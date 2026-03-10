@@ -1,0 +1,13 @@
+/* Minimal global styles - let Pico CSS handle most styling */
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Remove default Vite styles - Pico CSS provides better defaults */
+
+/* Utility classes */
+.ml-sm {
+  margin-left: 0.5rem;
+}

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPv4 Subnet Calculator - Static</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Theme Switcher -->
+    <button id="theme-switcher" onclick="toggleTheme()">
+        <span id="theme-icon">☀️</span> Toggle Theme
+    </button>
+
+    <main class="container">
+        <!-- Header -->
+        <header class="text-center">
+            <h1>IPv4 Subnet Calculator</h1>
+            <p>Static HTML + nginx</p>
+        </header>
+
+        <!-- API Status -->
+        <div id="api-status" class="alert alert-info" style="display: none;">
+            <p id="api-status-message"></p>
+        </div>
+
+        <!-- Input Form -->
+        <section>
+            <form id="lookup-form">
+                <div>
+                    <label for="ip-address">IP Address or CIDR Range</label>
+                    <div class="form-row">
+                        <input
+                            type="text"
+                            id="ip-address"
+                            name="address"
+                            placeholder="e.g., 192.168.1.1 or 10.0.0.0/24"
+                            required
+                        />
+                        <select id="cloud-mode" name="mode">
+                            <option value="Standard">Standard</option>
+                            <option value="AWS">AWS</option>
+                            <option value="Azure" selected>Azure</option>
+                            <option value="OCI">OCI</option>
+                        </select>
+                        <button type="submit" id="lookup-btn">Lookup</button>
+                    </div>
+                    <small id="validation-error" style="color: #dc2626; display: none;">
+                        Please enter a valid IPv4 address in the format x.x.x.x or x.x.x.x/y
+                    </small>
+                </div>
+
+                <!-- Example Buttons -->
+                <div id="example-buttons">
+                    <label>Try Examples:</label>
+                    <div class="example-buttons">
+                        <button type="button" onclick="tryExample('10.0.0.0/24')" class="example-btn btn-rfc1918">
+                            RFC1918: 10.0.0.0/24
+                        </button>
+                        <button type="button" onclick="tryExample('100.64.0.1')" class="example-btn btn-rfc6598">
+                            RFC6598: 100.64.0.1
+                        </button>
+                        <button type="button" onclick="tryExample('8.8.8.8')" class="example-btn btn-public">
+                            Public: 8.8.8.8
+                        </button>
+                        <button type="button" onclick="tryExample('104.16.1.1')" class="example-btn btn-cloudflare">
+                            Cloudflare: 104.16.1.1
+                        </button>
+                        <button type="button" onclick="tryExample('192.168.1.0/24')" class="example-btn btn-network">
+                            Network: 192.168.1.0/24
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <!-- Loading Spinner -->
+        <div id="loading" style="display: none; text-align: center; margin: 2rem 0;">
+            <p aria-busy="true">Loading...</p>
+        </div>
+
+        <!-- Results Section -->
+        <section id="results" style="display: none;">
+            <h2>Results</h2>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button type="button" id="copy-btn" onclick="copyResults()">Copy Results</button>
+                <button type="button" id="clear-btn" onclick="clearResults()">Clear</button>
+            </div>
+
+            <!-- Results Table -->
+            <div id="results-content"></div>
+        </section>
+    </main>
+
+    <!-- Configuration and App Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

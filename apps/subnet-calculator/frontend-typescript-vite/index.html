@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPv4 Subnet Calculator - TypeScript</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+    <!-- Top Bar with Theme Switcher and User Info -->
+    <div class="top-bar">
+        <button id="theme-switcher">
+            <span id="theme-icon">☀️</span> Toggle Theme
+        </button>
+        <div id="user-info" style="display: none;"></div>
+    </div>
+
+    <main class="container">
+        <!-- Header -->
+        <header>
+            <h1>IPv4 Subnet Calculator</h1>
+            <p id="stack-description">TypeScript + Vite</p>
+        </header>
+
+        <!-- API Status -->
+        <div id="api-status" class="alert" style="display: none;"></div>
+
+        <!-- Input Form -->
+        <section>
+            <form id="lookup-form">
+                <div>
+                    <label for="ip-address">IP Address or CIDR Range</label>
+                    <div class="form-row">
+                        <input
+                            type="text"
+                            id="ip-address"
+                            name="address"
+                            placeholder="e.g., 192.168.1.1 or 10.0.0.0/24"
+                            required
+                        />
+                        <select id="cloud-mode" name="mode">
+                            <option value="Standard">Standard</option>
+                            <option value="AWS">AWS</option>
+                            <option value="Azure" selected>Azure</option>
+                            <option value="OCI">OCI</option>
+                        </select>
+                        <button type="submit">Lookup</button>
+                    </div>
+                </div>
+
+                <!-- Example Buttons -->
+                <div id="example-buttons" class="example-buttons">
+                    <button type="button" class="secondary outline example-btn btn-rfc1918" data-address="10.0.0.0/24">RFC1918: 10.0.0.0/24</button>
+                    <button type="button" class="outline example-btn btn-rfc6598" data-address="100.64.0.1">RFC6598: 100.64.0.1</button>
+                    <button type="button" class="contrast outline example-btn btn-public" data-address="8.8.8.8">Public: 8.8.8.8</button>
+                    <button type="button" class="secondary example-btn btn-cloudflare" data-address="104.16.1.1">Cloudflare: 104.16.1.1</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Loading -->
+        <div id="loading" style="display: none; text-align: center; margin: 2rem 0;">
+            <div aria-busy="true"></div>
+        </div>
+
+        <!-- Results -->
+        <section id="results" style="display: none;">
+            <h2>Results</h2>
+            <div id="results-content"></div>
+        </section>
+
+        <!-- Error -->
+        <div id="error" class="alert alert-error" style="display: none;"></div>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

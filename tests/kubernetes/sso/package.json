@@ -1,0 +1,15 @@
+{
+  "name": "platform-e2e-sso",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright smoke tests for platform SSO-protected endpoints (Dex + oauth2-proxy + Headlamp OIDC).",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

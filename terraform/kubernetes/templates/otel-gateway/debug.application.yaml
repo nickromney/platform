@@ -1,0 +1,107 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-prometheus
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "96"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.146.1
+    helm:
+      releaseName: otel-collector-prometheus
+      values: |
+        mode: deployment
+
+        nameOverride: otel-collector
+        fullnameOverride: otel-collector
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        replicaCount: 1
+
+        service:
+          enabled: true
+          type: ClusterIP
+
+        ports:
+          otlp:
+            enabled: true
+            hostPort: 0
+            containerPort: 4317
+            servicePort: 4317
+          otlp-http:
+            enabled: true
+            hostPort: 0
+            containerPort: 4318
+            servicePort: 4318
+          metrics:
+            enabled: false
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+
+        presets:
+          kubernetesAttributes:
+            enabled: true
+
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+
+          processors:
+            batch: {}
+
+          exporters:
+            debug:
+              verbosity: basic
+
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [k8sattributes, batch]
+                exporters: [debug]
+              metrics:
+                receivers: [otlp]
+                processors: [k8sattributes, batch]
+                exporters: [debug]
+              logs:
+                receivers: [otlp]
+                processors: [k8sattributes, batch]
+                exporters: [debug]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

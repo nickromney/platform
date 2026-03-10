@@ -1,0 +1,25 @@
+{
+  "name": "subnet-calculator",
+  "version": "1.0.0",
+  "description": "Full-stack IPv4/IPv6 subnet calculator with multiple backend and frontend implementations",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "swa": "swa",
+    "swa:init": "swa init",
+    "swa:start": "swa start"
+  },
+  "devDependencies": {
+    "@azure/static-web-apps-cli": "^2.0.1"
+  },
+  "keywords": [
+    "subnet-calculator",
+    "azure",
+    "static-web-apps",
+    "fastapi",
+    "typescript",
+    "vite"
+  ],
+  "author": "",
+  "license": "ISC"
+}

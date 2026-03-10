@@ -1,0 +1,22 @@
+meta {
+  name: Page Load
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{directFlaskUrl}}/
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should load Flask frontend", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody()).to.include("Subnet Calculator");
+  });
+}

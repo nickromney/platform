@@ -1,0 +1,26 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-cloud-metadata-egress
+spec:
+  description: |
+    Deny pod egress to common cloud metadata endpoints (defense-in-depth).
+    Covers Azure IMDS (169.254.169.254), AWS task metadata (169.254.170.2),
+    and Alibaba Cloud metadata (100.100.100.200).
+
+    IMPORTANT: In Cilium, any policy that selects an endpoint enables policy
+    enforcement for that endpoint. This policy is scoped to dev, uat, and apim
+    which already have baseline allowlists.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - dev
+          - uat
+          - apim
+  egressDeny:
+    - toCIDRSet:
+        - cidr: 169.254.169.254/32
+        - cidr: 169.254.170.2/32
+        - cidr: 100.100.100.200/32

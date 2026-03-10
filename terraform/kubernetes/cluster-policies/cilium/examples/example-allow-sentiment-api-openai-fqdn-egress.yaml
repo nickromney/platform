@@ -1,0 +1,32 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: example-allow-sentiment-api-openai-fqdn-egress
+spec:
+  description: |
+    Example: allow sentiment-api egress to OpenAI endpoints via FQDN policies.
+    Not enabled by default (this file is not referenced by kustomization.yaml).
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": sentiment-dev
+      "k8s:app.kubernetes.io/name": sentiment-api
+  egress:
+    # DNS is required for FQDN policies.
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": "kube-system"
+            "k8s:k8s-app": "kube-dns"
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+
+    # Cilium 1.19+ supports multi-level wildcards with "**".
+    - toFQDNs:
+        - matchPattern: "**.openai.azure.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Subnet Calculator</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <noscript>
+        <style>
+            /* Ensure JavaScript-only features stay hidden when JS is disabled */
+            #copy-btn,
+            #clear-btn,
+            #example-buttons,
+            #theme-switcher {
+                display: none !important;
+            }
+        </style>
+    </noscript>
+</head>
+<body>
+    <!-- Theme Switcher & User Menu (JavaScript only) -->
+    <nav>
+        <ul>
+            <li><button id="theme-switcher" class="hidden" onclick="toggleTheme()">
+                <span id="theme-icon">☀️</span> Theme
+            </button></li>
+        </ul>
+        <ul>
+            {% if user_info %}
+            <li>
+                <small>
+                    👤 {{ user_info.get('name', user_info.get('preferred_username', 'User')) }}
+                    {% if user_info.get('email') %}<br/>({{ user_info.get('email') }}){% endif %}
+                </small>
+            </li>
+            <li><a href="{{ url_for('logout') }}" role="button" class="outline">Logout</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <main class="container">
+        <!-- Header -->
+        <header class="text-center">
+            <h1>IP Subnet Calculator</h1>
+            <p>{{ stack_name }}</p>
+        </header>
+
+        <!-- API Status -->
+        {% if api_health %}
+        <div class="alert alert-success">
+            <p>
+                <strong>API Status:</strong> {{ api_health.status }} |
+                <strong>Backend:</strong> {{ api_health.service }} |
+                <strong>Version:</strong> {{ api_health.version }}<br>
+                <small>Frontend: <code>{{ request.host_url }}</code> | Backend: <code>{{ api_health.endpoint }}</code></small>
+            </p>
+        </div>
+        {% elif not api_down %}
+        <div class="alert alert-error">
+            <p>
+                <strong>API Unavailable:</strong> Unable to connect to backend API<br>
+                <small>The calculator may not function correctly</small>
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- No JavaScript Warning -->
+        <noscript>
+            <div class="alert alert-warning">
+                <p>
+                    <strong>Note:</strong> JavaScript is disabled. The calculator will work, but with limited interactivity.
+                    Example buttons and real-time validation are unavailable.
+                </p>
+            </div>
+        </noscript>
+
+        <!-- Server-side Error (API Down) -->
+        {% if api_down %}
+        <div class="alert alert-error">
+            <p>
+                <strong>Backend API Unavailable:</strong> {{ error }}
+            </p>
+            <p>
+                Try using <a href="{{ cidr_url }}" target="_blank" rel="noopener noreferrer">cidr.xyz</a> as an alternative:
+            </p>
+            <p>
+                <a href="{{ cidr_url }}" target="_blank" rel="noopener noreferrer" style="word-break: break-all;">{{ cidr_url }}</a>
+            </p>
+        </div>
+        {% elif error %}
+        <div class="alert alert-error">
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Input Form -->
+        <section>
+            <form id="lookup-form" method="POST" action="/">
+                <div>
+                    <label for="ip-address">IP Address or CIDR Range</label>
+                    <div class="form-row">
+                        <input
+                            type="text"
+                            id="ip-address"
+                            name="address"
+                            value="{{ address or '' }}"
+                            placeholder="e.g., 192.168.1.1, 10.0.0.0/24, or 2001:db8::/32"
+                            required
+                        />
+                        <select id="cloud-mode" name="mode">
+                            <option value="Standard" {% if mode == 'Standard' %}selected{% endif %}>Standard</option>
+                            <option value="AWS" {% if mode == 'AWS' %}selected{% endif %}>AWS</option>
+                            <option value="Azure" {% if mode == 'Azure' or not mode %}selected{% endif %}>Azure</option>
+                            <option value="OCI" {% if mode == 'OCI' %}selected{% endif %}>OCI</option>
+                        </select>
+                        <button type="submit">Lookup</button>
+                    </div>
+                    <small id="validation-error" class="hidden" style="color: #dc2626;">
+                        Please enter a valid IP address (IPv4: 192.168.1.1 or 10.0.0.0/24, IPv6: 2001:db8::1 or 2001:db8::/32)
+                    </small>
+                </div>
+
+                <!-- Example Buttons (JavaScript only) -->
+                <div id="example-buttons" class="hidden">
+                    <label>Try Examples:</label>
+                    <div class="example-buttons">
+                        <button type="button" onclick="tryExample('10.0.0.0/24')" class="secondary outline">
+                            RFC1918: 10.0.0.0/24
+                        </button>
+                        <button type="button" onclick="tryExample('100.64.0.1')" class="outline">
+                            RFC6598: 100.64.0.1
+                        </button>
+                        <button type="button" onclick="tryExample('8.8.8.8')" class="contrast outline">
+                            Public: 8.8.8.8
+                        </button>
+                        <button type="button" onclick="tryExample('104.16.1.1')" class="secondary">
+                            Cloudflare: 104.16.1.1
+                        </button>
+                        <button type="button" onclick="tryExample('2001:db8::/32')" class="contrast">
+                            IPv6: 2001:db8::/32
+                        </button>
+                        <button type="button" onclick="tryExample('2606:4700:4700::1111')" class="outline">
+                            Cloudflare IPv6: 2606:4700:4700::1111
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clear Button -->
+                <button type="button" id="clear-btn" onclick="clearResults()" class="btn-clear hidden" style="width: 100%; margin-top: 0.5rem;">
+                    Clear Results
+                </button>
+            </form>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden text-center" style="padding: 2rem 0;">
+            <div class="spinner"></div>
+            <p>Looking up address information...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error" class="hidden alert alert-error">
+            <p></p>
+        </div>
+
+        <!-- Results Table (JavaScript) -->
+        <section id="results" class="hidden">
+            <div class="results-header">
+                <h2 style="margin: 0;">Address Information</h2>
+                <button
+                    id="copy-btn"
+                    onclick="copyUsableRange()"
+                    class="btn-small btn-copy hidden"
+                    title="Copy usable IP range to clipboard"
+                >
+                    Copy Range
+                </button>
+            </div>
+            <figure>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Property</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <!-- Results will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </figure>
+        </section>
+
+        <!-- Server-side Results (No JavaScript Fallback) -->
+        {% if results %}
+        <section>
+            <h2>Address Information</h2>
+            <figure>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Property</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Address</td>
+                            <td>{{ results.validate.address }}</td>
+                        </tr>
+                        <tr>
+                            <td>Type</td>
+                            <td>{{ 'Network/CIDR Range' if results.validate.type == 'network' else 'Single Address' }}</td>
+                        </tr>
+                        <tr>
+                            <td>Classification</td>
+                            <td>
+                                {% if results.private and results.private.is_rfc1918 %}
+                                    RFC1918 Private ({{ results.private.matched_rfc1918_range }})
+                                {% elif results.private and results.private.is_rfc6598 %}
+                                    RFC6598 Shared ({{ results.private.matched_rfc6598_range }})
+                                {% elif results.cloudflare.is_cloudflare %}
+                                    Cloudflare ({{ results.cloudflare.matched_ranges|join(', ') }})
+                                {% else %}
+                                    Public Internet
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if results.subnet %}
+                        <tr>
+                            <td>Network Address</td>
+                            <td>{{ results.subnet.network_address }}</td>
+                        </tr>
+                        <tr>
+                            <td>Broadcast Address</td>
+                            <td>{{ results.subnet.broadcast_address or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <td>Netmask</td>
+                            <td>{{ results.subnet.netmask }}</td>
+                        </tr>
+                        <tr>
+                            <td>Wildcard Mask</td>
+                            <td>{{ results.subnet.wildcard_mask }}</td>
+                        </tr>
+                        <tr>
+                            <td>Prefix Length</td>
+                            <td>/{{ results.subnet.prefix_length }}</td>
+                        </tr>
+                        <tr>
+                            <td>Total Addresses</td>
+                            <td>{{ "{:,}".format(results.subnet.total_addresses) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Usable Addresses</td>
+                            <td>{{ "{:,}".format(results.subnet.usable_addresses) }}</td>
+                        </tr>
+                        <tr class="highlight">
+                            <td>Usable Range</td>
+                            <td>{{ results.subnet.first_usable_ip }} - {{ results.subnet.last_usable_ip }}</td>
+                        </tr>
+                        <tr>
+                            <td>Cloud Provider Mode</td>
+                            <td>{{ results.subnet.mode }}</td>
+                        </tr>
+                        {% if results.subnet.note %}
+                        <tr>
+                            <td>Note</td>
+                            <td>{{ results.subnet.note }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endif %}
+                        <tr>
+                            <td>IP Version</td>
+                            <td>{{ 'IPv4' if results.validate.is_ipv4 else 'IPv6' if results.validate.is_ipv6 else 'Unknown' }}</td>
+                        </tr>
+                        {% if timing %}
+                        <tr>
+                            <td>Response Time</td>
+                            <td>{{ timing.totalDuration }}ms</td>
+                        </tr>
+                        {% if timing.apiCalls %}
+                        <tr>
+                            <td>API Call Breakdown</td>
+                            <td>
+                                {% for call in timing.apiCalls %}
+                                    {{ call.call }}: {{ call.duration }}ms{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </figure>
+        </section>
+        {% endif %}
+    </main>
+
+    <script>
+        const form = document.getElementById('lookup-form');
+        const ipInput = document.getElementById('ip-address');
+        const cloudMode = document.getElementById('cloud-mode');
+        const validationError = document.getElementById('validation-error');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const results = document.getElementById('results');
+        const resultsBody = document.getElementById('results-body');
+        const clearBtn = document.getElementById('clear-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const exampleButtons = document.getElementById('example-buttons');
+        const themeSwitcher = document.getElementById('theme-switcher');
+        const themeIcon = document.getElementById('theme-icon');
+
+        let currentUsableRange = '';
+
+        // Theme switching
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+            html.setAttribute('data-theme', newTheme);
+            themeIcon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+
+            // Save preference
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // Load saved theme preference or default to dark
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            themeIcon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        }
+
+        // Initialize theme on load
+        loadTheme();
+
+        // Show JavaScript-only features when JS is enabled
+        if (exampleButtons) {
+            exampleButtons.classList.remove('hidden');
+        }
+        if (themeSwitcher) {
+            themeSwitcher.classList.remove('hidden');
+        }
+
+        // Try example function
+        function tryExample(address) {
+            ipInput.value = address;
+            form.dispatchEvent(new Event('submit'));
+        }
+
+        // Clear results function
+        function clearResults() {
+            ipInput.value = '';
+            cloudMode.value = 'Azure';
+            results.classList.add('hidden');
+            error.classList.add('hidden');
+            clearBtn.classList.add('hidden');
+            copyBtn.classList.add('hidden');
+            validationError.classList.add('hidden');
+            currentUsableRange = '';
+        }
+
+        // Copy usable range to clipboard
+        async function copyUsableRange() {
+            if (!currentUsableRange) return;
+
+            try {
+                await navigator.clipboard.writeText(currentUsableRange);
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('copied');
+
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy Range';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+        }
+
+        // IPv4 and IPv6 address validation regex
+        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipv4CidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+        const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+        const ipv6CidrRegex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\/\d{1,3}$/;
+
+        function validateIP(value) {
+            // Check if it's IPv6 (contains colons)
+            if (value.includes(':')) {
+                return ipv6Regex.test(value) || ipv6CidrRegex.test(value);
+            }
+
+            // Check if it's IPv4 (plain IP or CIDR notation)
+            if (!ipv4Regex.test(value) && !ipv4CidrRegex.test(value)) {
+                return false;
+            }
+
+            // Validate IPv4 octets
+            const parts = value.split('/')[0].split('.');
+            return parts.every(part => {
+                const num = parseInt(part, 10);
+                return num >= 0 && num <= 255;
+            });
+        }
+
+        function getAddressType(privateData, cloudflareData) {
+            const types = [];
+
+            if (privateData && privateData.is_rfc1918) {
+                types.push(`RFC1918 Private (${privateData.matched_rfc1918_range})`);
+            }
+            if (privateData && privateData.is_rfc6598) {
+                types.push(`RFC6598 Shared (${privateData.matched_rfc6598_range})`);
+            }
+            if (cloudflareData.is_cloudflare) {
+                types.push(`Cloudflare (${cloudflareData.matched_ranges.join(', ')})`);
+            }
+
+            return types.length > 0 ? types.join(', ') : 'Public Internet';
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const address = ipInput.value.trim();
+            const mode = cloudMode.value;
+
+            // Validate input
+            if (!validateIP(address)) {
+                validationError.classList.remove('hidden');
+                return;
+            }
+
+            validationError.classList.add('hidden');
+            loading.classList.remove('hidden');
+            error.classList.add('hidden');
+            results.classList.add('hidden');
+            copyBtn.classList.add('hidden');
+
+            try {
+                const response = await fetch('/lookup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ address, mode }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    // Check if API is down (503) with cidr.xyz fallback
+                    if (data.api_down && data.cidr_url) {
+                        error.querySelector('p').innerHTML = `
+                            <strong>Backend API Unavailable:</strong> ${data.error}<br><br>
+                            Try using <a href="${data.cidr_url}" target="_blank" rel="noopener noreferrer">cidr.xyz</a> as an alternative:<br>
+                            <a href="${data.cidr_url}" target="_blank" rel="noopener noreferrer" style="word-break: break-all;">${data.cidr_url}</a>
+                        `;
+                    } else {
+                        error.querySelector('p').textContent = data.error || 'Failed to lookup address';
+                    }
+                    error.classList.remove('hidden');
+                    return;
+                }
+
+                // Display results
+                displayResults(data);
+                clearBtn.classList.remove('hidden');
+
+            } catch (err) {
+                error.querySelector('p').textContent = `Network error: ${err.message}`;
+                error.classList.remove('hidden');
+            } finally {
+                loading.classList.add('hidden');
+            }
+        });
+
+        function displayResults(data) {
+            const rows = [];
+            const results = data.results;
+            const timing = data.timing;
+            const validate = results.validate;
+            const privateData = results.private;
+            const cloudflareData = results.cloudflare;
+            const subnet = results.subnet;
+
+            // Address
+            rows.push({ property: 'Address', value: validate.address });
+
+            // Type (address vs network)
+            rows.push({
+                property: 'Type',
+                value: validate.type === 'network' ? 'Network/CIDR Range' : 'Single Address'
+            });
+
+            // Address classification (RFC1918, Cloudflare, etc.)
+            rows.push({
+                property: 'Classification',
+                value: getAddressType(privateData, cloudflareData)
+            });
+
+            // Network-specific information
+            if (validate.type === 'network' && subnet) {
+                rows.push({ property: 'Network Address', value: subnet.network_address });
+                rows.push({ property: 'Broadcast Address', value: subnet.broadcast_address || 'N/A' });
+                rows.push({ property: 'Netmask', value: subnet.netmask });
+                rows.push({ property: 'Wildcard Mask', value: subnet.wildcard_mask });
+                rows.push({ property: 'Prefix Length', value: `/${subnet.prefix_length}` });
+                rows.push({ property: 'Total Addresses', value: subnet.total_addresses.toLocaleString() });
+                rows.push({ property: 'Usable Addresses', value: subnet.usable_addresses.toLocaleString() });
+
+                // Store usable range for copying
+                currentUsableRange = `${subnet.first_usable_ip} - ${subnet.last_usable_ip}`;
+
+                rows.push({
+                    property: 'Usable Range',
+                    value: currentUsableRange,
+                    highlight: true
+                });
+                rows.push({ property: 'Cloud Provider Mode', value: subnet.mode });
+
+                // Show copy button for networks
+                copyBtn.classList.remove('hidden');
+
+                if (subnet.note) {
+                    rows.push({ property: 'Note', value: subnet.note });
+                }
+            }
+
+            // IP version
+            rows.push({
+                property: 'IP Version',
+                value: validate.is_ipv4 ? 'IPv4' : validate.is_ipv6 ? 'IPv6' : 'Unknown'
+            });
+
+            // Performance timing - Rich display matching TypeScript frontend
+            if (timing) {
+                // Overall timing summary
+                const overallSeconds = (timing.totalDuration / 1000).toFixed(3);
+                rows.push({
+                    property: 'Total Response Time',
+                    value: `<strong>${timing.totalDuration.toFixed(0)}ms</strong> (${overallSeconds}s)`,
+                    allowHtml: true
+                });
+
+                // Individual API call timings in collapsible details
+                if (timing.apiCalls && timing.apiCalls.length > 0) {
+                    const apiCallDetailsHtml = timing.apiCalls.map(call => `
+                        <details style="margin: 0.5rem 0;">
+                            <summary style="cursor: pointer; font-weight: 500;">
+                                ${call.call}: <strong>${call.duration.toFixed(0)}ms</strong>
+                            </summary>
+                            <table style="margin-top: 0.5rem; font-size: 0.9em;">
+                                <tr><th style="text-align: left; padding: 0.25rem;">Duration</th><td style="padding: 0.25rem;"><strong>${call.duration.toFixed(0)}ms</strong></td></tr>
+                                <tr><th style="text-align: left; padding: 0.25rem;">Request (UTC)</th><td style="padding: 0.25rem;">${call.requestTime}</td></tr>
+                                <tr><th style="text-align: left; padding: 0.25rem;">Response (UTC)</th><td style="padding: 0.25rem;">${call.responseTime}</td></tr>
+                            </table>
+                        </details>
+                    `).join('');
+
+                    rows.push({
+                        property: 'API Call Details',
+                        value: apiCallDetailsHtml,
+                        allowHtml: true
+                    });
+                }
+            }
+
+            // Build table
+            resultsBody.innerHTML = rows.map(row => `
+                <tr${row.highlight ? ' class="highlight"' : ''}>
+                    <td>${row.property}</td>
+                    <td>${row.allowHtml ? row.value : row.value}</td>
+                </tr>
+            `).join('');
+
+            results.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

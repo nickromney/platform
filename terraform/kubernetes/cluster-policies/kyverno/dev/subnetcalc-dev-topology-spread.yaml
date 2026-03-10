@@ -1,0 +1,37 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: subnetcalc-dev-topology-spread
+  annotations:
+    policies.kyverno.io/title: Enforce Topology Spread for subnetcalc-dev
+    policies.kyverno.io/description: >-
+      Mutates Deployments in subnetcalc-dev namespace to add topologySpreadConstraints
+      with maxSkew=1 across nodes, ensuring pods are evenly distributed.
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  validationFailureAction: Audit
+  rules:
+    - name: add-topology-spread-constraint
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaces:
+                - subnetcalc-dev
+      skipBackgroundRequests: true
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                topologySpreadConstraints:
+                  - maxSkew: 1
+                    topologyKey: kubernetes.io/hostname
+                    whenUnsatisfiable: ScheduleAnyway
+                    labelSelector:
+                      # Kyverno supports variable substitution here; keep it as a
+                      # scalar string so ArgoCD diffs match the live object.
+                      matchLabels: "{{request.object.spec.selector.matchLabels}}"

@@ -1,0 +1,278 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-auth-proxy
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+data:
+  proxy.mjs: |
+    import express from 'express'
+    import axios from 'axios'
+    import dotenv from 'dotenv'
+
+    dotenv.config()
+
+    const CFG = {
+      SIGNOZ_URL: process.env.SIGNOZ_URL,
+      SIGNOZ_USER: process.env.SIGNOZ_USER,
+      SIGNOZ_PASSWORD: process.env.SIGNOZ_PASSWORD,
+    }
+
+    let missingVar = false
+    for (const [key, value] of Object.entries(CFG)) {
+      if (!value) {
+        console.error(`Missing environment variable: ${key}`)
+        missingVar = true
+      }
+    }
+    if (missingVar) process.exit(1)
+
+    let tokenCache = null
+    const unwrapToken = (resp) => {
+      if (!resp || typeof resp !== 'object') return null
+      // SigNoz can return either:
+      // - v1: {accessJwt, refreshJwt} or {data:{accessJwt, refreshJwt}}
+      // - v2: {status:'success', data:{accessToken, refreshToken}}
+      const candidate = resp?.data?.accessJwt
+        ? resp.data
+        : resp?.data?.accessToken
+          ? {
+              accessJwt: resp.data.accessToken,
+              refreshJwt: resp.data.refreshToken,
+            }
+          : resp
+
+      if (!candidate?.accessJwt) return null
+      return {
+        accessJwt: candidate.accessJwt,
+        refreshJwt: candidate.refreshJwt,
+      }
+    }
+
+    const getOrgId = async () => {
+      const url = new URL(CFG.SIGNOZ_URL)
+      url.pathname = '/api/v2/sessions/context'
+      url.searchParams.set('email', CFG.SIGNOZ_USER)
+
+      const { data } = await axios.get(url.toString())
+      const orgId = data?.data?.orgs?.[0]?.id
+      if (!orgId) throw new Error('Auth Proxy: unable to determine SigNoz orgId')
+      return orgId
+    }
+
+    const getToken = async (reset = false) => {
+      if (tokenCache && !reset) return tokenCache
+      const url = new URL(CFG.SIGNOZ_URL)
+
+      // Prefer v2 sessions; fall back to legacy v1 login.
+      let res = null
+      try {
+        url.pathname = '/api/v2/sessions/email_password'
+        res = await axios.post(url.toString(), {
+          email: CFG.SIGNOZ_USER,
+          password: CFG.SIGNOZ_PASSWORD,
+          orgId: await getOrgId(),
+        })
+      } catch {
+        url.pathname = '/api/v1/login'
+        res = await axios.post(url.toString(), {
+          email: CFG.SIGNOZ_USER,
+          password: CFG.SIGNOZ_PASSWORD,
+        })
+      }
+
+      const tok = unwrapToken(res.data)
+      if (!tok) {
+        console.error('Auth Proxy: login response did not contain accessJwt/accessToken')
+        tokenCache = null
+        throw new Error('Invalid SigNoz login response')
+      }
+
+      tokenCache = tok
+      return tokenCache
+    }
+
+    const decodeJwtPayload = (jwt) => {
+      const parts = jwt.split('.')
+      if (parts.length < 2) return null
+
+      let payload = parts[1]
+      payload = payload.replace(/-/g, '+').replace(/_/g, '/')
+      while (payload.length % 4 !== 0) payload += '='
+
+      try {
+        return JSON.parse(Buffer.from(payload, 'base64').toString('utf8'))
+      } catch {
+        return null
+      }
+    }
+
+    const app = express()
+
+    app.use(express.json({ limit: '50mb' }))
+    app.use(express.urlencoded({ limit: '50mb', extended: true }))
+    app.use(express.text({ limit: '50mb' }))
+    app.use(express.raw({ limit: '50mb' }))
+
+    const denyAccess = (_, res) => res.status(403).send('Auth Proxy: Access denied for security reasons')
+
+    // Newer SigNoz frontends can call this during boot; denying it can break the app.
+    app.all('/api/v1/invite', denyAccess)
+    app.all('/api/v1/invite/*', denyAccess)
+    app.all('/api/v1/getResetPasswordToken/*', denyAccess)
+    app.delete('/api/v1/user/*', denyAccess)
+    app.put('/api/v1/user/*', denyAccess)
+    app.post('/api/v1/user/*', denyAccess)
+    app.patch('/api/v1/user/*', denyAccess)
+
+    app.all('/api/v1/login', async (_, res) => {
+      try {
+        res.send(await getToken())
+      } catch (e) {
+        console.error(e)
+        res.status(502).send('Auth Proxy: Unable to authenticate to SigNoz')
+      }
+    })
+
+    // Keep SigNoz "logged in user" UI aligned with the upstream OIDC identity.
+    // SigNoz itself is authenticated via a service user JWT; we rewrite the /api/v1/user response
+    // to reflect the email forwarded by oauth2-proxy (if present).
+    app.get('/api/v1/user', async (req, res) => {
+      try {
+        const url = new URL(CFG.SIGNOZ_URL)
+        url.pathname = '/api/v1/user'
+
+        const forwardHeaders = { ...req.headers }
+        delete forwardHeaders.host
+        delete forwardHeaders.Host
+        delete forwardHeaders.authorization
+        delete forwardHeaders.Authorization
+
+        const displayEmail =
+          req.headers['x-auth-request-email'] ||
+          req.headers['x-forwarded-email'] ||
+          ''
+
+        const { data, status, headers: respHeaders } = await axios({
+          method: 'GET',
+          url: url.toString(),
+          headers: {
+            ...forwardHeaders,
+            authorization: `Bearer ${(await getToken()).accessJwt}`,
+          },
+          validateStatus: (s) => s !== 401 && s !== 403,
+        })
+
+        let out = data
+        try {
+          // axios sometimes returns a string even if it's JSON (depending on headers).
+          let obj = null
+          if (typeof data === 'string') {
+            obj = JSON.parse(data)
+          } else if (Buffer.isBuffer(data)) {
+            obj = JSON.parse(data.toString('utf8'))
+          } else if (data && typeof data === 'object') {
+            obj = data
+          }
+
+          if (obj && displayEmail && obj?.status === 'success' && Array.isArray(obj?.data)) {
+            for (const u of obj.data) {
+              if (u && typeof u === 'object') u.email = displayEmail
+            }
+            out = obj
+          }
+        } catch {
+          // ignore - fall back to original response
+        }
+
+        // If we rewrote the response body, the original content-length is wrong.
+        try {
+          delete respHeaders['content-length']
+          delete respHeaders['Content-Length']
+        } catch {
+          // ignore
+        }
+
+        res.header(respHeaders).status(status).send(out)
+      } catch (e) {
+        console.error(e)
+        res.status(502).send('Auth Proxy: Upstream error')
+      }
+    })
+
+    app.get('/main.*.js', async (req, res) => {
+      try {
+        const url = new URL(CFG.SIGNOZ_URL)
+        url.pathname = req.path
+
+        const token = await getToken()
+        const payload = decodeJwtPayload(token.accessJwt)
+        const userId = payload?.id || ''
+
+        const original = await axios.get(url.toString()).then((r) => r.data)
+
+        res
+          .header('Content-Type', 'application/javascript')
+          .header('Cache-Control', 'no-cache')
+          .send(`
+    ;(() => {
+      try {
+        window.localStorage.setItem('AUTH_TOKEN', '${token.accessJwt}');
+        window.localStorage.setItem('REFRESH_AUTH_TOKEN', '${token.refreshJwt}');
+        window.localStorage.setItem('IS_LOGGED_IN', 'true');
+        window.localStorage.setItem('IS_IDENTIFIED_USER', 'true');
+        if ('${userId}') window.localStorage.setItem('USER_ID', '${userId}');
+      } catch (e) {
+        // ignore
+      }
+    })();
+    ${original}
+    `)
+      } catch (e) {
+        console.error(e)
+        res.status(502).send('Auth Proxy: Upstream error')
+      }
+    })
+
+    app.all('*', async (req, res) => {
+      const url = new URL(CFG.SIGNOZ_URL)
+      url.pathname = req.path
+      for (const [key, value] of Object.entries(req.query)) url.searchParams.append(key, value)
+
+      try {
+        // oauth2-proxy in front of this service can send its own Authorization header.
+        // Ensure SigNoz always sees the SigNoz access JWT, not an upstream OIDC token.
+        const forwardHeaders = { ...req.headers }
+        delete forwardHeaders.host
+        delete forwardHeaders.Host
+        delete forwardHeaders.authorization
+        delete forwardHeaders.Authorization
+
+        const { data, status, headers: respHeaders } = await axios({
+          method: req.method,
+          url: url.toString(),
+          headers: {
+            ...forwardHeaders,
+            authorization: `Bearer ${(await getToken()).accessJwt}`,
+          },
+          data: req.body,
+          validateStatus: (s) => s !== 401 && s !== 403,
+          responseType: 'arraybuffer',
+        })
+
+        res.header(respHeaders).status(status).send(data)
+      } catch (error) {
+        if (error.response) {
+          await getToken(true)
+          res.header({ Refresh: '1; url=/' }).send('Auth Proxy: Refreshing token, please wait...')
+        } else {
+          res.status(500).send('Auth Proxy: Internal server error')
+          console.error(error)
+        }
+      }
+    })
+
+    app.listen(3000, () => {
+      console.log('Auth Proxy: Listening on port 3000')
+    })

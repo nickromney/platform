@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# IDE
+.vscode
+.idea
+.claude
+
+# Tests
+test-results
+playwright-report
+.playwright
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development
+*.log
+npm-debug.log*

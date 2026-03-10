@@ -1,0 +1,176 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: observability-hardened
+spec:
+  description: >-
+    Hardened policy for observability namespace.
+    Contains Prometheus, Grafana, Loki, Tempo, SigNoz, OTEL collector.
+    Logs/metrics/traces are sensitive (OpSec risk).
+    Ingress: OTEL data from app namespaces on collector ports only,
+    Grafana/SigNoz UI via sso (oauth2-proxy), scrape from Prometheus.
+    Egress: DNS, kube-apiserver (service discovery), intra-namespace only.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": observability
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+            - port: "3301"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argocd
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+            # CoreDNS metrics
+            - port: "9153"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+    # Prometheus scraping: allow egress to metrics ports in hardened namespaces
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argocd
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8082"
+              protocol: TCP
+            - port: "8083"
+              protocol: TCP
+            - port: "8084"
+              protocol: TCP
+            - port: "8085"
+              protocol: TCP
+            # argocd-notifications-controller metrics
+            - port: "9001"
+              protocol: TCP
+            # argocd-dex-server telemetry
+            - port: "5558"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": gitea
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+      toPorts:
+        - ports:
+            # Dex telemetry
+            - port: "5558"
+              protocol: TCP
+            # oauth2-proxy metrics
+            - port: "44180"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": nginx-gateway
+      toPorts:
+        - ports:
+            # nginx-prometheus-exporter (NGF data plane)
+            - port: "9113"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": cert-manager
+      toPorts:
+        - ports:
+            # cert-manager controller/cainjector/webhook metrics
+            - port: "9402"
+              protocol: TCP
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+            - port: "10255"
+              protocol: TCP
+            # node-exporter
+            - port: "9100"
+              protocol: TCP
+            # cilium-agent metrics
+            - port: "9962"
+              protocol: TCP
+            # cilium-operator metrics
+            - port: "9963"
+              protocol: TCP
+            # hubble/cilium additional metrics
+            - port: "9964"
+              protocol: TCP
+            # hubble metrics
+            - port: "9965"
+              protocol: TCP

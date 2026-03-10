@@ -1,0 +1,94 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: apim-baseline
+spec:
+  description: >-
+    Hardened policy for apim namespace (shared APIM simulator).
+    Traffic flow (verified via APIM config.json):
+      Ingress: subnetcalc-router (dev/uat, role=gateway) -> :8000
+      Egress:  -> subnetcalc-api (dev/uat, role=backend) :8000  (host-header routed)
+      Egress:  -> dex (sso) :5556  (JWKS fetch for JWT validation)
+      Egress:  -> DNS, kube-apiserver
+    Only subnetcalc-router pods from dev and uat should reach the APIM.
+    The broad "allow all from dev/uat" is removed to enforce zero-trust.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": apim
+  ingress:
+    # Kubelet health probes
+    - fromEntities:
+        - host
+        - remote-node
+    # subnetcalc-router (dev) -> apim-simulator :8000
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": subnetcalc
+            "k8s:role": gateway
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    # subnetcalc-router (uat) -> apim-simulator :8000
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:project": subnetcalc
+            "k8s:role": gateway
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # apim-simulator -> dex (JWKS fetch for JWT validation)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": dex
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+    # apim-simulator -> subnetcalc-api (dev) :8000
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": subnetcalc
+            "k8s:role": backend
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    # apim-simulator -> subnetcalc-api (uat) :8000
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:project": subnetcalc
+            "k8s:role": backend
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    # kube-apiserver
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -1,0 +1,53 @@
+results.json
+results-stack*.json
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Env files (secrets live here)
+.env
+.env.local
+.env.*.local
+
+# Allow committed examples / test configs
+!.env.example
+!.env.test
+!.env.stack*
+
+# Build / coverage
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+**/coverage/
+.coverage
+htmlcov/
+
+# Test artifacts
+**/test-results/
+**/playwright-report/
+
+# Runtime session directories
+**/flask_session/
+**/.flask_session/
+
+# Azure Functions local settings
+local.settings.json

@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: cert-manager
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.19.4
+    helm:
+      releaseName: cert-manager
+      values: |
+        installCRDs: true
+        image:
+          registry: dhi.io
+          repository: cert-manager-controller
+          tag: 1.19.4-debian13
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65532
+        webhook:
+          image:
+            registry: dhi.io
+            repository: cert-manager-webhook
+            tag: 1.19.4-debian13
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+        cainjector:
+          image:
+            registry: dhi.io
+            repository: cert-manager-cainjector
+            tag: 1.19.4-debian13
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+        startupapicheck:
+          image:
+            registry: dhi.io
+            repository: cert-manager-startupapicheck
+            tag: 1.19.4-debian13
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

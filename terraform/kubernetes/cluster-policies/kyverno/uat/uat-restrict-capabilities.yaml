@@ -1,0 +1,67 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: uat-restrict-capabilities
+  annotations:
+    policies.kyverno.io/title: Restrict container capabilities in UAT
+    policies.kyverno.io/description: >-
+      Containers in uat must drop ALL capabilities and cannot run as privileged.
+      Enforces a restricted security posture for production-like workloads.
+spec:
+  admission: true
+  background: true
+  validationFailureAction: Audit
+  rules:
+    - name: drop-all-capabilities
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Containers in uat must drop ALL capabilities."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
+    - name: deny-privileged
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Privileged containers are not allowed in uat."
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  privileged: "false"
+    - name: deny-host-namespaces
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "hostNetwork, hostPID, and hostIPC are not allowed in uat."
+        pattern:
+          spec:
+            =(hostNetwork): "false"
+            =(hostPID): "false"
+            =(hostIPC): "false"

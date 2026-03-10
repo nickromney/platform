@@ -1,0 +1,62 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restrict container image registries
+    policies.kyverno.io/description: >-
+      Only allow container images that were either:
+        (a) pulled from registries listed in scripts/preload-images.txt, or
+        (b) built by Gitea Actions CI/CD (pushed to localhost:30090).
+      This policy is intentionally kept in Audit mode for teaching/demo use.
+spec:
+  admission: true
+  background: true
+  validationFailureAction: Audit
+  rules:
+    - name: validate-image-source
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - dev
+                - uat
+                - apim
+                - observability
+                - sso
+                - headlamp
+                - gitea
+                - gitea-runner
+      validate:
+        allowExistingViolations: true
+        message: >-
+          Container image is not from an approved source.
+          Only images from registries listed in scripts/preload-images.txt
+          and images built by Gitea CI/CD (localhost:30090/*) are allowed.
+        foreach:
+          - list: "request.object.spec.[initContainers, containers][]"
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.image }}"
+                    operator: AnyNotIn
+                    value:
+                      # --- Gitea CI/CD built images ---
+                      - "localhost:30090/*"
+                      # --- Registries present in scripts/preload-images.txt ---
+                      - "quay.io/*"
+                      - "ghcr.io/*"
+                      - "dhi.io/*"
+                      - "ecr-public.aws.com/*"
+                      - "docker.gitea.com/*"
+                      - "docker.io/*"
+                      - "signoz/*"
+                      - "otel/*"
+                      - "docker:*"
+                      - "gitea/*"
+                      - "python:*"
+                      - "node:*"
+                      - "curlimages/*"

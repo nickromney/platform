@@ -1,0 +1,106 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "91"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: 6.53.0
+    helm:
+      releaseName: loki
+      values: |
+        deploymentMode: SingleBinary
+
+        loki:
+          image:
+            registry: dhi.io
+            repository: loki
+            tag: 3.6.6-debian13
+          auth_enabled: false
+          containerSecurityContext:
+            readOnlyRootFilesystem: false
+          commonConfig:
+            path_prefix: /tmp/loki
+            replication_factor: 1
+          storage:
+            type: filesystem
+            filesystem:
+              chunks_directory: /tmp/loki/chunks
+              rules_directory: /tmp/loki/rules
+          rulerConfig:
+            wal:
+              dir: /tmp/loki/ruler-wal
+          schemaConfig:
+            configs:
+              - from: 2024-01-01
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+          limits_config:
+            retention_period: 24h
+            max_query_length: 0
+            max_query_parallelism: 32
+
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+
+        sidecar:
+          image:
+            repository: dhi.io/k8s-sidecar
+            tag: 2.5.1-debian13
+
+        gateway:
+          enabled: false
+
+        lokiCanary:
+          enabled: false
+
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+
+        backend:
+          replicas: 0
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+
+        monitoring:
+          selfMonitoring:
+            enabled: false
+            grafanaAgent:
+              installOperator: false
+
+        test:
+          enabled: false
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

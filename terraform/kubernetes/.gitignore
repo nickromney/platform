@@ -1,0 +1,12 @@
+# Runtime-generated files (created by stage100/stage200 scripts)
+.run/
+.runner
+certs/
+kind-config.yaml
+
+# Terraform/Terragrunt
+.terraform/
+.terragrunt-cache/
+backend.tf
+*.tfstate
+*.tfstate.backup

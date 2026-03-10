@@ -1,0 +1,19 @@
+{
+  "name": "sentiment-llm-frontend-typescript-vite",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check": "biome check . && tsc --noEmit",
+    "lint": "biome check .",
+    "type-check": "tsc --noEmit",
+    "test:kind:sentiment-auth": "playwright test --config=playwright.kind-local.config.ts",
+    "test:kind:sentiment-auth:headed": "playwright test --config=playwright.kind-local.config.ts --headed"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

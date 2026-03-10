@@ -1,0 +1,32 @@
+# Compose configuration for Flask Frontend only
+# Works with both podman-compose and docker compose
+#
+# Note: This runs the frontend only. For a complete stack with API,
+# use the root compose.yml or compose-container-frontend.yml
+#
+# Usage:
+#   podman-compose up
+#   docker compose up
+#
+# Access:
+#   Frontend: http://localhost:8000
+#
+# Configuration:
+#   Set API_BASE_URL to point to your running API backend
+
+services:
+  frontend-python-flask:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: subnet-calculator-frontend-python-flask:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # Point to your running API backend
+      # Azure Function: http://localhost:8080/api/v1
+      # Container App: http://localhost:8000/subnets
+      - API_BASE_URL=http://localhost:8080/api/v1
+      # JWT Authentication credentials (if using JWT auth)
+      - JWT_USERNAME=demo
+      - JWT_PASSWORD=password123

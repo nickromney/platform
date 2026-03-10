@@ -1,0 +1,32 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-sentiment-api-llm-egress
+spec:
+  description: |
+    Allow sentiment-api pods in dev and uat to reach a direct external LLM
+    gateway on the host. This policy is only required when the direct gateway
+    mode is selected; LiteLLM mode keeps traffic in-cluster.
+    Use a port-scoped world egress rule instead of FQDN matching because
+    host-backed names such as host.docker.internal may resolve through
+    Docker Desktop paths that do not populate Cilium's FQDN allowlist
+    reliably, even though the destination is correct and reachable from the
+    Kind node itself.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:app.kubernetes.io/name"
+        operator: In
+        values:
+          - sentiment-api
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - dev
+          - uat
+  egress:
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "12434"
+              protocol: TCP

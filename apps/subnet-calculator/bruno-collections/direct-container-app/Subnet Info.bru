@@ -1,0 +1,36 @@
+meta {
+  name: Subnet Info
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{directContainerAppUrl}}/api/v1/ipv4/subnet-info
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "network": "10.0.0.0/24",
+    "mode": "Azure"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.network: eq 10.0.0.0/24
+  res.body.prefix_length: eq 24
+}
+
+tests {
+  test("should calculate subnet information", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.network).to.equal("10.0.0.0/24");
+    expect(data.prefix_length).to.equal(24);
+    expect(data.netmask).to.equal("255.255.255.0");
+    expect(data.total_addresses).to.equal(256);
+    expect(data.usable_addresses).to.equal(251);
+  });
+}

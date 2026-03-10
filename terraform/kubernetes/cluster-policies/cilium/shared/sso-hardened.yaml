@@ -1,0 +1,168 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: sso-hardened
+spec:
+  description: >-
+    Hardened policy for sso namespace (Dex IdP + oauth2-proxy instances).
+    Dex is the IdP -- treat it like you would Azure EntraID.
+    Ingress: platform-gateway (HTTPS-terminated OIDC flows), app namespaces (token validation).
+    Egress: DNS, kube-apiserver (Dex stores state in k8s), upstream services
+    that oauth2-proxy reverse-proxies to.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": sso
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+      toPorts:
+        - ports:
+            - port: "4180"
+              protocol: TCP
+            # Dex OIDC endpoints (httproute-dex.yaml proxies /dex/* to port 5556)
+            - port: "5556"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argocd
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": headlamp
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+      toPorts:
+        - ports:
+            # Dex telemetry
+            - port: "5558"
+              protocol: TCP
+            # oauth2-proxy metrics
+            - port: "44180"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+    # oauth2-proxy upstreams: each proxy forwards to its target service
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argocd
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": gitea
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:app.kubernetes.io/name": hubble-ui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8081"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+            - port: "3301"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": headlamp
+      toPorts:
+        - ports:
+            - port: "4466"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

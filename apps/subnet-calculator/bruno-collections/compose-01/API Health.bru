@@ -1,0 +1,24 @@
+meta {
+  name: API Health
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{compose01ApiUrl}}/api/v1/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq healthy
+}
+
+tests {
+  test("should return API health", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.status).to.equal("healthy");
+  });
+}

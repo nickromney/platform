@@ -1,0 +1,50 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+**/coverage/
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
+
+# Python
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+**/.pytest_cache/
+.ruff_cache/
+**/.ruff_cache/
+.mypy_cache/
+**/.mypy_cache/
+.venv/
+**/.venv/
+
+# Terraform / Terragrunt / OpenTofu
+.terraform/
+**/.terraform/
+.terragrunt-cache/
+**/.terragrunt-cache/
+*.tfstate
+*.tfstate.*
+backend.tf
+**/backend.tf
+
+# Local run artifacts
+.run/
+**/.run/
+
+# Generated local stack files
+**/kind-config.yaml
+
+# Env files
+.env
+.env.local
+.env.*.local

@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-runner
+  namespace: gitea-runner
+  labels:
+    app.kubernetes.io/name: act-runner
+    app.kubernetes.io/part-of: gitea
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: act-runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: act-runner
+    spec:
+      initContainers:
+        # Download Docker CLI and buildx plugin for the runner to use
+        # Pinned to 27.5-cli for reproducibility (buildx at /usr/local/libexec/docker/cli-plugins/)
+        - name: install-docker-cli
+          image: docker:27.5-cli
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Copying Docker CLI to shared volume..."
+              cp /usr/local/bin/docker /tools/docker
+              chmod +x /tools/docker
+              echo "Docker CLI installed: $(/tools/docker --version)"
+
+              # Install buildx plugin
+              echo "Installing buildx plugin..."
+              mkdir -p /tools/.docker/cli-plugins
+              cp /usr/local/libexec/docker/cli-plugins/docker-buildx /tools/.docker/cli-plugins/
+              chmod +x /tools/.docker/cli-plugins/docker-buildx
+              echo "Buildx installed: $(/tools/.docker/cli-plugins/docker-buildx version)"
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+        # Register runner with Gitea before starting daemon
+        - name: register
+          image: gitea/act_runner:0.2.13
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              wait_for_gitea() {
+                local attempt=0
+                local health_url="${GITEA_URL%/}/api/v1/version"
+                while true; do
+                  status="$(wget -S -O /dev/null -T 5 "${health_url}" 2>&1 | awk '/^  HTTP\//{print $2}' | tail -n 1 || true)"
+                  if echo "${status}" | grep -Eq '^[234][0-9][0-9]$'; then
+                    break
+                  fi
+                  attempt=$((attempt + 1))
+                  if [ "${attempt}" -ge 60 ]; then
+                    echo "Timed out waiting for Gitea at ${health_url}"
+                    exit 1
+                  fi
+                  echo "Waiting for Gitea (${attempt}/60): ${health_url}"
+                  sleep 5
+                done
+              }
+              if [ -f /data/.runner ]; then
+                echo "Runner already registered, skipping..."
+                exit 0
+              fi
+              wait_for_gitea
+              echo "Registering runner with Gitea..."
+              act_runner register \
+                --config /config/config.yaml \
+                --instance "${GITEA_URL}" \
+                --token "${RUNNER_TOKEN}" \
+                --name "in-cluster-runner" \
+                --no-interactive
+          env:
+            - name: GITEA_URL
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: gitea_url
+            - name: RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: runner_token
+            - name: DOCKER_HOST
+              value: "unix:///var/run/docker.sock"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: data
+              mountPath: /data
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+      containers:
+        - name: runner
+          image: gitea/act_runner:0.2.13
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              health_url="${GITEA_HTTP_BASE%/}/api/v1/version"
+              attempt=0
+              while true; do
+                status="$(wget -S -O /dev/null -T 5 "${health_url}" 2>&1 | awk '/^  HTTP\//{print $2}' | tail -n 1 || true)"
+                if echo "${status}" | grep -Eq '^[234][0-9][0-9]$'; then
+                  break
+                fi
+                attempt=$((attempt + 1))
+                if [ "${attempt}" -ge 60 ]; then
+                  echo "Timed out waiting for Gitea at ${health_url}"
+                  exit 1
+                fi
+                echo "Waiting for Gitea (${attempt}/60): ${health_url}"
+                sleep 5
+              done
+              exec act_runner daemon --config /config/config.yaml
+          env:
+            - name: DOCKER_HOST
+              value: "unix:///var/run/docker.sock"
+            - name: DOCKER_CONFIG
+              value: "/tools/.docker"
+            - name: REGISTRY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: registry_host
+            - name: REGISTRY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: registry_username
+            - name: REGISTRY_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: registry_password
+            - name: GITEA_HTTP_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: gitea_http_base
+            - name: GITEA_REPO_OWNER
+              valueFrom:
+                secretKeyRef:
+                  name: act-runner-secret
+                  key: gitea_repo_owner
+            - name: APPS_DIR
+              value: "/workspace/apps"
+            - name: PATH
+              value: "/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: data
+              mountPath: /data
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: tools
+              mountPath: /tools
+            - name: apps-dir
+              mountPath: /workspace/apps
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: act-runner-config
+        - name: data
+          emptyDir: {}
+        - name: tools
+          emptyDir: {}
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: apps-dir
+          hostPath:
+            path: /workspace/apps
+            type: DirectoryOrCreate

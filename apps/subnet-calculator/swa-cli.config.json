@@ -1,0 +1,29 @@
+{
+  "$schema": "https://aka.ms/azure/static-web-apps-cli/schema",
+  "configurations": {
+    "swa-04": {
+      "_comment": "SWA CLI Stack 04: TypeScript Vite + Container App (No Auth)",
+      "appLocation": "frontend-typescript-vite",
+      "outputLocation": "dist",
+      "appBuildCommand": "npm run build",
+      "apiDevserverUrl": "http://localhost:8090",
+      "port": 4280
+    },
+    "swa-05": {
+      "_comment": "SWA CLI Stack 05: TypeScript Vite + Azure Function (JWT Auth) - static build, compose backend on 8080",
+      "appLocation": "frontend-typescript-vite",
+      "outputLocation": "dist",
+      "appBuildCommand": "npm run build",
+      "apiDevserverUrl": "http://localhost:8080",
+      "port": 4281
+    },
+    "swa-06": {
+      "_comment": "SWA CLI Stack 06: TypeScript Vite + Container App (Entra ID Auth at SWA layer) - static build, compose backend on 8090",
+      "appLocation": "frontend-typescript-vite",
+      "outputLocation": "dist",
+      "appBuildCommand": "npm run build",
+      "apiDevserverUrl": "http://localhost:8090",
+      "port": 4282
+    }
+  }
+}

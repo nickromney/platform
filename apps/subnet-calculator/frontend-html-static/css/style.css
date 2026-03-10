@@ -1,0 +1,236 @@
+/* Minimal custom styles for subnet calculator - Static Version */
+
+/* Theme switcher button */
+#theme-switcher {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    z-index: 1000;
+}
+
+/* Layout */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+/* Header */
+header {
+    margin-bottom: 2rem;
+}
+
+.architecture-note {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(59, 130, 246, 0.1);
+    border-left: 3px solid #3b82f6;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+/* Form layout */
+.form-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.form-row input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+}
+
+.form-row select,
+.form-row button {
+    min-width: auto;
+}
+
+/* Example buttons */
+.example-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.example-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+    border-radius: 4px;
+    border: 1px solid;
+    cursor: pointer;
+    background: var(--pico-card-background-color);
+    transition: all 0.2s;
+}
+
+.example-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn-rfc1918 { border-color: #9333ea; color: #9333ea; }
+.btn-rfc6598 { border-color: #ea580c; color: #ea580c; }
+.btn-public { border-color: #16a34a; color: #16a34a; }
+.btn-cloudflare { border-color: #0284c7; color: #0284c7; }
+.btn-network { border-color: #7c3aed; color: #7c3aed; }
+
+/* Alerts */
+.alert {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    border-left: 4px solid;
+}
+
+/* Light theme alerts */
+html[data-theme="light"] .alert-info {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1e40af;
+}
+
+html[data-theme="light"] .alert-success {
+    background: #d1fae5;
+    border-color: #10b981;
+    color: #065f46;
+}
+
+html[data-theme="light"] .alert-warning {
+    background: #fef3c7;
+    border-color: #f59e0b;
+    color: #92400e;
+}
+
+html[data-theme="light"] .alert-error {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #991b1b;
+}
+
+/* Dark theme alerts */
+html[data-theme="dark"] .alert-info {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: #3b82f6;
+    color: #93c5fd;
+}
+
+html[data-theme="dark"] .alert-success {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: #10b981;
+    color: #6ee7b7;
+}
+
+html[data-theme="dark"] .alert-warning {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: #f59e0b;
+    color: #fbbf24;
+}
+
+html[data-theme="dark"] .alert-error {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+    color: #fca5a5;
+}
+
+.alert a {
+    text-decoration: underline;
+}
+
+.alert code {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.85rem;
+}
+
+/* Action buttons */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mt-1 { margin-top: 0.5rem; }
+
+/* Results section */
+#results article {
+    margin-top: 1rem;
+}
+
+#results h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--pico-h3-color);
+}
+
+#results h4 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+#results table {
+    margin-bottom: 1rem;
+}
+
+#results table th {
+    width: 40%;
+    text-align: left;
+}
+
+#results table td {
+    font-family: monospace;
+}
+
+#results ul {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+#results ul li {
+    margin-bottom: 0.25rem;
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .form-row {
+        flex-direction: column;
+    }
+
+    .form-row input[type="text"],
+    .form-row select,
+    .form-row button {
+        width: 100%;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .action-buttons button {
+        width: 100%;
+    }
+
+    #theme-switcher {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.8rem;
+    }
+}

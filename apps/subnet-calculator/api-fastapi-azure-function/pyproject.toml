@@ -1,0 +1,53 @@
+[project]
+name = "subnet-calculator-python-api"
+version = "0.1.0"
+description = "IPv4/IPv6 subnet validation and analysis API with cloud provider support"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "azure-functions>=1.23.0",
+    "fastapi[standard]>=0.118.0",
+    "pwdlib[argon2]>=0.2.0",
+    "pyjwt>=2.10.1",
+    "python-jose[cryptography]>=3.3.0",
+    "httpx>=0.28.1",
+    # Must stay compatible with the Azure Functions Python worker's bundled protobuf.
+    # The Functions base image currently ships protobuf 5.x; protobuf 6.x has caused
+    # Python worker segfaults (exit code 139) due to mixed worker/customer deps.
+    "protobuf>=5.29.5,<6",
+    # Avoid the opentelemetry-exporter-otlp meta-package (pulls grpcio), which can
+    # override Azure Functions worker dependencies and destabilize the runtime.
+    "opentelemetry-exporter-otlp-proto-http>=1.36.0",
+    "opentelemetry-instrumentation-fastapi>=0.57b0",
+    "opentelemetry-instrumentation-httpx>=0.57b0",
+    "opentelemetry-sdk>=1.36.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

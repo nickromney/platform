@@ -1,0 +1,75 @@
+name: Build sentiment-llm images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api-sentiment/**"
+      - "frontend-react-vite/sentiment-auth-ui/**"
+      - ".gitea/workflows/**"
+  workflow_dispatch:
+
+env:
+  DOCKER_HOST: unix:///var/run/docker.sock
+  WORKDIR: /tmp/sentiment-llm
+
+jobs:
+  build:
+    runs-on: [self-hosted, in-cluster]
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - name: Clone repo
+        run: |
+          set -e
+          : "${GITEA_HTTP_BASE:?}"
+          : "${GITEA_REPO_OWNER:?}"
+          : "${REGISTRY_USERNAME:?}"
+          : "${REGISTRY_PWD:?}"
+
+          rm -rf "${WORKDIR}"
+          git config --global credential.helper store
+
+          host="$(echo "${GITEA_HTTP_BASE}" | sed -E 's#^https?://##')"
+          proto="$(echo "${GITEA_HTTP_BASE}" | sed -E 's#^(https?)://.*#\1#')"
+          printf "protocol=%s\nhost=%s\nusername=%s\npassword=%s\n" \
+            "${proto}" "${host}" "${REGISTRY_USERNAME}" "${REGISTRY_PWD}" \
+            | git credential-store store
+
+          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/sentiment-llm.git" "${WORKDIR}"
+          cd "${WORKDIR}" && git checkout main
+
+      - name: Log in to registry
+        run: |
+          set -e
+          : "${REGISTRY_HOST:?}"
+          echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
+
+      - name: Build and push sentiment-api
+        run: |
+          set -e
+          cd "${WORKDIR}"
+          TAG="$(git rev-parse --short=12 HEAD)"
+          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" ./api-sentiment
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:latest"
+
+      - name: Build and push sentiment-auth-ui
+        run: |
+          set -e
+          cd "${WORKDIR}"
+          TAG="$(git rev-parse --short=12 HEAD)"
+          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}" ./frontend-react-vite/sentiment-auth-ui
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:latest"
+
+      - name: Stamp manifests with new sentiment tags
+        run: |
+          set -e
+          cd "${WORKDIR}"
+          TAG="$(git rev-parse --short=12 HEAD)"
+          export TAG
+          bash update-sentiment-image-tags.sh

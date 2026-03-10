@@ -1,0 +1,105 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: argocd-hardened
+spec:
+  description: >-
+    Hardened policy for argocd namespace. ArgoCD is highly privileged (cluster admin).
+    Ingress: only from platform-gateway (UI access via sso) and intra-namespace.
+    Egress: kube-apiserver (deployments), Gitea SSH (repo sync), Dex (OIDC),
+    DNS, and external Helm chart registries on :443 only.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": argocd
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argocd
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8083"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            # argocd-application-controller metrics
+            - port: "8082"
+              protocol: TCP
+            # argocd-notifications metrics
+            - port: "8083"
+              protocol: TCP
+            # argocd-server metrics
+            - port: "8084"
+              protocol: TCP
+            # argocd-repo-server metrics
+            - port: "8085"
+              protocol: TCP
+            # argocd-notifications-controller metrics
+            - port: "9001"
+              protocol: TCP
+            # argocd-dex-server telemetry
+            - port: "5558"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argocd
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": gitea
+      toPorts:
+        - ports:
+            - port: "22"
+              protocol: TCP
+            - port: "2222"
+              protocol: TCP
+            - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": dex
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

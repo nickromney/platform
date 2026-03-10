@@ -1,0 +1,9 @@
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: approved-egress-cidrs
+spec:
+  externalCIDRs:
+    - 1.1.1.1/32
+    - 8.8.8.8/32
+    - 208.67.222.222/32

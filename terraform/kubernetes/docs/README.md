@@ -1,0 +1,194 @@
+# platform (local platform demo)
+
+## Intent
+
+This stack is a reproducible, local "platform-in-a-box" demo that shows:
+
+- **Kubernetes (kind)** as the local cluster
+- **Cilium + Hubble** for CNI and L7 visibility
+- **Gitea** as both:
+  - the Git server backing GitOps
+  - the CI system (Gitea Actions)
+  - the container image registry (OCI)
+- **Argo CD** using the **app-of-apps** GitOps pattern
+- **NGINX Gateway Fabric** (Gateway API) for ingress
+- **TLS everywhere** via **cert-manager** + a locally bootstrapped **mkcert CA**
+- **Instrumentation/Monitoring** with **SigNoz** (local, open-source "Datadog-like" observability)
+
+## Existing Cluster Mode
+
+The same Terraform root can now run without provisioning Kind by setting `provision_kind_cluster = false`.
+
+- Single stack path: `terraform/kubernetes`
+- Backend profile inputs:
+  - `targets/kind.tfvars` (Kind provisioning enabled)
+  - `targets/k3s.tfvars` (existing kubeconfig cluster)
+
+Example:
+
+```bash
+cd kubernetes/kind
+KUBECONFIG_CONTEXT=my-context make k3s apply 900 AUTO_APPROVE=1
+```
+
+## Recommended Stages (Minimal Surface Area)
+
+This stack intentionally keeps the "stage" interface small:
+
+- `100` create the kind cluster (no addons)
+- `200` install Cilium (baseline CNI)
+- `300` enable Hubble UI
+- `900` full stack + SSO (opinionated learning environment)
+
+Typical flow:
+
+```bash
+cd kubernetes/kind
+make kind apply 100 AUTO_APPROVE=1
+make kind apply 200 AUTO_APPROVE=1
+make kind apply 300 AUTO_APPROVE=1
+make kind apply 900 AUTO_APPROVE=1
+```
+
+## Instrumentation / Monitoring
+
+### What emits telemetry
+
+- **Platform metrics/logs/traces** are collected via OpenTelemetry.
+- **NGINX Gateway Fabric tracing** is enabled so edge requests produce spans (useful for "did the request reach the cluster" debugging).
+
+### SigNoz trace storage (important for debugging)
+
+SigNoz stores spans in ClickHouse using the **v3 trace schema** (e.g. `signoz_traces.signoz_index_v3`).
+If you query older tables like `signoz_traces.distributed_signoz_spans` you may see `0` even when traces are present.
+
+### Service Map / dependency graph
+
+The Service Map depends on **service-to-service relationships** (edges). A single "edge" service (only NGINX spans) will typically not produce a map.
+
+In this stack the dependency graph table (`signoz_traces.dependency_graph_minutes_v2`) is populated via a ClickHouse materialized view over `signoz_traces.signoz_index_v3` that looks for **parent/child spans across different `service.name` values**.
+
+Practically:
+
+- If you only have `service.name = ngf:platform-gateway:platform-gateway`, **Service Map can be empty**.
+- Once you have traces that include **multiple services in the same trace** (with context propagation), the dependency graph tables will start to fill and the Service Map should render.
+
+### OpenTelemetry service graph connector (optional)
+
+OpenTelemetry also has a **`servicegraph` connector** which derives service-graph *metrics* (e.g. `traces_service_graph_request_total`) from traces.
+If/when we enable it in the collector path, it provides another way to drive service dependency views.
+
+## Next Steps (Registry + Runner + App Repos)
+
+These are the next setup steps for local builds/pulls and for onboarding application repos beyond the platform stack.
+
+### 1) Gitea registry + Kind node trust (required for image pulls)
+
+This stack now writes containerd `hosts.toml` for:
+- `docker.io`
+- `gitea_registry_host` (default `localhost:30090`)
+
+It also mounts `/etc/containerd/certs.d` into Kind nodes so containerd can pull from the registry.
+**Important:** Changing Kind mounts requires recreating the Kind cluster.
+
+Suggested values:
+- `gitea_registry_host = "localhost:30090"`
+- `gitea_registry_scheme = "http"`
+- `enable_docker_socket_mount = true`
+- `docker_socket_path = "/var/run/docker.sock"`
+
+Apply notes:
+- Any change to Kind mounts will recreate the cluster on the next `make apply`.
+
+### 2) In-cluster Gitea Actions runner (optional, for local builds)
+
+Enable the runner via:
+- `enable_actions_runner = true`
+
+The runner uses the host Docker socket and registers itself against the in-cluster Gitea.
+This gives you an in‑cluster CI path that can build/push images to the Gitea registry.
+
+### 3) Registry pull secrets for namespaces
+
+If you want workloads to pull images from the local Gitea registry, add namespaces here:
+- `registry_secret_namespaces = ["<your-namespace>"]`
+
+This creates a `gitea-registry-creds` secret in each namespace.
+You still need to reference the secret from workloads/service accounts:
+- `imagePullSecrets: [{ name: gitea-registry-creds }]`
+
+### 4) Flexible app repo onboarding (by design)
+
+We want this to be flexible across teammates and setups:
+
+Option A: **External repo (GitHub, etc.)**
+- Create an Argo CD Application that points directly to the external repo.
+- Add repo credentials in Argo CD (SSH key or HTTPS token).
+
+Option B: **Mirror into local Gitea**
+- Clone the repo locally (or from GitHub) and push into Gitea.
+- Point Argo CD at the in-cluster Gitea repo.
+
+We can implement a generic "seed repo" script later that supports:
+- `SOURCE=local path` or `SOURCE=git URL`
+- `DEST=gitea repo`
+- optional filters (subdir, overlays, kustomize/helm)
+This keeps onboarding flexible for both local and hosted sources.
+
+### 5) Hybrid app image strategy (external baseline + Gitea-on-change)
+
+This repo now supports a hybrid mode:
+
+- **External baseline images** are built outside the cluster (local scripts or your preferred CI)
+- **Gitea images win on app code changes** because app-repo workflows stamp workload manifests to commit-tagged Gitea images
+
+Enable external baseline refs in your stage tfvars:
+
+```hcl
+prefer_external_workload_images = true
+external_workload_image_refs = {
+  sentiment-api                          = "ghcr.io/<owner>/sentiment-api:main"
+  sentiment-auth-ui                      = "ghcr.io/<owner>/sentiment-auth-ui:main"
+  subnetcalc-api-fastapi-container-app   = "ghcr.io/<owner>/subnetcalc-api-fastapi-container-app:main"
+  subnetcalc-apim-simulator              = "ghcr.io/<owner>/subnetcalc-apim-simulator:main"
+  subnetcalc-frontend-react              = "ghcr.io/<owner>/subnetcalc-frontend-react:main"
+  subnetcalc-frontend-typescript-vite    = "ghcr.io/<owner>/subnetcalc-frontend-typescript-vite:main"
+}
+```
+
+## Kyverno Policies
+
+Kyverno is deployed via ArgoCD and enforces cluster-wide policies. Policies are stored in `cluster-policies/kyverno/` using a `shared/`, `dev/`, and `uat/` hierarchy.
+
+### Topology Spread for subnetcalc-dev
+
+The `subnetcalc-dev-topology-spread` policy automatically mutates Deployments in the `subnetcalc-dev` namespace to add `topologySpreadConstraints`:
+
+```yaml
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: <deployment's own selector labels>
+```
+
+**How it works:**
+
+1. When a Deployment is created/updated in `subnetcalc-dev`, Kyverno intercepts the request
+2. The policy adds `topologySpreadConstraints` to the pod template spec
+3. `maxSkew: 1` ensures pods are evenly distributed across nodes (at most 1 pod difference between any two nodes)
+4. `topologyKey: kubernetes.io/hostname` spreads across nodes
+5. `whenUnsatisfiable: ScheduleAnyway` allows scheduling even if perfect balance isn't achievable (soft constraint)
+6. The `labelSelector` dynamically uses the Deployment's own selector via `{{request.object.spec.selector.matchLabels}}`
+
+**Example:** With 2 replicas and 2 worker nodes, you get 1 pod per node:
+
+```
+$ kubectl -n subnetcalc-dev get pods -o wide
+NAME                        NODE
+subnetcalc-frontend-xxx     kind-local-worker
+subnetcalc-frontend-yyy     kind-local-worker2
+```
+
+**Note:** Deployments can still define their own explicit `topologySpreadConstraints` which will take precedence (Kyverno uses `patchStrategicMerge`).

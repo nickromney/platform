@@ -1,0 +1,53 @@
+{
+  "name": "@subnet-calculator/shared-frontend",
+  "version": "1.0.0",
+  "description": "Shared TypeScript types and utilities for subnet calculator frontends",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/types/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "default": "./dist/api/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "default": "./dist/auth/index.js"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "lint": "biome check --write src/",
+    "lint:check": "biome check src/",
+    "format": "biome format --write src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@vitest/coverage-v8": "^4.0.8",
+    "typescript": "^5.6.3",
+    "vitest": "^4.0.8"
+  },
+  "keywords": [
+    "subnet",
+    "calculator",
+    "types",
+    "api",
+    "shared"
+  ],
+  "author": "",
+  "license": "MIT"
+}

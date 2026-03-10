@@ -1,0 +1,38 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gateway-routes
+  namespace: sso
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: gateway-routes
+  to:
+    - group: ""
+      kind: Service
+      name: dex
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-argocd
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-gitea
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-hubble
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-grafana
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-sentiment-dev
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-sentiment-uat
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-subnetcalc-dev
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-subnetcalc-uat

@@ -1,0 +1,40 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{swa05BaseUrl}}/api/v1/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  username: demo
+  password: password123
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  const data = res.getBody();
+  if (data.access_token) {
+    bru.setEnvVar("token", data.access_token);
+  }
+}
+
+tests {
+  test("should return JWT token", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.access_token).to.be.a("string");
+    expect(data.token_type).to.equal("bearer");
+  });
+}

@@ -1,0 +1,40 @@
+# Compose configuration for Container App API only
+# Works with both podman-compose and docker compose
+#
+# Usage:
+#   podman-compose up
+#   docker compose up
+#
+# Access:
+#   API: http://localhost:8000/api/v1/health
+#   Docs: http://localhost:8000/api/v1/docs
+
+services:
+  api-fastapi-container-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: subnet-calculator-api-fastapi-container-app:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # JWT Authentication with Argon2 hashed passwords
+      - AUTH_METHOD=jwt
+      - JWT_SECRET_KEY=container-app-dev-secret-key-min-32-chars-long-12345
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      # Test users (Argon2 hashed passwords)
+      # demo: password123
+      # admin: securepass
+      - JWT_TEST_USERS={"demo":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","admin":"$$argon2id$$v=19$$m=65536,t=3,p=4$$JiTJZlTwD/1jJLlMQMOwCA$$HbubnE11kzEfcszqKtMOmjvxj14vjooqbdZtgc1NYCs"}
+    volumes:
+      # Mount app directory for hot reload during development
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

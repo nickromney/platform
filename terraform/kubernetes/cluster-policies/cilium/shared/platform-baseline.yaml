@@ -1,0 +1,82 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: platform-baseline-headlamp
+spec:
+  description: >-
+    Policy for headlamp namespace (Kubernetes dashboard).
+    Headlamp is optional (enable_headlamp toggle). When the namespace does not
+    exist this policy harmlessly matches nothing -- Cilium ignores selectors
+    with zero matching endpoints.
+    Ingress: nginx-gateway-fabric (platform-gateway ns) on :4466, kubelet health probes.
+    Egress: kube-apiserver, DNS, Dex (OIDC), platform gateway HTTPS
+    (for Dex public issuer URL), and FQDN-pinned HTTPS
+    for plugin sidecar (registry.npmjs.org, artifacthub.io).
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": headlamp
+  ingress:
+    # Kubelet health probes
+    - fromEntities:
+        - host
+        - remote-node
+    # nginx-gateway-fabric (platform-gateway ns) -> headlamp :4466
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+      toPorts:
+        - ports:
+            - port: "4466"
+              protocol: TCP
+  egress:
+    # DNS
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # kube-apiserver (Headlamp's primary function)
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Dex (OIDC authentication)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": dex
+      toPorts:
+        - ports:
+            - port: "5556"
+              protocol: TCP
+            - port: "5558"
+              protocol: TCP
+    # Headlamp resolves dex.127.0.0.1.sslip.io to the internal gateway VIP via hostAliases.
+    # Allow HTTPS egress to the platform gateway data plane for OIDC discovery/auth redirects.
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Plugin sidecar: npmjs registry + ArtifactHub (FQDN-pinned)
+    - toFQDNs:
+        - matchName: registry.npmjs.org
+        - matchName: artifacthub.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

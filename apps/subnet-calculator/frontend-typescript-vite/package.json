@@ -1,0 +1,38 @@
+{
+  "name": "subnet-calculator-frontend-typescript-vite",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TypeScript + Vite frontend for subnet calculator",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "npm --prefix ../shared-frontend run build && tsc --noEmit",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:integration": "BASE_URL=http://localhost:3001 playwright test --config=playwright.integration.config.ts",
+    "test:integration:stack4": "BASE_URL=http://localhost:3000 playwright test --config=playwright.integration.config.ts",
+    "test:integration:headed": "BASE_URL=http://localhost:3001 playwright test --config=playwright.integration.config.ts --headed",
+    "test:swa:stack4": "BASE_URL=http://localhost:4280 playwright test --config=playwright.swa.config.ts",
+    "test:swa:stack5": "BASE_URL=http://localhost:4281 playwright test --config=playwright.swa.config.ts",
+    "test:swa:headed": "BASE_URL=http://localhost:4280 playwright test --config=playwright.swa.config.ts --headed",
+    "test:auth": "playwright test tests/auth-logout.spec.ts",
+    "test:auth:headed": "playwright test tests/auth-logout.spec.ts --headed",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "biome check . && npm --prefix ../shared-frontend run build && tsc --noEmit"
+  },
+  "dependencies": {
+    "@picocss/pico": "^2.0.6",
+    "@subnet-calculator/shared-frontend": "file:../shared-frontend"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^6.0.0"
+  }
+}

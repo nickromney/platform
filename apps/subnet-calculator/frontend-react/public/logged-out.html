@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logged Out - IPv4 Subnet Calculator</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .logout-container {
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .logout-icon {
+            font-size: 64px;
+            margin-bottom: 1rem;
+        }
+
+        .logout-container h1 {
+            margin-bottom: 1rem;
+        }
+
+        .logout-container p {
+            margin-bottom: 2rem;
+        }
+
+        .logout-container a {
+            display: block;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <div class="logout-container">
+            <div class="logout-icon">👋</div>
+            <h1>You've been logged out</h1>
+            <p>Thank you for using the IPv4 Subnet Calculator.</p>
+            <!--
+              Route through oauth2-proxy so we don't rely on cached SPA assets for logout gating.
+              If the session is gone, oauth2-proxy will redirect to Dex.
+            -->
+            <a href="/oauth2/start?rd=%2F" role="button" onclick="window.location.href='/oauth2/start?rd=%2F'; return false;">Return to Calculator</a>
+        </div>
+    </main>
+
+    <script>
+        // Clear any lingering OIDC state from localStorage
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('oidc.')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+    </script>
+</body>
+</html>

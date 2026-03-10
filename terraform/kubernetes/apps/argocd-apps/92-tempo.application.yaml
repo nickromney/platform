@@ -1,0 +1,112 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "92"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: tempo
+    targetRevision: 1.24.4
+    helm:
+      releaseName: tempo
+      values: |
+        securityContext:
+          runAsUser: 65532
+          runAsGroup: 65532
+          fsGroup: 65532
+          runAsNonRoot: true
+        tempo:
+          registry: dhi.io
+          repository: tempo
+          tag: 2.10.1-debian13
+          memBallastSizeMbs: 0
+          storage:
+            trace:
+              backend: local
+              local:
+                path: /tmp/tempo/traces
+              wal:
+                path: /tmp/tempo/wal
+          retention: 24h
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+        config: |
+          memberlist:
+            cluster_label: "tempo.observability"
+          multitenancy_enabled: false
+          usage_report:
+            reporting_enabled: true
+          compactor:
+            compaction:
+              block_retention: 24h
+          distributor:
+            receivers:
+              otlp:
+                protocols:
+                  grpc:
+                    endpoint: 0.0.0.0:4317
+                  http:
+                    endpoint: 0.0.0.0:4318
+          ingester: {}
+          server:
+            http_listen_port: 3200
+          storage:
+            trace:
+              backend: local
+              local:
+                path: /tmp/tempo/traces
+              wal:
+                path: /tmp/tempo/wal
+          querier: {}
+          query_frontend: {}
+          overrides:
+            per_tenant_override_config: /conf/overrides.yaml
+            metrics_generator_processors:
+              - service-graphs
+              - span-metrics
+              - local-blocks
+          metrics_generator:
+            traces_storage:
+              path: /tmp/tempo/generator/traces
+            processor:
+              local_blocks:
+                filter_server_spans: false
+            storage:
+              path: /tmp/tempo/generator/wal
+              remote_write:
+                - url: http://prometheus-server.observability.svc.cluster.local/api/v1/write
+
+        persistence:
+          enabled: false
+
+        serviceMonitor:
+          enabled: false
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-gateway-nginx
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: platform-gateway-nginx
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/managed-by: nginx-gateway-nginx
+    gateway.networking.k8s.io/gateway-name: platform-gateway
+spec:
+  type: NodePort
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: PreferDualStack
+  sessionAffinity: None
+  selector:
+    app.kubernetes.io/instance: nginx-gateway
+    app.kubernetes.io/managed-by: nginx-gateway-nginx
+    app.kubernetes.io/name: platform-gateway-nginx
+    gateway.networking.k8s.io/gateway-name: platform-gateway
+  ports:
+    - name: port-443
+      port: 443
+      protocol: TCP
+      targetPort: 443
+      nodePort: 30070

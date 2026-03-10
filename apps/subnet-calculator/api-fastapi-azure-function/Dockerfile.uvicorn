@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install deps (production only)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-cache --no-dev
+
+# Copy application code
+COPY . /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 8080
+
+CMD ["uvicorn", "function_app:api", "--host", "0.0.0.0", "--port", "8080"]

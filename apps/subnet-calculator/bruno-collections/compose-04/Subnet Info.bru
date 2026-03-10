@@ -1,0 +1,32 @@
+meta {
+  name: Subnet Info
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{compose04ApiUrl}}/api/v1/ipv4/subnet-info
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "network": "10.0.0.0/16",
+    "mode": "Azure"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.prefix_length: eq 16
+}
+
+tests {
+  test("should calculate subnet information", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.network).to.equal("10.0.0.0/16");
+    expect(data.netmask).to.equal("255.255.0.0");
+  });
+}

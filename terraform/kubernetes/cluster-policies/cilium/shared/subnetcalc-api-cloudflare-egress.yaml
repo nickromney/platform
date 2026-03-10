@@ -1,0 +1,27 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-subnetcalc-api-cloudflare-egress
+spec:
+  description: |
+    Allow subnetcalc-api pods in dev and uat to fetch Cloudflare IP ranges
+    over HTTPS. Used by the subnet calculator's IP-to-ASN/provider lookup.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:app.kubernetes.io/name"
+        operator: In
+        values:
+          - subnetcalc-api
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - dev
+          - uat
+  egress:
+    - toFQDNs:
+        - matchName: www.cloudflare.com
+        - matchName: cloudflare.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

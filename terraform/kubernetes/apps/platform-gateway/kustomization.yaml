@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform-gateway
+resources:
+  - namespace.yaml
+  - agent-tls-bootstrap.yaml
+  - gateway.yaml
+  - gateway-service.yaml
+  - nginxproxy.yaml
+  - tls-hardening.yaml

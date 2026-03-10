@@ -1,0 +1,53 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: nginx-gateway-control-plane
+spec:
+  description: >-
+    Allow NGINX Gateway Fabric control-plane pods in the nginx-gateway namespace
+    to receive ingress from gateway data-plane pods and host, and egress to
+    DNS and kube-apiserver for Gateway API CRD watches.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": nginx-gateway
+      "k8s:app.kubernetes.io/name": nginx-gateway
+  ingress:
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": "kube-system"
+            "k8s:k8s-app": "kube-dns"
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

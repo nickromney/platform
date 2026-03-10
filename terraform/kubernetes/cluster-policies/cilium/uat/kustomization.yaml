@@ -1,0 +1,7 @@
+resources:
+  - uat-baseline.yaml
+  - uat-project-isolation.yaml
+  - uat-mtls-sentiment.yaml
+  - uat-mtls-subnetcalc.yaml
+  - sentiment-router-l7-uat.yaml
+  - subnetcalc-l7-uat.yaml

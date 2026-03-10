@@ -1,0 +1,107 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: subnetcalc-router-l7-uat
+spec:
+  description: >-
+    L7 HTTP policy for subnetcalc-router in uat namespace.
+    The router NEVER contacts subnetcalc-api directly. /api/* traffic is
+    proxied to subnetcalc-apim-simulator (apim ns) which validates the JWT
+    and forwards to subnetcalc-api. All other paths go to subnetcalc-frontend.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": uat
+      "k8s:app.kubernetes.io/name": subnetcalc-router
+  egress:
+    # /api/* -> apim-simulator (cross-namespace, apim ns)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/api/v1/health.*"
+              - method: "POST"
+                path: "/api/v1/ipv4/.*"
+              - method: "OPTIONS"
+                path: "/api/v1/ipv4/.*"
+              - method: "GET"
+                path: "/api/v1/subnet.*"
+              - method: "POST"
+                path: "/api/v1/subnet.*"
+              - method: "OPTIONS"
+                path: "/api/v1/subnet.*"
+    # /, /logged-out.html, /favicon.* -> subnetcalc-frontend (:8080)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:app.kubernetes.io/name": subnetcalc-frontend
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: subnetcalc-api-l7-uat
+spec:
+  description: >-
+    L7 HTTP policy for subnetcalc-api in uat namespace.
+    The API receives traffic ONLY from the APIM simulator (apim ns),
+    never from the router directly.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": uat
+      "k8s:app.kubernetes.io/name": subnetcalc-api
+  ingress:
+    # apim-simulator (apim ns) -> subnetcalc-api (uat ns)
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/api/v1/health.*"
+              - method: "POST"
+                path: "/api/v1/ipv4/.*"
+              - method: "OPTIONS"
+                path: "/api/v1/ipv4/.*"
+              - method: "GET"
+                path: "/api/v1/subnet.*"
+              - method: "POST"
+                path: "/api/v1/subnet.*"
+              - method: "OPTIONS"
+                path: "/api/v1/subnet.*"
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+            "k8s:app.kubernetes.io/name": otel-collector
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP

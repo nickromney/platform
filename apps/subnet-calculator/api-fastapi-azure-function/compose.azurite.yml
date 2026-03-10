@@ -1,0 +1,32 @@
+# Optional Azurite for local development parity with the kind + ArgoCD stack.
+# Usage:
+#   docker compose -f compose.yml -f compose.azurite.yml up
+#   podman-compose -f compose.yml -f compose.azurite.yml up
+
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+    platform: linux/amd64
+    command:
+      - azurite
+      - --location
+      - /data
+      - --blobHost
+      - 0.0.0.0
+      - --queueHost
+      - 0.0.0.0
+      - --tableHost
+      - 0.0.0.0
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+
+  api-fastapi-azure-function:
+    environment:
+      - AzureWebJobsStorage=UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://azurite
+
+volumes:
+  azurite-data: {}

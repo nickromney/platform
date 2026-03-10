@@ -1,0 +1,42 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-sentiment-to-subnetcalc-dev
+spec:
+  description: Hard isolation - deny sentiment project to subnetcalc project in dev namespace.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": sentiment
+  egressDeny:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": subnetcalc
+  ingressDeny:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": subnetcalc
+
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-subnetcalc-to-sentiment-dev
+spec:
+  description: Hard isolation - deny subnetcalc project to sentiment project in dev namespace.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": subnetcalc
+  egressDeny:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": sentiment
+  ingressDeny:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": sentiment

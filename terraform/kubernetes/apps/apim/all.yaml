@@ -1,0 +1,147 @@
+# APIM namespace - shared API management services
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apim
+  labels:
+    app.kubernetes.io/name: apim
+    app.kubernetes.io/component: apim
+
+---
+# SubnetCalc APIM Simulator Config - Shared (routes based on Host header)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: subnetcalc-apim-simulator-config
+  namespace: apim
+  labels:
+    app.kubernetes.io/name: subnetcalc-apim-simulator
+    project: subnetcalc
+    role: apim
+data:
+  config.json: |
+    {
+      "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io"],
+      "allow_anonymous": false,
+      "oidc": {
+        "issuer": "https://dex.127.0.0.1.sslip.io/dex",
+        "audience": "oauth2-proxy",
+        "jwks_uri": "http://dex.sso.svc.cluster.local:5556/dex/keys"
+      },
+      "subscription": {
+        "required": false,
+        "bypass": [
+          {
+            "header": "X-Subnetcalc-Bypass-Subscription",
+            "equals": "true"
+          }
+        ]
+      },
+      "routes": [
+        {
+          "name": "subnetcalc-api-dev",
+          "host_match": ["subnetcalc.dev.127.0.0.1.sslip.io", "subnetcalc-dev.127.0.0.1.sslip.io"],
+          "path_prefix": "/api",
+          "upstream_base_url": "http://subnetcalc-api.dev.svc.cluster.local:8000",
+          "upstream_path_prefix": "/api"
+        },
+        {
+          "name": "subnetcalc-api-uat",
+          "host_match": ["subnetcalc.uat.127.0.0.1.sslip.io", "subnetcalc-uat.127.0.0.1.sslip.io"],
+          "path_prefix": "/api",
+          "upstream_base_url": "http://subnetcalc-api.uat.svc.cluster.local:8000",
+          "upstream_path_prefix": "/api"
+        }
+      ]
+    }
+
+---
+# SubnetCalc APIM Simulator - Shared deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subnetcalc-apim-simulator
+  namespace: apim
+  labels:
+    app.kubernetes.io/name: subnetcalc-apim-simulator
+    app.kubernetes.io/component: apim
+    project: subnetcalc
+    role: apim
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: subnetcalc-apim-simulator
+      app.kubernetes.io/component: apim
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: subnetcalc-apim-simulator
+        app.kubernetes.io/component: apim
+        project: subnetcalc
+        role: apim
+    spec:
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: apim
+          image: localhost:30090/platform/subnetcalc-apim-simulator:latest
+          imagePullPolicy: Always
+          env:
+            - name: APIM_CONFIG_PATH
+              value: /config/config.json
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: config
+              mountPath: /config/config.json
+              subPath: config.json
+          readinessProbe:
+            httpGet:
+              path: /apim/startup
+              port: 8000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /apim/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: subnetcalc-apim-simulator-config
+
+---
+# Shared service - both dev and uat use this
+apiVersion: v1
+kind: Service
+metadata:
+  name: subnetcalc-apim-simulator
+  namespace: apim
+  labels:
+    app.kubernetes.io/name: subnetcalc-apim-simulator
+    app.kubernetes.io/component: apim
+    project: subnetcalc
+    role: apim
+spec:
+  selector:
+    app.kubernetes.io/name: subnetcalc-apim-simulator
+    app.kubernetes.io/component: apim
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

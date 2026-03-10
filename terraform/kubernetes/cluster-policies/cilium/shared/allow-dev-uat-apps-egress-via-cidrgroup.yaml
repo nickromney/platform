@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-dev-uat-apps-egress-via-cidrgroup
+spec:
+  description: Allow real app pods in dev and uat to egress to approved CIDRs over HTTPS.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - dev
+          - uat
+      - key: "k8s:app.kubernetes.io/name"
+        operator: In
+        values:
+          - sentiment-api
+          - sentiment-auth-ui
+          - sentiment-router
+          - subnetcalc-api
+          - subnetcalc-frontend
+          - subnetcalc-router
+  egress:
+    - toCIDRSet:
+        - cidrGroupRef: approved-egress-cidrs
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

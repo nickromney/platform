@@ -1,0 +1,4 @@
+resources:
+  - namespace-default-deny.yaml
+  - protect-default-deny.yaml
+  - restrict-image-registries.yaml

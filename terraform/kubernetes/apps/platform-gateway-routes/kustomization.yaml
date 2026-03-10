@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - httproute-argocd.yaml
+  - httproute-gitea.yaml
+  - httproute-headlamp.yaml
+  - httproute-hubble.yaml
+  - httproute-kyverno.yaml
+  - httproute-signoz.yaml
+  - referencegrant-argocd.yaml
+  - referencegrant-gitea.yaml
+  - referencegrant-headlamp.yaml
+  - referencegrant-hubble.yaml
+  - referencegrant-policy-reporter.yaml
+  - referencegrant-signoz.yaml

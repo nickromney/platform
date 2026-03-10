@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Calculator body -->
+  <rect x="15" y="10" width="70" height="80" rx="5" fill="#2c3e50" stroke="#34495e" stroke-width="2"/>
+
+  <!-- Display screen -->
+  <rect x="22" y="18" width="56" height="16" rx="2" fill="#3498db" stroke="#2980b9" stroke-width="1"/>
+
+  <!-- Display text (subnet mask) -->
+  <text x="50" y="29" font-family="monospace" font-size="7" fill="#ecf0f1" text-anchor="middle">255.255.0.0</text>
+
+  <!-- Calculator buttons (grid) -->
+  <!-- Row 1 -->
+  <rect x="23" y="42" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="38" y="42" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="53" y="42" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="68" y="42" width="9" height="8" rx="1" fill="#e67e22"/>
+
+  <!-- Row 2 -->
+  <rect x="23" y="53" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="38" y="53" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="53" y="53" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="68" y="53" width="9" height="8" rx="1" fill="#e67e22"/>
+
+  <!-- Row 3 -->
+  <rect x="23" y="64" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="38" y="64" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="53" y="64" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="68" y="64" width="9" height="8" rx="1" fill="#e67e22"/>
+
+  <!-- Row 4 -->
+  <rect x="23" y="75" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="38" y="75" width="12" height="8" rx="1" fill="#95a5a6"/>
+  <rect x="53" y="75" width="24" height="8" rx="1" fill="#27ae60"/>
+
+  <!-- Button labels -->
+  <text x="29" y="48" font-size="5" fill="#2c3e50" text-anchor="middle">7</text>
+  <text x="44" y="48" font-size="5" fill="#2c3e50" text-anchor="middle">8</text>
+  <text x="59" y="48" font-size="5" fill="#2c3e50" text-anchor="middle">9</text>
+  <text x="72.5" y="48" font-size="5" fill="#fff" text-anchor="middle">/</text>
+</svg>

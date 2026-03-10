@@ -1,0 +1,97 @@
+{
+  "tiles": [
+    {
+      "title": "Platform App Golden Signals",
+      "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
+      "sort_key": "00/dashboard/platform-app-overview",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"observability\",deployment=\"grafana\"}) > bool 0) or max(argocd_app_info{name=\"grafana\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Platform Namespace Health",
+      "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-namespace-health/platform-namespace-health",
+      "sort_key": "00/dashboard/platform-namespace-health",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"observability\",deployment=\"grafana\"}) > bool 0) or max(argocd_app_info{name=\"grafana\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Argo CD",
+      "url": "https://argocd.admin.127.0.0.1.sslip.io",
+      "sort_key": "admin/argocd",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"argocd\",deployment=\"argocd-server\"}) > bool 0) or (sum(argocd_app_info{health_status=\"Healthy\"}) > bool 0) or vector(0))"
+    },
+    {
+      "title": "Dex",
+      "url": "https://dex.127.0.0.1.sslip.io/dex",
+      "sort_key": "admin/dex",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"dex\"}) > bool 0) or vector(0))"
+    },
+    {
+      "title": "Gitea",
+      "url": "https://gitea.admin.127.0.0.1.sslip.io",
+      "sort_key": "admin/gitea",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"gitea\",deployment=\"gitea\"}) > bool 0) or max(argocd_app_info{name=\"gitea\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Headlamp",
+      "url": "https://headlamp.admin.127.0.0.1.sslip.io",
+      "sort_key": "admin/headlamp",
+      "requires": [
+        "ENABLE_HEADLAMP"
+      ],
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"headlamp\",deployment=\"headlamp\"}) > bool 0) or max(argocd_app_info{name=\"headlamp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Hubble",
+      "url": "https://hubble.admin.127.0.0.1.sslip.io",
+      "sort_key": "admin/hubble",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-hubble\"}) > bool 0) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Kyverno Policy UI",
+      "url": "https://kyverno.admin.127.0.0.1.sslip.io/",
+      "sort_key": "admin/kyverno",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"policy-reporter\",deployment=~\"policy-reporter|policy-reporter-ui\"}) > bool 0) or max(argocd_app_info{name=\"policy-reporter\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Sentiment DEV",
+      "url": "https://sentiment.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/sentiment",
+      "requires": [
+        "ENABLE_APP_REPO_SENTIMENT"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-sentiment-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"sentiment-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"sentiment-auth-ui\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "SubnetCalc DEV",
+      "url": "https://subnetcalc.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/subnetcalc",
+      "requires": [
+        "ENABLE_APP_REPO_SUBNETCALC"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Sentiment UAT",
+      "url": "https://sentiment.uat.127.0.0.1.sslip.io",
+      "sort_key": "uat/sentiment",
+      "requires": [
+        "ENABLE_APP_REPO_SENTIMENT"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-sentiment-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"sentiment-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"sentiment-auth-ui\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "SubnetCalc UAT",
+      "url": "https://subnetcalc.uat.127.0.0.1.sslip.io",
+      "sort_key": "uat/subnetcalc",
+      "requires": [
+        "ENABLE_APP_REPO_SUBNETCALC"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
+    }
+  ]
+}

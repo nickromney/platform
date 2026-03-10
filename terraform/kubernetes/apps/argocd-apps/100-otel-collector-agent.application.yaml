@@ -1,0 +1,128 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-agent
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.146.1
+    helm:
+      releaseName: otel-collector-agent
+      values: |
+        mode: daemonset
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        service:
+          enabled: true
+          type: ClusterIP
+
+        ports:
+          otlp:
+            hostPort: 0
+          otlp-http:
+            hostPort: 0
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+
+        presets:
+          logsCollection:
+            enabled: true
+            includeCollectorLogs: false
+          kubernetesAttributes:
+            enabled: true
+
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 256Mi
+
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+            prometheus:
+              config:
+                scrape_configs:
+                  - job_name: argocd
+                    metrics_path: /metrics
+                    static_configs:
+                      - targets:
+                          - argocd-application-controller-metrics.argocd.svc.cluster.local:8082
+                          - argocd-server-metrics.argocd.svc.cluster.local:8083
+                          - argocd-repo-server-metrics.argocd.svc.cluster.local:8084
+                          - argocd-applicationset-controller-metrics.argocd.svc.cluster.local:8080
+                  - job_name: gitea
+                    metrics_path: /metrics
+                    static_configs:
+                      - targets:
+                          - gitea-http.gitea.svc.cluster.local:3000
+                  - job_name: oauth2-proxy
+                    metrics_path: /metrics
+                    static_configs:
+                      - targets:
+                          - oauth2-proxy-argocd.sso.svc.cluster.local:44180
+                          - oauth2-proxy-gitea.sso.svc.cluster.local:44180
+                          - oauth2-proxy-hubble.sso.svc.cluster.local:44180
+                          - oauth2-proxy-signoz.sso.svc.cluster.local:44180
+                  - job_name: nginx-gateway-fabric
+                    metrics_path: /metrics
+                    static_configs:
+                      - targets:
+                          - nginx-gateway.nginx-gateway.svc.cluster.local:9113
+
+          processors:
+            batch: {}
+
+          exporters:
+            otlp:
+              endpoint: signoz-otel-collector.observability.svc.cluster.local:4317
+              tls:
+                insecure: true
+
+          service:
+            pipelines:
+              logs:
+                receivers: [filelog, otlp]
+                processors: [k8sattributes, batch]
+                exporters: [otlp]
+              metrics:
+                receivers: [prometheus, otlp]
+                processors: [k8sattributes, batch]
+                exporters: [otlp]
+              traces:
+                receivers: [otlp]
+                processors: [k8sattributes, batch]
+                exporters: [otlp]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

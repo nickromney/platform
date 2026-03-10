@@ -1,0 +1,42 @@
+meta {
+  name: Check Auth Status
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{swa06BaseUrl}}/.auth/me
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should return authentication status", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    // When not authenticated: { clientPrincipal: null }
+    // When authenticated: { clientPrincipal: { userId, userRoles, claims } }
+    expect(data).to.have.property("clientPrincipal");
+  });
+}
+
+docs {
+  # Check Auth Status
+
+  This endpoint is provided by SWA (Static Web Apps), not your backend API.
+
+  **What a security researcher sees:**
+  - Request: GET /.auth/me
+  - Cookies: StaticWebAppsAuthCookie (if logged in)
+  - Response: User info if authenticated, null if not
+
+  **Key observations:**
+  - No Authorization header (cookie-based auth)
+  - SWA platform endpoint (not your API)
+  - In production: Real Azure AD user info
+  - In development: SWA CLI emulated user info
+}

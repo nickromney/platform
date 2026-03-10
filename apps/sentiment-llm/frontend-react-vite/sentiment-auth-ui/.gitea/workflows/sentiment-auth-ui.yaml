@@ -1,0 +1,80 @@
+name: Build sentiment-auth-ui image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**"
+  workflow_dispatch:
+
+env:
+  REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
+  REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+  REGISTRY_PWD: ${{ secrets.REGISTRY_PWD }}
+  DOCKER_HOST: unix:///var/run/docker.sock
+  WORKSPACE_DIR: /tmp/sentiment-auth-ui
+
+jobs:
+  build:
+    runs-on: [self-hosted]
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - name: Clone repo
+        env:
+          GITEA_USER: ${{ secrets.REGISTRY_USERNAME }}
+          GITEA_PASS: ${{ secrets.REGISTRY_PWD }}
+          # Cluster-internal service DNS name for git clone.
+          GITEA_HOST: ${{ secrets.GITEAHOST }}
+        run: |
+          OWNER="${GITEA_REPO_OWNER:-gitea-admin}"
+          if [ -z "${GITEA_USER}" ] || [ -z "${GITEA_PASS}" ]; then
+            echo "Missing Gitea credentials" >&2
+            exit 1
+          fi
+          CLONE_HOST="${GITEA_HOST:-host.docker.internal:3000}"
+          rm -rf "${WORKSPACE_DIR}"
+          if echo "${CLONE_HOST}" | grep -q "\.svc\."; then
+            PROTOCOL="http"
+            SSL_VERIFY="true"
+          else
+            PROTOCOL="https"
+            SSL_VERIFY="false"
+          fi
+          echo "Cloning from ${PROTOCOL}://${CLONE_HOST}/${OWNER}/sentiment-auth-ui"
+          git config --global credential.helper store
+          printf "protocol=%s\nhost=%s\nusername=%s\npassword=%s\n" "${PROTOCOL}" "${CLONE_HOST}" "${GITEA_USER}" "${GITEA_PASS}" | git credential-store store
+          git -c http.sslVerify=${SSL_VERIFY} clone "${PROTOCOL}://${CLONE_HOST}/${OWNER}/sentiment-auth-ui" "${WORKSPACE_DIR}"
+          cd "${WORKSPACE_DIR}"
+          git checkout main
+
+      - name: Log in to registry
+        run: |
+          echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
+          echo "Logged in to ${REGISTRY_HOST}"
+
+      - name: Pre-pull base images
+        run: |
+          for img in node:22-alpine dhi.io/nginx:1.29.5-debian13; do
+            for i in 1 2 3; do
+              echo "Pulling ${img} (attempt ${i}/3)..."
+              if docker pull --platform linux/amd64 "${img}"; then
+                break
+              fi
+              docker rmi "${img}" 2>/dev/null || true
+              sleep 3
+            done
+          done
+
+      - name: Build and push frontend image
+        working-directory: ${{ env.WORKSPACE_DIR }}
+        run: |
+          OWNER="${GITEA_REPO_OWNER:-gitea-admin}"
+          docker build \
+            --platform linux/amd64 \
+            --provenance=false \
+            -t "${REGISTRY_HOST}/${OWNER}/sentiment-auth-frontend:latest" \
+            .
+          docker push "${REGISTRY_HOST}/${OWNER}/sentiment-auth-frontend:latest"
+          echo "Pushed ${REGISTRY_HOST}/${OWNER}/sentiment-auth-frontend:latest"

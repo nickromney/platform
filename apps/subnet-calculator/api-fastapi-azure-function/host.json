@@ -1,0 +1,35 @@
+{
+  "version": "2.0",
+  "isDefaultHostConfig": true,
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.*, 5.0.0)"
+  },
+  "extensions": {
+    "http": {
+      "routePrefix": "",
+      "cors": {
+        "allowedOrigins": [
+          "*"
+        ],
+        "allowedMethods": [
+          "GET",
+          "POST",
+          "OPTIONS"
+        ],
+        "allowedHeaders": [
+          "Content-Type",
+          "Accept"
+        ]
+      }
+    }
+  },
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      }
+    }
+  }
+}

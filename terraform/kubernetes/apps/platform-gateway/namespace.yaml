@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-gateway
+  annotations:
+    # Ensure the namespace exists before any Sync hooks/jobs.
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/name: platform-gateway
+    app.kubernetes.io/managed-by: argocd

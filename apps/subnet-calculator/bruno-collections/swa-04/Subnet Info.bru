@@ -1,0 +1,34 @@
+meta {
+  name: Subnet Info
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{swa04BaseUrl}}/api/v1/ipv4/subnet-info
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "network": "10.0.0.0/24",
+    "mode": "Azure"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should calculate Azure subnet info", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.network_address).to.equal("10.0.0.0");
+    expect(data.prefix_length).to.equal(24);
+    expect(data.mode).to.equal("Azure");
+    expect(data.total_addresses).to.equal(256);
+    expect(data.usable_addresses).to.equal(251);
+  });
+}

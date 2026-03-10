@@ -1,0 +1,28 @@
+meta {
+  name: Health Check (Authenticated)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{swa05BaseUrl}}/api/v1/health
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should return healthy status with authentication", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.status).to.equal("healthy");
+    expect(data.service).to.equal("Subnet Calculator API (Azure Function)");
+  });
+}

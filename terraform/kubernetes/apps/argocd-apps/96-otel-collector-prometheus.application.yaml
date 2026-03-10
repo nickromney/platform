@@ -1,0 +1,142 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-prometheus
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "96"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.146.1
+    helm:
+      releaseName: otel-collector-prometheus
+      values: |
+        mode: deployment
+
+        nameOverride: otel-collector
+        fullnameOverride: otel-collector
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        replicaCount: 1
+
+        service:
+          enabled: true
+          type: ClusterIP
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/path: /metrics
+            prometheus.io/port: "9464"
+
+        ports:
+          otlp:
+            enabled: true
+            hostPort: 0
+            containerPort: 4317
+            servicePort: 4317
+          otlp-http:
+            enabled: true
+            hostPort: 0
+            containerPort: 4318
+            servicePort: 4318
+          metrics:
+            enabled: true
+            hostPort: 0
+            containerPort: 9464
+            servicePort: 9464
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+
+        presets:
+          kubernetesAttributes:
+            enabled: true
+          logsCollection:
+            enabled: true
+            includeCollectorLogs: false
+            storeCheckpoints: true
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 384Mi
+
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+
+          processors:
+            batch:
+              timeout: 1s
+              send_batch_size: 1024
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 75
+              spike_limit_percentage: 15
+
+          connectors:
+            spanmetrics:
+              histogram:
+                unit: ms
+              dimensions:
+                - name: k8s.namespace.name
+                - name: http.method
+                - name: http.status_code
+                - name: service.version
+
+          exporters:
+            prometheus:
+              endpoint: 0.0.0.0:9464
+              resource_to_telemetry_conversion:
+                enabled: true
+            otlp/tempo:
+              endpoint: tempo.observability.svc.cluster.local:4317
+              tls:
+                insecure: true
+            otlphttp/loki:
+              endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [spanmetrics, otlp/tempo]
+              metrics:
+                receivers: [otlp, spanmetrics]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [prometheus]
+              logs:
+                receivers: [filelog]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [otlphttp/loki]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

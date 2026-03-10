@@ -1,0 +1,14 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: ObservabilityPolicy
+metadata:
+  name: tracing-signoz
+  namespace: gateway-routes
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: signoz
+  tracing:
+    context: propagate
+    ratio: 100
+    strategy: ratio

@@ -1,0 +1,96 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: signoz
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "90"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: signoz-clickhouse-operator
+      jsonPointers:
+        - /metadata/annotations
+        - /metadata/labels
+        - /spec
+    - group: apps
+      kind: StatefulSet
+      name: signoz
+      jsonPointers:
+        - /metadata/annotations
+        - /metadata/labels
+        - /spec
+  source:
+    repoURL: https://charts.signoz.io
+    chart: signoz
+    targetRevision: 0.114.1
+    helm:
+      values: |
+        clickhouse:
+          persistence:
+            enabled: false
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: 1500m
+              memory: 2Gi
+          zookeeper:
+            persistence:
+              enabled: false
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+
+        signoz:
+          env:
+            # Required for password login + JWT issuance (used by signoz-auth-proxy).
+            signoz_tokenizer_jwt_secret: "local-kind-unsafe-dev-jwt-secret"
+          persistence:
+            enabled: true
+            size: 1Gi
+            storageClass: standard
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+
+        schemaMigrator:
+          upgradeHelmHooks: true
+
+        otelCollector:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

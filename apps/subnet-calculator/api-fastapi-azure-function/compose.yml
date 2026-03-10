@@ -1,0 +1,38 @@
+# Compose configuration for Azure Function API only
+# Works with both podman-compose and docker compose
+#
+# Usage:
+#   podman-compose up
+#   docker compose up
+#
+# Access:
+#   API: http://localhost:8080/api/v1/health
+#   Docs: http://localhost:8080/api/v1/docs
+
+services:
+  api-fastapi-azure-function:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: subnet-calculator-api-fastapi-azure-function:latest
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      # JWT Authentication with Argon2 hashed passwords
+      - AUTH_METHOD=jwt
+      - JWT_SECRET_KEY=azure-function-dev-secret-key-min-32-chars-long-12345
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - WEBSITES_PORT=8080
+      - ASPNETCORE_URLS=http://+:8080
+      # Test users (Argon2 hashed passwords)
+      # demo: password123
+      # admin: securepass
+      - JWT_TEST_USERS={"demo":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","admin":"$$argon2id$$v=19$$m=65536,t=3,p=4$$JiTJZlTwD/1jJLlMQMOwCA$$HbubnE11kzEfcszqKtMOmjvxj14vjooqbdZtgc1NYCs"}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

@@ -1,0 +1,247 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-gateway-agent-tls-bootstrap
+  namespace: platform-gateway
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-gateway-agent-tls-bootstrap-read
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agent-tls"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-gateway-agent-tls-bootstrap-read
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+subjects:
+  - kind: ServiceAccount
+    name: platform-gateway-agent-tls-bootstrap
+    namespace: platform-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-gateway-agent-tls-bootstrap-read
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-gateway-agent-tls-bootstrap-write
+  namespace: platform-gateway
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["platform-gateway-nginx-agent-tls"]
+    verbs: ["get", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-gateway-agent-tls-bootstrap-write
+  namespace: platform-gateway
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+subjects:
+  - kind: ServiceAccount
+    name: platform-gateway-agent-tls-bootstrap
+    namespace: platform-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-gateway-agent-tls-bootstrap-write
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: platform-gateway-agent-tls-bootstrap
+  namespace: platform-gateway
+  annotations:
+    # NGINX Gateway Fabric creates a per-Gateway NGINX deployment in the Gateway's namespace
+    # which mounts `platform-gateway-nginx-agent-tls`. This job mirrors nginx-gateway/agent-tls
+    # into platform-gateway/platform-gateway-nginx-agent-tls.
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: platform-gateway-agent-tls-bootstrap
+      containers:
+        - name: bootstrap
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              python - <<'PY'
+              import json
+              import os
+              import ssl
+              import sys
+              import time
+              import urllib.error
+              import urllib.request
+
+              SRC_NS = "nginx-gateway"
+              SRC_SECRET = "agent-tls"
+              DST_NS = "platform-gateway"
+              DST_SECRET = "platform-gateway-nginx-agent-tls"
+
+              WAIT_SECONDS = int(os.environ.get("WAIT_SECONDS", "900"))
+              SLEEP_SECONDS = float(os.environ.get("SLEEP_SECONDS", "2"))
+
+              API_SERVER = "https://kubernetes.default.svc"
+              TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+              CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+              def eprint(*args: object) -> None:
+                  print(*args, file=sys.stderr)
+
+              token = open(TOKEN_PATH, "r", encoding="utf-8").read().strip()
+              ssl_ctx = ssl.create_default_context(cafile=CA_PATH)
+
+              def request(method: str, path: str, body: object | None = None, content_type: str = "application/json"):
+                  url = f"{API_SERVER}{path}"
+                  headers = {
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/json",
+                  }
+                  data = None
+                  if body is not None:
+                      headers["Content-Type"] = content_type
+                      if isinstance(body, (bytes, bytearray)):
+                          data = body
+                      else:
+                          data = json.dumps(body).encode("utf-8")
+                  req = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as resp:
+                          resp_body = resp.read()
+                          if resp_body:
+                              return resp.status, json.loads(resp_body.decode("utf-8"))
+                          return resp.status, None
+                  except urllib.error.HTTPError as ex:
+                      try:
+                          body_text = ex.read().decode("utf-8")
+                      except Exception:
+                          body_text = ""
+                      raise RuntimeError(f"HTTP {ex.code} {method} {path}: {body_text}")
+                  except urllib.error.URLError as ex:
+                      raise RuntimeError(f"URL error {method} {path}: {ex}")
+
+              def get_optional(path: str):
+                  url = f"{API_SERVER}{path}"
+                  headers = {
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/json",
+                  }
+                  req = urllib.request.Request(url, headers=headers, method="GET")
+                  try:
+                      with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as resp:
+                          return resp.status, json.loads(resp.read().decode("utf-8"))
+                  except urllib.error.HTTPError as ex:
+                      if ex.code == 404:
+                          return 404, None
+                      body_text = ""
+                      try:
+                          body_text = ex.read().decode("utf-8")
+                      except Exception:
+                          pass
+                      raise RuntimeError(f"HTTP {ex.code} GET {path}: {body_text}")
+
+              def wait_for_secret(ns: str, name: str):
+                  deadline = time.time() + WAIT_SECONDS
+                  path = f"/api/v1/namespaces/{ns}/secrets/{name}"
+                  print(f"Waiting for secret {ns}/{name}...")
+                  while time.time() < deadline:
+                      status, secret = get_optional(path)
+                      if status != 404:
+                          return secret
+                      time.sleep(SLEEP_SECONDS)
+                  raise RuntimeError(f"Timed out waiting for secret {ns}/{name}")
+
+              def upsert_secret(data: dict, secret_type: str):
+                  labels = {
+                      "app.kubernetes.io/name": "platform-gateway-nginx",
+                      "app.kubernetes.io/instance": "nginx-gateway",
+                      "app.kubernetes.io/managed-by": "nginx-gateway-nginx",
+                      "gateway.networking.k8s.io/gateway-name": "platform-gateway",
+                  }
+
+                  desired = {
+                      "apiVersion": "v1",
+                      "kind": "Secret",
+                      "metadata": {
+                          "name": DST_SECRET,
+                          "namespace": DST_NS,
+                          "labels": labels,
+                      },
+                      "type": secret_type,
+                      "data": data,
+                  }
+
+                  create_path = f"/api/v1/namespaces/{DST_NS}/secrets"
+                  try:
+                      request("POST", create_path, desired)
+                      print(f"Created {DST_NS}/{DST_SECRET}")
+                      return
+                  except RuntimeError as ex:
+                      if "HTTP 409" not in str(ex):
+                          raise
+
+                  patch_path = f"/api/v1/namespaces/{DST_NS}/secrets/{DST_SECRET}"
+                  patch_body = {
+                      "metadata": {"labels": labels},
+                      "type": secret_type,
+                      "data": data,
+                  }
+                  request("PATCH", patch_path, patch_body, content_type="application/merge-patch+json")
+                  print(f"Updated {DST_NS}/{DST_SECRET}")
+
+              # Fast-path: if destination secret already exists and looks populated, do nothing.
+              dst_status, dst_secret = get_optional(f"/api/v1/namespaces/{DST_NS}/secrets/{DST_SECRET}")
+              if dst_status != 404:
+                  existing_data = (dst_secret or {}).get("data") or {}
+                  if all(existing_data.get(k) for k in ("ca.crt", "tls.crt", "tls.key")):
+                      print(f"Secret {DST_NS}/{DST_SECRET} already exists")
+                      sys.exit(0)
+
+              src_secret = wait_for_secret(SRC_NS, SRC_SECRET)
+
+              src_data = (src_secret or {}).get("data") or {}
+              if not all(src_data.get(k) for k in ("ca.crt", "tls.crt", "tls.key")):
+                  raise RuntimeError(f"Secret {SRC_NS}/{SRC_SECRET} missing expected keys")
+
+              src_type = (src_secret or {}).get("type") or "kubernetes.io/tls"
+              upsert_secret(
+                  {
+                      "ca.crt": src_data["ca.crt"],
+                      "tls.crt": src_data["tls.crt"],
+                      "tls.key": src_data["tls.key"],
+                  },
+                  src_type,
+              )
+              PY

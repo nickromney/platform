@@ -1,0 +1,181 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: signoz-bootstrap
+  namespace: observability
+  annotations:
+    # This is a one-time bootstrap task (complete SigNoz setup + create the auth-proxy secret).
+    # Model it as an Argo CD hook so it can be safely re-run and re-created (Jobs have immutable selectors).
+    argocd.argoproj.io/hook: Sync
+    # Delete failed hooks so Argo can retry on the next sync, rather than leaving a long-running
+    # failing Job that blocks the entire Application from becoming Healthy.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded,HookFailed
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: signoz-bootstrap
+    app.kubernetes.io/component: setup
+spec:
+  # Prevent a broken bootstrap script from blocking the platform-gateway-routes sync forever.
+  activeDeadlineSeconds: 1800
+  backoffLimit: 8
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: signoz-bootstrap
+        app.kubernetes.io/component: setup
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: signoz-bootstrap
+      containers:
+        - name: bootstrap
+          image: curlimages/curl:8.10.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              SIGNOZ_URL="http://signoz:8080"
+              NAMESPACE="observability"
+              SECRET_NAME="signoz-auth-proxy-credentials"
+
+              EMAIL="${SIGNOZ_BOOTSTRAP_EMAIL:-demo@admin.test}"
+              PASSWORD="${SIGNOZ_BOOTSTRAP_PASSWORD:-password123}"
+              LOGIN_WAIT_SECONDS="${SIGNOZ_BOOTSTRAP_LOGIN_WAIT_SECONDS:-600}"
+
+              K8S_API="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+              SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+              SA_CA_FILE="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              SA_TOKEN="$(cat "${SA_TOKEN_FILE}")"
+              SECRET_GET_URL="${K8S_API}/api/v1/namespaces/${NAMESPACE}/secrets/${SECRET_NAME}"
+              SECRET_CREATE_URL="${K8S_API}/api/v1/namespaces/${NAMESPACE}/secrets"
+
+              secret_exists() {
+                curl -fsS \
+                  --cacert "${SA_CA_FILE}" \
+                  -H "Authorization: Bearer ${SA_TOKEN}" \
+                  -o /tmp/secret.json \
+                  "${SECRET_GET_URL}" >/dev/null 2>&1
+              }
+
+              setup_completed() {
+                curl -fsS -o /tmp/version.json "${SIGNOZ_URL}/api/v1/version" >/dev/null 2>&1
+                grep -q '"setupCompleted":true' /tmp/version.json
+              }
+
+              register_user() {
+                code="$(curl -sS -o /tmp/register.json -w '%{http_code}' \
+                  -H 'content-type: application/json' \
+                  -d "$(printf '{"email":"%s","password":"%s"}' "$EMAIL" "$PASSWORD")" \
+                  "${SIGNOZ_URL}/api/v1/register" || true)"
+
+                if [ "$code" = "409" ]; then
+                  echo "User already registered"
+                  return 0
+                fi
+                if [ "$code" != "200" ]; then
+                  echo "Failed to register user (HTTP ${code})"
+                  cat /tmp/register.json || true
+                  return 1
+                fi
+                return 0
+              }
+
+              login_ok() {
+                # SigNoz v0.110+ moved password login to v2 sessions.
+                # Keep a v1 fallback for older versions.
+
+                code="$(curl -sS -o /tmp/login.json -w '%{http_code}' \
+                  -H 'content-type: application/json' \
+                  -d "$(printf '{"email":"%s","password":"%s"}' "$EMAIL" "$PASSWORD")" \
+                  "${SIGNOZ_URL}/api/v1/login" || true)"
+                if [ "$code" = "200" ] && grep -q 'accessJwt' /tmp/login.json; then
+                  return 0
+                fi
+
+                code="$(curl -sS -o /tmp/context.json -w '%{http_code}' \
+                  "${SIGNOZ_URL}/api/v2/sessions/context?email=${EMAIL}" || true)"
+                if [ "$code" != "200" ]; then
+                  return 1
+                fi
+
+                ORG_ID="$(sed -n 's/.*"id":"\([0-9a-f-]*\)".*/\1/p' /tmp/context.json | head -n 1)"
+                if [ -z "${ORG_ID}" ]; then
+                  return 1
+                fi
+
+                code="$(curl -sS -o /tmp/login.json -w '%{http_code}' \
+                  -H 'content-type: application/json' \
+                  -d "$(printf '{"email":"%s","password":"%s","orgId":"%s"}' "$EMAIL" "$PASSWORD" "$ORG_ID")" \
+                  "${SIGNOZ_URL}/api/v2/sessions/email_password" || true)"
+                if [ "$code" != "200" ]; then
+                  return 1
+                fi
+                grep -q 'accessToken' /tmp/login.json
+              }
+
+              echo "Waiting for SigNoz to become reachable..."
+              i=0
+              until curl -fsS -o /tmp/version.json "${SIGNOZ_URL}/api/v1/version" >/dev/null 2>&1; do
+                i=$((i+1))
+                if [ "$i" -ge 180 ]; then
+                  echo "Timed out waiting for SigNoz"
+                  exit 1
+                fi
+                sleep 2
+              done
+
+              if ! setup_completed; then
+                echo "SigNoz setup not complete; registering bootstrap user..."
+                register_user
+
+                echo "Waiting for SigNoz setup to complete..."
+                # Use epoch time for portability: $SECONDS is bash-only.
+                end="$(( $(date +%s) + LOGIN_WAIT_SECONDS ))"
+                until setup_completed; do
+                  if [ "$(date +%s)" -ge "$end" ]; then
+                    echo "Timed out waiting for SigNoz setup to complete"
+                    cat /tmp/version.json || true
+                    exit 1
+                  fi
+                  sleep 2
+                done
+              fi
+
+              echo "Waiting for SigNoz login to work (this can lag version readiness)..."
+              end="$(( $(date +%s) + LOGIN_WAIT_SECONDS ))"
+              until login_ok; do
+                if [ "$(date +%s)" -ge "$end" ]; then
+                  echo "Timed out waiting for SigNoz login to succeed"
+                  cat /tmp/login.json || true
+                  exit 1
+                fi
+                sleep 2
+              done
+
+              if secret_exists; then
+                echo "Auth-proxy secret already present"
+                exit 0
+              fi
+
+              echo "SigNoz login OK; creating ${SECRET_NAME} for signoz-auth-proxy..."
+
+              SECRET_PAYLOAD="$(printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"%s","namespace":"%s"},"type":"Opaque","stringData":{"SIGNOZ_URL":"%s","SIGNOZ_USER":"%s","SIGNOZ_PASSWORD":"%s"}}' "$SECRET_NAME" "$NAMESPACE" "$SIGNOZ_URL" "$EMAIL" "$PASSWORD")"
+
+              code="$(curl -sS -o /tmp/secret-create.json -w '%{http_code}' \
+                --cacert "${SA_CA_FILE}" \
+                -H "Authorization: Bearer ${SA_TOKEN}" \
+                -H "content-type: application/json" \
+                -d "$SECRET_PAYLOAD" \
+                "${SECRET_CREATE_URL}" || true)"
+              if [ "$code" = "409" ]; then
+                echo "${SECRET_NAME} already exists"
+              elif [ "$code" != "201" ] && [ "$code" != "200" ]; then
+                echo "Failed to create ${SECRET_NAME} (HTTP ${code})"
+                cat /tmp/secret-create.json || true
+                exit 1
+              fi
+
+              setup_completed

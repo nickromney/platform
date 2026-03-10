@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # Compatibility service: newer SigNoz charts (using the Altinity ClickHouse operator)
+  # may not create a stable "signoz-clickhouse" Service name, but the SigNoz init/migrator
+  # containers expect to resolve and reach it at signoz-clickhouse:8123.
+  name: signoz-clickhouse
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "82"
+  labels:
+    app.kubernetes.io/name: signoz-clickhouse
+    app.kubernetes.io/part-of: signoz
+spec:
+  type: ClusterIP
+  selector:
+    # Matches the ClickHouse pod created by the operator for the SigNoz installation.
+    clickhouse.altinity.com/chi: signoz-clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: http
+      protocol: TCP
+    - name: tcp
+      port: 9000
+      targetPort: tcp
+      protocol: TCP

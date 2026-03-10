@@ -1,0 +1,36 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-sentiment-llm-dns-egress
+spec:
+  description: |
+    Allow sentiment backend and LLM broker pods in dev and uat to perform DNS
+    lookups. Required for in-cluster service discovery and for direct-mode
+    ExternalName resolution when the host-backed gateway is selected.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:project"
+        operator: In
+        values:
+          - sentiment
+      - key: "k8s:role"
+        operator: In
+        values:
+          - backend
+          - llm
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - dev
+          - uat
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": "kube-system"
+            "k8s:k8s-app": "kube-dns"
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

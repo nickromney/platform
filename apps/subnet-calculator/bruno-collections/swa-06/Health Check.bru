@@ -1,0 +1,56 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{swa06BaseUrl}}/api/v1/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should return healthy status", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.status).to.equal("healthy");
+    expect(data.service).to.equal("Subnet Calculator API (Container App)");
+  });
+}
+
+docs {
+  # Health Check (Protected)
+
+  **What a security researcher sees:**
+
+  ## Without Authentication:
+  - Request: GET /api/v1/health
+  - Response: 401 Unauthorized or redirect to /.auth/login/aad
+
+  ## With Authentication (after login):
+  - Request: GET /api/v1/health
+  - Cookies: StaticWebAppsAuthCookie (set by SWA)
+  - Response: 200 OK with health status
+
+  ## Backend receives (invisible to client):
+  - x-ms-client-principal: <base64 encoded user info>
+  - x-ms-client-principal-id: <user-id>
+  - x-ms-client-principal-name: <user-name>
+
+  **Key observations:**
+  - No Authorization header in request
+  - Cookie-based authentication
+  - SWA injects headers to backend (not visible in browser tools)
+  - Backend has AUTH_METHOD=none (trusts SWA headers)
+
+  **Security model:**
+  - SWA validates authentication (platform level)
+  - SWA sets secure HttpOnly cookies
+  - SWA injects trusted headers to backend
+  - Backend trusts SWA (single trust boundary)
+}

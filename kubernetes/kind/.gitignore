@@ -1,0 +1,12 @@
+# Terraform/OpenTofu
+**/.terraform/
+**/.terragrunt-cache/
+**/*.tfstate
+**/*.tfstate.*
+**/backend.tf
+
+# Terragrunt local state (root-local.hcl)
+terraform/terragrunt/.run/
+
+# Generated kind config (written by the stack)
+**/kind-config.yaml

@@ -1,0 +1,31 @@
+meta {
+  name: Subnet Info
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{compose03ApiUrl}}/api/v1/ipv4/subnet-info
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "network": "172.16.0.0/12",
+    "mode": "AWS"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.prefix_length: eq 12
+}
+
+tests {
+  test("should calculate subnet information", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.network).to.equal("172.16.0.0/12");
+  });
+}

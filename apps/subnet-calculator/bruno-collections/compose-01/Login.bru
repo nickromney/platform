@@ -1,0 +1,37 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{compose01ApiUrl}}/api/v1/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+body:form-urlencoded {
+  username: demo
+  password: password123
+}
+
+script:post-response {
+  bru.setEnvVar("token", res.getBody().access_token);
+}
+
+assert {
+  res.status: eq 200
+  res.body.token_type: eq bearer
+}
+
+tests {
+  test("should return JWT token", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.body.access_token).to.exist;
+    expect(res.body.token_type).to.equal("bearer");
+  });
+}

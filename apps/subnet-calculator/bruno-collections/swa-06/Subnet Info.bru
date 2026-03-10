@@ -1,0 +1,74 @@
+meta {
+  name: Subnet Info
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{swa06BaseUrl}}/api/v1/ipv4/subnet-info
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "network": "10.0.0.0/24",
+    "mode": "Azure"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should calculate Azure subnet info", function() {
+    const data = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(data.network_address).to.equal("10.0.0.0");
+    expect(data.prefix_length).to.equal(24);
+    expect(data.mode).to.equal("Azure");
+    expect(data.total_addresses).to.equal(256);
+    expect(data.usable_addresses).to.equal(251);
+  });
+}
+
+docs {
+  # Subnet Info (Protected)
+
+  **What a security researcher sees:**
+
+  ## Request:
+  ```http
+  POST /api/v1/ipv4/subnet-info HTTP/1.1
+  Host: localhost:4282
+  Content-Type: application/json
+  Cookie: StaticWebAppsAuthCookie=<opaque-token>
+
+  {"network":"10.0.0.0/24","mode":"Azure"}
+  ```
+
+  ## Response:
+  ```http
+  HTTP/1.1 200 OK
+  Content-Type: application/json
+
+  {
+    "network_address": "10.0.0.0",
+    "prefix_length": 24,
+    ...
+  }
+  ```
+
+  **Key observations:**
+  - No Authorization header visible
+  - Cookie is opaque (not a JWT - can't decode it)
+  - In production: Cookie is signed by Azure
+  - Request body is in clear text (use HTTPS in production)
+
+  **Compare to Stack 5 (JWT):**
+  - Stack 5: Authorization: Bearer <visible-JWT-token>
+  - Stack 6: Cookie: <opaque-token>
+  - Stack 5: Anyone can decode JWT (base64)
+  - Stack 6: Cookie is signed, can't decode without key
+}
