@@ -1,0 +1,40 @@
+#!/bin/bash
+# Cloud2 (on-prem) egress firewall rules
+# Applied on outbound gateway (10.10.1.254)
+set -eux
+
+# Default: drop forwarded traffic
+iptables -P FORWARD DROP
+
+# Allow established/related
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Allow internal -> SD-WAN tunnel overlay
+iptables -A FORWARD -s 10.10.1.0/24 -d 192.168.1.0/24 -j ACCEPT
+
+# Allow internal -> cloud1 external VIPs (Azure)
+iptables -A FORWARD -s 10.10.1.0/24 -d 172.16.10.0/24 -j ACCEPT
+
+# Allow internal -> cloud3 external VIPs (AWS)
+iptables -A FORWARD -s 10.10.1.0/24 -d 172.16.12.0/24 -j ACCEPT
+
+# SNAT outbound through WireGuard
+iptables -t nat -A POSTROUTING -s 10.10.1.0/24 -o wg0 -j MASQUERADE
+
+# DNAT inbound VIP traffic to nginx
+iptables -t nat -A PREROUTING -d 172.16.11.2 -p tcp --dport 80 \
+    -j DNAT --to-destination 10.10.1.60:8080
+iptables -t nat -A PREROUTING -d 172.16.11.2 -p tcp --dport 443 \
+    -j DNAT --to-destination 10.10.1.60:8443
+
+# Log + drop everything else
+iptables -A FORWARD -j LOG --log-prefix "EGRESS-DENIED-CLOUD2: " --log-level 4
+iptables -A FORWARD -j DROP
+
+# Block outbound internet from the gateway VM itself
+iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -d 127.0.0.0/8 -j ACCEPT
+iptables -A OUTPUT -d 10.0.0.0/8 -j ACCEPT
+iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
+iptables -A OUTPUT -d 192.168.0.0/16 -j ACCEPT
+iptables -A OUTPUT -j REJECT

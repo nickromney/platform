@@ -28,6 +28,7 @@ export interface TunnelPeerDiagnostics {
 }
 
 export interface NetworkDiagnosticsResponse {
+  viewpoint?: string
   target: string
   generated_at: string
   dns: {
@@ -55,4 +56,5 @@ export interface NetworkDiagnosticsResponse {
 
 export interface LookupResultWithDiagnostics extends LookupResult {
   networkDiagnostics?: NetworkDiagnosticsResponse | null
+  secondaryNetworkDiagnostics?: NetworkDiagnosticsResponse | null
 }

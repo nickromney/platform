@@ -1,0 +1,44 @@
+# Cloud1 (Azure) - EXTERNAL view
+# Enterprise-routable addresses (172.16.10.0/24)
+
+cloud1.test:53 {
+    hosts {
+        172.16.10.1  inbound.cloud1.test
+        fallthrough
+    }
+    log
+    errors
+}
+
+cloud2.test:53 {
+    hosts {
+        172.16.11.2  inbound.cloud2.test
+        fallthrough
+    }
+    log
+    errors
+}
+
+cloud3.test:53 {
+    hosts {
+        172.16.12.3  inbound.cloud3.test
+        fallthrough
+    }
+    log
+    errors
+}
+
+vanity.test:53 {
+    hosts {
+        172.16.11.2  api1.vanity.test
+        fallthrough
+    }
+    log
+    errors
+}
+
+.:53 {
+    forward . 8.8.8.8
+    log
+    errors
+}

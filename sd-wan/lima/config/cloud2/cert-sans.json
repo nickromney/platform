@@ -1,0 +1,18 @@
+{
+  "cloud": "cloud2",
+  "role": "onprem",
+  "server_sans": [
+    "inbound.cloud2.test",
+    "api1.cloud2.test",
+    "api1.vanity.test",
+    "dns.cloud2.test",
+    "10.10.1.60",
+    "172.16.11.2"
+  ],
+  "app_sans": [
+    "api1.cloud2.test",
+    "api1.vanity.test",
+    "10.10.1.4"
+  ],
+  "client_cn": "cloud2-client"
+}

@@ -67,7 +67,7 @@ async function handleSubmit(event: Event): Promise<void> {
   showLoading()
 
   try {
-    const { results, timing, networkDiagnostics } = await apiClient.performLookup(
+    const { results, timing, networkDiagnostics, secondaryNetworkDiagnostics } = await apiClient.performLookup(
       address,
       cloudMode as 'Standard' | 'AWS' | 'Azure' | 'OCI'
     )
@@ -87,7 +87,7 @@ async function handleSubmit(event: Event): Promise<void> {
       apiCalls: timing.apiCalls,
     }
 
-    renderResults(results, timingInfo, networkDiagnostics)
+    renderResults(results, timingInfo, networkDiagnostics, secondaryNetworkDiagnostics)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred'
     showError(`Error: ${message}`)

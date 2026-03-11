@@ -5,7 +5,7 @@
   "description": "TypeScript + Vite frontend for subnet calculator",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm --prefix ../shared-frontend run build && tsc && vite build",
     "preview": "vite preview",
     "type-check": "npm --prefix ../shared-frontend run build && tsc --noEmit",
     "test": "playwright test",

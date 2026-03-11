@@ -1,0 +1,16 @@
+{
+  "cloud": "cloud3",
+  "role": "aws",
+  "server_sans": [
+    "inbound.cloud3.test",
+    "app2.cloud3.test",
+    "dns.cloud3.test",
+    "10.10.1.60",
+    "172.16.12.3"
+  ],
+  "app_sans": [
+    "app2.cloud3.test",
+    "172.31.1.1"
+  ],
+  "client_cn": "cloud3-client"
+}
