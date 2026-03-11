@@ -2,7 +2,7 @@
  * UI utilities and rendering
  */
 
-import { getNetworkHops } from './config'
+import { API_CONFIG, getNetworkHops } from './config'
 import type { ClientPrincipal } from './entraid-auth'
 import type { ApiResults, NetworkDiagnosticsResponse } from './types'
 
@@ -41,15 +41,18 @@ export function showApiStatus(healthy: boolean, service?: string, version?: stri
   if (!statusDiv) return
 
   if (healthy && service && version) {
-    // Show backend URL, or indicate it's proxied via SWA CLI if empty
-    const backendUrl = endpoint && endpoint !== '' ? endpoint : `${window.location.origin}/api`
+    const apiIngress = endpoint && endpoint !== '' ? endpoint : `${window.location.origin}/api`
+    const backendPathDetail = API_CONFIG.apiStatus.backendPathDetail
+      ? `<br><small>${API_CONFIG.apiStatus.backendPathLabel}: <code>${escapeHtml(API_CONFIG.apiStatus.backendPathDetail)}</code></small>`
+      : ''
 
     statusDiv.className = 'alert alert-success'
     statusDiv.innerHTML = `
       <strong>API Status:</strong> healthy |
-      <strong>Backend:</strong> ${service} |
+      <strong>Service:</strong> ${service} |
       <strong>Version:</strong> ${version}<br>
-      <small>Frontend: <code>${window.location.origin}/</code> | Backend: <code>${backendUrl}</code></small>
+      <small>${API_CONFIG.apiStatus.frontendLabel}: <code>${window.location.origin}/</code> | ${API_CONFIG.apiStatus.ingressLabel}: <code>${escapeHtml(apiIngress)}</code></small>
+      ${backendPathDetail}
     `
   } else {
     statusDiv.className = 'alert alert-error'
@@ -79,6 +82,7 @@ function formatCodeList(values: string[]): string {
 }
 
 function renderNetworkDiagnostics(
+  title: string,
   diagnostics: NetworkDiagnosticsResponse | null,
   timing?: { duration: number; requestTime: string; responseTime: string }
 ): string {
@@ -107,8 +111,13 @@ function renderNetworkDiagnostics(
 
   return `
     <details>
-      <summary>Live Diagnostics (${diagnostics.traceroute.hop_count} traceroute hops)</summary>
+      <summary>${escapeHtml(title)} (${diagnostics.traceroute.hop_count} traceroute hops)</summary>
       <table>
+        ${
+          diagnostics.viewpoint
+            ? `<tr><th>Viewpoint</th><td><code>${escapeHtml(diagnostics.viewpoint)}</code></td></tr>`
+            : ''
+        }
         <tr><th>Generated (UTC)</th><td>${escapeHtml(diagnostics.generated_at)}</td></tr>
         <tr><th>Target</th><td><code>${escapeHtml(diagnostics.target)}</code></td></tr>
         <tr><th>DNS Resolver</th><td><code>${escapeHtml(diagnostics.dns.resolver)}</code></td></tr>
@@ -153,7 +162,8 @@ export function renderResults(
     mode: string
     apiCalls: Array<{ call: string; requestTime: string; responseTime: string; duration: number }>
   },
-  networkDiagnostics: NetworkDiagnosticsResponse | null = null
+  networkDiagnostics: NetworkDiagnosticsResponse | null = null,
+  secondaryNetworkDiagnostics: NetworkDiagnosticsResponse | null = null
 ): void {
   const resultsContent = document.getElementById('results-content')
   if (!resultsContent) return
@@ -166,6 +176,7 @@ export function renderResults(
     const requestPayload = escapeHtml(JSON.stringify({ address: timingInfo.address, mode: timingInfo.mode }))
     const networkHops = getNetworkHops()
     const diagnosticsTiming = timingInfo.apiCalls.find((call) => call.call === 'networkDiagnostics')
+    const secondaryDiagnosticsTiming = timingInfo.apiCalls.find((call) => call.call === 'secondaryNetworkDiagnostics')
     const networkPathDetails =
       networkHops && networkHops.length > 0
         ? `<details>
@@ -182,7 +193,19 @@ export function renderResults(
           </div>
         </details>`
         : ''
-    const networkDiagnosticsDetails = renderNetworkDiagnostics(networkDiagnostics, diagnosticsTiming)
+    const secondaryNetworkDiagnosticsDetails =
+      secondaryNetworkDiagnostics && API_CONFIG.networkDiagnostics.secondaryLabel
+        ? renderNetworkDiagnostics(
+            API_CONFIG.networkDiagnostics.secondaryLabel,
+            secondaryNetworkDiagnostics,
+            secondaryDiagnosticsTiming
+          )
+        : ''
+    const networkDiagnosticsDetails = renderNetworkDiagnostics(
+      API_CONFIG.networkDiagnostics.primaryLabel,
+      networkDiagnostics,
+      diagnosticsTiming
+    )
 
     html += `
       <article class="performance-timing">
@@ -194,6 +217,7 @@ export function renderResults(
           <tr><th>Request Payload</th><td><code>${requestPayload}</code></td></tr>
         </table>
         ${networkPathDetails}
+        ${secondaryNetworkDiagnosticsDetails}
         ${networkDiagnosticsDetails}
       </article>
     `

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Info - SD-WAN Demo</title>
+    <style>
+        body { 
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace; 
+            background: #0d1117; 
+            color: #c9d1d9; 
+            padding: 20px; 
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { color: #58a6ff; margin-bottom: 5px; }
+        h2 { color: #f0883e; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-top: 30px; }
+        .subtitle { color: #8b949e; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px; }
+        th, td { text-align: left; padding: 10px; border: 1px solid #30363d; }
+        th { background: #161b22; color: #58a6ff; width: 200px; }
+        .value { color: #7ee787; word-break: break-all; }
+        .no-value { color: #484f58; font-style: italic; }
+        .highlight { background: #1f2428; }
+        .info-box { 
+            background: #161b22; 
+            border: 1px solid #30363d; 
+            border-radius: 6px; 
+            padding: 15px; 
+            margin: 20px 0;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+        .badge-sys1 { background: #da3633; color: white; }
+        .badge-sys2 { background: #238636; color: white; }
+        .badge-sys3 { background: #a371f7; color: white; }
+        footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; color: #8b949e; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>SD-WAN Request Inspector</h1>
+    <p class="subtitle">Displaying client request headers to help understand SD-WAN routing</p>
+
+    <div class="info-box">
+        <strong>Container:</strong> <span id="hostname" class="badge badge-sys1">loading...</span><br>
+        <strong>IP Address:</strong> <span id="client-ip" class="value">loading...</span>
+    </div>
+
+    <h2>Client Information (JavaScript)</h2>
+    <table>
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>User Agent</td><td id="user-agent" class="value">-</td></tr>
+        <tr><td>Language</td><td id="language" class="value">-</td></tr>
+        <tr><td>Platform</td><td id="platform" class="value">-</td></tr>
+        <tr><td>Screen Resolution</td><td id="screen" class="value">-</td></tr>
+        <tr><td>Timezone</td><td id="timezone" class="value">-</td></tr>
+    </table>
+
+    <h2>What You're Seeing</h2>
+    <table>
+        <tr><th>Header</th><th>Purpose</th></tr>
+        <tr>
+            <td class="value">X-Real-IP</td>
+            <td>Original client IP (set by proxy/SD-WAN)</td>
+        </tr>
+        <tr>
+            <td class="value">X-Forwarded-For</td>
+            <td>Chain of proxies client passed through</td>
+        </tr>
+        <tr>
+            <td class="value">X-Forwarded-Proto</td>
+            <td>Original protocol (http/https) from client</td>
+        </tr>
+        <tr>
+            <td class="value">Host</td>
+            <td>Domain requested by client</td>
+        </tr>
+    </table>
+
+    <h2>SD-WAN Headers Explained</h2>
+    <div class="info-box">
+        <p>When traffic goes through an SD-WAN edge device or tunnel, 
+        additional headers are added to preserve original client information:</p>
+        
+        <p><strong>X-Forwarded-For:</strong> Client IP, proxy1, proxy2<br>
+        <span class="no-value">Example: 203.0.113.50, 10.0.0.1, 10.0.0.2</span></p>
+        
+        <p><strong>X-Real-IP:</strong> The actual client IP behind proxies<br>
+        <span class="no-value">Example: 203.0.113.50</span></p>
+    </div>
+
+    <footer>
+        Generated at: <span id="timestamp">-</span><br>
+        This page demonstrates header visibility for DNS/SD-WAN testing.
+    </footer>
+
+    <script>
+        document.getElementById('hostname').textContent = window.location.hostname || 'localhost';
+        
+        fetch(window.location.href)
+            .then(response => {
+                const headers = {};
+                for (let [key, value] of response.headers) {
+                    headers[key] = value;
+                }
+                
+                document.getElementById('client-ip').textContent = 
+                    headers['x-real-ip'] || 
+                    headers['x-forwarded-for'] || 
+                    'Direct connection (no proxy headers)';
+            })
+            .catch(() => {
+                document.getElementById('client-ip').textContent = 'Could not fetch headers';
+            });
+        
+        document.getElementById('user-agent').textContent = navigator.userAgent;
+        document.getElementById('language').textContent = navigator.language;
+        document.getElementById('platform').textContent = navigator.platform;
+        document.getElementById('screen').textContent = screen.width + 'x' + screen.height;
+        document.getElementById('timezone').textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+        
+        if (window.location.hostname.includes('system1')) {
+            document.getElementById('hostname').className = 'badge badge-sys1';
+            document.getElementById('hostname').textContent = 'System 1 (On-Prem)';
+        } else if (window.location.hostname.includes('system2')) {
+            document.getElementById('hostname').className = 'badge badge-sys2';
+            document.getElementById('hostname').textContent = 'System 2 (AWS)';
+        } else if (window.location.hostname.includes('system3')) {
+            document.getElementById('hostname').className = 'badge badge-sys3';
+            document.getElementById('hostname').textContent = 'System 3 (Azure)';
+        }
+    </script>
+</body>
+</html>

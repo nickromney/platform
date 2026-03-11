@@ -186,11 +186,33 @@ class ApiClient implements IApiClient {
     }
   }
 
+  async getSecondaryNetworkDiagnostics(): Promise<NetworkDiagnosticsResponse | null> {
+    if (!API_CONFIG.networkDiagnostics.secondaryPath) {
+      return null
+    }
+
+    try {
+      const response = await fetch(API_CONFIG.networkDiagnostics.secondaryPath, {
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (!response.ok) {
+        const error = await parseJsonResponse<{ detail?: string }>(response).catch((): { detail?: string } => ({}))
+        throw new Error(error.detail || `Secondary network diagnostics failed (HTTP ${response.status})`)
+      }
+
+      return parseJsonResponse<NetworkDiagnosticsResponse>(response)
+    } catch (error) {
+      return handleFetchError(error)
+    }
+  }
+
   async performLookup(address: string, mode: CloudMode): Promise<LookupResultWithDiagnostics> {
     const overallStart = performance.now()
     const apiCalls: LookupResult['timing']['apiCalls'] = []
     const results: ApiResults = {}
     let networkDiagnostics: NetworkDiagnosticsResponse | null = null
+    let secondaryNetworkDiagnostics: NetworkDiagnosticsResponse | null = null
 
     const isV6 = isIpv6(address)
 
@@ -253,6 +275,24 @@ class ApiClient implements IApiClient {
 
     if (API_CONFIG.showNetworkPath) {
       try {
+        const secondaryDiagnosticsStart = performance.now()
+        const secondaryDiagnosticsRequestTime = new Date().toISOString()
+        secondaryNetworkDiagnostics = await this.getSecondaryNetworkDiagnostics()
+        const secondaryDiagnosticsDuration = performance.now() - secondaryDiagnosticsStart
+
+        if (secondaryNetworkDiagnostics) {
+          apiCalls.push({
+            call: 'secondaryNetworkDiagnostics',
+            requestTime: secondaryDiagnosticsRequestTime,
+            responseTime: new Date().toISOString(),
+            duration: Math.round(secondaryDiagnosticsDuration),
+          })
+        }
+      } catch (error) {
+        console.log('Secondary network diagnostics unavailable:', error)
+      }
+
+      try {
         const diagnosticsStart = performance.now()
         const diagnosticsRequestTime = new Date().toISOString()
         networkDiagnostics = await this.getNetworkDiagnostics()
@@ -274,6 +314,7 @@ class ApiClient implements IApiClient {
     return {
       results,
       networkDiagnostics,
+      secondaryNetworkDiagnostics,
       timing: {
         overallDuration: Math.round(overallDuration),
         renderingDuration: 0, // Will be calculated by UI

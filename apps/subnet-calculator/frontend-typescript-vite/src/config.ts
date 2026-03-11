@@ -25,6 +25,17 @@ export const API_CONFIG = {
     password: (typeof window !== 'undefined' && window.JWT_PASSWORD) || import.meta.env.VITE_JWT_PASSWORD || '',
   },
   showNetworkPath: import.meta.env.VITE_SHOW_NETWORK_PATH === 'true',
+  networkDiagnostics: {
+    primaryLabel: import.meta.env.VITE_NETWORK_DIAGNOSTICS_LABEL || 'Live Diagnostics',
+    secondaryLabel: import.meta.env.VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL || '',
+    secondaryPath: import.meta.env.VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH || '',
+  },
+  apiStatus: {
+    frontendLabel: import.meta.env.VITE_FRONTEND_STATUS_LABEL || 'Frontend origin',
+    ingressLabel: import.meta.env.VITE_API_INGRESS_STATUS_LABEL || 'API ingress',
+    backendPathLabel: import.meta.env.VITE_BACKEND_PATH_STATUS_LABEL || 'Backend path',
+    backendPathDetail: import.meta.env.VITE_BACKEND_PATH_STATUS_DETAIL || '',
+  },
   paths: {
     health: '/api/v1/health',
     // Both backends use consistent /ipv4/ endpoints

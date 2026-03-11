@@ -1,0 +1,76 @@
+# Lima VM: cloud1 (Azure)
+# Internal: 10.10.1.0/24 (overlaps with cloud2)
+# External: 172.16.10.0/24
+# SD-WAN tunnel: 192.168.1.1
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+vmType: "vz"
+rosetta:
+  enabled: true
+
+cpus: 1
+memory: "512MiB"
+disk: "8GiB"
+
+networks:
+  - lima: user-v2
+
+portForwards:
+  - guestPort: 8080
+    hostIP: 127.0.0.1
+    hostPort: 58081
+    proto: tcp
+  # Ignore Lima's fallback auto-forwarding so we only claim the explicit ports above.
+  - guestIP: 0.0.0.0
+    guestIPMustBeZero: false
+    guestPortRange: [1, 65535]
+    proto: any
+    ignore: true
+
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+
+      # Find project dir via host mount
+      PROJECT_DIR=""
+      for base in /Users /home; do
+        found=$(find "$base" -maxdepth 6 -path '*/sd-wan/lima' -type d 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+          PROJECT_DIR="$found"
+          break
+        fi
+      done
+      if [ -z "$PROJECT_DIR" ]; then
+        echo "ERROR: Could not find sd-wan/lima project directory"
+        exit 1
+      fi
+
+      export CLOUD_NUM=1
+      export CLOUD_NAME=cloud1
+      export CLOUD_ROLE=azure
+      export INTERNAL_IP=10.10.1.4
+      export DNS_IP=10.10.1.10
+      export INBOUND_IP=10.10.1.60
+      export OUTBOUND_IP=10.10.1.254
+      export EXTERNAL_VIP=172.16.10.1
+      export EXTERNAL_SUBNET=172.16.10.0/24
+      export TUNNEL_IP=192.168.1.1
+      export APP_SERVICE=app1
+      export PROJECT_DIR
+
+      bash "$PROJECT_DIR/provision/common.sh"
+      bash "$PROJECT_DIR/provision/cloud1.sh"

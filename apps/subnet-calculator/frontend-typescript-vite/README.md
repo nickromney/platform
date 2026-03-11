@@ -88,6 +88,15 @@ Authentication is controlled via environment variables at **build time**:
 - `VITE_JWT_USERNAME` - JWT username (default: empty)
 - `VITE_JWT_PASSWORD` - JWT password (default: empty)
 - `VITE_API_URL` - API base URL (default: `http://localhost:8090`)
+- `VITE_SHOW_NETWORK_PATH` - Set to `"true"` to show the network path and diagnostics panels
+- `VITE_FRONTEND_STATUS_LABEL` - Optional label for the browser-facing frontend origin in the health banner
+- `VITE_API_INGRESS_STATUS_LABEL` - Optional label for the ingress URL the frontend calls
+- `VITE_BACKEND_PATH_STATUS_LABEL` - Optional label for a topology/explanation line in the health banner
+- `VITE_BACKEND_PATH_STATUS_DETAIL` - Optional topology/explanation string shown under the ingress URL
+- `VITE_NETWORK_HOPS` - Optional JSON array describing the user-facing request path
+- `VITE_NETWORK_DIAGNOSTICS_LABEL` - Optional label for the primary diagnostics panel
+- `VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL` - Optional label for a second diagnostics panel
+- `VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH` - Optional path for that second diagnostics API
 
 ### Local Development with JWT
 
@@ -114,6 +123,107 @@ podman build \
   --build-arg VITE_API_URL=http://api-fastapi-azure-function:8080 \
   -t subnet-calculator-frontend-typescript-vite-jwt:latest .
 ```
+
+## Optional Network Diagnostics Panels
+
+The Vite frontend can show one or two network diagnostics panels alongside the subnet lookup results.
+
+The primary panel uses the normal backend API endpoint:
+
+- `GET ${VITE_API_URL}/api/v1/network/diagnostics`
+- if `VITE_API_URL` is empty, that becomes `/api/v1/network/diagnostics`
+
+The optional secondary panel is intended for cases where you want a second viewpoint, for example:
+
+- frontend edge vs backend API
+- ingress site vs service site
+- local proxy vs remote application
+
+### Diagnostics Environment Variables
+
+- `VITE_SHOW_NETWORK_PATH=true`
+  Enables the network path card and diagnostics panels.
+- `VITE_FRONTEND_STATUS_LABEL`
+  Overrides the frontend-origin label in the API health banner.
+- `VITE_API_INGRESS_STATUS_LABEL`
+  Overrides the ingress label in the API health banner.
+- `VITE_BACKEND_PATH_STATUS_LABEL`
+  Title for the optional backend-path explanation line.
+- `VITE_BACKEND_PATH_STATUS_DETAIL`
+  Optional topology string that explains what sits behind the ingress URL.
+- `VITE_NETWORK_HOPS`
+  JSON array of `{ label, detail, role? }` objects shown as the request path legend.
+- `VITE_NETWORK_DIAGNOSTICS_LABEL`
+  Overrides the primary panel title. Default: `Live Diagnostics`.
+- `VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL`
+  Title for the optional second panel. If empty, no second panel is shown.
+- `VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH`
+  Relative or absolute URL fetched for the second panel. If empty, no second panel is fetched.
+
+### Expected Diagnostics Response
+
+Both diagnostics panels expect the same JSON shape:
+
+```json
+{
+  "viewpoint": "cloud1",
+  "target": "api1.vanity.test:443",
+  "generated_at": "2026-03-11T15:29:03.595020+00:00",
+  "dns": {
+    "resolver": "10.10.1.10",
+    "answers": ["172.16.11.2"],
+    "command": "dig +time=2 +tries=1 api1.vanity.test A @10.10.1.10",
+    "exit_code": 0,
+    "raw_output": "..."
+  },
+  "traceroute": {
+    "command": "traceroute -n -T -p 443 -q 1 -w 1 api1.vanity.test",
+    "exit_code": 0,
+    "hops": ["172.16.11.2"],
+    "hop_count": 1,
+    "raw_output": "..."
+  },
+  "tunnel": {
+    "interface": "wg0",
+    "local_tunnel_ip": "192.168.1.1",
+    "peer_tunnel_ips": ["192.168.1.2", "192.168.1.3"],
+    "peer_endpoint_ips": ["192.168.104.5", "192.168.104.6"],
+    "peers": [
+      {
+        "public_key": "base64...",
+        "endpoint_ip": "192.168.104.5",
+        "endpoint_port": 51820,
+        "allowed_ips": ["192.168.1.2/32", "172.16.11.0/24"],
+        "tunnel_peer_ip": "192.168.1.2",
+        "latest_handshake_unix": 1741706941
+      }
+    ]
+  }
+}
+```
+
+### Example: dual-view diagnostics
+
+```bash
+VITE_SHOW_NETWORK_PATH=true \
+VITE_FRONTEND_STATUS_LABEL='Frontend origin' \
+VITE_API_INGRESS_STATUS_LABEL='Cloud1 ingress' \
+VITE_BACKEND_PATH_STATUS_LABEL='Backend path' \
+VITE_BACKEND_PATH_STATUS_DETAIL='cloud1 nginx -> WireGuard SD-WAN -> cloud2 nginx -> cloud2 FastAPI' \
+VITE_NETWORK_DIAGNOSTICS_LABEL='Backend Diagnostics' \
+VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL='Frontend Diagnostics (cloud1 viewpoint)' \
+VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH='/cloud1-diagnostics/network/diagnostics' \
+VITE_NETWORK_HOPS='[
+  {"label":"Browser","detail":"localhost:58081"},
+  {"label":"cloud1 nginx","detail":"frontend ingress"},
+  {"label":"cloud2 FastAPI","detail":"remote service"}
+]' \
+npm run build
+```
+
+This keeps the feature reusable in non-SD-WAN deployments: the frontend only needs a primary diagnostics endpoint, and optionally a second endpoint that returns the same response shape from a different network viewpoint.
+
+The optional status-banner variables keep the host-facing ingress URL separate from the actual backend path. That is useful when the frontend talks to a local reverse proxy which then crosses some other transport layer before reaching the real API.
 
 ### How JWT Works
 
