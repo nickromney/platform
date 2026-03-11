@@ -47,39 +47,39 @@ make -C sd-wan/lima destroy
 
 ```mermaid
 flowchart LR
-  Browser["Browser\nlocalhost:58081"] --> Cloud1["cloud1\nAzure-style edge\nVite subnet calculator + nginx"]
-  Cloud1 -->|mTLS over WireGuard| Cloud2["cloud2\nOn-prem edge\nnginx + subnet calculator API"]
-  Cloud1 -->|WireGuard| Cloud3["cloud3\nAWS-style edge\nalternate app workload"]
+  Browser["Browser<br/>localhost:58081"] --> Cloud1["cloud1<br/>Azure-style edge<br/>Vite subnet calculator + nginx"]
+  Cloud1 -->|mTLS over WireGuard| Cloud2["cloud2<br/>On-prem edge<br/>nginx + subnet calculator API"]
+  Cloud1 -->|WireGuard| Cloud3["cloud3<br/>AWS-style edge<br/>alternate app workload"]
   Cloud2 <-->|WireGuard| Cloud3
 ```
 
 ```mermaid
 flowchart TD
-  DNS1["cloud1 CoreDNS\n10.10.1.10"] --> VIP2["api1.vanity.test\n172.16.11.2"]
-  DNS3["cloud3 CoreDNS\n172.31.1.10"] --> VIP2
-  VIP2 --> WG["WireGuard mesh\n192.168.1.0/24"]
-  WG --> API["cloud2 API\n10.10.1.4:8000"]
+  DNS1["cloud1 CoreDNS<br/>10.10.1.10"] --> VIP2["api1.vanity.test<br/>172.16.11.2"]
+  DNS3["cloud3 CoreDNS<br/>172.31.1.10"] --> VIP2
+  VIP2 --> WG["WireGuard mesh<br/>192.168.1.0/24"]
+  WG --> API["cloud2 API<br/>10.10.1.4:8000"]
 ```
 
 ```mermaid
 flowchart LR
   subgraph RFC1918["RFC1918 reuse is intentional"]
-    C1["cloud1 view\napp1.cloud1.test = 10.10.1.4"]
-    C2["cloud2 view\napi1.cloud2.test = 10.10.1.4"]
+    C1["cloud1 view<br/>app1.cloud1.test = 10.10.1.4"]
+    C2["cloud2 view<br/>api1.cloud2.test = 10.10.1.4"]
   end
 
-  C1 -. "same private IP,\ndifferent meaning" .- C2
+  C1 -. "same private IP,<br/>different meaning" .- C2
 ```
 
 ```mermaid
 flowchart TD
-  Client["Client on cloud1"] --> Resolver1["Resolve with cloud1 DNS\n10.10.1.10"]
-  Resolver1 --> Vanity["api1.vanity.test\n172.16.11.2"]
+  Client["Client on cloud1"] --> Resolver1["Resolve with cloud1 DNS<br/>10.10.1.10"]
+  Resolver1 --> Vanity["api1.vanity.test<br/>172.16.11.2"]
   Vanity --> Tunnel["WireGuard + mTLS path"]
   Tunnel --> Target["cloud2 API"]
 
   Client --> Wrong["Guess '10.10.1.4' directly"]
-  Wrong --> Ambiguous["ambiguous / wrong target\nbecause 10.10.1.4 exists in more than one cloud"]
+  Wrong --> Ambiguous["ambiguous / wrong target<br/>because 10.10.1.4 exists in more than one cloud"]
 ```
 
 The intended cross-cloud path is always:

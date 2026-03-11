@@ -32,13 +32,13 @@ Browser → localhost:58081 → cloud1 nginx → WireGuard (wg0)
 
 ```mermaid
 flowchart LR
-    Q["Question: what does 10.10.1.4 mean?"] --> R1["Ask cloud1 resolver\n10.10.1.10"]
-    Q --> R2["Ask cloud2 resolver\n10.10.1.10"]
+    Q["Question: what does 10.10.1.4 mean?"] --> R1["Ask cloud1 resolver<br/>10.10.1.10"]
+    Q --> R2["Ask cloud2 resolver<br/>10.10.1.10"]
 
-    R1 --> A1["app1.cloud1.test\n10.10.1.4"]
-    R2 --> A2["api1.cloud2.test\n10.10.1.4"]
+    R1 --> A1["app1.cloud1.test<br/>10.10.1.4"]
+    R2 --> A2["api1.cloud2.test<br/>10.10.1.4"]
 
-    A1 -. "same RFC1918 address,\ndifferent answer because resolver context changed" .- A2
+    A1 -. "same RFC1918 address,<br/>different answer because resolver context changed" .- A2
 ```
 
 The point of the lab is that private addresses are reused. The safe cross-cloud move is to resolve a vanity name from the cloud you are in, then follow the returned `172.16.x.x` VIP over WireGuard.

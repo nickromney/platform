@@ -24,9 +24,9 @@ This lab uses WireGuard as the transport, but the point is not "WireGuard by its
 
 ```mermaid
 flowchart LR
-    Site1["cloud1\nlocal private network"] --> Overlay["SD-WAN overlay"]
-    Site2["cloud2\nlocal private network"] --> Overlay
-    Site3["cloud3\nlocal private network"] --> Overlay
+    Site1["cloud1<br/>local private network"] --> Overlay["SD-WAN overlay"]
+    Site2["cloud2<br/>local private network"] --> Overlay
+    Site3["cloud3<br/>local private network"] --> Overlay
 
     Overlay --> Policy["routing + identity + policy"]
 ```
@@ -55,7 +55,7 @@ This repo intentionally mixes different numbering schemes across the three cloud
 
 ```mermaid
 flowchart TD
-    Raw["Raw private IP\n10.10.1.4"] --> Problem["not globally unique"]
+    Raw["Raw private IP<br/>10.10.1.4"] --> Problem["not globally unique"]
     Problem --> Resolver["resolver viewpoint decides meaning"]
     Resolver --> Cloud1["cloud1 may mean app1"]
     Resolver --> Cloud2["cloud2 may mean api1"]
