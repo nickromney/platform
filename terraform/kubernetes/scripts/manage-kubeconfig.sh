@@ -17,6 +17,14 @@ current-context: ""
 EOF
 }
 
+is_empty_null_kubeconfig() {
+  local raw_config="$1"
+
+  grep -Eq '^clusters: null$' <<<"${raw_config}" && \
+    grep -Eq '^contexts: null$' <<<"${raw_config}" && \
+    grep -Eq '^users: null$' <<<"${raw_config}"
+}
+
 ensure_valid_kubeconfig() {
   local kubeconfig_path="$1"
   local create_if_missing="${2:-1}"
@@ -36,8 +44,13 @@ ensure_valid_kubeconfig() {
   fi
 
   raw_config="$(cat "${kubeconfig_path}" 2>/dev/null || true)"
+  if [[ -n "${raw_config}" ]] && is_empty_null_kubeconfig "${raw_config}"; then
+    write_empty_kubeconfig "${kubeconfig_path}"
+    return 0
+  fi
+
   current_context="$(KUBECONFIG="${kubeconfig_path}" kubectl config view --raw -o jsonpath='{.current-context}' 2>/dev/null || true)"
-  if [[ -n "${raw_config}" ]] && ! grep -Eq '^(clusters|contexts|users): null$' <<<"${raw_config}"; then
+  if [[ -n "${raw_config}" ]]; then
     if [[ -z "${current_context}" ]] || KUBECONFIG="${kubeconfig_path}" kubectl config get-contexts "${current_context}" >/dev/null 2>&1; then
       return 0
     fi

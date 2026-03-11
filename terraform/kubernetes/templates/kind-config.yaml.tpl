@@ -12,6 +12,9 @@ nodes:
 %{ for port in ports ~}
       - containerPort: ${port.container_port}
         hostPort: ${port.host_port}
+%{ if try(port.listen_address, "") != "" ~}
+        listenAddress: "${port.listen_address}"
+%{ endif ~}
         protocol: ${port.protocol}
 %{ endfor ~}
 %{ endif ~}

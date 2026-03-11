@@ -41,10 +41,10 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_secret.argocd_repo_policies,
+    kubernetes_secret_v1.argocd_repo_policies,
     # If actions-runner is enabled, ensure its secret exists before Argo starts
     # syncing the GitOps app-of-apps tree that includes the runner Application.
-    kubernetes_secret.gitea_runner,
+    kubernetes_secret_v1.gitea_runner,
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
   ]

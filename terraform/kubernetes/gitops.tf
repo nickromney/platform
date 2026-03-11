@@ -16,44 +16,11 @@ resource "null_resource" "sync_gitea_policies_repo" {
   count = local.enable_gitops_repo ? 1 : 0
 
   triggers = {
-    content_hash               = local.policies_repo_content_hash
-    public_key                 = tls_private_key.policies_repo[0].public_key_openssh
-    script_sha                 = filesha256("${path.module}/scripts/sync-gitea-policies.sh")
-    gitea_http                 = tostring(var.gitea_http_node_port)
-    gitea_ssh                  = tostring(var.gitea_ssh_node_port)
-    repo_owner                 = local.gitea_repo_owner
-    repo_is_org                = tostring(local.gitea_repo_owner_is_org)
-    enable_policies            = tostring(var.enable_policies)
-    enable_gateway_tls         = tostring(var.enable_gateway_tls)
-    enable_actions_runner      = tostring(var.enable_actions_runner)
-    enable_app_repo_sentiment  = tostring(var.enable_app_repo_sentiment_llm)
-    enable_app_repo_subnetcalc = tostring(var.enable_app_repo_subnet_calculator)
-    enable_prometheus          = tostring(var.enable_prometheus)
-    enable_grafana             = tostring(var.enable_grafana)
-    enable_loki                = tostring(var.enable_loki)
-    enable_tempo               = tostring(var.enable_tempo)
-    enable_signoz              = tostring(var.enable_signoz)
-    enable_otel_gateway        = tostring(var.enable_otel_gateway)
-    enable_headlamp            = tostring(var.enable_headlamp)
-    enable_observability_agent = tostring(var.enable_observability_agent)
-    prefer_external_images     = tostring(var.prefer_external_workload_images)
-    external_sentiment_api     = lookup(var.external_workload_image_refs, "sentiment-api", "")
-    external_sentiment_ui      = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
-    external_subnetcalc_api    = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
-    external_subnetcalc_apim   = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
-    external_subnetcalc_fe     = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
-    external_subnetcalc_fe_ts  = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
-    hardened_image_registry    = var.hardened_image_registry
-    llm_gateway_mode           = var.llm_gateway_mode
-    llm_gateway_external_name  = var.llm_gateway_external_name
-    llama_cpp_image            = var.llama_cpp_image
-    llama_cpp_hf_repo          = var.llama_cpp_hf_repo
-    llama_cpp_hf_file          = var.llama_cpp_hf_file
-    llama_cpp_model_alias      = var.llama_cpp_model_alias
-    llama_cpp_ctx_size         = tostring(var.llama_cpp_ctx_size)
-    litellm_upstream_model     = var.litellm_upstream_model
-    litellm_upstream_api_base  = var.litellm_upstream_api_base
-    litellm_upstream_api_key   = nonsensitive(var.litellm_upstream_api_key)
+    repo_render_hash = local.policies_repo_render_hash
+    public_key       = tls_private_key.policies_repo[0].public_key_openssh
+    script_sha       = filesha256("${path.module}/scripts/sync-gitea-policies.sh")
+    gitea_http       = tostring(var.gitea_http_node_port)
+    gitea_ssh        = tostring(var.gitea_ssh_node_port)
   }
 
   provisioner "local-exec" {
@@ -530,7 +497,7 @@ EOT
 
   depends_on = [
     null_resource.sync_gitea_app_repo_subnet_calculator,
-    kubernetes_secret.gitea_runner,
+    kubernetes_secret_v1.gitea_runner,
   ]
 }
 
@@ -556,12 +523,12 @@ data "external" "gitea_runner_token" {
   ]
 }
 
-resource "kubernetes_secret" "gitea_runner" {
+resource "kubernetes_secret_v1" "gitea_runner" {
   count = var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
 
   metadata {
     name      = "act-runner-secret"
-    namespace = kubernetes_namespace.gitea_runner[0].metadata[0].name
+    namespace = kubernetes_namespace_v1.gitea_runner[0].metadata[0].name
   }
 
   data = {
@@ -575,7 +542,7 @@ resource "kubernetes_secret" "gitea_runner" {
   }
 
   depends_on = [
-    kubernetes_namespace.gitea_runner[0],
+    kubernetes_namespace_v1.gitea_runner[0],
     data.external.gitea_runner_token[0],
   ]
 }
@@ -586,10 +553,9 @@ resource "null_resource" "gitea_known_hosts_cluster" {
   triggers = {
     # Re-run if the cluster identity changes (kind reset/recreate or kubeconfig/context switch).
     cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
-    repo_sync  = null_resource.sync_gitea_policies_repo[0].id
     host       = local.gitea_ssh_host_cluster
     port       = tostring(local.gitea_ssh_port_cluster)
-    script_v   = "6"
+    script_v   = "7"
   }
 
   provisioner "local-exec" {
@@ -601,7 +567,7 @@ HOST="${local.gitea_ssh_host_cluster}"
 PORT="${local.gitea_ssh_port_cluster}"
 OUT_TMP="${local.run_dir}/.gitea_known_hosts_cluster.tmp"
 RAW="${local.run_dir}/.gitea_known_hosts_cluster.raw"
-GITEA_NS="${kubernetes_namespace.gitea[0].metadata[0].name}"
+GITEA_NS="${kubernetes_namespace_v1.gitea[0].metadata[0].name}"
 GITEA_SVC="gitea-ssh"
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
@@ -866,10 +832,10 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
   count = local.enable_gitops_repo ? 1 : 0
 
   triggers = {
-    repo_sync          = null_resource.sync_gitea_policies_repo[0].id
+    gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = sha1(local.argocd_ssh_known_hosts_merged)
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_ver = "3"
+    refresh_script_ver = "4"
   }
 
   provisioner "local-exec" {
@@ -991,6 +957,7 @@ EOT
   }
 
   depends_on = [
+    null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
     kubectl_manifest.argocd_app_of_apps,
     kubectl_manifest.argocd_app_gitea_actions_runner,
@@ -1007,7 +974,7 @@ EOT
   ]
 }
 
-resource "kubernetes_secret" "argocd_repo_policies" {
+resource "kubernetes_secret_v1" "argocd_repo_policies" {
   count = local.enable_gitops_repo ? 1 : 0
 
   metadata {
@@ -1027,7 +994,7 @@ resource "kubernetes_secret" "argocd_repo_policies" {
   }
 
   depends_on = [
-    kubernetes_namespace.argocd,
+    kubernetes_namespace_v1.argocd,
     helm_release.argocd,
     null_resource.gitea_known_hosts_cluster,
     data.local_file.gitea_known_hosts_cluster,
@@ -1035,7 +1002,7 @@ resource "kubernetes_secret" "argocd_repo_policies" {
   ]
 }
 
-resource "kubernetes_secret" "argocd_repo_creds_gitea_ssh" {
+resource "kubernetes_secret_v1" "argocd_repo_creds_gitea_ssh" {
   count = local.enable_gitops_repo ? 1 : 0
 
   metadata {
@@ -1055,7 +1022,7 @@ resource "kubernetes_secret" "argocd_repo_creds_gitea_ssh" {
   }
 
   depends_on = [
-    kubernetes_namespace.argocd,
+    kubernetes_namespace_v1.argocd,
     helm_release.argocd,
     null_resource.gitea_known_hosts_cluster,
     data.local_file.gitea_known_hosts_cluster,
@@ -1099,9 +1066,9 @@ __YAML__
   server_side_apply = false
 
   depends_on = [
-    kubernetes_secret.argocd_repo_policies,
+    kubernetes_secret_v1.argocd_repo_policies,
     null_resource.sync_gitea_policies_repo,
-    kubernetes_secret.gitea_runner,
+    kubernetes_secret_v1.gitea_runner,
   ]
 }
 

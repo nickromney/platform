@@ -45,7 +45,7 @@ Local stacks run in containers using `podman-compose up`. This is the fastest wa
 
 ```bash
 # Start all services in background
-cd /Users/nickromney/Developer/personal/subnet-calculator
+cd apps/subnet-calculator
 podman-compose up -d
 
 # Wait for services to be healthy

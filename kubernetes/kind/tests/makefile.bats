@@ -30,7 +30,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/lsof"
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" check-kind-host-ports TARGET=kind STAGE=100
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-kind-host-ports STAGE=100
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   kind host ports available:"* ]]
@@ -67,10 +67,10 @@ EOF
 gateway_https_host_port = 4443
 EOF
 
-  run env PLATFORM_TFVARS="${override_file}" make -C "${REPO_ROOT}/kubernetes/kind" check-kind-host-ports TARGET=kind STAGE=100
+  run env PLATFORM_TFVARS="${override_file}" make -C "${REPO_ROOT}/kubernetes/kind" check-kind-host-ports STAGE=100
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"FAIL gateway-https host port 0.0.0.0:4443 is already in use"* ]]
+  [[ "${output}" == *"FAIL gateway-https host port 127.0.0.1:4443 is already in use"* ]]
   [[ "${output}" == *"Planned mapping: gateway_https_host_port=4443"* ]]
   [[ "${output}" == *"Conflicting Docker publishers:"* ]]
   [[ "${output}" == *"laemp-test-debian: 0.0.0.0:4443->443/tcp, [::]:4443->443/tcp"* ]]
@@ -90,8 +90,8 @@ EOF
 gateway_https_host_port = 30080
 EOF
 
-  run env PLATFORM_TFVARS="${override_file}" make -C "${REPO_ROOT}/kubernetes/kind" check-kind-host-ports TARGET=kind STAGE=100
+  run env PLATFORM_TFVARS="${override_file}" make -C "${REPO_ROOT}/kubernetes/kind" check-kind-host-ports STAGE=100
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"FAIL planned kind host port overlap: gateway-https (0.0.0.0:30080) conflicts with argocd (0.0.0.0:30080)"* ]]
+  [[ "${output}" == *"FAIL planned kind host port overlap: gateway-https (127.0.0.1:30080) conflicts with argocd (127.0.0.1:30080)"* ]]
 }

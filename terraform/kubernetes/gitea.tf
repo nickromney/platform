@@ -1,9 +1,9 @@
-resource "kubernetes_secret" "gitea_admin" {
+resource "kubernetes_secret_v1" "gitea_admin" {
   count = var.enable_gitea ? 1 : 0
 
   metadata {
     name      = "gitea-admin-secret"
-    namespace = kubernetes_namespace.gitea[0].metadata[0].name
+    namespace = kubernetes_namespace_v1.gitea[0].metadata[0].name
   }
 
   data = {
@@ -14,12 +14,12 @@ resource "kubernetes_secret" "gitea_admin" {
   type = "Opaque"
 }
 
-resource "kubernetes_config_map" "gitea_custom_templates" {
+resource "kubernetes_config_map_v1" "gitea_custom_templates" {
   count = var.enable_gitea ? 1 : 0
 
   metadata {
     name      = "gitea-custom-templates"
-    namespace = kubernetes_namespace.gitea[0].metadata[0].name
+    namespace = kubernetes_namespace_v1.gitea[0].metadata[0].name
   }
 
   data = {
@@ -27,7 +27,7 @@ resource "kubernetes_config_map" "gitea_custom_templates" {
   }
 }
 
-resource "kubernetes_secret" "gitea_registry_creds" {
+resource "kubernetes_secret_v1" "gitea_registry_creds" {
   for_each = var.enable_gitea ? local.registry_secret_namespaces_effective : toset([])
 
   metadata {
@@ -50,11 +50,11 @@ resource "kubernetes_secret" "gitea_registry_creds" {
   type = "kubernetes.io/dockerconfigjson"
 
   depends_on = [
-    kubernetes_namespace.argocd,
-    kubernetes_namespace.gitea,
-    kubernetes_namespace.gitea_runner,
-    kubernetes_namespace.dev,
-    kubernetes_namespace.uat,
+    kubernetes_namespace_v1.argocd,
+    kubernetes_namespace_v1.gitea,
+    kubernetes_namespace_v1.gitea_runner,
+    kubernetes_namespace_v1.dev,
+    kubernetes_namespace_v1.uat,
   ]
 }
 
@@ -70,7 +70,7 @@ metadata:
 spec:
   project: default
   destination:
-    namespace: ${kubernetes_namespace.gitea[0].metadata[0].name}
+    namespace: ${kubernetes_namespace_v1.gitea[0].metadata[0].name}
     server: https://kubernetes.default.svc
   source:
     repoURL: https://dl.gitea.io/charts/
@@ -188,9 +188,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.gitea,
-    kubernetes_secret.gitea_admin,
-    kubernetes_config_map.gitea_custom_templates,
+    kubernetes_namespace_v1.gitea,
+    kubernetes_secret_v1.gitea_admin,
+    kubernetes_config_map_v1.gitea_custom_templates,
   ]
 }
 

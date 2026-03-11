@@ -75,6 +75,7 @@ resource "kind_cluster" "local" {
         content {
           container_port = extra_port_mappings.value.container_port
           host_port      = extra_port_mappings.value.host_port
+          listen_address = extra_port_mappings.value.listen_address
           protocol       = extra_port_mappings.value.protocol
         }
       }
@@ -122,31 +123,13 @@ resource "local_sensitive_file" "kubeconfig" {
   depends_on           = [kind_cluster.local]
 }
 
-data "external" "preload_image_set" {
-  count = var.enable_image_preload && var.provision_kind_cluster ? 1 : 0
-
-  program = ["/bin/bash", "${path.module}/scripts/fetch-preload-image-set.sh"]
-
-  query = {
-    preload_script        = "${path.module}/scripts/preload-images.sh"
-    image_list            = "${path.module}/scripts/preload-images.txt"
-    enable_signoz         = tostring(var.enable_signoz)
-    enable_prometheus     = tostring(var.enable_prometheus)
-    enable_grafana        = tostring(var.enable_grafana)
-    enable_loki           = tostring(var.enable_loki)
-    enable_tempo          = tostring(var.enable_tempo)
-    enable_headlamp       = tostring(var.enable_headlamp)
-    enable_sso            = tostring(var.enable_sso)
-    enable_actions_runner = tostring(var.enable_actions_runner)
-  }
-}
-
 resource "null_resource" "preload_images" {
   count = var.enable_image_preload && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    cluster_id    = kind_cluster.local[0].id
-    image_set_sha = data.external.preload_image_set[0].result.image_set_sha
+    cluster_id        = kind_cluster.local[0].id
+    preload_script    = filesha256("${path.module}/scripts/preload-images.sh")
+    preload_image_set = filesha256("${path.module}/scripts/preload-images.txt")
   }
 
   provisioner "local-exec" {

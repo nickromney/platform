@@ -12,8 +12,8 @@ run "actions_runner_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.gitea_runner) == 1
-    error_message = "Expected kubernetes_namespace.gitea_runner to exist when enable_actions_runner=true"
+    condition     = length(kubernetes_namespace_v1.gitea_runner) == 1
+    error_message = "Expected kubernetes_namespace_v1.gitea_runner to exist when enable_actions_runner=true"
   }
 
   assert {
@@ -27,7 +27,7 @@ run "actions_runner_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_secret.argocd_repo_creds_gitea_ssh) == 1
+    condition     = length(kubernetes_secret_v1.argocd_repo_creds_gitea_ssh) == 1
     error_message = "Expected ArgoCD repo-creds secret for Gitea SSH to exist when enable_actions_runner=true"
   }
 }
@@ -78,7 +78,7 @@ run "policies_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_secret.argocd_repo_creds_gitea_ssh) == 1
+    condition     = length(kubernetes_secret_v1.argocd_repo_creds_gitea_ssh) == 1
     error_message = "Expected ArgoCD repo-creds secret for Gitea SSH to exist when enable_policies=true"
   }
 }
@@ -127,7 +127,7 @@ run "gateway_tls_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_secret.argocd_repo_creds_gitea_ssh) == 1
+    condition     = length(kubernetes_secret_v1.argocd_repo_creds_gitea_ssh) == 1
     error_message = "Expected ArgoCD repo-creds secret for Gitea SSH to exist when enable_gateway_tls=true"
   }
 }
@@ -225,13 +225,13 @@ run "app_repo_sentiment_llm_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.dev) == 1
-    error_message = "Expected kubernetes_namespace.dev to exist when enable_app_repo_sentiment_llm=true"
+    condition     = length(kubernetes_namespace_v1.dev) == 1
+    error_message = "Expected kubernetes_namespace_v1.dev to exist when enable_app_repo_sentiment_llm=true"
   }
 
   assert {
-    condition     = length(kubernetes_namespace.uat) == 1
-    error_message = "Expected kubernetes_namespace.uat to exist when enable_app_repo_sentiment_llm=true"
+    condition     = length(kubernetes_namespace_v1.uat) == 1
+    error_message = "Expected kubernetes_namespace_v1.uat to exist when enable_app_repo_sentiment_llm=true"
   }
 
   assert {
@@ -260,8 +260,8 @@ run "app_repo_subnet_calculator_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.apim) == 1
-    error_message = "Expected kubernetes_namespace.apim to exist when enable_app_repo_subnet_calculator=true"
+    condition     = length(kubernetes_namespace_v1.apim) == 1
+    error_message = "Expected kubernetes_namespace_v1.apim to exist when enable_app_repo_subnet_calculator=true"
   }
 
   assert {

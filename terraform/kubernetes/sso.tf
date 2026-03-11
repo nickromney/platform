@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "sso" {
+resource "kubernetes_namespace_v1" "sso" {
   count = var.enable_sso ? 1 : 0
 
   metadata {
@@ -43,12 +43,12 @@ resource "random_password" "oauth2_proxy_cookie_secret" {
   special = false
 }
 
-resource "kubernetes_secret" "oauth2_proxy_oidc" {
+resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
   count = var.enable_sso ? 1 : 0
 
   metadata {
     name      = "oauth2-proxy-oidc"
-    namespace = kubernetes_namespace.sso[0].metadata[0].name
+    namespace = kubernetes_namespace_v1.sso[0].metadata[0].name
   }
 
   type = "Opaque"
@@ -60,7 +60,7 @@ resource "kubernetes_secret" "oauth2_proxy_oidc" {
   }
 }
 
-resource "kubernetes_secret" "signoz_auth_proxy_credentials" {
+resource "kubernetes_secret_v1" "signoz_auth_proxy_credentials" {
   count = var.enable_sso && var.enable_signoz ? 1 : 0
 
   metadata {
@@ -77,7 +77,7 @@ resource "kubernetes_secret" "signoz_auth_proxy_credentials" {
   }
 
   depends_on = [
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
   ]
 }
 
@@ -91,12 +91,12 @@ data "external" "mkcert_ca_cert" {
   ]
 }
 
-resource "kubernetes_secret" "headlamp_mkcert_ca" {
+resource "kubernetes_secret_v1" "headlamp_mkcert_ca" {
   count = var.enable_sso && var.enable_headlamp ? 1 : 0
 
   metadata {
     name      = "mkcert-ca"
-    namespace = kubernetes_namespace.headlamp[0].metadata[0].name
+    namespace = kubernetes_namespace_v1.headlamp[0].metadata[0].name
   }
 
   data = {
@@ -106,7 +106,7 @@ resource "kubernetes_secret" "headlamp_mkcert_ca" {
   type = "Opaque"
 
   depends_on = [
-    kubernetes_namespace.headlamp,
+    kubernetes_namespace_v1.headlamp,
     data.external.mkcert_ca_cert,
   ]
 }
@@ -213,8 +213,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
   ]
 }
 
@@ -223,7 +223,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
 
   triggers = {
     script_sha          = filesha256(abspath("${path.module}/scripts/configure-kind-apiserver-oidc.sh"))
-    gateway_service_uid = kubernetes_service.platform_gateway_nginx_internal[0].metadata[0].uid
+    gateway_service_uid = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
   }
 
   provisioner "local-exec" {
@@ -243,7 +243,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
 
   depends_on = [
     local_sensitive_file.kubeconfig,
-    kubernetes_service.platform_gateway_nginx_internal,
+    kubernetes_service_v1.platform_gateway_nginx_internal,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.argocd_app_oauth2_proxy_argocd,
     kubectl_manifest.argocd_app_oauth2_proxy_gitea,
@@ -378,8 +378,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
   ]
 }
@@ -477,8 +477,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
   ]
 }
@@ -575,8 +575,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
   ]
 }
@@ -673,8 +673,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
   ]
 }
@@ -779,8 +779,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
   ]
 }
@@ -879,8 +879,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
     # When enable_app_of_apps=true, apps are managed via the GitOps tree.
     kubectl_manifest.argocd_app_of_apps,
@@ -982,8 +982,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
     # When enable_app_of_apps=true, apps are managed via the GitOps tree.
     kubectl_manifest.argocd_app_of_apps,
@@ -1086,8 +1086,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
     # When enable_app_of_apps=true, apps are managed via the GitOps tree.
     kubectl_manifest.argocd_app_of_apps,
@@ -1191,8 +1191,8 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.sso,
-    kubernetes_secret.oauth2_proxy_oidc,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
     # When enable_app_of_apps=true, subnetcalc-uat is managed via the GitOps tree.
     kubectl_manifest.argocd_app_of_apps,

@@ -38,8 +38,8 @@ run "argocd_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.argocd) == 1
-    error_message = "Expected kubernetes_namespace.argocd to exist when enable_argocd=true"
+    condition     = length(kubernetes_namespace_v1.argocd) == 1
+    error_message = "Expected kubernetes_namespace_v1.argocd to exist when enable_argocd=true"
   }
 
   assert {
@@ -69,13 +69,13 @@ run "gitea_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.gitea) == 1
-    error_message = "Expected kubernetes_namespace.gitea to exist when enable_gitea=true"
+    condition     = length(kubernetes_namespace_v1.gitea) == 1
+    error_message = "Expected kubernetes_namespace_v1.gitea to exist when enable_gitea=true"
   }
 
   assert {
-    condition     = length(kubernetes_secret.gitea_admin) == 1
-    error_message = "Expected kubernetes_secret.gitea_admin to exist when enable_gitea=true"
+    condition     = length(kubernetes_secret_v1.gitea_admin) == 1
+    error_message = "Expected kubernetes_secret_v1.gitea_admin to exist when enable_gitea=true"
   }
 
   assert {
@@ -104,8 +104,8 @@ run "signoz_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.observability) == 1
-    error_message = "Expected kubernetes_namespace.observability to exist when enable_signoz=true"
+    condition     = length(kubernetes_namespace_v1.observability) == 1
+    error_message = "Expected kubernetes_namespace_v1.observability to exist when enable_signoz=true"
   }
 
   assert {
@@ -143,13 +143,13 @@ run "sso_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.sso) == 1
-    error_message = "Expected kubernetes_namespace.sso to exist when enable_sso=true"
+    condition     = length(kubernetes_namespace_v1.sso) == 1
+    error_message = "Expected kubernetes_namespace_v1.sso to exist when enable_sso=true"
   }
 
   assert {
-    condition     = length(kubernetes_secret.oauth2_proxy_oidc) == 1
-    error_message = "Expected kubernetes_secret.oauth2_proxy_oidc to exist when enable_sso=true"
+    condition     = length(kubernetes_secret_v1.oauth2_proxy_oidc) == 1
+    error_message = "Expected kubernetes_secret_v1.oauth2_proxy_oidc to exist when enable_sso=true"
   }
 
   assert {
