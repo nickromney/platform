@@ -78,3 +78,27 @@ run "image_preload_can_be_disabled" {
     error_message = "Did not expect null_resource.preload_images when enable_image_preload=false"
   }
 }
+
+run "gitea_admin_promotions_always_keep_bootstrap_admin" {
+  command = plan
+
+  variables {
+    cni_provider              = "none"
+    enable_hubble             = false
+    enable_argocd             = true
+    enable_gitea              = true
+    enable_signoz             = false
+    gitea_admin_username      = "gitea-admin"
+    gitea_admin_promote_users = ["demo-admin"]
+  }
+
+  assert {
+    condition     = contains(local.gitea_admin_promote_users_effective, "gitea-admin")
+    error_message = "Expected the bootstrap Gitea admin user to remain in the promoted-user set"
+  }
+
+  assert {
+    condition     = contains(local.gitea_admin_promote_users_effective, "demo-admin")
+    error_message = "Expected additional promoted users to remain in the promoted-user set"
+  }
+}

@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "observability" {
+resource "kubernetes_namespace_v1" "observability" {
   count = local.enable_observability_effective ? 1 : 0
 
   metadata {
@@ -132,7 +132,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
   ]
 }
 
@@ -267,7 +267,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
   ]
 }
 
@@ -1401,7 +1401,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
     kubectl_manifest.argocd_app_prometheus,
   ]
 }
@@ -1425,7 +1425,7 @@ resource "kubectl_manifest" "argocd_app_otel_collector_prometheus" {
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
   ]
 }
 
@@ -1546,7 +1546,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
   ]
 }
 
@@ -1634,7 +1634,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
   ]
 }
 
@@ -1781,7 +1781,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.observability,
+    kubernetes_namespace_v1.observability,
     kubectl_manifest.argocd_app_signoz,
   ]
 }

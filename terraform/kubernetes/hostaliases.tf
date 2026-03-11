@@ -11,7 +11,7 @@ spec:
   template:
     spec:
       hostAliases:
-        - ip: ${kubernetes_service.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
+        - ip: ${kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
           hostnames:
             - dex.127.0.0.1.sslip.io
 __YAML__
@@ -23,7 +23,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_service.platform_gateway_nginx_internal,
+    kubernetes_service_v1.platform_gateway_nginx_internal,
   ]
 }
 
@@ -35,12 +35,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: headlamp
-  namespace: ${kubernetes_namespace.headlamp[0].metadata[0].name}
+  namespace: ${kubernetes_namespace_v1.headlamp[0].metadata[0].name}
 spec:
   template:
     spec:
       hostAliases:
-        - ip: ${kubernetes_service.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
+        - ip: ${kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
           hostnames:
             - dex.127.0.0.1.sslip.io
 __YAML__
@@ -53,7 +53,7 @@ __YAML__
   depends_on = [
     null_resource.wait_headlamp_deployment,
     kubectl_manifest.argocd_app_headlamp,
-    kubernetes_service.platform_gateway_nginx_internal,
+    kubernetes_service_v1.platform_gateway_nginx_internal,
   ]
 }
 
@@ -64,17 +64,17 @@ resource "null_resource" "wait_headlamp_deployment" {
     command     = <<-EOT
       set -euo pipefail
 
-      ns="${kubernetes_namespace.headlamp[0].metadata[0].name}"
+      ns="${kubernetes_namespace_v1.headlamp[0].metadata[0].name}"
       for i in {1..300}; do
-        if kubectl -n "${kubernetes_namespace.headlamp[0].metadata[0].name}" get deploy headlamp >/dev/null 2>&1; then
-          kubectl -n "${kubernetes_namespace.headlamp[0].metadata[0].name}" rollout status deploy/headlamp --timeout=600s
+        if kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" get deploy headlamp >/dev/null 2>&1; then
+          kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" rollout status deploy/headlamp --timeout=600s
           exit 0
         fi
         sleep 2
       done
 
-      echo "Timed out waiting for deployment/headlamp in namespace ${kubernetes_namespace.headlamp[0].metadata[0].name}" >&2
-      kubectl -n "${kubernetes_namespace.headlamp[0].metadata[0].name}" get all || true
+      echo "Timed out waiting for deployment/headlamp in namespace ${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" >&2
+      kubectl -n "${kubernetes_namespace_v1.headlamp[0].metadata[0].name}" get all || true
       exit 1
     EOT
     interpreter = ["/bin/bash", "-c"]
@@ -88,4 +88,3 @@ resource "null_resource" "wait_headlamp_deployment" {
     kubectl_manifest.argocd_app_headlamp,
   ]
 }
-

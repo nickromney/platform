@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "gitea" {
+resource "kubernetes_namespace_v1" "gitea" {
   count = var.enable_gitea ? 1 : 0
 
   metadata {
@@ -14,7 +14,7 @@ resource "kubernetes_namespace" "gitea" {
   ]
 }
 
-resource "kubernetes_namespace" "headlamp" {
+resource "kubernetes_namespace_v1" "headlamp" {
   count = var.enable_headlamp ? 1 : 0
 
   metadata {
@@ -30,7 +30,7 @@ resource "kubernetes_namespace" "headlamp" {
   ]
 }
 
-resource "kubernetes_namespace" "gitea_runner" {
+resource "kubernetes_namespace_v1" "gitea_runner" {
   count = var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
 
   metadata {
@@ -49,7 +49,7 @@ resource "kubernetes_namespace" "gitea_runner" {
   ]
 }
 
-resource "kubernetes_namespace" "dev" {
+resource "kubernetes_namespace_v1" "dev" {
   count = var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) ? 1 : 0
 
   metadata {
@@ -67,7 +67,7 @@ resource "kubernetes_namespace" "dev" {
   ]
 }
 
-resource "kubernetes_namespace" "uat" {
+resource "kubernetes_namespace_v1" "uat" {
   count = var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) ? 1 : 0
 
   metadata {
@@ -86,7 +86,7 @@ resource "kubernetes_namespace" "uat" {
   ]
 }
 
-resource "kubernetes_namespace" "apim" {
+resource "kubernetes_namespace_v1" "apim" {
   count = var.enable_argocd && local.enable_subnetcalc_workloads_effective ? 1 : 0
 
   metadata {

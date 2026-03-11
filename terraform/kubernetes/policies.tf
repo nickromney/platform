@@ -291,7 +291,7 @@ __YAML__
   server_side_apply = false
 
   depends_on = [
-    kubernetes_secret.argocd_repo_policies,
+    kubernetes_secret_v1.argocd_repo_policies,
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
     kubectl_manifest.argocd_app_kyverno,
@@ -382,7 +382,7 @@ __YAML__
   server_side_apply = false
 
   depends_on = [
-    kubernetes_secret.argocd_repo_policies,
+    kubernetes_secret_v1.argocd_repo_policies,
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
     helm_release.cilium,

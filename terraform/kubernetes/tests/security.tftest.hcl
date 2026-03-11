@@ -90,17 +90,17 @@ run "uat_namespace_has_isolate_label" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.uat) == 1
-    error_message = "Expected kubernetes_namespace.uat to exist"
+    condition     = length(kubernetes_namespace_v1.uat) == 1
+    error_message = "Expected kubernetes_namespace_v1.uat to exist"
   }
 
   assert {
-    condition     = kubernetes_namespace.uat[0].metadata[0].labels["kyverno.io/isolate"] == "true"
+    condition     = kubernetes_namespace_v1.uat[0].metadata[0].labels["kyverno.io/isolate"] == "true"
     error_message = "Expected uat namespace to have kyverno.io/isolate=true label"
   }
 
   assert {
-    condition     = kubernetes_namespace.uat[0].metadata[0].labels["security-tier"] == "strict"
+    condition     = kubernetes_namespace_v1.uat[0].metadata[0].labels["security-tier"] == "strict"
     error_message = "Expected uat namespace to have security-tier=strict label"
   }
 }
@@ -120,12 +120,12 @@ run "dev_namespace_has_isolate_label" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.dev) == 1
-    error_message = "Expected kubernetes_namespace.dev to exist"
+    condition     = length(kubernetes_namespace_v1.dev) == 1
+    error_message = "Expected kubernetes_namespace_v1.dev to exist"
   }
 
   assert {
-    condition     = kubernetes_namespace.dev[0].metadata[0].labels["kyverno.io/isolate"] == "true"
+    condition     = kubernetes_namespace_v1.dev[0].metadata[0].labels["kyverno.io/isolate"] == "true"
     error_message = "Expected dev namespace to have kyverno.io/isolate=true label"
   }
 }
@@ -144,17 +144,17 @@ run "sso_namespace_has_security_labels" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.sso) == 1
-    error_message = "Expected kubernetes_namespace.sso to exist"
+    condition     = length(kubernetes_namespace_v1.sso) == 1
+    error_message = "Expected kubernetes_namespace_v1.sso to exist"
   }
 
   assert {
-    condition     = kubernetes_namespace.sso[0].metadata[0].labels["kyverno.io/isolate"] == "true"
+    condition     = kubernetes_namespace_v1.sso[0].metadata[0].labels["kyverno.io/isolate"] == "true"
     error_message = "Expected sso namespace to have kyverno.io/isolate=true label"
   }
 
   assert {
-    condition     = kubernetes_namespace.sso[0].metadata[0].labels["security-tier"] == "critical"
+    condition     = kubernetes_namespace_v1.sso[0].metadata[0].labels["security-tier"] == "critical"
     error_message = "Expected sso namespace to have security-tier=critical label"
   }
 }

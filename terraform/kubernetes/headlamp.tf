@@ -12,7 +12,7 @@ metadata:
 spec:
   project: default
   destination:
-    namespace: ${kubernetes_namespace.headlamp[0].metadata[0].name}
+    namespace: ${kubernetes_namespace_v1.headlamp[0].metadata[0].name}
     server: https://kubernetes.default.svc
   source:
     repoURL: https://kubernetes-sigs.github.io/headlamp/
@@ -38,7 +38,7 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_namespace.headlamp,
-    kubernetes_secret.headlamp_mkcert_ca,
+    kubernetes_namespace_v1.headlamp,
+    kubernetes_secret_v1.headlamp_mkcert_ca,
   ]
 }

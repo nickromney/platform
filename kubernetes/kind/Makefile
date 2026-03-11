@@ -15,13 +15,12 @@ ENSURE_KIND_KUBECONFIG := $(MAKEFILE_DIR)scripts/ensure-kind-kubeconfig.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
-TARGET ?= kind
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 KIND_KUBECONFIG_CONTEXT ?= kind-kind-local
 KIND_KUBECONFIG_PATH ?= $(HOME)/.kube/$(KIND_KUBECONFIG_CONTEXT).yaml
 
-VALID_TARGETS := kind k3s
+VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
@@ -29,13 +28,6 @@ ACTION_FROM_GOALS := $(firstword $(filter plan apply,$(MAKECMDGOALS)))
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
-K3S_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply-existing,plan-existing)
-
-ifneq ($(TARGET_FROM_GOALS),)
-ifneq ($(origin TARGET),command line)
-override TARGET := $(TARGET_FROM_GOALS)
-endif
-endif
 
 ifneq ($(STAGE_FROM_GOALS),)
 ifneq ($(origin STAGE),command line)
@@ -51,10 +43,8 @@ ifeq ($(origin STAGE),command line)
 STAGE_SPECIFIED := 1
 endif
 
-ifeq ($(TARGET),kind)
 KUBECONFIG_PATH ?= $(KIND_KUBECONFIG_PATH)
 KUBECONFIG_CONTEXT ?= $(KIND_KUBECONFIG_CONTEXT)
-endif
 
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
@@ -71,7 +61,7 @@ STAGE_FILE_800 := stages/800-gateway-tls.tfvars
 STAGE_FILE_900 := stages/900-sso.tfvars
 
 stage_file = $(STAGE_FILE_$(STAGE))
-target_profile_file = targets/$(TARGET).tfvars
+target_profile_file = targets/kind.tfvars
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
 
@@ -82,12 +72,10 @@ help:
 	@echo "Workflow syntax:"
 	@echo "  make kind apply 100 AUTO_APPROVE=1"
 	@echo "  make kind plan 200"
-	@echo "  make k3s plan 100"
-	@echo "  make k3s apply 900 AUTO_APPROVE=1"
 	@echo ""
 	@echo "Targets (workflow syntax above is preferred):"
-	@echo "  make apply        900 [AUTO_APPROVE=1]      (or STAGE=900, TARGET=kind|k3s)"
-	@echo "  make plan         900                        (or STAGE=900, TARGET=kind|k3s)"
+	@echo "  make apply        900 [AUTO_APPROVE=1]"
+	@echo "  make plan         900"
 	@echo "  make init"
 	@echo "  make check-gateway-urls"
 	@echo "  make check-app  APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
@@ -95,6 +83,7 @@ help:
 	@echo "  make check-security                           WireGuard, TLS 1.3, policy enforcement, negative tests"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Browser-based SSO end-to-end app checks (Playwright)"
+	@echo "  make check-provider-version"
 	@echo "  make check-version"
 	@echo "  make discover-images                          Dump images from running cluster"
 	@echo "  make docker-health"
@@ -106,7 +95,7 @@ help:
 	@echo "  make preload-images-pull-only                 Warm Docker cache only"
 	@echo "  make prereqs"
 	@echo "  make check-stage-monotonicity"
-	@echo "  make reset        [AUTO_APPROVE=1] [TARGET=kind|k3s]"
+	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make show-urls"
 	@echo "  make start-kind"
 	@echo "  make stop-kind"
@@ -126,16 +115,9 @@ help:
 	@echo "Stage examples:"
 	@echo "  make kind plan 100"
 	@echo "  make kind apply 900 AUTO_APPROVE=1"
-	@echo "  make k3s plan 100"
-	@echo "  make k3s apply 900 AUTO_APPROVE=1"
-	@echo ""
-	@echo "Existing cluster overrides (k3s target):"
-	@echo "  KUBECONFIG_PATH=/path/to/kubeconfig KUBECONFIG_CONTEXT=my-context make k3s apply 900"
-	@echo "  make reset TARGET=k3s KUBECONFIG_CONTEXT=my-context K3S_RESET_CMD='limactl delete my-k3s-vm'"
 	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
-	@echo "  k3s  -> set KUBECONFIG_PATH=/path/to/kubeconfig"
 
 .PHONY: $(VALID_STAGES)
 $(VALID_STAGES):
@@ -195,13 +177,11 @@ check-kubeconfig:
 	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
 	[ -n "$$default_current" ] || default_current="<none>"; \
 	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	if [ "$(TARGET)" = "kind" ]; then \
-		"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
-		kind_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
-		kind_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
-		[ -n "$$kind_current" ] || kind_current="<none>"; \
-		echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)"; \
-	fi
+	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
+	kind_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
+	kind_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
+	[ -n "$$kind_current" ] || kind_current="<none>"; \
+	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)";
 
 .PHONY: check-kind-host-ports
 check-kind-host-ports:
@@ -215,38 +195,19 @@ check-kind-host-ports:
 	fi; \
 	"$(CHECK_KIND_HOST_PORTS)" "$${args[@]}"
 
-.PHONY: kind k3s
+.PHONY: kind
 kind:
 	@set -euo pipefail; \
 	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
 		echo "Usage: make kind <plan|apply> <stage> [AUTO_APPROVE=1]"; \
 		exit 1; \
 	fi; \
-	$(MAKE) $(KIND_DISPATCH_TARGET) TARGET=kind STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
-
-k3s:
-	@set -euo pipefail; \
-	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
-		echo "Usage: make k3s <plan|apply> <stage> [AUTO_APPROVE=1]"; \
-		exit 1; \
-	fi; \
-	$(MAKE) $(K3S_DISPATCH_TARGET) TARGET=k3s STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
-
-# Backward-compatible aliases.
-.PHONY: init-existing plan-existing apply-existing
-init-existing:
-	@$(MAKE) init TARGET=k3s STAGE="$(STAGE)"
-
-plan-existing:
-	@$(MAKE) plan TARGET=k3s STAGE="$(STAGE)"
-
-apply-existing:
-	@$(MAKE) apply TARGET=k3s STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
+	$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
 
 .PHONY: init
 init:
 	@$(MAKE) prepare-state
-	@if [ ! -f "$(target_profile_file)" ]; then echo "Unknown TARGET=$(TARGET) (missing $(target_profile_file))"; exit 1; fi
+	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE) (missing $(stage_file))"; exit 1; fi
 	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
 
@@ -273,16 +234,16 @@ plan:
 else
 plan:
 	@$(MAKE) prepare-state
-	@if [ ! -f "$(target_profile_file)" ]; then echo "Unknown TARGET=$(TARGET)"; exit 1; fi
+	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) check-docker-daemon && $(MAKE) check-kind-state; fi
+	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
-	if [ "$(TARGET)" = "kind" ] && [ "$$stage_num" -ge 200 ]; then \
+	if [ "$$stage_num" -ge 200 ]; then \
 		if ! command -v kind >/dev/null 2>&1; then \
-			echo "kind not found in PATH (required for TARGET=kind STAGE>=200 checks)"; exit 1; \
+			echo "kind not found in PATH (required for STAGE>=200 checks)"; exit 1; \
 		fi; \
 		if ! kind get clusters 2>/dev/null | grep -qx "kind-local"; then \
 			echo "kind-local not found. Run: make kind apply 100 AUTO_APPROVE=1"; \
@@ -307,25 +268,25 @@ apply:
 else
 apply:
 	@$(MAKE) prepare-state
-	@if [ ! -f "$(target_profile_file)" ]; then echo "Unknown TARGET=$(TARGET)"; exit 1; fi
+	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) check-docker-daemon && $(MAKE) check-kind-state; fi
+	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
 	cluster_name="$${TARGET_CLUSTER_NAME:-kind-local}"; \
-	if [ "$(TARGET)" = "kind" ] && [ "$$stage_num" -gt 200 ]; then \
+	if [ "$$stage_num" -gt 200 ]; then \
 		if ! command -v kind >/dev/null 2>&1; then \
-			echo "kind not found in PATH (required for TARGET=kind STAGE>200 checks)"; exit 1; \
+			echo "kind not found in PATH (required for STAGE>200 checks)"; exit 1; \
 		fi; \
 		if ! kind get clusters 2>/dev/null | grep -qx "kind-local"; then \
 			echo "kind-local not found; bootstrapping cluster via STAGE=100 (auto-approve)"; \
-			$(MAKE) apply TARGET=kind STAGE=100 AUTO_APPROVE=1; \
+			$(MAKE) apply STAGE=100 AUTO_APPROVE=1; \
 		fi; \
 	fi; \
-	if [ "$(TARGET)" = "kind" ] && ! docker ps -a --format '{{.Names}}' | grep -qx "$$cluster_name-control-plane"; then \
-		$(MAKE) check-kind-host-ports TARGET=kind STAGE="$(STAGE)"; \
+	if ! docker ps -a --format '{{.Names}}' | grep -qx "$$cluster_name-control-plane"; then \
+		$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
 	fi; \
 	apply_args="-var-file=$(stage_var_file) -var-file=$(target_var_file)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then apply_args="$$apply_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
@@ -346,7 +307,7 @@ apply:
 	run_apply 2>&1 | tee "$$tmp_log"; \
 	rc=$${PIPESTATUS[0]}; \
 	set -e; \
-		if [ "$(TARGET)" = "kind" ] && [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tmp_log"; then \
+		if [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tmp_log"; then \
 			echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
 			KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"; \
 			set +e; \
@@ -359,7 +320,7 @@ apply:
 endif
 .PHONY: check-health
 check-health:
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) ensure-kind-kubeconfig >/dev/null; fi
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -383,7 +344,7 @@ check-cluster:
 
 .PHONY: check-gateway-urls
 check-gateway-urls:
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) ensure-kind-kubeconfig >/dev/null; fi
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -392,7 +353,7 @@ check-gateway-urls:
 
 .PHONY: check-app
 check-app:
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) ensure-kind-kubeconfig >/dev/null; fi
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
 	vf=""; \
@@ -409,7 +370,7 @@ check-app:
 
 .PHONY: check-sso
 check-sso:
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) ensure-kind-kubeconfig >/dev/null; fi
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -499,7 +460,7 @@ start-kind:
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
-	required=(curl docker git kubectl kind ssh tofu terragrunt); \
+	required=(curl docker git jq kubectl kind ssh tofu terragrunt); \
 	optional=(helm cilium hubble kubectx mkcert); \
 	missing_required=(); \
 	check_bin() { \
@@ -582,28 +543,16 @@ discover-images:
 .PHONY: reset
 reset:
 	@set -euo pipefail; \
-	if [ "$(TARGET)" != "kind" ] && [ "$(TARGET)" != "k3s" ]; then \
-		echo "Unknown TARGET=$(TARGET) (expected: kind or k3s)"; \
-		exit 1; \
-	fi; \
 	CLUSTER_NAME="$${TARGET_CLUSTER_NAME:-kind-local}"; \
-	if [ "$(TARGET)" = "k3s" ] && [ -z "$${TARGET_CLUSTER_NAME:-}" ]; then \
-		CLUSTER_NAME="local-existing"; \
-	fi; \
 	KUBECONFIG_PATH="$${KUBECONFIG_PATH:-$(KUBECONFIG_PATH)}"; \
 	CTX="$${KUBECONFIG_CONTEXT:-}"; \
-	if [ "$(TARGET)" = "kind" ] && [ -z "$$CTX" ]; then \
+	CLUSTER_EXISTS=0; \
+	if [ -z "$$CTX" ]; then \
 		CTX="kind-$$CLUSTER_NAME"; \
 	fi; \
 	STATE_DIR="$(dir $(STATE_FILE))"; \
-	echo "Target: $(TARGET)"; \
 	echo "This will:"; \
-	if [ "$(TARGET)" = "kind" ]; then \
-		echo "  - Delete kind cluster: $$CLUSTER_NAME"; \
-	else \
-		echo "  - External cluster teardown (optional): $${K3S_RESET_CMD:-<none>}"; \
-		echo "    (or set LIMA_INSTANCE=<name> to run limactl delete <name>)"; \
-	fi; \
+	echo "  - Delete kind cluster: $$CLUSTER_NAME"; \
 	if [ -n "$$CTX" ]; then \
 		echo "  - Remove kubeconfig context/cluster/user: $$CTX"; \
 	else \
@@ -612,45 +561,80 @@ reset:
 	echo "  - Remove local terragrunt state: $$STATE_DIR"; \
 	echo "  - Clean stack caches (.terraform/.terragrunt-cache)"; \
 	echo ""; \
+	echo "Preflight:"; \
+	echo "  - Checking Docker daemon / Docker Desktop"; \
+	if ! $(MAKE) check-docker-daemon; then \
+		echo ""; \
+		echo "FAIL reset cannot continue because Docker is not reachable."; \
+		echo "kind clusters are Docker containers, so reset cannot delete or inspect them while the daemon is down."; \
+		echo "Start Docker Desktop and rerun: make reset AUTO_APPROVE=1"; \
+		exit 1; \
+	fi; \
+	echo "  - Docker daemon reachable"; \
+	if command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -qx "$$CLUSTER_NAME"; then \
+		CLUSTER_EXISTS=1; \
+		echo "  - kind cluster '$$CLUSTER_NAME' exists and will be deleted"; \
+	else \
+		echo "  - kind cluster '$$CLUSTER_NAME' does not exist"; \
+		echo "    reset can still remove kubeconfig entries and local Terraform state"; \
+	fi; \
+	echo ""; \
 	if [ "$(AUTO_APPROVE)" != "1" ]; then \
-		printf "Proceed? [y/N] "; read -r confirm; \
-		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "Aborted."; exit 0; fi; \
+		if [ "$$CLUSTER_EXISTS" = "1" ]; then \
+			printf "Proceed with cluster deletion, kubeconfig cleanup, and local state cleanup? [y/N] "; read -r confirm; \
+			if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: reset cancelled by user at the confirmation prompt. Docker preflight passed, and the kind cluster was left untouched. No kubeconfig or local state changes were made."; exit 0; fi; \
+		else \
+			printf "Proceed with kubeconfig cleanup and local state cleanup? [y/N] "; read -r confirm; \
+			if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: reset cancelled by user at the confirmation prompt. Docker preflight passed. No kubeconfig or local state changes were made."; exit 0; fi; \
+		fi; \
 	fi; \
 	echo ""; \
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
-		"$(KUBECONFIG_HELPER)" delete-context "$$KUBECONFIG_PATH" "$$CTX" "$$CTX" "$$CTX" 1; \
-		echo "OK   Removed $$CTX from $$KUBECONFIG_PATH (if present)"; \
-		"$(KUBECONFIG_HELPER)" delete-context "$(DEFAULT_KUBECONFIG_PATH)" "$$CTX" "$$CTX" "$$CTX" 0; \
-		echo "OK   Removed $$CTX from $(DEFAULT_KUBECONFIG_PATH) (if present)"; \
+		if [ -e "$$KUBECONFIG_PATH" ]; then \
+			"$(KUBECONFIG_HELPER)" ensure-valid "$$KUBECONFIG_PATH"; \
+			if KUBECONFIG="$$KUBECONFIG_PATH" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
+				local_ctx_found=1; \
+			else \
+				local_ctx_found=0; \
+			fi; \
+			"$(KUBECONFIG_HELPER)" delete-context "$$KUBECONFIG_PATH" "$$CTX" "$$CTX" "$$CTX" 1; \
+			if [ "$$local_ctx_found" = "1" ]; then \
+				echo "OK   Removed $$CTX from $$KUBECONFIG_PATH"; \
+			else \
+				echo "OK   No $$CTX entry found in $$KUBECONFIG_PATH"; \
+			fi; \
+		else \
+			echo "OK   No kubeconfig file at $$KUBECONFIG_PATH"; \
+		fi; \
+		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
+			"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
+			if KUBECONFIG="$(DEFAULT_KUBECONFIG_PATH)" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
+				global_ctx_found=1; \
+			else \
+				global_ctx_found=0; \
+			fi; \
+			"$(KUBECONFIG_HELPER)" delete-context "$(DEFAULT_KUBECONFIG_PATH)" "$$CTX" "$$CTX" "$$CTX" 0; \
+			if [ "$$global_ctx_found" = "1" ]; then \
+				echo "OK   Removed $$CTX from $(DEFAULT_KUBECONFIG_PATH)"; \
+			else \
+				echo "OK   No $$CTX entry found in $(DEFAULT_KUBECONFIG_PATH)"; \
+			fi; \
+		else \
+			echo "OK   No kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \
+		fi; \
 	elif [ -z "$$CTX" ]; then \
 		echo "(skipping kubeconfig cleanup; no KUBECONFIG_CONTEXT set)"; \
 	else \
 		echo "(no kubeconfig at $$KUBECONFIG_PATH)"; \
 	fi; \
 	echo ""; \
-	if [ "$(TARGET)" = "kind" ]; then \
-		echo "Deleting kind cluster (best-effort)..."; \
-		if command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -qx "$$CLUSTER_NAME"; then \
-			kind delete cluster --name "$$CLUSTER_NAME"; \
-			echo "OK   Deleted $$CLUSTER_NAME"; \
-		else \
-			echo "(cluster $$CLUSTER_NAME not found)"; \
-		fi; \
+	echo "Deleting kind cluster (best-effort)..."; \
+	if [ "$$CLUSTER_EXISTS" = "1" ]; then \
+		kind delete cluster --name "$$CLUSTER_NAME"; \
+		echo "OK   Deleted $$CLUSTER_NAME"; \
 	else \
-		echo "Tearing down external k3s cluster (best-effort)..."; \
-		if [ -n "$${K3S_RESET_CMD:-}" ]; then \
-			echo "Running K3S_RESET_CMD"; \
-			bash -lc "$${K3S_RESET_CMD}" || true; \
-		elif [ -n "$${LIMA_INSTANCE:-}" ]; then \
-			if command -v limactl >/dev/null 2>&1; then \
-				limactl delete "$${LIMA_INSTANCE}" || true; \
-			else \
-				echo "limactl not found; skipping LIMA_INSTANCE teardown"; \
-			fi; \
-		else \
-			echo "(no external teardown command configured; skipping cluster deletion)"; \
-		fi; \
+		echo "OK   Cluster $$CLUSTER_NAME was already absent"; \
 	fi; \
 	echo ""; \
 	echo "Cleaning local state/caches..."; \
@@ -685,8 +669,14 @@ test-bats:
 
 .PHONY: check-version
 check-version:
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) ensure-kind-kubeconfig >/dev/null; fi
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@"$(STACK_DIR)/scripts/check-version.sh"
+	@echo ""
+	@"$(STACK_DIR)/scripts/check-provider-version.sh"
+
+.PHONY: check-provider-version
+check-provider-version:
+	@"$(STACK_DIR)/scripts/check-provider-version.sh"
 
 .PHONY: ensure-kind-kubeconfig
 ensure-kind-kubeconfig:
@@ -694,5 +684,5 @@ ensure-kind-kubeconfig:
 
 .PHONY: audit-bootstrap
 audit-bootstrap:
-	@if [ "$(TARGET)" = "kind" ]; then $(MAKE) ensure-kind-kubeconfig >/dev/null; fi
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@"$(MAKEFILE_DIR)scripts/audit-bootstrap.sh"

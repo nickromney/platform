@@ -14,13 +14,13 @@ run "sso_enabled_argocd_oidc_disabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.sso) == 1
-    error_message = "Expected kubernetes_namespace.sso to exist when enable_sso=true"
+    condition     = length(kubernetes_namespace_v1.sso) == 1
+    error_message = "Expected kubernetes_namespace_v1.sso to exist when enable_sso=true"
   }
 
   assert {
-    condition     = length(kubernetes_secret.oauth2_proxy_oidc) == 1
-    error_message = "Expected kubernetes_secret.oauth2_proxy_oidc to exist when enable_sso=true"
+    condition     = length(kubernetes_secret_v1.oauth2_proxy_oidc) == 1
+    error_message = "Expected kubernetes_secret_v1.oauth2_proxy_oidc to exist when enable_sso=true"
   }
 
   assert {
@@ -104,8 +104,8 @@ run "sso_with_subnetcalc_apps" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.apim) == 1
-    error_message = "Expected kubernetes_namespace.apim to exist when enable_app_repo_subnet_calculator=true"
+    condition     = length(kubernetes_namespace_v1.apim) == 1
+    error_message = "Expected kubernetes_namespace_v1.apim to exist when enable_app_repo_subnet_calculator=true"
   }
 
   assert {

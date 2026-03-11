@@ -26,9 +26,10 @@ locals {
   enable_tempo_effective         = var.enable_tempo
   enable_otel_gateway_effective  = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_tempo_effective || var.enable_signoz
   enable_observability_effective = local.enable_otel_gateway_effective || var.enable_observability_agent
-  gitea_admin_promote_users_effective = var.enable_gitea ? (
-    length(var.gitea_admin_promote_users) > 0 ? var.gitea_admin_promote_users : [var.gitea_admin_username]
-  ) : []
+  gitea_admin_promote_users_effective = var.enable_gitea ? distinct(compact(concat(
+    [var.gitea_admin_username],
+    var.gitea_admin_promote_users,
+  ))) : []
 
   containerd_certs_dir = abspath("${path.module}/.run/containerd-certs.d")
   docker_socket_mount = var.enable_docker_socket_mount ? [
@@ -111,6 +112,42 @@ locals {
     [for f in sort(fileset(path.module, "cluster-policies/**")) : filesha256("${path.module}/${f}")],
     [for f in sort(fileset(path.module, "templates/otel-gateway/**")) : filesha256("${path.module}/${f}")]
   )))
+  policies_repo_render_hash = sha1(jsonencode({
+    content_hash               = local.policies_repo_content_hash
+    repo_owner                 = local.gitea_repo_owner
+    repo_is_org                = local.gitea_repo_owner_is_org
+    enable_policies            = var.enable_policies
+    enable_gateway_tls         = var.enable_gateway_tls
+    enable_actions_runner      = var.enable_actions_runner
+    enable_app_repo_sentiment  = var.enable_app_repo_sentiment_llm
+    enable_app_repo_subnetcalc = var.enable_app_repo_subnet_calculator
+    enable_prometheus          = var.enable_prometheus
+    enable_grafana             = var.enable_grafana
+    enable_loki                = var.enable_loki
+    enable_tempo               = var.enable_tempo
+    enable_signoz              = var.enable_signoz
+    enable_otel_gateway        = var.enable_otel_gateway
+    enable_headlamp            = var.enable_headlamp
+    enable_observability_agent = var.enable_observability_agent
+    prefer_external_images     = var.prefer_external_workload_images
+    external_sentiment_api     = lookup(var.external_workload_image_refs, "sentiment-api", "")
+    external_sentiment_ui      = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
+    external_subnetcalc_api    = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
+    external_subnetcalc_apim   = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
+    external_subnetcalc_fe     = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
+    external_subnetcalc_fe_ts  = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
+    hardened_image_registry    = var.hardened_image_registry
+    llm_gateway_mode           = var.llm_gateway_mode
+    llm_gateway_external_name  = var.llm_gateway_external_name
+    llama_cpp_image            = var.llama_cpp_image
+    llama_cpp_hf_repo          = var.llama_cpp_hf_repo
+    llama_cpp_hf_file          = var.llama_cpp_hf_file
+    llama_cpp_model_alias      = var.llama_cpp_model_alias
+    llama_cpp_ctx_size         = var.llama_cpp_ctx_size
+    litellm_upstream_model     = var.litellm_upstream_model
+    litellm_upstream_api_base  = var.litellm_upstream_api_base
+    litellm_upstream_api_key   = nonsensitive(var.litellm_upstream_api_key)
+  }))
 
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.
   # Stage 100 may run on machines without an existing kubeconfig file, so fall back
@@ -131,36 +168,42 @@ locals {
       name           = "gateway-https"
       container_port = var.gateway_https_node_port
       host_port      = var.gateway_https_host_port
+      listen_address = "127.0.0.1"
       protocol       = "TCP"
     },
     {
       name           = "argocd"
       container_port = var.argocd_server_node_port
       host_port      = var.argocd_server_node_port
+      listen_address = "127.0.0.1"
       protocol       = "TCP"
     },
     {
       name           = "hubble-ui"
       container_port = var.hubble_ui_node_port
       host_port      = var.hubble_ui_node_port
+      listen_address = "127.0.0.1"
       protocol       = "TCP"
     },
     {
       name           = "gitea-http"
       container_port = var.gitea_http_node_port
       host_port      = var.gitea_http_node_port
+      listen_address = "127.0.0.1"
       protocol       = "TCP"
     },
     {
       name           = "gitea-ssh"
       container_port = var.gitea_ssh_node_port
       host_port      = var.gitea_ssh_node_port
+      listen_address = "127.0.0.1"
       protocol       = "TCP"
     },
     {
       name           = "grafana-ui"
       container_port = var.grafana_ui_node_port
       host_port      = var.grafana_ui_host_port
+      listen_address = "127.0.0.1"
       protocol       = "TCP"
     },
   ]
@@ -388,7 +431,7 @@ locals {
     server = {
       hostAliases = var.enable_sso ? [
         {
-          ip        = kubernetes_service.platform_gateway_nginx_internal[0].spec[0].cluster_ip
+          ip        = kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip
           hostnames = ["dex.127.0.0.1.sslip.io"]
         }
       ] : []

@@ -491,7 +491,7 @@ variable "enable_argocd_oidc" {
 }
 
 variable "gitea_admin_promote_users" {
-  description = "Usernames to promote to Gitea admin via API (best-effort). Empty defaults to gitea_admin_username."
+  description = "Additional usernames to promote to Gitea admin via API (best-effort). gitea_admin_username is always included."
   type        = list(string)
   default     = []
 }

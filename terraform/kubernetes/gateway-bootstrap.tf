@@ -19,7 +19,7 @@ __YAML__
   ]
 }
 
-resource "kubernetes_service" "platform_gateway_nginx_internal" {
+resource "kubernetes_service_v1" "platform_gateway_nginx_internal" {
   count = var.enable_sso ? 1 : 0
 
   metadata {
@@ -49,4 +49,3 @@ resource "kubernetes_service" "platform_gateway_nginx_internal" {
     kubectl_manifest.namespace_platform_gateway,
   ]
 }
-

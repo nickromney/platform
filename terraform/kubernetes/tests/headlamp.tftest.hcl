@@ -14,8 +14,8 @@ run "headlamp_enabled" {
   }
 
   assert {
-    condition     = length(kubernetes_namespace.headlamp) == 1
-    error_message = "Expected kubernetes_namespace.headlamp to exist when enable_headlamp=true"
+    condition     = length(kubernetes_namespace_v1.headlamp) == 1
+    error_message = "Expected kubernetes_namespace_v1.headlamp to exist when enable_headlamp=true"
   }
 
   assert {
@@ -28,4 +28,3 @@ run "headlamp_enabled" {
     error_message = "Expected Headlamp ArgoCD Application YAML to include targetRevision matching var.headlamp_chart_version"
   }
 }
-

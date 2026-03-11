@@ -79,20 +79,8 @@ listeners_for_port_lsof() {
 
   header="$(printf '%s\n' "${raw}" | sed -n '1p')"
   body="$(
-    printf '%s\n' "${raw}" | tail -n +2 | awk -v port="${port}" '
-      {
-        name = $NF
-        if (
-          name == "*:" port ||
-          name == "127.0.0.1:" port ||
-          name == "localhost:" port ||
-          name == "[::1]:" port ||
-          name == "::1:" port
-        ) {
-          print
-        }
-      }
-    '
+    printf '%s\n' "${raw}" | tail -n +2 | \
+      grep -E "(^|[[:space:]])(\\*:${port}|127\\.0\\.0\\.1:${port}|localhost:${port}|\\[::1\\]:${port}|::1:${port})([[:space:]]|$)" || true
   )"
   [[ -n "${body}" ]] || return 1
   printf '%s\n%s\n' "${header}" "${body}"
@@ -171,7 +159,7 @@ docker_publishers_for_port() {
       continue
     fi
 
-    if [[ "${ports}" == *"127.0.0.1:${port}->"* || "${ports}" == *"[::1]:${port}->"* ]]; then
+    if [[ "${ports}" == *"0.0.0.0:${port}->"* || "${ports}" == *"[::]:${port}->"* || "${ports}" == *"127.0.0.1:${port}->"* || "${ports}" == *"[::1]:${port}->"* ]]; then
       printf '%s\t%s\n' "${name}" "${ports}"
     fi
   done
@@ -211,12 +199,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 checks=(
-  "gateway-https|0.0.0.0|$(tfvar_or_default gateway_https_host_port 443)|gateway_https_host_port|$(tfvar_or_default gateway_https_node_port 30070)|gateway_https_node_port"
-  "argocd|0.0.0.0|$(tfvar_or_default argocd_server_node_port 30080)|argocd_server_node_port|$(tfvar_or_default argocd_server_node_port 30080)|argocd_server_node_port"
-  "hubble-ui|0.0.0.0|$(tfvar_or_default hubble_ui_node_port 31235)|hubble_ui_node_port|$(tfvar_or_default hubble_ui_node_port 31235)|hubble_ui_node_port"
-  "gitea-http|0.0.0.0|$(tfvar_or_default gitea_http_node_port 30090)|gitea_http_node_port|$(tfvar_or_default gitea_http_node_port 30090)|gitea_http_node_port"
-  "gitea-ssh|0.0.0.0|$(tfvar_or_default gitea_ssh_node_port 30022)|gitea_ssh_node_port|$(tfvar_or_default gitea_ssh_node_port 30022)|gitea_ssh_node_port"
-  "grafana-ui|0.0.0.0|$(tfvar_or_default grafana_ui_host_port 3302)|grafana_ui_host_port|$(tfvar_or_default grafana_ui_node_port 30302)|grafana_ui_node_port"
+  "gateway-https|127.0.0.1|$(tfvar_or_default gateway_https_host_port 443)|gateway_https_host_port|$(tfvar_or_default gateway_https_node_port 30070)|gateway_https_node_port"
+  "argocd|127.0.0.1|$(tfvar_or_default argocd_server_node_port 30080)|argocd_server_node_port|$(tfvar_or_default argocd_server_node_port 30080)|argocd_server_node_port"
+  "hubble-ui|127.0.0.1|$(tfvar_or_default hubble_ui_node_port 31235)|hubble_ui_node_port|$(tfvar_or_default hubble_ui_node_port 31235)|hubble_ui_node_port"
+  "gitea-http|127.0.0.1|$(tfvar_or_default gitea_http_node_port 30090)|gitea_http_node_port|$(tfvar_or_default gitea_http_node_port 30090)|gitea_http_node_port"
+  "gitea-ssh|127.0.0.1|$(tfvar_or_default gitea_ssh_node_port 30022)|gitea_ssh_node_port|$(tfvar_or_default gitea_ssh_node_port 30022)|gitea_ssh_node_port"
+  "grafana-ui|127.0.0.1|$(tfvar_or_default grafana_ui_host_port 3302)|grafana_ui_host_port|$(tfvar_or_default grafana_ui_node_port 30302)|grafana_ui_node_port"
   "api-server|127.0.0.1|$(tfvar_or_default kind_api_server_port 6443)|kind_api_server_port|$(tfvar_or_default kind_api_server_port 6443)|kind_api_server_port"
 )
 
@@ -254,4 +242,4 @@ if [[ "${conflicts}" -ne 0 ]]; then
   exit 1
 fi
 
-ok "kind host ports available: 0.0.0.0:$(tfvar_or_default gateway_https_host_port 443), 0.0.0.0:$(tfvar_or_default argocd_server_node_port 30080), 0.0.0.0:$(tfvar_or_default hubble_ui_node_port 31235), 0.0.0.0:$(tfvar_or_default gitea_http_node_port 30090), 0.0.0.0:$(tfvar_or_default gitea_ssh_node_port 30022), 0.0.0.0:$(tfvar_or_default grafana_ui_host_port 3302), 127.0.0.1:$(tfvar_or_default kind_api_server_port 6443)"
+ok "kind host ports available: 127.0.0.1:$(tfvar_or_default gateway_https_host_port 443), 127.0.0.1:$(tfvar_or_default argocd_server_node_port 30080), 127.0.0.1:$(tfvar_or_default hubble_ui_node_port 31235), 127.0.0.1:$(tfvar_or_default gitea_http_node_port 30090), 127.0.0.1:$(tfvar_or_default gitea_ssh_node_port 30022), 127.0.0.1:$(tfvar_or_default grafana_ui_host_port 3302), 127.0.0.1:$(tfvar_or_default kind_api_server_port 6443)"

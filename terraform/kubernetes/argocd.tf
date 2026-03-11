@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "argocd" {
+resource "kubernetes_namespace_v1" "argocd" {
   count = var.enable_argocd && var.provision_argocd ? 1 : 0
 
   metadata {
@@ -33,6 +33,6 @@ resource "helm_release" "argocd" {
     kind_cluster.local,
     local_sensitive_file.kubeconfig,
     helm_release.cilium,
-    kubernetes_namespace.argocd,
+    kubernetes_namespace_v1.argocd,
   ]
 }
