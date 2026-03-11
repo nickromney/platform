@@ -74,19 +74,19 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  Name["Service name\napi1.vanity.test"] --> Resolver["Resolver viewpoint\nwhich cloud are you in?"]
-  Resolver --> Local1["cloud1/cloud2 local meaning\n10.10.1.0/24"]
-  Resolver --> Local3["cloud3 local meaning\n172.31.1.0/24"]
-  Resolver --> VIP["Cross-cloud VIP\n172.16.x.x"]
-  VIP --> WG["WireGuard transport\n192.168.1.x"]
+  Name["Service name<br/>api1.vanity.test"] --> Resolver["Resolver viewpoint<br/>which cloud are you in?"]
+  Resolver --> Local1["cloud1/cloud2 local meaning<br/>10.10.1.0/24"]
+  Resolver --> Local3["cloud3 local meaning<br/>172.31.1.0/24"]
+  Resolver --> VIP["Cross-cloud VIP<br/>172.16.x.x"]
+  VIP --> WG["WireGuard transport<br/>192.168.1.x"]
 ```
 
 ```mermaid
 flowchart LR
-  Guest1["cloud1 guest"] --> Underlay["Lima user-v2 underlay\nshared peer underlay IPs"]
+  Guest1["cloud1 guest"] --> Underlay["Lima user-v2 underlay<br/>shared peer underlay IPs"]
   Guest2["cloud2 guest"] --> Underlay
   Guest3["cloud3 guest"] --> Underlay
-  Underlay --> WG["WireGuard listeners\ninside each guest"]
+  Underlay --> WG["WireGuard listeners<br/>inside each guest"]
 ```
 
 The Lima `user-v2` underlay is only there so the guests can find one another. It is not advertised in DNS, not used as a service identity, and not part of the `172.16.x.x` cross-cloud VIP layer.
@@ -99,17 +99,17 @@ cloud1 and cloud2 both reuse `10.10.1.0/24`. That means an address like `10.10.1
 flowchart LR
   subgraph cloud1["cloud1 resolver view"]
     c1dns["10.10.1.10 DNS"]
-    c1app["app1.cloud1.test\n10.10.1.4"]
+    c1app["app1.cloud1.test<br/>10.10.1.4"]
   end
 
   subgraph cloud2["cloud2 resolver view"]
     c2dns["10.10.1.10 DNS"]
-    c2api["api1.cloud2.test\n10.10.1.4"]
+    c2api["api1.cloud2.test<br/>10.10.1.4"]
   end
 
   c1dns --> c1app
   c2dns --> c2api
-  c1app -. "same RFC1918 address,\ndifferent workload" .- c2api
+  c1app -. "same RFC1918 address,<br/>different workload" .- c2api
 ```
 
 ## Resolver Viewpoint Matters
@@ -136,7 +136,7 @@ flowchart TD
   VIP --> Reach["Reachable over WireGuard"]
 
   Start --> Bad["Use raw RFC1918 target"]
-  Bad --> Ambiguous["10.10.1.4 is ambiguous\nbecause cloud1 and cloud2 both own it"]
+  Bad --> Ambiguous["10.10.1.4 is ambiguous<br/>because cloud1 and cloud2 both own it"]
 ```
 
 ## What To Remember
