@@ -1,0 +1,19 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+stateDiagram-v2
+    [*] --> IncomingRequest
+
+    IncomingRequest --> OAuthRedirect : no oauth2-proxy session
+    IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
+    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
+
+    AuthenticatedRequest --> RouterDispatch
+    RouterDispatch --> FrontendResponse : non-/api path
+    RouterDispatch --> APIMValidation : /api/* path
+
+    APIMValidation --> DexIssuerCheck
+    DexIssuerCheck --> BackendRequest : issuer and JWKS valid
+    BackendRequest --> TraceExport
+    TraceExport --> APIResponse
+
+    FrontendResponse --> [*]
+    APIResponse --> [*]

@@ -1,0 +1,27 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+sequenceDiagram
+    autonumber
+    participant Browser as Browser
+    participant Gateway as platform-gateway
+    participant OAuth as oauth2-proxy
+    participant Dex as Dex
+    participant Router as subnetcalc-router
+
+    Browser->>Gateway: GET /
+    Gateway->>OAuth: Route host to oauth2-proxy
+    OAuth-->>Browser: 302 to Dex via /oauth2/start
+    Browser->>Dex: Authenticate
+    Dex-->>OAuth: Callback with auth code
+    OAuth->>OAuth: Create session cookie
+    OAuth->>Router: Forward authenticated request with user headers
+    Router-->>Browser: SPA shell
+    Browser->>Gateway: GET /.auth/me
+    Gateway->>OAuth: Route host to oauth2-proxy
+    OAuth->>Router: Forward /.auth/me with auth headers
+    Router-->>Browser: Current user payload
+    Browser->>Gateway: GET /.auth/logout
+    Gateway->>OAuth: Route host to oauth2-proxy
+    OAuth->>Router: Forward logout helper path
+    Router-->>Browser: 302 /oauth2/sign_out?rd=/logged-out.html
+    Browser->>OAuth: GET /oauth2/sign_out with session cookie
+    OAuth-->>Browser: Clear cookie and redirect /logged-out.html

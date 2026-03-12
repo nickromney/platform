@@ -6,7 +6,8 @@ spec:
   description: >-
     Hardened policy for sso namespace (Dex IdP + oauth2-proxy instances).
     Dex is the IdP -- treat it like you would Azure EntraID.
-    Ingress: platform-gateway (HTTPS-terminated OIDC flows), app namespaces (token validation).
+    Ingress: kubelet probes plus intra-namespace traffic. Shared workload bridge
+    policies add Dex ingress, auth-proxy ingress, and external IdP egress.
     Egress: DNS, kube-apiserver (Dex stores state in k8s), upstream services
     that oauth2-proxy reverse-proxies to.
   endpointSelector:
@@ -19,63 +20,6 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": sso
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": platform-gateway
-      toPorts:
-        - ports:
-            - port: "4180"
-              protocol: TCP
-            # Dex OIDC endpoints (httproute-dex.yaml proxies /dex/* to port 5556)
-            - port: "5556"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": argocd
-      toPorts:
-        - ports:
-            - port: "5556"
-              protocol: TCP
-            - port: "5558"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": headlamp
-      toPorts:
-        - ports:
-            - port: "5556"
-              protocol: TCP
-            - port: "5558"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
-      toPorts:
-        - ports:
-            - port: "5556"
-              protocol: TCP
-            - port: "5558"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": apim
-      toPorts:
-        - ports:
-            - port: "5556"
-              protocol: TCP
-            - port: "5558"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": observability
-      toPorts:
-        - ports:
-            # Dex telemetry
-            - port: "5558"
-              protocol: TCP
-            # oauth2-proxy metrics
-            - port: "44180"
-              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -142,19 +86,4 @@ spec:
       toPorts:
         - ports:
             - port: "4466"
-              protocol: TCP
-    - toEndpoints:
-        - matchExpressions:
-            - key: "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
-              operator: In
-              values:
-                - application
-            - key: "k8s:app.kubernetes.io/name"
-              operator: In
-              values:
-                - sentiment-router
-                - subnetcalc-router
-      toPorts:
-        - ports:
-            - port: "8080"
               protocol: TCP

@@ -1,0 +1,13 @@
+flowchart LR
+    Internet["External clients"] --> Gateway["platform-gateway"]
+    Gateway --> SSO["sso / oauth2-proxy + Dex"]
+    SSO --> SentRouter["sentiment-router"]
+    SSO --> SubnetRouter["subnetcalc-router"]
+    SentRouter --> SentAPI["sentiment-api"]
+    SentRouter --> SentUI["sentiment-auth-ui"]
+    SentAPI --> LiteLLM["litellm"]
+    LiteLLM --> Llama["llama-cpp"]
+    SubnetRouter --> APIM["subnetcalc-apim-simulator"]
+    APIM --> SubnetAPI["subnetcalc-api"]
+    SentAPI --> OTel["otel-collector"]
+    SubnetAPI --> OTel

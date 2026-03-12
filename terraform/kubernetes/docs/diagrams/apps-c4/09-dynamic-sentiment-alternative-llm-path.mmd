@@ -1,0 +1,11 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+C4Dynamic
+    title Sentiment alternative in-cluster LLM path
+
+    Container(api, "sentiment-api", "API service", "Calls the configured LLM backend and emits traces")
+    Container(litellm, "litellm", "LiteLLM", "Optional in-cluster LLM gateway")
+    Container(llama, "llama.cpp", "llama.cpp server", "Optional in-cluster model runtime")
+
+    RelIndex(1, api, litellm, "Call model alias on 4000")
+    RelIndex(2, litellm, llama, "Forward to llama.cpp on 8080")
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

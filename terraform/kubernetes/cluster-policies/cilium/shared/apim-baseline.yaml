@@ -54,7 +54,7 @@ spec:
     # apim-simulator -> dex (JWKS fetch for JWT validation)
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
             "k8s:app.kubernetes.io/name": dex
       toPorts:
         - ports:

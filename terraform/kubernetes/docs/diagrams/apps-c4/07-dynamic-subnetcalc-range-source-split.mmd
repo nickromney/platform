@@ -1,0 +1,10 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+C4Dynamic
+    title Subnetcalc live range fetch in dev
+
+    Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
+    Container_Ext(cloudflare, "www.cloudflare.com", "HTTPS endpoint", "Serves /ips-v4 and /ips-v6")
+
+    RelIndex(1, api, cloudflare, "GET /ips-v4")
+    RelIndex(2, api, cloudflare, "GET /ips-v6")
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")

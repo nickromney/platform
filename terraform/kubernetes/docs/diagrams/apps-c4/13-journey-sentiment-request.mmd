@@ -1,0 +1,29 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+sequenceDiagram
+    autonumber
+    participant Browser as Browser
+    participant Gateway as platform-gateway
+    participant OAuth as oauth2-proxy
+    participant Router as sentiment-router
+    participant UI as sentiment-auth-ui
+    participant API as sentiment-api
+    participant GatewaySvc as llm-gateway Service
+    participant HostLLM as Host-side LLM
+    participant OTel as otel-collector
+
+    Browser->>Gateway: HTTPS request
+    Gateway->>OAuth: Route to oauth2-proxy
+    OAuth->>Router: Authenticated forward
+    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + sentiment-router-ingress
+
+    alt UI path
+        Router->>UI: Serve UI route
+        Note over Router,UI: Cilium: sentiment-frontend-ingress
+    else API path
+        Router->>API: Forward /api/*
+        Note over Router,API: Cilium: sentiment-router-http-routes + sentiment-backend-ingress
+        API->>GatewaySvc: Call llm-gateway
+        GatewaySvc->>HostLLM: Resolve ExternalName and connect on 12434
+        Note over API,HostLLM: Cilium: allow-sentiment-api-llm-egress in direct mode
+        API->>OTel: Emit traces
+    end

@@ -1,0 +1,30 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+sequenceDiagram
+    autonumber
+    participant Browser as Browser
+    participant Gateway as platform-gateway
+    participant OAuth as oauth2-proxy
+    participant Router as subnetcalc-router
+    participant APIM as subnetcalc-apim-simulator
+    participant Dex as Dex
+    participant API as subnetcalc-api
+    participant OTel as otel-collector
+
+    Browser->>Gateway: HTTPS request
+    Gateway->>OAuth: Route to oauth2-proxy
+    OAuth->>Router: Authenticated forward
+    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + subnetcalc-router-ingress
+
+    alt UI path
+        Router->>Router: Match non-/api route
+        Router->>Browser: SPA content via subnetcalc-frontend
+        Note over Router,Browser: Cilium: subnetcalc-frontend-ingress
+    else API path
+        Router->>APIM: Forward /api/*
+        Note over Router,APIM: Cilium: subnetcalc-router-http-routes
+        APIM->>Dex: JWKS / issuer validation
+        Note over APIM,Dex: Cilium: apim-baseline + sso-hardened
+        APIM->>API: Forward validated API request
+        Note over APIM,API: Cilium: apim-baseline + subnetcalc-api-http-routes
+        API->>OTel: Emit traces
+    end

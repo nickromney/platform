@@ -4,7 +4,7 @@ metadata:
   name: sentiment-router-ingress
 spec:
   description: >-
-    Allow only SSO reverse-proxies to reach the sentiment router.
+    Allow only shared auth proxies to reach the sentiment router.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal
@@ -15,7 +15,8 @@ spec:
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/component": authentication-proxy
       toPorts:
         - ports:
             - port: "8080"

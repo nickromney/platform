@@ -8,7 +8,7 @@ spec:
     Contains Prometheus, Grafana, Loki, Tempo, SigNoz, OTEL collector.
     Logs/metrics/traces are sensitive (OpSec risk).
     Ingress: OTEL data from app namespaces on collector ports only,
-    Grafana/SigNoz UI via sso (oauth2-proxy), scrape from Prometheus.
+    Grafana/SigNoz UI via shared auth proxies, scrape from Prometheus.
     Egress: DNS, kube-apiserver (service discovery), intra-namespace only.
   endpointSelector:
     matchLabels:
@@ -22,7 +22,8 @@ spec:
             "k8s:io.kubernetes.pod.namespace": observability
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/component": authentication-proxy
       toPorts:
         - ports:
             - port: "3000"
@@ -116,12 +117,19 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/name": dex
       toPorts:
         - ports:
             # Dex telemetry
             - port: "5558"
               protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/component": authentication-proxy
+      toPorts:
+        - ports:
             # oauth2-proxy metrics
             - port: "44180"
               protocol: TCP

@@ -28,6 +28,14 @@ EOF
   ! grep -Fq "toCIDRSet:" "${policy}"
 }
 
+@test "shared identity egress policy stays pinned to the minimal Entra hosts" {
+  policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/shared-identity-egress-via-fqdn.yaml"
+
+  grep -Fq "matchName: login.microsoftonline.com" "${policy}"
+  grep -Fq "matchName: graph.microsoft.com" "${policy}"
+  ! grep -Fq 'matchPattern: "*.microsoftonline.com"' "${policy}"
+}
+
 @test "rendered Cilium policy set no longer includes the shared Cloudflare policy" {
   run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium"
 

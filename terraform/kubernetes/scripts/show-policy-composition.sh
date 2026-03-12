@@ -134,6 +134,9 @@ esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 POLICY_ROOT="${REPO_ROOT}/terraform/kubernetes/cluster-policies"
+DISPLAY_LABEL_STRIP_PREFIX=""
+DISPLAY_LABEL_PREFIX_PATH=""
+DISPLAY_LABEL_PREFIX_TARGET=""
 
 read_kustomize_resources() {
   local dir="$1"
@@ -387,25 +390,27 @@ build_overlay_rows_from_records() {
       return 0
     }
 
-    function add_resource(path, value) {
-      if (resources[path] == "") {
-        resources[path] = value
-      } else if (!has_entry(resources[path], value)) {
-        resources[path] = resources[path] listsep value
+    function add_source(key, value) {
+      if (sources[key] == "") {
+        sources[key] = value
+      } else if (!has_entry(sources[key], value)) {
+        sources[key] = sources[key] listsep value
       }
     }
 
     NF == 4 && $1 == overlay {
-      add_resource($2, $3 "/" $4)
-      paths[$2] = 1
+      key = $3 "\t" $4
+      names[key] = 1
+      add_source(key, $2)
     }
 
     END {
-      for (path in paths) {
-        printf "%s\t%s\n", path, resources[path]
+      for (key in names) {
+        split(key, parts, /\t/)
+        printf "%s\t%s\t%s\n", parts[1], parts[2], sources[key]
       }
     }
-  ' | sort -t "$(printf '\t')" -k1,1
+  ' | sort -t "$(printf '\t')" -k1,1 -k2,2
 }
 
 source_link_target() {
@@ -414,9 +419,21 @@ source_link_target() {
   printf './%s' "${path#terraform/kubernetes/cluster-policies/}"
 }
 
+display_source_label() {
+  local path="$1"
+
+  if [[ -n "${DISPLAY_LABEL_STRIP_PREFIX}" && "${path}" == "${DISPLAY_LABEL_STRIP_PREFIX}"* ]]; then
+    printf '%s' "${path#${DISPLAY_LABEL_STRIP_PREFIX}}"
+    return
+  fi
+
+  printf '%s' "${path}"
+}
+
 format_source_links() {
   local paths="$1"
   local path
+  local label
   local first=1
   local expanded_paths
 
@@ -424,129 +441,92 @@ format_source_links() {
 
   while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
+    label="$(display_source_label "${path}")"
 
     if [[ "${FORMAT}" == "markdown" ]]; then
       if [[ "${first}" -eq 0 ]]; then
         printf '<br />'
       fi
-      printf '[`%s`](%s)' "${path}" "$(source_link_target "${path}")"
+      printf '[`%s`](%s)' "${label}" "$(source_link_target "${path}")"
     else
-      printf '      source: %s\n' "${path}"
+      printf '      source: %s\n' "${label}"
     fi
 
     first=0
   done <<< "${expanded_paths}"
 }
 
-print_resource_rows() {
-  local resource_rows="$1"
-  local kind
-  local name
-  local sources
+print_name_source_row() {
+  local name="$1"
+  local sources="$2"
 
-  while IFS=$'\t' read -r kind name sources; do
-    [[ -n "${kind}" ]] || continue
-
-    case "${FORMAT}" in
-      markdown)
-        printf '| `%s` | `%s` | ' "${kind}" "${name}"
-        if [[ -n "${sources}" ]]; then
-          format_source_links "${sources}"
-        else
-          printf '_none_'
-        fi
-        printf ' |\n'
-        ;;
-      text)
-        printf '  - %s/%s\n' "${kind}" "${name}"
-        if [[ -n "${sources}" ]]; then
-          format_source_links "${sources}"
-        fi
-        ;;
-    esac
-  done <<< "${resource_rows}"
+  case "${FORMAT}" in
+    markdown)
+      printf '| `%s` | ' "${name}"
+      if [[ -n "${sources}" ]]; then
+        format_source_links "${sources}"
+      else
+        printf '_none_'
+      fi
+      printf ' |\n'
+      ;;
+    text)
+      printf '  - %s\n' "${name}"
+      if [[ -n "${sources}" ]]; then
+        format_source_links "${sources}"
+      fi
+      ;;
+  esac
 }
 
 print_rendered_section() {
   local title="$1"
   local resource_rows="$2"
-
-  case "${FORMAT}" in
-    markdown)
-      printf '### %s\n\n' "${title}"
-      printf '| Kind | Name | Source Files |\n'
-      printf '| --- | --- | --- |\n'
-      if [[ -n "${resource_rows}" ]]; then
-        print_resource_rows "${resource_rows}"
-      else
-        printf '| _none_ | _none_ | _none_ |\n'
-      fi
-      printf '\n'
-      ;;
-    text)
-      printf '%s\n' "${title}"
-      if [[ -n "${resource_rows}" ]]; then
-        print_resource_rows "${resource_rows}"
-      else
-        printf '  - none\n'
-      fi
-      printf '\n'
-      ;;
-  esac
-}
-
-print_overlay_section() {
-  local title="$1"
-  local rows="$2"
-  local path
-  local resources
-  local resource
-  local first
+  local kind
+  local name
+  local sources
+  local current_kind=""
   local had_rows=0
-  local expanded_resources
 
   case "${FORMAT}" in
     markdown)
       printf '### %s\n\n' "${title}"
-      printf '| Source | Rendered Resources |\n'
-      printf '| --- | --- |\n'
       ;;
     text)
       printf '%s\n' "${title}"
       ;;
   esac
 
-  while IFS=$'\t' read -r path resources; do
-    [[ -n "${path}" ]] || continue
+  while IFS=$'\t' read -r kind name sources; do
+    [[ -n "${kind}" ]] || continue
     had_rows=1
 
-    if [[ "${FORMAT}" == "markdown" ]]; then
-      printf '| [`%s`](%s) | ' "${path}" "$(source_link_target "${path}")"
-      first=1
-      expanded_resources="${resources//${LIST_SEP}/$'\n'}"
-      while IFS= read -r resource; do
-        [[ -n "${resource}" ]] || continue
-        if [[ "${first}" -eq 0 ]]; then
-          printf '<br />'
-        fi
-        printf '`%s`' "${resource}"
-        first=0
-      done <<< "${expanded_resources}"
-      printf ' |\n'
-    else
-      printf '  - %s\n' "${path}"
-      expanded_resources="${resources//${LIST_SEP}/$'\n'}"
-      while IFS= read -r resource; do
-        [[ -n "${resource}" ]] || continue
-        printf '      %s\n' "${resource}"
-      done <<< "${expanded_resources}"
+    if [[ "${kind}" != "${current_kind}" ]]; then
+      if [[ -n "${current_kind}" ]]; then
+        printf '\n'
+      fi
+
+      case "${FORMAT}" in
+        markdown)
+          printf '#### %s\n\n' "${kind}"
+          printf '| Name | Source |\n'
+          printf '| --- | --- |\n'
+          ;;
+        text)
+          printf '  %s\n' "${kind}"
+          ;;
+      esac
+
+      current_kind="${kind}"
     fi
-  done <<< "${rows}"
+
+    print_name_source_row "${name}" "${sources}"
+  done <<< "${resource_rows}"
 
   if [[ "${had_rows}" -eq 0 ]]; then
     case "${FORMAT}" in
       markdown)
-        printf '| _none_ | _none_ |\n'
+        printf '_none_\n'
         ;;
       text)
         printf '  - none\n'
@@ -555,6 +535,13 @@ print_overlay_section() {
   fi
 
   printf '\n'
+}
+
+print_overlay_section() {
+  local title="$1"
+  local rows="$2"
+
+  print_rendered_section "${title}" "${rows}"
 }
 
 print_target() {
@@ -567,12 +554,25 @@ print_target() {
   local overlay_rows
 
   display_name="$(tr '[:lower:]' '[:upper:]' <<< "${name:0:1}")${name:1}"
+  DISPLAY_LABEL_STRIP_PREFIX=""
+  DISPLAY_LABEL_PREFIX_PATH=""
+  DISPLAY_LABEL_PREFIX_TARGET=""
+
+  if [[ "${name}" == "cilium" ]]; then
+    DISPLAY_LABEL_STRIP_PREFIX="terraform/kubernetes/cluster-policies/cilium/"
+    DISPLAY_LABEL_PREFIX_PATH="terraform/kubernetes/cluster-policies/cilium"
+    DISPLAY_LABEL_PREFIX_TARGET="./cilium"
+  fi
 
   case "${FORMAT}" in
     markdown)
       printf '## %s\n\n' "${display_name}"
       printf 'Rendered from [`%s`](./%s) after filter application.\n\n' \
         "${dir#${REPO_ROOT}/}" "${name}"
+      if [[ -n "${DISPLAY_LABEL_PREFIX_PATH}" ]]; then
+        printf 'Displayed policy source paths below are relative to [`%s`](%s).\n\n' \
+          "${DISPLAY_LABEL_PREFIX_PATH}" "${DISPLAY_LABEL_PREFIX_TARGET}"
+      fi
       ;;
     text)
       printf '%s\n\n' "${display_name}"

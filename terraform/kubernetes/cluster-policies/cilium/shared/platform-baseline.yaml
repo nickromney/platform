@@ -8,8 +8,8 @@ spec:
     Headlamp is optional (enable_headlamp toggle). When the namespace does not
     exist this policy harmlessly matches nothing -- Cilium ignores selectors
     with zero matching endpoints.
-    Ingress: nginx-gateway-fabric (platform-gateway ns) on :4466, kubelet health probes.
-    Egress: kube-apiserver, DNS, Dex (OIDC), platform gateway HTTPS
+    Ingress: shared platform-gateway data plane on :4466, kubelet health probes.
+    Egress: kube-apiserver, DNS, shared Dex (OIDC), platform gateway HTTPS
     (for Dex public issuer URL), and FQDN-pinned HTTPS
     for plugin sidecar (registry.npmjs.org, artifacthub.io).
   endpointSelector:
@@ -20,10 +20,11 @@ spec:
     - fromEntities:
         - host
         - remote-node
-    # nginx-gateway-fabric (platform-gateway ns) -> headlamp :4466
+    # Shared platform gateway data plane -> headlamp :4466
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
       toPorts:
         - ports:
             - port: "4466"
@@ -57,7 +58,7 @@ spec:
     # Dex (OIDC authentication)
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
             "k8s:app.kubernetes.io/name": dex
       toPorts:
         - ports:
@@ -69,7 +70,7 @@ spec:
     # Allow HTTPS egress to the platform gateway data plane for OIDC discovery/auth redirects.
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
             "k8s:app.kubernetes.io/name": platform-gateway-nginx
       toPorts:
         - ports:

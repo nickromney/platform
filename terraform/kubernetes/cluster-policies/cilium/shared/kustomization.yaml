@@ -3,6 +3,10 @@ resources:
   - deny-cloud-metadata-egress.yaml
   - approved-egress-cidrs.yaml
   - application-baseline.yaml
+  - shared-baseline.yaml
+  - shared-auth-proxy-bridge.yaml
+  - shared-identity-provider-ingress.yaml
+  - shared-identity-egress-via-fqdn.yaml
   - application-project-boundaries.yaml
   - application-cloud-metadata-deny.yaml
   - application-backend-egress-via-cidrgroup.yaml

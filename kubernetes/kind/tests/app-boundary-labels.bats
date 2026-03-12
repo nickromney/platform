@@ -87,11 +87,18 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"name: allow-application-backend-egress-via-fqdn"* ]]
+  [[ "${output}" == *"name: shared-baseline"* ]]
+  [[ "${output}" == *"name: shared-auth-proxy-bridge"* ]]
+  [[ "${output}" == *"name: shared-identity-provider-ingress"* ]]
+  [[ "${output}" == *"name: allow-shared-identity-egress-via-fqdn"* ]]
   [[ "${output}" == *$'      - sentiment-api\n      - subnetcalc-api'* ]]
   [[ "${output}" != *"      - sentiment-auth-ui"* ]]
   [[ "${output}" != *"      - subnetcalc-router"* ]]
   [[ "${output}" == *"name: application-baseline"* ]]
   [[ "${output}" == *"name: apim-baseline"* ]]
+  [[ "${output}" == *"k8s:app.kubernetes.io/component: authentication-proxy"* ]]
+  [[ "${output}" == *"k8s:app.kubernetes.io/name: dex"* ]]
+  [[ "${output}" == *"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role: shared"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-router"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-api"* ]]
   [[ "${output}" == *"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role: application"* ]]
@@ -102,6 +109,19 @@ setup() {
   [[ "${output}" == *"k8s:app: subnetcalc"* ]]
   [[ "${output}" == *"kind: CiliumNetworkPolicy"* ]]
   [[ "${output}" == *"namespace: sit"* ]]
+}
+
+@test "application router policies trust shared auth proxies instead of hard-coded sso namespace matches" {
+  sentiment_runtime="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml"
+  subnetcalc_runtime="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml"
+
+  grep -Fq '"k8s:app.kubernetes.io/component": authentication-proxy' "${sentiment_runtime}"
+  grep -Fq '"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared' "${sentiment_runtime}"
+  ! grep -Fq '"k8s:io.kubernetes.pod.namespace": sso' "${sentiment_runtime}"
+
+  grep -Fq '"k8s:app.kubernetes.io/component": authentication-proxy' "${subnetcalc_runtime}"
+  grep -Fq '"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared' "${subnetcalc_runtime}"
+  ! grep -Fq '"k8s:io.kubernetes.pod.namespace": sso' "${subnetcalc_runtime}"
 }
 
 @test "dev overlay carries the project override without leaking it to uat or sit" {

@@ -1,0 +1,27 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+stateDiagram-v2
+    [*] --> IncomingRequest
+
+    IncomingRequest --> OAuthRedirect : no oauth2-proxy session
+    IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
+    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
+
+    AuthenticatedRequest --> RouterDispatch
+    RouterDispatch --> FrontendResponse : non-/api path
+    RouterDispatch --> BackendRequest : /api/* path
+
+    BackendRequest --> DirectMode : LLM_GATEWAY_MODE=direct
+    BackendRequest --> BrokerMode : LiteLLM mode selected
+
+    DirectMode --> LLMGatewayCall
+    LLMGatewayCall --> HostLLMInference
+
+    BrokerMode --> LiteLLMCall
+    LiteLLMCall --> LlamaCppInference
+
+    HostLLMInference --> TraceExport
+    LlamaCppInference --> TraceExport
+    TraceExport --> APIResponse
+
+    FrontendResponse --> [*]
+    APIResponse --> [*]
