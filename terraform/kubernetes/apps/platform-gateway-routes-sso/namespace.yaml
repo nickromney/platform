@@ -6,3 +6,4 @@ metadata:
     app.kubernetes.io/name: gateway-routes
     app.kubernetes.io/managed-by: argocd
     platform-gateway-access: "true"
+    "platform.publiccloudexperiments.net/namespace-role": shared

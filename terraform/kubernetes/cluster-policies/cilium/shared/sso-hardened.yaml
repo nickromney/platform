@@ -49,16 +49,7 @@ spec:
               protocol: TCP
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
-      toPorts:
-        - ports:
-            - port: "5556"
-              protocol: TCP
-            - port: "5558"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
       toPorts:
         - ports:
             - port: "5556"
@@ -153,15 +144,16 @@ spec:
             - port: "4466"
               protocol: TCP
     - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+        - matchExpressions:
+            - key: "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
+              operator: In
+              values:
+                - application
+            - key: "k8s:app.kubernetes.io/name"
+              operator: In
+              values:
+                - sentiment-router
+                - subnetcalc-router
       toPorts:
         - ports:
             - port: "8080"

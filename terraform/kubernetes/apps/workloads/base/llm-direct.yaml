@@ -5,7 +5,10 @@ metadata:
   labels:
     app.kubernetes.io/name: llm-gateway
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 spec:
   type: ExternalName

@@ -86,6 +86,20 @@ locals {
 
   policies_repo_name        = "policies"
   policies_repo_url_cluster = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/${local.gitea_repo_owner}/${local.policies_repo_name}.git"
+  vendored_chart_paths = {
+    cert_manager            = "apps/vendor/charts/cert-manager"
+    dex                     = "apps/vendor/charts/dex"
+    grafana                 = "apps/vendor/charts/grafana"
+    headlamp                = "apps/vendor/charts/headlamp"
+    kyverno                 = "apps/vendor/charts/kyverno"
+    loki                    = "apps/vendor/charts/loki"
+    oauth2_proxy            = "apps/vendor/charts/oauth2-proxy"
+    opentelemetry_collector = "apps/vendor/charts/opentelemetry-collector"
+    policy_reporter         = "apps/vendor/charts/policy-reporter"
+    prometheus              = "apps/vendor/charts/prometheus"
+    signoz                  = "apps/vendor/charts/signoz"
+    tempo                   = "apps/vendor/charts/tempo"
+  }
 
   policies_repo_private_key_path = "${local.run_dir}/policies-repo.id_ed25519"
   gitea_known_hosts_cluster_path = "${local.run_dir}/gitea_known_hosts_cluster"
@@ -94,7 +108,7 @@ locals {
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
     var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno-policies", "cilium-policies"] : [],
-    var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric-crds", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
+    var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
     var.enable_actions_runner && var.enable_gitea && var.enable_argocd && !var.enable_app_of_apps ? ["gitea-actions-runner"] : [],
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
@@ -113,40 +127,52 @@ locals {
     [for f in sort(fileset(path.module, "templates/otel-gateway/**")) : filesha256("${path.module}/${f}")]
   )))
   policies_repo_render_hash = sha1(jsonencode({
-    content_hash               = local.policies_repo_content_hash
-    repo_owner                 = local.gitea_repo_owner
-    repo_is_org                = local.gitea_repo_owner_is_org
-    enable_policies            = var.enable_policies
-    enable_gateway_tls         = var.enable_gateway_tls
-    enable_actions_runner      = var.enable_actions_runner
-    enable_app_repo_sentiment  = var.enable_app_repo_sentiment_llm
-    enable_app_repo_subnetcalc = var.enable_app_repo_subnet_calculator
-    enable_prometheus          = var.enable_prometheus
-    enable_grafana             = var.enable_grafana
-    enable_loki                = var.enable_loki
-    enable_tempo               = var.enable_tempo
-    enable_signoz              = var.enable_signoz
-    enable_otel_gateway        = var.enable_otel_gateway
-    enable_headlamp            = var.enable_headlamp
-    enable_observability_agent = var.enable_observability_agent
-    prefer_external_images     = var.prefer_external_workload_images
-    external_sentiment_api     = lookup(var.external_workload_image_refs, "sentiment-api", "")
-    external_sentiment_ui      = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
-    external_subnetcalc_api    = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
-    external_subnetcalc_apim   = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
-    external_subnetcalc_fe     = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
-    external_subnetcalc_fe_ts  = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
-    hardened_image_registry    = var.hardened_image_registry
-    llm_gateway_mode           = var.llm_gateway_mode
-    llm_gateway_external_name  = var.llm_gateway_external_name
-    llama_cpp_image            = var.llama_cpp_image
-    llama_cpp_hf_repo          = var.llama_cpp_hf_repo
-    llama_cpp_hf_file          = var.llama_cpp_hf_file
-    llama_cpp_model_alias      = var.llama_cpp_model_alias
-    llama_cpp_ctx_size         = var.llama_cpp_ctx_size
-    litellm_upstream_model     = var.litellm_upstream_model
-    litellm_upstream_api_base  = var.litellm_upstream_api_base
-    litellm_upstream_api_key   = nonsensitive(var.litellm_upstream_api_key)
+    content_hash                  = local.policies_repo_content_hash
+    repo_owner                    = local.gitea_repo_owner
+    repo_is_org                   = local.gitea_repo_owner_is_org
+    enable_policies               = var.enable_policies
+    enable_gateway_tls            = var.enable_gateway_tls
+    enable_actions_runner         = var.enable_actions_runner
+    enable_app_repo_sentiment     = var.enable_app_repo_sentiment_llm
+    enable_app_repo_subnetcalc    = var.enable_app_repo_subnet_calculator
+    enable_prometheus             = var.enable_prometheus
+    enable_grafana                = var.enable_grafana
+    enable_loki                   = var.enable_loki
+    enable_tempo                  = var.enable_tempo
+    enable_signoz                 = var.enable_signoz
+    enable_otel_gateway           = var.enable_otel_gateway
+    enable_headlamp               = var.enable_headlamp
+    enable_observability_agent    = var.enable_observability_agent
+    prefer_external_images        = var.prefer_external_workload_images
+    external_sentiment_api        = lookup(var.external_workload_image_refs, "sentiment-api", "")
+    external_sentiment_ui         = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
+    external_subnetcalc_api       = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
+    external_subnetcalc_apim      = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
+    external_subnetcalc_fe        = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
+    external_subnetcalc_fe_ts     = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
+    hardened_image_registry       = var.hardened_image_registry
+    cert_manager_chart_version    = var.cert_manager_chart_version
+    dex_chart_version             = var.dex_chart_version
+    grafana_chart_version         = var.grafana_chart_version
+    headlamp_chart_version        = var.headlamp_chart_version
+    kyverno_chart_version         = var.kyverno_chart_version
+    loki_chart_version            = var.loki_chart_version
+    oauth2_proxy_chart_version    = var.oauth2_proxy_chart_version
+    otel_chart_version            = var.opentelemetry_collector_chart_version
+    policy_reporter_chart_version = var.policy_reporter_chart_version
+    prometheus_chart_version      = var.prometheus_chart_version
+    signoz_chart_version          = var.signoz_chart_version
+    tempo_chart_version           = var.tempo_chart_version
+    llm_gateway_mode              = var.llm_gateway_mode
+    llm_gateway_external_name     = var.llm_gateway_external_name
+    llama_cpp_image               = var.llama_cpp_image
+    llama_cpp_hf_repo             = var.llama_cpp_hf_repo
+    llama_cpp_hf_file             = var.llama_cpp_hf_file
+    llama_cpp_model_alias         = var.llama_cpp_model_alias
+    llama_cpp_ctx_size            = var.llama_cpp_ctx_size
+    litellm_upstream_model        = var.litellm_upstream_model
+    litellm_upstream_api_base     = var.litellm_upstream_api_base
+    litellm_upstream_api_key      = nonsensitive(var.litellm_upstream_api_key)
   }))
 
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.

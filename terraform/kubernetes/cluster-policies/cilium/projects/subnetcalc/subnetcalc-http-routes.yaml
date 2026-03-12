@@ -1,22 +1,27 @@
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: subnetcalc-router-l7-dev
+  name: subnetcalc-router-http-routes
 spec:
   description: >-
-    L7 HTTP policy for subnetcalc-router in dev namespace.
-    The router NEVER contacts subnetcalc-api directly. /api/* traffic is
-    proxied to subnetcalc-apim-simulator (apim ns) which validates the JWT
-    and forwards to subnetcalc-api. All other paths go to subnetcalc-frontend.
+    The router never contacts subnetcalc-api directly. API traffic is proxied
+    to the APIM simulator which validates the JWT and forwards to the backend.
+    All other paths go to the frontend.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": subnetcalc
+      "k8s:tier": gateway
       "k8s:app.kubernetes.io/name": subnetcalc-router
   egress:
-    # /api/* -> apim-simulator (cross-namespace, apim ns)
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
       toPorts:
         - ports:
@@ -36,35 +41,41 @@ spec:
                 path: "/api/v1/subnet.*"
               - method: "OPTIONS"
                 path: "/api/v1/subnet.*"
-    # /, /logged-out.html, /favicon.* -> subnetcalc-frontend (:8080)
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": frontend
             "k8s:app.kubernetes.io/name": subnetcalc-frontend
       toPorts:
         - ports:
             - port: "8080"
               protocol: TCP
-
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: subnetcalc-api-l7-dev
+  name: subnetcalc-api-http-routes
 spec:
   description: >-
-    L7 HTTP policy for subnetcalc-api in dev namespace.
-    The API receives traffic ONLY from the APIM simulator (apim ns),
+    The subnetcalc API receives traffic only from the APIM simulator,
     never from the router directly.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": subnetcalc
+      "k8s:tier": backend
       "k8s:app.kubernetes.io/name": subnetcalc-api
   ingress:
-    # apim-simulator (apim ns) -> subnetcalc-api (dev ns)
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
       toPorts:
         - ports:

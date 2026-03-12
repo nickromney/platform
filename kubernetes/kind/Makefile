@@ -11,6 +11,7 @@ TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHECK_STAGE_MONOTONICITY := $(MAKEFILE_DIR)scripts/check-stage-monotonicity.sh
 CHECK_KIND_HOST_PORTS := $(MAKEFILE_DIR)scripts/check-kind-host-ports.sh
+CHECK_HOST_LLM := $(MAKEFILE_DIR)scripts/check-host-llm.sh
 ENSURE_KIND_KUBECONFIG := $(MAKEFILE_DIR)scripts/ensure-kind-kubeconfig.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
@@ -64,6 +65,7 @@ stage_file = $(STAGE_FILE_$(STAGE))
 target_profile_file = targets/kind.tfvars
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
+prereq_llm_stage_file = $(abspath $(if $(filter 1,$(STAGE_SPECIFIED)),$(stage_file),$(STAGE_FILE_900)))
 
 .PHONY: help
 help:
@@ -81,6 +83,7 @@ help:
 	@echo "  make check-app  APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
 	@echo "  make check-health"
 	@echo "  make check-security                           WireGuard, TLS 1.3, policy enforcement, negative tests"
+	@echo "  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Browser-based SSO end-to-end app checks (Playwright)"
 	@echo "  make check-provider-version"
@@ -332,11 +335,20 @@ check-health:
 
 .PHONY: check-security
 check-security:
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
 	fi; \
+	if [ -f "$(target_var_file)" ]; then \
+		vf="$$vf --var-file $(target_var_file)"; \
+	fi; \
 	"$(STACK_DIR)/scripts/check-security.sh" $$vf
+
+.PHONY: check-gateway-stack
+check-gateway-stack:
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@"$(STACK_DIR)/scripts/check-gateway-stack.sh"
 
 .PHONY: check-cluster
 check-cluster:
@@ -393,12 +405,14 @@ gitea-sync:
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
 	dry_flag=""; \
+	sync_stage_file="$(abspath $(STAGE_FILE_900))"; \
+	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then sync_stage_file="$(stage_var_file)"; fi; \
 	if [ "$(DRY_RUN)" = "1" ]; then dry_flag="--dry-run"; fi; \
-	GITEA_POLICIES_REMOTE="${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
-	GITEA_BRANCH="${GITEA_BRANCH:-main}" \
-	GITEA_USER="${GITEA_USER:-gitea-admin}" \
-		GITEA_PASSWORD="${GITEA_PASSWORD:-ChangeMe123!}" \
-		GITEA_SYNC_TFVARS_FILE="$(stage_var_file)" \
+	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
+	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
+	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
+		GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
+		GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
 		STACK_DIR="$$stack_path" \
 		"$$script" $${dry_flag}
 
@@ -508,6 +522,16 @@ prereqs:
 		fi; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
+	echo ""; \
+	echo "Host-side LLM:"; \
+	args=(--var-file "$(prereq_llm_stage_file)" --var-file "$(target_var_file)"); \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then \
+		args+=(--var-file "$${PLATFORM_BASE_TFVARS}"); \
+	fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
+		args+=(--var-file "$${PLATFORM_TFVARS}"); \
+	fi; \
+	"$(CHECK_HOST_LLM)" "$${args[@]}"; \
 	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \

@@ -93,14 +93,12 @@ run "signoz_enabled" {
   command = plan
 
   variables {
-    cni_provider  = "cilium"
-    enable_hubble = true
-    enable_argocd = true
-    enable_gitea  = true
-    enable_signoz = true
-
-    signoz_chart_version = "0.112.0"
-    signoz_ui_node_port  = 30301
+    cni_provider        = "cilium"
+    enable_hubble       = true
+    enable_argocd       = true
+    enable_gitea        = true
+    enable_signoz       = true
+    signoz_ui_node_port = 30301
   }
 
   assert {
@@ -119,8 +117,13 @@ run "signoz_enabled" {
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.signoz_chart_version}", kubectl_manifest.argocd_app_signoz[0].yaml_body)) > 0
-    error_message = "Expected SigNoz ArgoCD Application YAML to include targetRevision matching var.signoz_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected SigNoz ArgoCD Application YAML to load from the policies repo"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "path: ${local.vendored_chart_paths.signoz}")
+    error_message = "Expected SigNoz ArgoCD Application YAML to track the vendored chart on main"
   }
 }
 
@@ -165,5 +168,15 @@ run "sso_enabled" {
   assert {
     condition     = length(regexall("path: ${var.platform_gateway_routes_path}", kubectl_manifest.argocd_app_platform_gateway_routes[0].yaml_body)) > 0
     error_message = "Expected platform-gateway-routes Application YAML to include path matching var.platform_gateway_routes_path"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.gateway_bootstrap_crds) > 0
+    error_message = "Expected Terraform to bootstrap gateway CRDs when enable_gateway_tls=true"
+  }
+
+  assert {
+    condition     = !contains(local.argocd_gitops_repo_app_names, "nginx-gateway-fabric-crds")
+    error_message = "Did not expect nginx-gateway-fabric-crds in the direct GitOps app list after moving CRD ownership to Terraform"
   }
 }

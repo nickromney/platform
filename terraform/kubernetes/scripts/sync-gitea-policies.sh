@@ -3,6 +3,8 @@ set -euo pipefail
 
 fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
 
+DRY_RUN=0
+
 : "${STACK_DIR:?STACK_DIR is required}"
 : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://127.0.0.1:30090)}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
@@ -16,6 +18,7 @@ fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
 : "${DEPLOY_PUBLIC_KEY:?DEPLOY_PUBLIC_KEY is required}"
 : "${SSH_PRIVATE_KEY_PATH:?SSH_PRIVATE_KEY_PATH is required}"
 
+POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${GITEA_SSH_USERNAME}@gitea-ssh.gitea.svc.cluster.local:22/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git}"
 GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
 GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
 ENABLE_POLICIES="${ENABLE_POLICIES:-true}"
@@ -41,6 +44,7 @@ EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONT
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
 LLM_GATEWAY_MODE="${LLM_GATEWAY_MODE:-litellm}"
 LLM_GATEWAY_EXTERNAL_NAME="${LLM_GATEWAY_EXTERNAL_NAME:-host.docker.internal}"
+LLM_GATEWAY_EXTERNAL_CIDR="${LLM_GATEWAY_EXTERNAL_CIDR:-}"
 LLAMA_CPP_IMAGE="${LLAMA_CPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}"
 LLAMA_CPP_HF_REPO="${LLAMA_CPP_HF_REPO:-bartowski/SmolLM2-1.7B-Instruct-GGUF}"
 LLAMA_CPP_HF_FILE="${LLAMA_CPP_HF_FILE:-SmolLM2-1.7B-Instruct-Q4_K_M.gguf}"
@@ -49,9 +53,22 @@ LLAMA_CPP_CTX_SIZE="${LLAMA_CPP_CTX_SIZE:-2048}"
 LITELLM_UPSTREAM_MODEL="${LITELLM_UPSTREAM_MODEL:-openai/local-classifier}"
 LITELLM_UPSTREAM_API_BASE="${LITELLM_UPSTREAM_API_BASE:-http://llama-cpp:8080/v1}"
 LITELLM_UPSTREAM_API_KEY="${LITELLM_UPSTREAM_API_KEY:-dummy}"
+CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-v1.19.4}"
+DEX_CHART_VERSION="${DEX_CHART_VERSION:-0.24.0}"
+GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-10.5.15}"
+HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-0.40.0}"
+KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-3.7.1}"
+LOKI_CHART_VERSION="${LOKI_CHART_VERSION:-6.53.0}"
+OAUTH2_PROXY_CHART_VERSION="${OAUTH2_PROXY_CHART_VERSION:-10.1.4}"
+OPENTELEMETRY_COLLECTOR_CHART_VERSION="${OPENTELEMETRY_COLLECTOR_CHART_VERSION:-0.146.1}"
+POLICY_REPORTER_CHART_VERSION="${POLICY_REPORTER_CHART_VERSION:-3.7.3}"
+PROMETHEUS_CHART_VERSION="${PROMETHEUS_CHART_VERSION:-28.13.0}"
+SIGNOZ_CHART_VERSION="${SIGNOZ_CHART_VERSION:-0.114.0}"
+TEMPO_CHART_VERSION="${TEMPO_CHART_VERSION:-1.24.4}"
 
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
+command -v helm >/dev/null 2>&1 || fail "helm not found"
 
 tmp=""
 cleanup_tmp() {
@@ -62,6 +79,20 @@ cleanup_tmp() {
   return 0
 }
 trap cleanup_tmp EXIT
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run)
+        DRY_RUN=1
+        ;;
+      *)
+        fail "unknown flag: $1"
+        ;;
+    esac
+    shift
+  done
+}
 
 wait_for_gitea() {
   local code
@@ -153,6 +184,113 @@ rewrite_llm_gateway_external_name() {
   mv "${out}" "${workload_file}"
 }
 
+resolve_ipv4_for_host() {
+  local host="$1"
+  local ip=""
+
+  if [[ -z "${host}" ]]; then
+    return 1
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    ip="$(python3 - "${host}" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+try:
+    infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+except socket.gaierror:
+    sys.exit(1)
+
+for info in infos:
+    ip = info[4][0]
+    if ip:
+        print(ip)
+        sys.exit(0)
+
+sys.exit(1)
+PY
+)"
+  elif command -v getent >/dev/null 2>&1; then
+    ip="$(getent ahostsv4 "${host}" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  elif command -v dig >/dev/null 2>&1; then
+    ip="$(dig +short A "${host}" 2>/dev/null | awk 'NF { print; exit }')"
+  fi
+
+  [[ -n "${ip}" ]] || return 1
+  printf '%s\n' "${ip}"
+}
+
+is_loopback_ipv4() {
+  case "$1" in
+    127.*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_ipv4_for_host_from_kind_node() {
+  local host="$1"
+  local node_name=""
+  local ip=""
+
+  [[ -n "${host}" ]] || return 1
+  command -v docker >/dev/null 2>&1 || return 1
+
+  node_name="$(
+    docker ps --format '{{.Names}}' 2>/dev/null | \
+      awk '/-control-plane$/ { print; exit }'
+  )"
+  [[ -n "${node_name}" ]] || return 1
+
+  ip="$(
+    docker exec "${node_name}" getent hosts "${host}" 2>/dev/null | \
+      awk 'NF { print $1; exit }'
+  )"
+  [[ -n "${ip}" ]] || return 1
+  printf '%s\n' "${ip}"
+}
+
+determine_llm_gateway_external_cidr() {
+  local cidr="${LLM_GATEWAY_EXTERNAL_CIDR}"
+  local ip=""
+  local use_kind_resolution="false"
+
+  if [[ -n "${cidr}" ]]; then
+    printf '%s\n' "${cidr}"
+    return 0
+  fi
+
+  ip="$(resolve_ipv4_for_host "${LLM_GATEWAY_EXTERNAL_NAME}")" || true
+
+  if [[ "${LLM_GATEWAY_EXTERNAL_NAME}" == "host.docker.internal" ]]; then
+    if [[ -z "${ip}" ]] || is_loopback_ipv4 "${ip}"; then
+      use_kind_resolution="true"
+    fi
+  fi
+
+  if [[ "${use_kind_resolution}" == "true" ]]; then
+    ip="$(resolve_ipv4_for_host_from_kind_node "${LLM_GATEWAY_EXTERNAL_NAME}")" || true
+  fi
+
+  [[ -n "${ip}" ]] || \
+    fail "could not resolve LLM_GATEWAY_EXTERNAL_NAME=${LLM_GATEWAY_EXTERNAL_NAME}; set LLM_GATEWAY_EXTERNAL_CIDR explicitly"
+
+  printf '%s/32\n' "${ip}"
+}
+
+rewrite_llm_gateway_policy_cidr() {
+  local policy_file="$1"
+  local cidr="$2"
+
+  [[ -f "${policy_file}" ]] || return 0
+
+  local out
+  out="$(mktemp)"
+  sed "s|__LLM_GATEWAY_EXTERNAL_CIDR__|${cidr}|g" "${policy_file}" > "${out}"
+  mv "${out}" "${policy_file}"
+}
+
 replace_literal() {
   local file="$1"
   local from="$2"
@@ -164,6 +302,149 @@ replace_literal() {
   out="$(mktemp)"
   sed "s|${from}|${to}|g" "${file}" > "${out}"
   mv "${out}" "${file}"
+}
+
+strip_wrapping_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  printf '%s\n' "${value}"
+}
+
+yaml_scalar_for_key() {
+  local file="$1"
+  local key="$2"
+  local value=""
+
+  [[ -f "${file}" ]] || return 0
+
+  value="$(sed -nE "s/^[[:space:]]*${key}:[[:space:]]*(.+)[[:space:]]*$/\\1/p" "${file}" | head -n 1 | xargs)"
+  strip_wrapping_quotes "${value}"
+}
+
+chart_version_override_for_name() {
+  local chart="$1"
+
+  case "${chart}" in
+    cert-manager) printf '%s\n' "${CERT_MANAGER_CHART_VERSION}" ;;
+    dex) printf '%s\n' "${DEX_CHART_VERSION}" ;;
+    grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
+    headlamp) printf '%s\n' "${HEADLAMP_CHART_VERSION}" ;;
+    kyverno) printf '%s\n' "${KYVERNO_CHART_VERSION}" ;;
+    loki) printf '%s\n' "${LOKI_CHART_VERSION}" ;;
+    oauth2-proxy) printf '%s\n' "${OAUTH2_PROXY_CHART_VERSION}" ;;
+    opentelemetry-collector) printf '%s\n' "${OPENTELEMETRY_COLLECTOR_CHART_VERSION}" ;;
+    policy-reporter) printf '%s\n' "${POLICY_REPORTER_CHART_VERSION}" ;;
+    prometheus) printf '%s\n' "${PROMETHEUS_CHART_VERSION}" ;;
+    signoz) printf '%s\n' "${SIGNOZ_CHART_VERSION}" ;;
+    tempo) printf '%s\n' "${TEMPO_CHART_VERSION}" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+assert_pinned_chart_version() {
+  local chart="$1"
+  local version="$2"
+
+  case "${version}" in
+    ""|"*"|HEAD|head|main|master)
+      fail "chart ${chart} must use a pinned version, got '${version}'"
+      ;;
+  esac
+}
+
+vendor_chart() {
+  local repo_url="$1"
+  local chart="$2"
+  local version="$3"
+  local vendor_root="$4"
+  local repo_name
+
+  assert_pinned_chart_version "${chart}" "${version}"
+  mkdir -p "${vendor_root}"
+  rm -rf "${vendor_root:?}/${chart}"
+  repo_name="vendor-$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
+  helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
+  helm repo update "${repo_name}" >/dev/null 2>&1 || true
+  helm pull "${repo_name}/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+}
+
+rewrite_argocd_app_to_vendored_chart() {
+  local app_file="$1"
+  local chart_path="$2"
+
+  [[ -f "${app_file}" ]] || return 0
+
+  local out
+  out="$(mktemp)"
+  awk -v repo_url="${POLICIES_REPO_URL_CLUSTER}" -v chart_path="${chart_path}" '
+    /^[[:space:]]*repoURL:[[:space:]]*/ {
+      sub(/repoURL:.*/, "repoURL: " repo_url)
+      print
+      next
+    }
+    /^[[:space:]]*chart:[[:space:]]*/ {
+      next
+    }
+    /^[[:space:]]*targetRevision:[[:space:]]*/ {
+      sub(/targetRevision:.*/, "targetRevision: main")
+      print
+      print "    path: " chart_path
+      path_printed=1
+      next
+    }
+    /^[[:space:]]*path:[[:space:]]*/ {
+      next
+    }
+    /^[[:space:]]*helm:[[:space:]]*/ && !path_printed {
+      print "    path: " chart_path
+      path_printed=1
+      print
+      next
+    }
+    { print }
+  ' "${app_file}" > "${out}"
+  mv "${out}" "${app_file}"
+}
+
+rewrite_external_argocd_apps_to_vendored_charts() {
+  local apps_dir="$1"
+  local vendor_root="$2"
+  local app_file repo_url chart version chart_path version_override
+
+  [[ -d "${apps_dir}" ]] || return 0
+
+  while IFS= read -r app_file; do
+    repo_url="$(yaml_scalar_for_key "${app_file}" "repoURL")"
+    chart="$(yaml_scalar_for_key "${app_file}" "chart")"
+    version="$(yaml_scalar_for_key "${app_file}" "targetRevision")"
+
+    if [[ -z "${repo_url}" || -z "${chart}" ]]; then
+      continue
+    fi
+
+    if [[ "${repo_url}" == "https://dl.gitea.io/charts/" ]]; then
+      continue
+    fi
+
+    version_override="$(chart_version_override_for_name "${chart}")"
+    if [[ -n "${version_override}" ]]; then
+      version="${version_override}"
+    fi
+
+    assert_pinned_chart_version "${chart}" "${version}"
+    vendor_chart "${repo_url}" "${chart}" "${version}" "${vendor_root}"
+    chart_path="apps/vendor/charts/${chart}"
+    rewrite_argocd_app_to_vendored_chart "${app_file}" "${chart_path}"
+  done < <(find "${apps_dir}" -maxdepth 1 -type f -name '*.yaml' | sort)
+}
+
+vendor_direct_tf_only_charts() {
+  local vendor_root="$1"
+
+  vendor_chart "https://charts.dexidp.io" "dex" "${DEX_CHART_VERSION}" "${vendor_root}"
+  vendor_chart "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${OAUTH2_PROXY_CHART_VERSION}" "${vendor_root}"
+  vendor_chart "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${HEADLAMP_CHART_VERSION}" "${vendor_root}"
 }
 
 rewrite_llm_gateway_mode_value() {
@@ -233,9 +514,12 @@ render_llm_gateway_policies() {
       add_kustomization_entry "${kustomization_file}" "sentiment-llama-cpp-world-egress.yaml"
       ;;
     direct)
+      local llm_gateway_cidr
+      llm_gateway_cidr="$(determine_llm_gateway_external_cidr)"
       remove_if_present "${shared_dir}/sentiment-llama-cpp-world-egress.yaml"
       remove_kustomization_entry "${kustomization_file}" "sentiment-llama-cpp-world-egress.yaml"
       add_kustomization_entry "${kustomization_file}" "sentiment-api-llm-egress.yaml"
+      rewrite_llm_gateway_policy_cidr "${shared_dir}/sentiment-api-llm-egress.yaml" "${llm_gateway_cidr}"
       ;;
     *)
       fail "unsupported LLM_GATEWAY_MODE=${LLM_GATEWAY_MODE}"
@@ -369,7 +653,6 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_GATEWAY_TLS}"; then
     remove_if_present "${apps_dir}/001-cert-manager.application.yaml"
-    remove_if_present "${apps_dir}/002-nginx-gateway-fabric-crds.application.yaml"
     remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
     remove_if_present "${apps_dir}/003-platform-gateway.application.yaml"
     remove_if_present "${apps_dir}/10-cert-manager-config.application.yaml"
@@ -595,33 +878,79 @@ EOF
   fi
 }
 
-seed_repo() {
-  cleanup_tmp || true
-  tmp=$(mktemp -d)
+render_repo() {
+  local root_dir="$1"
+  local repo_dir="${root_dir}/repo"
+  local vendor_root="${repo_dir}/apps/vendor/charts"
 
-  mkdir -p "${tmp}/repo"
-  cp -R "${STACK_DIR}/apps" "${tmp}/repo/apps"
-  cp -R "${STACK_DIR}/cluster-policies" "${tmp}/repo/cluster-policies"
-  apply_external_workload_images "${tmp}/repo/apps/apim/all.yaml"
-  apply_external_workload_images "${tmp}/repo/apps/workloads/base/all.yaml"
-  apply_external_workload_images "${tmp}/repo/apps/dev/all.yaml"
-  apply_external_workload_images "${tmp}/repo/apps/uat/all.yaml"
-  render_llm_gateway_manifests "${tmp}/repo/apps/workloads/base"
-  render_llm_gateway_policies "${tmp}/repo/cluster-policies/cilium/shared"
-  rewrite_image_owner "${tmp}/repo/apps/apim/all.yaml"
-  rewrite_image_owner "${tmp}/repo/apps/workloads/base/all.yaml"
-  rewrite_image_owner "${tmp}/repo/apps/dev/all.yaml"
-  rewrite_image_owner "${tmp}/repo/apps/uat/all.yaml"
-  prune_argocd_app_manifests "${tmp}/repo/apps/argocd-apps"
-  if [[ -d "${tmp}/repo/apps/platform-gateway-routes" ]]; then
-    prune_gateway_routes_manifests "${tmp}/repo/apps/platform-gateway-routes"
+  mkdir -p "${repo_dir}"
+  cp -R "${STACK_DIR}/apps" "${repo_dir}/apps"
+  cp -R "${STACK_DIR}/cluster-policies" "${repo_dir}/cluster-policies"
+  apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"
+  apply_external_workload_images "${repo_dir}/apps/workloads/base/all.yaml"
+  apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
+  apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
+  render_llm_gateway_manifests "${repo_dir}/apps/workloads/base"
+  render_llm_gateway_policies "${repo_dir}/cluster-policies/cilium/shared"
+  rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"
+  prune_argocd_app_manifests "${repo_dir}/apps/argocd-apps"
+  mkdir -p "${vendor_root}"
+  rewrite_external_argocd_apps_to_vendored_charts "${repo_dir}/apps/argocd-apps" "${vendor_root}"
+  vendor_direct_tf_only_charts "${vendor_root}"
+  if [[ -d "${repo_dir}/apps/platform-gateway-routes" ]]; then
+    prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes"
   fi
-  if [[ -d "${tmp}/repo/apps/platform-gateway-routes-sso" ]]; then
-    prune_gateway_routes_manifests "${tmp}/repo/apps/platform-gateway-routes-sso"
+  if [[ -d "${repo_dir}/apps/platform-gateway-routes-sso" ]]; then
+    prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes-sso"
   fi
-  rewrite_hardened_registry "${tmp}/repo"
+  rewrite_hardened_registry "${repo_dir}"
 
-  pushd "${tmp}/repo" >/dev/null
+  printf '%s\n' "${repo_dir}"
+}
+
+clone_remote_repo() {
+  local dest="$1"
+  local remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
+  local ssh_cmd
+
+  rm -rf "${dest}"
+  ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+  if GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 --branch main "${remote_url}" "${dest}"; then
+    return 0
+  fi
+
+  GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 "${remote_url}" "${dest}"
+}
+
+show_dry_run_diff() {
+  local rendered_dir="$1"
+  local remote_dir="$(dirname "${rendered_dir}")/remote"
+  local changes=""
+
+  if ! clone_remote_repo "${remote_dir}"; then
+    fail "could not clone remote repo for dry-run"
+  fi
+
+  rsync -a --delete --exclude=.git "${rendered_dir}/" "${remote_dir}/"
+  changes="$(git -C "${remote_dir}" status --short --untracked-files=all)"
+
+  if [[ -z "${changes// }" ]]; then
+    echo "No diff after sync for policies; nothing to push."
+    return 0
+  fi
+
+  echo "==> [dry-run] Would commit with message: sync(policies): $(date -Iseconds)"
+  printf '%s\n' "${changes}"
+}
+
+push_rendered_repo() {
+  local rendered_dir="$1"
+
+  pushd "${rendered_dir}" >/dev/null
   git init -q
   git config user.email "kind-demo@local"
   git config user.name "kind-demo"
@@ -646,7 +975,6 @@ seed_repo() {
   local pushed="false"
   for i in {1..20}; do
     if GIT_SSH_COMMAND="$ssh_cmd" git push -q --force origin main; then
-      popd >/dev/null
       pushed="true"
       break
     fi
@@ -663,12 +991,30 @@ seed_repo() {
   return 0
 }
 
-wait_for_gitea
-create_repo_if_missing
-ensure_deploy_key
+main() {
+  local rendered_dir=""
 
-if ! seed_repo; then
-  fail "git push failed"
+  parse_args "$@"
+  wait_for_gitea
+  create_repo_if_missing
+  ensure_deploy_key
+
+  cleanup_tmp || true
+  tmp="$(mktemp -d)"
+  rendered_dir="$(render_repo "${tmp}")"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    show_dry_run_diff "${rendered_dir}"
+    return 0
+  fi
+
+  if ! push_rendered_repo "${rendered_dir}"; then
+    fail "git push failed"
+  fi
+
+  echo "Synced ${GITEA_REPO_OWNER}/${GITEA_REPO_NAME} from ${STACK_DIR}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
 fi
-
-echo "Synced ${GITEA_REPO_OWNER}/${GITEA_REPO_NAME} from ${STACK_DIR}"

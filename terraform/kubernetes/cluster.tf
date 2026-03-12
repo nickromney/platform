@@ -130,6 +130,15 @@ resource "null_resource" "preload_images" {
     cluster_id        = kind_cluster.local[0].id
     preload_script    = filesha256("${path.module}/scripts/preload-images.sh")
     preload_image_set = filesha256("${path.module}/scripts/preload-images.txt")
+    enable_signoz         = tostring(var.enable_signoz)
+    enable_prometheus     = tostring(var.enable_prometheus)
+    enable_grafana        = tostring(var.enable_grafana)
+    enable_loki           = tostring(var.enable_loki)
+    enable_tempo          = tostring(var.enable_tempo)
+    enable_headlamp       = tostring(var.enable_headlamp)
+    enable_sso            = tostring(var.enable_sso)
+    enable_actions_runner = tostring(var.enable_actions_runner)
+    preload_parallelism   = tostring(var.image_preload_parallelism)
   }
 
   provisioner "local-exec" {

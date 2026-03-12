@@ -1,24 +1,22 @@
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:
-  name: dev-baseline
+  name: application-baseline
 spec:
   description: >-
-    Baseline for dev namespace. Provides ONLY shared infrastructure access:
-    DNS and kube-apiserver. All intra-namespace and cross-namespace app traffic
-    is delegated to the dev-mtls-* role-based policies which enforce strict
-    per-pod access control. Mirrors the uat-baseline pattern; see that policy's
-    description for rationale on why broad intra-namespace allows are removed.
+    Baseline guardrail for every namespace labeled
+    platform.publiccloudexperiments.net/namespace-role=application.
+    Provides only kubelet health-probe ingress plus DNS and kube-apiserver
+    egress. Project-specific CiliumNetworkPolicies are layered on top
+    per application namespace.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
   ingress:
-    # Kubelet health probes
     - fromEntities:
         - host
         - remote-node
   egress:
-    # DNS resolution
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": kube-system
@@ -29,7 +27,6 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # kube-apiserver
     - toEntities:
         - kube-apiserver
     - toServices:

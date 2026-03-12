@@ -12,17 +12,24 @@ spec:
       - key: "k8s:project"
         operator: In
         values:
-          - sentiment
+          - kindlocal
+      - key: "k8s:team"
+        operator: In
+        values:
+          - dolphin
+      - key: "k8s:app"
+        operator: In
+        values:
+          - sentiment-llm
       - key: "k8s:role"
         operator: In
         values:
           - backend
           - llm
-      - key: "k8s:io.kubernetes.pod.namespace"
+      - key: "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
         operator: In
         values:
-          - dev
-          - uat
+          - application
   egress:
     - toEndpoints:
         - matchLabels:

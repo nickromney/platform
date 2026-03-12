@@ -24,6 +24,16 @@ run "app_of_apps_enabled_disables_direct_apps" {
   }
 
   assert {
+    condition     = length(kubectl_manifest.gateway_bootstrap_crds) > 0
+    error_message = "Expected Terraform to bootstrap gateway CRDs before the app-of-apps path when enable_gateway_tls=true"
+  }
+
+  assert {
+    condition     = !contains(local.argocd_gitops_repo_app_names, "nginx-gateway-fabric-crds")
+    error_message = "Did not expect nginx-gateway-fabric-crds in the direct GitOps app list after moving CRD ownership to Terraform"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.argocd_app_kyverno) == 0
     error_message = "Did not expect direct Kyverno Application when enable_app_of_apps=true"
   }
@@ -59,6 +69,16 @@ run "image_preload_enabled_by_default" {
     condition     = length(null_resource.preload_images) == 1
     error_message = "Expected null_resource.preload_images to exist when enable_image_preload=true"
   }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_sso == "false"
+    error_message = "Expected preload triggers to record SSO as disabled in the bootstrap image set"
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_grafana == "false"
+    error_message = "Expected preload triggers to record Grafana as disabled in the bootstrap image set"
+  }
 }
 
 run "image_preload_can_be_disabled" {
@@ -76,6 +96,56 @@ run "image_preload_can_be_disabled" {
   assert {
     condition     = length(null_resource.preload_images) == 0
     error_message = "Did not expect null_resource.preload_images when enable_image_preload=false"
+  }
+}
+
+run "image_preload_triggers_follow_enabled_feature_set" {
+  command = plan
+
+  variables {
+    cni_provider          = "none"
+    enable_hubble         = false
+    enable_argocd         = true
+    enable_gitea          = true
+    enable_gateway_tls    = true
+    enable_signoz         = false
+    enable_prometheus     = true
+    enable_grafana        = true
+    enable_loki           = true
+    enable_tempo          = false
+    enable_headlamp       = true
+    enable_sso            = true
+    enable_actions_runner = true
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_prometheus == "true"
+    error_message = "Expected preload triggers to record Prometheus as enabled when later-stage observability is turned on"
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_grafana == "true"
+    error_message = "Expected preload triggers to record Grafana as enabled when later-stage observability is turned on"
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_loki == "true"
+    error_message = "Expected preload triggers to record Loki as enabled when later-stage observability is turned on"
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_headlamp == "true"
+    error_message = "Expected preload triggers to record Headlamp as enabled when that stage is active"
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_sso == "true"
+    error_message = "Expected preload triggers to record SSO as enabled when later-stage SSO is turned on"
+  }
+
+  assert {
+    condition     = null_resource.preload_images[0].triggers.enable_actions_runner == "true"
+    error_message = "Expected preload triggers to record the actions runner as enabled when app repos are enabled"
   }
 }
 

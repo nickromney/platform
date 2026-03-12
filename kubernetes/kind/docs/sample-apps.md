@@ -4,6 +4,11 @@ The demo applications appear from stage `700` onward.
 
 The application source trees live under [apps/README.md](../../../apps/README.md).
 
+For the fuller static architecture and policy-control view, see:
+
+- [`apps-c4.md`](../../../terraform/kubernetes/docs/apps-c4.md) for the Mermaid native C4 architecture model
+- [`COMPOSITION.md`](../../../terraform/kubernetes/cluster-policies/COMPOSITION.md)
+
 ## Subnetcalc
 
 `subnetcalc` is deliberately split so the frontend never talks to the backend directly. The router sends UI traffic to the frontend and `/api/*` traffic to the APIM simulator, which then forwards to the backend.
@@ -60,6 +65,7 @@ For the shipped kind stages, the key point is that `llm-gateway` is host-backed,
 
 That means the sentiment backend expects a host-side LLM endpoint to exist. In practice that usually means:
 
+- Docker Desktop model runner on `127.0.0.1:12434` in the current local setup
 - LM Studio running on the host with an OpenAI-compatible API
 - a host-side gateway in front of Apple MLX or another local model runtime
 

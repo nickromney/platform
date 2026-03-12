@@ -4,7 +4,8 @@ resource "kubernetes_namespace_v1" "argocd" {
   metadata {
     name = var.argocd_namespace
     labels = {
-      app = "argocd"
+      app                                               = "argocd"
+      "platform.publiccloudexperiments.net/namespace-role" = "platform"
     }
   }
 

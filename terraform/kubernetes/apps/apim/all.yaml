@@ -6,6 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/name: apim
     app.kubernetes.io/component: apim
+    "platform.publiccloudexperiments.net/namespace-role": shared
 
 ---
 # SubnetCalc APIM Simulator Config - Shared (routes based on Host header)
@@ -16,7 +17,10 @@ metadata:
   namespace: apim
   labels:
     app.kubernetes.io/name: subnetcalc-apim-simulator
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: apim
 data:
   config.json: |
@@ -65,7 +69,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-apim-simulator
     app.kubernetes.io/component: apim
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: apim
 spec:
   replicas: 1
@@ -78,7 +85,10 @@ spec:
       labels:
         app.kubernetes.io/name: subnetcalc-apim-simulator
         app.kubernetes.io/component: apim
-        project: subnetcalc
+        app: subnetcalc
+        project: kindlocal
+        team: dolphin
+        tier: gateway
         role: apim
     spec:
       imagePullSecrets:
@@ -135,7 +145,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-apim-simulator
     app.kubernetes.io/component: apim
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: apim
 spec:
   selector:

@@ -6,7 +6,7 @@ spec:
   admission: true
   background: false
   emitWarning: false
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   rules:
     - name: block-delete-default-deny-netpol
       match:

@@ -1,0 +1,37 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: subnetcalc-cloudflare-live-fetch
+spec:
+  description: |
+    Dev-only override that allows subnetcalc-api to fetch the live Cloudflare
+    range files from the exact host www.cloudflare.com over HTTPS.
+    This stays outside the reusable project base so a team can keep the
+    namespace-local exception with the namespace overlay that owns it.
+  endpointSelector:
+    matchLabels:
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": subnetcalc
+      "k8s:tier": backend
+      "k8s:app.kubernetes.io/name": subnetcalc-api
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: www.cloudflare.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -7,7 +7,8 @@ spec:
     Hardened policy for argocd namespace. ArgoCD is highly privileged (cluster admin).
     Ingress: only from platform-gateway (UI access via sso) and intra-namespace.
     Egress: kube-apiserver (deployments), Gitea SSH (repo sync), Dex (OIDC),
-    DNS, and external Helm chart registries on :443 only.
+    and DNS. External Helm chart egress is delegated to a workload-scoped
+    repo-server policy.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": argocd
@@ -97,8 +98,37 @@ spec:
               protocol: TCP
             - port: "5558"
               protocol: TCP
-    - toEntities:
-        - world
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: argocd-repo-server-helm-egress
+spec:
+  description: >-
+    Allow only argocd-repo-server to fetch Helm charts from the external
+    repository that remains outside the in-cluster Gitea mirror during
+    bootstrap: dl.gitea.io. Include a DNS L7 rule so Cilium can observe and
+    cache the hostname resolution for this FQDN-pinned destination.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": argocd
+      "k8s:app.kubernetes.io/name": argocd-repo-server
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: dl.gitea.io
       toPorts:
         - ports:
             - port: "443"
