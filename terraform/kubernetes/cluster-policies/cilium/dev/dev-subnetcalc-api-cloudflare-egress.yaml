@@ -1,0 +1,35 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: dev-subnetcalc-api-cloudflare-egress
+spec:
+  description: |
+    Allow subnetcalc-api pods in dev to fetch the live Cloudflare range files
+    from the exact host www.cloudflare.com over HTTPS. The dev environment
+    exercises the live remote lookup path; uat relies on the application's
+    built-in fallback ranges instead. Include a DNS L7 rule so Cilium can
+    observe and cache the hostname resolution for the FQDN-pinned egress.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:app.kubernetes.io/name": subnetcalc-api
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: www.cloudflare.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -4,6 +4,7 @@ resource "kubernetes_namespace_v1" "sso" {
   metadata {
     name = "sso"
     labels = {
+      "role"                = "shared"
       "kyverno.io/isolate" = "true"
       "security-tier"      = "critical"
     }
@@ -128,9 +129,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://charts.dexidp.io
-    chart: dex
-    targetRevision: ${var.dex_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.dex}
     helm:
       releaseName: dex
       values: |
@@ -213,6 +214,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
   ]
@@ -302,9 +306,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-argocd
       values: |
@@ -378,6 +382,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -401,9 +408,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-gitea
       values: |
@@ -477,6 +484,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -500,9 +510,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-hubble
       values: |
@@ -575,6 +585,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -598,9 +611,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-grafana
       values: |
@@ -673,6 +686,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -696,9 +712,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-signoz
       parameters:
@@ -779,6 +795,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -802,9 +821,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-sentiment-dev
       values: |
@@ -879,6 +898,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -904,9 +926,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-sentiment-uat
       values: |
@@ -982,6 +1004,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -1007,9 +1032,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-subnetcalc-dev
       values: |
@@ -1086,6 +1111,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,
@@ -1111,9 +1139,9 @@ spec:
     namespace: sso
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://oauth2-proxy.github.io/manifests
-    chart: oauth2-proxy
-    targetRevision: ${var.oauth2_proxy_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
     helm:
       releaseName: oauth2-proxy-subnetcalc-uat
       values: |
@@ -1191,6 +1219,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.argocd_app_dex,

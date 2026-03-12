@@ -40,6 +40,9 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
     # kube-apiserver (Headlamp's primary function)
     - toEntities:
         - kube-apiserver

@@ -1,4 +1,5 @@
 resources:
+  - require-app-labels-application-namespaces.yaml
   - namespace-default-deny.yaml
   - protect-default-deny.yaml
   - restrict-image-registries.yaml

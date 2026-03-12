@@ -3,5 +3,6 @@ resources:
   - dev-project-isolation.yaml
   - dev-mtls-sentiment.yaml
   - dev-mtls-subnetcalc.yaml
+  - dev-subnetcalc-api-cloudflare-egress.yaml
   - sentiment-router-l7-dev.yaml
   - subnetcalc-l7-dev.yaml

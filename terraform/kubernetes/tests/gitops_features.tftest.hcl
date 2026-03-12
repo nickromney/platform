@@ -43,8 +43,6 @@ run "policies_enabled" {
     enable_signoz   = false
     enable_sso      = false
     enable_policies = true
-
-    kyverno_chart_version = "3.7.1"
   }
 
   assert {
@@ -68,13 +66,23 @@ run "policies_enabled" {
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.kyverno_chart_version}", kubectl_manifest.argocd_app_kyverno[0].yaml_body)) > 0
-    error_message = "Expected Kyverno ArgoCD Application YAML to include targetRevision matching var.kyverno_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected Kyverno ArgoCD Application YAML to load from the policies repo"
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.policy_reporter_chart_version}", kubectl_manifest.argocd_app_policy_reporter[0].yaml_body)) > 0
-    error_message = "Expected Policy Reporter ArgoCD Application YAML to include targetRevision matching var.policy_reporter_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "path: ${local.vendored_chart_paths.kyverno}")
+    error_message = "Expected Kyverno ArgoCD Application YAML to track the vendored chart on main"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_policy_reporter[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected Policy Reporter ArgoCD Application YAML to load from the policies repo"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_policy_reporter[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_policy_reporter[0].yaml_body, "path: ${local.vendored_chart_paths.policy_reporter}")
+    error_message = "Expected Policy Reporter ArgoCD Application YAML to track the vendored chart on main"
   }
 
   assert {
@@ -143,8 +151,6 @@ run "observability_agent_enabled" {
     enable_signoz              = true
     enable_sso                 = false
     enable_observability_agent = true
-
-    opentelemetry_collector_chart_version = "0.145.0"
   }
 
   assert {
@@ -153,8 +159,13 @@ run "observability_agent_enabled" {
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.opentelemetry_collector_chart_version}", kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body)) > 0
-    error_message = "Expected OTel agent ArgoCD Application YAML to include targetRevision matching var.opentelemetry_collector_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected OTel agent ArgoCD Application YAML to load from the policies repo"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_otel_collector_agent[0].yaml_body, "path: ${local.vendored_chart_paths.opentelemetry_collector}")
+    error_message = "Expected OTel agent ArgoCD Application YAML to track the vendored chart on main"
   }
 }
 
@@ -170,8 +181,6 @@ run "prometheus_observability_enabled" {
     enable_prometheus = true
     enable_grafana    = true
     enable_sso        = false
-
-    opentelemetry_collector_chart_version = "0.145.0"
   }
 
   assert {
@@ -205,8 +214,13 @@ run "prometheus_observability_enabled" {
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.opentelemetry_collector_chart_version}", kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body)) > 0
-    error_message = "Expected Prometheus OTel collector ArgoCD Application YAML to include targetRevision matching var.opentelemetry_collector_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected Prometheus OTel collector ArgoCD Application YAML to load from the policies repo"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "path: ${local.vendored_chart_paths.opentelemetry_collector}")
+    error_message = "Expected Prometheus OTel collector ArgoCD Application YAML to track the vendored chart on main"
   }
 }
 

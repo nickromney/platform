@@ -17,9 +17,9 @@ spec:
     namespace: cert-manager
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://charts.jetstack.io
-    chart: cert-manager
-    targetRevision: ${var.cert_manager_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.cert_manager}
     helm:
       releaseName: cert-manager
       values: |
@@ -70,6 +70,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
   ]
 }
 

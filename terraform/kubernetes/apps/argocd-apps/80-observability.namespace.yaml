@@ -7,3 +7,4 @@ metadata:
   labels:
     app.kubernetes.io/name: observability
     app.kubernetes.io/managed-by: argocd
+    role: shared

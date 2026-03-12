@@ -46,6 +46,7 @@ If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's 
 
 - expected binaries are on `PATH`
 - Docker Desktop is reachable through `docker info`
+- the host-side LLM endpoint is reachable when the selected stage uses `llm_gateway_mode = "direct"`
 - versions for the main tools can be queried
 - kubeconfig files and contexts look sane
 
@@ -63,6 +64,8 @@ From stage `700` onward, the shipped kind stages use:
 - `llm_gateway_external_name = "host.docker.internal"`
 
 That means the sentiment demo expects a host-side LLM endpoint to be reachable from Docker Desktop via `host.docker.internal`.
+
+`make prereqs` now checks that endpoint explicitly for the shipped full-stack kind path and will report what it finds on `127.0.0.1:12434` when `llm_gateway_mode = "direct"`. On this machine, that check currently identifies a Docker Desktop model runner endpoint.
 
 In practice, that means you need one of:
 

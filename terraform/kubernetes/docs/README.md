@@ -15,6 +15,16 @@ This stack is a reproducible, local "platform-in-a-box" demo that shows:
 - **TLS everywhere** via **cert-manager** + a locally bootstrapped **mkcert CA**
 - **Instrumentation/Monitoring** with **SigNoz** (local, open-source "Datadog-like" observability)
 
+## GitOps Chart Sources
+
+The chart source model is now intentionally split:
+
+- Gitea itself is still bootstrapped from `https://dl.gitea.io/charts/`.
+- Other chart-based Argo apps are vendored into the Gitea-backed `platform/policies` Git repo under `apps/vendor/charts/*`.
+- That lets `argocd-repo-server` render almost everything from in-cluster Gitea Git and keeps the remaining public Helm egress exception down to `dl.gitea.io:443`.
+
+This is a deliberate minimal-bootstrap-exception design, not reliance on local Docker Desktop registry caching for Helm charts.
+
 ## Existing Cluster Mode
 
 The same Terraform root can now run without provisioning Kind by setting `provision_kind_cluster = false`.
@@ -30,6 +40,15 @@ Example:
 cd kubernetes/kind
 KUBECONFIG_CONTEXT=my-context make k3s apply 900 AUTO_APPROVE=1
 ```
+
+## Architecture Views
+
+These documents are the current reasoning aids for the stack:
+
+- [`apps-c4.md`](./apps-c4.md) gives a Mermaid native C4 view of how `sentiment` and `subnetcalc` hang together, including the policy control points on each hop.
+- [`../cluster-policies/COMPOSITION.md`](../cluster-policies/COMPOSITION.md) shows the rendered policy composition from the active Kustomize trees.
+- [`../cluster-policies/AUDIT.md`](../cluster-policies/AUDIT.md) captures the current policy audit and best-practice gaps.
+- [`../../../kubernetes/kind/docs/sample-apps.md`](../../../kubernetes/kind/docs/sample-apps.md) remains the shorter operator-facing walkthrough for the sample apps.
 
 ## Recommended Stages (Minimal Surface Area)
 
@@ -158,37 +177,38 @@ external_workload_image_refs = {
 
 ## Kyverno Policies
 
-Kyverno is deployed via ArgoCD and enforces cluster-wide policies. Policies are stored in `cluster-policies/kyverno/` using a `shared/`, `dev/`, and `uat/` hierarchy.
+Kyverno is deployed via ArgoCD and enforces cluster-wide policies. Policies are stored in `cluster-policies/kyverno/` using a `shared/` and `uat/` hierarchy.
 
-### Topology Spread for subnetcalc-dev
+### Topology Spread for subnetcalc frontend
 
-The `subnetcalc-dev-topology-spread` policy automatically mutates Deployments in the `subnetcalc-dev` namespace to add `topologySpreadConstraints`:
+The active topology-spread rule is now owned directly by the `subnetcalc-frontend` workload manifest rather than a Kyverno mutation policy:
 
 ```yaml
 topologySpreadConstraints:
   - maxSkew: 1
     topologyKey: kubernetes.io/hostname
-    whenUnsatisfiable: ScheduleAnyway
+    whenUnsatisfiable: DoNotSchedule
+    nodeAffinityPolicy: Honor
+    nodeTaintsPolicy: Honor
     labelSelector:
-      matchLabels: <deployment's own selector labels>
+      matchLabels:
+        app.kubernetes.io/name: subnetcalc-frontend
+        app.kubernetes.io/component: frontend
 ```
 
 **How it works:**
 
-1. When a Deployment is created/updated in `subnetcalc-dev`, Kyverno intercepts the request
-2. The policy adds `topologySpreadConstraints` to the pod template spec
-3. `maxSkew: 1` ensures pods are evenly distributed across nodes (at most 1 pod difference between any two nodes)
-4. `topologyKey: kubernetes.io/hostname` spreads across nodes
-5. `whenUnsatisfiable: ScheduleAnyway` allows scheduling even if perfect balance isn't achievable (soft constraint)
-6. The `labelSelector` dynamically uses the Deployment's own selector via `{{request.object.spec.selector.matchLabels}}`
+1. The `subnetcalc-frontend` Deployment declares the spread constraint directly in its pod template.
+2. `maxSkew: 1` keeps the frontend replicas evenly distributed across nodes.
+3. `topologyKey: kubernetes.io/hostname` spreads across worker nodes.
+4. `whenUnsatisfiable: DoNotSchedule` makes this a hard scheduling rule instead of a best-effort preference.
+5. `nodeAffinityPolicy: Honor` and `nodeTaintsPolicy: Honor` keep scheduling decisions consistent with the rest of the pod's placement rules.
 
 **Example:** With 2 replicas and 2 worker nodes, you get 1 pod per node:
 
-```
-$ kubectl -n subnetcalc-dev get pods -o wide
+```bash
+$ kubectl -n dev get pods -l app.kubernetes.io/name=subnetcalc-frontend -o wide
 NAME                        NODE
 subnetcalc-frontend-xxx     kind-local-worker
 subnetcalc-frontend-yyy     kind-local-worker2
 ```
-
-**Note:** Deployments can still define their own explicit `topologySpreadConstraints` which will take precedence (Kyverno uses `patchStrategicMerge`).

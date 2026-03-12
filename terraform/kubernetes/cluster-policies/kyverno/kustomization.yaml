@@ -1,4 +1,3 @@
 resources:
   - shared
-  - dev
   - uat

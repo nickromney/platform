@@ -1,27 +1,15 @@
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:
-  name: dev-mtls-sentiment
+  name: dev-sentiment-router-ingress
 spec:
   description: >-
-    Strict role-based access for sentiment workloads in dev namespace.
-    Traffic flow (verified via nginx configs and manifests):
-      oauth2-proxy (sso) -> sentiment-router (gateway, :8080)
-      sentiment-router   -> sentiment-api (backend, :8080)
-      sentiment-router   -> sentiment-auth-ui (frontend, :8080)
-      sentiment-api      -> llm-gateway (broker, :4000 in LiteLLM mode)
-      litellm            -> llama-cpp (:8080)
-      sentiment-api      -> otel-collector (observability, :4317/:4318)
-    The backend and frontend NEVER receive traffic from platform-gateway
-    or sso directly -- only from the router (role=gateway).
+    Allow only SSO reverse-proxies to reach the sentiment router in dev.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": dev
-      "k8s:project": sentiment
-
-  # --- INGRESS ---
+      "k8s:app.kubernetes.io/name": sentiment-router
   ingress:
-    # oauth2-proxy (sso ns) -> sentiment-router (role=gateway) on port 8080
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": sso
@@ -29,64 +17,61 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    # sentiment-router (role=gateway) -> sentiment-api (role=backend) :8080
-    # sentiment-router (role=gateway) -> sentiment-auth-ui (role=frontend) :8080
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: dev-sentiment-backend-ingress
+spec:
+  description: >-
+    Allow only the sentiment router to reach the sentiment API in dev.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:app.kubernetes.io/name": sentiment-api
+  ingress:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": sentiment
-            "k8s:role": gateway
+            "k8s:app.kubernetes.io/name": sentiment-router
       toPorts:
         - ports:
             - port: "8080"
               protocol: TCP
-    # sentiment-api (role=backend) -> llm broker (:4000)
-    # litellm/llama-cpp (role=llm) internal broker traffic (:8080)
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: dev-sentiment-frontend-ingress
+spec:
+  description: >-
+    Allow only the sentiment router to reach the sentiment frontend in dev.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:app.kubernetes.io/name": sentiment-auth-ui
+  ingress:
     - fromEndpoints:
-        - matchExpressions:
-            - key: "k8s:io.kubernetes.pod.namespace"
-              operator: In
-              values:
-                - dev
-            - key: "k8s:project"
-              operator: In
-              values:
-                - sentiment
-            - key: "k8s:role"
-              operator: In
-              values:
-                - backend
-                - llm
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/name": sentiment-router
       toPorts:
         - ports:
-            - port: "4000"
-              protocol: TCP
             - port: "8080"
               protocol: TCP
-
-  # --- EGRESS ---
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: dev-sentiment-api-egress
+spec:
+  description: >-
+    Allow the sentiment API in dev to emit OTEL data and reach LiteLLM.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:app.kubernetes.io/name": sentiment-api
   egress:
-    # sentiment-router -> sentiment-api :8080
-    - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": sentiment
-            "k8s:role": backend
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
-    # sentiment-router -> sentiment-auth-ui :8080
-    - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": sentiment
-            "k8s:role": frontend
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
-    # sentiment-api -> otel-collector (observability)
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": observability
@@ -97,15 +82,63 @@ spec:
               protocol: TCP
             - port: "4318"
               protocol: TCP
-    # sentiment-api -> litellm, litellm -> llama-cpp
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": sentiment
-            "k8s:role": llm
+            "k8s:app.kubernetes.io/name": litellm
       toPorts:
         - ports:
             - port: "4000"
               protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: dev-sentiment-litellm-ingress-egress
+spec:
+  description: >-
+    Allow LiteLLM in dev to receive traffic from the sentiment API and talk
+    to llama.cpp only.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:app.kubernetes.io/name": litellm
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/name": sentiment-api
+      toPorts:
+        - ports:
+            - port: "4000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/name": llama-cpp
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: dev-sentiment-llama-ingress
+spec:
+  description: >-
+    Allow only LiteLLM to reach llama.cpp in dev.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:app.kubernetes.io/name": llama-cpp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/name": litellm
+      toPorts:
+        - ports:
             - port: "8080"
               protocol: TCP

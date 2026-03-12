@@ -12,7 +12,15 @@ spec:
       - key: "k8s:project"
         operator: In
         values:
-          - sentiment
+          - kindlocal
+      - key: "k8s:team"
+        operator: In
+        values:
+          - dolphin
+      - key: "k8s:app"
+        operator: In
+        values:
+          - sentiment-llm
       - key: "k8s:role"
         operator: In
         values:

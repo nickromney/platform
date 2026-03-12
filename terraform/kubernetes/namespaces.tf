@@ -4,6 +4,7 @@ resource "kubernetes_namespace_v1" "gitea" {
   metadata {
     name = "gitea"
     labels = {
+      "role"                = "shared"
       "kyverno.io/isolate" = "true"
     }
   }
@@ -20,6 +21,7 @@ resource "kubernetes_namespace_v1" "headlamp" {
   metadata {
     name = "headlamp"
     labels = {
+      "role"                = "shared"
       "kyverno.io/isolate" = "true"
     }
   }
@@ -39,6 +41,7 @@ resource "kubernetes_namespace_v1" "gitea_runner" {
       "app.kubernetes.io/name"       = "gitea-actions-runner"
       "app.kubernetes.io/part-of"    = "gitea"
       "app.kubernetes.io/managed-by" = "terraform"
+      "role"                         = "shared"
       "kyverno.io/isolate"           = "true"
     }
   }
@@ -57,6 +60,7 @@ resource "kubernetes_namespace_v1" "dev" {
     labels = {
       "app.kubernetes.io/name"       = "dev"
       "app.kubernetes.io/managed-by" = "terraform"
+      "role"                         = "application"
       "kyverno.io/isolate"           = "true"
     }
   }
@@ -75,6 +79,7 @@ resource "kubernetes_namespace_v1" "uat" {
     labels = {
       "app.kubernetes.io/name"       = "uat"
       "app.kubernetes.io/managed-by" = "terraform"
+      "role"                         = "application"
       "kyverno.io/isolate"           = "true"
       "security-tier"                = "strict"
     }
@@ -95,6 +100,7 @@ resource "kubernetes_namespace_v1" "apim" {
       "app.kubernetes.io/component"  = "apim"
       "app.kubernetes.io/name"       = "apim"
       "app.kubernetes.io/managed-by" = "terraform"
+      "role"                         = "shared"
     }
   }
 

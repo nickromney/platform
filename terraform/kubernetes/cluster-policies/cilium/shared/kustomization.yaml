@@ -7,7 +7,6 @@ resources:
   - allow-dev-uat-apps-egress-via-fqdn.yaml
   - sentiment-api-dns-egress.yaml
   - sentiment-llama-cpp-world-egress.yaml
-  - subnetcalc-api-cloudflare-egress.yaml
   - apim-baseline.yaml
   - platform-baseline.yaml
   - argocd-hardened.yaml

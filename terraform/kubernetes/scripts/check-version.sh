@@ -434,6 +434,78 @@ helm_deployed_chart_version() {
   echo "$chart" | sed -E 's/^.*-([0-9][0-9A-Za-z.+-]+)$/\1/'
 }
 
+chart_version_from_label() {
+  local label="$1"
+
+  if [ -z "$label" ]; then
+    echo ""
+    return 0
+  fi
+
+  # label looks like "prometheus-28.13.0", "opentelemetry-collector-0.128.0", or "cert-manager-v1.19.4".
+  echo "$label" | sed -E 's/^.*-([vV]?[0-9][0-9A-Za-z.+-]+)$/\1/'
+}
+
+argocd_app_release_name() {
+  local app="$1"
+  local ns="${2:-argocd}"
+
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+
+  kubectl -n "$ns" get application "$app" -o jsonpath='{.spec.source.helm.releaseName}' 2>/dev/null || true
+}
+
+argocd_app_destination_namespace() {
+  local app="$1"
+  local ns="${2:-argocd}"
+
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+
+  kubectl -n "$ns" get application "$app" -o jsonpath='{.spec.destination.namespace}' 2>/dev/null || true
+}
+
+argocd_app_deployed_chart_version() {
+  local app="$1"
+  local chart="$2"
+  local app_ns="${3:-argocd}"
+  local release namespace label
+
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+
+  namespace=$(argocd_app_destination_namespace "$app" "$app_ns")
+  if [ -z "${namespace}" ]; then
+    echo ""
+    return 0
+  fi
+
+  release=$(argocd_app_release_name "$app" "$app_ns")
+  if [ -z "${release}" ]; then
+    release="$app"
+  fi
+
+  label=$(
+    kubectl -n "${namespace}" get deploy,statefulset,daemonset,job,cronjob,svc,sa,cm,ingress,networkpolicy,role,rolebinding,pdb \
+      -l "app.kubernetes.io/instance=${release}" -o json 2>/dev/null | \
+      jq -r --arg chart "${chart}" '
+        [
+          .items[]?.metadata.labels["helm.sh/chart"]
+          | select(. != null and startswith($chart + "-"))
+        ] | first // empty
+      ' 2>/dev/null || true
+  )
+
+  chart_version_from_label "${label}"
+}
+
 argocd_app_deployed_target_revision() {
   local app="$1"
   local ns="${2:-argocd}"
@@ -507,6 +579,7 @@ check_app_yaml_tfvar_drift() {
     case "$app" in
       cert-manager) tfvar_key="cert_manager_chart_version" ;;
       kyverno) tfvar_key="kyverno_chart_version" ;;
+      policy-reporter) tfvar_key="policy_reporter_chart_version" ;;
       prometheus) tfvar_key="prometheus_chart_version" ;;
       grafana) tfvar_key="grafana_chart_version" ;;
       loki) tfvar_key="loki_chart_version" ;;
@@ -555,6 +628,7 @@ CODE_SIGNOZ=$(tfvar_get_any_stage_or_default "signoz_chart_version" "$(tf_defaul
 CODE_OTEL_COLLECTOR=$(tfvar_get_any_stage_or_default "opentelemetry_collector_chart_version" "$(tf_default_from_variables "opentelemetry_collector_chart_version")")
 CODE_HEADLAMP=$(tfvar_get "${STAGES_DIR}/800-gateway-tls.tfvars" "headlamp_chart_version")
 CODE_KYVERNO=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "kyverno_chart_version")
+CODE_POLICY_REPORTER=$(tfvar_get_any_stage_or_default "policy_reporter_chart_version" "$(tf_default_from_variables "policy_reporter_chart_version")")
 CODE_CERT_MANAGER=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "cert_manager_chart_version")
 CODE_DEX=$(tfvar_get "${STAGES_DIR}/900-sso.tfvars" "dex_chart_version")
 CODE_OAUTH2_PROXY=$(tfvar_get "${STAGES_DIR}/900-sso.tfvars" "oauth2_proxy_chart_version")
@@ -585,6 +659,7 @@ LATEST_SIGNOZ=$(helm_latest_chart_version "signoz" "https://charts.signoz.io" "s
 LATEST_OTEL_COLLECTOR=$(helm_latest_chart_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector")
 LATEST_HEADLAMP=$(helm_latest_chart_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp")
 LATEST_KYVERNO=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno")
+LATEST_POLICY_REPORTER=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter")
 LATEST_CERT_MANAGER=$(helm_latest_chart_version "jetstack" "https://charts.jetstack.io" "cert-manager")
 LATEST_DEX=$(helm_latest_chart_version "dex" "https://charts.dexidp.io" "dex")
 LATEST_OAUTH2_PROXY=$(helm_latest_chart_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy")
@@ -601,6 +676,7 @@ CODETAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "sig
 CODETAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${CODE_OTEL_COLLECTOR}")
 CODETAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${CODE_HEADLAMP}")
 CODETAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${CODE_KYVERNO}")
+CODETAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${CODE_POLICY_REPORTER}")
 CODETAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${CODE_CERT_MANAGER}")
 CODETAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${CODE_DEX}")
 CODETAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${CODE_OAUTH2_PROXY}")
@@ -617,6 +693,7 @@ LATESTTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "s
 LATESTTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${LATEST_OTEL_COLLECTOR}")
 LATESTTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${LATEST_HEADLAMP}")
 LATESTTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${LATEST_KYVERNO}")
+LATESTTAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${LATEST_POLICY_REPORTER}")
 LATESTTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${LATEST_CERT_MANAGER}")
 LATESTTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${LATEST_DEX}")
 LATESTTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${LATEST_OAUTH2_PROXY}")
@@ -649,6 +726,7 @@ DEPLOYED_TEMPO=""
 DEPLOYED_OTEL_COLLECTOR=""
 DEPLOYED_HEADLAMP=""
 DEPLOYED_KYVERNO=""
+DEPLOYED_POLICY_REPORTER=""
 DEPLOYED_CERT_MANAGER=""
 DEPLOYED_DEX=""
 DEPLOYED_OAUTH2_PROXY=""
@@ -664,6 +742,7 @@ DEPLOYEDTAG_SIGNOZ=""
 DEPLOYEDTAG_OTEL_COLLECTOR=""
 DEPLOYEDTAG_HEADLAMP=""
 DEPLOYEDTAG_KYVERNO=""
+DEPLOYEDTAG_POLICY_REPORTER=""
 DEPLOYEDTAG_CERT_MANAGER=""
 DEPLOYEDTAG_DEX=""
 DEPLOYEDTAG_OAUTH2_PROXY=""
@@ -673,23 +752,24 @@ if [ "${CLUSTER_OK}" -eq 1 ]; then
   DEPLOYED_ARGOCD=$(helm_deployed_chart_version "argocd" "argocd")
   DEPLOYED_ARGOCD_IMAGE_REF=$(k8s_deployment_container_image "argocd" "argocd-server" "server")
 
-  DEPLOYED_GITEA=$(argocd_app_deployed_target_revision "gitea" "argocd")
-  DEPLOYED_PROMETHEUS=$(argocd_app_deployed_target_revision "prometheus" "argocd")
-  DEPLOYED_GRAFANA=$(argocd_app_deployed_target_revision "grafana" "argocd")
-  DEPLOYED_LOKI=$(argocd_app_deployed_target_revision "loki" "argocd")
-  DEPLOYED_TEMPO=$(argocd_app_deployed_target_revision "tempo" "argocd")
-  DEPLOYED_SIGNOZ=$(argocd_app_deployed_target_revision "signoz" "argocd")
-  DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_target_revision "otel-collector-agent" "argocd")
+  DEPLOYED_GITEA=$(argocd_app_deployed_chart_version "gitea" "gitea")
+  DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus")
+  DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana")
+  DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki")
+  DEPLOYED_TEMPO=$(argocd_app_deployed_chart_version "tempo" "tempo")
+  DEPLOYED_SIGNOZ=$(argocd_app_deployed_chart_version "signoz" "signoz")
+  DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-agent" "opentelemetry-collector")
   if [ -z "${DEPLOYED_OTEL_COLLECTOR}" ]; then
-    DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_target_revision "otel-collector-prometheus" "argocd")
+    DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-prometheus" "opentelemetry-collector")
   fi
-  DEPLOYED_HEADLAMP=$(argocd_app_deployed_target_revision "headlamp" "argocd")
+  DEPLOYED_HEADLAMP=$(argocd_app_deployed_chart_version "headlamp" "headlamp")
 
-  DEPLOYED_KYVERNO=$(argocd_app_deployed_target_revision "kyverno" "argocd")
-  DEPLOYED_CERT_MANAGER=$(argocd_app_deployed_target_revision "cert-manager" "argocd")
+  DEPLOYED_KYVERNO=$(argocd_app_deployed_chart_version "kyverno" "kyverno")
+  DEPLOYED_POLICY_REPORTER=$(argocd_app_deployed_chart_version "policy-reporter" "policy-reporter")
+  DEPLOYED_CERT_MANAGER=$(argocd_app_deployed_chart_version "cert-manager" "cert-manager")
 
-  DEPLOYED_DEX=$(argocd_app_deployed_target_revision "dex" "argocd")
-  DEPLOYED_OAUTH2_PROXY=$(argocd_app_deployed_target_revision "oauth2-proxy-argocd" "argocd")
+  DEPLOYED_DEX=$(argocd_app_deployed_chart_version "dex" "dex")
+  DEPLOYED_OAUTH2_PROXY=$(argocd_app_deployed_chart_version "oauth2-proxy-argocd" "oauth2-proxy")
 
   DEPLOYEDTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${DEPLOYED_CILIUM}")
   DEPLOYEDTAG_ARGOCD=$(image_tag_from_ref "${DEPLOYED_ARGOCD_IMAGE_REF}")
@@ -705,6 +785,7 @@ if [ "${CLUSTER_OK}" -eq 1 ]; then
   DEPLOYEDTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${DEPLOYED_OTEL_COLLECTOR}")
   DEPLOYEDTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${DEPLOYED_HEADLAMP}")
   DEPLOYEDTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${DEPLOYED_KYVERNO}")
+  DEPLOYEDTAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${DEPLOYED_POLICY_REPORTER}")
   DEPLOYEDTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${DEPLOYED_CERT_MANAGER}")
   DEPLOYEDTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${DEPLOYED_DEX}")
   DEPLOYEDTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}")
@@ -720,6 +801,7 @@ else
   DEPLOYED_OTEL_COLLECTOR="Unavailable"
   DEPLOYED_HEADLAMP="Unavailable"
   DEPLOYED_KYVERNO="Unavailable"
+  DEPLOYED_POLICY_REPORTER="Unavailable"
   DEPLOYED_CERT_MANAGER="Unavailable"
   DEPLOYED_DEX="Unavailable"
   DEPLOYED_OAUTH2_PROXY="Unavailable"
@@ -734,6 +816,7 @@ else
   DEPLOYEDTAG_OTEL_COLLECTOR="Unavailable"
   DEPLOYEDTAG_HEADLAMP="Unavailable"
   DEPLOYEDTAG_KYVERNO="Unavailable"
+  DEPLOYEDTAG_POLICY_REPORTER="Unavailable"
   DEPLOYEDTAG_CERT_MANAGER="Unavailable"
   DEPLOYEDTAG_DEX="Unavailable"
   DEPLOYEDTAG_OAUTH2_PROXY="Unavailable"
@@ -755,6 +838,7 @@ rows+=("$(print_row "signoz chart" "${DEPLOYED_SIGNOZ}" "${CODE_SIGNOZ}" "${LATE
 rows+=("$(print_row "otel-collector" "${DEPLOYED_OTEL_COLLECTOR}" "${CODE_OTEL_COLLECTOR}" "${LATEST_OTEL_COLLECTOR}" "${DEPLOYEDTAG_OTEL_COLLECTOR}" "${CODETAG_OTEL_COLLECTOR}" "" "${LATESTTAG_OTEL_COLLECTOR}" "0")")
 rows+=("$(print_row "headlamp chart" "${DEPLOYED_HEADLAMP}" "${CODE_HEADLAMP}" "${LATEST_HEADLAMP}" "${DEPLOYEDTAG_HEADLAMP}" "${CODETAG_HEADLAMP}" "" "${LATESTTAG_HEADLAMP}" "0")")
 rows+=("$(print_row "kyverno chart" "${DEPLOYED_KYVERNO}" "${CODE_KYVERNO}" "${LATEST_KYVERNO}" "${DEPLOYEDTAG_KYVERNO}" "${CODETAG_KYVERNO}" "" "${LATESTTAG_KYVERNO}" "0")")
+rows+=("$(print_row "policy-reporter" "${DEPLOYED_POLICY_REPORTER}" "${CODE_POLICY_REPORTER}" "${LATEST_POLICY_REPORTER}" "${DEPLOYEDTAG_POLICY_REPORTER}" "${CODETAG_POLICY_REPORTER}" "" "${LATESTTAG_POLICY_REPORTER}" "0")")
 rows+=("$(print_row "cert-manager" "${DEPLOYED_CERT_MANAGER}" "${CODE_CERT_MANAGER}" "${LATEST_CERT_MANAGER}" "${DEPLOYEDTAG_CERT_MANAGER}" "${CODETAG_CERT_MANAGER}" "" "${LATESTTAG_CERT_MANAGER}" "0")")
 rows+=("$(print_row "dex chart" "${DEPLOYED_DEX}" "${CODE_DEX}" "${LATEST_DEX}" "${DEPLOYEDTAG_DEX}" "${CODETAG_DEX}" "" "${LATESTTAG_DEX}" "0")")
 rows+=("$(print_row "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}" "${CODE_OAUTH2_PROXY}" "${LATEST_OAUTH2_PROXY}" "${DEPLOYEDTAG_OAUTH2_PROXY}" "${CODETAG_OAUTH2_PROXY}" "" "${LATESTTAG_OAUTH2_PROXY}" "0")")
@@ -778,6 +862,7 @@ check_consistent_tfvars "signoz_chart_version"
 check_consistent_tfvars "opentelemetry_collector_chart_version"
 check_consistent_tfvars "headlamp_chart_version"
 check_consistent_tfvars "kyverno_chart_version"
+check_consistent_tfvars "policy_reporter_chart_version"
 check_consistent_tfvars "cert_manager_chart_version"
 check_consistent_tfvars "dex_chart_version"
 check_consistent_tfvars "oauth2_proxy_chart_version"

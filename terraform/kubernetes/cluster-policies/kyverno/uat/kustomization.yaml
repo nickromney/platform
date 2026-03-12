@@ -1,3 +1,2 @@
 resources:
-  - uat-require-project-labels.yaml
   - uat-restrict-capabilities.yaml

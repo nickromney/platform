@@ -1,0 +1,47 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-app-labels-application-namespaces
+  annotations:
+    policies.kyverno.io/title: Require app boundary labels in application namespaces
+    policies.kyverno.io/description: >-
+      All Deployments in namespaces labeled role=application must carry the
+      shared app, tier, project, and team labels on both the Deployment
+      metadata and Pod template so that Cilium can enforce stable frontend,
+      gateway, and backend trust boundaries across any application namespace.
+spec:
+  admission: true
+  background: true
+  validationFailureAction: Enforce
+  rules:
+    - name: require-app-boundary-labels
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaceSelector:
+                matchLabels:
+                  role: application
+      validate:
+        allowExistingViolations: true
+        message: >-
+          Deployments in application namespaces must carry app, tier,
+          project=kindlocal, and team=dolphin labels on both the Deployment
+          and Pod template.
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              tier: "?*"
+              project: kindlocal
+              team: dolphin
+          spec:
+            template:
+              metadata:
+                labels:
+                  app: "?*"
+                  tier: "?*"
+                  project: kindlocal
+                  team: dolphin

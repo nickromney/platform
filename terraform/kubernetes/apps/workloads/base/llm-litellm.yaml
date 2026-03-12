@@ -5,7 +5,10 @@ metadata:
   labels:
     app.kubernetes.io/name: litellm
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 data:
   config.yaml: |
@@ -24,7 +27,10 @@ metadata:
   labels:
     app.kubernetes.io/name: llama-cpp
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 spec:
   accessModes:
@@ -41,7 +47,10 @@ metadata:
   labels:
     app.kubernetes.io/name: llama-cpp
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 spec:
   replicas: 1
@@ -54,7 +63,10 @@ spec:
       labels:
         app.kubernetes.io/name: llama-cpp
         app.kubernetes.io/component: llm
-        project: sentiment
+        app: sentiment-llm
+        project: kindlocal
+        team: dolphin
+        tier: backend
         role: llm
     spec:
       containers:
@@ -122,7 +134,10 @@ metadata:
   labels:
     app.kubernetes.io/name: llama-cpp
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 spec:
   selector:
@@ -141,7 +156,10 @@ metadata:
   labels:
     app.kubernetes.io/name: litellm
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 spec:
   replicas: 1
@@ -154,7 +172,10 @@ spec:
       labels:
         app.kubernetes.io/name: litellm
         app.kubernetes.io/component: llm
-        project: sentiment
+        app: sentiment-llm
+        project: kindlocal
+        team: dolphin
+        tier: backend
         role: llm
     spec:
       containers:
@@ -220,7 +241,10 @@ metadata:
   labels:
     app.kubernetes.io/name: llm-gateway
     app.kubernetes.io/component: llm
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: llm
 spec:
   selector:

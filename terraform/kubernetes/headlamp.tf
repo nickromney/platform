@@ -15,9 +15,9 @@ spec:
     namespace: ${kubernetes_namespace_v1.headlamp[0].metadata[0].name}
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://kubernetes-sigs.github.io/headlamp/
-    chart: headlamp
-    targetRevision: ${var.headlamp_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.headlamp}
     helm:
       releaseName: headlamp
       valuesObject: ${jsonencode(local.headlamp_values)}
@@ -38,6 +38,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.headlamp,
     kubernetes_secret_v1.headlamp_mkcert_ca,
   ]

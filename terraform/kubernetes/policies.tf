@@ -127,9 +127,9 @@ spec:
         - .metadata.labels
         - .spec
   source:
-    repoURL: https://kyverno.github.io/kyverno/
-    chart: kyverno
-    targetRevision: ${var.kyverno_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.kyverno}
     helm:
       releaseName: kyverno
       values: |
@@ -249,6 +249,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
   ]
 }
 
@@ -315,9 +318,9 @@ spec:
     namespace: policy-reporter
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://kyverno.github.io/policy-reporter
-    chart: policy-reporter
-    targetRevision: ${var.policy_reporter_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.policy_reporter}
     helm:
       releaseName: policy-reporter
       values: |
@@ -342,6 +345,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubectl_manifest.argocd_app_kyverno,
   ]
 }

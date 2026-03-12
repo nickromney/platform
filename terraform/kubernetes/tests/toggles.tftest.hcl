@@ -93,14 +93,12 @@ run "signoz_enabled" {
   command = plan
 
   variables {
-    cni_provider  = "cilium"
-    enable_hubble = true
-    enable_argocd = true
-    enable_gitea  = true
-    enable_signoz = true
-
-    signoz_chart_version = "0.112.0"
-    signoz_ui_node_port  = 30301
+    cni_provider        = "cilium"
+    enable_hubble       = true
+    enable_argocd       = true
+    enable_gitea        = true
+    enable_signoz       = true
+    signoz_ui_node_port = 30301
   }
 
   assert {
@@ -119,8 +117,13 @@ run "signoz_enabled" {
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.signoz_chart_version}", kubectl_manifest.argocd_app_signoz[0].yaml_body)) > 0
-    error_message = "Expected SigNoz ArgoCD Application YAML to include targetRevision matching var.signoz_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected SigNoz ArgoCD Application YAML to load from the policies repo"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "path: ${local.vendored_chart_paths.signoz}")
+    error_message = "Expected SigNoz ArgoCD Application YAML to track the vendored chart on main"
   }
 }
 

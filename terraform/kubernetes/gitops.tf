@@ -63,6 +63,19 @@ resource "null_resource" "sync_gitea_policies_repo" {
       HARDENED_IMAGE_REGISTRY                       = var.hardened_image_registry
       LLM_GATEWAY_MODE                              = var.llm_gateway_mode
       LLM_GATEWAY_EXTERNAL_NAME                     = var.llm_gateway_external_name
+      POLICIES_REPO_URL_CLUSTER                     = local.policies_repo_url_cluster
+      CERT_MANAGER_CHART_VERSION                    = var.cert_manager_chart_version
+      DEX_CHART_VERSION                             = var.dex_chart_version
+      GRAFANA_CHART_VERSION                         = var.grafana_chart_version
+      HEADLAMP_CHART_VERSION                        = var.headlamp_chart_version
+      KYVERNO_CHART_VERSION                         = var.kyverno_chart_version
+      LOKI_CHART_VERSION                            = var.loki_chart_version
+      OAUTH2_PROXY_CHART_VERSION                    = var.oauth2_proxy_chart_version
+      OPENTELEMETRY_COLLECTOR_CHART_VERSION         = var.opentelemetry_collector_chart_version
+      POLICY_REPORTER_CHART_VERSION                 = var.policy_reporter_chart_version
+      PROMETHEUS_CHART_VERSION                      = var.prometheus_chart_version
+      SIGNOZ_CHART_VERSION                          = var.signoz_chart_version
+      TEMPO_CHART_VERSION                           = var.tempo_chart_version
       LLAMA_CPP_IMAGE                               = var.llama_cpp_image
       LLAMA_CPP_HF_REPO                             = var.llama_cpp_hf_repo
       LLAMA_CPP_HF_FILE                             = var.llama_cpp_hf_file
@@ -692,10 +705,16 @@ resource "null_resource" "argocd_repo_server_restart" {
   count = local.enable_gitops_repo ? 1 : 0
 
   triggers = {
-    gitea_host_key     = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
-    argocd_chart_ver   = var.argocd_chart_version
-    known_hosts_hash   = sha1(local.argocd_ssh_known_hosts_merged)
-    restart_script_ver = "4"
+    cluster_id       = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
+    gitea_host_key   = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    argocd_chart_ver = var.argocd_chart_version
+    known_hosts_hash = sha1(local.argocd_ssh_known_hosts_merged)
+    repo_secret_hash = sha1(join("\n", [
+      local.policies_repo_url_cluster,
+      tls_private_key.policies_repo[0].private_key_openssh,
+      data.local_file.gitea_known_hosts_cluster[0].content,
+    ]))
+    restart_script_ver = "5"
   }
 
   provisioner "local-exec" {
@@ -703,11 +722,13 @@ resource "null_resource" "argocd_repo_server_restart" {
 set -euo pipefail
 export KUBECONFIG="${local.kubeconfig_path_expanded}"
 KNOWN_HOSTS_FILE="${local.gitea_known_hosts_cluster_path}"
-KNOWN_HOSTS_CHANGED=0
 
 # The Kubernetes provider state can drift from the live, Helm-owned ConfigMap.
 # Patch the live ConfigMap explicitly from the generated Gitea host key file, then
-# restart argocd-repo-server so its mounted ssh_known_hosts content is current.
+# restart argocd-repo-server so it re-reads both the mounted ssh_known_hosts
+# content and the repository credentials secrets. On a clean cluster, skipping
+# the restart because the ConfigMap is already current can leave repo-server
+# serving stale SSH trust state for newly created repo secrets.
 #
 # During Kyverno install/upgrade, the apiserver can temporarily fail admission webhooks with failurePolicy=Fail
 # (e.g. "failed calling webhook ... connect: connection refused"). Retry the restart in that case.
@@ -757,12 +778,6 @@ patch_known_hosts() {
 
   awk 'NF && !seen[$0]++' "$base_file" "$KNOWN_HOSTS_FILE" > "$merged_file"
 
-  if cmp -s "$base_file" "$merged_file"; then
-    KNOWN_HOSTS_CHANGED=0
-    rm -rf "$tmpdir"
-    return 0
-  fi
-
   {
     echo "data:"
     echo "  ssh_known_hosts: |"
@@ -771,11 +786,6 @@ patch_known_hosts() {
 
   patch_out="$(retry_webhook_fail kubectl patch configmap argocd-ssh-known-hosts-cm -n ${var.argocd_namespace} --type merge --patch-file "$patch_file")"
   echo "$patch_out"
-  if echo "$patch_out" | grep -q "(no change)"; then
-    KNOWN_HOSTS_CHANGED=0
-  else
-    KNOWN_HOSTS_CHANGED=1
-  fi
   rm -rf "$tmpdir"
 }
 
@@ -802,17 +812,13 @@ force_delete_stuck_repo_server_pods() {
 
 if kubectl -n ${var.argocd_namespace} get deployment argocd-repo-server >/dev/null 2>&1; then
   patch_known_hosts
-  if [ "$KNOWN_HOSTS_CHANGED" -eq 1 ]; then
-    retry_webhook_fail kubectl rollout restart deployment argocd-repo-server -n ${var.argocd_namespace}
-    if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s; then
-      if force_delete_stuck_repo_server_pods; then
-        retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s
-      else
-        exit 1
-      fi
+  retry_webhook_fail kubectl rollout restart deployment argocd-repo-server -n ${var.argocd_namespace}
+  if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s; then
+    if force_delete_stuck_repo_server_pods; then
+      retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s
+    else
+      exit 1
     fi
-  else
-    echo "Known hosts unchanged; skipping argocd-repo-server restart" >&2
   fi
 else
   echo "WARN argocd-repo-server deployment not found in namespace ${var.argocd_namespace}; skipping restart" >&2
@@ -825,6 +831,8 @@ EOT
     helm_release.argocd,
     kubernetes_config_map_v1_data.argocd_ssh_known_hosts_cm,
     data.local_file.gitea_known_hosts_cluster,
+    kubernetes_secret_v1.argocd_repo_policies,
+    kubernetes_secret_v1.argocd_repo_creds_gitea_ssh,
   ]
 }
 

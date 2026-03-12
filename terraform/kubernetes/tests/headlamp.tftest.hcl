@@ -9,8 +9,6 @@ run "headlamp_enabled" {
     enable_signoz   = false
     enable_sso      = false
     enable_headlamp = true
-
-    headlamp_chart_version = "0.40.0"
   }
 
   assert {
@@ -24,7 +22,12 @@ run "headlamp_enabled" {
   }
 
   assert {
-    condition     = length(regexall("targetRevision: ${var.headlamp_chart_version}", kubectl_manifest.argocd_app_headlamp[0].yaml_body)) > 0
-    error_message = "Expected Headlamp ArgoCD Application YAML to include targetRevision matching var.headlamp_chart_version"
+    condition     = strcontains(kubectl_manifest.argocd_app_headlamp[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
+    error_message = "Expected Headlamp ArgoCD Application YAML to load from the policies repo"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_headlamp[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_headlamp[0].yaml_body, "path: ${local.vendored_chart_paths.headlamp}")
+    error_message = "Expected Headlamp ArgoCD Application YAML to track the vendored chart on main"
   }
 }

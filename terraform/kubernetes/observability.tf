@@ -9,6 +9,7 @@ resource "kubernetes_namespace_v1" "observability" {
     labels = {
       "app.kubernetes.io/managed-by" = "argocd"
       "app.kubernetes.io/name"       = "observability"
+      "role"                         = "shared"
       "kyverno.io/isolate"           = "true"
       "security-tier"                = "sensitive"
     }
@@ -58,9 +59,9 @@ spec:
         - /metadata/labels
         - /spec
   source:
-    repoURL: https://charts.signoz.io
-    chart: signoz
-    targetRevision: ${var.signoz_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.signoz}
     helm:
       values: |
         clickhouse:
@@ -132,6 +133,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
   ]
 }
@@ -153,9 +157,9 @@ spec:
     namespace: observability
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://prometheus-community.github.io/helm-charts
-    chart: prometheus
-    targetRevision: ${var.prometheus_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.prometheus}
     helm:
       releaseName: prometheus
       values: |
@@ -267,6 +271,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
   ]
 }
@@ -288,9 +295,9 @@ spec:
     namespace: observability
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://grafana.github.io/helm-charts
-    chart: grafana
-    targetRevision: ${var.grafana_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.grafana}
     helm:
       releaseName: grafana
       values: |
@@ -1401,6 +1408,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
     kubectl_manifest.argocd_app_prometheus,
   ]
@@ -1411,6 +1421,8 @@ resource "kubectl_manifest" "argocd_app_otel_collector_prometheus" {
 
   yaml_body = templatefile("${path.module}/templates/argocd-app-otel-gateway.yaml.tftpl", {
     argocd_namespace                      = var.argocd_namespace
+    policies_repo_url_cluster             = local.policies_repo_url_cluster
+    opentelemetry_collector_chart_path    = local.vendored_chart_paths.opentelemetry_collector
     opentelemetry_collector_chart_version = var.opentelemetry_collector_chart_version
     enable_prometheus_fanout              = local.enable_prometheus_effective || local.enable_grafana_effective
     enable_signoz_fanout                  = var.enable_signoz
@@ -1425,6 +1437,9 @@ resource "kubectl_manifest" "argocd_app_otel_collector_prometheus" {
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
   ]
 }
@@ -1446,9 +1461,9 @@ spec:
     namespace: observability
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://grafana.github.io/helm-charts
-    chart: loki
-    targetRevision: ${var.loki_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.loki}
     helm:
       releaseName: loki
       values: |
@@ -1546,6 +1561,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
   ]
 }
@@ -1567,9 +1585,9 @@ spec:
     namespace: observability
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://grafana.github.io/helm-charts
-    chart: tempo
-    targetRevision: ${var.tempo_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.tempo}
     helm:
       releaseName: tempo
       values: |
@@ -1634,6 +1652,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
   ]
 }
@@ -1655,9 +1676,9 @@ spec:
     namespace: observability
     server: https://kubernetes.default.svc
   source:
-    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
-    chart: opentelemetry-collector
-    targetRevision: ${var.opentelemetry_collector_chart_version}
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.opentelemetry_collector}
     helm:
       releaseName: otel-collector-agent
       values: |
@@ -1781,6 +1802,9 @@ __YAML__
 
   depends_on = [
     helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
     kubectl_manifest.argocd_app_signoz,
   ]

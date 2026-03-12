@@ -6,8 +6,8 @@ spec:
   description: >-
     Hardened policy for apim namespace (shared APIM simulator).
     Traffic flow (verified via APIM config.json):
-      Ingress: subnetcalc-router (dev/uat, role=gateway) -> :8000
-      Egress:  -> subnetcalc-api (dev/uat, role=backend) :8000  (host-header routed)
+      Ingress: subnetcalc-router (dev/uat, tier=gateway) -> :8000
+      Egress:  -> subnetcalc-api (dev/uat, tier=backend) :8000  (host-header routed)
       Egress:  -> dex (sso) :5556  (JWKS fetch for JWT validation)
       Egress:  -> DNS, kube-apiserver
     Only subnetcalc-router pods from dev and uat should reach the APIM.
@@ -15,6 +15,11 @@ spec:
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": apim
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": subnetcalc
+      "k8s:tier": gateway
+      "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
   ingress:
     # Kubelet health probes
     - fromEntities:
@@ -24,8 +29,11 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": subnetcalc
-            "k8s:role": gateway
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": gateway
+            "k8s:app.kubernetes.io/name": subnetcalc-router
       toPorts:
         - ports:
             - port: "8000"
@@ -34,8 +42,11 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": uat
-            "k8s:project": subnetcalc
-            "k8s:role": gateway
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": gateway
+            "k8s:app.kubernetes.io/name": subnetcalc-router
       toPorts:
         - ports:
             - port: "8000"
@@ -65,8 +76,11 @@ spec:
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": subnetcalc
-            "k8s:role": backend
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": backend
+            "k8s:app.kubernetes.io/name": subnetcalc-api
       toPorts:
         - ports:
             - port: "8000"
@@ -75,8 +89,11 @@ spec:
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": uat
-            "k8s:project": subnetcalc
-            "k8s:role": backend
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": backend
+            "k8s:app.kubernetes.io/name": subnetcalc-api
       toPorts:
         - ports:
             - port: "8000"

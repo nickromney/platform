@@ -3,7 +3,12 @@ kind: CiliumClusterwideNetworkPolicy
 metadata:
   name: allow-dev-uat-apps-egress-via-fqdn
 spec:
-  description: Allow real app pods in dev and uat to egress to approved FQDNs over HTTPS.
+  description: >-
+    Allow only the real app backends in dev and uat to egress to approved
+    FQDNs over HTTPS. Frontends and gateways stay on their explicit next-hop
+    policies instead of inheriting this broader external egress path.
+    Include a DNS L7 rule so Cilium can observe and cache the hostname
+    resolution for these FQDN-pinned destinations.
   endpointSelector:
     matchExpressions:
       - key: "k8s:io.kubernetes.pod.namespace"
@@ -15,19 +20,20 @@ spec:
         operator: In
         values:
           - sentiment-api
-          - sentiment-auth-ui
-          - sentiment-router
           - subnetcalc-api
-          - subnetcalc-frontend
-          - subnetcalc-router
+      - key: "k8s:project"
+        operator: In
+        values:
+          - kindlocal
+      - key: "k8s:team"
+        operator: In
+        values:
+          - dolphin
+      - key: "k8s:tier"
+        operator: In
+        values:
+          - backend
   egress:
-    - toFQDNs:
-        - matchName: api.github.com
-        - matchPattern: "*.githubusercontent.com"
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": kube-system
@@ -37,4 +43,14 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: api.github.com
+        - matchPattern: "*.githubusercontent.com"
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

@@ -3,7 +3,10 @@ kind: CiliumClusterwideNetworkPolicy
 metadata:
   name: allow-dev-uat-apps-egress-via-cidrgroup
 spec:
-  description: Allow real app pods in dev and uat to egress to approved CIDRs over HTTPS.
+  description: >-
+    Allow only the real app backends in dev and uat to egress to approved
+    CIDRs over HTTPS. Frontends and gateways stay on their explicit
+    service-to-service policies.
   endpointSelector:
     matchExpressions:
       - key: "k8s:io.kubernetes.pod.namespace"
@@ -15,11 +18,19 @@ spec:
         operator: In
         values:
           - sentiment-api
-          - sentiment-auth-ui
-          - sentiment-router
           - subnetcalc-api
-          - subnetcalc-frontend
-          - subnetcalc-router
+      - key: "k8s:project"
+        operator: In
+        values:
+          - kindlocal
+      - key: "k8s:team"
+        operator: In
+        values:
+          - dolphin
+      - key: "k8s:tier"
+        operator: In
+        values:
+          - backend
   egress:
     - toCIDRSet:
         - cidrGroupRef: approved-egress-cidrs

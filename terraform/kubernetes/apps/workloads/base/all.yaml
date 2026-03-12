@@ -1,5 +1,6 @@
 # Shared workloads for sentiment and subnetcalc (dev/uat overlays set namespace)
-# Labels: project (sentiment|subnetcalc), role (frontend|gateway|backend|apim|llm)
+# Labels: project/team/app/tier define the coarse trust boundary.
+# role remains for component-specific detail such as llm and apim.
 
 ---
 apiVersion: v1
@@ -9,7 +10,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-api
     app.kubernetes.io/component: backend
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: backend
 spec:
   accessModes:
@@ -26,7 +30,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-api
     app.kubernetes.io/component: backend
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: backend
 spec:
   replicas: 1
@@ -39,7 +46,10 @@ spec:
       labels:
         app.kubernetes.io/name: sentiment-api
         app.kubernetes.io/component: backend
-        project: sentiment
+        app: sentiment-llm
+        project: kindlocal
+        team: dolphin
+        tier: backend
         role: backend
     spec:
       imagePullSecrets:
@@ -116,7 +126,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-api
     app.kubernetes.io/component: backend
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: backend
 spec:
   selector:
@@ -135,7 +148,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-auth-ui
     app.kubernetes.io/component: frontend
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: frontend
     role: frontend
 spec:
   replicas: 1
@@ -148,7 +164,10 @@ spec:
       labels:
         app.kubernetes.io/name: sentiment-auth-ui
         app.kubernetes.io/component: frontend
-        project: sentiment
+        app: sentiment-llm
+        project: kindlocal
+        team: dolphin
+        tier: frontend
         role: frontend
     spec:
       imagePullSecrets:
@@ -175,7 +194,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-auth-ui
     app.kubernetes.io/component: frontend
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: frontend
     role: frontend
 spec:
   selector:
@@ -193,7 +215,10 @@ metadata:
   name: sentiment-router-nginx
   labels:
     app.kubernetes.io/name: sentiment-router
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: gateway
 data:
   default.conf: |
@@ -235,7 +260,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-router
     app.kubernetes.io/component: gateway
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: gateway
 spec:
   replicas: 1
@@ -248,7 +276,10 @@ spec:
       labels:
         app.kubernetes.io/name: sentiment-router
         app.kubernetes.io/component: gateway
-        project: sentiment
+        app: sentiment-llm
+        project: kindlocal
+        team: dolphin
+        tier: gateway
         role: gateway
     spec:
       containers:
@@ -281,7 +312,10 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-router
     app.kubernetes.io/component: gateway
-    project: sentiment
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: gateway
 spec:
   selector:
@@ -301,7 +335,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-api
     app.kubernetes.io/component: backend
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: backend
 spec:
   replicas: 1
@@ -314,7 +351,10 @@ spec:
       labels:
         app.kubernetes.io/name: subnetcalc-api
         app.kubernetes.io/component: backend
-        project: subnetcalc
+        app: subnetcalc
+        project: kindlocal
+        team: dolphin
+        tier: backend
         role: backend
     spec:
       imagePullSecrets:
@@ -367,7 +407,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-api
     app.kubernetes.io/component: backend
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: backend
     role: backend
 spec:
   selector:
@@ -387,7 +430,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-frontend
     app.kubernetes.io/component: frontend
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: frontend
     role: frontend
 spec:
   replicas: 2
@@ -400,7 +446,10 @@ spec:
       labels:
         app.kubernetes.io/name: subnetcalc-frontend
         app.kubernetes.io/component: frontend
-        project: subnetcalc
+        app: subnetcalc
+        project: kindlocal
+        team: dolphin
+        tier: frontend
         role: frontend
     spec:
       topologySpreadConstraints:
@@ -438,7 +487,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-frontend
     app.kubernetes.io/component: frontend
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: frontend
     role: frontend
 spec:
   selector:
@@ -457,7 +509,10 @@ metadata:
   name: subnetcalc-router-nginx
   labels:
     app.kubernetes.io/name: subnetcalc-router
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: gateway
 data:
   default.conf: |
@@ -560,7 +615,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-router
     app.kubernetes.io/component: gateway
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: gateway
 spec:
   replicas: 1
@@ -573,7 +631,10 @@ spec:
       labels:
         app.kubernetes.io/name: subnetcalc-router
         app.kubernetes.io/component: gateway
-        project: subnetcalc
+        app: subnetcalc
+        project: kindlocal
+        team: dolphin
+        tier: gateway
         role: gateway
     spec:
       containers:
@@ -607,7 +668,10 @@ metadata:
   labels:
     app.kubernetes.io/name: subnetcalc-router
     app.kubernetes.io/component: gateway
-    project: subnetcalc
+    app: subnetcalc
+    project: kindlocal
+    team: dolphin
+    tier: gateway
     role: gateway
 spec:
   selector:

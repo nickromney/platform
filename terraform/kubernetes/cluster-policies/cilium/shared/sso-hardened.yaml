@@ -153,15 +153,31 @@ spec:
             - port: "4466"
               protocol: TCP
     - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+        - matchExpressions:
+            - key: "k8s:io.kubernetes.pod.namespace"
+              operator: In
+              values:
+                - dev
+            - key: "k8s:app.kubernetes.io/name"
+              operator: In
+              values:
+                - sentiment-router
+                - subnetcalc-router
       toPorts:
         - ports:
             - port: "8080"
               protocol: TCP
     - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+        - matchExpressions:
+            - key: "k8s:io.kubernetes.pod.namespace"
+              operator: In
+              values:
+                - uat
+            - key: "k8s:app.kubernetes.io/name"
+              operator: In
+              values:
+                - sentiment-router
+                - subnetcalc-router
       toPorts:
         - ports:
             - port: "8080"
