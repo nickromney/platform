@@ -2,3 +2,4 @@ resources:
   - shared
   - dev
   - uat
+  - sit

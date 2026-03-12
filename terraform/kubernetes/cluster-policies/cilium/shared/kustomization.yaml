@@ -2,9 +2,11 @@ resources:
   - azure-auth-nginx-gateway-ingress.yaml
   - deny-cloud-metadata-egress.yaml
   - approved-egress-cidrs.yaml
-  - deny-cloud-metadata-dev-uat-apps.yaml
-  - allow-dev-uat-apps-egress-via-cidrgroup.yaml
-  - allow-dev-uat-apps-egress-via-fqdn.yaml
+  - application-baseline.yaml
+  - application-project-boundaries.yaml
+  - application-cloud-metadata-deny.yaml
+  - application-backend-egress-via-cidrgroup.yaml
+  - application-backend-egress-via-fqdn.yaml
   - sentiment-api-dns-egress.yaml
   - sentiment-llama-cpp-world-egress.yaml
   - apim-baseline.yaml

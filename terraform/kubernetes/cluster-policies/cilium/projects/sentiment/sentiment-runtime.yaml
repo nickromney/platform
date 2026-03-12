@@ -1,13 +1,16 @@
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-sentiment-router-ingress
+  name: sentiment-router-ingress
 spec:
   description: >-
-    Allow only SSO reverse-proxies to reach the sentiment router in dev.
+    Allow only SSO reverse-proxies to reach the sentiment router.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:tier": gateway
       "k8s:app.kubernetes.io/name": sentiment-router
   ingress:
     - fromEndpoints:
@@ -19,20 +22,26 @@ spec:
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-sentiment-backend-ingress
+  name: sentiment-backend-ingress
 spec:
   description: >-
-    Allow only the sentiment router to reach the sentiment API in dev.
+    Allow only the sentiment router to reach the sentiment API.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:tier": backend
       "k8s:app.kubernetes.io/name": sentiment-api
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": sentiment-router
       toPorts:
         - ports:
@@ -40,20 +49,26 @@ spec:
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-sentiment-frontend-ingress
+  name: sentiment-frontend-ingress
 spec:
   description: >-
-    Allow only the sentiment router to reach the sentiment frontend in dev.
+    Allow only the sentiment router to reach the sentiment frontend.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:tier": frontend
       "k8s:app.kubernetes.io/name": sentiment-auth-ui
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": sentiment-router
       toPorts:
         - ports:
@@ -61,15 +76,19 @@ spec:
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-sentiment-api-egress
+  name: sentiment-api-egress
 spec:
   description: >-
-    Allow the sentiment API in dev to emit OTEL data and reach LiteLLM.
+    Allow the sentiment API to emit OTEL data and reach LiteLLM when the
+    in-cluster broker mode is selected.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:tier": backend
       "k8s:app.kubernetes.io/name": sentiment-api
   egress:
     - toEndpoints:
@@ -84,7 +103,10 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:role": llm
             "k8s:app.kubernetes.io/name": litellm
       toPorts:
         - ports:
@@ -92,21 +114,27 @@ spec:
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-sentiment-litellm-ingress-egress
+  name: sentiment-litellm-ingress-egress
 spec:
   description: >-
-    Allow LiteLLM in dev to receive traffic from the sentiment API and talk
-    to llama.cpp only.
+    Allow LiteLLM to receive traffic from the sentiment API and talk to
+    llama.cpp only.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:role": llm
       "k8s:app.kubernetes.io/name": litellm
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:tier": backend
             "k8s:app.kubernetes.io/name": sentiment-api
       toPorts:
         - ports:
@@ -115,7 +143,10 @@ spec:
   egress:
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:role": llm
             "k8s:app.kubernetes.io/name": llama-cpp
       toPorts:
         - ports:
@@ -123,20 +154,26 @@ spec:
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-sentiment-llama-ingress
+  name: sentiment-llama-ingress
 spec:
   description: >-
-    Allow only LiteLLM to reach llama.cpp in dev.
+    Allow only LiteLLM to reach llama.cpp.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:role": llm
       "k8s:app.kubernetes.io/name": llama-cpp
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:role": llm
             "k8s:app.kubernetes.io/name": litellm
       toPorts:
         - ports:

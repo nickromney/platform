@@ -86,16 +86,38 @@ setup() {
   run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"name: allow-dev-uat-apps-egress-via-fqdn"* ]]
+  [[ "${output}" == *"name: allow-application-backend-egress-via-fqdn"* ]]
   [[ "${output}" == *$'      - sentiment-api\n      - subnetcalc-api'* ]]
   [[ "${output}" != *"      - sentiment-auth-ui"* ]]
   [[ "${output}" != *"      - subnetcalc-router"* ]]
+  [[ "${output}" == *"name: application-baseline"* ]]
   [[ "${output}" == *"name: apim-baseline"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-router"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-api"* ]]
+  [[ "${output}" == *"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role: application"* ]]
   [[ "${output}" == *"k8s:tier: gateway"* ]]
   [[ "${output}" == *"k8s:tier: backend"* ]]
-  [[ "${output}" == *"name: deny-sentiment-to-subnetcalc-dev"* ]]
+  [[ "${output}" == *"name: deny-application-sentiment-to-subnetcalc"* ]]
   [[ "${output}" == *"k8s:app: sentiment-llm"* ]]
   [[ "${output}" == *"k8s:app: subnetcalc"* ]]
+  [[ "${output}" == *"kind: CiliumNetworkPolicy"* ]]
+  [[ "${output}" == *"namespace: sit"* ]]
+}
+
+@test "dev overlay carries the project override without leaking it to uat or sit" {
+  run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/dev"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"name: subnetcalc-cloudflare-live-fetch"* ]]
+  [[ "${output}" == *"namespace: dev"* ]]
+
+  run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/uat"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"name: subnetcalc-cloudflare-live-fetch"* ]]
+
+  run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/sit"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"name: subnetcalc-cloudflare-live-fetch"* ]]
 }

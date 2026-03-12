@@ -26,11 +26,10 @@ spec:
         values:
           - backend
           - llm
-      - key: "k8s:io.kubernetes.pod.namespace"
+      - key: "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
         operator: In
         values:
-          - dev
-          - uat
+          - application
   egress:
     - toEndpoints:
         - matchLabels:

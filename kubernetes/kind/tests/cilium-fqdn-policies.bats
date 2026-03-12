@@ -21,7 +21,7 @@ EOF
 }
 
 @test "dev Cloudflare policy is exact-host only and has no CIDR assist" {
-  policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/dev/dev-subnetcalc-api-cloudflare-egress.yaml"
+  policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml"
 
   grep -Fq "matchName: www.cloudflare.com" "${policy}"
   ! grep -Fq "matchName: cloudflare.com" "${policy}"
@@ -32,6 +32,6 @@ EOF
   run kubectl kustomize "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"name: dev-subnetcalc-api-cloudflare-egress"* ]]
+  [[ "${output}" == *"name: subnetcalc-cloudflare-live-fetch"* ]]
   [[ "${output}" != *"name: allow-subnetcalc-api-cloudflare-egress"* ]]
 }

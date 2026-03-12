@@ -3,7 +3,7 @@ Policies synchronized via Argo CD from the local Gitea repository (created by Te
 Detailed reasoning aids live here:
 
 - [AUDIT.md](./AUDIT.md) for the policy-by-policy audit and current posture.
-- [COMPOSITION.md](./COMPOSITION.md) for the rendered shared/dev/uat and shared/uat composition view.
+- [COMPOSITION.md](./COMPOSITION.md) for the rendered `shared` / `dev` / `uat` / `sit` composition view.
 - [apps-c4.md](../docs/apps-c4.md) for the Mermaid native C4 application and policy control model.
 
 Regenerate the composition view with:
@@ -15,9 +15,10 @@ terraform/kubernetes/scripts/show-policy-composition.sh --target all --format ma
 ## Layout
 
 - `cilium/` contains clusterwide network policy overlays:
-  - `shared/` for shared platform controls and shared app egress restrictions.
-  - `dev/` for dev-specific namespace baselines, project isolation, and app flow policies.
-  - `uat/` for uat-specific namespace baselines, project isolation, and app flow policies.
+  - `shared/` for true clusterwide guardrails and shared namespace controls.
+  - `projects/` for reusable namespaced `CiliumNetworkPolicy` bundles such as `sentiment/` and `subnetcalc/`.
+  - `dev/`, `uat/`, and `sit/` for namespace overlays that apply the reusable project bundles into a concrete application namespace.
+  - `*/overrides/` under those namespace overlays for namespace-local exceptions such as the dev-only Cloudflare live fetch.
 - `kyverno/` contains admission policies:
   - `shared/` for generated default-deny scaffolding, application-namespace label checks, and image-source checks.
   - `uat/` for uat-only pod hardening checks.
@@ -34,8 +35,10 @@ Namespace intent is now explicit:
 ## Current audit summary
 
 - The overall model is good: default-deny scaffolding, explicit Cilium allowlists, and selective L7 rules.
-- The app-flow Cilium policies are now workload-scoped instead of project-scoped, which fixes the main over-permissioning issue from the initial audit pass.
+- The Cilium model is now split cleanly between clusterwide guardrails and reusable namespaced app-flow policies, which fixes the old `dev`/`uat` duplication and the earlier over-permissioning issue.
 - Namespace-level intent is now explicit: `dev`, `uat`, and `sit` are labeled `platform.publiccloudexperiments.net/namespace-role=application`, serving-path and runtime shared-service namespaces are labeled `platform.publiccloudexperiments.net/namespace-role=shared`, and operator/control/delivery namespaces are labeled `platform.publiccloudexperiments.net/namespace-role=platform`, so admission policy can target application namespaces generically without overloading pod-level `role` labels.
+- `sit` now renders the same reusable project Cilium bundles as `dev` and `uat`, even though it remains intentionally empty. That gives us a concrete inheritance proof before workloads are deployed there.
+- Namespace overlays now have a deliberate `overrides/` extension point, so a team can add a namespace-local exception such as the dev-only subnetcalc Cloudflare fetch without copying the shared project policy bundle.
 - Non-Gitea Helm charts are now vendored into the in-cluster `platform/policies` Git repository, which lets Argo CD render those charts from Gitea Git and keeps the repo-server external exception down to `dl.gitea.io:443`.
 - The dev-only Cloudflare live-fetch path is now exact-host scoped to `www.cloudflare.com:443`, while `uat` intentionally falls back to the API's bundled ranges.
 - Cilium FQDN policies now include DNS proxy rules so those hostname pins are actually enforceable.

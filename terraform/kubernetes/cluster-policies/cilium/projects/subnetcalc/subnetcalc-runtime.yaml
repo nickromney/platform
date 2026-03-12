@@ -1,13 +1,16 @@
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-subnetcalc-router-ingress
+  name: subnetcalc-router-ingress
 spec:
   description: >-
-    Allow only SSO reverse-proxies to reach the subnetcalc router in dev.
+    Allow only SSO reverse-proxies to reach the subnetcalc router.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": subnetcalc
+      "k8s:tier": gateway
       "k8s:app.kubernetes.io/name": subnetcalc-router
   ingress:
     - fromEndpoints:
@@ -19,20 +22,26 @@ spec:
               protocol: TCP
 ---
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: dev-subnetcalc-frontend-ingress
+  name: subnetcalc-frontend-ingress
 spec:
   description: >-
-    Allow only the subnetcalc router to reach the subnetcalc frontend in dev.
+    Allow only the subnetcalc router to reach the subnetcalc frontend.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": dev
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": subnetcalc
+      "k8s:tier": frontend
       "k8s:app.kubernetes.io/name": subnetcalc-frontend
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": subnetcalc
+            "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": subnetcalc-router
       toPorts:
         - ports:

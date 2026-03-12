@@ -199,10 +199,12 @@ summarize_policy_posture() {
     return 0
   fi
 
-  local cilium_lines cilium_count=0 cilium_invalid=0
-  cilium_lines=$(kubectl get ciliumclusterwidenetworkpolicies -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Valid")]}{.status}{end}{"\n"}{end}' 2>/dev/null || true)
+  local cilium_clusterwide_lines cilium_namespaced_lines cilium_lines cilium_count=0 cilium_invalid=0
+  cilium_clusterwide_lines=$(kubectl get ciliumclusterwidenetworkpolicies -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Valid")]}{.status}{end}{"\n"}{end}' 2>/dev/null || true)
+  cilium_namespaced_lines=$(kubectl get ciliumnetworkpolicies -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"/"}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Valid")]}{.status}{end}{"\n"}{end}' 2>/dev/null || true)
+  cilium_lines="$(printf '%s\n%s\n' "${cilium_clusterwide_lines}" "${cilium_namespaced_lines}" | awk 'NF > 0')"
   if [[ -z "${cilium_lines}" ]]; then
-    warn "No CiliumClusterwideNetworkPolicy resources found"
+    warn "No Cilium policy resources found"
   else
     while IFS=$'\t' read -r name valid; do
       [[ -z "${name}" ]] && continue
@@ -213,7 +215,7 @@ summarize_policy_posture() {
       fi
     done <<<"${cilium_lines}"
     if [[ "${cilium_invalid}" -eq 0 ]]; then
-      ok "Cilium policy validation OK (${cilium_count} policy resource(s))"
+      ok "Cilium policy validation OK (${cilium_count} policy resource(s) across CCNP/CNP)"
     fi
   fi
 

@@ -1,4 +1,4 @@
-# Sentiment And Subnetcalc C4 Model
+# Sentiment And Subnetcalc Architecture Views
 
 This document is a static reasoning aid for the two demo applications and the
 policies that constrain them. It complements Hubble and the Cilium UI by
@@ -12,14 +12,15 @@ Scope:
 
 ## Reading Guide
 
-- The diagrams use Mermaid's native C4 beta syntax so they render in-repo as
-  actual C4 views, not flowcharts pretending to be C4.
+- The document now mixes Mermaid C4, UML state diagrams, and sequence diagrams
+  on purpose. Different questions are easier to answer in different notations.
 - Edge labels call out the main controller for the hop: Cilium policy, app
   config, or application fallback logic.
 - `dev` and `uat` usually share the same request path; the Cloudflare live
   fetch is the main deliberate exception.
-- The C4 views show structure and control boundaries; the sequence diagrams
-  later in the document show handshake and request-flow behavior.
+- The C4 views show structure and control boundaries; the UML state views show
+  how requests and background jobs move through the system; the sequence
+  diagrams later in the document show handshake and request-flow behavior.
 - Dynamic C4 views are split into focused paths because Mermaid C4 beta is much
   better at ordered interactions than at `alt` / `else` branching.
 
@@ -140,6 +141,85 @@ Key intent:
 - the repo still contains a fully in-cluster LiteLLM plus `llama.cpp` mode,
   but that is not the default selected by the checked-in kind stages
 
+## UML State Views
+
+These use Mermaid's UML-style `stateDiagram-v2` support rather than
+class-diagram syntax. That is a better fit here because the interesting
+question is not "what are the classes?" but "what states and transitions does a
+request or refresh job move through?"
+
+### Subnetcalc Request State Diagram
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+stateDiagram-v2
+    [*] --> IncomingRequest
+
+    IncomingRequest --> OAuthRedirect : no oauth2-proxy session
+    IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
+    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
+
+    AuthenticatedRequest --> RouterDispatch
+    RouterDispatch --> FrontendResponse : non-/api path
+    RouterDispatch --> APIMValidation : /api/* path
+
+    APIMValidation --> DexIssuerCheck
+    DexIssuerCheck --> BackendRequest : issuer and JWKS valid
+    BackendRequest --> TraceExport
+    TraceExport --> APIResponse
+
+    FrontendResponse --> [*]
+    APIResponse --> [*]
+```
+
+What this view is trying to make obvious:
+
+- a subnetcalc request has two distinct runtime branches after authentication:
+  frontend content or APIM-mediated API traffic
+- the backend path is not reachable until the request crosses APIM and Dex
+  validation
+- the APIM hop is part of the state machine, not just a box in a topology
+
+### Sentiment Backend Mode State Diagram
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+stateDiagram-v2
+    [*] --> IncomingRequest
+
+    IncomingRequest --> OAuthRedirect : no oauth2-proxy session
+    IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
+    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
+
+    AuthenticatedRequest --> RouterDispatch
+    RouterDispatch --> FrontendResponse : non-/api path
+    RouterDispatch --> BackendRequest : /api/* path
+
+    BackendRequest --> DirectMode : LLM_GATEWAY_MODE=direct
+    BackendRequest --> BrokerMode : LiteLLM mode selected
+
+    DirectMode --> LLMGatewayCall
+    LLMGatewayCall --> HostLLMInference
+
+    BrokerMode --> LiteLLMCall
+    LiteLLMCall --> LlamaCppInference
+
+    HostLLMInference --> TraceExport
+    LlamaCppInference --> TraceExport
+    TraceExport --> APIResponse
+
+    FrontendResponse --> [*]
+    APIResponse --> [*]
+```
+
+What this view is trying to make obvious:
+
+- the sentiment system has one browser entry flow but two backend inference
+  modes
+- mode selection happens at the API/backend stage, not at the router
+- the direct host-backed LLM path and the in-cluster LiteLLM path are mutually
+  exclusive runtime branches, not an undifferentiated dependency graph
+
 ## Dynamic Views
 
 ### Subnetcalc API Path
@@ -170,11 +250,11 @@ C4Dynamic
 
 Control points:
 
-- `platform-gateway-hardened`, `sso-hardened`, and the environment-specific
-  router ingress policies control entry into `subnetcalc`.
-- `subnetcalc-router-l7-dev` or `subnetcalc-router-l7-uat` constrains the
-  router to APIM hop.
-- `subnetcalc-api-l7-dev` or `subnetcalc-api-l7-uat` constrains the APIM to API
+- `platform-gateway-hardened`, `sso-hardened`, and `subnetcalc-router-ingress`
+  control entry into `subnetcalc`.
+- `subnetcalc-router-http-routes` constrains the router to APIM hop and its
+  allowed HTTP methods and paths.
+- `apim-baseline` plus `subnetcalc-api-http-routes` constrain the APIM to API
   hop.
 
 ### Subnetcalc Range Source Split
@@ -194,7 +274,8 @@ C4Dynamic
 
 Control points:
 
-- `dev-subnetcalc-api-cloudflare-egress` allows the `dev` live fetch path.
+- `subnetcalc-cloudflare-live-fetch` allows the `dev` live fetch path as a
+  namespace-local override.
 - `uat` has no equivalent allow, so the application falls back in
   `cloudflare_ips.py`.
 
@@ -226,10 +307,10 @@ C4Dynamic
 
 Control points:
 
-- `platform-gateway-hardened`, `sso-hardened`, and the environment-specific
-  router ingress policies control entry into `sentiment`.
-- `sentiment-router-l7-dev` or `sentiment-router-l7-uat` plus the backend
-  ingress policies constrain the router to API hop.
+- `platform-gateway-hardened`, `sso-hardened`, and `sentiment-router-ingress`
+  control entry into `sentiment`.
+- `sentiment-router-http-routes` plus `sentiment-backend-ingress` constrain the
+  router to API hop.
 - `allow-sentiment-api-llm-egress` constrains the direct-mode LLM path.
 
 ### Sentiment Alternative LLM Path
@@ -250,9 +331,9 @@ C4Dynamic
 
 Control points:
 
-- `dev/uat-sentiment-api-egress` allows `sentiment-api` to reach `litellm`.
-- `dev/uat-sentiment-litellm-ingress-egress` and
-  `dev/uat-sentiment-llama-ingress` constrain the in-cluster LLM path.
+- `sentiment-api-egress` allows `sentiment-api` to reach `litellm`.
+- `sentiment-litellm-ingress-egress` and `sentiment-llama-ingress` constrain
+  the in-cluster LLM path.
 
 ## Journey Views
 
@@ -274,19 +355,19 @@ sequenceDiagram
     Browser->>Gateway: HTTPS request
     Gateway->>OAuth: Route to oauth2-proxy
     OAuth->>Router: Authenticated forward
-    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + dev/uat-subnetcalc-router-ingress
+    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + subnetcalc-router-ingress
 
     alt UI path
         Router->>Router: Match non-/api route
         Router->>Browser: SPA content via subnetcalc-frontend
-        Note over Router,Browser: Cilium: dev/uat-subnetcalc-frontend-ingress
+        Note over Router,Browser: Cilium: subnetcalc-frontend-ingress
     else API path
         Router->>APIM: Forward /api/*
-        Note over Router,APIM: Cilium: subnetcalc-router-l7-dev or subnetcalc-router-l7-uat
+        Note over Router,APIM: Cilium: subnetcalc-router-http-routes
         APIM->>Dex: JWKS / issuer validation
         Note over APIM,Dex: Cilium: apim-baseline + sso-hardened
         APIM->>API: Forward validated API request
-        Note over APIM,API: Cilium: subnetcalc-api-l7-dev or subnetcalc-api-l7-uat
+        Note over APIM,API: Cilium: apim-baseline + subnetcalc-api-http-routes
         API->>OTel: Emit traces
     end
 ```
@@ -302,7 +383,7 @@ sequenceDiagram
 
     alt dev
         API->>Cloudflare: GET /ips-v4 and /ips-v6
-        Note over API,Cloudflare: Cilium: dev-subnetcalc-api-cloudflare-egress
+        Note over API,Cloudflare: Cilium: subnetcalc-cloudflare-live-fetch
         Cloudflare-->>API: Published range files
     else uat
         API->>API: Use bundled fallback ranges
@@ -361,14 +442,14 @@ sequenceDiagram
     Browser->>Gateway: HTTPS request
     Gateway->>OAuth: Route to oauth2-proxy
     OAuth->>Router: Authenticated forward
-    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + dev/uat-sentiment-router-ingress
+    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + sentiment-router-ingress
 
     alt UI path
         Router->>UI: Serve UI route
-        Note over Router,UI: Cilium: dev/uat-sentiment-frontend-ingress
+        Note over Router,UI: Cilium: sentiment-frontend-ingress
     else API path
         Router->>API: Forward /api/*
-        Note over Router,API: Cilium: sentiment-router-l7-dev or sentiment-router-l7-uat + dev/uat-sentiment-backend-ingress
+        Note over Router,API: Cilium: sentiment-router-http-routes + sentiment-backend-ingress
         API->>GatewaySvc: Call llm-gateway
         GatewaySvc->>HostLLM: Resolve ExternalName and connect on 12434
         Note over API,HostLLM: Cilium: allow-sentiment-api-llm-egress in direct mode
@@ -381,27 +462,31 @@ sequenceDiagram
 | Hop | Runtime owner | Main control point | Notes |
 | --- | --- | --- | --- |
 | `platform-gateway -> oauth2-proxy` | Gateway routing and SSO | `platform-gateway-hardened` and `sso-hardened` | Shared platform boundary for both apps. |
-| `oauth2-proxy -> subnetcalc-router` | Authenticated reverse proxy | `sso-hardened` plus `dev-subnetcalc-router-ingress` or `uat-subnetcalc-router-ingress` | Only SSO pods should reach the router. |
-| `subnetcalc-router -> subnetcalc-frontend` | Router UI path | `dev-subnetcalc-frontend-ingress` or `uat-subnetcalc-frontend-ingress` | The router stays the only frontend caller. |
-| `subnetcalc-router -> subnetcalc-apim-simulator` | Router API path | `subnetcalc-router-l7-dev` or `subnetcalc-router-l7-uat` | L7 policy constrains methods and paths. |
-| `subnetcalc-apim-simulator -> subnetcalc-api` | Token-checked API forwarding | `apim-baseline` plus `subnetcalc-api-l7-dev` or `subnetcalc-api-l7-uat` | APIM is the only allowed backend caller. |
-| `subnetcalc-api -> www.cloudflare.com` | Background range refresh | `dev-subnetcalc-api-cloudflare-egress` in `dev`; no matching allow in `uat` | `dev` uses live fetch, `uat` uses fallback in code. |
-| `oauth2-proxy -> sentiment-router` | Authenticated reverse proxy | `sso-hardened` plus `dev-sentiment-router-ingress` or `uat-sentiment-router-ingress` | Mirrors the subnetcalc entry path. |
-| `sentiment-router -> sentiment-auth-ui` | Router UI path | `dev-sentiment-frontend-ingress` or `uat-sentiment-frontend-ingress` | Frontend is isolated behind the router. |
-| `sentiment-router -> sentiment-api` | Router API path | `sentiment-router-l7-dev` or `sentiment-router-l7-uat` plus `dev/uat-sentiment-backend-ingress` | UI and API stay separate. |
+| `oauth2-proxy -> subnetcalc-router` | Authenticated reverse proxy | `sso-hardened` plus `subnetcalc-router-ingress` | Only SSO pods should reach the router. |
+| `subnetcalc-router -> subnetcalc-frontend` | Router UI path | `subnetcalc-frontend-ingress` | The router stays the only frontend caller. |
+| `subnetcalc-router -> subnetcalc-apim-simulator` | Router API path | `subnetcalc-router-http-routes` | L7 policy constrains methods and paths. |
+| `subnetcalc-apim-simulator -> subnetcalc-api` | Token-checked API forwarding | `apim-baseline` plus `subnetcalc-api-http-routes` | APIM is the only allowed backend caller. |
+| `subnetcalc-api -> www.cloudflare.com` | Background range refresh | `subnetcalc-cloudflare-live-fetch` in `dev`; no matching allow in `uat` or `sit` | `dev` uses live fetch, `uat` and `sit` use fallback in code. |
+| `oauth2-proxy -> sentiment-router` | Authenticated reverse proxy | `sso-hardened` plus `sentiment-router-ingress` | Mirrors the subnetcalc entry path. |
+| `sentiment-router -> sentiment-auth-ui` | Router UI path | `sentiment-frontend-ingress` | Frontend is isolated behind the router. |
+| `sentiment-router -> sentiment-api` | Router API path | `sentiment-router-http-routes` plus `sentiment-backend-ingress` | UI and API stay separate. |
 | `sentiment-api -> llm-gateway -> host LLM` | Direct mode LLM call | `allow-sentiment-api-llm-egress` | The Service is `ExternalName`; the policy is enforced at the API pod. |
-| `sentiment-api -> litellm -> llama.cpp` | In-cluster LLM mode | `dev/uat-sentiment-api-egress`, `dev/uat-sentiment-litellm-ingress-egress`, and `dev/uat-sentiment-llama-ingress` | Present in repo, but not the checked-in default kind mode. |
-| `sentiment-api` and `subnetcalc-api` -> `otel-collector` | Trace export | `dev/uat-sentiment-api-egress` and `subnetcalc-api-l7-dev` or `subnetcalc-api-l7-uat` | Observability is part of the application path, not an afterthought. |
+| `sentiment-api -> litellm -> llama.cpp` | In-cluster LLM mode | `sentiment-api-egress`, `sentiment-litellm-ingress-egress`, and `sentiment-llama-ingress` | Present in repo, but not the checked-in default kind mode. |
+| `sentiment-api` and `subnetcalc-api` -> `otel-collector` | Trace export | `sentiment-api-egress` and `subnetcalc-api-http-routes` | Observability is part of the application path, not an afterthought. |
 
 ## Policy Layering Cheatsheet
 
-- `shared/` holds clusterwide baselines and platform boundaries.
-- `dev/` and `uat/` hold namespace-specific app entry, app isolation, and
-  request-path restrictions.
+- `shared/` holds clusterwide baselines, application guardrails, and platform
+  boundaries.
+- `projects/` holds reusable namespaced app-flow bundles such as
+  `sentiment/` and `subnetcalc/`.
+- `dev/`, `uat/`, and `sit/` are thin namespace overlays that apply those
+  reusable bundles, and `*/overrides/` is the namespace-local extension point
+  for exceptions like the dev-only Cloudflare live fetch.
 - Cilium is additive, so the useful mental model is:
-  1. shared platform and DNS baselines
-  2. environment-specific app ingress and egress
-  3. L7 router and API guards where HTTP path control matters
+  1. shared platform, DNS, and application guardrails
+  2. reusable project bundles rendered into an application namespace
+  3. namespace-local overrides where a team needs a deliberate exception
 - The composition of those layers is easier to inspect through
   `terraform/kubernetes/scripts/show-policy-composition.sh` and the generated
   `cluster-policies/COMPOSITION.md` view than by reading filenames alone.

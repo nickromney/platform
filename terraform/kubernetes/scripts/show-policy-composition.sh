@@ -14,7 +14,7 @@ Options:
   --format markdown|text
       Output format. Default: markdown
 
-  --namespace all|shared|dev|uat
+  --namespace all|shared|dev|uat|sit
       Limit the view to one overlay / namespace slice. Default: all
 
   --label TERM
@@ -116,7 +116,7 @@ case "${FORMAT}" in
 esac
 
 case "${NAMESPACE}" in
-  all|shared|dev|uat) ;;
+  all|shared|dev|uat|sit) ;;
   *)
     echo "show-policy-composition: unsupported namespace: ${NAMESPACE}" >&2
     exit 1
@@ -147,6 +147,37 @@ read_kustomize_resources() {
     }
     in_resources && $1 !~ /^-/ { in_resources = 0 }
   ' "${file}"
+}
+
+normalize_path() {
+  local path="$1"
+  local dir
+  local base
+
+  if [[ -d "${path}" ]]; then
+    (cd "${path}" && pwd -P)
+    return
+  fi
+
+  dir="$(cd "$(dirname "${path}")" && pwd -P)"
+  base="$(basename "${path}")"
+  printf '%s/%s\n' "${dir}" "${base}"
+}
+
+collect_overlay_files() {
+  local dir="$1"
+  local resource
+  local full_path
+
+  while IFS= read -r resource; do
+    [[ -n "${resource}" ]] || continue
+    full_path="$(normalize_path "${dir}/${resource}")"
+    if [[ -d "${full_path}" ]]; then
+      collect_overlay_files "${full_path}"
+    else
+      printf '%s\n' "${full_path}"
+    fi
+  done < <(read_kustomize_resources "${dir}")
 }
 
 split_yaml_documents() {
@@ -240,7 +271,6 @@ matches_terms() {
 collect_target_records() {
   local dir="$1"
   local overlay_name
-  local resource
   local full_path
   local relative_path
   local document
@@ -255,9 +285,8 @@ collect_target_records() {
       continue
     fi
 
-    while IFS= read -r resource <&4; do
-      [[ -n "${resource}" ]] || continue
-      full_path="${dir}/${overlay_name}/${resource}"
+    while IFS= read -r full_path <&4; do
+      [[ -n "${full_path}" ]] || continue
       relative_path="${full_path#${REPO_ROOT}/}"
 
       while IFS= read -r -d '' document <&5; do
@@ -282,7 +311,7 @@ ${document}"
 
         printf '%s\t%s\t%s\t%s\n' "${overlay_name}" "${relative_path}" "${kind}" "${name}"
       done 5< <(split_yaml_documents "${full_path}")
-    done 4< <(read_kustomize_resources "${dir}/${overlay_name}")
+    done 4< <(collect_overlay_files "${dir}/${overlay_name}")
   done 3< <(read_kustomize_resources "${dir}")
 }
 

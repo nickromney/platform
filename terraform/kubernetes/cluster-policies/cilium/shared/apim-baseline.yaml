@@ -10,8 +10,10 @@ spec:
       Egress:  -> subnetcalc-api (dev/uat, tier=backend) :8000  (host-header routed)
       Egress:  -> dex (sso) :5556  (JWKS fetch for JWT validation)
       Egress:  -> DNS, kube-apiserver
-    Only subnetcalc-router pods from dev and uat should reach the APIM.
-    The broad "allow all from dev/uat" is removed to enforce zero-trust.
+    Any namespace labeled namespace-role=application can inherit the same
+    subnetcalc flow without duplicating this policy. A namespace-local override
+    should live with that namespace overlay rather than inside this shared
+    baseline.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": apim
@@ -25,23 +27,9 @@ spec:
     - fromEntities:
         - host
         - remote-node
-    # subnetcalc-router (dev) -> apim-simulator :8000
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": kindlocal
-            "k8s:team": dolphin
-            "k8s:app": subnetcalc
-            "k8s:tier": gateway
-            "k8s:app.kubernetes.io/name": subnetcalc-router
-      toPorts:
-        - ports:
-            - port: "8000"
-              protocol: TCP
-    # subnetcalc-router (uat) -> apim-simulator :8000
-    - fromEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
             "k8s:project": kindlocal
             "k8s:team": dolphin
             "k8s:app": subnetcalc
@@ -72,23 +60,9 @@ spec:
         - ports:
             - port: "5556"
               protocol: TCP
-    # apim-simulator -> subnetcalc-api (dev) :8000
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": dev
-            "k8s:project": kindlocal
-            "k8s:team": dolphin
-            "k8s:app": subnetcalc
-            "k8s:tier": backend
-            "k8s:app.kubernetes.io/name": subnetcalc-api
-      toPorts:
-        - ports:
-            - port: "8000"
-              protocol: TCP
-    # apim-simulator -> subnetcalc-api (uat) :8000
-    - toEndpoints:
-        - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
             "k8s:project": kindlocal
             "k8s:team": dolphin
             "k8s:app": subnetcalc

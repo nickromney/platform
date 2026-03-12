@@ -68,10 +68,16 @@ KUBECONFIG_CONTEXT=my-context make k3s apply 900 AUTO_APPROVE=1
 
 These documents are the current reasoning aids for the stack:
 
-- [`apps-c4.md`](./apps-c4.md) gives a Mermaid native C4 view of how `sentiment` and `subnetcalc` hang together, including the policy control points on each hop.
+- [`apps-c4.md`](./apps-c4.md) gives a mixed Mermaid architecture view of how `sentiment` and `subnetcalc` hang together, combining native C4, UML state diagrams, and sequence diagrams with policy control points on each hop.
 - [`../cluster-policies/COMPOSITION.md`](../cluster-policies/COMPOSITION.md) shows the rendered policy composition from the active Kustomize trees.
 - [`../cluster-policies/AUDIT.md`](../cluster-policies/AUDIT.md) captures the current policy audit and best-practice gaps.
 - [`../../../kubernetes/kind/docs/sample-apps.md`](../../../kubernetes/kind/docs/sample-apps.md) remains the shorter operator-facing walkthrough for the sample apps.
+
+The Cilium model described by those docs is now explicitly layered:
+
+- clusterwide guardrails in [`../cluster-policies/cilium/shared/`](../cluster-policies/cilium/shared/)
+- reusable project bundles in [`../cluster-policies/cilium/projects/`](../cluster-policies/cilium/projects/)
+- namespace overlays plus namespace-local overrides in [`../cluster-policies/cilium/dev/`](../cluster-policies/cilium/dev/), [`../cluster-policies/cilium/uat/`](../cluster-policies/cilium/uat/), and [`../cluster-policies/cilium/sit/`](../cluster-policies/cilium/sit/)
 
 Namespace intent is now carried by domain-scoped labels rather than generic keys:
 

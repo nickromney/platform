@@ -224,7 +224,7 @@ Fix direction used in this repo:
 
 Gotcha (UAT namespaces):
 
-- The `allow-sentiment-uat-baseline` and `allow-subnetcalc-uat-baseline` CiliumClusterwideNetworkPolicies intentionally block `world` egress.
+- The reusable namespaced `sentiment-*` and `subnetcalc-*` Cilium policies intentionally do not grant `world` egress; only the explicit shared guardrails and namespace-local overrides open external paths.
 - That means pods in `sentiment-uat` / `subnetcalc-uat` cannot pull model layers unless you explicitly allow it.
 - In this repo we add `allow-sentiment-api-llm-egress` (restricted to `app.kubernetes.io/name=sentiment-api`) to allow
   only sentiment-api pods to talk to the external LLM gateway.

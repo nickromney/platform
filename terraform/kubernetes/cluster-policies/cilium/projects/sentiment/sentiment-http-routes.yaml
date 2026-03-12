@@ -1,20 +1,25 @@
 apiVersion: cilium.io/v2
-kind: CiliumClusterwideNetworkPolicy
+kind: CiliumNetworkPolicy
 metadata:
-  name: sentiment-router-l7-uat
+  name: sentiment-router-http-routes
 spec:
   description: >-
-    L7 HTTP policy for sentiment-router in uat namespace. Restricts the
-    router's egress to only the expected HTTP methods and paths on the
-    backend API, plus unrestricted proxy to the frontend (static SPA).
+    Restrict the sentiment router's egress to only the expected HTTP methods
+    and paths on the backend API, plus unrestricted proxying to the frontend.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": uat
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": sentiment-llm
+      "k8s:tier": gateway
       "k8s:app.kubernetes.io/name": sentiment-router
   egress:
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:tier": backend
             "k8s:app.kubernetes.io/name": sentiment-api
       toPorts:
         - ports:
@@ -30,7 +35,10 @@ spec:
                 path: "/api/v1/comments"
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": uat
+            "k8s:project": kindlocal
+            "k8s:team": dolphin
+            "k8s:app": sentiment-llm
+            "k8s:tier": frontend
             "k8s:app.kubernetes.io/name": sentiment-auth-ui
       toPorts:
         - ports:
