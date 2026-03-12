@@ -7,4 +7,5 @@ metadata:
   labels:
     app.kubernetes.io/name: observability
     app.kubernetes.io/managed-by: argocd
-    role: shared
+    "platform.publiccloudexperiments.net/namespace-role": shared
+    "platform.publiccloudexperiments.net/sensitivity": confidential

@@ -100,8 +100,18 @@ run "uat_namespace_has_isolate_label" {
   }
 
   assert {
-    condition     = kubernetes_namespace_v1.uat[0].metadata[0].labels["security-tier"] == "strict"
-    error_message = "Expected uat namespace to have security-tier=strict label"
+    condition     = kubernetes_namespace_v1.uat[0].metadata[0].labels["platform.publiccloudexperiments.net/namespace-role"] == "application"
+    error_message = "Expected uat namespace to have platform.publiccloudexperiments.net/namespace-role=application label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.uat[0].metadata[0].labels["platform.publiccloudexperiments.net/environment"] == "uat"
+    error_message = "Expected uat namespace to have platform.publiccloudexperiments.net/environment=uat label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.uat[0].metadata[0].labels["platform.publiccloudexperiments.net/sensitivity"] == "private"
+    error_message = "Expected uat namespace to have platform.publiccloudexperiments.net/sensitivity=private label"
   }
 }
 
@@ -128,9 +138,19 @@ run "dev_namespace_has_isolate_label" {
     condition     = kubernetes_namespace_v1.dev[0].metadata[0].labels["kyverno.io/isolate"] == "true"
     error_message = "Expected dev namespace to have kyverno.io/isolate=true label"
   }
+
+  assert {
+    condition     = kubernetes_namespace_v1.dev[0].metadata[0].labels["platform.publiccloudexperiments.net/namespace-role"] == "application"
+    error_message = "Expected dev namespace to have platform.publiccloudexperiments.net/namespace-role=application label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.dev[0].metadata[0].labels["platform.publiccloudexperiments.net/environment"] == "dev"
+    error_message = "Expected dev namespace to have platform.publiccloudexperiments.net/environment=dev label"
+  }
 }
 
-run "sso_namespace_has_security_labels" {
+run "sso_namespace_has_sensitivity_labels" {
   command = plan
 
   variables {
@@ -154,7 +174,66 @@ run "sso_namespace_has_security_labels" {
   }
 
   assert {
-    condition     = kubernetes_namespace_v1.sso[0].metadata[0].labels["security-tier"] == "critical"
-    error_message = "Expected sso namespace to have security-tier=critical label"
+    condition     = kubernetes_namespace_v1.sso[0].metadata[0].labels["platform.publiccloudexperiments.net/namespace-role"] == "shared"
+    error_message = "Expected sso namespace to have platform.publiccloudexperiments.net/namespace-role=shared label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.sso[0].metadata[0].labels["platform.publiccloudexperiments.net/sensitivity"] == "restricted"
+    error_message = "Expected sso namespace to have platform.publiccloudexperiments.net/sensitivity=restricted label"
+  }
+}
+
+run "platform_namespaces_have_platform_role" {
+  command = plan
+
+  variables {
+    cni_provider       = "cilium"
+    enable_hubble      = true
+    enable_argocd      = true
+    enable_gateway_tls = true
+    enable_policies    = true
+    enable_gitea       = true
+    enable_signoz      = false
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.argocd) == 1
+    error_message = "Expected kubernetes_namespace_v1.argocd to exist"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.argocd[0].metadata[0].labels["platform.publiccloudexperiments.net/namespace-role"] == "platform"
+    error_message = "Expected argocd namespace to have platform.publiccloudexperiments.net/namespace-role=platform label"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.namespace_cert_manager) == 1
+    error_message = "Expected kubectl_manifest.namespace_cert_manager to exist"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.namespace_cert_manager[0].yaml_body, "\"platform.publiccloudexperiments.net/namespace-role\": platform")
+    error_message = "Expected cert-manager namespace manifest to set platform.publiccloudexperiments.net/namespace-role=platform"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.namespace_kyverno) == 1
+    error_message = "Expected kubectl_manifest.namespace_kyverno to exist"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.namespace_kyverno[0].yaml_body, "\"platform.publiccloudexperiments.net/namespace-role\": platform")
+    error_message = "Expected kyverno namespace manifest to set platform.publiccloudexperiments.net/namespace-role=platform"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.namespace_policy_reporter) == 1
+    error_message = "Expected kubectl_manifest.namespace_policy_reporter to exist"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.namespace_policy_reporter[0].yaml_body, "\"platform.publiccloudexperiments.net/namespace-role\": platform")
+    error_message = "Expected policy-reporter namespace manifest to set platform.publiccloudexperiments.net/namespace-role=platform"
   }
 }

@@ -25,6 +25,29 @@ The chart source model is now intentionally split:
 
 This is a deliberate minimal-bootstrap-exception design, not reliance on local Docker Desktop registry caching for Helm charts.
 
+## Security Verification
+
+The main runtime verifier for this stack is [`../scripts/check-security.sh`](../scripts/check-security.sh).
+
+For the platform gateway, it now does two different kinds of proof:
+
+- black-box checks from outside the cluster:
+  - TLS 1.3 succeeds
+  - TLS 1.2 is rejected
+  - HTTP/2 negotiates
+  - HSTS and `X-Content-Type-Options: nosniff` are present on the wire
+- white-box checks inside the cluster:
+  - the NGINX Gateway Fabric controller is started with `--snippets`
+  - the controller RBAC includes `SnippetsPolicy` and `SnippetsFilter`
+  - the live rendered NGINX config tree contains every active directive declared in [`../apps/platform-gateway/tls-hardening.yaml`](../apps/platform-gateway/tls-hardening.yaml)
+
+That verifier is intentionally a misconfiguration guardrail, not an admission control. The owner of the repo can still make an intentional change; the point is to catch accidental drift where the manifest exists but the running gateway is not enforcing it.
+
+The broader health check at [`../scripts/check-cluster-health.sh`](../scripts/check-cluster-health.sh) now follows the same model for user-facing admin services:
+
+- direct bootstrap or operator paths where they exist, such as Argo CD on `http://127.0.0.1:30080`, Hubble UI on `http://127.0.0.1:31235`, and the Gitea API NodePort on `http://127.0.0.1:30090`
+- gateway + SSO paths for the admin experience, such as `https://argocd.admin.127.0.0.1.sslip.io`, `https://gitea.admin.127.0.0.1.sslip.io`, `https://hubble.admin.127.0.0.1.sslip.io`, `https://grafana.admin.127.0.0.1.sslip.io`, `https://headlamp.admin.127.0.0.1.sslip.io`, and `https://kyverno.admin.127.0.0.1.sslip.io`
+
 ## Existing Cluster Mode
 
 The same Terraform root can now run without provisioning Kind by setting `provision_kind_cluster = false`.
@@ -49,6 +72,27 @@ These documents are the current reasoning aids for the stack:
 - [`../cluster-policies/COMPOSITION.md`](../cluster-policies/COMPOSITION.md) shows the rendered policy composition from the active Kustomize trees.
 - [`../cluster-policies/AUDIT.md`](../cluster-policies/AUDIT.md) captures the current policy audit and best-practice gaps.
 - [`../../../kubernetes/kind/docs/sample-apps.md`](../../../kubernetes/kind/docs/sample-apps.md) remains the shorter operator-facing walkthrough for the sample apps.
+
+Namespace intent is now carried by domain-scoped labels rather than generic keys:
+
+- `platform.publiccloudexperiments.net/namespace-role=application|shared|platform`
+- `platform.publiccloudexperiments.net/environment=dev|uat`
+- `platform.publiccloudexperiments.net/sensitivity=private|confidential|restricted` where needed
+
+The sensitivity vocabulary follows the four-level model described in [SISA Infosec's data classification overview](https://www.sisainfosec.com/blogs/data-classification-levels/):
+
+- `public`
+- `private`
+- `confidential`
+- `restricted`
+
+Current namespace intent in this repo uses:
+
+- `application` for `dev` and `uat`
+- `shared` for serving-path and runtime shared-service namespaces such as `apim`, `sso`, `observability`, `platform-gateway`, and `gateway-routes`
+- `platform` for operator, control, and delivery namespaces such as `argocd`, `cert-manager`, `kyverno`, `nginx-gateway`, `gitea`, `gitea-runner`, `headlamp`, and `policy-reporter`
+
+Core Kubernetes namespaces such as `kube-system`, `kube-public`, and `kube-node-lease` remain intentionally unlabeled and out of this local taxonomy.
 
 ## Recommended Stages (Minimal Surface Area)
 

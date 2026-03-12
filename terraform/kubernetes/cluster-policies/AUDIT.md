@@ -11,8 +11,9 @@ Related views:
 
 - The Cilium app-flow policies are now workload-scoped instead of project-scoped, so router, API, frontend, LiteLLM, and llama.cpp permissions are separated by actual workload identity.
 - `protect-default-deny-netpol` now enforces deletion protection instead of only reporting it.
-- `require-app-labels-application-namespaces` now validates both `Deployment` labels and pod-template labels, and it enforces those checks in any namespace labeled `role=application`.
-- Namespace intent is now explicit: `dev` and `uat` carry `role=application`, while supporting namespaces such as `apim`, `sso`, `observability`, `gitea`, and `headlamp` carry `role=shared`.
+- `require-app-labels-application-namespaces` now validates both `Deployment` labels and pod-template labels, and it enforces those checks in any namespace labeled `platform.publiccloudexperiments.net/namespace-role=application`.
+- Namespace intent is now explicit: `dev` and `uat` carry `platform.publiccloudexperiments.net/namespace-role=application` plus `platform.publiccloudexperiments.net/environment`; serving-path and runtime shared-service namespaces such as `apim`, `sso`, `observability`, `platform-gateway`, and `gateway-routes` carry `platform.publiccloudexperiments.net/namespace-role=shared`; and operator, control, and delivery namespaces such as `argocd`, `cert-manager`, `kyverno`, `nginx-gateway`, `gitea`, `gitea-runner`, `headlamp`, and `policy-reporter` carry `platform.publiccloudexperiments.net/namespace-role=platform`.
+- Namespace sensitivity labels now use `platform.publiccloudexperiments.net/sensitivity=private|confidential|restricted`, following the [SISA Infosec data classification model](https://www.sisainfosec.com/blogs/data-classification-levels/).
 - The stale Kyverno `dev` topology-spread overlay was removed from composition because it no longer matched the deployed namespace layout.
 - Non-Gitea external Helm charts are now vendored into the in-cluster `platform/policies` Git repository, so Argo CD renders those apps from Gitea Git instead of public Helm repos.
 - `argocd-repo-server` external Helm egress is now reduced to the remaining bootstrap dependency on `dl.gitea.io:443` for the Gitea chart itself.
@@ -35,7 +36,7 @@ flowchart TD
 
     KShared --> DefaultDeny["Generate and protect default-deny NetworkPolicy"]
     KShared --> ImageAudit["Audit image sources"]
-    KShared --> LabelGuard["Enforce app boundary labels in role=application namespaces"]
+    KShared --> LabelGuard["Enforce app boundary labels in namespace-role=application namespaces"]
     KUat --> PodGuard["Audit selected pod hardening controls in uat"]
 
     CShared --> Platform["Platform namespace baselines"]
@@ -112,7 +113,7 @@ flowchart LR
 | `shared/namespace-default-deny.yaml` | Generates a `default-deny` `NetworkPolicy` for namespaces labeled `kyverno.io/isolate=true`. | Valid scaffold; the label is defined in Terraform-managed namespaces. |
 | `shared/protect-default-deny.yaml` | Blocks deletion of generated `default-deny` policies in isolated namespaces. | Now enforced instead of audit-only. |
 | `shared/restrict-image-registries.yaml` | Audits image sources in selected namespaces against an allowlist. | Still audit-only and intentionally broad. |
-| `shared/require-app-labels-application-namespaces.yaml` | Enforces `app`, `tier`, `project=kindlocal`, and `team=dolphin` on both the `Deployment` object and its pod template in any namespace labeled `role=application`. | This decouples label enforcement from the current `dev`/`uat` namespace names and makes `sit`/`pat` style expansion straightforward. |
+| `shared/require-app-labels-application-namespaces.yaml` | Enforces `app`, `tier`, `project=kindlocal`, and `team=dolphin` on both the `Deployment` object and its pod template in any namespace labeled `platform.publiccloudexperiments.net/namespace-role=application`. | This decouples label enforcement from the current `dev`/`uat` namespace names and makes `sit`/`pat` style expansion straightforward. |
 | `uat/uat-restrict-capabilities.yaml` | Audits dropped capabilities, non-privileged execution, and disabled host namespaces for pods in `uat`. | Still partial restricted-profile coverage and still audit-only. |
 
 ## Mode-dependent files
@@ -126,12 +127,13 @@ flowchart LR
 1. Split the `dev-mtls-*` and `uat-mtls-*` Cilium policies into workload-specific selectors so the app stacks no longer inherit project-wide unions of allows.
 2. Narrowed `sso-hardened.yaml` egress to the app routers in `dev` and `uat` instead of the entire namespaces.
 3. Changed `protect-default-deny.yaml` from `Audit` to `Enforce`.
-4. Replaced the old UAT-only label check with `shared/require-app-labels-application-namespaces.yaml`, which enforces pod-template labels as well as deployment labels in any namespace labeled `role=application`.
+4. Replaced the old UAT-only label check with `shared/require-app-labels-application-namespaces.yaml`, which enforces pod-template labels as well as deployment labels in any namespace labeled `platform.publiccloudexperiments.net/namespace-role=application`.
 5. Removed the stale Kyverno `dev` overlay and its obsolete topology-spread mutation from the active policy set.
 6. Vendored non-Gitea Helm charts into the Gitea-backed `platform/policies` repo and repointed Argo `Application` sources at `apps/vendor/charts/*`.
 7. Tightened the repo-server external egress exception from a multi-host Helm allowlist to `dl.gitea.io:443` only.
 8. Updated `terraform/kubernetes/scripts/check-version.sh` so vendored Argo apps report deployed chart versions from live `helm.sh/chart` labels instead of nonexistent Helm release records.
 9. Removed the Cloudflare CIDR assist and converted the dev-only subnetcalc live-fetch path to exact-host `www.cloudflare.com` with DNS proxy visibility, while keeping `uat` on fallback behavior.
+10. Reworked namespace metadata from a two-way `application/shared` split to a three-way `application/shared/platform` taxonomy and replaced the old `security-tier` wording with `platform.publiccloudexperiments.net/sensitivity`.
 
 ## Remaining gaps
 
@@ -149,7 +151,9 @@ These are the main best-practice gaps that still remain after the fixes above:
 - `kubectl kustomize terraform/kubernetes/cluster-policies/cilium` renders successfully after the selector refactor.
 - `kubectl kustomize terraform/kubernetes/cluster-policies/kyverno` renders successfully after removing the stale `dev` overlay.
 - `bats kubernetes/kind/tests/cilium-fqdn-policies.bats` passes, proving the rendered set no longer includes the shared Cloudflare policy, that the dev policy is exact-host only, and that every FQDN policy carries a DNS proxy rule.
+- `bats kubernetes/kind/tests/platform-gateway-tls.bats` passes, proving the checked-in gateway manifests keep `SnippetsPolicy` support, TLS 1.3 listener options, and the expected hardening directives.
 - `make -C kubernetes/kind reset AUTO_APPROVE=1` followed by `make -C kubernetes/kind 900 apply AUTO_APPROVE=1` succeeded on March 11, 2026, proving the vendored-chart GitOps flow from a clean kind cluster.
 - Live `argocd-repo-server` logs on March 11, 2026 showed Git-backed manifest generation for vendored charts and only `dl.gitea.io` among the remaining public Helm endpoints.
 - `terraform/kubernetes/scripts/check-version.sh` now reports deployed chart versions for Argo-managed vendored apps such as Gitea, Prometheus, and Policy Reporter by inspecting live `helm.sh/chart` labels.
 - Live testing on March 12, 2026 showed `dev/subnetcalc-api` successfully fetching `https://www.cloudflare.com/ips-v4/` with exact-host FQDN policy plus DNS L7 support, while `uat/subnetcalc-api` continued to report fallback range usage.
+- Live testing on March 12, 2026 showed the platform gateway rejecting TLS 1.2, accepting TLS 1.3, serving HSTS and `X-Content-Type-Options: nosniff`, and rendering every directive from `apps/platform-gateway/tls-hardening.yaml` into the NGINX config tree.

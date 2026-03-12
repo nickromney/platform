@@ -8,3 +8,4 @@ metadata:
   labels:
     app.kubernetes.io/name: platform-gateway
     app.kubernetes.io/managed-by: argocd
+    "platform.publiccloudexperiments.net/namespace-role": shared

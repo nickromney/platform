@@ -36,28 +36,48 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"name: require-app-labels-application-namespaces"* ]]
   [[ "${output}" == *"Deployments in application namespaces must carry app, tier,"* ]]
-  [[ "${output}" == *$'            matchLabels:\n              role: application'* ]]
+  [[ "${output}" == *$'            matchLabels:\n              platform.publiccloudexperiments.net/namespace-role: application'* ]]
   [[ "${output}" == *"project: kindlocal"* ]]
   [[ "${output}" == *"team: dolphin"* ]]
   [[ "${output}" == *"app: ?*"* ]]
   [[ "${output}" == *"tier: ?*"* ]]
 }
 
-@test "terraform namespace definitions separate application and shared roles" {
+@test "namespace definitions separate application, shared, and platform roles" {
   dev_ns="${REPO_ROOT}/terraform/kubernetes/namespaces.tf"
+  argocd_ns="${REPO_ROOT}/terraform/kubernetes/argocd.tf"
   sso_ns="${REPO_ROOT}/terraform/kubernetes/sso.tf"
   observability_ns="${REPO_ROOT}/terraform/kubernetes/observability.tf"
   apim_manifest="${REPO_ROOT}/terraform/kubernetes/apps/apim/all.yaml"
   observability_manifest="${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/80-observability.namespace.yaml"
+  platform_gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/namespace.yaml"
+  gateway_routes_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes/namespace.yaml"
+  gateway_routes_sso_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/namespace.yaml"
+  nginx_gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml"
 
-  grep -Fq '"role"                         = "application"' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "application"' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/environment"    = "dev"' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/environment"    = "uat"' "${dev_ns}"
   grep -Fq 'name = "dev"' "${dev_ns}"
   grep -Fq 'name = "uat"' "${dev_ns}"
-  grep -Fq '"role"                         = "shared"' "${dev_ns}"
-  grep -Fq '"role"                = "shared"' "${sso_ns}"
-  grep -Fq '"role"                         = "shared"' "${observability_ns}"
-  grep -Fq 'role: shared' "${apim_manifest}"
-  grep -Fq 'role: shared' "${observability_manifest}"
+  grep -Fq 'name: cert-manager' "${dev_ns}"
+  grep -Fq 'name: kyverno' "${dev_ns}"
+  grep -Fq 'name: policy-reporter' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "shared"' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/sensitivity"    = "private"' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "platform"' "${dev_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "platform"' "${argocd_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "shared"' "${sso_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/sensitivity"    = "restricted"' "${sso_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role" = "shared"' "${observability_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/sensitivity"    = "confidential"' "${observability_ns}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${apim_manifest}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${observability_manifest}"
+  grep -Fq '"platform.publiccloudexperiments.net/sensitivity": confidential' "${observability_manifest}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${platform_gateway_manifest}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${gateway_routes_manifest}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": shared' "${gateway_routes_sso_manifest}"
+  grep -Fq '"platform.publiccloudexperiments.net/namespace-role": platform' "${nginx_gateway_manifest}"
 }
 
 @test "cilium render keeps external egress on app backends and APIM next hops only" {

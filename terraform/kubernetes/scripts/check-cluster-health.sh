@@ -582,6 +582,30 @@ print_gateway_urls() {
   fi
 }
 
+check_http_surface() {
+  local label="$1"
+  local url="$2"
+  local accepted_codes="$3"
+  local insecure="${4:-false}"
+  local code
+
+  if ! have_cmd curl; then
+    warn "${label} check skipped (curl not found)"
+    return 0
+  fi
+
+  if [[ "${insecure}" == "true" ]]; then
+    code=$(curl -skI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000)
+  else
+    code=$(curl -sSI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000)
+  fi
+
+  case " ${accepted_codes} " in
+    *" ${code} "*) ok "${label} reachable: ${url} (HTTP ${code})" ;;
+    *) fail_soft "${label} not reachable: ${url} (HTTP ${code})" ;;
+  esac
+}
+
 print_success_dashboard_hint() {
   local grafana_url=""
 
@@ -733,6 +757,14 @@ else
     hubble_port=$(kubectl -n kube-system get svc hubble-ui -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true)
     if [[ -n "${hubble_port}" ]]; then
       ok "Hubble UI URL: http://localhost:${hubble_port}"
+      check_http_surface "Hubble UI direct URL" "http://127.0.0.1:${hubble_port}/" "200"
+    fi
+    if [[ "${EXPECT_GATEWAY_TLS}" == "true" && "${EXPECT_SSO}" == "true" ]]; then
+      gateway_port_suffix=""
+      if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
+        gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+      fi
+      check_http_surface "Hubble admin gateway URL" "https://hubble.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
     fi
   else
     if [[ "${EXPECT_HUBBLE}" == "true" ]]; then
@@ -752,6 +784,14 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   kubectl -n "${ARGOCD_NS}" get pods -o wide || true
   if kubectl -n "${ARGOCD_NS}" get svc argocd-server >/dev/null 2>&1; then
     kubectl -n "${ARGOCD_NS}" get svc argocd-server
+  fi
+  check_http_surface "Argo CD direct URL" "http://127.0.0.1:${ARGOCD_SERVER_NODE_PORT}/" "200"
+  if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+    gateway_port_suffix=""
+    if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
+      gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+    fi
+    check_http_surface "Argo CD admin gateway URL" "https://argocd.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
   fi
 
   argocd_settle_timeout=60
@@ -873,15 +913,21 @@ elif kubectl get ns gitea >/dev/null 2>&1; then
   kubectl -n gitea get svc || true
 
   if have_cmd curl; then
+    if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+      gateway_port_suffix=""
+      [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]] && gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+      check_http_surface "Gitea HTTPS gateway" "https://gitea.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
+    fi
+
     if curl -fsS --max-time 2 \
       -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD_EFFECTIVE}" \
       "http://127.0.0.1:${GITEA_HTTP_NODE_PORT}/api/v1/version" >/dev/null 2>&1; then
-      ok "Gitea API reachable: http://127.0.0.1:${GITEA_HTTP_NODE_PORT}/api/v1/version"
+      ok "Gitea API NodePort reachable: http://127.0.0.1:${GITEA_HTTP_NODE_PORT}/api/v1/version"
     else
-      warn "Gitea API not reachable on localhost:${GITEA_HTTP_NODE_PORT} (NodePort); stage 600+ will fail until it is"
+      warn "Gitea API NodePort not reachable on localhost:${GITEA_HTTP_NODE_PORT}; repo/bootstrap automation will fail until it is"
     fi
   else
-    warn "curl not found; skipping Gitea API reachability check"
+    warn "curl not found; skipping Gitea gateway and API reachability checks"
   fi
 
   if [[ "${EXPECT_POLICIES}" == "true" || "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
@@ -1024,6 +1070,13 @@ elif kubectl get ns observability >/dev/null 2>&1; then
   if kubectl -n observability get svc grafana >/dev/null 2>&1; then
     ok "Grafana detected (enable_grafana=${EXPECT_GRAFANA}${tfvars_hint})"
     kubectl -n observability get svc grafana || true
+    if [[ "${EXPECT_GATEWAY_TLS}" == "true" && "${EXPECT_SSO}" == "true" ]]; then
+      gateway_port_suffix=""
+      if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
+        gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+      fi
+      check_http_surface "Grafana admin gateway URL" "https://grafana.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
+    fi
   else
     if [[ "${EXPECT_GRAFANA}" == "true" ]]; then
       fail_soft "Grafana not detected (enable_grafana=true${tfvars_hint})"
@@ -1096,6 +1149,20 @@ elif kubectl get ns headlamp >/dev/null 2>&1; then
   kubectl -n headlamp get pods -o wide || true
   if kubectl -n headlamp get svc headlamp >/dev/null 2>&1; then
     kubectl -n headlamp get svc headlamp || true
+    if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+      gateway_port_suffix=""
+      if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
+        gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+      fi
+      check_http_surface "Headlamp admin gateway URL" "https://headlamp.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
+    fi
+  fi
+  if [[ "${EXPECT_GATEWAY_TLS}" == "true" && "${EXPECT_POLICIES}" == "true" ]]; then
+    gateway_port_suffix=""
+    if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
+      gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+    fi
+    check_http_surface "Kyverno admin gateway URL" "https://kyverno.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
   fi
 else
   if [[ "${EXPECT_HEADLAMP}" == "true" ]]; then

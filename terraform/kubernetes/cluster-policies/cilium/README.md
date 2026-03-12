@@ -16,9 +16,11 @@ See:
 
 ## Design notes
 
-- `dev` and `uat` are currently the namespaces labeled `role=application`; shared service namespaces such as `apim`, `sso`, `observability`, `gitea`, and `headlamp` are labeled `role=shared`.
-- That namespace-role split is the intended extension point. Additional end-user namespaces such as `sit` or `pat` should be labeled `role=application` so the shared Kyverno admission policy applies without introducing new hardcoded namespace names.
-- `shared/` holds dedicated baselines for platform namespaces such as `argocd`, `sso`, `observability`, `gitea`, `platform-gateway`, and `headlamp`.
+- `dev` and `uat` are currently the namespaces labeled `platform.publiccloudexperiments.net/namespace-role=application`; serving-path and runtime shared-service namespaces such as `apim`, `sso`, `observability`, `platform-gateway`, and `gateway-routes` are labeled `platform.publiccloudexperiments.net/namespace-role=shared`; operator, control, and delivery namespaces such as `argocd`, `cert-manager`, `kyverno`, `nginx-gateway`, `gitea`, `gitea-runner`, `headlamp`, and `policy-reporter` are labeled `platform.publiccloudexperiments.net/namespace-role=platform`.
+- That namespace-role split is the intended extension point. Additional end-user namespaces such as `sit` or `pat` should be labeled `platform.publiccloudexperiments.net/namespace-role=application` so the shared Kyverno admission policy applies without introducing new hardcoded namespace names.
+- The same namespaces can also carry `platform.publiccloudexperiments.net/environment`, which is a better long-term selector for env-specific Cilium generation than encoding environment into the namespace name.
+- Where namespace-level data handling matters, the repo now uses `platform.publiccloudexperiments.net/sensitivity=private|confidential|restricted` following the [SISA Infosec data classification model](https://www.sisainfosec.com/blogs/data-classification-levels/).
+- `shared/` holds dedicated baselines for both shared and platform namespaces such as `argocd`, `sso`, `observability`, `gitea`, `platform-gateway`, and `headlamp`.
 - `argocd-hardened.yaml` now keeps namespace-wide Argo CD egress tight and limits repo-server public Helm access to `dl.gitea.io:443` only.
 - Non-Gitea chart-based apps are now rendered from vendored charts in the Gitea-backed `platform/policies` repo, so the old multi-host Helm allowlist is no longer needed.
 - `dev/` and `uat/` layer namespace baselines, project-isolation deny rules, and application flow policies for the `sentiment` and `subnetcalc` stacks.
@@ -26,3 +28,4 @@ See:
 - The `*-mtls-*` files now contain workload-scoped policies rather than project-scoped unions, so router, API, frontend, and LLM access are separated explicitly.
 - Router-specific L7 policies still carry the request-path restrictions on top of those narrower L4 boundaries.
 - Any policy in this tree that uses `toFQDNs` now also carries a DNS proxy rule in the same file, so hostname-based egress does not silently depend on unrelated policy layering.
+- Cilium itself still runs in `kube-system`, which remains intentionally outside this namespace taxonomy for now.

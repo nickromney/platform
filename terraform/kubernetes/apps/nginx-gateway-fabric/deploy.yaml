@@ -2,6 +2,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: nginx-gateway
+  labels:
+    "platform.publiccloudexperiments.net/namespace-role": platform
 ---
 apiVersion: v1
 automountServiceAccountToken: false
@@ -205,6 +207,8 @@ rules:
   - authenticationfilters
   - proxysettingspolicies
   - ratelimitpolicies
+  - snippetsfilters
+  - snippetspolicies
   verbs:
   - list
   - watch
@@ -218,6 +222,8 @@ rules:
   - authenticationfilters/status
   - proxysettingspolicies/status
   - ratelimitpolicies/status
+  - snippetsfilters/status
+  - snippetspolicies/status
   verbs:
   - update
 - apiGroups:
@@ -316,6 +322,7 @@ spec:
         - controller
         - --gateway-ctlr-name=gateway.nginx.org/nginx-gateway-controller
         - --gatewayclass=nginx
+        - --snippets
         - --config=nginx-gateway-config
         - --service=nginx-gateway
         - --agent-tls-secret=agent-tls

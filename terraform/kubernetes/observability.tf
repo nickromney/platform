@@ -7,11 +7,11 @@ resource "kubernetes_namespace_v1" "observability" {
       "argocd.argoproj.io/sync-wave" = "80"
     }
     labels = {
-      "app.kubernetes.io/managed-by" = "argocd"
-      "app.kubernetes.io/name"       = "observability"
-      "role"                         = "shared"
-      "kyverno.io/isolate"           = "true"
-      "security-tier"                = "sensitive"
+      "app.kubernetes.io/managed-by"                       = "argocd"
+      "app.kubernetes.io/name"                             = "observability"
+      "platform.publiccloudexperiments.net/namespace-role" = "shared"
+      "platform.publiccloudexperiments.net/sensitivity"    = "confidential"
+      "kyverno.io/isolate"                                 = "true"
     }
   }
 

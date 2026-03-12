@@ -4,9 +4,9 @@ resource "kubernetes_namespace_v1" "sso" {
   metadata {
     name = "sso"
     labels = {
-      "role"                = "shared"
-      "kyverno.io/isolate" = "true"
-      "security-tier"      = "critical"
+      "platform.publiccloudexperiments.net/namespace-role" = "shared"
+      "platform.publiccloudexperiments.net/sensitivity"    = "restricted"
+      "kyverno.io/isolate"                                 = "true"
     }
   }
 
