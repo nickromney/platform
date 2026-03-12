@@ -150,6 +150,54 @@ run "dev_namespace_has_isolate_label" {
   }
 }
 
+run "sit_namespace_has_application_defaults" {
+  command = plan
+
+  variables {
+    cni_provider      = "cilium"
+    enable_hubble     = false
+    enable_argocd     = true
+    enable_gitea      = true
+    enable_policies   = true
+    enable_signoz     = false
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.sit) == 1
+    error_message = "Expected kubernetes_namespace_v1.sit to exist"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.sit[0].metadata[0].labels["kyverno.io/isolate"] == "true"
+    error_message = "Expected sit namespace to have kyverno.io/isolate=true label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.sit[0].metadata[0].labels["platform.publiccloudexperiments.net/namespace-role"] == "application"
+    error_message = "Expected sit namespace to have platform.publiccloudexperiments.net/namespace-role=application label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.sit[0].metadata[0].labels["platform.publiccloudexperiments.net/environment"] == "sit"
+    error_message = "Expected sit namespace to have platform.publiccloudexperiments.net/environment=sit label"
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.dev) == 0
+    error_message = "Expected kubernetes_namespace_v1.dev to be absent when no application repos are enabled"
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.uat) == 0
+    error_message = "Expected kubernetes_namespace_v1.uat to be absent when no application repos are enabled"
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.apim) == 0
+    error_message = "Expected kubernetes_namespace_v1.apim to be absent when no subnet calculator app repo is enabled"
+  }
+}
+
 run "sso_namespace_has_sensitivity_labels" {
   command = plan
 

@@ -215,7 +215,7 @@ echo ""
 # -------------------------------------------------------------------------
 echo "--- Kyverno default-deny NetworkPolicies ---"
 if [[ "${EXPECT_POLICIES}" == "true" ]]; then
-  for ns in dev uat; do
+  for ns in dev uat sit; do
     if kubectl -n "${ns}" get networkpolicy default-deny >/dev/null 2>&1; then
       ok "default-deny NetworkPolicy present in ${ns}"
     else
@@ -299,7 +299,7 @@ echo ""
 # 5. Namespace labels audit
 # -------------------------------------------------------------------------
 echo "--- Namespace labels audit ---"
-for ns in uat dev; do
+for ns in uat dev sit; do
   if kubectl get ns "${ns}" >/dev/null 2>&1; then
     labels=$(kubectl get ns "${ns}" -o jsonpath='{.metadata.labels}' 2>/dev/null || true)
     ok "Namespace ${ns} labels: ${labels}"

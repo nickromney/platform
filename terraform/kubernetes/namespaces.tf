@@ -162,6 +162,26 @@ resource "kubernetes_namespace_v1" "uat" {
   ]
 }
 
+resource "kubernetes_namespace_v1" "sit" {
+  count = var.enable_argocd ? 1 : 0
+
+  metadata {
+    name = "sit"
+    labels = {
+      "app.kubernetes.io/name"                             = "sit"
+      "app.kubernetes.io/managed-by"                       = "terraform"
+      "platform.publiccloudexperiments.net/namespace-role" = "application"
+      "platform.publiccloudexperiments.net/environment"    = "sit"
+      "kyverno.io/isolate"                                 = "true"
+    }
+  }
+
+  depends_on = [
+    kind_cluster.local,
+    local_sensitive_file.kubeconfig,
+  ]
+}
+
 resource "kubernetes_namespace_v1" "apim" {
   count = var.enable_argocd && local.enable_subnetcalc_workloads_effective ? 1 : 0
 

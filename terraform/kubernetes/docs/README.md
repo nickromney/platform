@@ -76,7 +76,7 @@ These documents are the current reasoning aids for the stack:
 Namespace intent is now carried by domain-scoped labels rather than generic keys:
 
 - `platform.publiccloudexperiments.net/namespace-role=application|shared|platform`
-- `platform.publiccloudexperiments.net/environment=dev|uat`
+- `platform.publiccloudexperiments.net/environment=dev|uat|sit`
 - `platform.publiccloudexperiments.net/sensitivity=private|confidential|restricted` where needed
 
 The sensitivity vocabulary follows the four-level model described in [SISA Infosec's data classification overview](https://www.sisainfosec.com/blogs/data-classification-levels/):
@@ -88,7 +88,7 @@ The sensitivity vocabulary follows the four-level model described in [SISA Infos
 
 Current namespace intent in this repo uses:
 
-- `application` for `dev` and `uat`
+- `application` for `dev`, `uat`, and the intentionally empty `sit` namespace used to prove namespace-level inheritance before workloads are deployed there
 - `shared` for serving-path and runtime shared-service namespaces such as `apim`, `sso`, `observability`, `platform-gateway`, and `gateway-routes`
 - `platform` for operator, control, and delivery namespaces such as `argocd`, `cert-manager`, `kyverno`, `nginx-gateway`, `gitea`, `gitea-runner`, `headlamp`, and `policy-reporter`
 

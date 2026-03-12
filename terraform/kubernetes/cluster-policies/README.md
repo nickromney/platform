@@ -27,15 +27,15 @@ Namespace intent is now explicit:
 - Namespaces labeled `platform.publiccloudexperiments.net/namespace-role=application` are the end-user workload namespaces that inherit the shared Kyverno label policy.
 - Namespaces labeled `platform.publiccloudexperiments.net/namespace-role=shared` are the serving-path and runtime shared-service namespaces such as `apim`, `sso`, `observability`, `platform-gateway`, and `gateway-routes`.
 - Namespaces labeled `platform.publiccloudexperiments.net/namespace-role=platform` are the operator, control, and delivery namespaces such as `argocd`, `cert-manager`, `kyverno`, `nginx-gateway`, `gitea`, `gitea-runner`, `headlamp`, and `policy-reporter`.
-- Today `dev` and `uat` are the only application namespaces, but the policy model is no longer coupled to those names. A future `sit` or `pat` namespace will inherit the same Kyverno contract as soon as it is labeled `platform.publiccloudexperiments.net/namespace-role=application`.
-- `dev` and `uat` also carry `platform.publiccloudexperiments.net/environment=dev|uat` so later Cilium or policy generators can distinguish environment from namespace purpose.
+- `dev`, `uat`, and `sit` are the current application namespaces. `sit` is intentionally empty and exists to prove namespace-level inheritance without deploying workloads into it.
+- Application namespaces carry `platform.publiccloudexperiments.net/environment`, currently `dev`, `uat`, and `sit`, so later Cilium or policy generators can distinguish environment from namespace purpose.
 - Where a namespace needs a data-handling tag, it now uses `platform.publiccloudexperiments.net/sensitivity=private|confidential|restricted` following the [SISA Infosec data classification model](https://www.sisainfosec.com/blogs/data-classification-levels/).
 
 ## Current audit summary
 
 - The overall model is good: default-deny scaffolding, explicit Cilium allowlists, and selective L7 rules.
 - The app-flow Cilium policies are now workload-scoped instead of project-scoped, which fixes the main over-permissioning issue from the initial audit pass.
-- Namespace-level intent is now explicit: `dev` and `uat` are labeled `platform.publiccloudexperiments.net/namespace-role=application`, serving-path and runtime shared-service namespaces are labeled `platform.publiccloudexperiments.net/namespace-role=shared`, and operator/control/delivery namespaces are labeled `platform.publiccloudexperiments.net/namespace-role=platform`, so admission policy can target application namespaces generically without overloading pod-level `role` labels.
+- Namespace-level intent is now explicit: `dev`, `uat`, and `sit` are labeled `platform.publiccloudexperiments.net/namespace-role=application`, serving-path and runtime shared-service namespaces are labeled `platform.publiccloudexperiments.net/namespace-role=shared`, and operator/control/delivery namespaces are labeled `platform.publiccloudexperiments.net/namespace-role=platform`, so admission policy can target application namespaces generically without overloading pod-level `role` labels.
 - Non-Gitea Helm charts are now vendored into the in-cluster `platform/policies` Git repository, which lets Argo CD render those charts from Gitea Git and keeps the repo-server external exception down to `dl.gitea.io:443`.
 - The dev-only Cloudflare live-fetch path is now exact-host scoped to `www.cloudflare.com:443`, while `uat` intentionally falls back to the API's bundled ranges.
 - Cilium FQDN policies now include DNS proxy rules so those hostname pins are actually enforceable.
