@@ -844,7 +844,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
-    for app in cert-manager cert-manager-config nginx-gateway-fabric-crds nginx-gateway-fabric platform-gateway platform-gateway-routes; do
+    for app in cert-manager cert-manager-config nginx-gateway-fabric platform-gateway platform-gateway-routes; do
       if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
         msg=$(kubectl -n "${ARGOCD_NS}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
         if [[ -n "${msg}" ]]; then
@@ -852,6 +852,24 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
         fi
       else
         fail_soft "Argo CD app ${app} missing (enable_gateway_tls=true${tfvars_hint})"
+      fi
+    done
+
+    for crd in \
+      gatewayclasses.gateway.networking.k8s.io \
+      gateways.gateway.networking.k8s.io \
+      httproutes.gateway.networking.k8s.io \
+      nginxgateways.gateway.nginx.org \
+      nginxproxies.gateway.nginx.org; do
+      if kubectl get crd "${crd}" >/dev/null 2>&1; then
+        established=$(kubectl get crd "${crd}" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || true)
+        if [[ "${established}" == "True" ]]; then
+          ok "Gateway CRD ${crd} established"
+        else
+          fail_soft "Gateway CRD ${crd} not established"
+        fi
+      else
+        fail_soft "Gateway CRD ${crd} missing (enable_gateway_tls=true${tfvars_hint})"
       fi
     done
 

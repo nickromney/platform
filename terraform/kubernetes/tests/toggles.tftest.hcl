@@ -169,4 +169,14 @@ run "sso_enabled" {
     condition     = length(regexall("path: ${var.platform_gateway_routes_path}", kubectl_manifest.argocd_app_platform_gateway_routes[0].yaml_body)) > 0
     error_message = "Expected platform-gateway-routes Application YAML to include path matching var.platform_gateway_routes_path"
   }
+
+  assert {
+    condition     = length(kubectl_manifest.gateway_bootstrap_crds) > 0
+    error_message = "Expected Terraform to bootstrap gateway CRDs when enable_gateway_tls=true"
+  }
+
+  assert {
+    condition     = !contains(local.argocd_gitops_repo_app_names, "nginx-gateway-fabric-crds")
+    error_message = "Did not expect nginx-gateway-fabric-crds in the direct GitOps app list after moving CRD ownership to Terraform"
+  }
 }

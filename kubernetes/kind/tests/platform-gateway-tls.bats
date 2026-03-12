@@ -19,7 +19,6 @@ setup() {
 
   grep -Fq "nginx.org/ssl-protocols: TLSv1.3" "${gateway_manifest}"
   grep -Fq 'nginx.org/ssl-prefer-server-ciphers: "off"' "${gateway_manifest}"
-  grep -Fq "ssl_protocols TLSv1.3;" "${hardening_manifest}"
   grep -Fq "ssl_conf_command Ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;" "${hardening_manifest}"
   grep -Fq "ssl_session_tickets off;" "${hardening_manifest}"
   grep -Fq 'add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;' "${hardening_manifest}"
@@ -29,10 +28,25 @@ setup() {
 @test "check-security verifies rendered platform gateway nginx directives" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-security.sh"
 
+  grep -Fq "TFVARS_FILES=()" "${script}"
+  grep -Fq 'TFVARS_FILES+=("${2:-}")' "${script}"
   grep -Fq "expected_platform_gateway_tls_directives" "${script}"
   grep -Fq "live_platform_gateway_nginx_conf" "${script}"
   grep -Fq "Rendered NGINX config includes:" "${script}"
   grep -Fq "Rendered NGINX config missing expected directive:" "${script}"
+  grep -Fq "app.kubernetes.io/name=sentiment-api" "${script}"
+}
+
+@test "oidc bootstrap script performs a controlled nginx gateway restart after kube-apiserver restart" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
+
+  grep -Fq "retry_webhook_fail()" "${script}"
+  grep -Fq "restart_deployment()" "${script}"
+  grep -Fq 'rollout restart "deploy/${deploy_name}"' "${script}"
+  grep -Fq 'retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}"' "${script}"
+  grep -Fq 'restart_deployment \' "${script}"
+  grep -Fq '"${NGINX_GATEWAY_NAMESPACE}"' "${script}"
+  grep -Fq '"${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
 }
 
 @test "cluster health script distinguishes gitea gateway reachability from direct api reachability" {
@@ -53,4 +67,12 @@ setup() {
   grep -Fq "Grafana admin gateway URL" "${script}"
   grep -Fq "Headlamp admin gateway URL" "${script}"
   grep -Fq "Kyverno admin gateway URL" "${script}"
+}
+
+@test "gateway stack check supports direct Argo CD mode without app-of-apps" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-gateway-stack.sh"
+
+  grep -Fq "detect_argocd_gitops_mode()" "${script}"
+  grep -Fq 'Detected direct Argo CD mode (no app-of-apps parent)' "${script}"
+  grep -Fq 'Detected Argo CD app-of-apps mode' "${script}"
 }

@@ -108,7 +108,7 @@ locals {
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
     var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno-policies", "cilium-policies"] : [],
-    var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric-crds", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
+    var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
     var.enable_actions_runner && var.enable_gitea && var.enable_argocd && !var.enable_app_of_apps ? ["gitea-actions-runner"] : [],
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],

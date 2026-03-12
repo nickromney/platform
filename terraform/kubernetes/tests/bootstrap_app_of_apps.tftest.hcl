@@ -24,6 +24,16 @@ run "app_of_apps_enabled_disables_direct_apps" {
   }
 
   assert {
+    condition     = length(kubectl_manifest.gateway_bootstrap_crds) > 0
+    error_message = "Expected Terraform to bootstrap gateway CRDs before the app-of-apps path when enable_gateway_tls=true"
+  }
+
+  assert {
+    condition     = !contains(local.argocd_gitops_repo_app_names, "nginx-gateway-fabric-crds")
+    error_message = "Did not expect nginx-gateway-fabric-crds in the direct GitOps app list after moving CRD ownership to Terraform"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.argocd_app_kyverno) == 0
     error_message = "Did not expect direct Kyverno Application when enable_app_of_apps=true"
   }

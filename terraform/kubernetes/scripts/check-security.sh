@@ -21,29 +21,46 @@ require_cmd kubectl
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 
-TFVARS_FILE=""
+TFVARS_FILES=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --var-file) TFVARS_FILE="${2:-}"; shift 2 ;;
+    --var-file) TFVARS_FILES+=("${2:-}"); shift 2 ;;
     *) fail "Unknown argument: $1" ;;
   esac
 done
 
-if [[ -n "${TFVARS_FILE}" && ! -f "${TFVARS_FILE}" ]]; then
-  if [[ -f "${STACK_DIR}/${TFVARS_FILE}" ]]; then
-    TFVARS_FILE="${STACK_DIR}/${TFVARS_FILE}"
+for i in "${!TFVARS_FILES[@]}"; do
+  if [[ -n "${TFVARS_FILES[$i]}" && ! -f "${TFVARS_FILES[$i]}" ]]; then
+    if [[ -f "${STACK_DIR}/${TFVARS_FILES[$i]}" ]]; then
+      TFVARS_FILES[$i]="${STACK_DIR}/${TFVARS_FILES[$i]}"
+    fi
   fi
-fi
+done
 
 tfvar_get() {
-  local file="$1" key="$2"
-  [[ -z "${file}" || ! -f "${file}" ]] && { echo ""; return 0; }
-  grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-    sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
+  local key="$1"
+  local file=""
+  local value=""
+  local i=0
+
+  for (( i=${#TFVARS_FILES[@]}-1; i>=0; i-- )); do
+    file="${TFVARS_FILES[$i]}"
+    [[ -z "${file}" || ! -f "${file}" ]] && continue
+    value="$(
+      grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
+        sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
+    )"
+    if [[ -n "${value}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  done
+
+  echo ""
 }
 
 tfvar_bool() {
-  local v; v=$(tfvar_get "$1" "$2")
+  local v; v=$(tfvar_get "$1")
   case "$v" in true|false) echo "$v" ;; *) echo "" ;; esac
 }
 
@@ -69,10 +86,10 @@ live_platform_gateway_nginx_conf() {
     sh -c 'find /etc/nginx -type f ! -path "*/secrets/*" -exec cat {} + 2>/dev/null' 2>/dev/null || true
 }
 
-EXPECT_WIREGUARD=$(tfvar_bool "${TFVARS_FILE}" enable_cilium_wireguard)
-EXPECT_GATEWAY_TLS=$(tfvar_bool "${TFVARS_FILE}" enable_gateway_tls)
-EXPECT_POLICIES=$(tfvar_bool "${TFVARS_FILE}" enable_policies)
-GATEWAY_HTTPS_HOST_PORT=$(tfvar_get "${TFVARS_FILE}" gateway_https_host_port)
+EXPECT_WIREGUARD=$(tfvar_bool enable_cilium_wireguard)
+EXPECT_GATEWAY_TLS=$(tfvar_bool enable_gateway_tls)
+EXPECT_POLICIES=$(tfvar_bool enable_policies)
+GATEWAY_HTTPS_HOST_PORT=$(tfvar_get gateway_https_host_port)
 [[ -z "${GATEWAY_HTTPS_HOST_PORT}" ]] && GATEWAY_HTTPS_HOST_PORT=443
 
 echo "=== Security checks ==="
@@ -249,7 +266,7 @@ echo ""
 echo "--- Cilium policy enforcement (negative tests) ---"
 if [[ "${EXPECT_POLICIES}" == "true" ]]; then
   # Test: sentiment pods in uat should NOT be able to reach subnetcalc pods
-  sentiment_pod=$(kubectl -n uat get pods -l project=sentiment -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  sentiment_pod=$(kubectl -n uat get pods -l app.kubernetes.io/name=sentiment-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
   subnetcalc_router_svc=$(kubectl -n uat get svc subnetcalc-router -o jsonpath='{.metadata.name}' 2>/dev/null || true)
 
   if [[ -n "${sentiment_pod}" && -n "${subnetcalc_router_svc}" ]]; then

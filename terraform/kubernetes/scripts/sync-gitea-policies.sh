@@ -653,7 +653,6 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_GATEWAY_TLS}"; then
     remove_if_present "${apps_dir}/001-cert-manager.application.yaml"
-    remove_if_present "${apps_dir}/002-nginx-gateway-fabric-crds.application.yaml"
     remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
     remove_if_present "${apps_dir}/003-platform-gateway.application.yaml"
     remove_if_present "${apps_dir}/10-cert-manager-config.application.yaml"

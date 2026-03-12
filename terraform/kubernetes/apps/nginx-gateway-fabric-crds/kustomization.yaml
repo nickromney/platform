@@ -5,13 +5,3 @@ resources:
   - gateway-api-crds.yaml
   # NGINX Gateway Fabric CRDs.
   - crds.yaml
-
-# Keep CRDs on their own Argo app and use Replace to avoid oversized
-# last-applied annotations when these manifests are rendered outside Argo.
-patches:
-  - target:
-      kind: CustomResourceDefinition
-    patch: |-
-      - op: add
-        path: /metadata/annotations/argocd.argoproj.io~1sync-options
-        value: Replace=true

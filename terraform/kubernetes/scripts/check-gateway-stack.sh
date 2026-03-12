@@ -90,6 +90,15 @@ print_argocd_app() {
   fi
 }
 
+detect_argocd_gitops_mode() {
+  if argocd_app_exists "app-of-apps"; then
+    printf '%s\n' "app-of-apps"
+    return 0
+  fi
+
+  printf '%s\n' "direct"
+}
+
 print_endpointslices_for_service() {
   local ns="$1"
   local svc="$2"
@@ -138,18 +147,36 @@ run kubectl get nodes -o wide
 run kubectl get ns | head -n 30
 
 section "Argo CD Apps (core)"
-apps=(
-  app-of-apps
-  cert-manager
-  cert-manager-config
-  cilium-policies
-  kyverno
-  kyverno-policies
-  nginx-gateway-fabric-crds
-  nginx-gateway-fabric
-  platform-gateway
-  platform-gateway-routes
-)
+gitops_mode="$(detect_argocd_gitops_mode)"
+case "${gitops_mode}" in
+  app-of-apps)
+    ok "Detected Argo CD app-of-apps mode"
+    apps=(
+      app-of-apps
+      cert-manager
+      cert-manager-config
+      cilium-policies
+      kyverno
+      kyverno-policies
+      nginx-gateway-fabric
+      platform-gateway
+      platform-gateway-routes
+    )
+    ;;
+  direct)
+    ok "Detected direct Argo CD mode (no app-of-apps parent)"
+    apps=(
+      cert-manager
+      cert-manager-config
+      cilium-policies
+      kyverno
+      kyverno-policies
+      nginx-gateway-fabric
+      platform-gateway
+      platform-gateway-routes
+    )
+    ;;
+esac
 for a in "${apps[@]}"; do
   print_argocd_app "${a}"
 done
@@ -157,6 +184,18 @@ done
 echo
 echo "All Argo CD Applications (if CRD present):"
 run kubectl -n argocd get app -o wide
+
+section "Gateway CRDs"
+gateway_crds=(
+  gatewayclasses.gateway.networking.k8s.io
+  gateways.gateway.networking.k8s.io
+  httproutes.gateway.networking.k8s.io
+  nginxgateways.gateway.nginx.org
+  nginxproxies.gateway.nginx.org
+)
+for crd in "${gateway_crds[@]}"; do
+  run kubectl get crd "${crd}" -o 'custom-columns=NAME:.metadata.name,ESTABLISHED:.status.conditions[?(@.type=="Established")].status'
+done
 
 section "CNI / Service Networking (quick signals)"
 echo "kubernetes service:"

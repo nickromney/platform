@@ -967,12 +967,12 @@ EOT
   depends_on = [
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
+    null_resource.wait_for_gateway_bootstrap_crds,
     kubectl_manifest.argocd_app_of_apps,
     kubectl_manifest.argocd_app_gitea_actions_runner,
     kubectl_manifest.argocd_app_kyverno_policies,
     kubectl_manifest.argocd_app_cilium_policies,
     kubectl_manifest.argocd_app_cert_manager_config,
-    kubectl_manifest.argocd_app_nginx_gateway_fabric_crds,
     kubectl_manifest.argocd_app_nginx_gateway_fabric,
     kubectl_manifest.argocd_app_platform_gateway,
     kubectl_manifest.argocd_app_platform_gateway_routes,

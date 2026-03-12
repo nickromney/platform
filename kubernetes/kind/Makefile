@@ -83,6 +83,7 @@ help:
 	@echo "  make check-app  APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
 	@echo "  make check-health"
 	@echo "  make check-security                           WireGuard, TLS 1.3, policy enforcement, negative tests"
+	@echo "  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Browser-based SSO end-to-end app checks (Playwright)"
 	@echo "  make check-provider-version"
@@ -334,11 +335,20 @@ check-health:
 
 .PHONY: check-security
 check-security:
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
 	fi; \
+	if [ -f "$(target_var_file)" ]; then \
+		vf="$$vf --var-file $(target_var_file)"; \
+	fi; \
 	"$(STACK_DIR)/scripts/check-security.sh" $$vf
+
+.PHONY: check-gateway-stack
+check-gateway-stack:
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@"$(STACK_DIR)/scripts/check-gateway-stack.sh"
 
 .PHONY: check-cluster
 check-cluster:

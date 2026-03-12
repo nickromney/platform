@@ -86,6 +86,62 @@ wait_for_service_endpoints() {
   return 1
 }
 
+retry_webhook_fail() {
+  local max_attempts="${1}"
+  shift
+
+  local attempt=1
+  local delay=2
+  local output
+  local status
+
+  while true; do
+    set +e
+    output="$("$@" 2>&1)"
+    status=$?
+    set -e
+
+    if [[ "${status}" -eq 0 ]]; then
+      if [[ -n "${output}" ]]; then
+        printf '%s\n' "${output}"
+      fi
+      return 0
+    fi
+
+    if printf '%s' "${output}" | grep -qE 'failed calling webhook|no endpoints available for service|connect: connection refused|kyverno-svc|kyverno\.svc-fail'; then
+      if (( attempt >= max_attempts )); then
+        printf '%s\n' "${output}" >&2
+        return "${status}"
+      fi
+      warn "admission webhook unavailable; retrying (${attempt}/${max_attempts}) after ${delay}s"
+      sleep "${delay}"
+      attempt=$((attempt + 1))
+      delay=$((delay * 2))
+      if (( delay > 30 )); then
+        delay=30
+      fi
+      continue
+    fi
+
+    printf '%s\n' "${output}" >&2
+    return "${status}"
+  done
+}
+
+restart_deployment() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local description="${3:-deployment ${namespace}/${deploy_name}}"
+
+  if ! kubectl -n "${namespace}" get deploy "${deploy_name}" >/dev/null 2>&1; then
+    warn "${description} not found; skipping controlled restart"
+    return 0
+  fi
+
+  ok "restarting ${description}"
+  retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}" >/dev/null
+}
+
 recycle_gateway_data_plane() {
   local pod_names
 
@@ -308,6 +364,11 @@ done
 if ! kubectl get --raw='/readyz' >/dev/null 2>&1; then
   fail "timed out waiting for kube-apiserver readiness"
 fi
+
+restart_deployment \
+  "${NGINX_GATEWAY_NAMESPACE}" \
+  "${NGINX_GATEWAY_DEPLOY_NAME}" \
+  "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
 
 ok "waiting for nginx gateway control plane after kube-apiserver restart"
 wait_for_deployment_rollout \
