@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview or publish a release from the selected ref
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - publish
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  semantic-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require main for publish mode
+        if: inputs.mode == 'publish' && github.ref != 'refs/heads/main'
+        run: |
+          echo "Publish mode must be run from the main branch." >&2
+          exit 1
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ inputs.mode }}" = "preview" ]; then
+            extra_args="--dry-run"
+          else
+            extra_args=""
+          fi
+
+          npx --yes \
+            --package semantic-release \
+            --package @semantic-release/commit-analyzer \
+            --package @semantic-release/release-notes-generator \
+            --package @semantic-release/github \
+            --package conventional-changelog-conventionalcommits \
+            semantic-release ${extra_args}

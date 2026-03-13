@@ -173,7 +173,8 @@ Content-Type: application/json
 }
 ```
 
-**[Full API Documentation](CLAUDE.md)**
+The examples above cover the main endpoints. For the current implementation
+details, see `function_app.py` and the test suite in this directory.
 
 ## Local Development
 
@@ -421,7 +422,6 @@ subnet-calculator-python-api/
 ├── .dockerignore            # Docker build exclusions
 ├── requirements.txt         # Python dependencies
 ├── pyproject.toml           # Project metadata and dev dependencies
-├── CLAUDE.md                # Detailed API documentation
 └── README.md                # This file
 ```
 
