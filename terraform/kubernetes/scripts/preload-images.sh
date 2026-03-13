@@ -8,7 +8,7 @@
 #   --pull-only       Pull images into Docker cache only (no kind cluster required)
 #   --print-images    Print the final filtered image list and exit
 #   --discover        Dump all images from the running cluster (excludes localhost:30090/*)
-#   --image-list FILE Path to image list file (default: scripts/preload-images.txt)
+#   --image-list FILE Path to image list file (default: kubernetes/kind/preload-images.txt)
 #   --tfvars FILE     Optional tfvars file for feature-gated image filtering
 #   --cluster NAME    Kind cluster name (default: kind-local)
 #   --platform PLAT   Target platform for pulls (default: auto)
@@ -21,7 +21,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-IMAGE_LIST="${SCRIPT_DIR}/preload-images.txt"
+IMAGE_LIST="${REPO_ROOT}/kubernetes/kind/preload-images.txt"
 CLUSTER_NAME="kind-local"
 USER_PLATFORM=""
 TFVARS_FILE=""

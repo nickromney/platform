@@ -733,6 +733,12 @@ variable "image_preload_parallelism" {
   default     = 4
 }
 
+variable "preload_image_list_path" {
+  description = "Path to the target-owned preload image list used when enable_image_preload=true."
+  type        = string
+  default     = ""
+}
+
 variable "registry_secret_namespaces" {
   description = "Namespaces that should receive a gitea-registry-creds imagePullSecret."
   type        = list(string)
@@ -755,6 +761,12 @@ variable "llm_gateway_external_name" {
   description = "DNS name used by the in-cluster llm-gateway ExternalName service."
   type        = string
   default     = "host.docker.internal"
+}
+
+variable "llm_gateway_external_cidr" {
+  description = "Optional explicit CIDR for the direct LLM gateway policy. Set this when the host-side name is not resolvable from the machine rendering the policies repo."
+  type        = string
+  default     = ""
 }
 
 variable "llm_gateway_mode" {

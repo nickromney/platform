@@ -1,0 +1,5 @@
+# Local Slicer artifacts
+.run/
+
+# OS
+.DS_Store

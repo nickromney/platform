@@ -248,6 +248,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   depends_on = [
     local_sensitive_file.kubeconfig,
     kubernetes_service_v1.platform_gateway_nginx_internal,
+    null_resource.argocd_refresh_gitops_repo_apps,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.argocd_app_oauth2_proxy_argocd,
     kubectl_manifest.argocd_app_oauth2_proxy_gitea,

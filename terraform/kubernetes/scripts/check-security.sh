@@ -336,7 +336,7 @@ echo ""
 # -------------------------------------------------------------------------
 echo "--- Image registry audit (uat namespace) ---"
 if kubectl get ns uat >/dev/null 2>&1; then
-  APPROVED_PREFIXES="quay.io/ ghcr.io/ docker.io/ dhi.io/ docker.gitea.com/ ecr-public.aws.com/ otel/ signoz/ gitea/ curlimages/ localhost:30090/"
+  APPROVED_PREFIXES="quay.io/ ghcr.io/ docker.io/ dhi.io/ docker.gitea.com/ ecr-public.aws.com/ otel/ signoz/ gitea/ curlimages/ localhost:30090/ host.lima.internal:5002/"
   unapproved=0
   while IFS= read -r image; do
     [[ -z "${image}" ]] && continue

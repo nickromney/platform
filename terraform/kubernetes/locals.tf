@@ -2,6 +2,7 @@ locals {
   kind_workers              = range(var.worker_count)
   kind_config_path_expanded = abspath(pathexpand(var.kind_config_path))
   kubeconfig_path_expanded  = abspath(pathexpand(var.kubeconfig_path))
+  preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${path.module}/../../kubernetes/kind/preload-images.txt")
 
   repo_root         = abspath("${path.module}/../..")
   monorepo_apps_dir = abspath("${local.repo_root}/apps")
@@ -108,10 +109,17 @@ locals {
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
     var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno-policies", "cilium-policies"] : [],
+    var.enable_cert_manager && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager"] : [],
     var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
     var.enable_actions_runner && var.enable_gitea && var.enable_argocd && !var.enable_app_of_apps ? ["gitea-actions-runner"] : [],
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
+    var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["dex", "oauth2-proxy-argocd", "oauth2-proxy-gitea", "oauth2-proxy-hubble"] : [],
+    var.enable_sso && var.enable_argocd && var.enable_grafana && !var.enable_app_of_apps ? ["oauth2-proxy-grafana"] : [],
+    var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
+    var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
+    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(
@@ -132,6 +140,7 @@ locals {
     repo_is_org                   = local.gitea_repo_owner_is_org
     enable_policies               = var.enable_policies
     enable_gateway_tls            = var.enable_gateway_tls
+    enable_cert_manager           = var.enable_cert_manager
     enable_actions_runner         = var.enable_actions_runner
     enable_app_repo_sentiment     = var.enable_app_repo_sentiment_llm
     enable_app_repo_subnetcalc    = var.enable_app_repo_subnet_calculator
@@ -165,6 +174,7 @@ locals {
     tempo_chart_version           = var.tempo_chart_version
     llm_gateway_mode              = var.llm_gateway_mode
     llm_gateway_external_name     = var.llm_gateway_external_name
+    llm_gateway_external_cidr     = var.llm_gateway_external_cidr
     llama_cpp_image               = var.llama_cpp_image
     llama_cpp_hf_repo             = var.llama_cpp_hf_repo
     llama_cpp_hf_file             = var.llama_cpp_hf_file

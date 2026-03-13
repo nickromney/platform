@@ -1,0 +1,5 @@
+# Local Lima artifacts
+.ruff_cache/
+
+# OS
+.DS_Store

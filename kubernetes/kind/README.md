@@ -287,5 +287,5 @@ make reset AUTO_APPROVE=1
 ## Useful troubleshooting command
 
 ```bash
-./scripts/preload-images.sh --cluster kind-local --parallelism 4 2>&1 | tee /tmp/preload.log
+../../terraform/kubernetes/scripts/preload-images.sh --cluster kind-local --parallelism 4 --image-list ./preload-images.txt 2>&1 | tee /tmp/preload.log
 ```

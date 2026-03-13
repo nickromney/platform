@@ -1,10 +1,12 @@
 # Platform
 
-Infrastructure and platform-engineering experiments, grouped by outcome first and implementation second.
+Infrastructure and platform-engineering experiments, grouped by outcome first
+and implementation second.
 
 ## Local Kubernetes in Docker cluster
 
-I spent several months making a "useful to me" local kubernetes cluster using kind (Kubernetes IN Docker):
+I spent several months making a "useful to me" local kubernetes cluster using
+kind (Kubernetes IN Docker):
 
 From the project root:
 
@@ -15,13 +17,65 @@ make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/kind check-health
 ```
 
-Stages are cumulative: `100` creates the cluster, `900` brings up the full local platform stack, but you could apply `500` if you "only" wanted Cilium, Hubble, ArgoCD, and Gitea running in-cluster.
+Stages are cumulative: `100` creates the cluster, `900` brings up the full
+local platform stack, but you could apply `500` if you "only" wanted Cilium,
+Hubble, ArgoCD, and Gitea running in-cluster.
 
-See [kubernetes/kind/README.md](kubernetes/kind/README.md) for the stage model, prerequisites, diagrams, ports, and troubleshooting.
+See [kubernetes/kind/README.md](kubernetes/kind/README.md) for the stage
+model, prerequisites, diagrams, ports, and troubleshooting.
 
-## SD-WAN 3-cloud simulation, on Lima Virtual Machines.
+## Local Kubernetes on Lima virtual machines
 
-This was a thought experiment of whether I could use Lima virtual machines to simulate public clouds, where the RFC1918 ranges "mean" something different dependent on context, showing how a frontend served from cloud1 can consume an API served from cloud2.
+There is also a fallback path for the same platform stack on a k3s cluster
+running inside Lima virtual machines:
+
+```shell
+make -C kubernetes/lima prereqs
+make -C kubernetes/lima 100 apply
+make -C kubernetes/lima 900 plan
+make -C kubernetes/lima 900 apply AUTO_APPROVE=1
+make -C kubernetes/lima check-health
+```
+
+This keeps the same cumulative stage ladder as `kubernetes/kind`, but stage
+`100` bootstraps k3s on Lima and stages `200+` apply the shared Terraform stack
+against that kubeconfig-backed cluster.
+
+See [kubernetes/lima/README.md](kubernetes/lima/README.md) for the Lima
+workflow, prerequisites, and operator targets.
+
+## Local Kubernetes on Slicer microVMs
+
+There is also a Slicer-backed path in the repository, but it does not yet work
+reliably enough to use for real work.
+
+As of March 13, 2026, live tests showed guest reboots plus ext4/containerd
+corruption under load. Treat it as an in-progress port and reference surface
+only, not as a supported local-cluster option.
+
+The intended operator shape is:
+
+```shell
+make -C kubernetes/slicer prereqs
+make -C kubernetes/slicer 100 apply
+make -C kubernetes/slicer 900 plan
+make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
+make -C kubernetes/slicer check-health
+```
+
+This keeps the same cumulative stage ladder as `kubernetes/kind`, but stage
+`100` bootstraps k3s on Slicer and stages `200+` apply the shared Terraform
+stack against that kubeconfig-backed cluster.
+
+See [kubernetes/slicer/README.md](kubernetes/slicer/README.md) for the current
+status, host-forwarding model, and operator targets.
+
+## SD-WAN 3-cloud simulation, on Lima Virtual Machines
+
+This was a thought experiment of whether I could use Lima virtual machines to
+simulate public clouds, where the RFC1918 ranges "mean" something different
+dependent on context, showing how a frontend served from cloud1 can consume an
+API served from cloud2.
 
 ```shell
 make -C sd-wan/lima prereqs
@@ -30,9 +84,13 @@ make -C sd-wan/lima show-urls
 make -C sd-wan/lima test
 ```
 
-Expected outcome: open the frontend URL from `make -C sd-wan/lima show-urls`, then run a lookup and compare the `Frontend Diagnostics (cloud1 viewpoint)` and `Backend Diagnostics (cloud2 viewpoint)` panels.
+Expected outcome: open the frontend URL from
+`make -C sd-wan/lima show-urls`, then run a lookup and compare the
+`Frontend Diagnostics (cloud1 viewpoint)` and
+`Backend Diagnostics (cloud2 viewpoint)` panels.
 
-See [sd-wan/lima/README.md](sd-wan/lima/README.md) for the lab walkthrough, topology notes, and browser checks.
+See [sd-wan/lima/README.md](sd-wan/lima/README.md) for the lab walkthrough,
+topology notes, and browser checks.
 
 ## Plans
 

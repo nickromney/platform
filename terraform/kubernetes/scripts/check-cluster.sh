@@ -21,10 +21,16 @@ require() {
 require curl
 require jq
 
-GITEA_USER="${GITEA_USER:-demo@admin.test}"
-GITEA_PWD="${GITEA_PWD:-password123}"
+GITEA_USER="${GITEA_USER:-gitea-admin}"
+GITEA_PWD="${GITEA_PWD:-ChangeMe123!}"
 GITEA_HOST="${GITEA_HOST:-localhost:30090}"
 REGISTRY_HOST="${REGISTRY_HOST:-localhost:30090}"
+EXPECT_SENTIMENT_REPO="${EXPECT_SENTIMENT_REPO:-1}"
+EXPECT_SUBNETCALC_REPO="${EXPECT_SUBNETCALC_REPO:-1}"
+EXPECT_ACTIONS_RUNS="${EXPECT_ACTIONS_RUNS:-1}"
+EXPECT_NAMESPACE_SSO="${EXPECT_NAMESPACE_SSO:-1}"
+EXPECT_NAMESPACE_OBSERVABILITY="${EXPECT_NAMESPACE_OBSERVABILITY:-1}"
+EXPECT_NAMESPACE_PLATFORM_GATEWAY="${EXPECT_NAMESPACE_PLATFORM_GATEWAY:-1}"
 
 check_gitea_repos() {
 	echo "=== Gitea Repos ==="
@@ -37,7 +43,15 @@ check_gitea_repos() {
 		return 1
 	fi
 
-	local expected_repos=("policies" "sentiment-llm" "subnet-calculator")
+	local expected_repos=("policies")
+
+	if [ "${EXPECT_SENTIMENT_REPO}" = "1" ]; then
+		expected_repos+=("sentiment-llm")
+	fi
+
+	if [ "${EXPECT_SUBNETCALC_REPO}" = "1" ]; then
+		expected_repos+=("subnet-calculator")
+	fi
 
 	for repo in "${expected_repos[@]}"; do
 		if echo "$repos" | grep -qx "$repo"; then
@@ -55,7 +69,27 @@ check_gitea_repos() {
 check_gitea_actions() {
 	echo "=== Gitea Actions (recent runs) ==="
 
-	local repos=("sentiment-llm" "subnet-calculator")
+	if [ "${EXPECT_ACTIONS_RUNS}" != "1" ]; then
+		warn "Skipping workflow run checks (actions runner not expected)"
+		echo ""
+		return 0
+	fi
+
+	local repos=()
+
+	if [ "${EXPECT_SENTIMENT_REPO}" = "1" ]; then
+		repos+=("sentiment-llm")
+	fi
+
+	if [ "${EXPECT_SUBNETCALC_REPO}" = "1" ]; then
+		repos+=("subnet-calculator")
+	fi
+
+	if [ "${#repos[@]}" -eq 0 ]; then
+		warn "Skipping workflow run checks (no app repos expected)"
+		echo ""
+		return 0
+	fi
 
 	for repo in "${repos[@]}"; do
 		echo "--- $repo ---"
@@ -201,7 +235,19 @@ check_namespaces() {
 		return 0
 	fi
 
-	local expected_namespaces=("dev" "uat" "apim" "sso" "argocd" "gitea" "observability" "platform-gateway")
+	local expected_namespaces=("dev" "uat" "apim" "argocd" "gitea")
+
+	if [ "${EXPECT_NAMESPACE_SSO}" = "1" ]; then
+		expected_namespaces+=("sso")
+	fi
+
+	if [ "${EXPECT_NAMESPACE_OBSERVABILITY}" = "1" ]; then
+		expected_namespaces+=("observability")
+	fi
+
+	if [ "${EXPECT_NAMESPACE_PLATFORM_GATEWAY}" = "1" ]; then
+		expected_namespaces+=("platform-gateway")
+	fi
 
 	for ns in "${expected_namespaces[@]}"; do
 		if kubectl get ns "$ns" >/dev/null 2>&1; then

@@ -1,0 +1,23 @@
+# Lima VM template for k3s nodes.
+# k3s is installed after boot by bootstrap-k3s-lima.sh via k3sup.
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+vmType: "vz"
+rosetta:
+  enabled: false
+
+cpus: 4
+memory: "8GiB"
+disk: "30GiB"
+
+networks:
+  # The fallback cluster path only needs outbound connectivity.
+  # user-v2 avoids depending on a root-owned socket_vmnet installation.
+  - lima: user-v2
+
+mounts: []

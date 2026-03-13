@@ -42,6 +42,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       SSH_PRIVATE_KEY_PATH                          = local.policies_repo_private_key_path
       ENABLE_POLICIES                               = tostring(var.enable_policies)
       ENABLE_GATEWAY_TLS                            = tostring(var.enable_gateway_tls)
+      ENABLE_CERT_MANAGER                           = tostring(var.enable_cert_manager)
       ENABLE_ACTIONS_RUNNER                         = tostring(var.enable_actions_runner)
       ENABLE_APP_REPO_SENTIMENT                     = tostring(var.enable_app_repo_sentiment_llm)
       ENABLE_APP_REPO_SUBNETCALC                    = tostring(var.enable_app_repo_subnet_calculator)
@@ -63,6 +64,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       HARDENED_IMAGE_REGISTRY                       = var.hardened_image_registry
       LLM_GATEWAY_MODE                              = var.llm_gateway_mode
       LLM_GATEWAY_EXTERNAL_NAME                     = var.llm_gateway_external_name
+      LLM_GATEWAY_EXTERNAL_CIDR                     = var.llm_gateway_external_cidr
       POLICIES_REPO_URL_CLUSTER                     = local.policies_repo_url_cluster
       CERT_MANAGER_CHART_VERSION                    = var.cert_manager_chart_version
       DEX_CHART_VERSION                             = var.dex_chart_version
@@ -843,7 +845,7 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = sha1(local.argocd_ssh_known_hosts_merged)
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_ver = "4"
+    refresh_script_ver = "5"
   }
 
   provisioner "local-exec" {
@@ -936,7 +938,12 @@ while IFS= read -r app; do
   fi
 done <<< "$app_list"
 
+# Give the controller time to process the initial hard-refresh wave before
+# deciding whether any app is still stale.
+sleep 15
+
 end=$((SECONDS + 180))
+stable_passes=0
 while (( SECONDS < end )); do
   pending=0
   while IFS= read -r app; do
@@ -952,7 +959,12 @@ while (( SECONDS < end )); do
   done <<< "$app_list"
 
   if [[ "$pending" -eq 0 ]]; then
-    exit 0
+    stable_passes=$((stable_passes + 1))
+    if [[ "$stable_passes" -ge 2 ]]; then
+      exit 0
+    fi
+  else
+    stable_passes=0
   fi
 
   sleep 5
@@ -979,6 +991,17 @@ EOT
     kubectl_manifest.argocd_app_apim,
     kubectl_manifest.argocd_app_dev,
     kubectl_manifest.argocd_app_uat,
+    kubectl_manifest.argocd_app_headlamp,
+    kubectl_manifest.argocd_app_dex,
+    kubectl_manifest.argocd_app_oauth2_proxy_argocd,
+    kubectl_manifest.argocd_app_oauth2_proxy_gitea,
+    kubectl_manifest.argocd_app_oauth2_proxy_hubble,
+    kubectl_manifest.argocd_app_oauth2_proxy_grafana,
+    kubectl_manifest.argocd_app_oauth2_proxy_signoz,
+    kubectl_manifest.argocd_app_oauth2_proxy_sentiment,
+    kubectl_manifest.argocd_app_oauth2_proxy_sentiment_uat,
+    kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc,
+    kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat,
   ]
 }
 

@@ -286,7 +286,21 @@ if (( SECONDS >= gw_prog_end )); then
 fi
 
 ok "waiting for Dex deployment (${DEX_NAMESPACE}/dex)"
-kubectl -n "${DEX_NAMESPACE}" rollout status deploy/dex --timeout=10m >/dev/null 2>&1 || true
+if ! wait_for_deployment_rollout \
+  "${DEX_NAMESPACE}" \
+  "dex" \
+  "${OIDC_DISCOVERY_WAIT_SECONDS}" \
+  "Dex deployment (${DEX_NAMESPACE}/dex)"; then
+  kubectl -n "${DEX_NAMESPACE}" get all -o wide 2>/dev/null || true
+  fail "Dex deployment never became ready"
+fi
+
+if ! wait_for_service_endpoints \
+  "${DEX_NAMESPACE}" \
+  "dex" \
+  "${OIDC_DISCOVERY_WAIT_SECONDS}"; then
+  fail "Dex service endpoints never became ready"
+fi
 
 ok "waiting for OIDC issuer discovery endpoint from kind control-plane node"
 end=$((SECONDS + OIDC_DISCOVERY_WAIT_SECONDS))
@@ -365,23 +379,13 @@ if ! kubectl get --raw='/readyz' >/dev/null 2>&1; then
   fail "timed out waiting for kube-apiserver readiness"
 fi
 
-restart_deployment \
-  "${NGINX_GATEWAY_NAMESPACE}" \
-  "${NGINX_GATEWAY_DEPLOY_NAME}" \
-  "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
+restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
 
 ok "waiting for nginx gateway control plane after kube-apiserver restart"
-wait_for_deployment_rollout \
-  "${NGINX_GATEWAY_NAMESPACE}" \
-  "${NGINX_GATEWAY_DEPLOY_NAME}" \
-  "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
-  "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})" \
+wait_for_deployment_rollout "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})" \
   || fail "nginx gateway control plane did not recover after kube-apiserver restart"
 
-wait_for_service_endpoints \
-  "${NGINX_GATEWAY_NAMESPACE}" \
-  "${NGINX_GATEWAY_SERVICE}" \
-  "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
   || fail "nginx gateway control plane service has no endpoints after kube-apiserver restart"
 
 ok "verifying gateway is reprogrammed after kube-apiserver restart"

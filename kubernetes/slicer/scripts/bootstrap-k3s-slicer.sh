@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+slicer_socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
+[ -n "${slicer_socket}" ] || { echo "ERROR: SLICER_URL or SLICER_SOCKET must be set" >&2; exit 1; }
+
+server_vm="${SLICER_VM_NAME:-sbox-1}"
+k3sup_context="${K3SUP_CONTEXT:-slicer-k3s}"
+kubeconfig_path="${KUBECONFIG_PATH:-${HOME}/.kube/${k3sup_context}.yaml}"
+default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-${HOME}/.kube/config}"
+k3s_version="${K3S_VERSION:-}"
+k3s_channel="${K3S_CHANNEL:-stable}"
+server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb}"
+merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-1}"
+disable_bpf_jit="${SLICER_DISABLE_BPF_JIT:-1}"
+swap_size="${SLICER_SWAP_SIZE:-4G}"
+image_list_file="${IMAGE_LIST_FILE:-}"
+local_image_cache_host="${LOCAL_IMAGE_CACHE_HOST:-}"
+local_image_cache_scheme="${LOCAL_IMAGE_CACHE_SCHEME:-http}"
+
+vm_exec() {
+  local vm="$1"; shift
+  SLICER_URL="$slicer_socket" slicer vm exec "$vm" -- "$@"
+}
+
+vm_exec_retry() {
+  local vm="$1" cmd="$2" max="${3:-8}" wait="${4:-3}"
+  local output
+  for _ in $(seq 1 "$max"); do
+    output="$(SLICER_URL="$slicer_socket" slicer vm exec "$vm" -- "$cmd" 2>&1)" && { printf '%s\n' "$output"; return 0; }
+    if printf '%s' "$output" | grep -Eiq '502 Bad Gateway|transport|EOF|i/o timeout|Connection reset|timed out'; then
+      sleep "$wait"
+      continue
+    fi
+    printf '%s\n' "$output" >&2
+    return 1
+  done
+  printf '%s\n' "$output" >&2
+  return 1
+}
+
+vm_cp() {
+  local src="$1" dst="$2" max="${3:-5}" wait="${4:-3}"
+  for _ in $(seq 1 "$max"); do
+    SLICER_URL="$slicer_socket" slicer vm cp "$src" "$dst" >/dev/null 2>&1 && return 0
+    sleep "$wait"
+  done
+  return 1
+}
+
+wait_for_vm() {
+  echo "Waiting for ${server_vm}..."
+  SLICER_URL="$slicer_socket" slicer vm ready "$server_vm" --timeout 180s >/dev/null
+}
+
+get_vm_ip() {
+  SLICER_URL="$slicer_socket" slicer vm list --json | jq -r --arg vm "${server_vm}" '.[] | select(.hostname == $vm) | .ip'
+}
+
+wait_for_kube_api() {
+  local attempts="${1:-45}" delay="${2:-2}"
+  for _ in $(seq 1 "$attempts"); do
+    if KUBECONFIG="$kubeconfig_path" kubectl --context "$k3sup_context" --request-timeout=5s get --raw=/version >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
+}
+
+remote_k3s_api_ready() {
+  local max="${1:-8}" wait="${2:-3}"
+  vm_exec_retry \
+    "$server_vm" \
+    "sudo test -x /usr/local/bin/k3s && sudo test -f /etc/rancher/k3s/k3s.yaml && sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get --raw=/version" \
+    "$max" \
+    "$wait" >/dev/null
+}
+
+fix_vm_dns() {
+  local gw
+  gw="$(vm_exec_retry "$server_vm" "ip -4 route list 0/0 | awk '{print \$3}' | head -n1" 5 2 | tr -d '\r' | head -n1 || true)"
+  if [ -z "$gw" ]; then
+    echo "WARN: unable to detect gateway for ${server_vm}; skipping DNS override" >&2
+    return 0
+  fi
+  echo "==> Setting ${server_vm} DNS to gateway resolver (${gw})"
+  vm_exec_retry "$server_vm" "sudo chattr -i /etc/resolv.conf || true; printf 'nameserver ${gw}\noptions timeout:1 attempts:2\n' | sudo tee /etc/resolv.conf >/dev/null; sudo chattr +i /etc/resolv.conf || true" 5 2 >/dev/null
+}
+
+refresh_kubeconfig() {
+  local vm_ip="$1"
+  local tmp_path="${kubeconfig_path}.tmp"
+
+  mkdir -p "$(dirname "$kubeconfig_path")"
+  vm_cp "${server_vm}:/etc/rancher/k3s/k3s.yaml" "$tmp_path" 10 2
+
+  sed -e "s/127\\.0\\.0\\.1/${vm_ip}/g" -e "s/localhost/${vm_ip}/g" "$tmp_path" > "$kubeconfig_path"
+  rm -f "$tmp_path"
+  chmod 600 "$kubeconfig_path" || true
+
+  if command -v kubectl >/dev/null 2>&1; then
+    local current_ctx
+    current_ctx="$(KUBECONFIG="$kubeconfig_path" kubectl config current-context 2>/dev/null || true)"
+    if [ -n "$current_ctx" ] && [ "$current_ctx" != "$k3sup_context" ]; then
+      KUBECONFIG="$kubeconfig_path" kubectl config rename-context "$current_ctx" "$k3sup_context" >/dev/null 2>&1 || true
+    fi
+    KUBECONFIG="$kubeconfig_path" kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
+    if [ "$merge_kubeconfig_to_default" = "1" ]; then
+      local merged_kubeconfig
+      merged_kubeconfig="${default_kubeconfig_path}.merged.$$"
+      mkdir -p "$(dirname "$default_kubeconfig_path")"
+      if [ -s "$default_kubeconfig_path" ]; then
+        if KUBECONFIG="${default_kubeconfig_path}:${kubeconfig_path}" kubectl config view --flatten > "$merged_kubeconfig"; then
+          chmod 600 "$merged_kubeconfig" || true
+          mv "$merged_kubeconfig" "$default_kubeconfig_path"
+        else
+          rm -f "$merged_kubeconfig"
+          echo "WARN: failed to merge ${kubeconfig_path} into ${default_kubeconfig_path}" >&2
+        fi
+      else
+        cp "$kubeconfig_path" "$default_kubeconfig_path"
+      fi
+      kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+registry_for_image_ref() {
+  local ref="${1%%@*}"
+  local first
+
+  if [[ "${ref}" != */* ]]; then
+    echo "docker.io"
+    return 0
+  fi
+
+  first="${ref%%/*}"
+  if [[ "${first}" == *.* || "${first}" == *:* || "${first}" == "localhost" ]]; then
+    echo "${first}"
+  else
+    echo "docker.io"
+  fi
+}
+
+default_endpoint_for_registry() {
+  case "$1" in
+    docker.io)
+      echo "https://registry-1.docker.io"
+      ;;
+    *)
+      echo "https://$1"
+      ;;
+  esac
+}
+
+platform_mirror_registries() {
+  [ -n "${image_list_file}" ] || return 0
+  [ -f "${image_list_file}" ] || return 0
+
+  while IFS= read -r image; do
+    [[ -z "${image}" || "${image}" =~ ^# ]] && continue
+    registry_for_image_ref "${image}"
+  done < "${image_list_file}" | awk 'NF { print }' | sort -u
+}
+
+configure_k3s_registries() {
+  local payload=""
+  local registry=""
+  local tmp_file
+
+  [ -n "${local_image_cache_host}" ] || return 0
+
+  append_mirror_entry() {
+    local mirror_name="$1"
+    shift
+
+    if [[ "${payload}" != mirrors:* ]]; then
+      payload+="mirrors:\n"
+    fi
+
+    payload+="  \"${mirror_name}\":\n"
+    payload+="    endpoint:\n"
+    while [[ $# -gt 0 ]]; do
+      payload+="      - \"$1\"\n"
+      shift
+    done
+  }
+
+  append_mirror_entry "${local_image_cache_host}" "${local_image_cache_scheme}://${local_image_cache_host}"
+  while IFS= read -r registry; do
+    [[ -n "${registry}" ]] || continue
+    append_mirror_entry \
+      "${registry}" \
+      "${local_image_cache_scheme}://${local_image_cache_host}" \
+      "$(default_endpoint_for_registry "${registry}")"
+  done < <(platform_mirror_registries)
+
+  tmp_file="$(mktemp)"
+  printf '%b' "${payload}" > "${tmp_file}"
+  vm_cp "${tmp_file}" "${server_vm}:/tmp/registries.yaml" 10 2
+  rm -f "${tmp_file}"
+
+  vm_exec_retry "${server_vm}" "sudo mkdir -p /etc/rancher/k3s; if ! sudo cmp -s /tmp/registries.yaml /etc/rancher/k3s/registries.yaml 2>/dev/null; then sudo mv /tmp/registries.yaml /etc/rancher/k3s/registries.yaml; sudo systemctl is-active --quiet k3s && sudo systemctl restart k3s || true; else rm -f /tmp/registries.yaml; fi" 5 2 >/dev/null
+}
+
+wait_for_vm
+server_ip="$(get_vm_ip)"
+[ -n "${server_ip}" ] || { echo "ERROR: could not determine IP for ${server_vm}" >&2; exit 1; }
+
+if [ -z "${local_image_cache_host}" ]; then
+  gateway_ip="$(vm_exec_retry "$server_vm" "ip -4 route list 0/0 | awk '{print \$3}' | head -n1" 5 2 | tr -d '\r' | head -n1 || true)"
+  if [ -n "${gateway_ip}" ]; then
+    local_image_cache_host="${gateway_ip}:5002"
+  fi
+fi
+
+fix_vm_dns
+configure_k3s_registries
+
+if remote_k3s_api_ready 2 2; then
+  echo "==> Existing k3s detected on ${server_vm}; refreshing kubeconfig only"
+  refresh_kubeconfig "${server_ip}"
+  KUBECONFIG="$kubeconfig_path" kubectl --context "$k3sup_context" get nodes -o wide || true
+  exit 0
+fi
+
+echo "==> Ensuring swap is enabled inside ${server_vm}"
+vm_exec_retry "$server_vm" "swapon --show | grep -q /swapfile || { sudo fallocate -l ${swap_size} /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && grep -q /swapfile /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab; }" 3 3 >/dev/null
+
+echo "==> Checking for ext4 filesystem errors"
+vm_exec_retry "$server_vm" "dmesg | grep -i 'ext4.*error' && echo 'WARNING: ext4 errors detected in dmesg' || true" 2 2 || true
+
+if [ "$disable_bpf_jit" = "1" ]; then
+  echo "==> Disabling BPF JIT inside ${server_vm} for slicer stability"
+  vm_exec_retry "$server_vm" "printf 'net.core.bpf_jit_enable = 0\n' | sudo tee /etc/sysctl.d/99-slicer-stability.conf >/dev/null && sudo sysctl -p /etc/sysctl.d/99-slicer-stability.conf >/dev/null" 5 2 >/dev/null
+fi
+
+echo "==> Installing k3sup and kubectl inside ${server_vm} via arkade"
+vm_exec_retry "$server_vm" "arkade get k3sup kubectl" 5 3 >/dev/null
+
+k3sup_bin="/home/${SLICER_VM_USER:-ubuntu}/.arkade/bin/k3sup"
+install_args="--local"
+if [ -n "$k3s_version" ]; then
+  install_args="${install_args} --k3s-version ${k3s_version}"
+else
+  install_args="${install_args} --k3s-channel ${k3s_channel}"
+fi
+if [ -n "$server_extra_args" ]; then
+  install_args="${install_args} --k3s-extra-args '${server_extra_args}'"
+fi
+
+echo "==> Installing k3s on ${server_vm} via k3sup --local"
+if ! vm_exec_retry "$server_vm" "timeout 300s sudo ${k3sup_bin} install ${install_args}" 3 5; then
+  echo "WARN: k3sup install did not complete cleanly; checking k3s service state..." >&2
+  if ! remote_k3s_api_ready 10 2; then
+    echo "ERROR: k3sup install failed and k3s API is not reachable" >&2
+    exit 1
+  fi
+fi
+
+configure_k3s_registries
+
+echo "==> Ensuring k3s service is active on ${server_vm}"
+vm_exec_retry "$server_vm" "sudo systemctl daemon-reload || true; sudo systemctl is-active --quiet k3s || sudo systemctl restart k3s" 8 3 >/dev/null
+vm_exec_retry "$server_vm" "timeout 120s sudo systemctl is-active --quiet k3s" 20 3 >/dev/null
+remote_k3s_api_ready 30 2
+
+echo "==> Retrieving kubeconfig from ${server_vm}"
+refresh_kubeconfig "${server_ip}"
+
+echo "==> Waiting for Kubernetes API (${server_ip}:6443)"
+if ! wait_for_kube_api 45 2; then
+  echo "ERROR: Kubernetes API did not become reachable via ${server_ip}:6443" >&2
+  vm_exec_retry "$server_vm" "sudo systemctl status k3s --no-pager -l | tail -n 40" 2 2 >&2 || true
+  vm_exec_retry "$server_vm" "sudo journalctl -u k3s --no-pager -n 60" 2 2 >&2 || true
+  exit 1
+fi
+
+echo ""
+echo "==> Cluster bootstrapped via k3sup --local"
+echo "    kubeconfig: KUBECONFIG=${kubeconfig_path}  context=${k3sup_context}"
+KUBECONFIG="$kubeconfig_path" kubectl --context "$k3sup_context" get nodes -o wide || true

@@ -65,6 +65,7 @@ stage_file = $(STAGE_FILE_$(STAGE))
 target_profile_file = targets/kind.tfvars
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
+preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 prereq_llm_stage_file = $(abspath $(if $(filter 1,$(STAGE_SPECIFIED)),$(stage_file),$(STAGE_FILE_900)))
 
 .PHONY: help
@@ -100,7 +101,9 @@ help:
 	@echo "  make check-stage-monotonicity"
 	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make show-urls"
+	@echo "  make start                                   Alias for start-kind"
 	@echo "  make start-kind"
+	@echo "  make stop                                    Alias for stop-kind"
 	@echo "  make stop-kind"
 	@echo "  make test"
 	@echo ""
@@ -456,6 +459,10 @@ stop-kind:
 	docker stop $$nodes >/dev/null; \
 	echo "Stopped: $$nodes"
 
+.PHONY: stop
+stop:
+	@$(MAKE) stop-kind
+
 .PHONY: start-kind
 start-kind:
 	@set -euo pipefail; \
@@ -470,6 +477,10 @@ start-kind:
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)" || true; \
 	echo "Started: $$nodes"; \
 	kubectl --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)" get nodes -o wide || true
+
+.PHONY: start
+start:
+	@$(MAKE) start-kind
 
 .PHONY: prereqs
 prereqs:
@@ -545,7 +556,7 @@ prereqs:
 .PHONY: preload-images
 preload-images:
 	@set -euo pipefail; \
-	args=(--cluster kind-local --parallelism 4); \
+	args=(--cluster kind-local --parallelism 4 --image-list "$(preload_images_file)"); \
 	if [ -f "$(stage_file)" ]; then \
 		args+=(--tfvars "$(abspath $(stage_file))"); \
 	fi; \
@@ -554,7 +565,7 @@ preload-images:
 .PHONY: preload-images-pull-only
 preload-images-pull-only:
 	@set -euo pipefail; \
-	args=(--pull-only); \
+	args=(--pull-only --image-list "$(preload_images_file)"); \
 	if [ -f "$(stage_file)" ]; then \
 		args+=(--tfvars "$(abspath $(stage_file))"); \
 	fi; \
@@ -694,7 +705,7 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@"$(STACK_DIR)/scripts/check-version.sh"
+	@PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh"
 	@echo ""
 	@"$(STACK_DIR)/scripts/check-provider-version.sh"
 

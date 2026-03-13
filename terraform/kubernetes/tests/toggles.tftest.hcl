@@ -137,6 +137,7 @@ run "sso_enabled" {
     enable_gitea       = true
     enable_signoz      = true
     enable_gateway_tls = true
+    enable_headlamp    = true
     enable_sso         = true
 
     dex_chart_version          = "0.24.0"
@@ -163,6 +164,21 @@ run "sso_enabled" {
   assert {
     condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_argocd) == 1
     error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_argocd to exist when enable_sso=true"
+  }
+
+  assert {
+    condition     = contains(local.argocd_gitops_repo_app_names, "dex")
+    error_message = "Expected dex to be included in the Git-backed Argo refresh list when enable_sso=true"
+  }
+
+  assert {
+    condition     = contains(local.argocd_gitops_repo_app_names, "oauth2-proxy-argocd")
+    error_message = "Expected oauth2-proxy-argocd to be included in the Git-backed Argo refresh list when enable_sso=true"
+  }
+
+  assert {
+    condition     = contains(local.argocd_gitops_repo_app_names, "headlamp")
+    error_message = "Expected headlamp to be included in the Git-backed Argo refresh list when enable_headlamp=true"
   }
 
   assert {

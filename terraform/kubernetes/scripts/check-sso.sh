@@ -28,13 +28,13 @@ have_cmd() {
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 
-TFVARS_FILE=""
+TFVARS_FILES=()
 HOST_PORT=""
 EXTENDED="${EXTENDED:-0}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --var-file)
-      TFVARS_FILE="${2:-}"
+      TFVARS_FILES+=("${2:-}")
       shift 2
       ;;
     --host-port)
@@ -55,21 +55,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "${TFVARS_FILE}" && ! -f "${TFVARS_FILE}" ]]; then
-  if [[ -f "${STACK_DIR}/${TFVARS_FILE}" ]]; then
-    TFVARS_FILE="${STACK_DIR}/${TFVARS_FILE}"
+for i in "${!TFVARS_FILES[@]}"; do
+  if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
+    TFVARS_FILES[i]="${STACK_DIR}/${TFVARS_FILES[i]}"
   fi
-fi
+done
 
 tfvar_get() {
-  local file="$1"
   local key="$2"
-  if [[ -z "${file}" || ! -f "${file}" ]]; then
-    echo ""
-    return 0
-  fi
-  grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-    sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
+  local file value=""
+  for file in "${TFVARS_FILES[@]}"; do
+    [[ -n "${file}" && -f "${file}" ]] || continue
+    value="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true)"
+    [[ -n "${value}" ]] || continue
+  done
+  echo "${value}"
 }
 
 expect_deploy_arg() {
@@ -140,10 +140,9 @@ print_http_head() {
 }
 
 require_cmd kubectl
-require_cmd kind
 
 if [[ -z "${HOST_PORT}" ]]; then
-  HOST_PORT=$(tfvar_get "${TFVARS_FILE}" gateway_https_host_port)
+  HOST_PORT=$(tfvar_get "" gateway_https_host_port)
 fi
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT="443"
@@ -154,11 +153,22 @@ if [[ "${HOST_PORT}" != "443" ]]; then
   port_suffix=":${HOST_PORT}"
 fi
 
-echo "Checking kind cluster..."
-if ! kind get clusters 2>/dev/null | grep -qx "kind-local"; then
-  fail "kind-local cluster not found"
+EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
+EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
+[ -n "${EXPECTED_CLUSTER_NAME}" ] || EXPECTED_CLUSTER_NAME="kind-local"
+[ -n "${EXPECT_KIND_PROVISIONING}" ] || EXPECT_KIND_PROVISIONING="true"
+
+if [[ "${EXPECT_KIND_PROVISIONING}" == "true" ]]; then
+  require_cmd kind
+  echo "Checking kind cluster..."
+  if ! kind get clusters 2>/dev/null | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
+    fail "${EXPECTED_CLUSTER_NAME} cluster not found"
+  fi
+  ok "${EXPECTED_CLUSTER_NAME} cluster exists"
+else
+  echo "Checking Kubernetes cluster..."
+  ok "Using existing kubeconfig-backed cluster (${EXPECTED_CLUSTER_NAME})"
 fi
-ok "kind-local cluster exists"
 
 kubectl get nodes >/dev/null 2>&1 || fail "kubectl cannot reach the cluster"
 ok "kubectl can reach the cluster"

@@ -183,3 +183,35 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = "192.168.65.254/32" ]
 }
+
+@test "determine_llm_gateway_external_cidr prefers explicit CIDR overrides" {
+  run bash -lc "export LLM_GATEWAY_EXTERNAL_CIDR='192.168.104.2/32'; source '${SCRIPT}'; determine_llm_gateway_external_cidr"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "192.168.104.2/32" ]
+}
+
+@test "prune_argocd_app_manifests keeps cert-manager when gateway TLS is disabled but cert-manager stays enabled" {
+  apps_dir="${BATS_TEST_TMPDIR}/apps"
+  mkdir -p "${apps_dir}"
+
+  cat >"${apps_dir}/001-cert-manager.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+EOF
+
+  cat >"${apps_dir}/002-nginx-gateway-fabric.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-gateway-fabric
+EOF
+
+  run bash -lc "export ENABLE_CERT_MANAGER=true ENABLE_GATEWAY_TLS=false; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'"
+
+  [ "${status}" -eq 0 ]
+  [ -f "${apps_dir}/001-cert-manager.application.yaml" ]
+  [ ! -f "${apps_dir}/002-nginx-gateway-fabric.application.yaml" ]
+}
