@@ -6,8 +6,11 @@ metadata:
     policies.kyverno.io/title: Restrict container image registries
     policies.kyverno.io/description: >-
       Only allow container images that were either:
-        (a) pulled from registries listed in scripts/preload-images.txt, or
-        (b) built by Gitea Actions CI/CD (pushed to localhost:30090).
+        (a) pulled from registries listed in the target-owned preload image
+            lists under kubernetes/*/preload-images.txt,
+        (b) built by Gitea Actions CI/CD (pushed to localhost:30090), or
+        (c) built locally for the Lima fallback path (pushed to
+            host.lima.internal:5002).
       This policy is intentionally kept in Audit mode for teaching/demo use.
 spec:
   admission: true
@@ -34,8 +37,9 @@ spec:
         allowExistingViolations: true
         message: >-
           Container image is not from an approved source.
-          Only images from registries listed in scripts/preload-images.txt
-          and images built by Gitea CI/CD (localhost:30090/*) are allowed.
+          Only images from registries listed in kubernetes/*/preload-images.txt,
+          images built by Gitea CI/CD (localhost:30090/*), and Lima local-build
+          images (host.lima.internal:5002/*) are allowed.
         foreach:
           - list: "request.object.spec.[initContainers, containers][]"
             deny:
@@ -46,7 +50,9 @@ spec:
                     value:
                       # --- Gitea CI/CD built images ---
                       - "localhost:30090/*"
-                      # --- Registries present in scripts/preload-images.txt ---
+                      # --- Lima local-build cache ---
+                      - "host.lima.internal:5002/*"
+                      # --- Registries present in kubernetes/*/preload-images.txt ---
                       - "quay.io/*"
                       - "ghcr.io/*"
                       - "dhi.io/*"

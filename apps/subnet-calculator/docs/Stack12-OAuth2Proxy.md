@@ -585,7 +585,8 @@ This stack helps you test authentication patterns before deploying to Azure:
 - **Learn more about OAuth2 Proxy:** [OAuth2 Proxy Documentation](https://oauth2-proxy.github.io/oauth2-proxy/)
 - **Deploy to Azure:** See [AKSAuthentication.md](./AKSAuthentication.md) for AKS deployment
 - **Understand Easy Auth:** See [AzureEasyAuthSupport.md](./AzureEasyAuthSupport.md) for Azure services
-- **Compare stacks:** See [CLAUDE.md](../CLAUDE.md) for all stack options
+- **Compare stacks:** See [HOSTING-MATRIX.md](./HOSTING-MATRIX.md) for the
+  stack and authentication overview
 
 ## Summary
 

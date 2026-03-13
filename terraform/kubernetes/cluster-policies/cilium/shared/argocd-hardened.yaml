@@ -5,7 +5,8 @@ metadata:
 spec:
   description: >-
     Hardened policy for argocd namespace. ArgoCD is highly privileged (cluster admin).
-    Ingress: only from shared auth proxies (UI access) and intra-namespace.
+    Ingress: only from shared auth proxies, platform-gateway admin UI access,
+    observability scrapes, and intra-namespace.
     Egress: kube-apiserver (deployments), Gitea SSH (repo sync), shared Dex
     (OIDC), and DNS. External Helm chart egress is delegated to a
     workload-scoped repo-server policy.
@@ -28,6 +29,14 @@ spec:
             - port: "8080"
               protocol: TCP
             - port: "8083"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+      toPorts:
+        - ports:
+            - port: "8080"
               protocol: TCP
     - fromEndpoints:
         - matchLabels:

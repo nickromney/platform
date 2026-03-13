@@ -6,9 +6,9 @@ spec:
   description: >-
     Hardened policy for gitea namespace. Holds source code and container registry.
     Ingress: ArgoCD (SSH repo sync), shared auth proxies (UI access),
-    gitea-runner (actions runner), and platform-gateway (container registry
-    pulls). Egress: DNS, kube-apiserver, intra-namespace, and webhook
-    notifications.
+    gitea-runner (actions runner), and platform-gateway (admin UI and
+    container-registry access). Egress: DNS, kube-apiserver, intra-namespace,
+    and webhook notifications.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": gitea
@@ -34,6 +34,14 @@ spec:
         - matchLabels:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
             "k8s:app.kubernetes.io/component": authentication-proxy
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
       toPorts:
         - ports:
             - port: "3000"

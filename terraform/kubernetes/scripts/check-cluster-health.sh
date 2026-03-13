@@ -36,9 +36,40 @@ wait_for_all_nodes_ready() {
   [[ "$(node_not_ready_count)" -eq 0 ]]
 }
 
+argocd_app_has_only_future_stage_namespace_gaps() {
+  local ns="$1"
+  local app="$2"
+  local unsynced kind resource_ns msg
+
+  if [[ "${app}" != "cilium-policies" ]] || stage_ge 700; then
+    return 1
+  fi
+
+  unsynced=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.operationState.syncResult.resources[?(@.status!="Synced")]}{.kind}{"\t"}{.namespace}{"\t"}{.message}{"\n"}{end}' 2>/dev/null || true)
+  [[ -n "${unsynced}" ]] || return 1
+
+  while IFS=$'\t' read -r kind resource_ns msg; do
+    [[ -n "${kind}" ]] || continue
+    if [[ "${kind}" != "CiliumNetworkPolicy" ]]; then
+      return 1
+    fi
+    if [[ "${resource_ns}" != "dev" && "${resource_ns}" != "uat" ]]; then
+      return 1
+    fi
+    if [[ "${msg}" != "namespaces \"${resource_ns}\" not found" ]]; then
+      return 1
+    fi
+  done <<< "${unsynced}"
+
+  return 0
+}
+
 argocd_app_allows_outofsync_if_healthy() {
-  local app="$1"
-  [[ "${app}" == "app-of-apps" || "${app}" == "platform-gateway" ]]
+  local ns="$1"
+  local app="$2"
+
+  [[ "${app}" == "app-of-apps" || "${app}" == "platform-gateway" ]] && return 0
+  argocd_app_has_only_future_stage_namespace_gaps "${ns}" "${app}"
 }
 
 argocd_app_is_settled() {
@@ -57,7 +88,7 @@ argocd_app_is_settled() {
     return 1
   fi
 
-  if [[ "${sync}" != "Synced" ]] && ! argocd_app_allows_outofsync_if_healthy "${app}"; then
+  if [[ "${sync}" != "Synced" ]] && ! argocd_app_allows_outofsync_if_healthy "${ns}" "${app}"; then
     return 1
   fi
 
@@ -122,6 +153,10 @@ check_argocd_app() {
   local app="$1"
   local ns="$2"
   local allow_outofsync_if_healthy="${3:-false}"
+
+  if argocd_app_allows_outofsync_if_healthy "${ns}" "${app}"; then
+    allow_outofsync_if_healthy="true"
+  fi
 
   if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
     return 1

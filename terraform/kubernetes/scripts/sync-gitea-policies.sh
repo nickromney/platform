@@ -23,6 +23,7 @@ GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
 GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
 ENABLE_POLICIES="${ENABLE_POLICIES:-true}"
 ENABLE_GATEWAY_TLS="${ENABLE_GATEWAY_TLS:-true}"
+ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
@@ -651,8 +652,11 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/40-cilium-policies.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_GATEWAY_TLS}"; then
+  if ! is_true "${ENABLE_CERT_MANAGER}"; then
     remove_if_present "${apps_dir}/001-cert-manager.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_GATEWAY_TLS}"; then
     remove_if_present "${apps_dir}/002-nginx-gateway-fabric.application.yaml"
     remove_if_present "${apps_dir}/003-platform-gateway.application.yaml"
     remove_if_present "${apps_dir}/10-cert-manager-config.application.yaml"

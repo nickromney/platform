@@ -38,10 +38,12 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../../.." && pwd)
 STAGES_DIR="${STAGES_DIR:-${REPO_ROOT}/kubernetes/kind/stages}"
+TARGET_TFVARS="${TARGET_TFVARS:-}"
+PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
 ARGOCD_APPS_DIR="${STACK_DIR}/apps/argocd-apps"
 VARIABLES_FILE="${STACK_DIR}/variables.tf"
 
-tfvar_get() {
+tfvar_get_from_file() {
   local file="$1"
   local key="$2"
   if [ ! -f "$file" ]; then
@@ -57,8 +59,22 @@ tfvar_get() {
   echo "$line" | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs
 }
 
+tfvar_get() {
+  tfvar_get_from_file "$1" "$2"
+}
+
 tfvar_get_any_stage() {
   local key="$1"
+  local value
+
+  if [ -n "${TARGET_TFVARS}" ] && [ -f "${TARGET_TFVARS}" ]; then
+    value=$(tfvar_get_from_file "${TARGET_TFVARS}" "${key}")
+    if [ -n "${value}" ]; then
+      echo "${value}"
+      return 0
+    fi
+  fi
+
   local line
   line=$(grep -hE "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*" "${STAGES_DIR}"/*.tfvars 2>/dev/null | head -n 1 || true)
   if [ -z "$line" ]; then
@@ -229,7 +245,7 @@ print_row() {
 }
 
 check_preload_image_version_alignment() {
-  local preload_file="${SCRIPT_DIR}/preload-images.txt"
+  local preload_file="${PRELOAD_IMAGES_FILE}"
   local expected_argocd_image_ref="$1"
   local expected_prometheus_tag="$2"
   local expected_grafana_tag="$3"
@@ -237,7 +253,7 @@ check_preload_image_version_alignment() {
   local expected_tempo_tag="$5"
 
   if [ ! -f "${preload_file}" ]; then
-    warn "preload-images.txt not found at ${preload_file}"
+    warn "preload image list not found at ${preload_file}"
     return 0
   fi
 
@@ -372,10 +388,10 @@ preload_expected_chart_version_for_section() {
 }
 
 check_preload_chart_section_version_alignment() {
-  local preload_file="${SCRIPT_DIR}/preload-images.txt"
+  local preload_file="${PRELOAD_IMAGES_FILE}"
 
   if [ ! -f "${preload_file}" ]; then
-    warn "preload-images.txt not found at ${preload_file}"
+    warn "preload image list not found at ${preload_file}"
     return 0
   fi
 
