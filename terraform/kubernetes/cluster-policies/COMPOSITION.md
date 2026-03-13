@@ -18,93 +18,151 @@ Active filters:
 
 Rendered from [`terraform/kubernetes/cluster-policies/cilium`](./cilium) after filter application.
 
+Displayed policy source paths below are relative to [`terraform/kubernetes/cluster-policies/cilium`](./cilium).
+
 ### Top-Level Rendered Set
 
-| Kind | Name | Source Files |
-| --- | --- | --- |
-| `CiliumCIDRGroup` | `approved-egress-cidrs` | [`terraform/kubernetes/cluster-policies/cilium/shared/approved-egress-cidrs.yaml`](./cilium/shared/approved-egress-cidrs.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `allow-application-backend-egress-via-cidrgroup` | [`terraform/kubernetes/cluster-policies/cilium/shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `allow-application-backend-egress-via-fqdn` | [`terraform/kubernetes/cluster-policies/cilium/shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `allow-sentiment-llama-cpp-world-egress` | [`terraform/kubernetes/cluster-policies/cilium/shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `allow-sentiment-llm-dns-egress` | [`terraform/kubernetes/cluster-policies/cilium/shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `apim-baseline` | [`terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `application-baseline` | [`terraform/kubernetes/cluster-policies/cilium/shared/application-baseline.yaml`](./cilium/shared/application-baseline.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `argocd-hardened` | [`terraform/kubernetes/cluster-policies/cilium/shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `argocd-repo-server-helm-egress` | [`terraform/kubernetes/cluster-policies/cilium/shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `deny-application-cloud-metadata` | [`terraform/kubernetes/cluster-policies/cilium/shared/application-cloud-metadata-deny.yaml`](./cilium/shared/application-cloud-metadata-deny.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `deny-application-sentiment-to-subnetcalc` | [`terraform/kubernetes/cluster-policies/cilium/shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `deny-application-subnetcalc-to-sentiment` | [`terraform/kubernetes/cluster-policies/cilium/shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `deny-cloud-metadata-egress` | [`terraform/kubernetes/cluster-policies/cilium/shared/deny-cloud-metadata-egress.yaml`](./cilium/shared/deny-cloud-metadata-egress.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `gitea-hardened` | [`terraform/kubernetes/cluster-policies/cilium/shared/gitea-hardened.yaml`](./cilium/shared/gitea-hardened.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `gitea-runner-hardened` | [`terraform/kubernetes/cluster-policies/cilium/shared/gitea-runner-hardened.yaml`](./cilium/shared/gitea-runner-hardened.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `nginx-gateway-control-plane` | [`terraform/kubernetes/cluster-policies/cilium/shared/azure-auth-nginx-gateway-ingress.yaml`](./cilium/shared/azure-auth-nginx-gateway-ingress.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `observability-hardened` | [`terraform/kubernetes/cluster-policies/cilium/shared/observability-hardened.yaml`](./cilium/shared/observability-hardened.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `platform-baseline-headlamp` | [`terraform/kubernetes/cluster-policies/cilium/shared/platform-baseline.yaml`](./cilium/shared/platform-baseline.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `platform-gateway-hardened` | [`terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml`](./cilium/shared/platform-gateway-hardened.yaml) |
-| `CiliumClusterwideNetworkPolicy` | `sso-hardened` | [`terraform/kubernetes/cluster-policies/cilium/shared/sso-hardened.yaml`](./cilium/shared/sso-hardened.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-api-egress` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-backend-ingress` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-frontend-ingress` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-litellm-ingress-egress` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-llama-ingress` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-router-http-routes` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
-| `CiliumNetworkPolicy` | `sentiment-router-ingress` | [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `CiliumNetworkPolicy` | `subnetcalc-api-http-routes` | [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
-| `CiliumNetworkPolicy` | `subnetcalc-cloudflare-live-fetch` | [`terraform/kubernetes/cluster-policies/cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) |
-| `CiliumNetworkPolicy` | `subnetcalc-frontend-ingress` | [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
-| `CiliumNetworkPolicy` | `subnetcalc-router-http-routes` | [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
-| `CiliumNetworkPolicy` | `subnetcalc-router-ingress` | [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
+#### CiliumCIDRGroup
+
+| Name | Source |
+| --- | --- |
+| `approved-egress-cidrs` | [`shared/approved-egress-cidrs.yaml`](./cilium/shared/approved-egress-cidrs.yaml) |
+
+#### CiliumClusterwideNetworkPolicy
+
+| Name | Source |
+| --- | --- |
+| `allow-application-backend-egress-via-cidrgroup` | [`shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
+| `allow-application-backend-egress-via-fqdn` | [`shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
+| `allow-sentiment-llama-cpp-world-egress` | [`shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
+| `allow-sentiment-llm-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
+| `allow-shared-identity-egress-via-fqdn` | [`shared/shared-identity-egress-via-fqdn.yaml`](./cilium/shared/shared-identity-egress-via-fqdn.yaml) |
+| `apim-baseline` | [`shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
+| `application-baseline` | [`shared/application-baseline.yaml`](./cilium/shared/application-baseline.yaml) |
+| `argocd-hardened` | [`shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) |
+| `argocd-repo-server-helm-egress` | [`shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) |
+| `deny-application-cloud-metadata` | [`shared/application-cloud-metadata-deny.yaml`](./cilium/shared/application-cloud-metadata-deny.yaml) |
+| `deny-application-sentiment-to-subnetcalc` | [`shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) |
+| `deny-application-subnetcalc-to-sentiment` | [`shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) |
+| `deny-cloud-metadata-egress` | [`shared/deny-cloud-metadata-egress.yaml`](./cilium/shared/deny-cloud-metadata-egress.yaml) |
+| `gitea-hardened` | [`shared/gitea-hardened.yaml`](./cilium/shared/gitea-hardened.yaml) |
+| `gitea-runner-hardened` | [`shared/gitea-runner-hardened.yaml`](./cilium/shared/gitea-runner-hardened.yaml) |
+| `nginx-gateway-control-plane` | [`shared/azure-auth-nginx-gateway-ingress.yaml`](./cilium/shared/azure-auth-nginx-gateway-ingress.yaml) |
+| `observability-hardened` | [`shared/observability-hardened.yaml`](./cilium/shared/observability-hardened.yaml) |
+| `platform-baseline-headlamp` | [`shared/platform-baseline.yaml`](./cilium/shared/platform-baseline.yaml) |
+| `platform-gateway-hardened` | [`shared/platform-gateway-hardened.yaml`](./cilium/shared/platform-gateway-hardened.yaml) |
+| `shared-auth-proxy-bridge` | [`shared/shared-auth-proxy-bridge.yaml`](./cilium/shared/shared-auth-proxy-bridge.yaml) |
+| `shared-baseline` | [`shared/shared-baseline.yaml`](./cilium/shared/shared-baseline.yaml) |
+| `shared-identity-provider-ingress` | [`shared/shared-identity-provider-ingress.yaml`](./cilium/shared/shared-identity-provider-ingress.yaml) |
+| `sso-hardened` | [`shared/sso-hardened.yaml`](./cilium/shared/sso-hardened.yaml) |
+
+#### CiliumNetworkPolicy
+
+| Name | Source |
+| --- | --- |
+| `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
+| `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-cloudflare-live-fetch` | [`dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) |
+| `subnetcalc-frontend-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
+| `subnetcalc-router-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-router-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
 
 ### Overlay: shared
 
-| Source | Rendered Resources |
+#### CiliumCIDRGroup
+
+| Name | Source |
 | --- | --- |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) | `CiliumClusterwideNetworkPolicy/apim-baseline` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) | `CiliumClusterwideNetworkPolicy/allow-application-backend-egress-via-cidrgroup` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) | `CiliumClusterwideNetworkPolicy/allow-application-backend-egress-via-fqdn` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/application-baseline.yaml`](./cilium/shared/application-baseline.yaml) | `CiliumClusterwideNetworkPolicy/application-baseline` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/application-cloud-metadata-deny.yaml`](./cilium/shared/application-cloud-metadata-deny.yaml) | `CiliumClusterwideNetworkPolicy/deny-application-cloud-metadata` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) | `CiliumClusterwideNetworkPolicy/deny-application-sentiment-to-subnetcalc`<br />`CiliumClusterwideNetworkPolicy/deny-application-subnetcalc-to-sentiment` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/approved-egress-cidrs.yaml`](./cilium/shared/approved-egress-cidrs.yaml) | `CiliumCIDRGroup/approved-egress-cidrs` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) | `CiliumClusterwideNetworkPolicy/argocd-hardened`<br />`CiliumClusterwideNetworkPolicy/argocd-repo-server-helm-egress` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/azure-auth-nginx-gateway-ingress.yaml`](./cilium/shared/azure-auth-nginx-gateway-ingress.yaml) | `CiliumClusterwideNetworkPolicy/nginx-gateway-control-plane` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/deny-cloud-metadata-egress.yaml`](./cilium/shared/deny-cloud-metadata-egress.yaml) | `CiliumClusterwideNetworkPolicy/deny-cloud-metadata-egress` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/gitea-hardened.yaml`](./cilium/shared/gitea-hardened.yaml) | `CiliumClusterwideNetworkPolicy/gitea-hardened` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/gitea-runner-hardened.yaml`](./cilium/shared/gitea-runner-hardened.yaml) | `CiliumClusterwideNetworkPolicy/gitea-runner-hardened` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/observability-hardened.yaml`](./cilium/shared/observability-hardened.yaml) | `CiliumClusterwideNetworkPolicy/observability-hardened` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/platform-baseline.yaml`](./cilium/shared/platform-baseline.yaml) | `CiliumClusterwideNetworkPolicy/platform-baseline-headlamp` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml`](./cilium/shared/platform-gateway-hardened.yaml) | `CiliumClusterwideNetworkPolicy/platform-gateway-hardened` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) | `CiliumClusterwideNetworkPolicy/allow-sentiment-llm-dns-egress` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) | `CiliumClusterwideNetworkPolicy/allow-sentiment-llama-cpp-world-egress` |
-| [`terraform/kubernetes/cluster-policies/cilium/shared/sso-hardened.yaml`](./cilium/shared/sso-hardened.yaml) | `CiliumClusterwideNetworkPolicy/sso-hardened` |
+| `approved-egress-cidrs` | [`shared/approved-egress-cidrs.yaml`](./cilium/shared/approved-egress-cidrs.yaml) |
+
+#### CiliumClusterwideNetworkPolicy
+
+| Name | Source |
+| --- | --- |
+| `allow-application-backend-egress-via-cidrgroup` | [`shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
+| `allow-application-backend-egress-via-fqdn` | [`shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
+| `allow-sentiment-llama-cpp-world-egress` | [`shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
+| `allow-sentiment-llm-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
+| `allow-shared-identity-egress-via-fqdn` | [`shared/shared-identity-egress-via-fqdn.yaml`](./cilium/shared/shared-identity-egress-via-fqdn.yaml) |
+| `apim-baseline` | [`shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
+| `application-baseline` | [`shared/application-baseline.yaml`](./cilium/shared/application-baseline.yaml) |
+| `argocd-hardened` | [`shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) |
+| `argocd-repo-server-helm-egress` | [`shared/argocd-hardened.yaml`](./cilium/shared/argocd-hardened.yaml) |
+| `deny-application-cloud-metadata` | [`shared/application-cloud-metadata-deny.yaml`](./cilium/shared/application-cloud-metadata-deny.yaml) |
+| `deny-application-sentiment-to-subnetcalc` | [`shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) |
+| `deny-application-subnetcalc-to-sentiment` | [`shared/application-project-boundaries.yaml`](./cilium/shared/application-project-boundaries.yaml) |
+| `deny-cloud-metadata-egress` | [`shared/deny-cloud-metadata-egress.yaml`](./cilium/shared/deny-cloud-metadata-egress.yaml) |
+| `gitea-hardened` | [`shared/gitea-hardened.yaml`](./cilium/shared/gitea-hardened.yaml) |
+| `gitea-runner-hardened` | [`shared/gitea-runner-hardened.yaml`](./cilium/shared/gitea-runner-hardened.yaml) |
+| `nginx-gateway-control-plane` | [`shared/azure-auth-nginx-gateway-ingress.yaml`](./cilium/shared/azure-auth-nginx-gateway-ingress.yaml) |
+| `observability-hardened` | [`shared/observability-hardened.yaml`](./cilium/shared/observability-hardened.yaml) |
+| `platform-baseline-headlamp` | [`shared/platform-baseline.yaml`](./cilium/shared/platform-baseline.yaml) |
+| `platform-gateway-hardened` | [`shared/platform-gateway-hardened.yaml`](./cilium/shared/platform-gateway-hardened.yaml) |
+| `shared-auth-proxy-bridge` | [`shared/shared-auth-proxy-bridge.yaml`](./cilium/shared/shared-auth-proxy-bridge.yaml) |
+| `shared-baseline` | [`shared/shared-baseline.yaml`](./cilium/shared/shared-baseline.yaml) |
+| `shared-identity-provider-ingress` | [`shared/shared-identity-provider-ingress.yaml`](./cilium/shared/shared-identity-provider-ingress.yaml) |
+| `sso-hardened` | [`shared/sso-hardened.yaml`](./cilium/shared/sso-hardened.yaml) |
 
 ### Overlay: dev
 
-| Source | Rendered Resources |
+#### CiliumNetworkPolicy
+
+| Name | Source |
 | --- | --- |
-| [`terraform/kubernetes/cluster-policies/cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) | `CiliumNetworkPolicy/subnetcalc-cloudflare-live-fetch` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) | `CiliumNetworkPolicy/sentiment-router-http-routes` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) | `CiliumNetworkPolicy/sentiment-router-ingress`<br />`CiliumNetworkPolicy/sentiment-backend-ingress`<br />`CiliumNetworkPolicy/sentiment-frontend-ingress`<br />`CiliumNetworkPolicy/sentiment-api-egress`<br />`CiliumNetworkPolicy/sentiment-litellm-ingress-egress`<br />`CiliumNetworkPolicy/sentiment-llama-ingress` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) | `CiliumNetworkPolicy/subnetcalc-router-http-routes`<br />`CiliumNetworkPolicy/subnetcalc-api-http-routes` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) | `CiliumNetworkPolicy/subnetcalc-router-ingress`<br />`CiliumNetworkPolicy/subnetcalc-frontend-ingress` |
+| `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
+| `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-cloudflare-live-fetch` | [`dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) |
+| `subnetcalc-frontend-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
+| `subnetcalc-router-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-router-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
 
 ### Overlay: uat
 
-| Source | Rendered Resources |
+#### CiliumNetworkPolicy
+
+| Name | Source |
 | --- | --- |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) | `CiliumNetworkPolicy/sentiment-router-http-routes` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) | `CiliumNetworkPolicy/sentiment-router-ingress`<br />`CiliumNetworkPolicy/sentiment-backend-ingress`<br />`CiliumNetworkPolicy/sentiment-frontend-ingress`<br />`CiliumNetworkPolicy/sentiment-api-egress`<br />`CiliumNetworkPolicy/sentiment-litellm-ingress-egress`<br />`CiliumNetworkPolicy/sentiment-llama-ingress` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) | `CiliumNetworkPolicy/subnetcalc-router-http-routes`<br />`CiliumNetworkPolicy/subnetcalc-api-http-routes` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) | `CiliumNetworkPolicy/subnetcalc-router-ingress`<br />`CiliumNetworkPolicy/subnetcalc-frontend-ingress` |
+| `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
+| `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-frontend-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
+| `subnetcalc-router-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-router-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
 
 ### Overlay: sit
 
-| Source | Rendered Resources |
+#### CiliumNetworkPolicy
+
+| Name | Source |
 | --- | --- |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) | `CiliumNetworkPolicy/sentiment-router-http-routes` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) | `CiliumNetworkPolicy/sentiment-router-ingress`<br />`CiliumNetworkPolicy/sentiment-backend-ingress`<br />`CiliumNetworkPolicy/sentiment-frontend-ingress`<br />`CiliumNetworkPolicy/sentiment-api-egress`<br />`CiliumNetworkPolicy/sentiment-litellm-ingress-egress`<br />`CiliumNetworkPolicy/sentiment-llama-ingress` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) | `CiliumNetworkPolicy/subnetcalc-router-http-routes`<br />`CiliumNetworkPolicy/subnetcalc-api-http-routes` |
-| [`terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) | `CiliumNetworkPolicy/subnetcalc-router-ingress`<br />`CiliumNetworkPolicy/subnetcalc-frontend-ingress` |
+| `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
+| `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
+| `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-frontend-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
+| `subnetcalc-router-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
+| `subnetcalc-router-ingress` | [`projects/subnetcalc/subnetcalc-runtime.yaml`](./cilium/projects/subnetcalc/subnetcalc-runtime.yaml) |
 
 ## Kyverno
 
@@ -112,26 +170,32 @@ Rendered from [`terraform/kubernetes/cluster-policies/kyverno`](./kyverno) after
 
 ### Top-Level Rendered Set
 
-| Kind | Name | Source Files |
-| --- | --- | --- |
-| `ClusterPolicy` | `default-deny-namespaces` | [`terraform/kubernetes/cluster-policies/kyverno/shared/namespace-default-deny.yaml`](./kyverno/shared/namespace-default-deny.yaml) |
-| `ClusterPolicy` | `protect-default-deny-netpol` | [`terraform/kubernetes/cluster-policies/kyverno/shared/protect-default-deny.yaml`](./kyverno/shared/protect-default-deny.yaml) |
-| `ClusterPolicy` | `require-app-labels-application-namespaces` | [`terraform/kubernetes/cluster-policies/kyverno/shared/require-app-labels-application-namespaces.yaml`](./kyverno/shared/require-app-labels-application-namespaces.yaml) |
-| `ClusterPolicy` | `restrict-image-registries` | [`terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml`](./kyverno/shared/restrict-image-registries.yaml) |
-| `ClusterPolicy` | `uat-restrict-capabilities` | [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-capabilities.yaml`](./kyverno/uat/uat-restrict-capabilities.yaml) |
+#### ClusterPolicy
+
+| Name | Source |
+| --- | --- |
+| `default-deny-namespaces` | [`terraform/kubernetes/cluster-policies/kyverno/shared/namespace-default-deny.yaml`](./kyverno/shared/namespace-default-deny.yaml) |
+| `protect-default-deny-netpol` | [`terraform/kubernetes/cluster-policies/kyverno/shared/protect-default-deny.yaml`](./kyverno/shared/protect-default-deny.yaml) |
+| `require-app-labels-application-namespaces` | [`terraform/kubernetes/cluster-policies/kyverno/shared/require-app-labels-application-namespaces.yaml`](./kyverno/shared/require-app-labels-application-namespaces.yaml) |
+| `restrict-image-registries` | [`terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml`](./kyverno/shared/restrict-image-registries.yaml) |
+| `uat-restrict-capabilities` | [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-capabilities.yaml`](./kyverno/uat/uat-restrict-capabilities.yaml) |
 
 ### Overlay: shared
 
-| Source | Rendered Resources |
+#### ClusterPolicy
+
+| Name | Source |
 | --- | --- |
-| [`terraform/kubernetes/cluster-policies/kyverno/shared/namespace-default-deny.yaml`](./kyverno/shared/namespace-default-deny.yaml) | `ClusterPolicy/default-deny-namespaces` |
-| [`terraform/kubernetes/cluster-policies/kyverno/shared/protect-default-deny.yaml`](./kyverno/shared/protect-default-deny.yaml) | `ClusterPolicy/protect-default-deny-netpol` |
-| [`terraform/kubernetes/cluster-policies/kyverno/shared/require-app-labels-application-namespaces.yaml`](./kyverno/shared/require-app-labels-application-namespaces.yaml) | `ClusterPolicy/require-app-labels-application-namespaces` |
-| [`terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml`](./kyverno/shared/restrict-image-registries.yaml) | `ClusterPolicy/restrict-image-registries` |
+| `default-deny-namespaces` | [`terraform/kubernetes/cluster-policies/kyverno/shared/namespace-default-deny.yaml`](./kyverno/shared/namespace-default-deny.yaml) |
+| `protect-default-deny-netpol` | [`terraform/kubernetes/cluster-policies/kyverno/shared/protect-default-deny.yaml`](./kyverno/shared/protect-default-deny.yaml) |
+| `require-app-labels-application-namespaces` | [`terraform/kubernetes/cluster-policies/kyverno/shared/require-app-labels-application-namespaces.yaml`](./kyverno/shared/require-app-labels-application-namespaces.yaml) |
+| `restrict-image-registries` | [`terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml`](./kyverno/shared/restrict-image-registries.yaml) |
 
 ### Overlay: uat
 
-| Source | Rendered Resources |
+#### ClusterPolicy
+
+| Name | Source |
 | --- | --- |
-| [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-capabilities.yaml`](./kyverno/uat/uat-restrict-capabilities.yaml) | `ClusterPolicy/uat-restrict-capabilities` |
+| `uat-restrict-capabilities` | [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-capabilities.yaml`](./kyverno/uat/uat-restrict-capabilities.yaml) |
 

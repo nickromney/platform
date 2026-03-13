@@ -24,70 +24,19 @@ Scope:
 - Dynamic C4 views are split into focused paths because Mermaid C4 beta is much
   better at ordered interactions than at `alt` / `else` branching.
 
+GitHub currently renders these Mermaid views with a transparent canvas in a way
+that makes the C4 diagrams hard to read, so each diagram below is a checked-in
+SVG render. Click any diagram to open its `.mmd` source.
+
 ## System Context
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Context
-    title Sentiment and Subnetcalc system context
-
-    Person(browser, "Browser", "Interactive user agent")
-    System_Ext(cloudflare, "www.cloudflare.com", "Serves the live Cloudflare range files")
-    System_Ext(host_llm, "Host-side LLM endpoint", "Docker Desktop model runner on TCP 12434")
-
-    Enterprise_Boundary(platform, "Local platform demo") {
-        System(gateway, "platform-gateway", "Cluster entrypoint and shared routing")
-        System(sso, "SSO stack", "oauth2-proxy and Dex")
-        System(subnetcalc, "subnetcalc", "Authenticated CIDR and Cloudflare range demo")
-        System(sentiment, "sentiment", "Authenticated sentiment analysis demo")
-        System(observability, "otel-collector", "Shared telemetry sink")
-    }
-
-    Rel(browser, gateway, "Uses over HTTPS")
-    Rel(gateway, sso, "Routes authenticated traffic through")
-    Rel(sso, subnetcalc, "Forwards subnetcalc requests to")
-    Rel(sso, sentiment, "Forwards sentiment requests to")
-    Rel(subnetcalc, observability, "Exports traces to")
-    Rel(sentiment, observability, "Exports traces to")
-    Rel(subnetcalc, cloudflare, "dev only: fetches live range files from")
-    Rel(sentiment, host_llm, "direct mode: calls through llm-gateway to")
-    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
-```
+[![System context diagram](./diagrams/apps-c4/01-system-context.svg)](./diagrams/apps-c4/01-system-context.mmd)
 
 ## Container View
 
 ### Subnetcalc
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Container
-    title Subnetcalc container view
-
-    Person(browser, "Browser", "Interactive user agent")
-    Container_Ext(gateway, "platform-gateway", "Ingress / reverse proxy", "Cluster entrypoint for the demo hosts")
-    Container_Ext(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Applies login and session checks for subnetcalc")
-    Container_Ext(dex, "Dex", "OIDC provider", "Publishes issuer and JWKS metadata")
-    Container_Ext(otel, "otel-collector", "OpenTelemetry Collector", "Receives traces from the app")
-    Container_Ext(cloudflare, "www.cloudflare.com", "HTTPS endpoint", "Serves /ips-v4 and /ips-v6")
-
-    Container_Boundary(subnetcalc, "subnetcalc") {
-        Container(router, "subnetcalc-router", "NGINX", "Routes browser traffic between frontend and APIM")
-        Container(frontend, "subnetcalc-frontend", "SPA", "Browser user interface")
-        Container(apim, "subnetcalc-apim-simulator", "APIM simulator", "Validates identity context and forwards /api traffic")
-        Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
-    }
-
-    Rel(browser, gateway, "Uses over HTTPS")
-    Rel(gateway, oauth, "Routes subnetcalc host/path traffic to")
-    Rel(oauth, router, "Forwards authenticated traffic to")
-    Rel(router, frontend, "Serves UI routes from")
-    Rel(router, apim, "Forwards /api/* to")
-    Rel(apim, dex, "Validates issuer and JWKS against")
-    Rel(apim, api, "Forwards validated API calls to")
-    Rel(api, otel, "Exports traces to")
-    Rel(api, cloudflare, "dev only: fetches live range files from")
-    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
-```
+[![Subnetcalc container diagram](./diagrams/apps-c4/02-container-subnetcalc.svg)](./diagrams/apps-c4/02-container-subnetcalc.mmd)
 
 Key intent:
 
@@ -97,41 +46,7 @@ Key intent:
 
 ### Sentiment
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Container
-    title Sentiment container view
-
-    Person(browser, "Browser", "Interactive user agent")
-    Container_Ext(gateway, "platform-gateway", "Ingress / reverse proxy", "Cluster entrypoint for the demo hosts")
-    Container_Ext(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Applies login and session checks for sentiment")
-    Container_Ext(otel, "otel-collector", "OpenTelemetry Collector", "Receives traces from the app")
-    Container_Ext(llm_gateway, "llm-gateway", "ExternalName Service", "Stable in-cluster name for the host-backed LLM")
-    Container_Ext(host_llm, "Host-side LLM endpoint", "Docker Desktop model runner", "Listens on TCP 12434")
-
-    Container_Boundary(sentiment, "sentiment") {
-        Container(router, "sentiment-router", "NGINX", "Routes browser traffic between UI and API")
-        Container(ui, "sentiment-auth-ui", "SPA", "Browser user interface")
-        Container(api, "sentiment-api", "API service", "Calls the configured LLM backend and emits traces")
-    }
-
-    Container_Boundary(sentiment_alt, "Alternative in-cluster LLM mode") {
-        Container(litellm, "litellm", "LiteLLM", "Optional in-cluster LLM gateway")
-        Container(llama, "llama.cpp", "llama.cpp server", "Optional in-cluster model runtime")
-    }
-
-    Rel(browser, gateway, "Uses over HTTPS")
-    Rel(gateway, oauth, "Routes sentiment host/path traffic to")
-    Rel(oauth, router, "Forwards authenticated traffic to")
-    Rel(router, ui, "Serves UI routes from")
-    Rel(router, api, "Forwards /api/* to")
-    Rel(api, llm_gateway, "direct mode: calls")
-    Rel(llm_gateway, host_llm, "Resolves and connects to")
-    Rel(api, litellm, "alternative mode: calls")
-    Rel(litellm, llama, "Forwards model requests to")
-    Rel(api, otel, "Exports traces to")
-    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")
-```
+[![Sentiment container diagram](./diagrams/apps-c4/03-container-sentiment.svg)](./diagrams/apps-c4/03-container-sentiment.mmd)
 
 Key intent:
 
@@ -150,27 +65,7 @@ request or refresh job move through?"
 
 ### Subnetcalc Request State Diagram
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-stateDiagram-v2
-    [*] --> IncomingRequest
-
-    IncomingRequest --> OAuthRedirect : no oauth2-proxy session
-    IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
-    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
-
-    AuthenticatedRequest --> RouterDispatch
-    RouterDispatch --> FrontendResponse : non-/api path
-    RouterDispatch --> APIMValidation : /api/* path
-
-    APIMValidation --> DexIssuerCheck
-    DexIssuerCheck --> BackendRequest : issuer and JWKS valid
-    BackendRequest --> TraceExport
-    TraceExport --> APIResponse
-
-    FrontendResponse --> [*]
-    APIResponse --> [*]
-```
+[![Subnetcalc request state diagram](./diagrams/apps-c4/04-state-subnetcalc-request.svg)](./diagrams/apps-c4/04-state-subnetcalc-request.mmd)
 
 What this view is trying to make obvious:
 
@@ -182,35 +77,7 @@ What this view is trying to make obvious:
 
 ### Sentiment Backend Mode State Diagram
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-stateDiagram-v2
-    [*] --> IncomingRequest
-
-    IncomingRequest --> OAuthRedirect : no oauth2-proxy session
-    IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
-    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
-
-    AuthenticatedRequest --> RouterDispatch
-    RouterDispatch --> FrontendResponse : non-/api path
-    RouterDispatch --> BackendRequest : /api/* path
-
-    BackendRequest --> DirectMode : LLM_GATEWAY_MODE=direct
-    BackendRequest --> BrokerMode : LiteLLM mode selected
-
-    DirectMode --> LLMGatewayCall
-    LLMGatewayCall --> HostLLMInference
-
-    BrokerMode --> LiteLLMCall
-    LiteLLMCall --> LlamaCppInference
-
-    HostLLMInference --> TraceExport
-    LlamaCppInference --> TraceExport
-    TraceExport --> APIResponse
-
-    FrontendResponse --> [*]
-    APIResponse --> [*]
-```
+[![Sentiment backend mode state diagram](./diagrams/apps-c4/05-state-sentiment-backend-mode.svg)](./diagrams/apps-c4/05-state-sentiment-backend-mode.mmd)
 
 What this view is trying to make obvious:
 
@@ -224,29 +91,7 @@ What this view is trying to make obvious:
 
 ### Subnetcalc API Path
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Dynamic
-    title Subnetcalc API path
-
-    Person(browser, "Browser", "Interactive user agent")
-    Container(gateway, "platform-gateway", "Ingress / reverse proxy", "Shared entrypoint")
-    Container(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Subnetcalc auth boundary")
-    Container(router, "subnetcalc-router", "NGINX", "Routes UI and API traffic")
-    Container(apim, "subnetcalc-apim-simulator", "APIM simulator", "Validates auth context and forwards /api traffic")
-    Container(dex, "Dex", "OIDC provider", "Publishes issuer and JWKS metadata")
-    Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
-    Container(otel, "otel-collector", "OpenTelemetry Collector", "Shared telemetry sink")
-
-    RelIndex(1, browser, gateway, "HTTPS request")
-    RelIndex(2, gateway, oauth, "Route to oauth2-proxy")
-    RelIndex(3, oauth, router, "Authenticated forward")
-    RelIndex(4, router, apim, "Forward /api/*")
-    RelIndex(5, apim, dex, "Validate issuer and JWKS")
-    RelIndex(6, apim, api, "Forward validated API request")
-    RelIndex(7, api, otel, "Emit traces")
-    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")
-```
+[![Subnetcalc API path dynamic diagram](./diagrams/apps-c4/06-dynamic-subnetcalc-api-path.svg)](./diagrams/apps-c4/06-dynamic-subnetcalc-api-path.mmd)
 
 Control points:
 
@@ -259,18 +104,7 @@ Control points:
 
 ### Subnetcalc Range Source Split
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Dynamic
-    title Subnetcalc live range fetch in dev
-
-    Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
-    Container_Ext(cloudflare, "www.cloudflare.com", "HTTPS endpoint", "Serves /ips-v4 and /ips-v6")
-
-    RelIndex(1, api, cloudflare, "GET /ips-v4")
-    RelIndex(2, api, cloudflare, "GET /ips-v6")
-    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
-```
+[![Subnetcalc range source split dynamic diagram](./diagrams/apps-c4/07-dynamic-subnetcalc-range-source-split.svg)](./diagrams/apps-c4/07-dynamic-subnetcalc-range-source-split.mmd)
 
 Control points:
 
@@ -281,29 +115,7 @@ Control points:
 
 ### Sentiment API Path
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Dynamic
-    title Sentiment API path in shipped direct mode
-
-    Person(browser, "Browser", "Interactive user agent")
-    Container(gateway, "platform-gateway", "Ingress / reverse proxy", "Shared entrypoint")
-    Container(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Sentiment auth boundary")
-    Container(router, "sentiment-router", "NGINX", "Routes UI and API traffic")
-    Container(api, "sentiment-api", "API service", "Calls the configured LLM backend and emits traces")
-    Container(llm_gateway, "llm-gateway", "ExternalName Service", "Stable in-cluster name for the host-backed LLM")
-    Container_Ext(host_llm, "Host-side LLM endpoint", "Docker Desktop model runner", "Listens on TCP 12434")
-    Container(otel, "otel-collector", "OpenTelemetry Collector", "Shared telemetry sink")
-
-    RelIndex(1, browser, gateway, "HTTPS request")
-    RelIndex(2, gateway, oauth, "Route to oauth2-proxy")
-    RelIndex(3, oauth, router, "Authenticated forward")
-    RelIndex(4, router, api, "Forward /api/*")
-    RelIndex(5, api, llm_gateway, "Call llm-gateway")
-    RelIndex(6, llm_gateway, host_llm, "Resolve ExternalName and connect on 12434")
-    RelIndex(7, api, otel, "Emit traces")
-    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")
-```
+[![Sentiment API path dynamic diagram](./diagrams/apps-c4/08-dynamic-sentiment-api-path.svg)](./diagrams/apps-c4/08-dynamic-sentiment-api-path.mmd)
 
 Control points:
 
@@ -315,19 +127,7 @@ Control points:
 
 ### Sentiment Alternative LLM Path
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-C4Dynamic
-    title Sentiment alternative in-cluster LLM path
-
-    Container(api, "sentiment-api", "API service", "Calls the configured LLM backend and emits traces")
-    Container(litellm, "litellm", "LiteLLM", "Optional in-cluster LLM gateway")
-    Container(llama, "llama.cpp", "llama.cpp server", "Optional in-cluster model runtime")
-
-    RelIndex(1, api, litellm, "Call model alias on 4000")
-    RelIndex(2, litellm, llama, "Forward to llama.cpp on 8080")
-    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
-```
+[![Sentiment alternative LLM path dynamic diagram](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.svg)](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.mmd)
 
 Control points:
 
@@ -339,123 +139,19 @@ Control points:
 
 ### Subnetcalc Request Journey
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-sequenceDiagram
-    autonumber
-    participant Browser as Browser
-    participant Gateway as platform-gateway
-    participant OAuth as oauth2-proxy
-    participant Router as subnetcalc-router
-    participant APIM as subnetcalc-apim-simulator
-    participant Dex as Dex
-    participant API as subnetcalc-api
-    participant OTel as otel-collector
-
-    Browser->>Gateway: HTTPS request
-    Gateway->>OAuth: Route to oauth2-proxy
-    OAuth->>Router: Authenticated forward
-    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + subnetcalc-router-ingress
-
-    alt UI path
-        Router->>Router: Match non-/api route
-        Router->>Browser: SPA content via subnetcalc-frontend
-        Note over Router,Browser: Cilium: subnetcalc-frontend-ingress
-    else API path
-        Router->>APIM: Forward /api/*
-        Note over Router,APIM: Cilium: subnetcalc-router-http-routes
-        APIM->>Dex: JWKS / issuer validation
-        Note over APIM,Dex: Cilium: apim-baseline + sso-hardened
-        APIM->>API: Forward validated API request
-        Note over APIM,API: Cilium: apim-baseline + subnetcalc-api-http-routes
-        API->>OTel: Emit traces
-    end
-```
+[![Subnetcalc request journey sequence diagram](./diagrams/apps-c4/10-journey-subnetcalc-request.svg)](./diagrams/apps-c4/10-journey-subnetcalc-request.mmd)
 
 ### Subnetcalc Live Range Refresh
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-sequenceDiagram
-    autonumber
-    participant API as subnetcalc-api
-    participant Cloudflare as www.cloudflare.com
-
-    alt dev
-        API->>Cloudflare: GET /ips-v4 and /ips-v6
-        Note over API,Cloudflare: Cilium: subnetcalc-cloudflare-live-fetch
-        Cloudflare-->>API: Published range files
-    else uat
-        API->>API: Use bundled fallback ranges
-        Note over API: Application code path in [cloudflare_ips.py](../../apps/subnet-calculator/api-fastapi-container-app/app/cloudflare_ips.py)
-    end
-```
+[![Subnetcalc live range refresh sequence diagram](./diagrams/apps-c4/11-journey-subnetcalc-live-range-refresh.svg)](./diagrams/apps-c4/11-journey-subnetcalc-live-range-refresh.mmd)
 
 ### Subnetcalc Auth Handshake And Logout
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-sequenceDiagram
-    autonumber
-    participant Browser as Browser
-    participant Gateway as platform-gateway
-    participant OAuth as oauth2-proxy
-    participant Dex as Dex
-    participant Router as subnetcalc-router
-
-    Browser->>Gateway: GET /
-    Gateway->>OAuth: Route host to oauth2-proxy
-    OAuth-->>Browser: 302 to Dex via /oauth2/start
-    Browser->>Dex: Authenticate
-    Dex-->>OAuth: Callback with auth code
-    OAuth->>OAuth: Create session cookie
-    OAuth->>Router: Forward authenticated request with user headers
-    Router-->>Browser: SPA shell
-    Browser->>Gateway: GET /.auth/me
-    Gateway->>OAuth: Route host to oauth2-proxy
-    OAuth->>Router: Forward /.auth/me with auth headers
-    Router-->>Browser: Current user payload
-    Browser->>Gateway: GET /.auth/logout
-    Gateway->>OAuth: Route host to oauth2-proxy
-    OAuth->>Router: Forward logout helper path
-    Router-->>Browser: 302 /oauth2/sign_out?rd=/logged-out.html
-    Browser->>OAuth: GET /oauth2/sign_out with session cookie
-    OAuth-->>Browser: Clear cookie and redirect /logged-out.html
-```
+[![Subnetcalc auth handshake and logout sequence diagram](./diagrams/apps-c4/12-journey-subnetcalc-auth-handshake-logout.svg)](./diagrams/apps-c4/12-journey-subnetcalc-auth-handshake-logout.mmd)
 
 ### Sentiment Request Journey
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
-sequenceDiagram
-    autonumber
-    participant Browser as Browser
-    participant Gateway as platform-gateway
-    participant OAuth as oauth2-proxy
-    participant Router as sentiment-router
-    participant UI as sentiment-auth-ui
-    participant API as sentiment-api
-    participant GatewaySvc as llm-gateway Service
-    participant HostLLM as Host-side LLM
-    participant OTel as otel-collector
-
-    Browser->>Gateway: HTTPS request
-    Gateway->>OAuth: Route to oauth2-proxy
-    OAuth->>Router: Authenticated forward
-    Note over OAuth,Router: Cilium: platform-gateway-hardened + sso-hardened + sentiment-router-ingress
-
-    alt UI path
-        Router->>UI: Serve UI route
-        Note over Router,UI: Cilium: sentiment-frontend-ingress
-    else API path
-        Router->>API: Forward /api/*
-        Note over Router,API: Cilium: sentiment-router-http-routes + sentiment-backend-ingress
-        API->>GatewaySvc: Call llm-gateway
-        GatewaySvc->>HostLLM: Resolve ExternalName and connect on 12434
-        Note over API,HostLLM: Cilium: allow-sentiment-api-llm-egress in direct mode
-        API->>OTel: Emit traces
-    end
-```
+[![Sentiment request journey sequence diagram](./diagrams/apps-c4/13-journey-sentiment-request.svg)](./diagrams/apps-c4/13-journey-sentiment-request.mmd)
 
 ## Policy Control Matrix
 

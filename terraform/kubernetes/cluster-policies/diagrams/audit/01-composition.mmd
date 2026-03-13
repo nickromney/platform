@@ -1,0 +1,28 @@
+flowchart TD
+    Root["cluster-policies/"] --> Cilium["cilium/kustomization.yaml"]
+    Root --> Kyverno["kyverno/kustomization.yaml"]
+
+    Cilium --> CShared["shared/"]
+    Cilium --> CProjects["projects/"]
+    Cilium --> CDev["dev/"]
+    Cilium --> CUat["uat/"]
+    Cilium --> CSit["sit/"]
+
+    Kyverno --> KShared["shared/"]
+    Kyverno --> KUat["uat/"]
+
+    KShared --> DefaultDeny["Generate and protect default-deny NetworkPolicy"]
+    KShared --> ImageAudit["Audit image sources"]
+    KShared --> LabelGuard["Enforce app boundary labels in namespace-role=application namespaces"]
+    KUat --> PodGuard["Audit selected pod hardening controls in uat"]
+
+    CShared --> Platform["Platform and shared namespace baselines"]
+    CShared --> AppGuardrails["Application namespace guardrails"]
+    CShared --> SharedDeny["Shared metadata egress deny rules"]
+
+    CProjects --> Sentiment["Reusable sentiment app-flow policies"]
+    CProjects --> Subnetcalc["Reusable subnetcalc app-flow policies"]
+
+    CDev --> DevBase["dev overlay + namespace-local overrides"]
+    CUat --> UatBase["uat overlay"]
+    CSit --> SitBase["sit overlay (empty namespace, pre-staged policies)"]

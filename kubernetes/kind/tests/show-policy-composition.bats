@@ -11,8 +11,12 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'[`terraform/kubernetes/scripts/show-policy-composition.sh`](../scripts/show-policy-composition.sh)'* ]]
-  [[ "${output}" == *'| `CiliumNetworkPolicy` | `subnetcalc-cloudflare-live-fetch` | [`terraform/kubernetes/cluster-policies/cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) |'* ]]
-  [[ "${output}" == *'| [`terraform/kubernetes/cluster-policies/cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) | `CiliumNetworkPolicy/subnetcalc-cloudflare-live-fetch` |'* ]]
+  [[ "${output}" == *'Displayed policy source paths below are relative to [`terraform/kubernetes/cluster-policies/cilium`](./cilium).'* ]]
+  [[ "${output}" == *'| Name | Source |'* ]]
+  [[ "${output}" != *'| Name | Source Files |'* ]]
+  [[ "${output}" != *'| Source | Rendered Resources |'* ]]
+  [[ "${output}" == *'#### CiliumNetworkPolicy'* ]]
+  [[ "${output}" == *'| `subnetcalc-cloudflare-live-fetch` | [`dev/overrides/subnetcalc-cloudflare-live-fetch.yaml`](./cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml) |'* ]]
   [[ "${output}" != *'subnetcalc-api-cloudflare-egress.yaml` | `CiliumClusterwideNetworkPolicy/allow-subnetcalc-api-cloudflare-egress`'* ]]
 }
 
@@ -22,7 +26,8 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: shared"* ]]
   [[ "${output}" == *"Overlay: uat"* ]]
-  [[ "${output}" == *"ClusterPolicy/protect-default-deny-netpol"* ]]
+  [[ "${output}" == *"  ClusterPolicy"* ]]
+  [[ "${output}" == *"protect-default-deny-netpol"* ]]
 }
 
 @test "show-policy-composition supports dev sentiment egress slices" {
@@ -31,11 +36,12 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: dev"* ]]
   [[ "${output}" != *"Overlay: uat"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-api-egress"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-litellm-ingress-egress"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-router-http-routes"* ]]
-  [[ "${output}" != *"CiliumNetworkPolicy/sentiment-frontend-ingress"* ]]
-  [[ "${output}" != *"CiliumNetworkPolicy/sentiment-router-ingress"* ]]
+  [[ "${output}" == *"  CiliumNetworkPolicy"* ]]
+  [[ "${output}" == *"sentiment-api-egress"* ]]
+  [[ "${output}" == *"sentiment-litellm-ingress-egress"* ]]
+  [[ "${output}" == *"sentiment-router-http-routes"* ]]
+  [[ "${output}" != *"sentiment-frontend-ingress"* ]]
+  [[ "${output}" != *"sentiment-router-ingress"* ]]
 }
 
 @test "show-policy-composition supports uat sentiment ingress slices" {
@@ -44,26 +50,29 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: uat"* ]]
   [[ "${output}" != *"Overlay: dev"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-router-ingress"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-backend-ingress"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-frontend-ingress"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/sentiment-litellm-ingress-egress"* ]]
-  [[ "${output}" != *"CiliumNetworkPolicy/sentiment-api-egress"* ]]
+  [[ "${output}" == *"  CiliumNetworkPolicy"* ]]
+  [[ "${output}" == *"sentiment-router-ingress"* ]]
+  [[ "${output}" == *"sentiment-backend-ingress"* ]]
+  [[ "${output}" == *"sentiment-frontend-ingress"* ]]
+  [[ "${output}" == *"sentiment-litellm-ingress-egress"* ]]
+  [[ "${output}" != *"sentiment-api-egress"* ]]
 }
 
 @test "show-policy-composition supports allow and deny label slices" {
   run "${SCRIPT}" --target cilium --label allow --egress --format text
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"CiliumClusterwideNetworkPolicy/allow-application-backend-egress-via-fqdn"* ]]
-  [[ "${output}" == *"CiliumClusterwideNetworkPolicy/allow-sentiment-llama-cpp-world-egress"* ]]
-  [[ "${output}" != *"CiliumClusterwideNetworkPolicy/deny-cloud-metadata-egress"* ]]
+  [[ "${output}" == *"  CiliumClusterwideNetworkPolicy"* ]]
+  [[ "${output}" == *"allow-application-backend-egress-via-fqdn"* ]]
+  [[ "${output}" == *"allow-sentiment-llama-cpp-world-egress"* ]]
+  [[ "${output}" != *"deny-cloud-metadata-egress"* ]]
 
   run "${SCRIPT}" --target cilium --label deny --egress --format text
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"CiliumClusterwideNetworkPolicy/deny-cloud-metadata-egress"* ]]
-  [[ "${output}" == *"CiliumClusterwideNetworkPolicy/deny-application-sentiment-to-subnetcalc"* ]]
+  [[ "${output}" == *"  CiliumClusterwideNetworkPolicy"* ]]
+  [[ "${output}" == *"deny-cloud-metadata-egress"* ]]
+  [[ "${output}" == *"deny-application-sentiment-to-subnetcalc"* ]]
 }
 
 @test "show-policy-composition supports sit overlay slices" {
@@ -72,6 +81,7 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: sit"* ]]
   [[ "${output}" != *"Overlay: dev"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/subnetcalc-router-http-routes"* ]]
-  [[ "${output}" == *"CiliumNetworkPolicy/subnetcalc-api-http-routes"* ]]
+  [[ "${output}" == *"  CiliumNetworkPolicy"* ]]
+  [[ "${output}" == *"subnetcalc-router-http-routes"* ]]
+  [[ "${output}" == *"subnetcalc-api-http-routes"* ]]
 }

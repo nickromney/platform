@@ -1,0 +1,14 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+sequenceDiagram
+    autonumber
+    participant API as subnetcalc-api
+    participant Cloudflare as www.cloudflare.com
+
+    alt dev
+        API->>Cloudflare: GET /ips-v4 and /ips-v6
+        Note over API,Cloudflare: Cilium: subnetcalc-cloudflare-live-fetch
+        Cloudflare-->>API: Published range files
+    else uat
+        API->>API: Use bundled fallback ranges
+        Note over API: Application code path in [cloudflare_ips.py](../../apps/subnet-calculator/api-fastapi-container-app/app/cloudflare_ips.py)
+    end

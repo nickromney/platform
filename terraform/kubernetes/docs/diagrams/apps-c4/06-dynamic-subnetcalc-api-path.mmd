@@ -1,0 +1,21 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+C4Dynamic
+    title Subnetcalc API path
+
+    Person(browser, "Browser", "Interactive user agent")
+    Container(gateway, "platform-gateway", "Ingress / reverse proxy", "Shared entrypoint")
+    Container(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Subnetcalc auth boundary")
+    Container(router, "subnetcalc-router", "NGINX", "Routes UI and API traffic")
+    Container(apim, "subnetcalc-apim-simulator", "APIM simulator", "Validates auth context and forwards /api traffic")
+    Container(dex, "Dex", "OIDC provider", "Publishes issuer and JWKS metadata")
+    Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
+    Container(otel, "otel-collector", "OpenTelemetry Collector", "Shared telemetry sink")
+
+    RelIndex(1, browser, gateway, "HTTPS request")
+    RelIndex(2, gateway, oauth, "Route to oauth2-proxy")
+    RelIndex(3, oauth, router, "Authenticated forward")
+    RelIndex(4, router, apim, "Forward /api/*")
+    RelIndex(5, apim, dex, "Validate issuer and JWKS")
+    RelIndex(6, apim, api, "Forward validated API request")
+    RelIndex(7, api, otel, "Emit traces")
+    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")

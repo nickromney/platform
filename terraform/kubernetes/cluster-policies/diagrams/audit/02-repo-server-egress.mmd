@@ -1,0 +1,4 @@
+flowchart LR
+    RepoServer["argocd-repo-server"] --> Policies["Gitea Git repo: platform/policies"]
+    Policies --> Vendored["apps/vendor/charts/*"]
+    RepoServer --> Bootstrap["dl.gitea.io (Gitea chart only)"]

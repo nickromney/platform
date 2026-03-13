@@ -1,0 +1,25 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+C4Context
+    title Sentiment and Subnetcalc system context
+
+    Person(browser, "Browser", "Interactive user agent")
+    System_Ext(cloudflare, "www.cloudflare.com", "Serves the live Cloudflare range files")
+    System_Ext(host_llm, "Host-side LLM endpoint", "Docker Desktop model runner on TCP 12434")
+
+    Enterprise_Boundary(platform, "Local platform demo") {
+        System(gateway, "platform-gateway", "Cluster entrypoint and shared routing")
+        System(sso, "SSO stack", "oauth2-proxy and Dex")
+        System(subnetcalc, "subnetcalc", "Authenticated CIDR and Cloudflare range demo")
+        System(sentiment, "sentiment", "Authenticated sentiment analysis demo")
+        System(observability, "otel-collector", "Shared telemetry sink")
+    }
+
+    Rel(browser, gateway, "Uses over HTTPS")
+    Rel(gateway, sso, "Routes authenticated traffic through")
+    Rel(sso, subnetcalc, "Forwards subnetcalc requests to")
+    Rel(sso, sentiment, "Forwards sentiment requests to")
+    Rel(subnetcalc, observability, "Exports traces to")
+    Rel(sentiment, observability, "Exports traces to")
+    Rel(subnetcalc, cloudflare, "dev only: fetches live range files from")
+    Rel(sentiment, host_llm, "direct mode: calls through llm-gateway to")
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

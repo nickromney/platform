@@ -7,8 +7,9 @@ spec:
     Hardened policy for platform-gateway namespace. This is the TLS termination
     point (NGINX Gateway Fabric). All external traffic enters here.
     Ingress: external clients via host/remote-node on :443 only.
-    Egress: sso (oauth2-proxy on :4180, Dex on :5556), headlamp on :4466,
-    policy-reporter UI on :8080, DNS, kube-apiserver, nginx-gateway control-plane.
+    Egress: shared auth proxies on :4180, shared Dex on :5556, headlamp on
+    :4466, policy-reporter UI on :8080, DNS, kube-apiserver, and the
+    nginx-gateway control-plane.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": platform-gateway
@@ -63,11 +64,18 @@ spec:
             "k8s:io.kubernetes.pod.namespace": platform-gateway
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/component": authentication-proxy
       toPorts:
         - ports:
             - port: "4180"
               protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/name": dex
+      toPorts:
+        - ports:
             # Dex OIDC endpoints proxied via httproute-dex.yaml
             - port: "5556"
               protocol: TCP

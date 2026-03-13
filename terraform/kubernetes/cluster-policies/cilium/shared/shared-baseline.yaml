@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: shared-baseline
+spec:
+  description: >-
+    Baseline guardrail for every namespace labeled
+    platform.publiccloudexperiments.net/namespace-role=shared.
+    Provides only kubelet health-probe ingress plus DNS and kube-apiserver
+    egress. Workload-specific shared bridge policies layer on top for auth,
+    telemetry, and namespace-local service paths.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

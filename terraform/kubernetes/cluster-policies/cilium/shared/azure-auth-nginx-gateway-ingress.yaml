@@ -22,8 +22,8 @@ spec:
               protocol: TCP
     - fromEndpoints:
         - matchLabels:
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
             "k8s:app.kubernetes.io/name": platform-gateway-nginx
-            "k8s:io.kubernetes.pod.namespace": platform-gateway
       toPorts:
         - ports:
             - port: "443"

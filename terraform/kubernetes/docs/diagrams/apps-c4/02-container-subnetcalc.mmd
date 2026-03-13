@@ -1,0 +1,28 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
+C4Container
+    title Subnetcalc container view
+
+    Person(browser, "Browser", "Interactive user agent")
+    Container_Ext(gateway, "platform-gateway", "Ingress / reverse proxy", "Cluster entrypoint for the demo hosts")
+    Container_Ext(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Applies login and session checks for subnetcalc")
+    Container_Ext(dex, "Dex", "OIDC provider", "Publishes issuer and JWKS metadata")
+    Container_Ext(otel, "otel-collector", "OpenTelemetry Collector", "Receives traces from the app")
+    Container_Ext(cloudflare, "www.cloudflare.com", "HTTPS endpoint", "Serves /ips-v4 and /ips-v6")
+
+    Container_Boundary(subnetcalc, "subnetcalc") {
+        Container(router, "subnetcalc-router", "NGINX", "Routes browser traffic between frontend and APIM")
+        Container(frontend, "subnetcalc-frontend", "SPA", "Browser user interface")
+        Container(apim, "subnetcalc-apim-simulator", "APIM simulator", "Validates identity context and forwards /api traffic")
+        Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
+    }
+
+    Rel(browser, gateway, "Uses over HTTPS")
+    Rel(gateway, oauth, "Routes subnetcalc host/path traffic to")
+    Rel(oauth, router, "Forwards authenticated traffic to")
+    Rel(router, frontend, "Serves UI routes from")
+    Rel(router, apim, "Forwards /api/* to")
+    Rel(apim, dex, "Validates issuer and JWKS against")
+    Rel(apim, api, "Forwards validated API calls to")
+    Rel(api, otel, "Exports traces to")
+    Rel(api, cloudflare, "dev only: fetches live range files from")
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

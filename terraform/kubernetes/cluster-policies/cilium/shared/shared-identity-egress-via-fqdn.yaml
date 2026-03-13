@@ -1,0 +1,42 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-shared-identity-egress-via-fqdn
+spec:
+  description: >-
+    Allow shared auth and identity bridge workloads to reach Microsoft Entra
+    OIDC discovery and UserInfo endpoints over HTTPS. Keep this small and add
+    namespace-local overrides for tenant-specific or non-Microsoft identity
+    providers.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
+        operator: In
+        values:
+          - shared
+      - key: "k8s:app.kubernetes.io/name"
+        operator: In
+        values:
+          - dex
+          - oauth2-proxy
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: login.microsoftonline.com
+        - matchName: graph.microsoft.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -7,6 +7,10 @@ Related views:
 - `COMPOSITION.md` shows which source files are rendered by the active Kustomize trees.
 - `../docs/apps-c4.md` shows the static application and policy control model for `sentiment` and `subnetcalc`.
 
+GitHub currently renders these Mermaid views with a transparent canvas in a way
+that makes the diagrams harder to read, so the diagrams below are checked-in
+SVG renders. Click any diagram to open its `.mmd` source.
+
 ## Current posture
 
 - The Cilium model is now split between clusterwide guardrails in `cilium/shared/` and reusable namespaced `CiliumNetworkPolicy` bundles in `cilium/projects/`, so router, API, frontend, LiteLLM, and llama.cpp permissions are separated by actual workload identity without duplicating the same YAML per namespace.
@@ -23,59 +27,11 @@ Related views:
 
 ## Composition
 
-```mermaid
-flowchart TD
-    Root["cluster-policies/"] --> Cilium["cilium/kustomization.yaml"]
-    Root --> Kyverno["kyverno/kustomization.yaml"]
+[![Cluster policy composition diagram](./diagrams/audit/01-composition.svg)](./diagrams/audit/01-composition.mmd)
 
-    Cilium --> CShared["shared/"]
-    Cilium --> CProjects["projects/"]
-    Cilium --> CDev["dev/"]
-    Cilium --> CUat["uat/"]
-    Cilium --> CSit["sit/"]
+[![Repo server egress diagram](./diagrams/audit/02-repo-server-egress.svg)](./diagrams/audit/02-repo-server-egress.mmd)
 
-    Kyverno --> KShared["shared/"]
-    Kyverno --> KUat["uat/"]
-
-    KShared --> DefaultDeny["Generate and protect default-deny NetworkPolicy"]
-    KShared --> ImageAudit["Audit image sources"]
-    KShared --> LabelGuard["Enforce app boundary labels in namespace-role=application namespaces"]
-    KUat --> PodGuard["Audit selected pod hardening controls in uat"]
-
-    CShared --> Platform["Platform and shared namespace baselines"]
-    CShared --> AppGuardrails["Application namespace guardrails"]
-    CShared --> SharedDeny["Shared metadata egress deny rules"]
-
-    CProjects --> Sentiment["Reusable sentiment app-flow policies"]
-    CProjects --> Subnetcalc["Reusable subnetcalc app-flow policies"]
-
-    CDev --> DevBase["dev overlay + namespace-local overrides"]
-    CUat --> UatBase["uat overlay"]
-    CSit --> SitBase["sit overlay (empty namespace, pre-staged policies)"]
-```
-
-```mermaid
-flowchart LR
-    RepoServer["argocd-repo-server"] --> Policies["Gitea Git repo: platform/policies"]
-    Policies --> Vendored["apps/vendor/charts/*"]
-    RepoServer --> Bootstrap["dl.gitea.io (Gitea chart only)"]
-```
-
-```mermaid
-flowchart LR
-    Internet["External clients"] --> Gateway["platform-gateway"]
-    Gateway --> SSO["sso / oauth2-proxy + Dex"]
-    SSO --> SentRouter["sentiment-router"]
-    SSO --> SubnetRouter["subnetcalc-router"]
-    SentRouter --> SentAPI["sentiment-api"]
-    SentRouter --> SentUI["sentiment-auth-ui"]
-    SentAPI --> LiteLLM["litellm"]
-    LiteLLM --> Llama["llama-cpp"]
-    SubnetRouter --> APIM["subnetcalc-apim-simulator"]
-    APIM --> SubnetAPI["subnetcalc-api"]
-    SentAPI --> OTel["otel-collector"]
-    SubnetAPI --> OTel
-```
+[![Serving path diagram](./diagrams/audit/03-serving-path.svg)](./diagrams/audit/03-serving-path.mmd)
 
 ## Active inventory
 
