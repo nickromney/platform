@@ -5,12 +5,9 @@ fail() { echo "sync-gitea-repo: $*" >&2; exit 1; }
 
 : "${STACK_DIR:?STACK_DIR is required}"
 : "${SOURCE_DIR:?SOURCE_DIR is required (host path to the repo content)}"
-: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://127.0.0.1:30090)}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
 : "${GITEA_SSH_USERNAME:?GITEA_SSH_USERNAME is required (typically git)}"
-: "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required (typically 127.0.0.1)}"
-: "${GITEA_SSH_PORT:?GITEA_SSH_PORT is required}"
 : "${GITEA_REPO_OWNER:?GITEA_REPO_OWNER is required}"
 : "${GITEA_REPO_NAME:?GITEA_REPO_NAME is required}"
 : "${DEPLOY_KEY_TITLE:?DEPLOY_KEY_TITLE is required}"
@@ -23,15 +20,28 @@ GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
 
+# shellcheck source=/dev/null
+source "${STACK_DIR}/scripts/gitea-local-access.sh"
+
 tmp=""
-cleanup_tmp() {
+cleanup() {
   local d="${tmp:-}"
+  gitea_local_access_cleanup || true
   if [[ -n "$d" && -d "$d" ]]; then
     rm -rf "$d"
   fi
   return 0
 }
-trap cleanup_tmp EXIT
+trap cleanup EXIT
+
+cleanup_tmp() {
+  local d="${tmp:-}"
+  if [[ -n "$d" && -d "$d" ]]; then
+    rm -rf "$d"
+  fi
+  tmp=""
+  return 0
+}
 
 wait_for_gitea() {
   local code
@@ -45,6 +55,14 @@ wait_for_gitea() {
     sleep 2
   done
   fail "Gitea API not reachable at ${GITEA_HTTP_BASE}"
+}
+
+refresh_gitea_git_access() {
+  gitea_local_access_reset both
+  : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
+  : "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required after local access setup}"
+  : "${GITEA_SSH_PORT:?GITEA_SSH_PORT is required after local access setup}"
+  wait_for_gitea
 }
 
 is_true() {
@@ -199,13 +217,18 @@ seed_repo() {
   fi
 
   git branch -M main
-  git remote add origin "ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
-
-  local ssh_cmd
-  ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
   local pushed="false"
   for i in {1..20}; do
+    local remote_url ssh_cmd
+    refresh_gitea_git_access
+    remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
+    ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    if git remote get-url origin >/dev/null 2>&1; then
+      git remote set-url origin "${remote_url}"
+    else
+      git remote add origin "${remote_url}"
+    fi
     if GIT_SSH_COMMAND="$ssh_cmd" git push -q --force origin main; then
       popd >/dev/null
       pushed="true"
@@ -223,6 +246,11 @@ seed_repo() {
 
   return 0
 }
+
+gitea_local_access_setup both
+: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
+: "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required after local access setup}"
+: "${GITEA_SSH_PORT:?GITEA_SSH_PORT is required after local access setup}"
 
 wait_for_gitea
 create_repo_if_missing

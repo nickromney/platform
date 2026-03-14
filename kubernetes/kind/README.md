@@ -62,6 +62,16 @@ This wrapper drives the Terraform stack in `../../terraform/kubernetes` using th
 
 Why Terragrunt is here, why OpenTofu is the default, and the raw non-`make` commands are documented in [docs/tooling.md](docs/tooling.md).
 
+Image preloading is explicit. The default remains the current behavior:
+
+- `KIND_PRELOAD_IMAGES_MODE=off` means `apply` does not preload images for you.
+- `KIND_PRELOAD_IMAGES_MODE=auto|on` tells `apply` to run the existing
+  `preload-images` step before Terraform.
+
+The full Kind path remains the reference/default shape. Its target profile pins
+`gitea_local_access_mode = "nodeport"`, so host-side automation continues to
+use the stable localhost NodePorts that Kind already owns.
+
 ## Stage ladder
 
 Stages are cumulative. `make kind apply 300 AUTO_APPROVE=1` means "bring the cluster to the stage-300 shape", not "run only stage 300 in isolation".

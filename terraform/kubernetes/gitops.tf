@@ -21,18 +21,24 @@ resource "null_resource" "sync_gitea_policies_repo" {
     script_sha       = filesha256("${path.module}/scripts/sync-gitea-policies.sh")
     gitea_http       = tostring(var.gitea_http_node_port)
     gitea_ssh        = tostring(var.gitea_ssh_node_port)
+    gitea_access     = local.gitea_local_access_mode_effective
+    gitea_host_key   = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
   }
 
   provisioner "local-exec" {
     command = "bash \"${path.module}/scripts/sync-gitea-policies.sh\""
     environment = {
       STACK_DIR                                     = abspath(path.module)
+      GITEA_LOCAL_ACCESS_MODE                       = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT                          = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE                               = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
       GITEA_ADMIN_USERNAME                          = var.gitea_admin_username
       GITEA_ADMIN_PWD                               = var.gitea_admin_pwd
       GITEA_SSH_USERNAME                            = var.gitea_ssh_username
+      GITEA_SSH_NODE_PORT                           = tostring(var.gitea_ssh_node_port)
       GITEA_SSH_HOST                                = local.gitea_ssh_host_local
       GITEA_SSH_PORT                                = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE                               = kubernetes_namespace_v1.gitea[0].metadata[0].name
       GITEA_REPO_OWNER                              = local.gitea_repo_owner
       GITEA_REPO_OWNER_IS_ORG                       = tostring(local.gitea_repo_owner_is_org)
       GITEA_REPO_OWNER_FALLBACK                     = local.gitea_repo_owner_fallback
@@ -40,8 +46,10 @@ resource "null_resource" "sync_gitea_policies_repo" {
       DEPLOY_KEY_TITLE                              = "argocd-policies-repo-key"
       DEPLOY_PUBLIC_KEY                             = tls_private_key.policies_repo[0].public_key_openssh
       SSH_PRIVATE_KEY_PATH                          = local.policies_repo_private_key_path
+      ENABLE_HUBBLE                                 = tostring(var.enable_hubble)
       ENABLE_POLICIES                               = tostring(var.enable_policies)
       ENABLE_GATEWAY_TLS                            = tostring(var.enable_gateway_tls)
+      GATEWAY_HTTPS_HOST_PORT                       = tostring(var.gateway_https_host_port)
       ENABLE_CERT_MANAGER                           = tostring(var.enable_cert_manager)
       ENABLE_ACTIONS_RUNNER                         = tostring(var.enable_actions_runner)
       ENABLE_APP_REPO_SENTIMENT                     = tostring(var.enable_app_repo_sentiment_llm)
@@ -86,6 +94,8 @@ resource "null_resource" "sync_gitea_policies_repo" {
       LITELLM_UPSTREAM_MODEL                        = var.litellm_upstream_model
       LITELLM_UPSTREAM_API_BASE                     = var.litellm_upstream_api_base
       LITELLM_UPSTREAM_API_KEY                      = nonsensitive(var.litellm_upstream_api_key)
+      KUBECONFIG                                    = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT                            = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -119,13 +129,15 @@ resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
   count = var.enable_app_repo_sentiment_llm && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash = local.sentiment_llm_content_hash
-    public_key   = tls_private_key.app_repo_sentiment_llm[0].public_key_openssh
-    script_sha   = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
-    gitea_http   = tostring(var.gitea_http_node_port)
-    gitea_ssh    = tostring(var.gitea_ssh_node_port)
-    repo_owner   = local.gitea_repo_owner
-    repo_is_org  = tostring(local.gitea_repo_owner_is_org)
+    content_hash   = local.sentiment_llm_content_hash
+    public_key     = tls_private_key.app_repo_sentiment_llm[0].public_key_openssh
+    script_sha     = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
+    gitea_http     = tostring(var.gitea_http_node_port)
+    gitea_ssh      = tostring(var.gitea_ssh_node_port)
+    gitea_access   = local.gitea_local_access_mode_effective
+    gitea_host_key = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    repo_owner     = local.gitea_repo_owner
+    repo_is_org    = tostring(local.gitea_repo_owner_is_org)
   }
 
   provisioner "local-exec" {
@@ -133,12 +145,16 @@ resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
     environment = {
       STACK_DIR                 = abspath(path.module)
       SOURCE_DIR                = local.sentiment_llm_source_dir
+      GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
       GITEA_ADMIN_USERNAME      = var.gitea_admin_username
       GITEA_ADMIN_PWD           = var.gitea_admin_pwd
       GITEA_SSH_USERNAME        = var.gitea_ssh_username
+      GITEA_SSH_NODE_PORT       = tostring(var.gitea_ssh_node_port)
       GITEA_SSH_HOST            = local.gitea_ssh_host_local
       GITEA_SSH_PORT            = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE           = kubernetes_namespace_v1.gitea[0].metadata[0].name
       GITEA_REPO_OWNER          = local.gitea_repo_owner
       GITEA_REPO_OWNER_IS_ORG   = tostring(local.gitea_repo_owner_is_org)
       GITEA_REPO_OWNER_FALLBACK = local.gitea_repo_owner_fallback
@@ -146,6 +162,8 @@ resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
       DEPLOY_KEY_TITLE          = "ci-${local.sentiment_llm_repo_name}-key"
       DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_sentiment_llm[0].public_key_openssh
       SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_sentiment_llm_private_key[0].filename
+      KUBECONFIG                = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -178,13 +196,15 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
   count = var.enable_app_repo_subnet_calculator && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash = local.subnet_calculator_content_hash
-    public_key   = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
-    script_sha   = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
-    gitea_http   = tostring(var.gitea_http_node_port)
-    gitea_ssh    = tostring(var.gitea_ssh_node_port)
-    repo_owner   = local.gitea_repo_owner
-    repo_is_org  = tostring(local.gitea_repo_owner_is_org)
+    content_hash   = local.subnet_calculator_content_hash
+    public_key     = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
+    script_sha     = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
+    gitea_http     = tostring(var.gitea_http_node_port)
+    gitea_ssh      = tostring(var.gitea_ssh_node_port)
+    gitea_access   = local.gitea_local_access_mode_effective
+    gitea_host_key = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    repo_owner     = local.gitea_repo_owner
+    repo_is_org    = tostring(local.gitea_repo_owner_is_org)
   }
 
   provisioner "local-exec" {
@@ -192,12 +212,16 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
     environment = {
       STACK_DIR                 = abspath(path.module)
       SOURCE_DIR                = local.subnet_calculator_source_dir
+      GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
       GITEA_ADMIN_USERNAME      = var.gitea_admin_username
       GITEA_ADMIN_PWD           = var.gitea_admin_pwd
       GITEA_SSH_USERNAME        = var.gitea_ssh_username
+      GITEA_SSH_NODE_PORT       = tostring(var.gitea_ssh_node_port)
       GITEA_SSH_HOST            = local.gitea_ssh_host_local
       GITEA_SSH_PORT            = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE           = kubernetes_namespace_v1.gitea[0].metadata[0].name
       GITEA_REPO_OWNER          = local.gitea_repo_owner
       GITEA_REPO_OWNER_IS_ORG   = tostring(local.gitea_repo_owner_is_org)
       GITEA_REPO_OWNER_FALLBACK = local.gitea_repo_owner_fallback
@@ -205,6 +229,8 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
       DEPLOY_KEY_TITLE          = "ci-${local.subnet_calculator_repo_name}-key"
       DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
       SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_subnet_calculator_private_key[0].filename
+      KUBECONFIG                = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -246,6 +272,11 @@ require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH"
 require_cmd curl
 require_cmd jq
 require_cmd kubectl
+
+# shellcheck source=/dev/null
+source "${path.module}/scripts/gitea-local-access.sh"
+trap 'gitea_local_access_cleanup || true' EXIT
+gitea_local_access_setup http
 
 GITEA_HTTP_BASE="$${GITEA_HTTP_BASE:?}"
 GITEA_ADMIN_USERNAME="$${GITEA_ADMIN_USERNAME:?}"
@@ -497,16 +528,20 @@ echo "Subnetcalc images and policies are ready for tag $${TAG}"
 EOT
 
     environment = {
-      GITEA_HTTP_BASE      = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME = var.gitea_admin_username
-      GITEA_ADMIN_PWD      = var.gitea_admin_pwd
-      GITEA_REPO_OWNER     = local.gitea_repo_owner
-      REGISTRY_REPO_OWNER  = local.gitea_repo_owner
-      REGISTRY_HOST        = var.gitea_registry_host
-      REGISTRY_SCHEME      = var.gitea_registry_scheme
-      REGISTRY_USERNAME    = var.gitea_admin_username
-      REGISTRY_PWD         = var.gitea_admin_pwd
-      KUBECONFIG           = local.kubeconfig_path_expanded
+      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT    = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME    = var.gitea_admin_username
+      GITEA_ADMIN_PWD         = var.gitea_admin_pwd
+      GITEA_REPO_OWNER        = local.gitea_repo_owner
+      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      REGISTRY_REPO_OWNER     = local.gitea_repo_owner
+      REGISTRY_HOST           = var.gitea_registry_host
+      REGISTRY_SCHEME         = var.gitea_registry_scheme
+      REGISTRY_USERNAME       = var.gitea_admin_username
+      REGISTRY_PWD            = var.gitea_admin_pwd
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -525,11 +560,15 @@ data "external" "gitea_runner_token" {
   program = ["/bin/bash", "${path.module}/scripts/fetch-gitea-runner-token.sh"]
 
   query = {
-    gitea_http_base      = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-    gitea_admin_username = var.gitea_admin_username
-    gitea_admin_pwd      = var.gitea_admin_pwd
-    kubeconfig_path      = local.kubeconfig_path_expanded
-    kubeconfig_context   = trimspace(var.kubeconfig_context)
+    gitea_http_base         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+    gitea_admin_username    = var.gitea_admin_username
+    gitea_admin_pwd         = var.gitea_admin_pwd
+    gitea_local_access_mode = local.gitea_local_access_mode_effective
+    gitea_http_node_port    = tostring(var.gitea_http_node_port)
+    gitea_ssh_node_port     = tostring(var.gitea_ssh_node_port)
+    gitea_namespace         = kubernetes_namespace_v1.gitea[0].metadata[0].name
+    kubeconfig_path         = local.kubeconfig_path_expanded
+    kubeconfig_context      = trimspace(var.kubeconfig_context)
   }
 
   depends_on = [
@@ -570,7 +609,7 @@ resource "null_resource" "gitea_known_hosts_cluster" {
     cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     host       = local.gitea_ssh_host_cluster
     port       = tostring(local.gitea_ssh_port_cluster)
-    script_v   = "7"
+    script_v   = "9"
   }
 
   provisioner "local-exec" {
@@ -586,19 +625,27 @@ GITEA_NS="${kubernetes_namespace_v1.gitea[0].metadata[0].name}"
 GITEA_SVC="gitea-ssh"
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
-require_cmd ssh-keyscan
 require_cmd kubectl
 
 CLUSTER_IP="$(kubectl -n "$GITEA_NS" get svc "$GITEA_SVC" -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
-EXTRA_HOSTS=()
+HOSTS_FILE="${local.run_dir}/.gitea_known_hosts_cluster.hosts"
+printf '%s\n' "$HOST" > "$HOSTS_FILE"
 if [ -n "$CLUSTER_IP" ] && [ "$CLUSTER_IP" != "None" ]; then
-  EXTRA_HOSTS+=("$CLUSTER_IP")
+  printf '%s\n' "$CLUSTER_IP" >> "$HOSTS_FILE"
 fi
 
 for i in {1..30}; do
-  if ssh-keyscan -p ${var.gitea_ssh_node_port} ${local.gitea_ssh_host_local} 2>/dev/null > "$RAW" && [ -s "$RAW" ]; then
+  if kubectl -n "$GITEA_NS" exec deploy/gitea -- sh -c '
+    found=0
+    for f in /data/ssh/*.pub; do
+      [ -f "$f" ] || continue
+      cat "$f"
+      found=1
+    done
+    [ "$found" -eq 1 ]
+  ' > "$RAW" 2>/dev/null && [ -s "$RAW" ]; then
 
-    if ! grep -E '^[^#]' "$RAW" >/dev/null 2>&1; then
+    if ! grep -E '^ssh-' "$RAW" >/dev/null 2>&1; then
       echo "ssh-keyscan output contained no host key lines" >&2
       break
     fi
@@ -608,9 +655,13 @@ for i in {1..30}; do
 
     # Some Argo CD / go-git SSH paths verify against the resolved address, not the original host.
     # Emit known_hosts entries for both the service DNS name and its ClusterIP.
-    for h in "$HOST" "$${EXTRA_HOSTS[@]}"; do
-      grep -E '^[^#]' "$RAW" | sed "s/^[^ ]* /$${h} /" >> "$KEYS_FILE"
-    done
+    while IFS= read -r h; do
+      [ -n "$h" ] || continue
+      while IFS= read -r key_line; do
+        [ -n "$key_line" ] || continue
+        echo "$h $key_line" >> "$KEYS_FILE"
+      done < <(grep -E '^ssh-' "$RAW")
+    done < "$HOSTS_FILE"
 
     # ArgoCD treats explicit ports as part of the host identity for ssh:// URLs.
     # Emit both formats for every key line returned by ssh-keyscan.
@@ -622,25 +673,31 @@ for i in {1..30}; do
     done < "$KEYS_FILE"
 
     mv "$OUT_TMP" "${local.gitea_known_hosts_cluster_path}"
+    rm -f "$HOSTS_FILE" 2>/dev/null || true
     rm -f "$KEYS_FILE" 2>/dev/null || true
     rm -f "$RAW" 2>/dev/null || true
     exit 0
   fi
-  echo "ssh-keyscan (cluster) failed, retrying... ($i/30)" >&2
+  echo "gitea host-key capture (cluster) failed, retrying... ($i/30)" >&2
   sleep 4
 done
 
+rm -f "$HOSTS_FILE" 2>/dev/null || true
 echo "Failed to capture Gitea SSH host key (cluster)" >&2
 exit 1
 EOT
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG = local.kubeconfig_path_expanded
+      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
+      GITEA_SSH_NODE_PORT     = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
     }
   }
 
   depends_on = [
-    null_resource.sync_gitea_policies_repo,
+    kubectl_manifest.argocd_app_gitea,
     local_sensitive_file.kubeconfig,
   ]
 }
@@ -668,13 +725,22 @@ data "kubernetes_config_map_v1" "argocd_ssh_known_hosts_cm" {
 
 locals {
   argocd_ssh_known_hosts_base = local.enable_gitops_repo ? try(data.kubernetes_config_map_v1.argocd_ssh_known_hosts_cm[0].data["ssh_known_hosts"], "") : ""
+  argocd_ssh_known_hosts_gitea_hosts = local.enable_gitops_repo ? distinct([
+    for line in compact(split("\n", trimspace(data.local_file.gitea_known_hosts_cluster[0].content))) :
+    split(" ", trimspace(line))[0]
+  ]) : []
+  argocd_ssh_known_hosts_base_filtered = local.enable_gitops_repo ? [
+    for line in compact(split("\n", trimspace(local.argocd_ssh_known_hosts_base))) :
+    line
+    if !contains(local.argocd_ssh_known_hosts_gitea_hosts, split(" ", trimspace(line))[0])
+  ] : []
 
   argocd_ssh_known_hosts_merged = local.enable_gitops_repo ? format(
     "%s\n",
     join(
       "\n",
       distinct(concat(
-        compact(split("\n", trimspace(local.argocd_ssh_known_hosts_base))),
+        local.argocd_ssh_known_hosts_base_filtered,
         compact(split("\n", trimspace(data.local_file.gitea_known_hosts_cluster[0].content))),
       )),
     ),
@@ -771,6 +837,8 @@ patch_known_hosts() {
   tmpdir="$(mktemp -d)"
 
   local base_file="$tmpdir/base"
+  local base_filtered="$tmpdir/base-filtered"
+  local current_hosts="$tmpdir/current-hosts"
   local merged_file="$tmpdir/merged"
   local patch_file="$tmpdir/patch.yaml"
   local patch_out
@@ -778,7 +846,9 @@ patch_known_hosts() {
   kubectl -n ${var.argocd_namespace} get configmap argocd-ssh-known-hosts-cm -o jsonpath='{.data.ssh_known_hosts}' > "$base_file"
   printf '\n' >> "$base_file"
 
-  awk 'NF && !seen[$0]++' "$base_file" "$KNOWN_HOSTS_FILE" > "$merged_file"
+  awk 'NF {print $1}' "$KNOWN_HOSTS_FILE" | sort -u > "$current_hosts"
+  awk 'NR==FNR {replace[$1]=1; next} NF && !($1 in replace)' "$current_hosts" "$base_file" > "$base_filtered"
+  awk 'NF && !seen[$0]++' "$base_filtered" "$KNOWN_HOSTS_FILE" > "$merged_file"
 
   {
     echo "data:"

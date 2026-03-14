@@ -1,4 +1,7 @@
-# Stage 100 - Bootstrap the Slicer-backed k3s cluster (no addons)
+# Stage 400 - Install Argo CD (core only) on the default-CNI profile
+# ApplicationSet and Notifications controllers are intentionally disabled here
+# to limit the pod scheduling burst during initial installation.
+# Both are re-enabled at stage 500.
 
 cluster_name       = "slicer-k3s"
 kubeconfig_path    = "~/.kube/slicer-k3s.yaml"
@@ -6,15 +9,16 @@ kubeconfig_context = "slicer-k3s"
 
 enable_image_preload       = false
 cni_provider               = "none"
-kind_disable_default_cni   = true
+kind_disable_default_cni   = false
 enable_hubble              = false
-enable_argocd              = false
+enable_argocd              = true
 enable_gitea               = false
 enable_policies            = false
 enable_signoz              = false
 enable_observability_agent = false
 enable_headlamp            = false
 enable_gateway_tls         = false
+enable_cert_manager        = false
 enable_sso                 = false
 
 enable_apps_dir_mount             = false
@@ -32,6 +36,9 @@ gitea_chart_version        = "12.5.0"
 signoz_chart_version       = "0.114.1"
 kyverno_chart_version      = "3.7.1"
 cert_manager_chart_version = "v1.19.4"
+
+argocd_applicationset_enabled = false
+argocd_notifications_enabled  = false
 
 argocd_server_node_port = 30080
 hubble_ui_node_port     = 31235

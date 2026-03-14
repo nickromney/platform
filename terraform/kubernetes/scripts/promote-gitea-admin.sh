@@ -5,13 +5,23 @@ fail() { echo "promote-gitea-admin: $*" >&2; exit 1; }
 warn() { echo "promote-gitea-admin: $*" >&2; }
 ok() { echo "promote-gitea-admin: $*"; }
 
-: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://127.0.0.1:30090)}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
 : "${GITEA_PROMOTE_USER:?GITEA_PROMOTE_USER is required}"
 command -v jq >/dev/null 2>&1 || fail "jq is required to parse Gitea API responses"
 
 GITEA_WAIT_MAX_SECONDS="${GITEA_WAIT_MAX_SECONDS:-600}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/gitea-local-access.sh"
+
+body_file=""
+cleanup() {
+  rm -f "${body_file:-}"
+  gitea_local_access_cleanup || true
+}
+trap cleanup EXIT
 
 gitea_http_code() {
   local url="$1"
@@ -46,13 +56,15 @@ urlencode_basic() {
   printf '%s' "$s"
 }
 
+gitea_local_access_setup http
+: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
+
 wait_for_gitea
 
 user_enc=$(urlencode_basic "${GITEA_PROMOTE_USER}")
 user_url="${GITEA_HTTP_BASE}/api/v1/users/${user_enc}"
 
 body_file=$(mktemp)
-trap 'rm -f "${body_file}"' EXIT
 
 code=$(curl -sS -o "${body_file}" -w "%{http_code}" \
   -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \

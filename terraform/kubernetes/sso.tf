@@ -141,7 +141,7 @@ spec:
         # rejects for IPv4. Use the upstream image (older Go) until dex fixes the
         # URL construction bug.
         config:
-          issuer: https://dex.127.0.0.1.sslip.io/dex
+          issuer: ${local.dex_public_url}
           storage:
             type: kubernetes
             config:
@@ -178,25 +178,25 @@ spec:
               name: "oauth2-proxy"
               secret: ${random_password.dex_oauth2_proxy_client_secret[0].result}
               redirectURIs:
-                - https://argocd.admin.127.0.0.1.sslip.io/oauth2/callback
-                - https://gitea.admin.127.0.0.1.sslip.io/oauth2/callback
-                - https://hubble.admin.127.0.0.1.sslip.io/oauth2/callback
-                - https://grafana.admin.127.0.0.1.sslip.io/oauth2/callback
-                - https://signoz.admin.127.0.0.1.sslip.io/oauth2/callback
-                - https://sentiment.dev.127.0.0.1.sslip.io/oauth2/callback
-                - https://sentiment.uat.127.0.0.1.sslip.io/oauth2/callback
-                - https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/callback
-                - https://subnetcalc.uat.127.0.0.1.sslip.io/oauth2/callback
+                - ${local.argocd_public_url}/oauth2/callback
+                - ${local.gitea_public_url}/oauth2/callback
+                - ${local.hubble_public_url}/oauth2/callback
+                - ${local.grafana_public_url}/oauth2/callback
+                - ${local.signoz_public_url}/oauth2/callback
+                - ${local.sentiment_dev_public_url}/oauth2/callback
+                - ${local.sentiment_uat_public_url}/oauth2/callback
+                - ${local.subnetcalc_dev_public_url}/oauth2/callback
+                - ${local.subnetcalc_uat_public_url}/oauth2/callback
             - id: argocd
               name: "argocd"
               secret: ${random_password.dex_argocd_client_secret[0].result}
               redirectURIs:
-                - https://argocd.admin.127.0.0.1.sslip.io/auth/callback
+                - ${local.argocd_public_url}/auth/callback
             - id: headlamp
               name: "headlamp"
               secret: ${random_password.dex_headlamp_client_secret[0].result}
               redirectURIs:
-                - https://headlamp.admin.127.0.0.1.sslip.io/oidc-callback
+                - ${local.headlamp_public_url}/oidc-callback
   syncPolicy:
     automated:
       prune: true
@@ -238,7 +238,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
       CLUSTER_NAME                = var.cluster_name
       DEX_HOST                    = "dex.127.0.0.1.sslip.io"
       DEX_NAMESPACE               = "sso"
-      OIDC_ISSUER_URL             = "https://dex.127.0.0.1.sslip.io/dex"
+      OIDC_ISSUER_URL             = local.dex_public_url
       OIDC_CLIENT_ID              = "headlamp"
       MKCERT_CA_DEST              = "/etc/kubernetes/pki/mkcert-rootCA.pem"
       OIDC_DISCOVERY_WAIT_SECONDS = "900"
@@ -343,21 +343,21 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth?prompt=login
+          login-url: ${local.dex_public_url}/auth?prompt=login
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://argocd.admin.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.argocd_public_url}/oauth2/callback
           upstream: http://argocd-server.argocd.svc.cluster.local:8080
           email-domain: "admin.test"
-          cookie-domain: .127.0.0.1.sslip.io
-          whitelist-domain: .127.0.0.1.sslip.io
+          cookie-domain: ${local.admin_cookie_domain}
+          whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-access-token: "true"
@@ -445,21 +445,21 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth?prompt=login
+          login-url: ${local.dex_public_url}/auth?prompt=login
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://gitea.admin.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.gitea_public_url}/oauth2/callback
           upstream: http://gitea-http.gitea.svc.cluster.local:3000
           email-domain: "admin.test"
-          cookie-domain: .127.0.0.1.sslip.io
-          whitelist-domain: .127.0.0.1.sslip.io
+          cookie-domain: ${local.admin_cookie_domain}
+          whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-access-token: "true"
@@ -495,7 +495,7 @@ __YAML__
 }
 
 resource "kubectl_manifest" "argocd_app_oauth2_proxy_hubble" {
-  count = var.enable_sso && var.enable_argocd ? 1 : 0
+  count = var.enable_sso && var.enable_hubble && var.enable_argocd ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1
@@ -547,21 +547,21 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth
+          login-url: ${local.dex_public_url}/auth
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://hubble.admin.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.hubble_public_url}/oauth2/callback
           upstream: http://hubble-ui.kube-system.svc.cluster.local:80
           email-domain: "admin.test"
-          cookie-domain: .127.0.0.1.sslip.io
-          whitelist-domain: .127.0.0.1.sslip.io
+          cookie-domain: ${local.admin_cookie_domain}
+          whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-user-headers: "true"
@@ -648,21 +648,21 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth?prompt=login
+          login-url: ${local.dex_public_url}/auth?prompt=login
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://grafana.admin.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.grafana_public_url}/oauth2/callback
           upstream: http://grafana.observability.svc.cluster.local:3000
           email-domain: "admin.test"
-          cookie-domain: .127.0.0.1.sslip.io
-          whitelist-domain: .127.0.0.1.sslip.io
+          cookie-domain: ${local.admin_cookie_domain}
+          whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-user-headers: "true"
@@ -758,21 +758,21 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth
+          login-url: ${local.dex_public_url}/auth
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://signoz.admin.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.signoz_public_url}/oauth2/callback
           upstream: http://signoz-auth-proxy.observability.svc.cluster.local:3000
           email-domain: "admin.test"
-          cookie-domain: .127.0.0.1.sslip.io
-          whitelist-domain: .127.0.0.1.sslip.io
+          cookie-domain: ${local.admin_cookie_domain}
+          whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-user-headers: "true"
@@ -858,22 +858,22 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth
+          login-url: ${local.dex_public_url}/auth
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://sentiment.dev.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.sentiment_dev_public_url}/oauth2/callback
           upstream: http://sentiment-router.dev.svc.cluster.local:8080
           upstream-timeout: 180s
           email-domain: "dev.test"
-          cookie-domain: .dev.127.0.0.1.sslip.io
-          whitelist-domain: .dev.127.0.0.1.sslip.io
+          cookie-domain: ${local.dev_cookie_domain}
+          whitelist-domain: ${local.dev_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-access-token: "true"
@@ -963,23 +963,23 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth?prompt=login
+          login-url: ${local.dex_public_url}/auth?prompt=login
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://sentiment.uat.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.sentiment_uat_public_url}/oauth2/callback
           upstream: http://sentiment-router.uat.svc.cluster.local:8080
           upstream-timeout: 180s
           # UAT apps should only accept demo@uat.test (not demo@admin.test).
           email-domain: "uat.test"
-          cookie-domain: .uat.127.0.0.1.sslip.io
-          whitelist-domain: .uat.127.0.0.1.sslip.io
+          cookie-domain: ${local.uat_cookie_domain}
+          whitelist-domain: ${local.uat_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           pass-access-token: "true"
@@ -1069,21 +1069,21 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth
+          login-url: ${local.dex_public_url}/auth
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.subnetcalc_dev_public_url}/oauth2/callback
           upstream: http://subnetcalc-router.dev.svc.cluster.local:8080
           email-domain: "dev.test"
-          cookie-domain: .dev.127.0.0.1.sslip.io
-          whitelist-domain: .dev.127.0.0.1.sslip.io
+          cookie-domain: ${local.dev_cookie_domain}
+          whitelist-domain: ${local.dev_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           # Only allow the logout landing page + favicon unauthenticated.
@@ -1176,22 +1176,22 @@ spec:
         extraArgs:
           provider: oidc
           scope: "openid email profile"
-          oidc-issuer-url: https://dex.127.0.0.1.sslip.io/dex
+          oidc-issuer-url: ${local.dex_public_url}
           profile-url: http://dex.sso.svc.cluster.local:5556/dex/userinfo
           oidc-email-claim: email
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
           ssl-insecure-skip-verify: "true"
-          login-url: https://dex.127.0.0.1.sslip.io/dex/auth
+          login-url: ${local.dex_public_url}/auth
           redeem-url: http://dex.sso.svc.cluster.local:5556/dex/token
           oidc-jwks-url: http://dex.sso.svc.cluster.local:5556/dex/keys
-          redirect-url: https://subnetcalc.uat.127.0.0.1.sslip.io/oauth2/callback
+          redirect-url: ${local.subnetcalc_uat_public_url}/oauth2/callback
           upstream: http://subnetcalc-router.uat.svc.cluster.local:8080
           # UAT apps should only accept demo@uat.test (not demo@admin.test).
           email-domain: "uat.test"
-          cookie-domain: .uat.127.0.0.1.sslip.io
-          whitelist-domain: .uat.127.0.0.1.sslip.io
+          cookie-domain: ${local.uat_cookie_domain}
+          whitelist-domain: ${local.uat_whitelist_domains}
           cookie-secure: "true"
           show-debug-on-error: "true"
           # Only allow the logout landing page + favicon unauthenticated.

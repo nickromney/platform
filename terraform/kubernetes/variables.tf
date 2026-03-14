@@ -357,6 +357,17 @@ variable "gitea_ssh_node_port" {
   default     = 30022
 }
 
+variable "gitea_local_access_mode" {
+  description = "How host-side automation reaches Gitea locally: direct localhost NodePorts or temporary kubectl port-forwards."
+  type        = string
+  default     = "nodeport"
+
+  validation {
+    condition     = contains(["nodeport", "port-forward"], lower(var.gitea_local_access_mode))
+    error_message = "gitea_local_access_mode must be one of: nodeport, port-forward."
+  }
+}
+
 variable "signoz_ui_node_port" {
   description = "SigNoz UI NodePort."
   type        = number

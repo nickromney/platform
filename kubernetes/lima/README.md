@@ -33,6 +33,30 @@ make -C kubernetes/lima status
 make -C kubernetes/lima reset AUTO_APPROVE=1
 ```
 
+Helper toggles are explicit now:
+
+- `LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off` controls whether the target
+  manages the host-gateway proxy helpers used by localhost-backed flows such as
+  SSO E2E checks and stable UI URLs. `auto` preserves the current behavior.
+- `PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off` controls whether the target
+  manages and syncs the host registry cache. `auto` preserves the current
+  behavior and turns it on from stage `700`.
+- `PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off` controls whether the
+  target builds and pushes the local workload images. `auto` preserves the
+  current behavior and turns it on from stage `700`.
+
+If a helper mode is `off`, the target stops managing that dependency. Later
+stages can still work, but only if an equivalent service is already present.
+For example, stage `700+` still expects workload images to exist at
+`host.lima.internal:5002`; with cache management disabled, the Makefile now
+fails fast unless a compatible registry is already reachable.
+
+The Lima target profile now sets `gitea_local_access_mode = "port-forward"`.
+That keeps the shared Terraform Gitea automation working without assuming a
+separate localhost proxy is already exposing `30090`/`30022`; the narrow
+Gitea access for repo/admin bootstrap is established on demand with
+`kubectl port-forward`.
+
 ## Operational truths
 
 - The stage model is cumulative. `make -C kubernetes/lima 900 apply` means
@@ -43,6 +67,9 @@ make -C kubernetes/lima reset AUTO_APPROVE=1
 - Stages `200+` reuse the shared Terraform platform root. The Lima target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
   mounts, the in-cluster actions runner, and Cilium WireGuard.
+- The Lima target profile also switches host-side Gitea automation to
+  `gitea_local_access_mode = "port-forward"` so it stays decoupled from the
+  broader host-gateway proxy surface.
 - Hardened platform images stay on their upstream refs (`dhi.io`, `quay.io`,
   `ghcr.io`, `docker.io`, and so on). When the host cache at
   `host.lima.internal:5002` is available, Lima configures containerd to try it

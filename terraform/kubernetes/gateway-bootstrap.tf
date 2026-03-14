@@ -114,6 +114,17 @@ resource "kubernetes_service_v1" "platform_gateway_nginx_internal" {
       target_port = 443
       protocol    = "TCP"
     }
+
+    dynamic "port" {
+      for_each = var.gateway_https_host_port == 443 ? [] : [var.gateway_https_host_port]
+
+      content {
+        name        = "https-host-port"
+        port        = port.value
+        target_port = 443
+        protocol    = "TCP"
+      }
+    }
   }
 
   depends_on = [

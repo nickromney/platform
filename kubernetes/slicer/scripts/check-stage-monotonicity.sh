@@ -2,8 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LIMA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-VARIABLES_FILE="${LIMA_DIR}/../../terraform/kubernetes/variables.tf"
+SLICER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+STAGES_DIR="${STAGES_DIR:-${SLICER_DIR}/stages}"
+VARIABLES_FILE="${SLICER_DIR}/../../terraform/kubernetes/variables.tf"
 
 if [ ! -f "${VARIABLES_FILE}" ]; then
   echo "Missing variables file: ${VARIABLES_FILE}" >&2
@@ -26,15 +27,15 @@ immutable_keys=(
 )
 
 cat > "${stage_list_file}" <<EOF
-100:${LIMA_DIR}/stages/100-cluster.tfvars
-200:${LIMA_DIR}/stages/200-cilium.tfvars
-300:${LIMA_DIR}/stages/300-hubble.tfvars
-400:${LIMA_DIR}/stages/400-argocd.tfvars
-500:${LIMA_DIR}/stages/500-gitea.tfvars
-600:${LIMA_DIR}/stages/600-policies.tfvars
-700:${LIMA_DIR}/stages/700-app-repos.tfvars
-800:${LIMA_DIR}/stages/800-gateway-tls.tfvars
-900:${LIMA_DIR}/stages/900-sso.tfvars
+100:${STAGES_DIR}/100-cluster.tfvars
+200:${STAGES_DIR}/200-cilium.tfvars
+300:${STAGES_DIR}/300-hubble.tfvars
+400:${STAGES_DIR}/400-argocd.tfvars
+500:${STAGES_DIR}/500-gitea.tfvars
+600:${STAGES_DIR}/600-policies.tfvars
+700:${STAGES_DIR}/700-app-repos.tfvars
+800:${STAGES_DIR}/800-gateway-tls.tfvars
+900:${STAGES_DIR}/900-sso.tfvars
 EOF
 
 awk '

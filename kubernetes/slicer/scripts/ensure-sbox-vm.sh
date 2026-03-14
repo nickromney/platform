@@ -40,6 +40,7 @@ list_json="$(SLICER_URL="${slicer_url}" slicer vm list --json)"
 if jq -e --arg vm "${vm_name}" '.[] | select(.hostname == $vm)' >/dev/null 2>&1 <<<"${list_json}"; then
   existing_cpus="$(jq -r --arg vm "${vm_name}" '.[] | select(.hostname == $vm) | .cpus' <<<"${list_json}")"
   existing_ram_bytes="$(jq -r --arg vm "${vm_name}" '.[] | select(.hostname == $vm) | .ram_bytes' <<<"${list_json}")"
+  existing_status="$(jq -r --arg vm "${vm_name}" '.[] | select(.hostname == $vm) | .status // empty' <<<"${list_json}")"
   existing_ram_gb="$(( (existing_ram_bytes + 1073741824 - 1) / 1073741824 ))"
 
   if (( existing_cpus < vm_cpus || existing_ram_gb < vm_ram_gb )); then
@@ -47,6 +48,25 @@ if jq -e --arg vm "${vm_name}" '.[] | select(.hostname == $vm)' >/dev/null 2>&1 
   fi
 
   ok "using existing ${vm_name} (${existing_cpus} CPU / ${existing_ram_gb}GiB)"
+
+  case "${existing_status}" in
+    Running|"")
+      ;;
+    Paused)
+      echo "Resuming paused VM ${vm_name}"
+      SLICER_URL="${slicer_url}" slicer vm resume "${vm_name}" >/dev/null
+      ;;
+    Suspended)
+      echo "Restoring suspended VM ${vm_name}"
+      SLICER_URL="${slicer_url}" slicer vm restore "${vm_name}" >/dev/null
+      ;;
+    Stopped)
+      fail "Existing VM ${vm_name} is stopped. Restart slicer-mac from /Users/nickromney/slicer-mac/slicer-mac.yaml or recreate ${vm_name}.img before retrying."
+      ;;
+    *)
+      fail "Existing VM ${vm_name} is in unexpected state '${existing_status}'."
+      ;;
+  esac
 else
   other_vms="$(jq -r --arg group "${vm_group}-" '.[] | .hostname | select(startswith($group))' <<<"${list_json}" || true)"
   if [[ -n "${other_vms}" ]]; then

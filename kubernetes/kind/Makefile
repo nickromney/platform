@@ -20,10 +20,12 @@ STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 KIND_KUBECONFIG_CONTEXT ?= kind-kind-local
 KIND_KUBECONFIG_PATH ?= $(HOME)/.kube/$(KIND_KUBECONFIG_CONTEXT).yaml
+KIND_PRELOAD_IMAGES_MODE ?= off
 
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
+VALID_HELPER_MODES := auto on off
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 ACTION_FROM_GOALS := $(firstword $(filter plan apply,$(MAKECMDGOALS)))
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
@@ -50,6 +52,10 @@ KUBECONFIG_CONTEXT ?= $(KIND_KUBECONFIG_CONTEXT)
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+
+ifeq ($(filter $(KIND_PRELOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
+$(error Invalid KIND_PRELOAD_IMAGES_MODE="$(KIND_PRELOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
 
 STAGE_FILE_100 := stages/100-cluster.tfvars
 STAGE_FILE_200 := stages/200-cilium.tfvars
@@ -124,6 +130,9 @@ help:
 	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo ""
+	@echo "Local helper modes:"
+	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
 
 .PHONY: $(VALID_STAGES)
 $(VALID_STAGES):
@@ -280,6 +289,15 @@ apply:
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
+	mode_enabled() { \
+		local mode="$$1"; local auto_threshold="$$2"; local stage_num_local="$$3"; \
+		case "$$mode" in \
+			on) return 0 ;; \
+			off) return 1 ;; \
+			auto) [ "$$stage_num_local" -ge "$$auto_threshold" ] ;; \
+			*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
+		esac; \
+	}; \
 	stage_num=$$((10#$(STAGE))); \
 	cluster_name="$${TARGET_CLUSTER_NAME:-kind-local}"; \
 	if [ "$$stage_num" -gt 200 ]; then \
@@ -293,6 +311,9 @@ apply:
 	fi; \
 	if ! docker ps -a --format '{{.Names}}' | grep -qx "$$cluster_name-control-plane"; then \
 		$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
+	fi; \
+	if mode_enabled "$(KIND_PRELOAD_IMAGES_MODE)" 200 "$$stage_num"; then \
+		$(MAKE) preload-images STAGE="$(STAGE)"; \
 	fi; \
 	apply_args="-var-file=$(stage_var_file) -var-file=$(target_var_file)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then apply_args="$$apply_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
@@ -390,13 +411,14 @@ check-sso:
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
 	fi; \
-	"$(STACK_DIR)/scripts/check-sso.sh" $$vf
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $$vf
 
 .PHONY: check-sso-e2e
 check-sso-e2e:
 	@set -euo pipefail; \
-	stage_tfvars=""; \
-	if [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
+	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
+	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
+	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
 	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh"
@@ -414,10 +436,13 @@ gitea-sync:
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
-		GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
-		GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
-		STACK_DIR="$$stack_path" \
-		"$$script" $${dry_flag}
+	GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
+	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-nodeport}" \
+	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
+	STACK_DIR="$$stack_path" \
+	KUBECONFIG="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+	"$$script" $${dry_flag}
 
 .PHONY: launchpad-render
 launchpad-render:

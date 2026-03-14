@@ -152,9 +152,16 @@ port_suffix=""
 if [[ "${HOST_PORT}" != "443" ]]; then
   port_suffix=":${HOST_PORT}"
 fi
+EXPECTED_DEX_ISSUER_URL="https://dex.127.0.0.1.sslip.io${port_suffix}/dex"
 
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
+if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
+  EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT:-}"
+fi
+if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
+  EXPECTED_CLUSTER_NAME="$(kubectl config current-context 2>/dev/null || true)"
+fi
 [ -n "${EXPECTED_CLUSTER_NAME}" ] || EXPECTED_CLUSTER_NAME="kind-local"
 [ -n "${EXPECT_KIND_PROVISIONING}" ] || EXPECT_KIND_PROVISIONING="true"
 
@@ -217,7 +224,7 @@ if kubectl -n sso get deploy oauth2-proxy-gitea >/dev/null 2>&1; then
   ok "deploy sso/oauth2-proxy-gitea present"
   expect_deploy_arg sso oauth2-proxy-gitea "--provider=oidc"
   expect_deploy_arg sso oauth2-proxy-gitea "--scope=openid email profile"
-  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-issuer-url=https://dex.127.0.0.1.sslip.io/dex"
+  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-issuer-url=${EXPECTED_DEX_ISSUER_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--profile-url=http://dex.sso.svc.cluster.local:5556/dex/userinfo"
   expect_deploy_arg sso oauth2-proxy-gitea "--redeem-url=http://dex.sso.svc.cluster.local:5556/dex/token"
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-jwks-url=http://dex.sso.svc.cluster.local:5556/dex/keys"

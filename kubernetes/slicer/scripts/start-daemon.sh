@@ -16,7 +16,7 @@ fi
 active_file="$RUN_DIR/slicer.sock.active"
 system_socket="${SLICER_SYSTEM_SOCKET:-${HOME}/slicer-mac/slicer.sock}"
 ignore_system_socket="${IGNORE_SYSTEM_SOCKET:-0}"
-system_wait_seconds="${SLICER_SYSTEM_SOCKET_WAIT_SECONDS:-90}"
+system_wait_seconds="${SLICER_SYSTEM_SOCKET_WAIT_SECONDS:-240}"
 
 socket_ready() {
   local socket="$1"
@@ -69,7 +69,8 @@ pid_file="$RUN_DIR/slicer-mac.pid"
 log_file="$RUN_DIR/slicer-mac.log"
 
 if [ ! -f "$CONFIG_FILE" ]; then
-  echo "Missing config: $CONFIG_FILE (run: make render-config)"
+  echo "Missing config: $CONFIG_FILE"
+  echo "Point SLICER_CONFIG at your on-device slicer-mac.yaml"
   exit 1
 fi
 

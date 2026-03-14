@@ -2,7 +2,8 @@
 
 Browser tests that verify you can load each SSO-protected endpoint, complete the Dex local-login flow,
 and exercise real post-login app behavior for the endpoints that support it.
-They target the shared `*.127.0.0.1.sslip.io` endpoints, so they work against either the kind or Lima platform stack.
+They target the shared `*.127.0.0.1.sslip.io` endpoints, so they work against the Kind, Lima, or Slicer platform stacks.
+The runner derives the HTTPS host port from the active stage tfvars, so Kind/Lima stay on `443` while Slicer uses `:8443`.
 By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTIONS=0` only when you explicitly want login-only coverage.
 
 ## Setup
