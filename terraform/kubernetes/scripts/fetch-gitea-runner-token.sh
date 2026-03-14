@@ -7,10 +7,15 @@ log() { echo "fetch-gitea-runner-token: $*" >&2; }
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v jq >/dev/null 2>&1 || fail "jq not found"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 query="$(cat)"
 GITEA_HTTP_BASE="$(jq -r '.gitea_http_base // empty' <<<"${query}")"
 GITEA_ADMIN_USERNAME="$(jq -r '.gitea_admin_username // empty' <<<"${query}")"
 GITEA_ADMIN_PWD="$(jq -r '.gitea_admin_pwd // empty' <<<"${query}")"
+GITEA_LOCAL_ACCESS_MODE="$(jq -r '.gitea_local_access_mode // empty' <<<"${query}")"
+GITEA_HTTP_NODE_PORT="$(jq -r '.gitea_http_node_port // empty' <<<"${query}")"
+GITEA_SSH_NODE_PORT="$(jq -r '.gitea_ssh_node_port // empty' <<<"${query}")"
+GITEA_NAMESPACE="$(jq -r '.gitea_namespace // empty' <<<"${query}")"
 KUBECONFIG_PATH="$(jq -r '.kubeconfig_path // empty' <<<"${query}")"
 KUBECONFIG_CONTEXT="$(jq -r '.kubeconfig_context // empty' <<<"${query}")"
 
@@ -23,9 +28,14 @@ if [[ -n "${KUBECONFIG_CONTEXT}" ]]; then
   KUBECTL_ARGS+=(--context "${KUBECONFIG_CONTEXT}")
 fi
 
-[[ -n "${GITEA_HTTP_BASE}" ]] || fail "gitea_http_base is required"
 [[ -n "${GITEA_ADMIN_USERNAME}" ]] || fail "gitea_admin_username is required"
 [[ -n "${GITEA_ADMIN_PWD}" ]] || fail "gitea_admin_pwd is required"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/gitea-local-access.sh"
+trap 'gitea_local_access_cleanup || true' EXIT
+gitea_local_access_setup http
+: "${GITEA_HTTP_BASE:?gitea_http_base is required after local access setup}"
 
 request_runner_token() {
   local body_file http_code

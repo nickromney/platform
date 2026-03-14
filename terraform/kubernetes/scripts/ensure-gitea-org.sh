@@ -5,7 +5,6 @@ fail() { echo "ensure-gitea-org: $*" >&2; exit 1; }
 warn() { echo "ensure-gitea-org: $*" >&2; }
 ok() { echo "ensure-gitea-org: $*"; }
 
-: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://127.0.0.1:30090)}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
 : "${GITEA_ORG_NAME:?GITEA_ORG_NAME is required}"
@@ -21,6 +20,11 @@ command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v jq >/dev/null 2>&1 || fail "jq not found"
 
 GITEA_WAIT_MAX_SECONDS="${GITEA_WAIT_MAX_SECONDS:-600}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/gitea-local-access.sh"
+trap 'gitea_local_access_cleanup || true' EXIT
 
 gitea_http_code() {
   local url="$1"
@@ -48,6 +52,9 @@ wait_for_gitea() {
   done
   fail "Gitea API not reachable at ${GITEA_HTTP_BASE} after ${GITEA_WAIT_MAX_SECONDS}s"
 }
+
+gitea_local_access_setup http
+: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
 
 org_exists() {
   local code

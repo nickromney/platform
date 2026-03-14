@@ -1,4 +1,4 @@
-# Stage 100 - Bootstrap the Slicer-backed k3s cluster (no addons)
+# Stage 200 - Default-CNI profile placeholder (no Cilium install)
 
 cluster_name       = "slicer-k3s"
 kubeconfig_path    = "~/.kube/slicer-k3s.yaml"
@@ -6,7 +6,7 @@ kubeconfig_context = "slicer-k3s"
 
 enable_image_preload       = false
 cni_provider               = "none"
-kind_disable_default_cni   = true
+kind_disable_default_cni   = false
 enable_hubble              = false
 enable_argocd              = false
 enable_gitea               = false
@@ -15,6 +15,7 @@ enable_signoz              = false
 enable_observability_agent = false
 enable_headlamp            = false
 enable_gateway_tls         = false
+enable_cert_manager        = false
 enable_sso                 = false
 
 enable_apps_dir_mount             = false

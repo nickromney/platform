@@ -80,7 +80,8 @@ resource "null_resource" "bootstrap_mkcert_ca" {
   count = var.enable_gateway_tls ? 1 : 0
 
   triggers = {
-    script_sha = filesha256(abspath("${path.module}/scripts/bootstrap-mkcert-ca.sh"))
+    script_sha     = filesha256(abspath("${path.module}/scripts/bootstrap-mkcert-ca.sh"))
+    kubeconfig_sha = fileexists(local.kubeconfig_path_expanded) ? filesha256(local.kubeconfig_path_expanded) : "missing"
   }
 
   provisioner "local-exec" {

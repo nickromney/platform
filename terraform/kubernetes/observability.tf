@@ -325,7 +325,7 @@ spec:
           port: 3000
         grafana.ini:
           server:
-            root_url: https://grafana.admin.127.0.0.1.sslip.io
+            root_url: ${local.grafana_public_url}
           dashboards:
             default_home_dashboard_path: /var/lib/grafana/dashboards/default/platform-launchpad.json
           auth:
@@ -385,7 +385,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
+                      "description": "${local.grafana_public_url}/d/platform-app-overview/platform-app-golden-signals",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -433,7 +433,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Platform App Golden Signals",
-                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals"
+                          "url": "${local.grafana_public_url}/d/platform-app-overview/platform-app-golden-signals"
                         }
                       ],
                       "options": {
@@ -451,7 +451,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-namespace-health/platform-namespace-health",
+                      "description": "${local.grafana_public_url}/d/platform-namespace-health/platform-namespace-health",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -499,7 +499,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Platform Namespace Health",
-                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-namespace-health/platform-namespace-health"
+                          "url": "${local.grafana_public_url}/d/platform-namespace-health/platform-namespace-health"
                         }
                       ],
                       "options": {
@@ -517,7 +517,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://argocd.admin.127.0.0.1.sslip.io",
+                      "description": "${local.argocd_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -565,7 +565,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Argo CD",
-                          "url": "https://argocd.admin.127.0.0.1.sslip.io"
+                          "url": "${local.argocd_public_url}"
                         }
                       ],
                       "options": {
@@ -583,7 +583,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://dex.127.0.0.1.sslip.io/dex",
+                      "description": "${local.dex_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -631,7 +631,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Dex",
-                          "url": "https://dex.127.0.0.1.sslip.io/dex"
+                          "url": "${local.dex_public_url}"
                         }
                       ],
                       "options": {
@@ -649,7 +649,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://gitea.admin.127.0.0.1.sslip.io",
+                      "description": "${local.gitea_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -697,7 +697,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Gitea",
-                          "url": "https://gitea.admin.127.0.0.1.sslip.io"
+                          "url": "${local.gitea_public_url}"
                         }
                       ],
                       "options": {
@@ -715,7 +715,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://headlamp.admin.127.0.0.1.sslip.io",
+                      "description": "${local.headlamp_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -763,7 +763,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Headlamp",
-                          "url": "https://headlamp.admin.127.0.0.1.sslip.io"
+                          "url": "${local.headlamp_public_url}"
                         }
                       ],
                       "options": {
@@ -781,7 +781,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://hubble.admin.127.0.0.1.sslip.io",
+                      "description": "${local.hubble_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -829,7 +829,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Hubble",
-                          "url": "https://hubble.admin.127.0.0.1.sslip.io"
+                          "url": "${local.hubble_public_url}"
                         }
                       ],
                       "options": {
@@ -847,7 +847,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://kyverno.admin.127.0.0.1.sslip.io/",
+                      "description": "${local.kyverno_public_url}/",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -895,7 +895,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Kyverno Policy UI",
-                          "url": "https://kyverno.admin.127.0.0.1.sslip.io/"
+                          "url": "${local.kyverno_public_url}/"
                         }
                       ],
                       "options": {
@@ -913,7 +913,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://sentiment.dev.127.0.0.1.sslip.io",
+                      "description": "${local.sentiment_dev_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -961,7 +961,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Sentiment DEV",
-                          "url": "https://sentiment.dev.127.0.0.1.sslip.io"
+                          "url": "${local.sentiment_dev_public_url}"
                         }
                       ],
                       "options": {
@@ -979,7 +979,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://subnetcalc.dev.127.0.0.1.sslip.io",
+                      "description": "${local.subnetcalc_dev_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1027,7 +1027,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open SubnetCalc DEV",
-                          "url": "https://subnetcalc.dev.127.0.0.1.sslip.io"
+                          "url": "${local.subnetcalc_dev_public_url}"
                         }
                       ],
                       "options": {
@@ -1045,7 +1045,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://sentiment.uat.127.0.0.1.sslip.io",
+                      "description": "${local.sentiment_uat_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1093,7 +1093,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open Sentiment UAT",
-                          "url": "https://sentiment.uat.127.0.0.1.sslip.io"
+                          "url": "${local.sentiment_uat_public_url}"
                         }
                       ],
                       "options": {
@@ -1111,7 +1111,7 @@ spec:
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://subnetcalc.uat.127.0.0.1.sslip.io",
+                      "description": "${local.subnetcalc_uat_public_url}",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1159,7 +1159,7 @@ spec:
                         {
                           "targetBlank": true,
                           "title": "Open SubnetCalc UAT",
-                          "url": "https://subnetcalc.uat.127.0.0.1.sslip.io"
+                          "url": "${local.subnetcalc_uat_public_url}"
                         }
                       ],
                       "options": {

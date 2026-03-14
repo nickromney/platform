@@ -149,7 +149,7 @@ spec:
               DISABLE_SSH: false
               SSH_PORT: ${var.gitea_ssh_node_port}
               DOMAIN: "${var.enable_gateway_tls ? "gitea.admin.127.0.0.1.sslip.io" : "127.0.0.1"}"
-              ROOT_URL: "${var.enable_gateway_tls ? "https://gitea.admin.127.0.0.1.sslip.io/" : "http://127.0.0.1:${var.gitea_http_node_port}/"}"
+              ROOT_URL: "${var.enable_gateway_tls ? "${local.gitea_public_url}/" : "http://127.0.0.1:${var.gitea_http_node_port}/"}"
               PUBLIC_URL_DETECTION: auto
             packages:
               ENABLED: true
@@ -198,20 +198,26 @@ resource "null_resource" "gitea_promote_admin" {
   for_each = toset(local.gitea_admin_promote_users_effective)
 
   triggers = {
-    user       = each.value
-    script_sha = filesha256("${path.module}/scripts/promote-gitea-admin.sh")
-    gitea_http = tostring(var.gitea_http_node_port)
-    admin_user = var.gitea_admin_username
-    admin_pwd  = sha1(var.gitea_admin_pwd)
+    user         = each.value
+    script_sha   = filesha256("${path.module}/scripts/promote-gitea-admin.sh")
+    gitea_http   = tostring(var.gitea_http_node_port)
+    gitea_access = local.gitea_local_access_mode_effective
+    admin_user   = var.gitea_admin_username
+    admin_pwd    = sha1(var.gitea_admin_pwd)
   }
 
   provisioner "local-exec" {
     command = "bash \"${path.module}/scripts/promote-gitea-admin.sh\""
     environment = {
-      GITEA_HTTP_BASE      = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME = var.gitea_admin_username
-      GITEA_ADMIN_PWD      = var.gitea_admin_pwd
-      GITEA_PROMOTE_USER   = each.value
+      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT    = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME    = var.gitea_admin_username
+      GITEA_ADMIN_PWD         = var.gitea_admin_pwd
+      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      GITEA_PROMOTE_USER      = each.value
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -232,6 +238,7 @@ resource "null_resource" "gitea_org" {
     org_members       = join(",", var.gitea_org_members)
     org_member_emails = join(",", var.gitea_org_member_emails)
     gitea_http        = tostring(var.gitea_http_node_port)
+    gitea_access      = local.gitea_local_access_mode_effective
     admin_user        = var.gitea_admin_username
     admin_pwd         = sha1(var.gitea_admin_pwd)
     script_sha        = filesha256("${path.module}/scripts/ensure-gitea-org.sh")
@@ -240,9 +247,12 @@ resource "null_resource" "gitea_org" {
   provisioner "local-exec" {
     command = "bash \"${path.module}/scripts/ensure-gitea-org.sh\""
     environment = {
+      GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
       GITEA_ADMIN_USERNAME      = var.gitea_admin_username
       GITEA_ADMIN_PWD           = var.gitea_admin_pwd
+      GITEA_NAMESPACE           = kubernetes_namespace_v1.gitea[0].metadata[0].name
       GITEA_ORG_NAME            = local.gitea_repo_owner
       GITEA_ORG_FULL_NAME       = var.gitea_org_full_name
       GITEA_ORG_EMAIL           = var.gitea_org_email
@@ -250,6 +260,8 @@ resource "null_resource" "gitea_org" {
       GITEA_ORG_MEMBERS         = join(",", var.gitea_org_members)
       GITEA_ORG_MEMBER_EMAILS   = join(",", var.gitea_org_member_emails)
       GITEA_MEMBERS_DEFAULT_PWD = var.gitea_member_user_pwd
+      KUBECONFIG                = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
     }
   }
 

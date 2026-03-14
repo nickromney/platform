@@ -138,6 +138,7 @@ main() {
   local gitea_admin_username
   local gitea_admin_pwd
   local gitea_ssh_username
+  local gitea_local_access_mode
   local gitea_ssh_port
   local gitea_repo_owner
   local gitea_repo_owner_is_org
@@ -149,6 +150,7 @@ main() {
   gitea_admin_username="$(resolve_string GITEA_ADMIN_USERNAME gitea_admin_username gitea-admin)"
   gitea_admin_pwd="$(resolve_string GITEA_ADMIN_PWD gitea_admin_pwd ChangeMe123!)"
   gitea_ssh_username="$(resolve_string GITEA_SSH_USERNAME gitea_ssh_username git)"
+  gitea_local_access_mode="$(resolve_string GITEA_LOCAL_ACCESS_MODE gitea_local_access_mode nodeport)"
   gitea_ssh_port="$(resolve_string GITEA_SSH_PORT gitea_ssh_node_port 30022)"
   gitea_repo_owner="$(resolve_string GITEA_REPO_OWNER gitea_repo_owner "")"
   gitea_repo_owner_is_org="$(resolve_bool GITEA_REPO_OWNER_IS_ORG gitea_repo_owner_is_org false)"
@@ -178,10 +180,13 @@ main() {
   }
 
   export STACK_DIR
+  export GITEA_LOCAL_ACCESS_MODE="${gitea_local_access_mode}"
+  export GITEA_HTTP_NODE_PORT="${gitea_http_port}"
   export GITEA_HTTP_BASE="${GITEA_HTTP_BASE:-http://127.0.0.1:${gitea_http_port}}"
   export GITEA_ADMIN_USERNAME="${gitea_admin_username}"
   export GITEA_ADMIN_PWD="${gitea_admin_pwd}"
   export GITEA_SSH_USERNAME="${gitea_ssh_username}"
+  export GITEA_SSH_NODE_PORT="${gitea_ssh_port}"
   export GITEA_SSH_HOST="${GITEA_SSH_HOST:-127.0.0.1}"
   export GITEA_SSH_PORT="${gitea_ssh_port}"
   export GITEA_REPO_OWNER="${gitea_repo_owner}"

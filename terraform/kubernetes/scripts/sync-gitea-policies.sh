@@ -6,12 +6,9 @@ fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
 DRY_RUN=0
 
 : "${STACK_DIR:?STACK_DIR is required}"
-: "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://127.0.0.1:30090)}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
 : "${GITEA_SSH_USERNAME:?GITEA_SSH_USERNAME is required (typically git)}"
-: "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required (typically 127.0.0.1)}"
-: "${GITEA_SSH_PORT:?GITEA_SSH_PORT is required}"
 : "${GITEA_REPO_OWNER:?GITEA_REPO_OWNER is required}"
 : "${GITEA_REPO_NAME:?GITEA_REPO_NAME is required}"
 : "${DEPLOY_KEY_TITLE:?DEPLOY_KEY_TITLE is required}"
@@ -21,8 +18,10 @@ DRY_RUN=0
 POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${GITEA_SSH_USERNAME}@gitea-ssh.gitea.svc.cluster.local:22/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git}"
 GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
 GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
+ENABLE_HUBBLE="${ENABLE_HUBBLE:-true}"
 ENABLE_POLICIES="${ENABLE_POLICIES:-true}"
 ENABLE_GATEWAY_TLS="${ENABLE_GATEWAY_TLS:-true}"
+GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
@@ -71,15 +70,28 @@ command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
 command -v helm >/dev/null 2>&1 || fail "helm not found"
 
+# shellcheck source=/dev/null
+source "${STACK_DIR}/scripts/gitea-local-access.sh"
+
 tmp=""
-cleanup_tmp() {
+cleanup() {
   local d="${tmp:-}"
+  gitea_local_access_cleanup || true
   if [[ -n "$d" && -d "$d" ]]; then
     rm -rf "$d"
   fi
   return 0
 }
-trap cleanup_tmp EXIT
+trap cleanup EXIT
+
+cleanup_tmp() {
+  local d="${tmp:-}"
+  if [[ -n "$d" && -d "$d" ]]; then
+    rm -rf "$d"
+  fi
+  tmp=""
+  return 0
+}
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -107,6 +119,14 @@ wait_for_gitea() {
     sleep 2
   done
   fail "Gitea API not reachable at ${GITEA_HTTP_BASE}"
+}
+
+refresh_gitea_git_access() {
+  gitea_local_access_reset both
+  : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
+  : "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required after local access setup}"
+  : "${GITEA_SSH_PORT:?GITEA_SSH_PORT is required after local access setup}"
+  wait_for_gitea
 }
 
 is_true() {
@@ -579,6 +599,60 @@ add_kustomization_entry() {
   printf '  - %s\n' "${resource_file}" >> "${kustomization_file}"
 }
 
+remove_referencegrant_service() {
+  local file="$1"
+  local service_name="$2"
+
+  [[ -f "${file}" ]] || return 0
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk -v service_name="${service_name}" '
+    /^[[:space:]]*-[[:space:]]*group:[[:space:]]*""[[:space:]]*$/ {
+      line1 = $0
+      if ((getline line2) > 0 && (getline line3) > 0) {
+        if (line2 ~ /^[[:space:]]*kind:[[:space:]]*Service[[:space:]]*$/ &&
+            line3 ~ ("^[[:space:]]*name:[[:space:]]*" service_name "[[:space:]]*$")) {
+          next
+        }
+        print line1
+        print line2
+        print line3
+        next
+      }
+    }
+    { print }
+  ' "${file}" > "${tmp_file}"
+  mv "${tmp_file}" "${file}"
+}
+
+remove_observability_targetref_route() {
+  local file="$1"
+  local route_name="$2"
+
+  [[ -f "${file}" ]] || return 0
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk -v route_name="${route_name}" '
+    /^[[:space:]]*-[[:space:]]*group:[[:space:]]*gateway\.networking\.k8s\.io[[:space:]]*$/ {
+      line1 = $0
+      if ((getline line2) > 0 && (getline line3) > 0) {
+        if (line2 ~ /^[[:space:]]*kind:[[:space:]]*HTTPRoute[[:space:]]*$/ &&
+            line3 ~ ("^[[:space:]]*name:[[:space:]]*" route_name "[[:space:]]*$")) {
+          next
+        }
+        print line1
+        print line2
+        print line3
+        next
+      }
+    }
+    { print }
+  ' "${file}" > "${tmp_file}"
+  mv "${tmp_file}" "${file}"
+}
+
 render_otel_gateway_manifest() {
   local apps_dir="$1"
   local gateway_enabled="false"
@@ -711,6 +785,15 @@ prune_gateway_routes_manifests() {
   local routes_dir="$1"
   local kustomization_file="${routes_dir}/kustomization.yaml"
 
+  if ! is_true "${ENABLE_HUBBLE}"; then
+    remove_if_present "${routes_dir}/httproute-hubble.yaml"
+    remove_if_present "${routes_dir}/referencegrant-hubble.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-hubble.yaml"
+    remove_kustomization_entry "${kustomization_file}" "referencegrant-hubble.yaml"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-hubble"
+    remove_observability_targetref_route "${routes_dir}/observabilitypolicy-tracing.yaml" "hubble"
+  fi
+
   if ! is_true "${ENABLE_POLICIES}" || ! is_true "${ENABLE_GATEWAY_TLS}"; then
     remove_if_present "${routes_dir}/httproute-kyverno.yaml"
     remove_if_present "${routes_dir}/referencegrant-policy-reporter.yaml"
@@ -765,6 +848,57 @@ prune_gateway_routes_manifests() {
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-dev.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-uat.yaml"
   fi
+}
+
+route_has_oauth2_proxy_backend() {
+  local route_file="$1"
+  grep -qE '^[[:space:]]*name:[[:space:]]*oauth2-proxy-' "${route_file}"
+}
+
+route_primary_hostname() {
+  local route_file="$1"
+  awk '
+    /^[[:space:]]*hostnames:[[:space:]]*$/ { in_hostnames=1; next }
+    in_hostnames && /^[[:space:]]*-[[:space:]]*/ {
+      sub(/^[[:space:]]*-[[:space:]]*/, "", $0)
+      print
+      exit
+    }
+    in_hostnames && /^[^[:space:]]/ { exit }
+  ' "${route_file}"
+}
+
+render_gateway_route_forwarded_headers() {
+  local routes_dir="$1"
+  local route_file host tmp_file
+
+  [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]] || return 0
+  [[ -d "${routes_dir}" ]] || return 0
+
+  while IFS= read -r -d '' route_file; do
+    route_has_oauth2_proxy_backend "${route_file}" || continue
+    host="$(route_primary_hostname "${route_file}")"
+    [[ -n "${host}" ]] || continue
+
+    tmp_file="$(mktemp)"
+    awk -v host="${host}" -v port="${GATEWAY_HTTPS_HOST_PORT}" '
+      /^[[:space:]]*backendRefs:[[:space:]]*$/ && !injected {
+        print "      filters:"
+        print "        - type: RequestHeaderModifier"
+        print "          requestHeaderModifier:"
+        print "            set:"
+        print "              - name: X-Forwarded-Host"
+        print "                value: " host ":" port
+        print "              - name: X-Forwarded-Port"
+        print "                value: \"" port "\""
+        print "              - name: X-Forwarded-Proto"
+        print "                value: https"
+        injected=1
+      }
+      { print }
+    ' "${route_file}" > "${tmp_file}"
+    mv "${tmp_file}" "${route_file}"
+  done < <(find "${routes_dir}" -maxdepth 1 -type f -name 'httproute-*.yaml' -print0)
 }
 
 repo_exists_for_owner() {
@@ -906,9 +1040,11 @@ render_repo() {
   vendor_direct_tf_only_charts "${vendor_root}"
   if [[ -d "${repo_dir}/apps/platform-gateway-routes" ]]; then
     prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes"
+    render_gateway_route_forwarded_headers "${repo_dir}/apps/platform-gateway-routes"
   fi
   if [[ -d "${repo_dir}/apps/platform-gateway-routes-sso" ]]; then
     prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes-sso"
+    render_gateway_route_forwarded_headers "${repo_dir}/apps/platform-gateway-routes-sso"
   fi
   rewrite_hardened_registry "${repo_dir}"
 
@@ -917,17 +1053,25 @@ render_repo() {
 
 clone_remote_repo() {
   local dest="$1"
-  local remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
-  local ssh_cmd
+  local remote_url ssh_cmd
 
-  rm -rf "${dest}"
-  ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  for i in {1..20}; do
+    refresh_gitea_git_access
+    remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
+    ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-  if GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 --branch main "${remote_url}" "${dest}"; then
-    return 0
-  fi
+    rm -rf "${dest}"
+    if GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 --branch main "${remote_url}" "${dest}"; then
+      return 0
+    fi
+    if GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 "${remote_url}" "${dest}"; then
+      return 0
+    fi
+    echo "git clone failed, retrying... ($i/20)" >&2
+    sleep 3
+  done
 
-  GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 "${remote_url}" "${dest}"
+  return 1
 }
 
 show_dry_run_diff() {
@@ -971,13 +1115,18 @@ push_rendered_repo() {
   fi
 
   git branch -M main
-  git remote add origin "ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
-
-  local ssh_cmd
-  ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
   local pushed="false"
   for i in {1..20}; do
+    local remote_url ssh_cmd
+    refresh_gitea_git_access
+    remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
+    ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    if git remote get-url origin >/dev/null 2>&1; then
+      git remote set-url origin "${remote_url}"
+    else
+      git remote add origin "${remote_url}"
+    fi
     if GIT_SSH_COMMAND="$ssh_cmd" git push -q --force origin main; then
       pushed="true"
       break
@@ -999,6 +1148,10 @@ main() {
   local rendered_dir=""
 
   parse_args "$@"
+  gitea_local_access_setup both
+  : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
+  : "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required after local access setup}"
+  : "${GITEA_SSH_PORT:?GITEA_SSH_PORT is required after local access setup}"
   wait_for_gitea
   create_repo_if_missing
   ensure_deploy_key

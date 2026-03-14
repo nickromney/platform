@@ -22,6 +22,7 @@ DESIRED_NODES ?= 1
 LIMA_INSTANCE_PREFIX ?= k3s-node
 LIMA_VM_USER ?= $(USER)
 LIMA_CONFIG ?= $(MAKEFILE_DIR)config/lima-k3s-node.yaml
+LIMA_HOST_GATEWAY_PROXY_MODE ?= auto
 K3SUP_CONTEXT ?= limavm-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
@@ -33,6 +34,8 @@ LOCAL_IMAGE_CACHE_HOST ?= host.lima.internal:5002
 LOCAL_IMAGE_CACHE_PUSH_HOST ?= 127.0.0.1:5002
 LOCAL_IMAGE_CACHE_SCHEME ?= http
 LOCAL_IMAGE_CACHE_OPTIONAL ?= 1
+PLATFORM_LOCAL_IMAGE_CACHE_MODE ?= auto
+PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE ?= auto
 GITEA_REGISTRY_HOST ?= localhost:30090
 GITEA_REGISTRY_SCHEME ?= http
 WORKLOAD_IMAGE_NAMESPACE ?= platform
@@ -45,6 +48,7 @@ EXPECT_NAMESPACE_OBSERVABILITY ?= 0
 EXPECT_NAMESPACE_PLATFORM_GATEWAY ?= 0
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
+VALID_HELPER_MODES := auto on off
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 
 ifneq ($(STAGE_FROM_GOALS),)
@@ -64,6 +68,16 @@ endif
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+
+ifeq ($(filter $(LIMA_HOST_GATEWAY_PROXY_MODE),$(VALID_HELPER_MODES)),)
+$(error Invalid LIMA_HOST_GATEWAY_PROXY_MODE="$(LIMA_HOST_GATEWAY_PROXY_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
+ifeq ($(filter $(PLATFORM_LOCAL_IMAGE_CACHE_MODE),$(VALID_HELPER_MODES)),)
+$(error Invalid PLATFORM_LOCAL_IMAGE_CACHE_MODE="$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
+ifeq ($(filter $(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
+$(error Invalid PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE="$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
 
 STAGE_FILE_100 := stages/100-cluster.tfvars
 STAGE_FILE_200 := stages/200-cilium.tfvars
@@ -119,6 +133,8 @@ help:
 	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make show-urls"
 	@echo "  make status"
+	@echo "  make stop                                    Alias for stop-lima"
+	@echo "  make stop-lima"
 	@echo "  make stop-host-gateway-proxy"
 	@echo "  make sync-image-cache"
 	@echo "  make test"
@@ -136,6 +152,11 @@ help:
 	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  lima -> $(KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo ""
+	@echo "Local helper modes:"
+	@echo "  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)"
+	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
+	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
 
 .PHONY: $(VALID_STAGES)
 $(VALID_STAGES):
@@ -285,6 +306,45 @@ status:
 		"$(HOST_GATEWAY_PROXY)" status || true; \
 		CONTAINER_NAME="limavm-platform-llm-12434" LISTEN_PORT="12434" UPSTREAM_HOST="host.docker.internal" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" status || true; \
 	fi
+	@echo ""
+	@echo "=== Helper modes ==="
+	@echo "Host gateway proxy: $(LIMA_HOST_GATEWAY_PROXY_MODE)"
+	@echo "Local image cache: $(PLATFORM_LOCAL_IMAGE_CACHE_MODE)"
+	@echo "Build workload images: $(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)"
+
+.PHONY: stop-lima
+stop-lima:
+	@set -euo pipefail; \
+	command -v limactl >/dev/null 2>&1 || { echo "limactl not found in PATH"; exit 1; }; \
+	echo "Stopping host gateway proxy containers (best-effort)..."; \
+	$(MAKE) stop-host-gateway-proxy >/dev/null 2>&1 || true; \
+	echo "OK   proxies stopped"; \
+	vm_names="$$(limactl list -q 2>/dev/null | grep -E '^$(LIMA_INSTANCE_PREFIX)-[0-9]+$$' || true)"; \
+	if [ -z "$$vm_names" ]; then \
+		echo "No Lima VMs matching $(LIMA_INSTANCE_PREFIX)-* found."; \
+		exit 0; \
+	fi; \
+	stopped=0; \
+	while IFS= read -r vm; do \
+		[ -n "$$vm" ] || continue; \
+		status="$$(limactl list 2>/dev/null | awk -v name="$$vm" '$$1 == name { print $$2; exit }')"; \
+		if [ "$$status" = "Running" ]; then \
+			echo "Stopping $$vm..."; \
+			limactl stop "$$vm" >/dev/null; \
+			stopped=$$((stopped + 1)); \
+		else \
+			echo "Skipping $$vm ($${status:-unknown})"; \
+		fi; \
+	done <<< "$$vm_names"; \
+	if [ "$$stopped" -eq 0 ]; then \
+		echo "No running Lima VMs matching $(LIMA_INSTANCE_PREFIX)-*."; \
+	else \
+		echo "Stopped $$stopped Lima VM(s)."; \
+	fi
+
+.PHONY: stop
+stop:
+	@$(MAKE) stop-lima
 
 .PHONY: ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status
 ensure-host-gateway-proxy:
@@ -353,6 +413,18 @@ apply:
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
+	mode_enabled() { \
+		local mode="$$1"; local auto_threshold="$$2"; local stage_num_local="$$3"; \
+		case "$$mode" in \
+			on) return 0 ;; \
+			off) return 1 ;; \
+			auto) [ "$$stage_num_local" -ge "$$auto_threshold" ] ;; \
+			*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
+		esac; \
+	}; \
+	local_cache_available() { \
+		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
+	}; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -eq 100 ]; then \
 		$(MAKE) prereqs; \
@@ -368,9 +440,17 @@ apply:
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \
 		$(MAKE) apply STAGE=100 AUTO_APPROVE=1; \
 	fi; \
-	$(MAKE) sync-image-cache; \
-	if [ "$$stage_num" -ge 700 ]; then \
+	if mode_enabled "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" 700 "$$stage_num"; then \
+		$(MAKE) sync-image-cache; \
+	elif [ "$$stage_num" -ge 700 ] && ! local_cache_available; then \
+		echo "Stage $(STAGE) expects workload images from $(LOCAL_IMAGE_CACHE_HOST), but PLATFORM_LOCAL_IMAGE_CACHE_MODE=off and no registry is reachable at http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/."; \
+		echo "Set PLATFORM_LOCAL_IMAGE_CACHE_MODE=on or start a compatible cache manually."; \
+		exit 1; \
+	fi; \
+	if [ "$$stage_num" -ge 700 ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)" 700 "$$stage_num"; then \
 		$(MAKE) build-workload-images; \
+	elif [ "$$stage_num" -ge 700 ]; then \
+		echo "Skipping workload image build (PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE))"; \
 	fi; \
 	apply_args="-var-file=$(stage_var_file) -var-file=$(target_var_file)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then apply_args="$$apply_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
@@ -470,13 +550,17 @@ check-sso:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-sso.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $$vf
 
 .PHONY: check-sso-e2e
 check-sso-e2e:
 	@set -euo pipefail; \
 	$(MAKE) check-kubeconfig >/dev/null; \
-	$(MAKE) ensure-host-gateway-proxy; \
+	case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on|auto) $(MAKE) ensure-host-gateway-proxy ;; \
+		off) echo "check-sso-e2e requires host gateway proxies or an equivalent manual setup. Set LIMA_HOST_GATEWAY_PROXY_MODE=on to let the Makefile manage them."; exit 1 ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac; \
 	$(MAKE) configure-k3s-apiserver-oidc; \
 	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
@@ -498,9 +582,11 @@ gitea-sync:
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
 	GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
+	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-port-forward}" \
 	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
 	STACK_DIR="$$stack_path" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 	"$$script" $${dry_flag}
 
 .PHONY: launchpad-render

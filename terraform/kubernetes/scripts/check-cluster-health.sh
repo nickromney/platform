@@ -595,7 +595,9 @@ print_gateway_urls() {
   echo "HTTPS URLs (via NGINX Gateway Fabric + *.127.0.0.1.sslip.io):"
   echo "  • Argo CD:  https://argocd.admin.127.0.0.1.sslip.io${port_suffix}/"
   echo "  • Gitea:    https://gitea.admin.127.0.0.1.sslip.io${port_suffix}/"
-  echo "  • Hubble:   https://hubble.admin.127.0.0.1.sslip.io${port_suffix}/"
+  if [[ "${EXPECT_HUBBLE}" == "true" || ( "${show_all}" == "true" && "${EXPECT_HUBBLE}" != "false" ) ]]; then
+    echo "  • Hubble:   https://hubble.admin.127.0.0.1.sslip.io${port_suffix}/"
+  fi
   if [[ "${EXPECT_HEADLAMP}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Headlamp: https://headlamp.admin.127.0.0.1.sslip.io${port_suffix}/"
   fi
@@ -641,6 +643,100 @@ check_http_surface() {
     *" ${code} "*) ok "${label} reachable: ${url} (HTTP ${code})" ;;
     *) fail_soft "${label} not reachable: ${url} (HTTP ${code})" ;;
   esac
+}
+
+first_node_internal_ip() {
+  kubectl get nodes -o jsonpath='{range .items[*]}{range .status.addresses[?(@.type=="InternalIP")]}{.address}{"\n"}{end}{end}' 2>/dev/null | awk 'NF { print; exit }'
+}
+
+http_status_code() {
+  local url="$1"
+  local insecure="${2:-false}"
+
+  if [[ "${insecure}" == "true" ]]; then
+    curl -skI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000
+  else
+    curl -sSI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000
+  fi
+}
+
+http_status_code_basic_auth() {
+  local url="$1"
+  local username="$2"
+  local password="$3"
+
+  curl -fsS --max-time 5 -o /dev/null -w "%{http_code}" -u "${username}:${password}" "${url}" 2>/dev/null || echo 000
+}
+
+check_nodeport_http_surface() {
+  local label="$1"
+  local port="$2"
+  local path="${3:-/}"
+  local accepted_codes="$4"
+  local insecure="${5:-false}"
+  local local_url="http://127.0.0.1:${port}${path}"
+  local local_code node_ip node_url node_code
+
+  if ! have_cmd curl; then
+    warn "${label} check skipped (curl not found)"
+    return 0
+  fi
+
+  local_code="$(http_status_code "${local_url}" "${insecure}")"
+  case " ${accepted_codes} " in
+    *" ${local_code} "*)
+      ok "${label} reachable: ${local_url} (HTTP ${local_code})"
+      return 0
+      ;;
+  esac
+
+  node_ip="$(first_node_internal_ip)"
+  if [[ -n "${node_ip}" && "${node_ip}" != "127.0.0.1" ]]; then
+    node_url="http://${node_ip}:${port}${path}"
+    node_code="$(http_status_code "${node_url}" "${insecure}")"
+    case " ${accepted_codes} " in
+      *" ${node_code} "*)
+        ok "${label} reachable via node IP: ${node_url} (localhost unavailable: HTTP ${local_code})"
+        return 0
+        ;;
+    esac
+    fail_soft "${label} not reachable: ${local_url} (HTTP ${local_code}); node fallback ${node_url} (HTTP ${node_code})"
+    return 0
+  fi
+
+  fail_soft "${label} not reachable: ${local_url} (HTTP ${local_code})"
+}
+
+check_gitea_api_surface() {
+  local port="$1"
+  local path="$2"
+  local local_url="http://127.0.0.1:${port}${path}"
+  local local_code node_ip node_url node_code
+
+  if ! have_cmd curl; then
+    warn "curl not found; skipping Gitea API reachability checks"
+    return 0
+  fi
+
+  local_code="$(http_status_code_basic_auth "${local_url}" "${GITEA_ADMIN_USERNAME}" "${GITEA_ADMIN_PWD_EFFECTIVE}")"
+  if [[ "${local_code}" == "200" ]]; then
+    ok "Gitea API NodePort reachable: ${local_url}"
+    return 0
+  fi
+
+  node_ip="$(first_node_internal_ip)"
+  if [[ -n "${node_ip}" && "${node_ip}" != "127.0.0.1" ]]; then
+    node_url="http://${node_ip}:${port}${path}"
+    node_code="$(http_status_code_basic_auth "${node_url}" "${GITEA_ADMIN_USERNAME}" "${GITEA_ADMIN_PWD_EFFECTIVE}")"
+    if [[ "${node_code}" == "200" ]]; then
+      ok "Gitea API NodePort reachable via node IP: ${node_url} (localhost unavailable: HTTP ${local_code})"
+      return 0
+    fi
+    warn "Gitea API NodePort not reachable on localhost:${port} or ${node_ip}:${port} (HTTP ${local_code}/${node_code}); repo/bootstrap automation will fail until one path is available"
+    return 0
+  fi
+
+  warn "Gitea API NodePort not reachable on localhost:${port}; repo/bootstrap automation will fail until it is"
 }
 
 print_success_dashboard_hint() {
@@ -794,7 +890,7 @@ else
     hubble_port=$(kubectl -n kube-system get svc hubble-ui -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true)
     if [[ -n "${hubble_port}" ]]; then
       ok "Hubble UI URL: http://localhost:${hubble_port}"
-      check_http_surface "Hubble UI direct URL" "http://127.0.0.1:${hubble_port}/" "200"
+      check_nodeport_http_surface "Hubble UI direct URL" "${hubble_port}" "/" "200"
     fi
     if [[ "${EXPECT_GATEWAY_TLS}" == "true" && "${EXPECT_SSO}" == "true" ]]; then
       gateway_port_suffix=""
@@ -822,7 +918,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   if kubectl -n "${ARGOCD_NS}" get svc argocd-server >/dev/null 2>&1; then
     kubectl -n "${ARGOCD_NS}" get svc argocd-server
   fi
-  check_http_surface "Argo CD direct URL" "http://127.0.0.1:${ARGOCD_SERVER_NODE_PORT}/" "200"
+  check_nodeport_http_surface "Argo CD direct URL" "${ARGOCD_SERVER_NODE_PORT}" "/" "200"
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     gateway_port_suffix=""
     if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
@@ -913,7 +1009,10 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
-    sso_apps=(dex oauth2-proxy-argocd oauth2-proxy-gitea oauth2-proxy-hubble)
+    sso_apps=(dex oauth2-proxy-argocd oauth2-proxy-gitea)
+    if [[ "${EXPECT_HUBBLE}" == "true" ]]; then
+      sso_apps+=(oauth2-proxy-hubble)
+    fi
     if [[ "${EXPECT_GRAFANA}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-grafana)
     fi
@@ -974,13 +1073,7 @@ elif kubectl get ns gitea >/dev/null 2>&1; then
       check_http_surface "Gitea HTTPS gateway" "https://gitea.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true
     fi
 
-    if curl -fsS --max-time 2 \
-      -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD_EFFECTIVE}" \
-      "http://127.0.0.1:${GITEA_HTTP_NODE_PORT}/api/v1/version" >/dev/null 2>&1; then
-      ok "Gitea API NodePort reachable: http://127.0.0.1:${GITEA_HTTP_NODE_PORT}/api/v1/version"
-    else
-      warn "Gitea API NodePort not reachable on localhost:${GITEA_HTTP_NODE_PORT}; repo/bootstrap automation will fail until it is"
-    fi
+    check_gitea_api_surface "${GITEA_HTTP_NODE_PORT}" "/api/v1/version"
   else
     warn "curl not found; skipping Gitea gateway and API reachability checks"
   fi

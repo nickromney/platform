@@ -46,16 +46,18 @@ workflow, prerequisites, and operator targets.
 
 ## Local Kubernetes on Slicer microVMs
 
-There is also a Slicer-backed path in the repository, but it does not yet work
-reliably enough to use for real work.
+There is also a Slicer-backed path in the repository.
 
-As of March 13, 2026, live tests showed guest reboots plus ext4/containerd
-corruption under load. Treat it as an in-progress port and reference surface
-only, not as a supported local-cluster option.
+As of March 14, 2026, a fresh `slicer-1` built from the on-device
+[`~/slicer-mac/slicer-mac.yaml`](/Users/nickromney/slicer-mac/slicer-mac.yaml)
+image can complete stages `100` through `900`, including Cilium, Hubble, Argo
+CD, Gitea, and Dex SSO, provided the VM has enough disk. The validated shape
+for that run was `8GiB` RAM and a `25G` root disk.
 
 The intended operator shape is:
 
 ```shell
+export SLICER_VM_GROUP=slicer
 make -C kubernetes/slicer prereqs
 make -C kubernetes/slicer 100 apply
 make -C kubernetes/slicer 900 plan
@@ -66,6 +68,10 @@ make -C kubernetes/slicer check-health
 This keeps the same cumulative stage ladder as `kubernetes/kind`, but stage
 `100` bootstraps k3s on Slicer and stages `200+` apply the shared Terraform
 stack against that kubeconfig-backed cluster.
+
+One Slicer-specific detail: the localhost HTTPS gateway uses `:8443`, so
+browser URLs are `https://*.127.0.0.1.sslip.io:8443/...` rather than bare
+`443`.
 
 See [kubernetes/slicer/README.md](kubernetes/slicer/README.md) for the current
 status, host-forwarding model, and operator targets.

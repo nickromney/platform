@@ -39,6 +39,8 @@ function absolutePlatformUrl(hostPrefix: string, path: string) {
   return new URL(path, platformUrl(hostPrefix)).toString()
 }
 
+const DEX_HOST = new URL(absolutePlatformUrl('dex', '/dex/')).host
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -163,7 +165,7 @@ async function maybeGrantDexAccess(page: Page) {
 
 async function ensureOnTargetOrDex(page: Page, targetUrl: string) {
   const host = new URL(targetUrl).host
-  await page.waitForURL((u) => u.host === host || u.host === 'dex.127.0.0.1.sslip.io', { timeout: 60_000 })
+  await page.waitForURL((u) => u.host === host || u.host === DEX_HOST, { timeout: 60_000 })
 }
 
 async function gotoWithGatewayRetry(page: Page, url: string) {
@@ -261,11 +263,11 @@ async function loginHeadlampPopupFlow(page: Page, target: Target) {
   const popup = await popupPromise
   if (popup) {
     await popup.waitForLoadState('domcontentloaded')
-    await popup.waitForURL((u) => u.host === targetHost || u.host === 'dex.127.0.0.1.sslip.io', { timeout: 60_000 })
+    await popup.waitForURL((u) => u.host === targetHost || u.host === DEX_HOST, { timeout: 60_000 })
 
     if (new URL(popup.url()).host !== targetHost) {
       await popup
-        .waitForURL((u) => u.host === targetHost || /dex\/auth\/local\/login/.test(u.pathname), { timeout: 60_000 })
+        .waitForURL((u) => u.host === targetHost || (u.host === DEX_HOST && /dex\/auth\/local\/login/.test(u.pathname)), { timeout: 60_000 })
         .catch(() => undefined)
     }
 
@@ -420,48 +422,11 @@ async function sentimentSamplePositiveAndAnalyze(page: Page) {
   await expect(statusStrong).toContainText(/ok/i, { timeout: 60_000 })
 }
 
-async function waitForSubnetcalcApiHealthy(page: Page) {
-  const maxAttempts = Number(process.env.SSO_E2E_SUBNETCALC_API_RETRIES || 10)
-  const errors: Array<{ attempt: number; status: number; body: string }> = []
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const result = await page.evaluate(async () => {
-      try {
-        const resp = await fetch('/api/v1/health', {
-          cache: 'no-store',
-          credentials: 'include',
-          headers: { accept: 'application/json' },
-        })
-        return {
-          status: resp.status,
-          body: (await resp.text()).slice(0, 1000),
-        }
-      } catch (error) {
-        return {
-          status: 0,
-          body: String(error),
-        }
-      }
-    })
-
-    if (result.status === 200 && /"status"\s*:\s*"healthy"/i.test(result.body)) return
-
-    errors.push({ attempt, status: result.status, body: result.body })
-    if (attempt === maxAttempts) {
-      throw new Error(`Subnetcalc API health failed after ${maxAttempts} attempts. ${JSON.stringify(errors, null, 2)}`)
-    }
-
-    await page.waitForTimeout(1500 * attempt)
-  }
-}
-
 async function subnetcalcRfc1918Lookup(page: Page) {
   const maxAttempts = Number(process.env.SSO_E2E_SUBNETCALC_LOOKUP_RETRIES || 3)
   const errors: Array<{ attempt: number; body: string }> = []
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    await waitForSubnetcalcApiHealthy(page)
-
     const rfcBtn = page.getByRole('button', { name: /RFC1918:\s*10\.0\.0\.0\/24/i })
     await expect(rfcBtn).toBeVisible({ timeout: 60_000 })
     await rfcBtn.click()
@@ -730,7 +695,8 @@ test.describe(SUITE_NAME, () => {
 
       // Common assertion: we should not be sitting on the Dex login form.
       await expect(page.locator('#login')).toHaveCount(0)
-      await expect(page).not.toHaveURL(/dex\.127\.0\.0\.1\.sslip\.io\/dex\/auth\/local\/login/)
+      const finalUrl = new URL(page.url())
+      expect(finalUrl.host === DEX_HOST && /^\/dex\/auth\/local\/login(?:\/|$)/.test(finalUrl.pathname)).toBe(false)
     })
   }
 })

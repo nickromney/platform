@@ -1,7 +1,7 @@
 locals {
-  kind_workers              = range(var.worker_count)
-  kind_config_path_expanded = abspath(pathexpand(var.kind_config_path))
-  kubeconfig_path_expanded  = abspath(pathexpand(var.kubeconfig_path))
+  kind_workers                      = range(var.worker_count)
+  kind_config_path_expanded         = abspath(pathexpand(var.kind_config_path))
+  kubeconfig_path_expanded          = abspath(pathexpand(var.kubeconfig_path))
   preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${path.module}/../../kubernetes/kind/preload-images.txt")
 
   repo_root         = abspath("${path.module}/../..")
@@ -9,8 +9,9 @@ locals {
 
   run_dir = abspath("${path.module}/.run")
 
-  gitea_http_host_local = "127.0.0.1"
-  gitea_ssh_host_local  = "127.0.0.1"
+  gitea_http_host_local             = "127.0.0.1"
+  gitea_ssh_host_local              = "127.0.0.1"
+  gitea_local_access_mode_effective = lower(var.gitea_local_access_mode)
 
   gitea_ssh_host_cluster         = "gitea-ssh.gitea.svc.cluster.local"
   gitea_ssh_port_cluster         = 22
@@ -20,6 +21,26 @@ locals {
   argocd_oidc_enabled            = var.enable_sso && var.enable_argocd_oidc
   cni_provider_effective         = lower(var.cni_provider)
   enable_cilium_effective        = local.cni_provider_effective == "cilium"
+  admin_cookie_domain            = ".127.0.0.1.sslip.io"
+  admin_whitelist_domains        = var.gateway_https_host_port == 443 ? local.admin_cookie_domain : "${local.admin_cookie_domain},${local.admin_cookie_domain}:${var.gateway_https_host_port}"
+  dev_cookie_domain              = ".dev.127.0.0.1.sslip.io"
+  dev_whitelist_domains          = var.gateway_https_host_port == 443 ? local.dev_cookie_domain : "${local.dev_cookie_domain},${local.dev_cookie_domain}:${var.gateway_https_host_port}"
+  uat_cookie_domain              = ".uat.127.0.0.1.sslip.io"
+  uat_whitelist_domains          = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
+  gateway_https_host_port_suffix = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
+  argocd_public_url              = "https://argocd.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  dex_public_host                = "dex.127.0.0.1.sslip.io"
+  dex_public_url                 = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
+  gitea_public_url               = "https://gitea.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  grafana_public_url             = "https://grafana.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  headlamp_public_url            = "https://headlamp.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  hubble_public_url              = "https://hubble.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  kyverno_public_url             = "https://kyverno.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  signoz_public_url              = "https://signoz.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  sentiment_dev_public_url       = "https://sentiment.dev.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  sentiment_uat_public_url       = "https://sentiment.uat.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  subnetcalc_dev_public_url      = "https://subnetcalc.dev.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
+  subnetcalc_uat_public_url      = "https://subnetcalc.uat.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
   kind_disable_default_cni       = var.kind_disable_default_cni != null ? var.kind_disable_default_cni : local.enable_cilium_effective
   enable_prometheus_effective    = var.enable_prometheus
   enable_grafana_effective       = var.enable_grafana
@@ -105,7 +126,23 @@ locals {
   policies_repo_private_key_path = "${local.run_dir}/policies-repo.id_ed25519"
   gitea_known_hosts_cluster_path = "${local.run_dir}/gitea_known_hosts_cluster"
 
-  enable_gitops_repo = var.enable_gitea && var.enable_argocd && (var.enable_policies || var.enable_gateway_tls || var.enable_actions_runner)
+  enable_gitops_repo_requested = (
+    var.enable_policies ||
+    var.enable_cert_manager ||
+    var.enable_gateway_tls ||
+    var.enable_actions_runner ||
+    local.enable_sentiment_workloads_effective ||
+    local.enable_subnetcalc_workloads_effective ||
+    local.enable_prometheus_effective ||
+    local.enable_grafana_effective ||
+    local.enable_loki_effective ||
+    local.enable_tempo_effective ||
+    var.enable_signoz ||
+    var.enable_headlamp ||
+    var.enable_sso ||
+    var.enable_app_of_apps
+  )
+  enable_gitops_repo = var.enable_gitea && var.enable_argocd && local.enable_gitops_repo_requested
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
     var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno-policies", "cilium-policies"] : [],
@@ -115,7 +152,8 @@ locals {
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
     var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["dex", "oauth2-proxy-argocd", "oauth2-proxy-gitea", "oauth2-proxy-hubble"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["dex", "oauth2-proxy-argocd", "oauth2-proxy-gitea"] : [],
+    var.enable_sso && var.enable_hubble && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hubble"] : [],
     var.enable_sso && var.enable_argocd && var.enable_grafana && !var.enable_app_of_apps ? ["oauth2-proxy-grafana"] : [],
     var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
@@ -138,8 +176,10 @@ locals {
     content_hash                  = local.policies_repo_content_hash
     repo_owner                    = local.gitea_repo_owner
     repo_is_org                   = local.gitea_repo_owner_is_org
+    enable_hubble                 = var.enable_hubble
     enable_policies               = var.enable_policies
     enable_gateway_tls            = var.enable_gateway_tls
+    gateway_https_host_port       = var.gateway_https_host_port
     enable_cert_manager           = var.enable_cert_manager
     enable_actions_runner         = var.enable_actions_runner
     enable_app_repo_sentiment     = var.enable_app_repo_sentiment_llm
@@ -392,11 +432,11 @@ locals {
           )
         },
         var.enable_sso ? merge({
-          url = "https://argocd.admin.127.0.0.1.sslip.io"
+          url = local.argocd_public_url
           }, local.argocd_oidc_enabled ? {
           "oidc.config" = trimspace(<<-EOT
             name: Dex
-            issuer: https://dex.127.0.0.1.sslip.io/dex
+            issuer: ${local.dex_public_url}
             clientID: argocd
             clientSecret: $oidc.dex.clientSecret
             requestedScopes:
@@ -506,9 +546,9 @@ locals {
       oidc = {
         clientID     = "headlamp"
         clientSecret = random_password.dex_headlamp_client_secret[0].result
-        issuerURL    = "https://dex.127.0.0.1.sslip.io/dex"
+        issuerURL    = local.dex_public_url
         scopes       = "openid profile email groups"
-        callbackURL  = "https://headlamp.admin.127.0.0.1.sslip.io/oidc-callback"
+        callbackURL  = "${local.headlamp_public_url}/oidc-callback"
       }
     } : {},
     # Pass -oidc-ca-file to trust the mkcert CA for OIDC connections to Dex
@@ -528,6 +568,10 @@ locals {
       {
         name  = "SSL_CERT_FILE"
         value = "/headlamp-ca/ca.crt"
+      },
+      {
+        name  = "HEADLAMP_OIDC_CONFIG_HASH"
+        value = sha256(jsonencode(local.headlamp_config))
       }
     ] : []
     volumeMounts = var.enable_sso ? [

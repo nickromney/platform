@@ -18,6 +18,14 @@ image_list_file="${IMAGE_LIST_FILE:-}"
 local_image_cache_host="${LOCAL_IMAGE_CACHE_HOST:-}"
 local_image_cache_scheme="${LOCAL_IMAGE_CACHE_SCHEME:-http}"
 
+desired_network_profile() {
+  if [[ "${server_extra_args}" == *"--flannel-backend=none"* ]]; then
+    echo "cilium"
+  else
+    echo "default"
+  fi
+}
+
 vm_exec() {
   local vm="$1"; shift
   SLICER_URL="$slicer_socket" slicer vm exec "$vm" -- "$@"
@@ -75,6 +83,35 @@ remote_k3s_api_ready() {
     "sudo test -x /usr/local/bin/k3s && sudo test -f /etc/rancher/k3s/k3s.yaml && sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get --raw=/version" \
     "$max" \
     "$wait" >/dev/null
+}
+
+existing_k3s_network_profile() {
+  local execstart
+  execstart="$(vm_exec_retry "$server_vm" "sudo systemctl show -p ExecStart --value k3s" 3 2 | tr -d '\r' || true)"
+  if [[ -z "${execstart}" ]]; then
+    echo ""
+    return 0
+  fi
+
+  if [[ "${execstart}" == *"--flannel-backend=none"* ]]; then
+    echo "cilium"
+  else
+    echo "default"
+  fi
+}
+
+validate_existing_k3s_network_profile() {
+  local desired_profile current_profile
+  desired_profile="$(desired_network_profile)"
+  current_profile="$(existing_k3s_network_profile)"
+
+  [[ -n "${current_profile}" ]] || return 0
+
+  if [[ "${desired_profile}" != "${current_profile}" ]]; then
+    echo "ERROR: existing k3s on ${server_vm} uses networking profile=${current_profile}, but requested profile=${desired_profile}." >&2
+    echo "Reset the VM before switching SLICER_NETWORK_PROFILE or K3S_SERVER_EXTRA_ARGS." >&2
+    exit 1
+  fi
 }
 
 fix_vm_dns() {
@@ -219,6 +256,7 @@ fix_vm_dns
 configure_k3s_registries
 
 if remote_k3s_api_ready 2 2; then
+  validate_existing_k3s_network_profile
   echo "==> Existing k3s detected on ${server_vm}; refreshing kubeconfig only"
   refresh_kubeconfig "${server_ip}"
   KUBECONFIG="$kubeconfig_path" kubectl --context "$k3sup_context" get nodes -o wide || true
@@ -232,8 +270,14 @@ echo "==> Checking for ext4 filesystem errors"
 vm_exec_retry "$server_vm" "dmesg | grep -i 'ext4.*error' && echo 'WARNING: ext4 errors detected in dmesg' || true" 2 2 || true
 
 if [ "$disable_bpf_jit" = "1" ]; then
-  echo "==> Disabling BPF JIT inside ${server_vm} for slicer stability"
-  vm_exec_retry "$server_vm" "printf 'net.core.bpf_jit_enable = 0\n' | sudo tee /etc/sysctl.d/99-slicer-stability.conf >/dev/null && sudo sysctl -p /etc/sysctl.d/99-slicer-stability.conf >/dev/null" 5 2 >/dev/null
+  if vm_exec_retry "$server_vm" "test -e /proc/sys/net/core/bpf_jit_enable" 5 2 >/dev/null; then
+    echo "==> Disabling BPF JIT inside ${server_vm} for slicer stability"
+    if ! vm_exec_retry "$server_vm" "printf 'net.core.bpf_jit_enable = 0\n' | sudo tee /etc/sysctl.d/99-slicer-stability.conf >/dev/null && sudo sysctl -p /etc/sysctl.d/99-slicer-stability.conf >/dev/null" 5 2 >/dev/null; then
+      echo "WARN: could not disable BPF JIT inside ${server_vm}; continuing"
+    fi
+  else
+    echo "==> Skipping BPF JIT disable inside ${server_vm}; net.core.bpf_jit_enable is unavailable"
+  fi
 fi
 
 echo "==> Installing k3sup and kubectl inside ${server_vm} via arkade"

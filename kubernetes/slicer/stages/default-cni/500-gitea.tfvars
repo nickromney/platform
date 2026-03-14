@@ -1,4 +1,4 @@
-# Stage 100 - Bootstrap the Slicer-backed k3s cluster (no addons)
+# Stage 500 - Re-enable full Argo CD controllers and deploy Gitea on the default-CNI profile
 
 cluster_name       = "slicer-k3s"
 kubeconfig_path    = "~/.kube/slicer-k3s.yaml"
@@ -6,15 +6,16 @@ kubeconfig_context = "slicer-k3s"
 
 enable_image_preload       = false
 cni_provider               = "none"
-kind_disable_default_cni   = true
+kind_disable_default_cni   = false
 enable_hubble              = false
-enable_argocd              = false
-enable_gitea               = false
+enable_argocd              = true
+enable_gitea               = true
 enable_policies            = false
 enable_signoz              = false
 enable_observability_agent = false
 enable_headlamp            = false
 enable_gateway_tls         = false
+enable_cert_manager        = false
 enable_sso                 = false
 
 enable_apps_dir_mount             = false
@@ -28,10 +29,17 @@ argocd_chart_version       = "9.4.7"
 argocd_namespace           = "argocd"
 gitea_admin_username       = "gitea-admin"
 gitea_ssh_username         = "git"
+gitea_repo_owner           = "platform"
+gitea_repo_owner_is_org    = true
+gitea_org_full_name        = "Platform"
+gitea_org_visibility       = "private"
 gitea_chart_version        = "12.5.0"
 signoz_chart_version       = "0.114.1"
 kyverno_chart_version      = "3.7.1"
 cert_manager_chart_version = "v1.19.4"
+
+argocd_applicationset_enabled = true
+argocd_notifications_enabled  = true
 
 argocd_server_node_port = 30080
 hubble_ui_node_port     = 31235
