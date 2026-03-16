@@ -527,7 +527,7 @@ EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnet_calculator)
-EXPECT_APP_REPO_SENTIMENT_LLM=$(expected_from_tfvars enable_app_repo_sentiment_llm)
+EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
 CURRENT_STAGE=$(detect_stage_from_tfvars)
 
@@ -1040,7 +1040,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     fi
   fi
 
-  if [[ "${EXPECT_APP_REPO_SENTIMENT_LLM}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
+  if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
     for app in dev uat; do
       if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
         ok "Argo CD app ${app} exists"
@@ -1095,7 +1095,7 @@ fi
 
 echo ""
 echo "Apps / pipelines (Gitea repos) (if enabled):"
-if ! section_active 700 "${EXPECT_APP_REPO_SUBNET_CALC}" && ! section_active 700 "${EXPECT_APP_REPO_SENTIMENT_LLM}" && ! section_active 700 "${EXPECT_ACTIONS_RUNNER}"; then
+if ! section_active 700 "${EXPECT_APP_REPO_SUBNET_CALC}" && ! section_active 700 "${EXPECT_APP_REPO_SENTIMENT}" && ! section_active 700 "${EXPECT_ACTIONS_RUNNER}"; then
   ok "Skipped until stage 700"
 else
 gitea_repo_check() {
@@ -1159,7 +1159,7 @@ gitea_repo_check() {
 }
 
 gitea_repo_check "subnet-calculator" ".gitea/workflows/build-images.yaml" "${EXPECT_APP_REPO_SUBNET_CALC}"
-gitea_repo_check "sentiment-llm" ".gitea/workflows/build-images.yaml" "${EXPECT_APP_REPO_SENTIMENT_LLM}"
+gitea_repo_check "sentiment" ".gitea/workflows/build-images.yaml" "${EXPECT_APP_REPO_SENTIMENT}"
 fi
 
 echo ""

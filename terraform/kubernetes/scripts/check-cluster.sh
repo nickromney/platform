@@ -46,7 +46,7 @@ check_gitea_repos() {
 	local expected_repos=("policies")
 
 	if [ "${EXPECT_SENTIMENT_REPO}" = "1" ]; then
-		expected_repos+=("sentiment-llm")
+		expected_repos+=("sentiment")
 	fi
 
 	if [ "${EXPECT_SUBNETCALC_REPO}" = "1" ]; then
@@ -78,7 +78,7 @@ check_gitea_actions() {
 	local repos=()
 
 	if [ "${EXPECT_SENTIMENT_REPO}" = "1" ]; then
-		repos+=("sentiment-llm")
+		repos+=("sentiment")
 	fi
 
 	if [ "${EXPECT_SUBNETCALC_REPO}" = "1" ]; then

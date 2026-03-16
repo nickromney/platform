@@ -692,7 +692,7 @@ scan_gitea_repos() {
   load_gitea_helper
   gitea_local_access_setup http
 
-  for repo_name in sentiment-llm subnet-calculator; do
+  for repo_name in sentiment subnet-calculator; do
     if ! gitea_repo_exists "${repo_name}"; then
       log "SKIP gitea/${repo_name} mirror missing at ${GITEA_REPO_OWNER:-platform}/${repo_name}"
       continue

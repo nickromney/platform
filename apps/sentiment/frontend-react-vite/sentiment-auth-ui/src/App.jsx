@@ -113,7 +113,7 @@ export function App() {
         <div>
           <div className="title">Sentiment Analysis (Authenticated UI)</div>
           <div className="subtitle">
-            Forced login via <code className="mono">oauth2-proxy</code> + Keycloak. API calls go to <code className="mono">/api</code> via APIM.
+            Forced login via <code className="mono">oauth2-proxy</code> + OIDC. API calls go to <code className="mono">/api</code> via APIM.
           </div>
         </div>
         <div className="pill">

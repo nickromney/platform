@@ -9,7 +9,7 @@ enable_actions_runner         = false
 enable_cilium_wireguard       = false
 enable_cilium_node_encryption = false
 gitea_local_access_mode       = "port-forward"
-gateway_https_host_port = 443
+gateway_https_host_port       = 443
 
 argocd_image_repository = "quay.io/argoproj/argocd"
 argocd_image_tag        = "v3.3.2"

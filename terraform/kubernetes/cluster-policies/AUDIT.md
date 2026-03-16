@@ -43,7 +43,7 @@ SVG renders. Click any diagram to open its `.mmd` source.
 | `approved-egress-cidrs.yaml` | Reusable CIDR group for approved external HTTPS IPs. | Centralized, but IP allowlists are coarse for internet destinations. |
 | `deny-cloud-metadata-egress.yaml` | Blocks metadata endpoints from `dev`, `uat`, and `apim`. | Good defense-in-depth baseline. |
 | `application-baseline.yaml` | Provides the baseline application-namespace allowlist: health probes in, DNS and apiserver out. | Replaces the old duplicated `dev`/`uat` baselines. |
-| `application-project-boundaries.yaml` | Denies `sentiment-llm` to `subnetcalc` and the reverse across all application namespaces. | Strong shared guardrail keyed off the common `project/team/app` labels. |
+| `application-project-boundaries.yaml` | Denies `sentiment` to `subnetcalc` and the reverse across all application namespaces. | Strong shared guardrail keyed off the common `project/team/app` labels. |
 | `application-cloud-metadata-deny.yaml` | Blocks IMDS for application pods with frontend/gateway/backend tiers. | Cleaner shared intent than the old `dev`/`uat`-named file. |
 | `application-backend-egress-via-cidrgroup.yaml` | Allows selected app backends to the approved CIDR group on 443 plus DNS. | Narrower than before because frontends and gateways no longer inherit the shared outbound rule. |
 | `application-backend-egress-via-fqdn.yaml` | Allows those same app backends to GitHub API and GitHub content over 443. | Includes DNS L7 visibility so the FQDN pinning is actually enforceable. |

@@ -1,7 +1,7 @@
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:
-  name: allow-sentiment-llm-dns-egress
+  name: allow-sentiment-dns-egress
 spec:
   description: |
     Allow sentiment backend and LLM broker pods in dev and uat to perform DNS
@@ -20,7 +20,7 @@ spec:
       - key: "k8s:app"
         operator: In
         values:
-          - sentiment-llm
+          - sentiment
       - key: "k8s:role"
         operator: In
         values:

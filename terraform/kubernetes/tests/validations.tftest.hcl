@@ -70,14 +70,14 @@ run "app_repo_sentiment_requires_gitea_and_actions_runner" {
   command = plan
 
   variables {
-    cni_provider                  = "none"
-    enable_hubble                 = false
-    enable_gitea                  = true
-    enable_actions_runner         = false
-    enable_app_repo_sentiment_llm = true
+    cni_provider              = "none"
+    enable_hubble             = false
+    enable_gitea              = true
+    enable_actions_runner     = false
+    enable_app_repo_sentiment = true
   }
 
-  expect_failures = [check.enable_app_repo_sentiment_llm_requires_gitea_and_actions_runner]
+  expect_failures = [check.enable_app_repo_sentiment_requires_gitea_and_actions_runner]
 }
 
 run "app_repo_subnetcalc_requires_gitea_and_actions_runner" {
@@ -102,7 +102,7 @@ run "app_repo_sentiment_allows_external_images_without_runner" {
     enable_hubble                   = false
     enable_gitea                    = true
     enable_actions_runner           = false
-    enable_app_repo_sentiment_llm   = true
+    enable_app_repo_sentiment       = true
     prefer_external_workload_images = true
     external_workload_image_refs = {
       "sentiment-api"     = "host.lima.internal:5002/platform/sentiment-api:latest"

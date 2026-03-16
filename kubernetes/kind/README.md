@@ -245,7 +245,7 @@ flowchart LR
 ```
 
 - `enable_actions_runner = true` adds the in-cluster CI executor.
-- `enable_app_repo_subnet_calculator = true` and `enable_app_repo_sentiment_llm = true` seed the demo application repos.
+- `enable_app_repo_subnet_calculator = true` and `enable_app_repo_sentiment = true` seed the demo application repos.
 - `llm_gateway_mode = "direct"` keeps the local demo path simple for the LLM-backed sample app.
 
 The demo applications are explained in [docs/sample-apps.md](docs/sample-apps.md).

@@ -200,7 +200,7 @@ main() {
   export ENABLE_GATEWAY_TLS="$(resolve_bool ENABLE_GATEWAY_TLS enable_gateway_tls true)"
   export ENABLE_CERT_MANAGER="$(resolve_bool ENABLE_CERT_MANAGER enable_cert_manager true)"
   export ENABLE_ACTIONS_RUNNER="$(resolve_bool ENABLE_ACTIONS_RUNNER enable_actions_runner true)"
-  export ENABLE_APP_REPO_SENTIMENT="$(resolve_bool ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment_llm true)"
+  export ENABLE_APP_REPO_SENTIMENT="$(resolve_bool ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment true)"
   export ENABLE_APP_REPO_SUBNETCALC="$(resolve_bool ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnet_calculator true)"
   export ENABLE_PROMETHEUS="$(resolve_bool ENABLE_PROMETHEUS enable_prometheus true)"
   export ENABLE_GRAFANA="$(resolve_bool ENABLE_GRAFANA enable_grafana true)"

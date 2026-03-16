@@ -20,6 +20,8 @@ GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
 
+[[ -d "${SOURCE_DIR}" ]] || fail "SOURCE_DIR does not exist: ${SOURCE_DIR}"
+
 # shellcheck source=/dev/null
 source "${STACK_DIR}/scripts/gitea-local-access.sh"
 

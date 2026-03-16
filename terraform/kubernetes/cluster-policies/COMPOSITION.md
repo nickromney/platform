@@ -40,7 +40,7 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | `allow-application-backend-egress-via-cidrgroup` | [`shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
 | `allow-application-backend-egress-via-fqdn` | [`shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
 | `allow-sentiment-llama-cpp-world-egress` | [`shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
-| `allow-sentiment-llm-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
+| `allow-sentiment-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
 | `allow-shared-identity-egress-via-fqdn` | [`shared/shared-identity-egress-via-fqdn.yaml`](./cilium/shared/shared-identity-egress-via-fqdn.yaml) |
 | `apim-baseline` | [`shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
 | `application-baseline` | [`shared/application-baseline.yaml`](./cilium/shared/application-baseline.yaml) |
@@ -93,7 +93,7 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | `allow-application-backend-egress-via-cidrgroup` | [`shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
 | `allow-application-backend-egress-via-fqdn` | [`shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
 | `allow-sentiment-llama-cpp-world-egress` | [`shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
-| `allow-sentiment-llm-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
+| `allow-sentiment-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
 | `allow-shared-identity-egress-via-fqdn` | [`shared/shared-identity-egress-via-fqdn.yaml`](./cilium/shared/shared-identity-egress-via-fqdn.yaml) |
 | `apim-baseline` | [`shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
 | `application-baseline` | [`shared/application-baseline.yaml`](./cilium/shared/application-baseline.yaml) |

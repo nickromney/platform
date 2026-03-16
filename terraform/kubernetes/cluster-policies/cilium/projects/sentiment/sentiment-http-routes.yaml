@@ -10,7 +10,7 @@ spec:
     matchLabels:
       "k8s:project": kindlocal
       "k8s:team": dolphin
-      "k8s:app": sentiment-llm
+      "k8s:app": sentiment
       "k8s:tier": gateway
       "k8s:app.kubernetes.io/name": sentiment-router
   egress:
@@ -18,7 +18,7 @@ spec:
         - matchLabels:
             "k8s:project": kindlocal
             "k8s:team": dolphin
-            "k8s:app": sentiment-llm
+            "k8s:app": sentiment
             "k8s:tier": backend
             "k8s:app.kubernetes.io/name": sentiment-api
       toPorts:
@@ -37,7 +37,7 @@ spec:
         - matchLabels:
             "k8s:project": kindlocal
             "k8s:team": dolphin
-            "k8s:app": sentiment-llm
+            "k8s:app": sentiment
             "k8s:tier": frontend
             "k8s:app.kubernetes.io/name": sentiment-auth-ui
       toPorts:

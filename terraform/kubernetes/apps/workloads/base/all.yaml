@@ -10,7 +10,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-api
     app.kubernetes.io/component: backend
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: backend
@@ -30,7 +30,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-api
     app.kubernetes.io/component: backend
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: backend
@@ -46,7 +46,7 @@ spec:
       labels:
         app.kubernetes.io/name: sentiment-api
         app.kubernetes.io/component: backend
-        app: sentiment-llm
+        app: sentiment
         project: kindlocal
         team: dolphin
         tier: backend
@@ -124,7 +124,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-api
     app.kubernetes.io/component: backend
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: backend
@@ -146,7 +146,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-auth-ui
     app.kubernetes.io/component: frontend
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: frontend
@@ -162,7 +162,7 @@ spec:
       labels:
         app.kubernetes.io/name: sentiment-auth-ui
         app.kubernetes.io/component: frontend
-        app: sentiment-llm
+        app: sentiment
         project: kindlocal
         team: dolphin
         tier: frontend
@@ -192,7 +192,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-auth-ui
     app.kubernetes.io/component: frontend
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: frontend
@@ -213,7 +213,7 @@ metadata:
   name: sentiment-router-nginx
   labels:
     app.kubernetes.io/name: sentiment-router
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: gateway
@@ -258,7 +258,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-router
     app.kubernetes.io/component: gateway
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: gateway
@@ -274,7 +274,7 @@ spec:
       labels:
         app.kubernetes.io/name: sentiment-router
         app.kubernetes.io/component: gateway
-        app: sentiment-llm
+        app: sentiment
         project: kindlocal
         team: dolphin
         tier: gateway
@@ -310,7 +310,7 @@ metadata:
   labels:
     app.kubernetes.io/name: sentiment-router
     app.kubernetes.io/component: gateway
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: gateway

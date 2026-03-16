@@ -52,7 +52,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       GATEWAY_HTTPS_HOST_PORT                       = tostring(var.gateway_https_host_port)
       ENABLE_CERT_MANAGER                           = tostring(var.enable_cert_manager)
       ENABLE_ACTIONS_RUNNER                         = tostring(var.enable_actions_runner)
-      ENABLE_APP_REPO_SENTIMENT                     = tostring(var.enable_app_repo_sentiment_llm)
+      ENABLE_APP_REPO_SENTIMENT                     = tostring(var.enable_app_repo_sentiment)
       ENABLE_APP_REPO_SUBNETCALC                    = tostring(var.enable_app_repo_subnet_calculator)
       ENABLE_PROMETHEUS                             = tostring(var.enable_prometheus)
       ENABLE_GRAFANA                                = tostring(var.enable_grafana)
@@ -111,40 +111,40 @@ resource "null_resource" "sync_gitea_policies_repo" {
 # Optional: seed monorepo apps into in-cluster Gitea (for in-cluster pipelines)
 # -----------------------------------------------------------------------------
 
-resource "tls_private_key" "app_repo_sentiment_llm" {
-  count     = var.enable_app_repo_sentiment_llm && var.enable_actions_runner ? 1 : 0
+resource "tls_private_key" "app_repo_sentiment" {
+  count     = var.enable_app_repo_sentiment && var.enable_actions_runner ? 1 : 0
   algorithm = "ED25519"
 }
 
-resource "local_sensitive_file" "app_repo_sentiment_llm_private_key" {
-  count                = var.enable_app_repo_sentiment_llm && var.enable_actions_runner ? 1 : 0
-  filename             = "${local.run_dir}/app-${local.sentiment_llm_repo_name}.id_ed25519"
-  content              = tls_private_key.app_repo_sentiment_llm[0].private_key_openssh
+resource "local_sensitive_file" "app_repo_sentiment_private_key" {
+  count                = var.enable_app_repo_sentiment && var.enable_actions_runner ? 1 : 0
+  filename             = "${local.run_dir}/app-${local.sentiment_repo_name}.id_ed25519"
+  content              = tls_private_key.app_repo_sentiment[0].private_key_openssh
   file_permission      = "0600"
   directory_permission = "0700"
-  depends_on           = [tls_private_key.app_repo_sentiment_llm]
+  depends_on           = [tls_private_key.app_repo_sentiment]
 }
 
-resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
-  count = var.enable_app_repo_sentiment_llm && var.enable_actions_runner ? 1 : 0
+resource "null_resource" "sync_gitea_app_repo_sentiment" {
+  count = var.enable_app_repo_sentiment && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash   = local.sentiment_llm_content_hash
-    public_key     = tls_private_key.app_repo_sentiment_llm[0].public_key_openssh
-    script_sha     = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
-    gitea_http     = tostring(var.gitea_http_node_port)
-    gitea_ssh      = tostring(var.gitea_ssh_node_port)
-    gitea_access   = local.gitea_local_access_mode_effective
-    gitea_ns_uid   = kubernetes_namespace_v1.gitea[0].metadata[0].uid
-    repo_owner     = local.gitea_repo_owner
-    repo_is_org    = tostring(local.gitea_repo_owner_is_org)
+    content_hash = local.sentiment_content_hash
+    public_key   = tls_private_key.app_repo_sentiment[0].public_key_openssh
+    script_sha   = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
+    gitea_http   = tostring(var.gitea_http_node_port)
+    gitea_ssh    = tostring(var.gitea_ssh_node_port)
+    gitea_access = local.gitea_local_access_mode_effective
+    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
+    repo_owner   = local.gitea_repo_owner
+    repo_is_org  = tostring(local.gitea_repo_owner_is_org)
   }
 
   provisioner "local-exec" {
     command = "bash \"${path.module}/scripts/sync-gitea-repo.sh\""
     environment = {
       STACK_DIR                 = abspath(path.module)
-      SOURCE_DIR                = local.sentiment_llm_source_dir
+      SOURCE_DIR                = local.sentiment_source_dir
       GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
@@ -158,10 +158,10 @@ resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
       GITEA_REPO_OWNER          = local.gitea_repo_owner
       GITEA_REPO_OWNER_IS_ORG   = tostring(local.gitea_repo_owner_is_org)
       GITEA_REPO_OWNER_FALLBACK = local.gitea_repo_owner_fallback
-      GITEA_REPO_NAME           = local.sentiment_llm_repo_name
-      DEPLOY_KEY_TITLE          = "ci-${local.sentiment_llm_repo_name}-key"
-      DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_sentiment_llm[0].public_key_openssh
-      SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_sentiment_llm_private_key[0].filename
+      GITEA_REPO_NAME           = local.sentiment_repo_name
+      DEPLOY_KEY_TITLE          = "ci-${local.sentiment_repo_name}-key"
+      DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_sentiment[0].public_key_openssh
+      SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_sentiment_private_key[0].filename
       KUBECONFIG                = local.kubeconfig_path_expanded
       KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
     }
@@ -170,7 +170,7 @@ resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
   depends_on = [
     kubectl_manifest.argocd_app_gitea,
     null_resource.gitea_org,
-    local_sensitive_file.app_repo_sentiment_llm_private_key,
+    local_sensitive_file.app_repo_sentiment_private_key,
     # Ensure the runner is ready before pushing code that triggers workflows.
     null_resource.wait_gitea_actions_runner_ready,
     # Policies repo must be synced first (see sync_gitea_app_repo_subnet_calculator).
@@ -196,15 +196,15 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
   count = var.enable_app_repo_subnet_calculator && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash   = local.subnet_calculator_content_hash
-    public_key     = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
-    script_sha     = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
-    gitea_http     = tostring(var.gitea_http_node_port)
-    gitea_ssh      = tostring(var.gitea_ssh_node_port)
-    gitea_access   = local.gitea_local_access_mode_effective
-    gitea_ns_uid   = kubernetes_namespace_v1.gitea[0].metadata[0].uid
-    repo_owner     = local.gitea_repo_owner
-    repo_is_org    = tostring(local.gitea_repo_owner_is_org)
+    content_hash = local.subnet_calculator_content_hash
+    public_key   = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
+    script_sha   = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
+    gitea_http   = tostring(var.gitea_http_node_port)
+    gitea_ssh    = tostring(var.gitea_ssh_node_port)
+    gitea_access = local.gitea_local_access_mode_effective
+    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
+    repo_owner   = local.gitea_repo_owner
+    repo_is_org  = tostring(local.gitea_repo_owner_is_org)
   }
 
   provisioner "local-exec" {
@@ -622,12 +622,12 @@ resource "null_resource" "gitea_known_hosts_cluster" {
 
   triggers = {
     # Re-run if the cluster identity changes (kind reset/recreate or kubeconfig/context switch).
-    cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
-    host       = local.gitea_ssh_host_cluster
-    port       = tostring(local.gitea_ssh_port_cluster)
-    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
+    cluster_id       = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
+    host             = local.gitea_ssh_host_cluster
+    port             = tostring(local.gitea_ssh_port_cluster)
+    gitea_ns_uid     = kubernetes_namespace_v1.gitea[0].metadata[0].uid
     ssh_pubkeys_sha1 = data.external.gitea_ssh_public_keys_cluster[0].result.keys_sha1
-    script_v   = "11"
+    script_v         = "11"
   }
 
   provisioner "local-exec" {

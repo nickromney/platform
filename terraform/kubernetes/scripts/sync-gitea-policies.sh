@@ -213,7 +213,7 @@ metadata:
   labels:
     app.kubernetes.io/name: llm-gateway
     app.kubernetes.io/component: llm
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: backend
@@ -232,7 +232,7 @@ metadata:
   labels:
     app.kubernetes.io/name: llm-gateway
     app.kubernetes.io/component: llm
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: backend
@@ -256,7 +256,7 @@ metadata:
   labels:
     app.kubernetes.io/name: llm-gateway
     app.kubernetes.io/component: llm
-    app: sentiment-llm
+    app: sentiment
     project: kindlocal
     team: dolphin
     tier: backend
