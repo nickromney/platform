@@ -95,8 +95,8 @@ no longer the hidden prerequisite for stage `500+` applies.
 - The current working shape depends on VM sizing. The validated full-stack run
   used the current on-device image plus a `25G` root disk; smaller roots hit
   node disk pressure at later stages.
-- Stage `100` is the bootstrap boundary. It reuses the running `slicer-mac`
-  daemon when available, otherwise starts `slicer-mac` from the on-device
+- Stage `100` is the bootstrap boundary. It requires the on-device
+  `slicer-mac` daemon at
   [`~/slicer-mac/slicer-mac.yaml`](/Users/nickromney/slicer-mac/slicer-mac.yaml),
   ensures the selected VM exists in the selected host group, installs k3s with
   `k3sup --local` inside the VM, and writes `~/.kube/slicer-k3s.yaml`.

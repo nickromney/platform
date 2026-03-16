@@ -29,12 +29,9 @@ AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
-SLICER_RUNTIME_DIR ?= /tmp/platform-slicer
 SLICER_SYSTEM_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
-SLICER_PROJECT_SOCKET ?= $(RUN_DIR)/slicer.sock
-SLICER_SOCKET ?= $(SLICER_PROJECT_SOCKET)
+SLICER_SOCKET ?= $(SLICER_SYSTEM_SOCKET)
 SLICER_CONFIG ?= $(HOME)/slicer-mac/slicer-mac.yaml
-IGNORE_SYSTEM_SOCKET ?= 0
 SLICER_SYSTEM_SOCKET_WAIT_SECONDS ?= 240
 SLICER_NETWORK_PROFILE ?= cilium
 SLICER_VM_GROUP ?= sbox
@@ -139,7 +136,7 @@ target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 stage_dir_abs = $(abspath $(MAKEFILE_DIR)$(STAGES_DIR))
 
-RESOLVE_SOCKET = cat "$(RUN_DIR)/slicer.sock.active" 2>/dev/null || echo "$(SLICER_SYSTEM_SOCKET)"
+RESOLVE_SOCKET = echo "$(SLICER_SYSTEM_SOCKET)"
 
 .PHONY: help
 help:
@@ -207,11 +204,10 @@ help:
 	@echo "  SLICER_NETWORK_PROFILE=default -> keep k3s default CNI; stages 200/300 become no-op placeholders"
 	@echo "  Switching profiles requires a fresh VM reset; bootstrap refuses in-place flannel/Cilium flips."
 	@echo ""
-	@echo "Daemon selection:"
-	@echo "  IGNORE_SYSTEM_SOCKET=0  -> prefer ~/slicer-mac when present"
-	@echo "  IGNORE_SYSTEM_SOCKET=1  -> start slicer-mac from $(SLICER_CONFIG) in $(RUN_DIR)"
-	@echo "  project runtime dir     -> $(SLICER_RUNTIME_DIR)"
+	@echo "Daemon requirement:"
+	@echo "  on-device socket        -> $(SLICER_SYSTEM_SOCKET)"
 	@echo "  slicer config           -> $(SLICER_CONFIG)"
+	@echo "  start manually from     -> ~/slicer-mac"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
@@ -325,11 +321,7 @@ prereqs:
 	$(MAKE) check-kind-stopped; \
 	echo ""; \
 	echo "Slicer daemon:"; \
-	if [ "$(IGNORE_SYSTEM_SOCKET)" = "1" ]; then \
-		echo "OK   project-managed daemon requested; stage 100 will start it in $(RUN_DIR)"; \
-	else \
-		SLICER_URL="$(SLICER_SYSTEM_SOCKET)" slicer info || exit 1; \
-	fi; \
+	SLICER_URL="$(SLICER_SYSTEM_SOCKET)" slicer info || exit 1; \
 	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \
@@ -342,15 +334,9 @@ prereqs:
 
 .PHONY: daemon-up
 daemon-up:
-	@mkdir -p "$(RUN_DIR)" "$(RUN_DIR)/docker-config"; \
-	printf '{}\n' > "$(RUN_DIR)/docker-config/config.json"; \
+	@mkdir -p "$(RUN_DIR)"; \
 	SLICER_SYSTEM_SOCKET="$(SLICER_SYSTEM_SOCKET)" \
-	SLICER_SOCKET="$(SLICER_SOCKET)" \
-	CONFIG_FILE="$(SLICER_CONFIG)" \
 	RUN_DIR="$(RUN_DIR)" \
-	SLICER_RUNTIME_DIR="$(SLICER_RUNTIME_DIR)" \
-	SLICER_DOCKER_CONFIG_DIR="$(RUN_DIR)/docker-config" \
-	IGNORE_SYSTEM_SOCKET="$(IGNORE_SYSTEM_SOCKET)" \
 	SLICER_SYSTEM_SOCKET_WAIT_SECONDS="$(SLICER_SYSTEM_SOCKET_WAIT_SECONDS)" \
 	"$(START_DAEMON)"
 
@@ -498,9 +484,9 @@ stop-slicer:
 	else \
 		echo "OK   slicer daemon not reachable at $$socket"; \
 	fi; \
-	echo "Stopping project-managed slicer daemon (best-effort)..."; \
+	echo "Cleaning any stale repo-managed slicer daemon state (best-effort)..."; \
 	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
-	echo "OK   project-managed daemon stopped"
+	echo "OK   stale repo-managed daemon state cleaned"
 
 .PHONY: stop
 stop:
@@ -543,12 +529,12 @@ plan: workflow-validate
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
-	if [ "$$stage_num" -eq 100 ]; then \
-		echo "Stage 100 plan:"; \
-		echo "  - preflight target host ports"; \
-		echo "  - reuse slicer-mac if present, otherwise start a project daemon"; \
-		echo "  - ensure $(SLICER_VM_NAME) exists in host group $(SLICER_VM_GROUP)"; \
-		echo "  - use networking profile: $(SLICER_NETWORK_PROFILE)"; \
+		if [ "$$stage_num" -eq 100 ]; then \
+			echo "Stage 100 plan:"; \
+			echo "  - preflight target host ports"; \
+			echo "  - require the on-device slicer-mac daemon at $(SLICER_SYSTEM_SOCKET)"; \
+			echo "  - ensure $(SLICER_VM_NAME) exists in host group $(SLICER_VM_GROUP)"; \
+			echo "  - use networking profile: $(SLICER_NETWORK_PROFILE)"; \
 		echo "  - bootstrap or refresh the $(K3SUP_CONTEXT) kubeconfig at $(KUBECONFIG_PATH)"; \
 		echo ""; \
 			$(MAKE) status || true; \
@@ -857,11 +843,10 @@ reset:
 	echo "This will:"; \
 	echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present"; \
 	echo "  - Stop host forwards"; \
-	echo "  - Stop any project-managed slicer daemon started from this repo"; \
+	echo "  - Clean any stale repo-managed slicer daemon state from older revisions"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
 	echo "  - Remove local terragrunt state: $$state_dir"; \
 	echo "  - Clean stack caches (.terraform/.terragrunt-cache)"; \
-	echo "  - Remove project runtime dir: $(SLICER_RUNTIME_DIR)"; \
 	echo ""; \
 	if [ "$(AUTO_APPROVE)" != "1" ]; then \
 		printf "Proceed with Slicer cleanup and local state cleanup? [y/N] "; read -r confirm; \
@@ -898,13 +883,12 @@ reset:
 		reset_incomplete=1; \
 	fi; \
 	echo ""; \
-	echo "Stopping project daemon (best-effort)..."; \
+	echo "Cleaning any stale repo-managed daemon state (best-effort)..."; \
 	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
-	echo "OK   project daemon stopped"; \
+	echo "OK   stale repo-managed daemon state cleaned"; \
 	echo ""; \
 	echo "Cleaning local state/caches..."; \
 	rm -rf "$(RUN_DIR)" 2>/dev/null || true; \
-	rm -rf "$(SLICER_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -rf "$$state_dir" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.terraform" "$(STACK_DIR)/.terragrunt-cache" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \
