@@ -5,7 +5,7 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 
 slicer_url="${SLICER_URL:-${SLICER_SOCKET:-}}"
-vm_name="${SLICER_VM_NAME:-sbox-1}"
+vm_name="${SLICER_VM_NAME:-slicer-1}"
 
 [ -n "${slicer_url}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
 

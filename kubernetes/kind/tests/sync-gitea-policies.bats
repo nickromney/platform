@@ -69,7 +69,24 @@ EOF
   chmod +x "${TEST_BIN}/helm"
 
   export STACK_DIR="${BATS_TEST_TMPDIR}/stack"
-  mkdir -p "${STACK_DIR}"
+  mkdir -p "${STACK_DIR}/scripts"
+  cat >"${STACK_DIR}/scripts/gitea-local-access.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+gitea_local_access_setup() {
+  return 0
+}
+
+gitea_local_access_reset() {
+  return 0
+}
+
+gitea_local_access_cleanup() {
+  return 0
+}
+EOF
+  chmod +x "${STACK_DIR}/scripts/gitea-local-access.sh"
   export GITEA_HTTP_BASE="http://127.0.0.1:30090"
   export GITEA_ADMIN_USERNAME="gitea-admin"
   export GITEA_ADMIN_PWD="ChangeMe123!"
@@ -189,6 +206,72 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "192.168.104.2/32" ]
+}
+
+@test "disabled llm gateway mode removes legacy llm manifests and policies" {
+  workloads_dir="${BATS_TEST_TMPDIR}/workloads"
+  shared_dir="${BATS_TEST_TMPDIR}/shared"
+  mkdir -p "${workloads_dir}" "${shared_dir}"
+
+  cat >"${workloads_dir}/kustomization.yaml" <<'EOF'
+resources:
+  - all.yaml
+  - llm-direct.yaml
+  - llm-litellm.yaml
+EOF
+
+  cat >"${workloads_dir}/all.yaml" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment
+EOF
+
+  cat >"${workloads_dir}/llm-direct.yaml" <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+EOF
+
+  cat >"${workloads_dir}/llm-litellm.yaml" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+EOF
+
+  cat >"${shared_dir}/kustomization.yaml" <<'EOF'
+resources:
+  - sentiment-api-llm-egress.yaml
+  - sentiment-llama-cpp-world-egress.yaml
+EOF
+
+  cat >"${shared_dir}/sentiment-api-llm-egress.yaml" <<'EOF'
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sentiment-api-llm-egress
+EOF
+
+  cat >"${shared_dir}/sentiment-llama-cpp-world-egress.yaml" <<'EOF'
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-sentiment-llama-cpp-world-egress
+EOF
+
+  run bash -lc "export LLM_GATEWAY_MODE=disabled; source '${SCRIPT}'; render_llm_gateway_manifests '${workloads_dir}'; render_llm_gateway_policies '${shared_dir}'"
+
+  [ "${status}" -eq 0 ]
+  [ ! -f "${workloads_dir}/llm-direct.yaml" ]
+  [ ! -f "${workloads_dir}/llm-litellm.yaml" ]
+  [ ! -f "${shared_dir}/sentiment-api-llm-egress.yaml" ]
+  [ ! -f "${shared_dir}/sentiment-llama-cpp-world-egress.yaml" ]
+  ! grep -Fq "llm-direct.yaml" "${workloads_dir}/kustomization.yaml"
+  ! grep -Fq "llm-litellm.yaml" "${workloads_dir}/kustomization.yaml"
+  ! grep -Fq "sentiment-api-llm-egress.yaml" "${shared_dir}/kustomization.yaml"
+  ! grep -Fq "sentiment-llama-cpp-world-egress.yaml" "${shared_dir}/kustomization.yaml"
 }
 
 @test "prune_argocd_app_manifests keeps cert-manager when gateway TLS is disabled but cert-manager stays enabled" {

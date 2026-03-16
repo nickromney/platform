@@ -28,11 +28,11 @@ spec:
           rules:
             http:
               - method: "GET"
-                path: "/api/v1/health"
+                path: "/api/v1/health.*"
               - method: "GET"
-                path: "/api/v1/comments"
+                path: "/api/v1/comments.*"
               - method: "POST"
-                path: "/api/v1/comments"
+                path: "/api/v1/comments.*"
     - toEndpoints:
         - matchLabels:
             "k8s:project": kindlocal

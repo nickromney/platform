@@ -27,7 +27,7 @@ enable_apps_dir_mount             = true
 enable_actions_runner             = true
 enable_app_repo_subnet_calculator = true
 enable_app_repo_sentiment_llm     = true
-llm_gateway_mode                  = "direct"
+llm_gateway_mode                  = "disabled"
 llm_gateway_external_name         = "host.docker.internal"
 
 cilium_version             = "1.19.1"

@@ -136,10 +136,10 @@ class TestJWTMode:
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long-123456789")
         monkeypatch.setenv("JWT_ALGORITHM", "HS256")
         monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
-        # Use pre-hashed password for "demo" user with password "password123"
+        # Use pre-hashed password for "demo@dev.test" user with password "password123"
         monkeypatch.setenv(
             "JWT_TEST_USERS",
-            '{"demo": "$argon2id$v=19$m=65536,t=3,p=4$OT3Rp/FENYROxqB7RxEc7A$stcjNX4fdarJH+GbxTyQeiyCOJi15GjQA2U8uTJlhII"}',
+            '{"demo@dev.test": "$argon2id$v=19$m=65536,t=3,p=4$OT3Rp/FENYROxqB7RxEc7A$stcjNX4fdarJH+GbxTyQeiyCOJi15GjQA2U8uTJlhII"}',
         )
         # Reload app to pick up new env vars
         from importlib import reload
@@ -161,13 +161,13 @@ class TestJWTMode:
     @pytest.fixture
     def valid_token(self, client):
         """Get a valid JWT token."""
-        response = client.post("/api/v1/auth/login", data={"username": "demo", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "demo@dev.test", "password": "password123"})
         assert response.status_code == 200
         return response.json()["access_token"]
 
     def test_login_with_valid_credentials(self, client):
         """Test login with valid credentials returns token."""
-        response = client.post("/api/v1/auth/login", data={"username": "demo", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "demo@dev.test", "password": "password123"})
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -180,7 +180,7 @@ class TestJWTMode:
 
     def test_login_with_invalid_password(self, client):
         """Test login with invalid password returns 401."""
-        response = client.post("/api/v1/auth/login", data={"username": "demo", "password": "wrong"})
+        response = client.post("/api/v1/auth/login", data={"username": "demo@dev.test", "password": "wrong"})
         assert response.status_code == 401
 
     def test_missing_authorization_header_returns_401(self, client):

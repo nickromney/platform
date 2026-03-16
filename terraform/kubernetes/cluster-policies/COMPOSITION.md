@@ -8,6 +8,11 @@ This view answers three related questions:
 - which source files contribute each rendered resource
 - which policies in each overlay survive the active slice
 
+Important notes:
+
+- this is a source-tree composition view, not a shipped stage-default view
+- optional sentiment legacy LLM policies still appear here because they are checked in under `cluster-policies/`; the shipped kind, lima, and slicer stages default to in-process SST with `llm_gateway_mode = "disabled"`
+
 Active filters:
 
 - namespace: `all`

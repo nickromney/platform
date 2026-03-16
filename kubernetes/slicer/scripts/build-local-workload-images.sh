@@ -79,13 +79,13 @@ build_and_push() {
 
 build_and_push \
   "sentiment-api" \
-  "${REPO_ROOT}/apps/sentiment-llm/api-sentiment" \
-  "${REPO_ROOT}/apps/sentiment-llm/api-sentiment/Dockerfile"
+  "${REPO_ROOT}/apps/sentiment/api-sentiment" \
+  "${REPO_ROOT}/apps/sentiment/api-sentiment/Dockerfile"
 
 build_and_push \
   "sentiment-auth-ui" \
-  "${REPO_ROOT}/apps/sentiment-llm/frontend-react-vite/sentiment-auth-ui" \
-  "${REPO_ROOT}/apps/sentiment-llm/frontend-react-vite/sentiment-auth-ui/Dockerfile"
+  "${REPO_ROOT}/apps/sentiment/frontend-react-vite/sentiment-auth-ui" \
+  "${REPO_ROOT}/apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile"
 
 build_and_push \
   "subnetcalc-api-fastapi-container-app" \

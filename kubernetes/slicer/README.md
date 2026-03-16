@@ -13,7 +13,7 @@ As of March 14, 2026, the validated shape is:
 - `slicer-1` in the `slicer` group
 - `8GiB` RAM
 - `25G` root disk
-- localhost HTTPS entrypoint on `:8443`
+- localhost HTTPS entrypoint on `:443`
 
 This target still carries useful operational caveats:
 
@@ -22,8 +22,10 @@ This target still carries useful operational caveats:
   ext4 plus containerd corruption under Cilium/Hubble load.
 - The lighter `SLICER_NETWORK_PROFILE=default` path is still valuable when you
   want a teaching cluster without Cilium/Hubble/service-mesh behavior.
-- Slicer host forwards are unprivileged on macOS, so the gateway does not bind
-  host port `443`; use `https://*.127.0.0.1.sslip.io:8443/...` in this target.
+- Slicer host forwards are still unprivileged on macOS, so this target now uses
+  the same Docker-based privileged-port proxy pattern as Lima: the VM is
+  forwarded to local `:8443`, and Docker publishes the operator-facing HTTPS
+  entrypoint on host port `443`.
 
 This target follows the current Kind/Lima plus shared Terraform shape. The old
 `publiccloudexperiments/platforms/slicervm` tree is reference material only for
@@ -38,7 +40,6 @@ keeps k3s' built-in networking and skips Cilium/Hubble/policies.
 From the project root:
 
 ```bash
-export SLICER_VM_GROUP=slicer
 make -C kubernetes/slicer prereqs
 make -C kubernetes/slicer 100 apply
 make -C kubernetes/slicer 500 apply SLICER_NETWORK_PROFILE=default
@@ -47,11 +48,12 @@ make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
 make -C kubernetes/slicer show-urls
 ```
 
-For the current Slicer-backed HTTPS routes, append `:8443`, for example:
+For the current Slicer-backed HTTPS routes, use the bare HTTPS origin, for
+example:
 
-- `https://gitea.admin.127.0.0.1.sslip.io:8443/`
-- `https://grafana.admin.127.0.0.1.sslip.io:8443/`
-- `https://dex.127.0.0.1.sslip.io:8443/dex`
+- `https://gitea.admin.127.0.0.1.sslip.io/`
+- `https://grafana.admin.127.0.0.1.sslip.io/`
+- `https://dex.127.0.0.1.sslip.io/dex`
 
 Useful follow-ups while debugging:
 
@@ -98,8 +100,9 @@ no longer the hidden prerequisite for stage `500+` applies.
 - Stage `100` is the bootstrap boundary. It requires the on-device
   `slicer-mac` daemon at
   [`~/slicer-mac/slicer-mac.yaml`](/Users/nickromney/slicer-mac/slicer-mac.yaml),
-  ensures the selected VM exists in the selected host group, installs k3s with
-  `k3sup --local` inside the VM, and writes `~/.kube/slicer-k3s.yaml`.
+  ensures the selected VM exists in the selected host group, authorizes a
+  dedicated bootstrap SSH key, installs k3s from the host with `k3sup-pro`
+  when present and `k3sup` otherwise, and writes `~/.kube/slicer-k3s.yaml`.
 - The bootstrap keeps the Slicer-specific host-health guards that still pull
   their weight on current images: swap creation and ext4 error checks.
 - Stages `200+` reuse the shared Terraform platform root. The Slicer target
@@ -125,12 +128,15 @@ no longer the hidden prerequisite for stage `500+` applies.
   host and pushed to `127.0.0.1:5002`, which the cluster then pulls as
   `192.168.64.1:5002`.
 - Slicer needs an explicit host forwarder so localhost URLs line up with Kind
-  and Lima. The target manages that via `make ensure-host-forwards`, mapping:
-  `30080`, `31235`, `30090`, `30022`, `3301`, `3302`, and `8443`.
-- Because that forwarder is unprivileged on macOS, the TLS gateway URL is
-  `https://...:8443`, not bare `443`.
+  and Lima. The target manages that via `make ensure-host-forwards`, mapping
+  the VM services to localhost and then using a small Docker proxy so the TLS
+  gateway is available on bare `443`.
 - The host-port preflight checks the Slicer-local URL surface before stage
   `100`, so Kind/Lima/Slicer do not silently overlap on the same host ports.
+
+If you need to debug the raw Slicer forwarder, it still uses local `:8443`
+under the hood by default. The Docker proxy publishes the user-facing HTTPS
+entrypoint on `:443`.
 
 ## Stage ladder
 

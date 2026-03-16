@@ -27,14 +27,14 @@ TRIVY_SKIP_DIRS=(
 mode="${1:-all}"
 
 SOURCE_TARGETS=(
-  "apps/sentiment-llm"
+  "apps/sentiment"
   "apps/subnet-calculator"
 )
 
 # Keep this list aligned with kubernetes/lima/scripts/build-local-workload-images.sh.
 IMAGE_SPECS=(
-  "platform-security-scan/sentiment-api:scan|apps/sentiment-llm/api-sentiment|apps/sentiment-llm/api-sentiment/Dockerfile|"
-  "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment-llm/frontend-react-vite/sentiment-auth-ui|apps/sentiment-llm/frontend-react-vite/sentiment-auth-ui/Dockerfile|"
+  "platform-security-scan/sentiment-api:scan|apps/sentiment/api-sentiment|apps/sentiment/api-sentiment/Dockerfile|"
+  "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment/frontend-react-vite/sentiment-auth-ui|apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile|"
   "platform-security-scan/subnetcalc-api-fastapi-container-app:scan|apps/subnet-calculator/api-fastapi-container-app|apps/subnet-calculator/api-fastapi-container-app/Dockerfile|"
   "platform-security-scan/subnetcalc-apim-simulator:scan|apps/subnet-calculator/apim-simulator|apps/subnet-calculator/apim-simulator/Dockerfile|"
   "platform-security-scan/subnetcalc-frontend-typescript-vite:scan|apps/subnet-calculator|apps/subnet-calculator/frontend-typescript-vite/Dockerfile|"

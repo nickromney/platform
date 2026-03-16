@@ -29,7 +29,7 @@ enable_actions_runner             = false
 enable_app_repo_subnet_calculator = true
 enable_app_repo_sentiment_llm     = true
 prefer_external_workload_images   = true
-llm_gateway_mode                  = "direct"
+llm_gateway_mode                  = "disabled"
 llm_gateway_external_name         = "192.168.64.1"
 
 cilium_version             = "1.19.1"
@@ -54,4 +54,4 @@ gitea_ssh_node_port     = 30022
 signoz_ui_node_port     = 30301
 signoz_ui_host_port     = 3301
 gateway_https_node_port = 30070
-gateway_https_host_port = 8443
+gateway_https_host_port = 443

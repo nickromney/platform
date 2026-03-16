@@ -39,21 +39,21 @@
 #   local-stack-03 - Flask + Azure Function (JWT):
 #     - Flask Frontend: http://localhost:8000
 #     - API docs: http://localhost:8080/api/v1/docs
-#     - Login: demo / password123
+#     - Login: demo@dev.test / password123
 #   local-stack-04 - TypeScript Vite + Container App (no auth):
 #     - Vite SPA: http://localhost:8003
 #     - API docs: http://localhost:8090/api/v1/docs
 #   local-stack-05 - TypeScript Vite + Azure Function (JWT):
 #     - Vite SPA: http://localhost:3001
 #     - API docs: http://localhost:8080/api/v1/docs
-#     - JWT: Automatic authentication (demo / password123)
+#     - JWT: Automatic authentication (demo@dev.test / password123)
 #   local-stack-06 - React + Container App (no auth):
 #     - React SPA: http://localhost:8004
 #     - API docs: http://localhost:8090/api/v1/docs
 #   local-stack-07 - React + Azure Function (JWT):
 #     - React SPA: http://localhost:3002
 #     - API docs: http://localhost:8080/api/v1/docs
-#     - JWT: Automatic authentication (demo / password123)
+#     - JWT: Automatic authentication (demo@dev.test / password123)
 #   local-stack-08 - React + Azure Function (MSAL local):
 #     - React SPA: http://localhost:3003
 #     - API docs: http://localhost:8080/api/v1/docs
@@ -61,7 +61,7 @@
 #   local-stack-09 - React + Azure Function (JWT with node server.js):
 #     - React SPA: http://localhost:3004
 #     - API docs: http://localhost:8080/api/v1/docs
-#     - JWT: Runtime config via /runtime-config endpoint (demo / password123)
+#     - JWT: Runtime config via /runtime-config endpoint (demo@dev.test / password123)
 #     - Simulates Azure Web App deployment with node server.js
 #   local-stack-10 - React + Web App proxy -> Azure Function (JWT):
 #     - React SPA (proxy): http://localhost:3005
@@ -70,16 +70,16 @@
 #   local-stack-11 - React + Keycloak OIDC + Azure Function (OAuth2):
 #     - React SPA: http://localhost:3006
 #     - API docs: http://localhost:8301/api/v1/docs
-#     - Keycloak Admin: http://localhost:8300 (admin / admin123)
+#     - Keycloak Admin: http://localhost:8300 (demo@admin.test / password123)
 #     - Auth: OAuth2/OIDC with Keycloak (simulates Azure Entra ID)
-#     - Test users: demo / password123, admin / securepass
+#     - Test users: demo@dev.test / password123, demo@admin.test / password123
 #   local-stack-12 - React + OAuth2 Proxy + APIM + Keycloak (Easy Auth simulation):
 #     - Frontend via OAuth2 Proxy: http://localhost:3007
 #     - Admin Frontend via OAuth2 Proxy: http://localhost:3008
 #     - APIM Simulator: http://localhost:8302
-#     - Keycloak Admin: http://localhost:8300 (admin / admin123)
+#     - Keycloak Admin: http://localhost:8300 (demo@admin.test / password123)
 #     - Auth: OAuth2 Proxy forces login upfront (simulates Azure Easy Auth)
-#     - Test users: demo / password123, admin / securepass
+#     - Test users: demo@dev.test / password123, demo@admin.test / password123
 services:
   api-fastapi-azure-function:
     build:
@@ -96,8 +96,8 @@ services:
       - JWT_SECRET_KEY=docker-compose-dev-secret-key-min-32-chars-long-12345
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
-      # Argon2 hashed passwords: demo=password123, admin=securepass
-      - JWT_TEST_USERS={"demo":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","admin":"$$argon2id$$v=19$$m=65536,t=3,p=4$$JiTJZlTwD/1jJLlMQMOwCA$$HbubnE11kzEfcszqKtMOmjvxj14vjooqbdZtgc1NYCs"}
+      # Argon2 hashed passwords: demo@dev.test=password123, demo@admin.test=password123
+      - JWT_TEST_USERS={"demo@dev.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","demo@admin.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo"}
       # CORS origins for React frontend on port 3004
       - CORS_ORIGINS=http://localhost:3004
       - WEBSITES_PORT=8080
@@ -122,7 +122,7 @@ services:
     environment:
       - API_BASE_URL=http://api-fastapi-azure-function:8080/api/v1
       # JWT Authentication credentials
-      - JWT_USERNAME=demo
+      - JWT_USERNAME=demo@dev.test
       - JWT_PASSWORD=password123
     depends_on:
       api-fastapi-azure-function:
@@ -208,7 +208,7 @@ services:
       - "3001:8080"
     environment:
       - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo
+      - JWT_USERNAME=demo@dev.test
       - JWT_PASSWORD=password123
       - API_BASE_URL=http://localhost:8080
     depends_on:
@@ -241,7 +241,7 @@ services:
     environment:
       - API_BASE_URL=http://localhost:8080
       - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo
+      - JWT_USERNAME=demo@dev.test
       - JWT_PASSWORD=password123
     depends_on:
       api-fastapi-azure-function:
@@ -280,7 +280,7 @@ services:
       # Use localhost URL for browser access (client appends /api/v1/... paths)
       - API_BASE_URL=http://localhost:8080
       - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo
+      - JWT_USERNAME=demo@dev.test
       - JWT_PASSWORD=password123
     depends_on:
       api-fastapi-azure-function:
@@ -305,7 +305,7 @@ services:
       # unless the container inherits Azure credentials (expected, logged as warning).
       - PROXY_MANAGED_IDENTITY_ENABLED=true
       - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo
+      - JWT_USERNAME=demo@dev.test
       - JWT_PASSWORD=password123
     depends_on:
       api-fastapi-azure-function:
@@ -322,8 +322,8 @@ services:
       - "8300:8080"
     environment:
       # Admin credentials
-      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
-      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin123
+      - KC_BOOTSTRAP_ADMIN_USERNAME=demo@admin.test
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=password123
       # Database (dev mode uses H2)
       - KC_DB=dev-file
       # Hostname configuration for local development

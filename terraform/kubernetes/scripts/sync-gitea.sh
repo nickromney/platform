@@ -211,7 +211,7 @@ main() {
   export ENABLE_OBSERVABILITY_AGENT="$(resolve_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false)"
   export ENABLE_HEADLAMP="$(resolve_bool ENABLE_HEADLAMP enable_headlamp true)"
   export HARDENED_IMAGE_REGISTRY="$(resolve_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io)"
-  export LLM_GATEWAY_MODE="$(resolve_string LLM_GATEWAY_MODE llm_gateway_mode litellm)"
+  export LLM_GATEWAY_MODE="$(resolve_string LLM_GATEWAY_MODE llm_gateway_mode disabled)"
   export LLM_GATEWAY_EXTERNAL_NAME="$(resolve_string LLM_GATEWAY_EXTERNAL_NAME llm_gateway_external_name host.docker.internal)"
   export LLM_GATEWAY_EXTERNAL_CIDR="$(resolve_string LLM_GATEWAY_EXTERNAL_CIDR llm_gateway_external_cidr "")"
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"

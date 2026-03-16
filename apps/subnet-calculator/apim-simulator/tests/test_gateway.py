@@ -46,9 +46,9 @@ def _make_token(
 ) -> str:
     claims = {
         "sub": "user-123",
-        "email": "demo@example.com",
+        "email": "demo@dev.test",
         "name": "Demo User",
-        "preferred_username": "demo",
+        "preferred_username": "demo@dev.test",
         "iss": issuer,
         "aud": audience,
     }
@@ -497,7 +497,7 @@ def test_proxy_injects_identity_headers_and_filters_hop_by_hop() -> None:
     )
 
     def handler(req: httpx.Request) -> httpx.Response:
-        assert req.headers.get("x-apim-user-email") == "demo@example.com"
+        assert req.headers.get("x-apim-user-email") == "demo@dev.test"
         assert req.headers.get("x-apim-user-object-id") == "user-123"
         assert req.headers.get("x-ms-client-principal")
         assert req.headers.get("x-user-id") == "sub1"

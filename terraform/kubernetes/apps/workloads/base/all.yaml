@@ -70,14 +70,12 @@ spec:
               value: "/data"
             - name: CSV_PATH
               value: "/data/comments.csv"
-            - name: LLM_GATEWAY_MODE
-              value: "litellm"
-            - name: LITELLM_BASE_URL
-              value: "http://llm-gateway:4000"
-            - name: LITELLM_MODEL_ALIAS
-              value: "sentiment-default"
-            - name: LLM_BACKEND_BASE_URL
-              value: "http://llm-gateway:12434/engines"
+            - name: SENTIMENT_BACKEND_MODE
+              value: "sst"
+            - name: SENTIMENT_MODEL_CACHE_DIR
+              value: "/opt/transformers-cache"
+            - name: SENTIMENT_MODEL_LOCAL_ONLY
+              value: "1"
             - name: OTEL_SERVICE_NAME
               value: "sentiment-api"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -108,11 +106,11 @@ spec:
             failureThreshold: 6
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 750m
+              memory: 1280Mi
       volumes:
         - name: data
           persistentVolumeClaim:

@@ -1,3 +1,2 @@
 resources:
   - all.yaml
-  - llm-litellm.yaml

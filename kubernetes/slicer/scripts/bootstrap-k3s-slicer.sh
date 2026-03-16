@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+run_dir="${RUN_DIR:-$(cd "${script_dir}/.." && pwd)/.run}"
+
 slicer_socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
 [ -n "${slicer_socket}" ] || { echo "ERROR: SLICER_URL or SLICER_SOCKET must be set" >&2; exit 1; }
 
-server_vm="${SLICER_VM_NAME:-sbox-1}"
+server_vm="${SLICER_VM_NAME:-slicer-1}"
+slicer_vm_user="${SLICER_VM_USER:-ubuntu}"
 k3sup_context="${K3SUP_CONTEXT:-slicer-k3s}"
 kubeconfig_path="${KUBECONFIG_PATH:-${HOME}/.kube/${k3sup_context}.yaml}"
 default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-${HOME}/.kube/config}"
@@ -16,6 +20,26 @@ swap_size="${SLICER_SWAP_SIZE:-4G}"
 image_list_file="${IMAGE_LIST_FILE:-}"
 local_image_cache_host="${LOCAL_IMAGE_CACHE_HOST:-}"
 local_image_cache_scheme="${LOCAL_IMAGE_CACHE_SCHEME:-http}"
+bootstrap_key="${K3SUP_BOOTSTRAP_KEY:-${run_dir}/${server_vm}-k3sup-bootstrap}"
+bootstrap_pub="${bootstrap_key}.pub"
+
+find_bootstrap_client() {
+  local candidate
+
+  for candidate in \
+    "${K3SUP_PRO_BIN:-}" \
+    "$(command -v k3sup-pro 2>/dev/null || true)" \
+    "${K3SUP_BIN:-}" \
+    "$(command -v k3sup 2>/dev/null || true)" \
+    "$HOME/.arkade/bin/k3sup"; do
+    [ -n "$candidate" ] || continue
+    [ -x "$candidate" ] || continue
+    echo "$candidate"
+    return 0
+  done
+
+  return 1
+}
 
 desired_network_profile() {
   if [[ "${server_extra_args}" == *"--flannel-backend=none"* ]]; then
@@ -240,6 +264,71 @@ configure_k3s_registries() {
   vm_exec_retry "${server_vm}" "sudo mkdir -p /etc/rancher/k3s; if ! sudo cmp -s /tmp/registries.yaml /etc/rancher/k3s/registries.yaml 2>/dev/null; then sudo mv /tmp/registries.yaml /etc/rancher/k3s/registries.yaml; sudo systemctl is-active --quiet k3s && sudo systemctl restart k3s || true; else rm -f /tmp/registries.yaml; fi" 5 2 >/dev/null
 }
 
+ensure_bootstrap_keypair() {
+  mkdir -p "${run_dir}"
+
+  if [ -f "${bootstrap_key}" ] && [ -f "${bootstrap_pub}" ]; then
+    return 0
+  fi
+
+  rm -f "${bootstrap_key}" "${bootstrap_pub}"
+  ssh-keygen -t ed25519 -N "" -f "${bootstrap_key}" -C "k3sup bootstrap for ${server_vm}" >/dev/null
+  chmod 600 "${bootstrap_key}" || true
+}
+
+authorize_bootstrap_key() {
+  vm_exec_retry "${server_vm}" "sudo install -d -m 700 -o ${slicer_vm_user} -g ${slicer_vm_user} /home/${slicer_vm_user}/.ssh && sudo touch /home/${slicer_vm_user}/.ssh/authorized_keys && sudo chmod 600 /home/${slicer_vm_user}/.ssh/authorized_keys && sudo chown ${slicer_vm_user}:${slicer_vm_user} /home/${slicer_vm_user}/.ssh/authorized_keys" 5 2 >/dev/null
+  vm_cp "${bootstrap_pub}" "${server_vm}:/tmp/k3sup-bootstrap.pub" 10 2
+  vm_exec_retry "${server_vm}" "sudo -u ${slicer_vm_user} bash -lc 'grep -qxF \"\$(cat /tmp/k3sup-bootstrap.pub)\" ~/.ssh/authorized_keys || cat /tmp/k3sup-bootstrap.pub >> ~/.ssh/authorized_keys'" 5 2 >/dev/null
+  vm_exec_retry "${server_vm}" "rm -f /tmp/k3sup-bootstrap.pub" 3 1 >/dev/null || true
+}
+
+ensure_ssh_service() {
+  vm_exec_retry "${server_vm}" "sudo systemctl is-active --quiet ssh || sudo systemctl restart ssh || sudo systemctl restart sshd" 5 2 >/dev/null
+  vm_exec_retry "${server_vm}" "sudo systemctl is-active --quiet ssh || sudo systemctl is-active --quiet sshd" 10 2 >/dev/null
+}
+
+install_k3s_via_k3sup() {
+  local k3sup_bin="$1"
+  local channel_args=()
+  local install_cmd=()
+
+  channel_args=(--k3s-channel "${k3s_channel}")
+  if [ -n "${k3s_version}" ]; then
+    channel_args=(--k3s-version "${k3s_version}")
+  fi
+
+  mkdir -p "$(dirname "${kubeconfig_path}")"
+
+  install_cmd=(
+    "${k3sup_bin}" install
+    --ip "${server_ip}"
+    --user "${slicer_vm_user}"
+    --ssh-key "${bootstrap_key}"
+    --ssh-port 22
+    --context "${k3sup_context}"
+    --local-path "${kubeconfig_path}"
+    --tls-san "${server_ip}"
+    "${channel_args[@]}"
+  )
+  if [ -n "${server_extra_args}" ]; then
+    install_cmd+=(--k3s-extra-args "${server_extra_args}")
+  fi
+
+  for _ in 1 2 3; do
+    if command -v timeout >/dev/null 2>&1; then
+      if timeout 300s "${install_cmd[@]}"; then
+        return 0
+      fi
+    elif "${install_cmd[@]}"; then
+      return 0
+    fi
+    sleep 5
+  done
+
+  return 1
+}
+
 wait_for_vm
 server_ip="$(get_vm_ip)"
 [ -n "${server_ip}" ] || { echo "ERROR: could not determine IP for ${server_vm}" >&2; exit 1; }
@@ -268,25 +357,28 @@ vm_exec_retry "$server_vm" "swapon --show | grep -q /swapfile || { sudo fallocat
 echo "==> Checking for ext4 filesystem errors"
 vm_exec_retry "$server_vm" "dmesg | grep -i 'ext4.*error' && echo 'WARNING: ext4 errors detected in dmesg' || true" 2 2 || true
 
-echo "==> Installing k3sup and kubectl inside ${server_vm} via arkade"
-vm_exec_retry "$server_vm" "arkade get k3sup kubectl" 5 3 >/dev/null
-
-k3sup_bin="/home/${SLICER_VM_USER:-ubuntu}/.arkade/bin/k3sup"
-install_args="--local"
-if [ -n "$k3s_version" ]; then
-  install_args="${install_args} --k3s-version ${k3s_version}"
+command -v ssh-keygen >/dev/null 2>&1 || { echo "ERROR: ssh-keygen is required for host-side k3sup bootstrap" >&2; exit 1; }
+k3sup_bin="$(find_bootstrap_client || true)"
+if [ -z "${k3sup_bin}" ]; then
+  echo "ERROR: neither k3sup-pro nor k3sup was found. Install one with brew or arkade." >&2
+  exit 1
+fi
+bootstrap_client_name="$(basename "${k3sup_bin}")"
+if [ "${bootstrap_client_name}" = "k3sup-pro" ]; then
+  echo "==> Using k3sup-pro for bootstrap"
 else
-  install_args="${install_args} --k3s-channel ${k3s_channel}"
-fi
-if [ -n "$server_extra_args" ]; then
-  install_args="${install_args} --k3s-extra-args '${server_extra_args}'"
+  echo "==> Using k3sup for bootstrap"
 fi
 
-echo "==> Installing k3s on ${server_vm} via k3sup --local"
-if ! vm_exec_retry "$server_vm" "timeout 300s sudo ${k3sup_bin} install ${install_args}" 3 5; then
-  echo "WARN: k3sup install did not complete cleanly; checking k3s service state..." >&2
+ensure_ssh_service
+ensure_bootstrap_keypair
+authorize_bootstrap_key
+
+echo "==> Installing k3s on ${server_vm} via ${bootstrap_client_name}"
+if ! install_k3s_via_k3sup "${k3sup_bin}"; then
+  echo "WARN: ${bootstrap_client_name} install did not complete cleanly; checking k3s service state..." >&2
   if ! remote_k3s_api_ready 10 2; then
-    echo "ERROR: k3sup install failed and k3s API is not reachable" >&2
+    echo "ERROR: ${bootstrap_client_name} install failed and k3s API is not reachable" >&2
     exit 1
   fi
 fi
@@ -310,6 +402,6 @@ if ! wait_for_kube_api 45 2; then
 fi
 
 echo ""
-echo "==> Cluster bootstrapped via k3sup --local"
+echo "==> Cluster bootstrapped via ${bootstrap_client_name}"
 echo "    kubeconfig: KUBECONFIG=${kubeconfig_path}  context=${k3sup_context}"
 KUBECONFIG="$kubeconfig_path" kubectl --context "$k3sup_context" get nodes -o wide || true

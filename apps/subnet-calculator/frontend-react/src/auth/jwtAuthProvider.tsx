@@ -44,7 +44,7 @@ export function JwtAuthProvider({ children }: { children: React.ReactNode }) {
           if (token) {
             setIsAuthenticated(true)
             setUser({
-              username: APP_CONFIG.auth.jwtUsername || 'demo',
+              username: APP_CONFIG.auth.jwtUsername || 'demo@dev.test',
               name: APP_CONFIG.auth.jwtUsername || 'Demo User',
             })
           }
@@ -68,7 +68,7 @@ export function JwtAuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         setIsAuthenticated(true)
         setUser({
-          username: APP_CONFIG.auth.jwtUsername || 'demo',
+          username: APP_CONFIG.auth.jwtUsername || 'demo@dev.test',
           name: APP_CONFIG.auth.jwtUsername || 'Demo User',
         })
       }

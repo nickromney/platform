@@ -42,7 +42,7 @@ EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR="${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMUL
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
-LLM_GATEWAY_MODE="${LLM_GATEWAY_MODE:-litellm}"
+LLM_GATEWAY_MODE="${LLM_GATEWAY_MODE:-disabled}"
 LLM_GATEWAY_EXTERNAL_NAME="${LLM_GATEWAY_EXTERNAL_NAME:-host.docker.internal}"
 LLM_GATEWAY_EXTERNAL_CIDR="${LLM_GATEWAY_EXTERNAL_CIDR:-}"
 LLAMA_CPP_IMAGE="${LLAMA_CPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}"
@@ -192,17 +192,79 @@ rewrite_hardened_registry() {
   done < <(find "${root_dir}" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
 }
 
-rewrite_llm_gateway_external_name() {
+is_ipv4_literal() {
+  local value="$1"
+  [[ "${value}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+}
+
+render_llm_gateway_direct_manifest() {
   local workload_file="$1"
 
-  if [[ ! -f "${workload_file}" || -z "${LLM_GATEWAY_EXTERNAL_NAME}" ]]; then
+  if [[ -z "${LLM_GATEWAY_EXTERNAL_NAME}" ]]; then
     return 0
   fi
 
-  local out
-  out="$(mktemp)"
-  sed -E "s|(^[[:space:]]*externalName:[[:space:]]*).*$|\\1${LLM_GATEWAY_EXTERNAL_NAME}|g" "${workload_file}" > "${out}"
-  mv "${out}" "${workload_file}"
+  if is_ipv4_literal "${LLM_GATEWAY_EXTERNAL_NAME}"; then
+    cat > "${workload_file}" <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels:
+    app.kubernetes.io/name: llm-gateway
+    app.kubernetes.io/component: llm
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
+    role: llm
+spec:
+  ports:
+    - name: http
+      port: 12434
+      protocol: TCP
+      targetPort: 12434
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: llm-gateway
+  labels:
+    app.kubernetes.io/name: llm-gateway
+    app.kubernetes.io/component: llm
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
+    role: llm
+subsets:
+  - addresses:
+      - ip: ${LLM_GATEWAY_EXTERNAL_NAME}
+    ports:
+      - name: http
+        port: 12434
+        protocol: TCP
+EOF
+    return 0
+  fi
+
+  cat > "${workload_file}" <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels:
+    app.kubernetes.io/name: llm-gateway
+    app.kubernetes.io/component: llm
+    app: sentiment-llm
+    project: kindlocal
+    team: dolphin
+    tier: backend
+    role: llm
+spec:
+  type: ExternalName
+  externalName: ${LLM_GATEWAY_EXTERNAL_NAME}
+EOF
 }
 
 resolve_ipv4_for_host() {
@@ -497,6 +559,13 @@ render_llm_gateway_manifests() {
   local litellm_manifest="${workloads_dir}/llm-litellm.yaml"
 
   case "${LLM_GATEWAY_MODE}" in
+    disabled)
+      rewrite_llm_gateway_mode_value "${shared_workloads}" "disabled"
+      remove_if_present "${direct_manifest}"
+      remove_kustomization_entry "${kustomization_file}" "llm-direct.yaml"
+      remove_if_present "${litellm_manifest}"
+      remove_kustomization_entry "${kustomization_file}" "llm-litellm.yaml"
+      ;;
     litellm)
       rewrite_llm_gateway_mode_value "${shared_workloads}" "litellm"
       remove_if_present "${direct_manifest}"
@@ -516,7 +585,7 @@ render_llm_gateway_manifests() {
       remove_if_present "${litellm_manifest}"
       remove_kustomization_entry "${kustomization_file}" "llm-litellm.yaml"
       add_kustomization_entry "${kustomization_file}" "llm-direct.yaml"
-      replace_literal "${direct_manifest}" "__LLM_GATEWAY_EXTERNAL_NAME__" "${LLM_GATEWAY_EXTERNAL_NAME}"
+      render_llm_gateway_direct_manifest "${direct_manifest}"
       ;;
     *)
       fail "unsupported LLM_GATEWAY_MODE=${LLM_GATEWAY_MODE}"
@@ -529,6 +598,12 @@ render_llm_gateway_policies() {
   local kustomization_file="${shared_dir}/kustomization.yaml"
 
   case "${LLM_GATEWAY_MODE}" in
+    disabled)
+      remove_if_present "${shared_dir}/sentiment-api-llm-egress.yaml"
+      remove_kustomization_entry "${kustomization_file}" "sentiment-api-llm-egress.yaml"
+      remove_if_present "${shared_dir}/sentiment-llama-cpp-world-egress.yaml"
+      remove_kustomization_entry "${kustomization_file}" "sentiment-llama-cpp-world-egress.yaml"
+      ;;
     litellm)
       remove_if_present "${shared_dir}/sentiment-api-llm-egress.yaml"
       remove_kustomization_entry "${kustomization_file}" "sentiment-api-llm-egress.yaml"

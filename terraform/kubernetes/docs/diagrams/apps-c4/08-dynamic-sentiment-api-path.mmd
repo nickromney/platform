@@ -1,21 +1,17 @@
 %%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
 C4Dynamic
-    title Sentiment API path in shipped direct mode
+    title Sentiment API path in shipped SST mode
 
     Person(browser, "Browser", "Interactive user agent")
     Container(gateway, "platform-gateway", "Ingress / reverse proxy", "Shared entrypoint")
     Container(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Sentiment auth boundary")
     Container(router, "sentiment-router", "NGINX", "Routes UI and API traffic")
-    Container(api, "sentiment-api", "API service", "Calls the configured LLM backend and emits traces")
-    Container(llm_gateway, "llm-gateway", "ExternalName Service", "Stable in-cluster name for the host-backed LLM")
-    Container_Ext(host_llm, "Host-side LLM endpoint", "Docker Desktop model runner", "Listens on TCP 12434")
+    Container(api, "sentiment-api", "API service", "Runs the shipped in-process SST classifier and emits traces")
     Container(otel, "otel-collector", "OpenTelemetry Collector", "Shared telemetry sink")
 
     RelIndex(1, browser, gateway, "HTTPS request")
     RelIndex(2, gateway, oauth, "Route to oauth2-proxy")
     RelIndex(3, oauth, router, "Authenticated forward")
     RelIndex(4, router, api, "Forward /api/*")
-    RelIndex(5, api, llm_gateway, "Call llm-gateway")
-    RelIndex(6, llm_gateway, host_llm, "Resolve ExternalName and connect on 12434")
-    RelIndex(7, api, otel, "Emit traces")
+    RelIndex(5, api, otel, "Emit traces")
     UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")

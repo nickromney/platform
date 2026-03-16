@@ -15,7 +15,7 @@ argocd_image_tag        = "v3.3.2"
 
 hardened_image_registry         = "dhi.io"
 prefer_external_workload_images = true
-llm_gateway_mode                = "direct"
+llm_gateway_mode                = "disabled"
 llm_gateway_external_name       = "host.lima.internal"
 llm_gateway_external_cidr       = "192.168.104.2/32"
 

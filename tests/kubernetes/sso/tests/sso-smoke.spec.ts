@@ -367,7 +367,7 @@ async function waitForHeadlampAuthenticated(page: Page, targetHost: string, time
 }
 
 async function sentimentSamplePositiveAndAnalyze(page: Page) {
-  // Try to align with the existing sentiment Playwright tests in apps/sentiment-llm.
+  // Try to align with the existing sentiment Playwright tests in apps/sentiment.
   // Be tolerant to minor UI changes; prefer role/name selectors.
   const heading = page.getByText('Sentiment Analysis (Authenticated UI)')
   await expect(heading).toBeVisible({ timeout: 60_000 })

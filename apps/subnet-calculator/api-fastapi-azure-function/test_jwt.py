@@ -104,7 +104,7 @@ class TestLoginEndpoint:
         """Set up environment for JWT auth with Argon2 hashed passwords."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
-        # Use Argon2 hashed passwords (alice=password123, bob=securepass)
+        # Use Argon2 hashed passwords (alice=password123, bob=password123)
         monkeypatch.setenv(
             "JWT_TEST_USERS",
             '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$3MKxLJSv0Ol1eueygZAV6w$mb8m63Id29lRAjPrYv+K180PAqxhRyoqkWBLQMPZ0ZM",'

@@ -12,6 +12,8 @@ MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 CHECK_STAGE_MONOTONICITY := $(MAKEFILE_DIR)scripts/check-stage-monotonicity.sh
 CHECK_KIND_HOST_PORTS := $(MAKEFILE_DIR)scripts/check-kind-host-ports.sh
+CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
+CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
 CHECK_HOST_LLM := $(MAKEFILE_DIR)scripts/check-host-llm.sh
 ENSURE_KIND_KUBECONFIG := $(MAKEFILE_DIR)scripts/ensure-kind-kubeconfig.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -24,6 +26,9 @@ KIND_KUBECONFIG_PATH ?= $(HOME)/.kube/$(KIND_KUBECONFIG_CONTEXT).yaml
 KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_API_READY_ATTEMPTS ?= 30
 KIND_API_READY_DELAY_SECONDS ?= 2
+KIND_CHECK_LIMA_INSTANCE_PREFIX ?= k3s-node
+KIND_CHECK_SLICER_VM_NAME ?= slicer-1
+KIND_CHECK_SLICER_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
 
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
@@ -35,7 +40,7 @@ ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
@@ -104,8 +109,10 @@ help:
 	@echo "  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals"
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
+	@echo "  make check-lima-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-security                           WireGuard, TLS 1.3, policy enforcement, negative tests"
+	@echo "  make check-slicer-stopped"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Browser-based SSO end-to-end app checks (Playwright)"
 	@echo "  make check-stage-monotonicity"
@@ -287,6 +294,19 @@ check-kind-host-ports:
 	fi; \
 	"$(CHECK_KIND_HOST_PORTS)" "$${args[@]}"
 
+.PHONY: check-lima-stopped
+check-lima-stopped:
+	@LIMA_INSTANCE_PREFIX="$(KIND_CHECK_LIMA_INSTANCE_PREFIX)" "$(CHECK_LIMA_STOPPED)"
+
+.PHONY: check-slicer-stopped
+check-slicer-stopped:
+	@SLICER_URL="$(KIND_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(KIND_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(KIND_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)"
+
+.PHONY: check-conflicting-clusters-stopped
+check-conflicting-clusters-stopped:
+	@$(MAKE) check-lima-stopped
+	@$(MAKE) check-slicer-stopped
+
 .PHONY: kind
 kind: workflow-validate
 	@set -euo pipefail; \
@@ -329,6 +349,7 @@ plan: workflow-validate
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
+	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
 	@$(MAKE) check-kubeconfig >/dev/null
@@ -364,6 +385,7 @@ apply: workflow-validate
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
+	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
 	@$(MAKE) check-kubeconfig >/dev/null
@@ -597,11 +619,12 @@ stop-kind:
 	nodes="$$(docker ps -a --format '{{.Names}}' | grep -E '^kind-local-(control-plane|worker([0-9]+)?)$$' || true)"; \
 	if [ -z "$$nodes" ]; then \
 		echo "No kind-local node containers found."; \
-		exit 0; \
+	else \
+		echo "Stopping kind-local node containers..."; \
+		docker stop $$nodes >/dev/null; \
+		echo "Stopped: $$nodes"; \
 	fi; \
-	echo "Stopping kind-local node containers..."; \
-	docker stop $$nodes >/dev/null; \
-	echo "Stopped: $$nodes"
+	$(MAKE) check-conflicting-clusters-stopped
 
 .PHONY: stop
 stop:
@@ -610,6 +633,7 @@ stop:
 .PHONY: start-kind
 start-kind:
 	@set -euo pipefail; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
 	nodes="$$(docker ps -a --format '{{.Names}}' | grep -E '^kind-local-(control-plane|worker([0-9]+)?)$$' || true)"; \
 	if [ -z "$$nodes" ]; then \
@@ -680,6 +704,8 @@ prereqs:
 		fi; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
+	echo ""; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
 	echo "Host-side LLM:"; \
 	args=(--var-file "$(prereq_llm_stage_file)" --var-file "$(target_var_file)"); \

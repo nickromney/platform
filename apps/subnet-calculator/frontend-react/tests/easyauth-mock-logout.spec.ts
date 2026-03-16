@@ -20,7 +20,7 @@ test.describe('Mock Easy Auth logout regression', () => {
               user_id: 'demo-user',
               claims: [
                 { typ: 'name', val: 'Demo User' },
-                { typ: 'preferred_username', val: 'demo@example.test' },
+                { typ: 'preferred_username', val: 'demo@dev.test' },
               ],
               authentication_token: 'mock-token',
             },

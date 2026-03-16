@@ -6,7 +6,7 @@ SHARED_SCRIPT="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/check-target-host-port
 
 TARGET_LABEL="slicer" \
 PORT_CHECKS="$(cat <<'EOF'
-gateway-https|127.0.0.1|gateway_https_host_port|8443|gateway_https_node_port|30070
+gateway-https|127.0.0.1|gateway_https_host_port|443|gateway_https_node_port|30070
 argocd|127.0.0.1|argocd_server_node_port|30080|argocd_server_node_port|30080
 hubble-ui|127.0.0.1|hubble_ui_node_port|31235|hubble_ui_node_port|31235
 gitea-http|127.0.0.1|gitea_http_node_port|30090|gitea_http_node_port|30090
