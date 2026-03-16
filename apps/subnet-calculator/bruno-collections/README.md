@@ -6,7 +6,7 @@ This directory contains Bruno API test collections for the Subnet Calculator, or
 
 ### Direct (7000s)
 
-Individual services launched with native tools (`func start`, `uvicorn`, `npm run dev`). Each service runs independently.
+Individual services launched with native tools (`func start`, `uvicorn`, `bun run dev`). Each service runs independently.
 
 ### Compose (8000s)
 
@@ -77,7 +77,7 @@ bruno-collections/
 ```bash
 # No installation needed - Makefile uses npx
 # Or install globally:
-npm install -g @usebruno/cli
+bun add -g @usebruno/cli
 ```
 
 ## Environments
@@ -113,15 +113,15 @@ make test-bruno-swa                     # Test all SWA stacks
 cd bruno-collections
 
 # Run all tests
-npx @usebruno/cli@latest run --env local -r
+bun x @usebruno/cli@latest run --env local -r
 
 # Run specific collection
-npx @usebruno/cli@latest run direct-azure-function --env local
-npx @usebruno/cli@latest run compose-01 --env local
-npx @usebruno/cli@latest run swa-04 --env local
+bun x @usebruno/cli@latest run direct-azure-function --env local
+bun x @usebruno/cli@latest run compose-01 --env local
+bun x @usebruno/cli@latest run swa-04 --env local
 
 # Output to JSON
-npx @usebruno/cli@latest run --env local --output results.json --format json -r
+bun x @usebruno/cli@latest run --env local --output results.json --format json -r
 ```
 
 ### Via Bruno GUI
@@ -179,7 +179,7 @@ make start-compose-01
 
 # Terminal 2
 cd bruno-collections
-npx @usebruno/cli@latest run compose-01 --env local
+bun x @usebruno/cli@latest run compose-01 --env local
 ```
 
 ### Test SWA 04
@@ -190,7 +190,7 @@ make start-swa-04
 
 # Terminal 2
 cd bruno-collections
-npx @usebruno/cli@latest run swa-04 --env local
+bun x @usebruno/cli@latest run swa-04 --env local
 ```
 
 ## Port Allocation

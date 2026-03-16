@@ -1,6 +1,6 @@
 /**
  * Playwright script to capture screenshots for blog posts
- * Run with: npx playwright test capture-screenshots.ts --project=chromium
+ * Run with: bun x playwright test capture-screenshots.ts --project=chromium
  */
 
 import { test, expect } from '@playwright/test';
@@ -66,7 +66,7 @@ test.describe('Capture screenshots for blog posts', () => {
 
     console.log('✓ Part 14 requires manual screenshots of:');
     console.log('  - pytest terminal output (run: uv run pytest -v)');
-    console.log('  - playwright UI mode (run: npm run test:ui)');
+    console.log('  - playwright UI mode (run: bun run test:ui)');
     console.log('  - playwright HTML report');
   });
 });

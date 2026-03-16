@@ -13,4 +13,4 @@ COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
 # Expose non-privileged HTTP port
 EXPOSE 8081
 
-# nginx will run as default (starts automatically from base image)
+USER nginx

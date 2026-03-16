@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: '**/integration.spec.ts', // Exclude integration tests (use separate config)
+  testIgnore: ['**/integration.spec.ts', '**/swa.spec.ts'], // Exclude opt-in suites with their own configs
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -29,7 +29,7 @@ export default defineConfig({
   webServer: process.env.BASE_URL
     ? undefined
     : {
-        command: 'npm run preview',
+        command: 'bun run preview',
         url: 'http://localhost:3000',
         reuseExistingServer: !process.env.CI,
       },

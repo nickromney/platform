@@ -8,13 +8,16 @@ STACK_DIR := ../../terraform/kubernetes
 STATE_FILE ?= ../../terraform/.run/kubernetes-slicer/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 RUN_DIR := $(MAKEFILE_DIR).run
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
+CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_HOST_PORTS := $(SCRIPTS_DIR)/check-slicer-host-ports.sh
 START_DAEMON := $(SCRIPTS_DIR)/start-daemon.sh
 STOP_DAEMON := $(SCRIPTS_DIR)/stop-daemon.sh
 ENSURE_SBOX_VM := $(SCRIPTS_DIR)/ensure-sbox-vm.sh
+DELETE_SLICER_VM := $(SCRIPTS_DIR)/delete-vm-best-effort.sh
 BOOTSTRAP_K3S := $(SCRIPTS_DIR)/bootstrap-k3s-slicer.sh
 WAIT_FOR_KUBECTL := $(SCRIPTS_DIR)/wait-for-kubectl.sh
 HOST_FORWARDS := $(SCRIPTS_DIR)/ensure-host-forwards.sh
@@ -26,12 +29,9 @@ AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
-SLICER_RUNTIME_DIR ?= /tmp/platform-slicer
 SLICER_SYSTEM_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
-SLICER_PROJECT_SOCKET ?= $(RUN_DIR)/slicer.sock
-SLICER_SOCKET ?= $(SLICER_PROJECT_SOCKET)
+SLICER_SOCKET ?= $(SLICER_SYSTEM_SOCKET)
 SLICER_CONFIG ?= $(HOME)/slicer-mac/slicer-mac.yaml
-IGNORE_SYSTEM_SOCKET ?= 0
 SLICER_SYSTEM_SOCKET_WAIT_SECONDS ?= 240
 SLICER_NETWORK_PROFILE ?= cilium
 SLICER_VM_GROUP ?= sbox
@@ -41,7 +41,6 @@ SLICER_VM_READY_TIMEOUT ?= 300s
 SLICER_GATEWAY_HTTPS_GUEST_PORT ?= 443
 SLICER_VM_CPUS ?=
 SLICER_VM_RAM_GB ?=
-SLICER_DISABLE_BPF_JIT ?= 1
 SLICER_SWAP_SIZE ?= 4G
 SLICER_HOST_FORWARDS_MODE ?= auto
 K3SUP_CONTEXT ?= slicer-k3s
@@ -72,9 +71,17 @@ EXPECT_NAMESPACE_PLATFORM_GATEWAY ?= 0
 FORWARD_PID_FILE ?= $(RUN_DIR)/slicer-host-forwards.pid
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
+VALID_ACTIONS := plan apply
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
+ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
+ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
+STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
+
+include ../../mk/common.mk
 
 ifneq ($(STAGE_FROM_GOALS),)
 ifneq ($(origin STAGE),command line)
@@ -129,7 +136,7 @@ target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 stage_dir_abs = $(abspath $(MAKEFILE_DIR)$(STAGES_DIR))
 
-RESOLVE_SOCKET = cat "$(RUN_DIR)/slicer.sock.active" 2>/dev/null || echo "$(SLICER_SYSTEM_SOCKET)"
+RESOLVE_SOCKET = echo "$(SLICER_SYSTEM_SOCKET)"
 
 .PHONY: help
 help:
@@ -140,8 +147,10 @@ help:
 	@echo "  make 900 plan"
 	@echo "  make 900 apply AUTO_APPROVE=1"
 	@echo ""
+	@echo "Accepted variants:"
+	@echo "  make apply 100"
+	@echo ""
 	@echo "Targets:"
-	@echo "  make plan         100|200|300|...|900"
 	@echo "  make apply        100|200|300|...|900 [AUTO_APPROVE=1]"
 	@echo "  make check-app    APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
 	@echo "  make check-cluster"
@@ -149,21 +158,23 @@ help:
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
 	@echo "  make check-host-ports"
+	@echo "  make check-kind-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-security"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e"
 	@echo "  make check-stage-monotonicity"
-	@echo "  make check-vm-health"
 	@echo "  make check-version"
+	@echo "  make check-vm-health"
 	@echo "  make configure-k3s-apiserver-oidc"
-	@echo "  make daemon-up"
 	@echo "  make daemon-down"
+	@echo "  make daemon-up"
 	@echo "  make env"
 	@echo "  make ensure-host-forwards"
 	@echo "  make ensure-image-cache"
 	@echo "  make gitea-sync"
 	@echo "  make launchpad-render"
+	@echo "  make plan         100|200|300|...|900"
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make show-urls"
@@ -193,24 +204,54 @@ help:
 	@echo "  SLICER_NETWORK_PROFILE=default -> keep k3s default CNI; stages 200/300 become no-op placeholders"
 	@echo "  Switching profiles requires a fresh VM reset; bootstrap refuses in-place flannel/Cilium flips."
 	@echo ""
-	@echo "Daemon selection:"
-	@echo "  IGNORE_SYSTEM_SOCKET=0  -> prefer ~/slicer-mac when present"
-	@echo "  IGNORE_SYSTEM_SOCKET=1  -> start slicer-mac from $(SLICER_CONFIG) in $(RUN_DIR)"
-	@echo "  project runtime dir     -> $(SLICER_RUNTIME_DIR)"
+	@echo "Daemon requirement:"
+	@echo "  on-device socket        -> $(SLICER_SYSTEM_SOCKET)"
 	@echo "  slicer config           -> $(SLICER_CONFIG)"
+	@echo "  start manually from     -> ~/slicer-mac"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
 
+.PHONY: workflow-validate
+workflow-validate:
+	@set -euo pipefail; \
+	if [ "$(ACTION_COUNT)" -gt 1 ]; then \
+		echo "Specify only one workflow action: $(VALID_ACTIONS)" >&2; \
+		exit 2; \
+	fi; \
+	if [ "$(STAGE_COUNT)" -gt 1 ]; then \
+		echo "Specify only one stage: $(VALID_STAGES)" >&2; \
+		exit 2; \
+	fi; \
+	if [ -n "$(UNKNOWN_WORKFLOW_GOALS)" ]; then \
+		echo "Unknown workflow goal '$(firstword $(UNKNOWN_WORKFLOW_GOALS))'." >&2; \
+		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" "$(firstword $(UNKNOWN_WORKFLOW_GOALS))" $(VALID_ACTIONS) $(VALID_STAGES) )"; \
+		if [ -n "$$suggestion" ]; then \
+			echo "$$suggestion" >&2; \
+		fi; \
+		echo "Use: make <stage> <plan|apply> [AUTO_APPROVE=1]" >&2; \
+		exit 2; \
+	fi
+
 .PHONY: $(VALID_STAGES)
-$(VALID_STAGES):
-	@:
+$(VALID_STAGES): workflow-validate
+	@set -euo pipefail; \
+	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
+		echo "Stage $@ requires an action." >&2; \
+		echo "Try: make $@ plan" >&2; \
+		echo "  or: make $@ apply AUTO_APPROVE=1" >&2; \
+		exit 2; \
+	fi
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
 	@"$(CHECK_STAGE_MONOTONICITY)"
+
+.PHONY: check-kind-stopped
+check-kind-stopped:
+	@"$(CHECK_KIND_STOPPED)"
 
 .PHONY: prepare-state
 prepare-state:
@@ -277,12 +318,10 @@ prereqs:
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
 	echo ""; \
+	$(MAKE) check-kind-stopped; \
+	echo ""; \
 	echo "Slicer daemon:"; \
-	if [ "$(IGNORE_SYSTEM_SOCKET)" = "1" ]; then \
-		echo "OK   project-managed daemon requested; stage 100 will start it in $(RUN_DIR)"; \
-	else \
-		SLICER_URL="$(SLICER_SYSTEM_SOCKET)" slicer info || exit 1; \
-	fi; \
+	SLICER_URL="$(SLICER_SYSTEM_SOCKET)" slicer info || exit 1; \
 	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \
@@ -295,15 +334,9 @@ prereqs:
 
 .PHONY: daemon-up
 daemon-up:
-	@mkdir -p "$(RUN_DIR)" "$(RUN_DIR)/docker-config"; \
-	printf '{}\n' > "$(RUN_DIR)/docker-config/config.json"; \
+	@mkdir -p "$(RUN_DIR)"; \
 	SLICER_SYSTEM_SOCKET="$(SLICER_SYSTEM_SOCKET)" \
-	SLICER_SOCKET="$(SLICER_SOCKET)" \
-	CONFIG_FILE="$(SLICER_CONFIG)" \
 	RUN_DIR="$(RUN_DIR)" \
-	SLICER_RUNTIME_DIR="$(SLICER_RUNTIME_DIR)" \
-	SLICER_DOCKER_CONFIG_DIR="$(RUN_DIR)/docker-config" \
-	IGNORE_SYSTEM_SOCKET="$(IGNORE_SYSTEM_SOCKET)" \
 	SLICER_SYSTEM_SOCKET_WAIT_SECONDS="$(SLICER_SYSTEM_SOCKET_WAIT_SECONDS)" \
 	"$(START_DAEMON)"
 
@@ -335,7 +368,6 @@ bootstrap-k3s:
 	K3S_VERSION="$(K3S_VERSION)" \
 	K3S_CHANNEL="$(K3S_CHANNEL)" \
 	K3S_SERVER_EXTRA_ARGS="$(K3S_SERVER_EXTRA_ARGS)" \
-	SLICER_DISABLE_BPF_JIT="$(SLICER_DISABLE_BPF_JIT)" \
 	SLICER_SWAP_SIZE="$(SLICER_SWAP_SIZE)" \
 	IMAGE_LIST_FILE="$(preload_images_file)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
@@ -452,9 +484,9 @@ stop-slicer:
 	else \
 		echo "OK   slicer daemon not reachable at $$socket"; \
 	fi; \
-	echo "Stopping project-managed slicer daemon (best-effort)..."; \
+	echo "Cleaning any stale repo-managed slicer daemon state (best-effort)..."; \
 	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
-	echo "OK   project-managed daemon stopped"
+	echo "OK   stale repo-managed daemon state cleaned"
 
 .PHONY: stop
 stop:
@@ -486,23 +518,23 @@ configure-k3s-apiserver-oidc:
 init:
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE) (missing $(stage_file))"; exit 1; fi
+	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
 
 .PHONY: plan
-plan:
+plan: workflow-validate
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
+	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
-	if [ "$$stage_num" -eq 100 ]; then \
-		echo "Stage 100 plan:"; \
-		echo "  - preflight target host ports"; \
-		echo "  - reuse slicer-mac if present, otherwise start a project daemon"; \
-		echo "  - ensure $(SLICER_VM_NAME) exists in host group $(SLICER_VM_GROUP)"; \
-		echo "  - use networking profile: $(SLICER_NETWORK_PROFILE)"; \
+		if [ "$$stage_num" -eq 100 ]; then \
+			echo "Stage 100 plan:"; \
+			echo "  - preflight target host ports"; \
+			echo "  - require the on-device slicer-mac daemon at $(SLICER_SYSTEM_SOCKET)"; \
+			echo "  - ensure $(SLICER_VM_NAME) exists in host group $(SLICER_VM_GROUP)"; \
+			echo "  - use networking profile: $(SLICER_NETWORK_PROFILE)"; \
 		echo "  - bootstrap or refresh the $(K3SUP_CONTEXT) kubeconfig at $(KUBECONFIG_PATH)"; \
 		echo ""; \
 			$(MAKE) status || true; \
@@ -524,10 +556,10 @@ plan:
 	TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args
 
 .PHONY: apply
-apply:
+apply: workflow-validate
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
+	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
 	mode_enabled() { \
@@ -539,13 +571,35 @@ apply:
 			*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
 		esac; \
 	}; \
+	prepare_host_forwards() { \
+		local mode="$$1"; local stage_num_local="$$2"; local tmp_log=""; \
+		if ! mode_enabled "$$mode" 500 "$$stage_num_local"; then \
+			return 0; \
+		fi; \
+		if [ "$$mode" = "auto" ]; then \
+			tmp_log=$$(mktemp); \
+			if $(MAKE) check-host-ports >"$$tmp_log" 2>&1; then \
+				rm -f "$$tmp_log"; \
+				$(MAKE) ensure-host-forwards; \
+			else \
+				cat "$$tmp_log"; \
+				rm -f "$$tmp_log"; \
+				echo "WARN slicer host forwards unavailable; continuing without localhost forwards because another target already owns those ports."; \
+			fi; \
+			return 0; \
+		fi; \
+		$(MAKE) check-host-ports; \
+		$(MAKE) ensure-host-forwards; \
+	}; \
 	local_cache_available() { \
 		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
 	}; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -eq 100 ]; then \
 		$(MAKE) prereqs; \
-		$(MAKE) check-host-ports; \
+		if [ "$(SLICER_HOST_FORWARDS_MODE)" = "on" ]; then \
+			$(MAKE) check-host-ports; \
+		fi; \
 		$(MAKE) slicer-vm-up; \
 		$(MAKE) bootstrap-k3s; \
 			$(MAKE) check-kubeconfig; \
@@ -556,9 +610,7 @@ apply:
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \
 		$(MAKE) apply STAGE=100 AUTO_APPROVE=1; \
 	fi; \
-	if mode_enabled "$(SLICER_HOST_FORWARDS_MODE)" 500 "$$stage_num"; then \
-		$(MAKE) ensure-host-forwards; \
-	fi; \
+	prepare_host_forwards "$(SLICER_HOST_FORWARDS_MODE)" "$$stage_num"; \
 	if mode_enabled "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" 700 "$$stage_num"; then \
 		$(MAKE) ensure-image-cache; \
 		$(MAKE) sync-image-cache; \
@@ -787,14 +839,14 @@ reset:
 	socket="$$($(RESOLVE_SOCKET))"; \
 	ctx="$${KUBECONFIG_CONTEXT:-$(KUBECONFIG_CONTEXT)}"; \
 	state_dir="$(dir $(STATE_FILE))"; \
+	reset_incomplete=0; \
 	echo "This will:"; \
 	echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present"; \
 	echo "  - Stop host forwards"; \
-	echo "  - Stop any project-managed slicer daemon started from this repo"; \
+	echo "  - Clean any stale repo-managed slicer daemon state from older revisions"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
 	echo "  - Remove local terragrunt state: $$state_dir"; \
 	echo "  - Clean stack caches (.terraform/.terragrunt-cache)"; \
-	echo "  - Remove project runtime dir: $(SLICER_RUNTIME_DIR)"; \
 	echo ""; \
 	if [ "$(AUTO_APPROVE)" != "1" ]; then \
 		printf "Proceed with Slicer cleanup and local state cleanup? [y/N] "; read -r confirm; \
@@ -827,34 +879,25 @@ reset:
 	fi; \
 	echo ""; \
 	echo "Deleting Slicer VM (best-effort)..."; \
-	if SLICER_URL="$$socket" slicer vm list --json | jq -e --arg vm "$(SLICER_VM_NAME)" '.[] | select(.hostname == $vm)' >/dev/null 2>&1; then \
-		echo "INFO shutting down $(SLICER_VM_NAME) cleanly before delete"; \
-		SLICER_URL="$$socket" slicer vm shutdown "$(SLICER_VM_NAME)" >/dev/null 2>&1 || true; \
-		for _ in $$(seq 1 30); do \
-			status=$$(SLICER_URL="$$socket" slicer vm list --json | jq -r --arg vm "$(SLICER_VM_NAME)" '.[] | select(.hostname == $vm) | .status // empty'); \
-			if [ -z "$$status" ] || [ "$$status" != "Running" ]; then \
-				break; \
-			fi; \
-			sleep 1; \
-		done; \
-		SLICER_URL="$$socket" slicer vm delete "$(SLICER_VM_NAME)" >/dev/null; \
-		echo "OK   deleted $(SLICER_VM_NAME)"; \
-	else \
-		echo "OK   no VM named $(SLICER_VM_NAME)"; \
+	if ! SLICER_URL="$$socket" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(DELETE_SLICER_VM)"; then \
+		reset_incomplete=1; \
 	fi; \
 	echo ""; \
-	echo "Stopping project daemon (best-effort)..."; \
+	echo "Cleaning any stale repo-managed daemon state (best-effort)..."; \
 	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
-	echo "OK   project daemon stopped"; \
+	echo "OK   stale repo-managed daemon state cleaned"; \
 	echo ""; \
 	echo "Cleaning local state/caches..."; \
 	rm -rf "$(RUN_DIR)" 2>/dev/null || true; \
-	rm -rf "$(SLICER_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -rf "$$state_dir" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.terraform" "$(STACK_DIR)/.terragrunt-cache" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
-	echo "OK   done"
+	echo "OK   done"; \
+	if [ "$$reset_incomplete" = "1" ]; then \
+		echo "WARN reset completed with manual Slicer VM recycle still required." >&2; \
+		exit 1; \
+	fi
 
 .PHONY: env
 env:

@@ -38,20 +38,20 @@ Tests the complete logout flow for Azure SWA with Entra ID authentication, inclu
 
 ```bash
 # Set the BASE_URL to your deployed SWA
-BASE_URL=https://proud-bay-05b7e1c03.1.azurestaticapps.net npm run test:auth
+BASE_URL=https://proud-bay-05b7e1c03.1.azurestaticapps.net bun run test:auth
 
 # Run with browser visible (headed mode)
-BASE_URL=https://proud-bay-05b7e1c03.1.azurestaticapps.net npm run test:auth:headed
+BASE_URL=https://proud-bay-05b7e1c03.1.azurestaticapps.net bun run test:auth:headed
 ```
 
 ### Against Local Development
 
 ```bash
 # Default (uses http://localhost:3000)
-npm run test:auth
+bun run test:auth
 
 # With custom BASE_URL
-BASE_URL=http://localhost:4280 npm run test:auth
+BASE_URL=http://localhost:4280 bun run test:auth
 ```
 
 ## Test Coverage
@@ -164,7 +164,7 @@ To test these:
 **Solution:**
 
 1. Verify `public/logged-out.html` exists
-2. Rebuild: `npm run build`
+2. Rebuild: `bun run build`
 3. Check `dist/logged-out.html` exists
 4. Redeploy to Azure
 
@@ -185,7 +185,7 @@ Add to your CI/CD pipeline:
 # Example GitHub Actions
 - name: Run auth logout tests
   run: |
-    BASE_URL=${{ secrets.SWA_URL }} npm run test:auth
+    BASE_URL=${{ secrets.SWA_URL }} bun run test:auth
   working-directory: subnet-calculator/frontend-typescript-vite
 ```
 

@@ -4,13 +4,13 @@ FROM mcr.microsoft.com/azure-functions/python:4-python3.11 AS builder
 WORKDIR /app
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
 
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
 # Create virtual environment and install dependencies with uv (production only)
-RUN uv sync --frozen --no-cache --no-dev
+RUN uv sync --frozen --no-cache --no-dev --no-install-project
 
 # Stage 2: Runtime - Copy only what's needed
 FROM mcr.microsoft.com/azure-functions/python:4-python3.11
@@ -23,9 +23,11 @@ ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
     PATH="/app/.venv/bin:$PATH"
 
 # Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
+COPY --chown=app:app --from=builder /app/.venv /app/.venv
 
 # Copy application files (excludes tests, docs, etc. per .dockerignore)
-COPY . /home/site/wwwroot
+COPY --chown=app:app . /home/site/wwwroot
 
 EXPOSE 8080
+
+USER app

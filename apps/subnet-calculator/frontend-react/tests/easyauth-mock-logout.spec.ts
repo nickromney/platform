@@ -1,20 +1,67 @@
 import { expect, test } from '@playwright/test'
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3012'
-
 test.describe('Mock Easy Auth logout regression', () => {
-  test('logout clears UI auth state when /.auth/me returns 200 with an empty principal', async ({ context, page }) => {
-    const url = new URL(BASE_URL)
+  test('logout clears UI auth state when /.auth/me returns 200 with an empty principal', async ({ page }) => {
+    let loggedIn = true
 
-    // Start as "logged in" by setting the mock cookie.
-    await context.addCookies([
-      {
-        name: 'easyauth',
-        value: '1',
-        domain: url.hostname,
-        path: '/',
-      },
-    ])
+    await page.addInitScript(() => {
+      window.RUNTIME_CONFIG = {
+        AUTH_METHOD: 'easyauth',
+      }
+    })
+
+    await page.route('**/.auth/me', async (route) => {
+      if (loggedIn) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            {
+              user_id: 'demo-user',
+              claims: [
+                { typ: 'name', val: 'Demo User' },
+                { typ: 'preferred_username', val: 'demo@example.test' },
+              ],
+              authentication_token: 'mock-token',
+            },
+          ]),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{}]),
+      })
+    })
+
+    await page.route('**/.auth/logout**', async (route) => {
+      loggedIn = false
+      await route.fulfill({
+        status: 302,
+        headers: {
+          location: '/logged-out.html',
+        },
+      })
+    })
+
+    await page.route('**/oauth2/start**', async (route) => {
+      await route.fulfill({
+        status: 302,
+        headers: {
+          location: '/',
+        },
+      })
+    })
+
+    await page.route('**/api/v1/health', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', service: 'subnet-calculator-api', version: 'test' }),
+      })
+    })
 
     await page.goto('/')
 

@@ -383,7 +383,7 @@ curl -v -b cookies.txt http://localhost:4282/api/v1/health
 
 ## Next Steps
 
-1. **Start a stack:** `make start-stack4` (or stack5/stack6)
+1. **Start a stack:** `make start-swa-04` (or `start-swa-05` / `start-swa-06`)
 1. **Open Bruno GUI:** Load `bruno-collections/`
 1. **Select environment:** Choose "local" from dropdown (top-right)
 1. **Run requests:** Click through each request in the collection

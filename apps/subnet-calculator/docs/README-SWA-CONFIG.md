@@ -307,7 +307,7 @@ az ad app update \
 ```bash
 # Start frontend dev server
 cd frontend-typescript-vite
-npm run dev
+bun run dev
 
 # In another terminal, start API (if BYO)
 cd api-fastapi-azure-function

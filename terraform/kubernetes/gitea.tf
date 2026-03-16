@@ -202,6 +202,7 @@ resource "null_resource" "gitea_promote_admin" {
     script_sha   = filesha256("${path.module}/scripts/promote-gitea-admin.sh")
     gitea_http   = tostring(var.gitea_http_node_port)
     gitea_access = local.gitea_local_access_mode_effective
+    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
     admin_user   = var.gitea_admin_username
     admin_pwd    = sha1(var.gitea_admin_pwd)
   }
@@ -239,6 +240,7 @@ resource "null_resource" "gitea_org" {
     org_member_emails = join(",", var.gitea_org_member_emails)
     gitea_http        = tostring(var.gitea_http_node_port)
     gitea_access      = local.gitea_local_access_mode_effective
+    gitea_ns_uid      = kubernetes_namespace_v1.gitea[0].metadata[0].uid
     admin_user        = var.gitea_admin_username
     admin_pwd         = sha1(var.gitea_admin_pwd)
     script_sha        = filesha256("${path.module}/scripts/ensure-gitea-org.sh")
@@ -275,7 +277,8 @@ resource "null_resource" "gitea_unset_must_change_password" {
   count = var.enable_gitea ? 1 : 0
 
   triggers = {
-    script_sha = filesha256("${path.module}/scripts/unset-gitea-must-change-password.sh")
+    script_sha   = filesha256("${path.module}/scripts/unset-gitea-must-change-password.sh")
+    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
   }
 
   provisioner "local-exec" {

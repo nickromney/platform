@@ -1,3 +1,5 @@
+import { getAuthMethod } from './config'
+
 /**
  * Azure Static Web Apps Entra ID Authentication
  *
@@ -31,8 +33,7 @@ export interface AuthResponse {
  * Check if we're running in Azure Static Web Apps (legacy detection)
  *
  * IMPORTANT: This only detects default .azurestaticapps.net domains.
- * For custom domains, VITE_AUTH_METHOD must be set explicitly during build.
- * All deployment scripts (azure-stack-*.sh) should set VITE_AUTH_METHOD.
+ * For custom domains, set AUTH_METHOD in runtime config.
  */
 export function isRunningInSWA(): boolean {
   // SWA domains end with .azurestaticapps.net
@@ -40,19 +41,15 @@ export function isRunningInSWA(): boolean {
 }
 
 /**
- * Check if Entra ID auth should be used
- * Use explicit VITE_AUTH_METHOD if set, otherwise fall back to domain detection
+ * Check if Entra ID auth should be used.
+ * Prefer explicit runtime configuration, then fall back to hostname detection.
  */
 export function useEntraIdAuth(): boolean {
-  // Check for explicit auth method configuration (works on any domain)
-  const explicitMethod = import.meta.env.VITE_AUTH_METHOD as string | undefined
-  if (explicitMethod === 'entraid') {
+  if (getAuthMethod() === 'entraid') {
     return true
   }
 
-  // Fallback to legacy detection for backwards compatibility
-  const authEnabled = import.meta.env.VITE_AUTH_ENABLED === 'true'
-  return authEnabled && isRunningInSWA()
+  return false
 }
 
 /**

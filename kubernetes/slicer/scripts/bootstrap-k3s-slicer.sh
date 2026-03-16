@@ -12,7 +12,6 @@ k3s_version="${K3S_VERSION:-}"
 k3s_channel="${K3S_CHANNEL:-stable}"
 server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb}"
 merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-1}"
-disable_bpf_jit="${SLICER_DISABLE_BPF_JIT:-1}"
 swap_size="${SLICER_SWAP_SIZE:-4G}"
 image_list_file="${IMAGE_LIST_FILE:-}"
 local_image_cache_host="${LOCAL_IMAGE_CACHE_HOST:-}"
@@ -268,17 +267,6 @@ vm_exec_retry "$server_vm" "swapon --show | grep -q /swapfile || { sudo fallocat
 
 echo "==> Checking for ext4 filesystem errors"
 vm_exec_retry "$server_vm" "dmesg | grep -i 'ext4.*error' && echo 'WARNING: ext4 errors detected in dmesg' || true" 2 2 || true
-
-if [ "$disable_bpf_jit" = "1" ]; then
-  if vm_exec_retry "$server_vm" "test -e /proc/sys/net/core/bpf_jit_enable" 5 2 >/dev/null; then
-    echo "==> Disabling BPF JIT inside ${server_vm} for slicer stability"
-    if ! vm_exec_retry "$server_vm" "printf 'net.core.bpf_jit_enable = 0\n' | sudo tee /etc/sysctl.d/99-slicer-stability.conf >/dev/null && sudo sysctl -p /etc/sysctl.d/99-slicer-stability.conf >/dev/null" 5 2 >/dev/null; then
-      echo "WARN: could not disable BPF JIT inside ${server_vm}; continuing"
-    fi
-  else
-    echo "==> Skipping BPF JIT disable inside ${server_vm}; net.core.bpf_jit_enable is unavailable"
-  fi
-fi
 
 echo "==> Installing k3sup and kubectl inside ${server_vm} via arkade"
 vm_exec_retry "$server_vm" "arkade get k3sup kubectl" 5 3 >/dev/null

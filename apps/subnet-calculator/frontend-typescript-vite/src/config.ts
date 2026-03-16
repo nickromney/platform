@@ -1,13 +1,47 @@
-// Runtime configuration (injected by deployment scripts)
-// Deployment scripts can set window.RUNTIME_CONFIG before loading this module
+// Runtime configuration (injected by deployment scripts or container startup)
 declare global {
   interface Window {
+    RUNTIME_CONFIG?: {
+      API_BASE_URL?: string
+      AUTH_METHOD?: 'none' | 'jwt' | 'entraid' | 'oidc'
+      AUTH_ENABLED?: string | boolean
+      JWT_USERNAME?: string
+      JWT_PASSWORD?: string
+      SHOW_NETWORK_PATH?: string | boolean
+      NETWORK_HOPS?: string
+      NETWORK_DIAGNOSTICS_LABEL?: string
+      SECONDARY_NETWORK_DIAGNOSTICS_LABEL?: string
+      SECONDARY_NETWORK_DIAGNOSTICS_PATH?: string
+      FRONTEND_STATUS_LABEL?: string
+      API_INGRESS_STATUS_LABEL?: string
+      BACKEND_PATH_STATUS_LABEL?: string
+      BACKEND_PATH_STATUS_DETAIL?: string
+    }
     API_BASE_URL?: string
     AUTH_ENABLED?: string
     JWT_USERNAME?: string
     JWT_PASSWORD?: string
   }
 }
+
+function getRuntimeConfig() {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+
+  if (window.RUNTIME_CONFIG) {
+    return window.RUNTIME_CONFIG
+  }
+
+  return {
+    API_BASE_URL: window.API_BASE_URL,
+    AUTH_ENABLED: window.AUTH_ENABLED,
+    JWT_USERNAME: window.JWT_USERNAME,
+    JWT_PASSWORD: window.JWT_PASSWORD,
+  }
+}
+
+const runtimeConfig = getRuntimeConfig()
 
 export interface NetworkHop {
   label: string
@@ -17,24 +51,35 @@ export interface NetworkHop {
 
 export const API_CONFIG = {
   // Priority: Runtime config (window) > Build-time env (import.meta.env) > Default (empty for SWA proxy)
-  baseUrl: (typeof window !== 'undefined' && window.API_BASE_URL) || import.meta.env.VITE_API_URL || '',
+  baseUrl: runtimeConfig?.API_BASE_URL || import.meta.env.VITE_API_URL || '',
   auth: {
-    enabled:
-      (typeof window !== 'undefined' && window.AUTH_ENABLED === 'true') || import.meta.env.VITE_AUTH_ENABLED === 'true',
-    username: (typeof window !== 'undefined' && window.JWT_USERNAME) || import.meta.env.VITE_JWT_USERNAME || '',
-    password: (typeof window !== 'undefined' && window.JWT_PASSWORD) || import.meta.env.VITE_JWT_PASSWORD || '',
+    enabled: `${runtimeConfig?.AUTH_ENABLED ?? import.meta.env.VITE_AUTH_ENABLED ?? 'false'}`.toLowerCase() === 'true',
+    username: runtimeConfig?.JWT_USERNAME || import.meta.env.VITE_JWT_USERNAME || '',
+    password: runtimeConfig?.JWT_PASSWORD || import.meta.env.VITE_JWT_PASSWORD || '',
   },
-  showNetworkPath: import.meta.env.VITE_SHOW_NETWORK_PATH === 'true',
+  showNetworkPath:
+    `${runtimeConfig?.SHOW_NETWORK_PATH ?? import.meta.env.VITE_SHOW_NETWORK_PATH ?? 'false'}`.toLowerCase() === 'true',
   networkDiagnostics: {
-    primaryLabel: import.meta.env.VITE_NETWORK_DIAGNOSTICS_LABEL || 'Live Diagnostics',
-    secondaryLabel: import.meta.env.VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL || '',
-    secondaryPath: import.meta.env.VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH || '',
+    primaryLabel:
+      runtimeConfig?.NETWORK_DIAGNOSTICS_LABEL || import.meta.env.VITE_NETWORK_DIAGNOSTICS_LABEL || 'Live Diagnostics',
+    secondaryLabel:
+      runtimeConfig?.SECONDARY_NETWORK_DIAGNOSTICS_LABEL ||
+      import.meta.env.VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL ||
+      '',
+    secondaryPath:
+      runtimeConfig?.SECONDARY_NETWORK_DIAGNOSTICS_PATH ||
+      import.meta.env.VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH ||
+      '',
   },
   apiStatus: {
-    frontendLabel: import.meta.env.VITE_FRONTEND_STATUS_LABEL || 'Frontend origin',
-    ingressLabel: import.meta.env.VITE_API_INGRESS_STATUS_LABEL || 'API ingress',
-    backendPathLabel: import.meta.env.VITE_BACKEND_PATH_STATUS_LABEL || 'Backend path',
-    backendPathDetail: import.meta.env.VITE_BACKEND_PATH_STATUS_DETAIL || '',
+    frontendLabel:
+      runtimeConfig?.FRONTEND_STATUS_LABEL || import.meta.env.VITE_FRONTEND_STATUS_LABEL || 'Frontend origin',
+    ingressLabel:
+      runtimeConfig?.API_INGRESS_STATUS_LABEL || import.meta.env.VITE_API_INGRESS_STATUS_LABEL || 'API ingress',
+    backendPathLabel:
+      runtimeConfig?.BACKEND_PATH_STATUS_LABEL || import.meta.env.VITE_BACKEND_PATH_STATUS_LABEL || 'Backend path',
+    backendPathDetail:
+      runtimeConfig?.BACKEND_PATH_STATUS_DETAIL || import.meta.env.VITE_BACKEND_PATH_STATUS_DETAIL || '',
   },
   paths: {
     health: '/api/v1/health',
@@ -65,7 +110,7 @@ export function getNetworkHops(): NetworkHop[] | null {
     return null
   }
 
-  const customHops = import.meta.env.VITE_NETWORK_HOPS
+  const customHops = runtimeConfig?.NETWORK_HOPS || import.meta.env.VITE_NETWORK_HOPS
   if (customHops) {
     try {
       const parsed = JSON.parse(customHops) as unknown
@@ -95,8 +140,7 @@ export function getNetworkHops(): NetworkHop[] | null {
  * Check if we're running in Azure Static Web Apps (legacy detection)
  *
  * IMPORTANT: This only detects default .azurestaticapps.net domains.
- * For custom domains, VITE_AUTH_METHOD must be set explicitly during build.
- * All deployment scripts (azure-stack-*.sh) should set VITE_AUTH_METHOD.
+ * For custom domains, set AUTH_METHOD in runtime config.
  */
 export function isRunningInSWA(): boolean {
   return typeof window !== 'undefined' && window.location.hostname.endsWith('.azurestaticapps.net')
@@ -106,8 +150,8 @@ export function isRunningInSWA(): boolean {
  * Determine which auth method is active
  */
 export function getAuthMethod(): 'none' | 'jwt' | 'entraid' | 'oidc' {
-  // Check for explicit auth method from build-time config
-  const explicitMethod = import.meta.env.VITE_AUTH_METHOD as 'none' | 'jwt' | 'entraid' | 'oidc' | undefined
+  const explicitMethod =
+    runtimeConfig?.AUTH_METHOD || (import.meta.env.VITE_AUTH_METHOD as 'none' | 'jwt' | 'entraid' | 'oidc' | undefined)
   if (explicitMethod) {
     return explicitMethod
   }

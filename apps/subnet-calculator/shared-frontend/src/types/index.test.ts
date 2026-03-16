@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import type {
   ApiResults,
-  CloudMode,
   CloudflareCheckResponse,
+  CloudMode,
   HealthResponse,
   PrivateCheckResponse,
   SubnetInfoResponse,

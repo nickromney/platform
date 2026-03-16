@@ -22,7 +22,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
     gitea_http       = tostring(var.gitea_http_node_port)
     gitea_ssh        = tostring(var.gitea_ssh_node_port)
     gitea_access     = local.gitea_local_access_mode_effective
-    gitea_host_key   = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    gitea_ns_uid     = kubernetes_namespace_v1.gitea[0].metadata[0].uid
   }
 
   provisioner "local-exec" {
@@ -135,7 +135,7 @@ resource "null_resource" "sync_gitea_app_repo_sentiment_llm" {
     gitea_http     = tostring(var.gitea_http_node_port)
     gitea_ssh      = tostring(var.gitea_ssh_node_port)
     gitea_access   = local.gitea_local_access_mode_effective
-    gitea_host_key = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    gitea_ns_uid   = kubernetes_namespace_v1.gitea[0].metadata[0].uid
     repo_owner     = local.gitea_repo_owner
     repo_is_org    = tostring(local.gitea_repo_owner_is_org)
   }
@@ -202,7 +202,7 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
     gitea_http     = tostring(var.gitea_http_node_port)
     gitea_ssh      = tostring(var.gitea_ssh_node_port)
     gitea_access   = local.gitea_local_access_mode_effective
-    gitea_host_key = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    gitea_ns_uid   = kubernetes_namespace_v1.gitea[0].metadata[0].uid
     repo_owner     = local.gitea_repo_owner
     repo_is_org    = tostring(local.gitea_repo_owner_is_org)
   }
@@ -601,6 +601,22 @@ resource "kubernetes_secret_v1" "gitea_runner" {
   ]
 }
 
+data "external" "gitea_ssh_public_keys_cluster" {
+  count   = local.enable_gitops_repo ? 1 : 0
+  program = ["/bin/bash", "${path.module}/scripts/fetch-gitea-ssh-public-keys.sh"]
+
+  query = {
+    gitea_namespace    = kubernetes_namespace_v1.gitea[0].metadata[0].name
+    kubeconfig_path    = local.kubeconfig_path_expanded
+    kubeconfig_context = trimspace(var.kubeconfig_context)
+  }
+
+  depends_on = [
+    kubectl_manifest.argocd_app_gitea,
+    local_sensitive_file.kubeconfig,
+  ]
+}
+
 resource "null_resource" "gitea_known_hosts_cluster" {
   count = local.enable_gitops_repo ? 1 : 0
 
@@ -609,7 +625,9 @@ resource "null_resource" "gitea_known_hosts_cluster" {
     cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     host       = local.gitea_ssh_host_cluster
     port       = tostring(local.gitea_ssh_port_cluster)
-    script_v   = "9"
+    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
+    ssh_pubkeys_sha1 = data.external.gitea_ssh_public_keys_cluster[0].result.keys_sha1
+    script_v   = "11"
   }
 
   provisioner "local-exec" {
@@ -623,9 +641,19 @@ OUT_TMP="${local.run_dir}/.gitea_known_hosts_cluster.tmp"
 RAW="${local.run_dir}/.gitea_known_hosts_cluster.raw"
 GITEA_NS="${kubernetes_namespace_v1.gitea[0].metadata[0].name}"
 GITEA_SVC="gitea-ssh"
+GITEA_SSH_KEYS_B64="${data.external.gitea_ssh_public_keys_cluster[0].result.keys_b64}"
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
 require_cmd kubectl
+require_cmd base64
+
+decode_base64() {
+  if base64 --help 2>&1 | grep -q -- '--decode'; then
+    base64 --decode
+  else
+    base64 -D
+  fi
+}
 
 CLUSTER_IP="$(kubectl -n "$GITEA_NS" get svc "$GITEA_SVC" -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
 HOSTS_FILE="${local.run_dir}/.gitea_known_hosts_cluster.hosts"
@@ -634,57 +662,42 @@ if [ -n "$CLUSTER_IP" ] && [ "$CLUSTER_IP" != "None" ]; then
   printf '%s\n' "$CLUSTER_IP" >> "$HOSTS_FILE"
 fi
 
-for i in {1..30}; do
-  if kubectl -n "$GITEA_NS" exec deploy/gitea -- sh -c '
-    found=0
-    for f in /data/ssh/*.pub; do
-      [ -f "$f" ] || continue
-      cat "$f"
-      found=1
-    done
-    [ "$found" -eq 1 ]
-  ' > "$RAW" 2>/dev/null && [ -s "$RAW" ]; then
+printf '%s' "$GITEA_SSH_KEYS_B64" | decode_base64 > "$RAW"
 
-    if ! grep -E '^ssh-' "$RAW" >/dev/null 2>&1; then
-      echo "ssh-keyscan output contained no host key lines" >&2
-      break
-    fi
+if ! grep -E '^ssh-' "$RAW" >/dev/null 2>&1; then
+  echo "Gitea SSH public key payload contained no host key lines" >&2
+  rm -f "$HOSTS_FILE" "$RAW" 2>/dev/null || true
+  exit 1
+fi
 
-    KEYS_FILE="${local.run_dir}/.gitea_known_hosts_cluster.keys"
-    : > "$KEYS_FILE"
+KEYS_FILE="${local.run_dir}/.gitea_known_hosts_cluster.keys"
+: > "$KEYS_FILE"
 
-    # Some Argo CD / go-git SSH paths verify against the resolved address, not the original host.
-    # Emit known_hosts entries for both the service DNS name and its ClusterIP.
-    while IFS= read -r h; do
-      [ -n "$h" ] || continue
-      while IFS= read -r key_line; do
-        [ -n "$key_line" ] || continue
-        echo "$h $key_line" >> "$KEYS_FILE"
-      done < <(grep -E '^ssh-' "$RAW")
-    done < "$HOSTS_FILE"
+# Some Argo CD / go-git SSH paths verify against the resolved address, not the original host.
+# Emit known_hosts entries for both the service DNS name and its ClusterIP.
+while IFS= read -r h; do
+  [ -n "$h" ] || continue
+  while IFS= read -r key_line; do
+    [ -n "$key_line" ] || continue
+    echo "$h $key_line" >> "$KEYS_FILE"
+  done < <(grep -E '^ssh-' "$RAW")
+done < "$HOSTS_FILE"
 
-    # ArgoCD treats explicit ports as part of the host identity for ssh:// URLs.
-    # Emit both formats for every key line returned by ssh-keyscan.
-    : > "$OUT_TMP"
-    while IFS= read -r key_line; do
-      key_host="$(echo "$key_line" | awk '{print $1}')"
-      echo "$key_line" >> "$OUT_TMP"
-      echo "$key_line" | sed "s/^$key_host /[$key_host]:$PORT /" >> "$OUT_TMP"
-    done < "$KEYS_FILE"
+# ArgoCD treats explicit ports as part of the host identity for ssh:// URLs.
+# Emit both formats for every key line returned by ssh-keyscan.
+: > "$OUT_TMP"
+while IFS= read -r key_line; do
+  key_host="$(echo "$key_line" | awk '{print $1}')"
+  echo "$key_line" >> "$OUT_TMP"
+  echo "$key_line" | sed "s/^$key_host /[$key_host]:$PORT /" >> "$OUT_TMP"
+done < "$KEYS_FILE"
 
-    mv "$OUT_TMP" "${local.gitea_known_hosts_cluster_path}"
-    rm -f "$HOSTS_FILE" 2>/dev/null || true
-    rm -f "$KEYS_FILE" 2>/dev/null || true
-    rm -f "$RAW" 2>/dev/null || true
-    exit 0
-  fi
-  echo "gitea host-key capture (cluster) failed, retrying... ($i/30)" >&2
-  sleep 4
-done
-
+mv "$OUT_TMP" "${local.gitea_known_hosts_cluster_path}"
 rm -f "$HOSTS_FILE" 2>/dev/null || true
-echo "Failed to capture Gitea SSH host key (cluster)" >&2
-exit 1
+rm -f "$KEYS_FILE" 2>/dev/null || true
+rm -f "$RAW" 2>/dev/null || true
+exit 0
+
 EOT
     interpreter = ["/bin/bash", "-c"]
     environment = {
@@ -699,6 +712,7 @@ EOT
   depends_on = [
     kubectl_manifest.argocd_app_gitea,
     local_sensitive_file.kubeconfig,
+    data.external.gitea_ssh_public_keys_cluster,
   ]
 }
 

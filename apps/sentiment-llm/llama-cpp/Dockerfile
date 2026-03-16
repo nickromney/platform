@@ -7,7 +7,7 @@ ARG TARGETARCH
 ARG LLAMA_CPP_REF
 
 RUN apt-get update && \
-    apt-get install -y build-essential git cmake libssl-dev && \
+    apt-get install -y --no-install-recommends build-essential git cmake libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -34,17 +34,21 @@ RUN mkdir -p /out/lib && \
 FROM ubuntu:${UBUNTU_VERSION}
 
 RUN apt-get update && \
-    apt-get install -y libgomp1 curl && \
+    apt-get install -y --no-install-recommends libgomp1 curl && \
     apt-get autoremove -y && \
     apt-get clean -y && \
     rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 
-COPY --from=build /out/lib/ /app/
-COPY --from=build /out/llama-server /app/llama-server
+RUN useradd --system --create-home --home-dir /app --uid 10001 llama
+
+COPY --chown=llama:llama --from=build /out/lib/ /app/
+COPY --chown=llama:llama --from=build /out/llama-server /app/llama-server
 
 ENV LLAMA_ARG_HOST=0.0.0.0
 
 WORKDIR /app
+
+USER llama
 
 HEALTHCHECK CMD ["curl", "-f", "http://localhost:8080/health"]
 

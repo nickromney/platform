@@ -25,7 +25,7 @@ The frontend detects the deployment environment and uses the appropriate auth me
 ```typescript
 // config.ts determines auth method:
 1. Check RUNTIME_CONFIG (injected by deployment)
-2. Check VITE_AUTH_METHOD environment variable
+2. Check runtime `AUTH_METHOD` or local Vite `VITE_AUTH_METHOD`
 3. Auto-detect from hostname:
    - *.azurewebsites.net → Easy Auth
    - *.azurecontainerapps.io → Easy Auth
@@ -54,25 +54,25 @@ src/
 ### Prerequisites
 
 ```bash
-npm install
+bun install
 ```
 
 ### Run Locally
 
 ```bash
 # No authentication
-npm run dev
+bun run dev
 
 # With MSAL (requires App Registration)
 VITE_AUTH_METHOD=msal \
 VITE_AZURE_CLIENT_ID="your-client-id" \
 VITE_AZURE_TENANT_ID="your-tenant-id" \
-npm run dev
+bun run dev
 ```
 
 ### Configuration
 
-#### Environment Variables
+#### Local Vite Environment Variables
 
 - `VITE_API_URL`: Backend API URL (default: `http://localhost:7071`)
 - `VITE_AUTH_METHOD`: `none` | `easyauth` | `msal` | `entraid-swa`
@@ -80,9 +80,17 @@ npm run dev
 - `VITE_AZURE_TENANT_ID`: Azure AD tenant ID (MSAL only)
 - `VITE_AZURE_REDIRECT_URI`: OAuth redirect URI (MSAL only)
 
+#### Container Runtime Variables
+
+- `API_BASE_URL`: backend API URL when the browser should call it directly
+- `AUTH_METHOD`: `none` | `easyauth` | `msal` | `entraid-swa` | `jwt` | `oidc`
+- `JWT_USERNAME` / `JWT_PASSWORD`: JWT bootstrap credentials when the frontend performs application login
+- `OIDC_AUTHORITY`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI`: OIDC browser configuration
+- `APIM_SUBSCRIPTION_KEY`: APIM key for the protected APIM teaching stacks
+
 #### Runtime Configuration
 
-For scenarios where build-time config isn't suitable, inject runtime config:
+For containers and proxy-backed deployments, inject runtime config:
 
 ```html
 <script>
@@ -118,7 +126,7 @@ Azure Web App has built-in static hosting that works perfectly with React SPAs:
 
 ```bash
 # Build the app
-npm run build
+bun run build
 
 # Deploy the dist folder as a zip
 cd dist
@@ -191,22 +199,22 @@ Same as Option 1 - configure via Azure Portal
 
 1. Deploy OAuth2 Proxy as sidecar container
 2. Configure OAuth2 Proxy to inject headers
-3. Set `VITE_AUTH_METHOD=easyauth` (OAuth2 Proxy mimics Easy Auth)
+3. Set `AUTH_METHOD=easyauth` (OAuth2 Proxy mimics Easy Auth)
 
 ## Testing
 
 ```bash
 # Unit tests
-npm test
+bun run test
 
 # E2E tests with Playwright
-npm run test:e2e
+bun run test:e2e
 
 # Type checking
-npm run type-check
+bun run type-check
 
 # Linting
-npm run lint
+bun run lint
 ```
 
 ### Proxy Mode Regression Test
@@ -214,7 +222,7 @@ npm run lint
 To verify the Easy Auth proxy runtime configuration keeps API calls relative (mirroring the Azure Web App stack), run the dedicated Playwright spec:
 
 ```bash
-npm run test -- tests/proxy-mode.spec.ts
+bun run test -- tests/proxy-mode.spec.ts
 ```
 
 The test injects `window.RUNTIME_CONFIG` at startup, so it works against the default Vite dev server—no Azure resources required.

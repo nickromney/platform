@@ -189,16 +189,16 @@ uv run pytest test_frontend.py --headed --base-url=http://localhost:8001
 
 ```bash
 cd frontend-typescript-vite
-npm install
+bun install
 
 # Run all tests
-npm test
+bun run test
 
 # Run with browser visible
-npm run test:headed
+bun run test:headed
 
 # Interactive UI mode
-npm run test:ui
+bun run test:ui
 ```
 
 ### Makefile Test Targets
@@ -216,9 +216,9 @@ make test-bruno-stack5 # Bruno tests for local-stack-05
 make test-bruno-stack6 # Bruno tests for local-stack-06 (Entra ID)
 
 # Start services
-make start-stack4 # Start local-stack-04
-make start-stack5 # Start local-stack-05
-make start-stack6 # Start local-stack-06
+make start-swa-04 # Start local-stack-04
+make start-swa-05 # Start local-stack-05
+make start-swa-06 # Start local-stack-06
 ```
 
 ### Bruno API Testing
@@ -243,9 +243,9 @@ make test-bruno-stack5 # Run Bruno tests for stack 5
 
 ```bash
 cd bruno-collections
-npx @usebruno/cli@latest run "Local Stack 04" --env local
-npx @usebruno/cli@latest run "Local Stack 05" --env local
-npx @usebruno/cli@latest run --env local -r # Run all collections
+bun x @usebruno/cli@latest run "Local Stack 04" --env local
+bun x @usebruno/cli@latest run "Local Stack 05" --env local
+bun x @usebruno/cli@latest run --env local -r # Run all collections
 ```
 
 **Via Bruno GUI (Interactive):**
@@ -273,11 +273,11 @@ SWA CLI emulates Azure Static Web Apps locally, allowing you to test the same ro
 
 ```bash
 # Start SWA CLI for local-stack-04 (no auth)
-npm run swa -- start stack4-no-auth
+bun run swa -- start stack4-no-auth
 
 # In another terminal, run SWA tests
 cd frontend-typescript-vite
-npm run test:swa:stack4
+bun run test:swa:stack4
 ```
 
 ### What SWA CLI Does
@@ -300,13 +300,13 @@ npm run test:swa:stack4
 cd frontend-typescript-vite
 
 # Test local-stack-04 (port 4280)
-npm run test:swa:stack4
+bun run test:swa:stack4
 
 # Test local-stack-05 (port 4281)
-npm run test:swa:stack5
+bun run test:swa:stack5
 
 # Run with browser visible (debugging)
-npm run test:swa:headed
+bun run test:swa:headed
 ```
 
 **Tests covered:**
@@ -330,7 +330,7 @@ cd api-fastapi-container-app
 uv run uvicorn app.main:app --reload --port 8000
 
 # Terminal 2: Start SWA CLI
-npm run swa -- start stack4-no-auth
+bun run swa -- start stack4-no-auth
 
 # Terminal 3: Test in browser or with curl
 open http://localhost:4280
@@ -341,7 +341,7 @@ curl http://localhost:4280/api/v1/health
 
 ```bash
 # SWA CLI auto-starts Azure Function
-npm run swa -- start stack5-jwt
+bun run swa -- start stack5-jwt
 
 # Browser tests automatic JWT login
 open http://localhost:4281
@@ -441,7 +441,7 @@ Test production deployments with Bruno:
 ```bash
 # Set environment to production
 cd bruno-collections
-npx @usebruno/cli@latest run "Azure Stack 06" --env production
+bun x @usebruno/cli@latest run "Azure Stack 06" --env production
 ```
 
 ---
@@ -499,7 +499,7 @@ npx @usebruno/cli@latest run "Azure Stack 06" --env production
 ```bash
 uv run playwright install chromium
 # or
-npm run test:install
+bun run test:install
 ```
 
 **API endpoint tests fail with "Cannot connect":**
@@ -561,8 +561,8 @@ podman-compose restart
 
 1. **Use headless mode for CI**
 
-- `npm test` runs headless by default
-- Use `npm run test:headed` for debugging
+- `bun run test` runs headless by default
+- Use `bun run test:headed` for debugging
 
 1. **Test one stack at a time**
 

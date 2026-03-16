@@ -1,51 +1,72 @@
-/**
- * API Integration tests
- * Tests interaction with the backend API
- */
+import type { Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
-import { test, expect } from '@playwright/test'
+const HEALTH_RESPONSE = {
+  status: 'ok',
+  service: 'subnet-calculator-api',
+  version: 'test',
+}
+
+const fillLookupForm = async (page: Page, address: string) => {
+  await page.getByLabel(/IP Address or CIDR Range/i).fill(address)
+  await page.getByRole('button', { name: /^Lookup$/i }).click()
+}
+
+const mockHealthyApi = async (page: Page) => {
+  await page.route('**/api/v1/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(HEALTH_RESPONSE),
+    })
+  })
+}
 
 test.describe('API Integration', () => {
   test('displays API health status on page load', async ({ page }) => {
+    await mockHealthyApi(page)
     await page.goto('/')
-
-    // Should check API health and display status
-    const statusIndicator = page.locator('[data-testid="api-status"]').or(
-      page.getByText(/API.*Connected|Backend.*Available|API.*Healthy/i)
-    )
-
-    await expect(statusIndicator.first()).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('#api-status')).toContainText(/API Status:\s*healthy/i)
+    await expect(page.locator('#api-status')).toContainText(/subnet-calculator-api/i)
   })
 
   test('handles API unavailable gracefully', async ({ page }) => {
-    // Mock API to return errors
-    await page.route('**/api/v1/**', route => route.abort())
+    await page.addInitScript(() => {
+      const nativeFetch = window.fetch.bind(window)
+      window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (requestUrl.includes('/api/v1/health')) {
+          throw new TypeError('Failed to fetch')
+        }
+        return nativeFetch(input, init)
+      }) as typeof window.fetch
+    })
 
     await page.goto('/')
-
-    // Should show that API is unavailable
-    await expect(page.getByText(/unavailable|offline|unable to connect/i)).toBeVisible({
-      timeout: 10000
-    })
+    await expect(page.locator('#api-status')).toContainText(/API Offline/i, { timeout: 15000 })
+    await expect(page.locator('#api-status')).toContainText(/Unable to connect to API/i)
   })
 
   test('handles API timeout gracefully', async ({ page }) => {
-    // Mock API with long delay
-    await page.route('**/api/v1/**', async route => {
-      await new Promise(resolve => setTimeout(resolve, 20000))
-      await route.continue()
+    await page.addInitScript(() => {
+      const nativeFetch = window.fetch.bind(window)
+      window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (requestUrl.includes('/api/v1/health')) {
+          throw new DOMException('The operation was aborted.', 'AbortError')
+        }
+        return nativeFetch(input, init)
+      }) as typeof window.fetch
     })
 
     await page.goto('/')
-
-    // Should show timeout error
-    await expect(page.getByText(/timeout|timed out/i)).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('#api-status')).toContainText(/API Offline/i, { timeout: 15000 })
+    await expect(page.locator('#api-status')).toContainText(/timed out/i)
   })
 
   test('handles non-JSON API response', async ({ page }) => {
-    // Mock API to return HTML instead of JSON
-    await page.route('**/api/v1/**', route => {
-      route.fulfill({
+    await page.route('**/api/v1/health', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'text/html',
         body: '<html><body>Not JSON</body></html>',
@@ -53,39 +74,29 @@ test.describe('API Integration', () => {
     })
 
     await page.goto('/')
-
-    // Should show helpful error about API not returning JSON
-    await expect(page.getByText(/JSON|starting up|error state/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('#api-status')).toContainText(/API Offline/i, { timeout: 15000 })
+    await expect(page.locator('#api-status')).toContainText(/did not return JSON/i)
   })
 
   test('handles HTTP error codes', async ({ page }) => {
-    await page.goto('/')
-
-    // Mock validation endpoint to return 400
-    await page.route('**/api/v1/**/validate', route => {
-      route.fulfill({
+    await mockHealthyApi(page)
+    await page.route('**/api/v1/ipv4/validate', async (route) => {
+      await route.fulfill({
         status: 400,
         contentType: 'application/json',
         body: JSON.stringify({ detail: 'Invalid IP address format' }),
       })
     })
 
-    const ipInput = page.getByPlaceholder(/IP address/i)
-    await ipInput.fill('999.999.999.999')
-
-    const submitButton = page.getByRole('button', { name: /lookup|calculate/i })
-    await submitButton.click()
-
-    // Should show the error message
-    await expect(page.getByText(/invalid.*format|400/i)).toBeVisible({ timeout: 5000 })
+    await page.goto('/')
+    await fillLookupForm(page, '999.999.999.999')
+    await expect(page.locator('#error')).toContainText(/Invalid IP address format/i)
   })
 
   test('successful IPv4 lookup displays results', async ({ page }) => {
-    await page.goto('/')
-
-    // Mock successful validation response
-    await page.route('**/api/v1/ipv4/validate', route => {
-      route.fulfill({
+    await mockHealthyApi(page)
+    await page.route('**/api/v1/ipv4/validate', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -98,9 +109,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    // Mock other endpoints
-    await page.route('**/api/v1/ipv4/check-private', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/check-private', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -111,8 +121,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    await page.route('**/api/v1/ipv4/check-cloudflare', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/check-cloudflare', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -123,26 +133,22 @@ test.describe('API Integration', () => {
       })
     })
 
-    const ipInput = page.getByPlaceholder(/IP address/i)
-    await ipInput.fill('8.8.8.8')
-
-    const submitButton = page.getByRole('button', { name: /lookup|calculate/i })
-    await submitButton.click()
-
-    // Should display results
-    await expect(page.getByText(/8\.8\.8\.8/)).toBeVisible({ timeout: 5000 })
-    await expect(page.getByText(/valid/i)).toBeVisible({ timeout: 5000 })
+    await page.goto('/')
+    await fillLookupForm(page, '8.8.8.8')
+    await expect(page.locator('#results')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Validation/i })).toBeVisible()
+    await expect(page.getByRole('cell', { name: '8.8.8.8' }).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Performance Timing/i })).toBeVisible()
   })
 
   test('successful IPv6 lookup uses correct endpoint', async ({ page }) => {
-    await page.goto('/')
+    await mockHealthyApi(page)
 
     let ipv6EndpointCalled = false
 
-    // Mock IPv6 validation endpoint
-    await page.route('**/api/v1/ipv6/validate', route => {
+    await page.route('**/api/v1/ipv6/validate', async (route) => {
       ipv6EndpointCalled = true
-      route.fulfill({
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -155,8 +161,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    await page.route('**/api/v1/ipv6/check-cloudflare', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv6/check-cloudflare', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -167,27 +173,20 @@ test.describe('API Integration', () => {
       })
     })
 
-    const ipInput = page.getByPlaceholder(/IP address/i)
-    await ipInput.fill('2001:4860:4860::8888')
-
-    const submitButton = page.getByRole('button', { name: /lookup|calculate/i })
-    await submitButton.click()
-
-    // Wait for results
-    await page.waitForTimeout(1000)
-
-    // Should have called IPv6 endpoint
+    await page.goto('/')
+    await fillLookupForm(page, '2001:4860:4860::8888')
     expect(ipv6EndpointCalled).toBe(true)
+    await expect(page.locator('#results')).toBeVisible()
+    await expect(page.getByText(/IPv6/i)).toBeVisible()
   })
 
   test('network CIDR triggers subnet info call', async ({ page }) => {
-    await page.goto('/')
+    await mockHealthyApi(page)
 
     let subnetEndpointCalled = false
 
-    // Mock validation for network
-    await page.route('**/api/v1/ipv4/validate', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/validate', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -202,8 +201,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    await page.route('**/api/v1/ipv4/check-private', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/check-private', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -215,8 +214,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    await page.route('**/api/v1/ipv4/check-cloudflare', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/check-cloudflare', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -227,10 +226,9 @@ test.describe('API Integration', () => {
       })
     })
 
-    // Mock subnet info endpoint
-    await page.route('**/api/v1/ipv4/subnet-info', route => {
+    await page.route('**/api/v1/ipv4/subnet-info', async (route) => {
       subnetEndpointCalled = true
-      route.fulfill({
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -249,28 +247,17 @@ test.describe('API Integration', () => {
       })
     })
 
-    const ipInput = page.getByPlaceholder(/IP address/i)
-    await ipInput.fill('192.168.1.0/24')
-
-    const submitButton = page.getByRole('button', { name: /lookup|calculate/i })
-    await submitButton.click()
-
-    // Wait for all API calls
-    await page.waitForTimeout(1500)
-
-    // Should have called subnet info endpoint
-    expect(subnetEndpointCalled).toBe(true)
-
-    // Should display subnet information
-    await expect(page.getByText(/192\.168\.1\.0/)).toBeVisible()
+    await page.goto('/')
+    await fillLookupForm(page, '192.168.1.0/24')
+    await expect.poll(() => subnetEndpointCalled).toBe(true)
+    await expect(page.getByRole('heading', { name: /Subnet Information/i })).toBeVisible()
+    await expect(page.getByRole('cell', { name: '192.168.1.0', exact: true })).toBeVisible()
   })
 
   test('displays performance timing information', async ({ page }) => {
-    await page.goto('/')
-
-    // Mock API responses
-    await page.route('**/api/v1/ipv4/validate', route => {
-      route.fulfill({
+    await mockHealthyApi(page)
+    await page.route('**/api/v1/ipv4/validate', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -283,8 +270,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    await page.route('**/api/v1/ipv4/check-private', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/check-private', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -295,8 +282,8 @@ test.describe('API Integration', () => {
       })
     })
 
-    await page.route('**/api/v1/ipv4/check-cloudflare', route => {
-      route.fulfill({
+    await page.route('**/api/v1/ipv4/check-cloudflare', async (route) => {
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -307,13 +294,10 @@ test.describe('API Integration', () => {
       })
     })
 
-    const ipInput = page.getByPlaceholder(/IP address/i)
-    await ipInput.fill('8.8.8.8')
-
-    const submitButton = page.getByRole('button', { name: /lookup|calculate/i })
-    await submitButton.click()
-
-    // Should display timing information
-    await expect(page.getByText(/response time|duration|ms/i)).toBeVisible({ timeout: 5000 })
+    await page.goto('/')
+    await fillLookupForm(page, '8.8.8.8')
+    await expect(page.getByRole('heading', { name: /Performance Timing/i })).toBeVisible()
+    await expect(page.getByText(/Total Response Time/i)).toBeVisible()
+    await expect(page.getByText(/\d+ms/).first()).toBeVisible()
   })
 })

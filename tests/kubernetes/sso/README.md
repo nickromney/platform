@@ -10,20 +10,20 @@ By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTI
 
 ```bash
 cd tests/kubernetes/sso
-npm install
-npx playwright install chromium
+bun install
+bun x playwright install chromium
 ```
 
 ## Run
 
 ```bash
-npm test
+bun run test
 ```
 
 Headed mode:
 
 ```bash
-npm run test:headed
+bun run test:headed
 ```
 
 From the repo root with kind:

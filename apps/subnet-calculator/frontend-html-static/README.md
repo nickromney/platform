@@ -72,7 +72,7 @@ Open `http://localhost:8001` in your browser.
 python -m http.server 8001
 
 # Node.js http-server
-npx http-server -p 8001
+bun x http-server -p 8001
 
 # VS Code Live Server extension
 # Right-click index.html → "Open with Live Server"

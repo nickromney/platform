@@ -1,7 +1,10 @@
 # SD-WAN Multi-Cloud Simulation - Lima VM Orchestration
-SHELL := /bin/bash
+USE_COMMON_HELP := 1
+MAKE_KNOWN_GOALS := help prereqs check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
+MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+include ../../mk/common.mk
 PROJECT_DIR := $(patsubst %/,%,$(MAKEFILE_DIR))
 REPO_ROOT := $(abspath $(PROJECT_DIR)/../..)
 FRONTEND_SHARED_DIR := $(REPO_ROOT)/apps/subnet-calculator/shared-frontend
@@ -13,6 +16,7 @@ LIMA_START_TIMEOUT ?= 30m
 .PHONY: prereqs check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e \
         ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
 
+##@ Lifecycle
 # --- Lifecycle ---
 
 prereqs: ## Check macOS host prerequisites for Lima + networking
@@ -250,6 +254,7 @@ clean-pki: ## Remove generated PKI material
 		echo "  No generated PKI state found."; \
 	fi
 
+##@ Status
 # --- Status ---
 
 status: fix-guest-hostnames ## Show VM status + access URLs + WireGuard summary
@@ -351,6 +356,7 @@ show-wireguard: fix-guest-hostnames ## Show raw WireGuard peer state
 		echo ""; \
 	done
 
+##@ SSH
 # --- SSH ---
 
 ssh-cloud1: ## Shell into cloud1 (Azure)
@@ -362,6 +368,7 @@ ssh-cloud2: ## Shell into cloud2 (on-prem)
 ssh-cloud3: ## Shell into cloud3 (AWS)
 	limactl shell cloud3
 
+##@ Tests
 # --- Tests ---
 
 test: test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc ## Run all tests
@@ -399,6 +406,7 @@ test-subnetcalc: ## Subnet calculator mTLS + JWT flow
 test-e2e: ## Browser-based SD-WAN checks with Playwright
 	@cd "$(PROJECT_DIR)/e2e" && npm install && npx playwright install chromium && npx playwright test
 
+##@ Logs
 # --- Logs ---
 
 logs: fix-guest-hostnames ## Tail CoreDNS + nginx logs across all VMs
@@ -407,11 +415,3 @@ logs: fix-guest-hostnames ## Tail CoreDNS + nginx logs across all VMs
 		limactl shell $$cloud -- sudo journalctl -u coredns -u nginx -u sdwan-app -u sdwan-cloud1-diagnostics --no-pager -n 20 2>/dev/null || true; \
 		echo ""; \
 	done
-
-# --- Help ---
-
-help: ## Show this help
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
-
-.DEFAULT_GOAL := help

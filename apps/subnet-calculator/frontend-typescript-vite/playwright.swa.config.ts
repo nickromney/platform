@@ -14,8 +14,8 @@ import { defineConfig, devices } from '@playwright/test'
  *   make start-stack5              # Start Stack 5
  *
  * Then run tests (Terminal 2):
- *   npm run test:swa:stack4        # Test Stack 4 (no auth)
- *   npm run test:swa:stack5        # Test Stack 5 (JWT auth)
+ *   bun run test:swa:stack4        # Test Stack 4 (no auth)
+ *   bun run test:swa:stack5        # Test Stack 5 (JWT auth)
  */
 export default defineConfig({
   testDir: './tests',
@@ -42,5 +42,5 @@ export default defineConfig({
   ],
 
   // Expect SWA CLI to already be running
-  // User must start: npm run swa -- start stack4
+  // User must start: bun run swa -- start stack4
 })

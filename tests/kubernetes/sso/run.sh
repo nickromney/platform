@@ -38,7 +38,7 @@ tfvar_bool() {
 }
 
 command -v node >/dev/null 2>&1 || { echo "node not found in PATH"; exit 1; }
-command -v npm >/dev/null 2>&1 || { echo "npm not found in PATH"; exit 1; }
+command -v bun >/dev/null 2>&1 || { echo "bun not found in PATH"; exit 1; }
 
 cd "${SCRIPT_DIR}"
 
@@ -49,17 +49,17 @@ if [ "${SSO_E2E_BASE_PORT_VALUE}" = "443" ]; then
   SSO_E2E_BASE_PORT_VALUE=""
 fi
 
-npm ci
-npx playwright install chromium
+bun install --frozen-lockfile
+bun x playwright install chromium
 
 if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
-  npm run test:headed
+  bun run test:headed
 else
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
-  npm test
+  bun run test
 fi

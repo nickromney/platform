@@ -3,15 +3,23 @@
 A full-stack IPv4/IPv6 subnet calculator with multiple backend and frontend implementations demonstrating different deployment patterns.
 
 > Looking for an overview of every hosting option (local compose, SWA, App Service Easy Auth, etc.) and how authentication works in each one? See [docs/HOSTING-MATRIX.md](docs/HOSTING-MATRIX.md) for the compatibility matrix that maps stacks to auth modes.
+>
+> Looking for the non-Kubernetes runtime topology itself, including Mermaid diagrams of the compose stacks and overlays? See [docs/COMPOSE-ARCHITECTURE.md](docs/COMPOSE-ARCHITECTURE.md).
+>
+> Looking for the default versus opt-in verification path for the local app and compose workflows? See [docs/TEST-RUNBOOK.md](docs/TEST-RUNBOOK.md).
 
 ## Quick Start
 
 ### Run All Services
 
-The project includes **four complete stacks** that run simultaneously:
+The main [`compose.yml`](compose.yml) defines many local stack variants. The
+four baseline compose slices below are still the quickest way to understand the
+core frontend/backend pairings before moving on to the OIDC, APIM, and mock
+Easy Auth variants documented in
+[docs/COMPOSE-ARCHITECTURE.md](docs/COMPOSE-ARCHITECTURE.md).
 
 ```bash
-# Start all six services (2 backends + 4 frontends)
+# Start the full local compose topology
 podman-compose up -d
 
 # Or with Docker
@@ -35,7 +43,7 @@ docker compose up -d
 
 **Stack 4 - TypeScript Vite + Container App** (Modern SPA):
 
-- Vite SPA: <http://localhost:3000>
+- Vite SPA: <http://localhost:8003>
 - Container App API: <http://localhost:8090/api/v1/docs>
 
 ### Run Individual Stacks
@@ -105,7 +113,7 @@ The project includes three additional stacks using the [Azure Static Web Apps CL
 **Prerequisites:**
 
 ```bash
-npm install -g @azure/static-web-apps-cli
+bun add -g @azure/static-web-apps-cli
 ```
 
 ### SWA Stack Overview
@@ -132,14 +140,14 @@ All SWA stacks use:
 
 ```bash
 cd ~/Developer/personal/subnet-calculator
-make start-stack4
+make start-swa-04
 # Access at: http://localhost:4280
 ```
 
 **Stack 5 - JWT Authentication:**
 
 ```bash
-make start-stack5
+make start-swa-05
 # Access at: http://localhost:4281
 # Login with: username=demo, password=password123
 ```
@@ -147,7 +155,7 @@ make start-stack5
 **Stack 6 - Entra ID Authentication:**
 
 ```bash
-make start-stack6
+make start-swa-06
 # Access at: http://localhost:4282
 # Uses SWA platform auth (emulated locally)
 ```
@@ -188,7 +196,7 @@ make start-stack6
 If you close terminals without stopping the stack, processes may remain running:
 
 ```bash
-make clean-stacks
+make clean-ports
 # Kills processes on ports: 3000, 7071, 4280-4282
 ```
 

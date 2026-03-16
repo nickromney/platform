@@ -3,8 +3,8 @@
  */
 
 import type {
-  CloudMode,
   CloudflareCheckResponse,
+  CloudMode,
   HealthResponse,
   LookupResult,
   PrivateCheckResponse,

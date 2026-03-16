@@ -53,24 +53,36 @@ def _strip_port(host: str) -> str:
     return host
 
 
-def _request_host_candidates(request: Request) -> set[str]:
-    candidates: set[str] = set()
+def _expand_host_candidates(raw_host: str) -> list[str]:
+    normalized = _normalize_host(raw_host)
+    if not normalized:
+        return []
+
+    candidates: list[str] = []
+    for value in (normalized, _strip_port(normalized)):
+        if value and value not in candidates:
+            candidates.append(value)
+    return candidates
+
+
+def _request_host_candidate_groups(request: Request) -> list[list[str]]:
+    groups: list[list[str]] = []
     raw_values = [
         request.headers.get("x-forwarded-host", ""),
         request.headers.get("host", ""),
         request.url.hostname or "",
     ]
     for raw in raw_values:
-        normalized = _normalize_host(raw)
-        if not normalized:
+        candidates = _expand_host_candidates(raw)
+        if not candidates:
             continue
-        candidates.add(normalized)
-        candidates.add(_strip_port(normalized))
-    candidates.discard("")
-    return candidates
+        if candidates in groups:
+            continue
+        groups.append(candidates)
+    return groups
 
 
-def _route_matches_host(route: RouteConfig, request_hosts: set[str]) -> bool:
+def _route_matches_host(route: RouteConfig, request_hosts: list[str]) -> bool:
     if not route.host_match:
         return True
     if not request_hosts:
@@ -146,41 +158,45 @@ def _read_version(request: Request, *, config: GatewayConfig, route: RouteConfig
 
 def resolve_route(config: GatewayConfig, request: Request) -> ResolvedRoute | None:
     path = request.url.path
-    request_hosts = _request_host_candidates(request)
-    for route in config.routes:
-        if not route.matches(method=request.method, path=path):
-            continue
-        if not _route_matches_host(route, request_hosts):
-            continue
+    request_host_groups = _request_host_candidate_groups(request)
+    if not request_host_groups:
+        request_host_groups = [[]]
 
-        if not route.api_version_set:
-            return ResolvedRoute(route=route, upstream_path=path)
+    for request_hosts in request_host_groups:
+        for route in config.routes:
+            if not route.matches(method=request.method, path=path):
+                continue
+            if not _route_matches_host(route, request_hosts):
+                continue
 
-        version_set_id = route.api_version_set
-        version_set = config.api_version_sets.get(version_set_id)
-        if version_set is None:
-            # Misconfigured; fall through to "no route".
+            if not route.api_version_set:
+                return ResolvedRoute(route=route, upstream_path=path)
+
+            version_set_id = route.api_version_set
+            version_set = config.api_version_sets.get(version_set_id)
+            if version_set is None:
+                # Misconfigured; fall through to "no route".
+                return None
+
+            requested_version, upstream_path = _read_version(request, config=config, route=route, path=path)
+            if not requested_version:
+                requested_version = version_set.default_version
+
+            if not requested_version:
+                return None
+
+            for candidate in config.routes:
+                if candidate.api_version_set != version_set_id:
+                    continue
+                if candidate.api_version != requested_version:
+                    continue
+                if not candidate.matches(method=request.method, path=path):
+                    continue
+                if not _route_matches_host(candidate, request_hosts):
+                    continue
+                return ResolvedRoute(route=candidate, upstream_path=upstream_path, api_version=requested_version)
+
             return None
-
-        requested_version, upstream_path = _read_version(request, config=config, route=route, path=path)
-        if not requested_version:
-            requested_version = version_set.default_version
-
-        if not requested_version:
-            return None
-
-        for candidate in config.routes:
-            if candidate.api_version_set != version_set_id:
-                continue
-            if candidate.api_version != requested_version:
-                continue
-            if not candidate.matches(method=request.method, path=path):
-                continue
-            if not _route_matches_host(candidate, request_hosts):
-                continue
-            return ResolvedRoute(route=candidate, upstream_path=upstream_path, api_version=requested_version)
-
-        return None
 
     return None
 

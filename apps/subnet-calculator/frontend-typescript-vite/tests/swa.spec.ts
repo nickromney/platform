@@ -15,8 +15,8 @@ import { expect, test } from '@playwright/test'
  *   make start-stack5             # Port 4281, Azure Function, JWT auth
  *
  * Then run (Terminal 2):
- *   npm run test:swa:stack4        # Test Stack 4
- *   npm run test:swa:stack5        # Test Stack 5
+ *   bun run test:swa:stack4        # Test Stack 4
+ *   bun run test:swa:stack5        # Test Stack 5
  */
 
 test.describe('SWA CLI Tests', () => {

@@ -25,26 +25,26 @@ Modern single-page application (SPA) frontend for the subnet calculator, built w
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Start development server with HMR
-npm run dev
+bun run dev
 # Access at http://localhost:5173
 
 # Run type checking
-npm run type-check
+bun run type-check
 
 # Run linting
-npm run lint
+bun run lint
 
 # Run tests (headless)
-npm test
+bun run test
 
 # Run tests (headed mode)
-npm run test:headed
+bun run test:headed
 
 # Run tests (interactive UI)
-npm run test:ui
+bun run test:ui
 ```
 
 ### Docker/Podman Build
@@ -82,7 +82,7 @@ The TypeScript frontend supports optional JWT authentication to connect to backe
 
 ### Configuration
 
-Authentication is controlled via environment variables at **build time**:
+For local Vite development, authentication is controlled via `VITE_*` variables:
 
 - `VITE_AUTH_ENABLED` - Set to `"true"` to enable JWT auth (default: `"false"`)
 - `VITE_JWT_USERNAME` - JWT username (default: empty)
@@ -98,6 +98,8 @@ Authentication is controlled via environment variables at **build time**:
 - `VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL` - Optional label for a second diagnostics panel
 - `VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH` - Optional path for that second diagnostics API
 
+For containers, the frontend now reads runtime config from `/runtime-config.js` generated at startup. Use runtime env vars such as `API_BASE_URL`, `AUTH_METHOD`, `JWT_USERNAME`, and `JWT_PASSWORD` instead of Docker build args.
+
 ### Local Development with JWT
 
 ```bash
@@ -106,22 +108,25 @@ VITE_AUTH_ENABLED=true \
 VITE_JWT_USERNAME=demo \
 VITE_JWT_PASSWORD=password123 \
 VITE_API_URL=http://localhost:8080 \
-npm run dev
+bun run dev
 
 # Access at http://localhost:5173
 # Connects to Azure Function API with automatic JWT authentication
 ```
 
-### Building with JWT
+### Container Runtime with JWT
 
 ```bash
-# Build with JWT enabled
-podman build \
-  --build-arg VITE_AUTH_ENABLED=true \
-  --build-arg VITE_JWT_USERNAME=demo \
-  --build-arg VITE_JWT_PASSWORD=password123 \
-  --build-arg VITE_API_URL=http://api-fastapi-azure-function:8080 \
-  -t subnet-calculator-frontend-typescript-vite-jwt:latest .
+# Build a generic image
+podman build -t subnet-calculator-frontend-typescript-vite-jwt:latest .
+
+# Supply auth and API details at runtime
+podman run --rm -p 3001:8080 \
+  -e AUTH_METHOD=jwt \
+  -e JWT_USERNAME=demo \
+  -e JWT_PASSWORD=password123 \
+  -e API_BASE_URL=http://api-fastapi-azure-function:8080 \
+  subnet-calculator-frontend-typescript-vite-jwt:latest
 ```
 
 ## Optional Network Diagnostics Panels
@@ -218,7 +223,7 @@ VITE_NETWORK_HOPS='[
   {"label":"cloud1 nginx","detail":"frontend ingress"},
   {"label":"cloud2 FastAPI","detail":"remote service"}
 ]' \
-npm run build
+bun run build
 ```
 
 This keeps the feature reusable in non-SD-WAN deployments: the frontend only needs a primary diagnostics endpoint, and optionally a second endpoint that returns the same response shape from a different network viewpoint.
@@ -227,14 +232,14 @@ The optional status-banner variables keep the host-facing ingress URL separate f
 
 ### How JWT Works
 
-When `VITE_AUTH_ENABLED=true`:
+When `AUTH_METHOD=jwt` in runtime config, or `VITE_AUTH_ENABLED=true` during local Vite development:
 
 1. **Automatic Login**: Frontend logs in on first API call using configured credentials
 2. **Token Caching**: JWT token cached for 25 minutes (refreshes before 30-min expiration)
 3. **Auth Headers**: All API requests include `Authorization: Bearer <token>` header
 4. **Transparent**: No UI changes - authentication happens automatically
 
-When `VITE_AUTH_ENABLED=false` (default):
+When `AUTH_METHOD=none` in runtime config, or `VITE_AUTH_ENABLED=false` (default) during local Vite development:
 
 - No authentication
 - Works with public APIs (like Container App backend)
@@ -244,10 +249,10 @@ When `VITE_AUTH_ENABLED=false` (default):
 
 ```bash
 # Run tests with JWT mocking enabled
-VITE_AUTH_ENABLED=true \
-VITE_JWT_USERNAME=demo \
-VITE_JWT_PASSWORD=password123 \
-npm test
+AUTH_METHOD=jwt \
+JWT_USERNAME=demo \
+JWT_PASSWORD=password123 \
+bun run test
 
 # All 30 tests pass with or without JWT enabled
 ```
@@ -265,23 +270,23 @@ Edit files in `src/`:
 ### 2. Type Check
 
 ```bash
-npm run type-check
+bun run type-check
 ```
 
 ### 3. Lint and Format
 
 ```bash
 # Check for issues
-npm run lint
+bun run lint
 
 # Auto-fix issues
-npm run lint:fix
+bun run lint:fix
 
 # Format code
-npm run format
+bun run format
 
 # Run all checks
-npm run check
+bun run check
 ```
 
 ### 4. Test
@@ -290,13 +295,13 @@ npm run check
 
 ```bash
 # Run all Playwright tests (mocked API responses)
-npm test
+bun run test
 
 # Run tests in headed mode (see browser)
-npm run test:headed
+bun run test:headed
 
 # Run tests in UI mode (interactive)
-npm run test:ui
+bun run test:ui
 ```
 
 Tests are located in `tests/frontend.spec.ts` and cover:
@@ -319,13 +324,13 @@ podman-compose up api-fastapi-azure-function frontend-typescript-vite-jwt  # Sta
 podman-compose up api-fastapi-container-app frontend-typescript-vite        # Stack 4 (no auth)
 
 # Run integration tests against Stack 5 (JWT auth)
-npm run test:integration
+bun run test:integration
 
 # Run integration tests against Stack 4 (no auth)
-npm run test:integration:stack4
+bun run test:integration:stack4
 
 # Run integration tests with browser visible
-npm run test:integration:headed
+bun run test:integration:headed
 ```
 
 Integration tests are located in `tests/integration.spec.ts` and validate:
@@ -343,10 +348,10 @@ Integration tests are located in `tests/integration.spec.ts` and validate:
 
 ```bash
 # Build for production
-npm run build
+bun run build
 
 # Preview production build
-npm run preview
+bun run preview
 ```
 
 Built files are output to `dist/`.
@@ -365,7 +370,7 @@ frontend-typescript-vite/
 ├── nginx.conf            # nginx configuration for container
 ├── Dockerfile            # Multi-stage production build
 ├── package.json          # Dependencies and scripts
-├── package-lock.json     # Locked dependencies
+├── bun.lock     # Locked dependencies
 ├── tsconfig.json         # TypeScript configuration
 ├── playwright.config.ts  # Playwright test configuration
 ├── biome.json           # Biome linter/formatter configuration
@@ -405,13 +410,13 @@ test('calculates IPv4 subnet correctly', async ({ page }) => {
 
 ```bash
 # Headless (CI mode)
-npm test
+bun run test
 
 # Headed (see browser)
-npm run test:headed
+bun run test:headed
 
 # UI mode (interactive debugging)
-npm run test:ui
+bun run test:ui
 ```
 
 ### Test Configuration
@@ -431,13 +436,13 @@ Fast, modern linter and formatter replacing ESLint + Prettier:
 
 ```bash
 # Check for issues
-npm run lint
+bun run lint
 
 # Auto-fix issues
-npm run lint:fix
+bun run lint:fix
 
 # Format code
-npm run format
+bun run format
 ```
 
 Configuration in `biome.json`:
@@ -452,7 +457,7 @@ Configuration in `biome.json`:
 Strict type checking enabled in `tsconfig.json`:
 
 ```bash
-npm run type-check
+bun run type-check
 ```
 
 ## Container Details
@@ -522,10 +527,10 @@ This frontend is part of Stack 4, the most modern architecture:
 ## Contributing
 
 1. Make changes to `src/` files
-2. Run `npm run check` to verify types and linting
-3. Run `npm test` to verify tests pass
+2. Run `bun run check` to verify types and linting
+3. Run `bun run test` to verify tests pass
 4. Build container: `podman build -t subnet-calculator-frontend-typescript-vite:latest .`
-5. Run security scan: `make trivy-scan` from repo root
+5. Run security scan: `make -C apps trivy-scan`
 
 ## Troubleshooting
 
@@ -544,23 +549,23 @@ kill -9 <PID>
 ### Playwright Browsers Not Installed
 
 ```bash
-npx playwright install
+bun x playwright install
 ```
 
 ### Type Errors
 
 ```bash
 # Clean and reinstall
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules bun.lock
+bun install
 ```
 
 ### Container Build Fails
 
-Ensure you have `package-lock.json`:
+Ensure you have `bun.lock`:
 
 ```bash
-npm install  # Generates package-lock.json
+bun install  # Generates bun.lock
 ```
 
 ## License

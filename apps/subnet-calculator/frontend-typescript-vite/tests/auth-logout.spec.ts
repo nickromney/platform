@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test'
  *   - User must be authenticated before running logout tests
  *
  * Run with:
- *   BASE_URL=https://your-app.azurestaticapps.net npm run test:auth
+ *   BASE_URL=https://your-app.azurestaticapps.net bun run test:auth
  */
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000'

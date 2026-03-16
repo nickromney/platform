@@ -9,6 +9,7 @@ STATE_FILE ?= ../../terraform/.run/kubernetes/terraform.tfstate
 LEGACY_STATE_FILE ?= ../../terraform/.run/platform/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 CHECK_STAGE_MONOTONICITY := $(MAKEFILE_DIR)scripts/check-stage-monotonicity.sh
 CHECK_KIND_HOST_PORTS := $(MAKEFILE_DIR)scripts/check-kind-host-ports.sh
 CHECK_HOST_LLM := $(MAKEFILE_DIR)scripts/check-host-llm.sh
@@ -21,16 +22,25 @@ DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 KIND_KUBECONFIG_CONTEXT ?= kind-kind-local
 KIND_KUBECONFIG_PATH ?= $(HOME)/.kube/$(KIND_KUBECONFIG_CONTEXT).yaml
 KIND_PRELOAD_IMAGES_MODE ?= off
+KIND_API_READY_ATTEMPTS ?= 30
+KIND_API_READY_DELAY_SECONDS ?= 2
 
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
+VALID_ACTIONS := plan apply
 VALID_HELPER_MODES := auto on off
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
-ACTION_FROM_GOALS := $(firstword $(filter plan apply,$(MAKECMDGOALS)))
+ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
+ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
+STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
+
+include ../../mk/common.mk
 
 ifneq ($(STAGE_FROM_GOALS),)
 ifneq ($(origin STAGE),command line)
@@ -79,34 +89,40 @@ help:
 	@echo "kind demo (Docker Desktop + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/Loki)"
 	@echo ""
 	@echo "Workflow syntax:"
-	@echo "  make kind apply 100 AUTO_APPROVE=1"
-	@echo "  make kind plan 200"
+	@echo "  make 100 apply"
+	@echo "  make 900 plan"
+	@echo "  make 900 apply AUTO_APPROVE=1"
+	@echo ""
+	@echo "Accepted variants:"
+	@echo "  make apply 100"
+	@echo "  make kind 100 apply"
 	@echo ""
 	@echo "Targets (workflow syntax above is preferred):"
 	@echo "  make apply        900 [AUTO_APPROVE=1]"
-	@echo "  make plan         900"
-	@echo "  make init"
-	@echo "  make check-gateway-urls"
+	@echo "  make audit-bootstrap                         Post-bootstrap audit: apps, pods, events, restarts, previous logs"
 	@echo "  make check-app  APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
-	@echo "  make check-health"
-	@echo "  make check-security                           WireGuard, TLS 1.3, policy enforcement, negative tests"
 	@echo "  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals"
+	@echo "  make check-gateway-urls"
+	@echo "  make check-health"
+	@echo "  make check-provider-version"
+	@echo "  make check-security                           WireGuard, TLS 1.3, policy enforcement, negative tests"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Browser-based SSO end-to-end app checks (Playwright)"
-	@echo "  make check-provider-version"
+	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version"
 	@echo "  make discover-images                          Dump images from running cluster"
 	@echo "  make docker-health"
 	@echo "  make env                                     Show local tool versions + Docker daemon status"
-	@echo "  make audit-bootstrap                         Post-bootstrap audit: apps, pods, events, restarts, previous logs"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
+	@echo "  make init"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
+	@echo "  make plan         900"
 	@echo "  make preload-images                           Pull + load images into kind"
 	@echo "  make preload-images-pull-only                 Warm Docker cache only"
 	@echo "  make prereqs"
-	@echo "  make check-stage-monotonicity"
 	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make show-urls"
+	@echo "  make status"
 	@echo "  make start                                   Alias for start-kind"
 	@echo "  make start-kind"
 	@echo "  make stop                                    Alias for stop-kind"
@@ -125,8 +141,8 @@ help:
 	@echo "  900 - full stack + sso"
 	@echo ""
 	@echo "Stage examples:"
-	@echo "  make kind plan 100"
-	@echo "  make kind apply 900 AUTO_APPROVE=1"
+	@echo "  make 100 plan"
+	@echo "  make 900 apply AUTO_APPROVE=1"
 	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
@@ -134,9 +150,36 @@ help:
 	@echo "Local helper modes:"
 	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
 
+.PHONY: workflow-validate
+workflow-validate:
+	@set -euo pipefail; \
+	if [ "$(ACTION_COUNT)" -gt 1 ]; then \
+		echo "Specify only one workflow action: $(VALID_ACTIONS)" >&2; \
+		exit 2; \
+	fi; \
+	if [ "$(STAGE_COUNT)" -gt 1 ]; then \
+		echo "Specify only one stage: $(VALID_STAGES)" >&2; \
+		exit 2; \
+	fi; \
+	if [ -n "$(UNKNOWN_WORKFLOW_GOALS)" ]; then \
+		echo "Unknown workflow goal '$(firstword $(UNKNOWN_WORKFLOW_GOALS))'." >&2; \
+		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" "$(firstword $(UNKNOWN_WORKFLOW_GOALS))" $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES) )"; \
+		if [ -n "$$suggestion" ]; then \
+			echo "$$suggestion" >&2; \
+		fi; \
+		echo "Use: make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]" >&2; \
+		exit 2; \
+	fi
+
 .PHONY: $(VALID_STAGES)
-$(VALID_STAGES):
-	@:
+$(VALID_STAGES): workflow-validate
+	@set -euo pipefail; \
+	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
+		echo "Stage $@ requires an action." >&2; \
+		echo "Try: make $@ plan" >&2; \
+		echo "  or: make $@ apply AUTO_APPROVE=1" >&2; \
+		exit 2; \
+	fi
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
@@ -198,6 +241,40 @@ check-kubeconfig:
 	[ -n "$$kind_current" ] || kind_current="<none>"; \
 	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)";
 
+.PHONY: ensure-kind-running
+ensure-kind-running:
+	@set -euo pipefail; \
+	cluster_name="$${TARGET_CLUSTER_NAME:-kind-local}"; \
+	control_plane="$$cluster_name-control-plane"; \
+	if ! command -v kind >/dev/null 2>&1; then \
+		exit 0; \
+	fi; \
+	if ! kind get clusters 2>/dev/null | grep -qx "$$cluster_name"; then \
+		exit 0; \
+	fi; \
+	if docker ps --format '{{.Names}}' | grep -qx "$$control_plane"; then \
+		exit 0; \
+	fi; \
+	if ! docker ps -a --format '{{.Names}}' | grep -qx "$$control_plane"; then \
+		echo "$$cluster_name metadata exists, but $$control_plane is missing." >&2; \
+		echo "Run 'make reset AUTO_APPROVE=1' to clean up the stale kind metadata." >&2; \
+		exit 1; \
+	fi; \
+	command -v kubectl >/dev/null 2>&1 || { echo "kubectl not found in PATH"; exit 1; }; \
+	$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
+	echo "$$cluster_name exists but is stopped; starting node containers..."; \
+	$(MAKE) start-kind SKIP_KIND_HOST_PORT_CHECK=1 >/dev/null; \
+	for _ in $$(seq 1 $(KIND_API_READY_ATTEMPTS)); do \
+		if docker ps --format '{{.Names}}' | grep -qx "$$control_plane" && \
+		   KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then \
+			echo "$$cluster_name is running again."; \
+			exit 0; \
+		fi; \
+		sleep $(KIND_API_READY_DELAY_SECONDS); \
+	done; \
+	echo "$$cluster_name started, but the Kubernetes API did not become ready." >&2; \
+	exit 1
+
 .PHONY: check-kind-host-ports
 check-kind-host-ports:
 	@set -euo pipefail; \
@@ -211,10 +288,10 @@ check-kind-host-ports:
 	"$(CHECK_KIND_HOST_PORTS)" "$${args[@]}"
 
 .PHONY: kind
-kind:
+kind: workflow-validate
 	@set -euo pipefail; \
 	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
-		echo "Usage: make kind <plan|apply> <stage> [AUTO_APPROVE=1]"; \
+		echo "Usage: make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]"; \
 		exit 1; \
 	fi; \
 	$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
@@ -223,7 +300,7 @@ kind:
 init:
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE) (missing $(stage_file))"; exit 1; fi
+	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
 
 .PHONY: prepare-state
@@ -244,15 +321,16 @@ prepare-state:
 
 .PHONY: plan
 ifeq ($(HAS_PLATFORM_GOAL),1)
-plan:
+plan: workflow-validate
 	@:
 else
-plan:
+plan: workflow-validate
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
+	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
+	@$(MAKE) ensure-kind-running
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
@@ -261,7 +339,7 @@ plan:
 			echo "kind not found in PATH (required for STAGE>=200 checks)"; exit 1; \
 		fi; \
 		if ! kind get clusters 2>/dev/null | grep -qx "kind-local"; then \
-			echo "kind-local not found. Run: make kind apply 100 AUTO_APPROVE=1"; \
+			echo "kind-local not found. Run: make 100 apply AUTO_APPROVE=1"; \
 			exit 1; \
 		fi; \
 	fi; \
@@ -278,15 +356,16 @@ endif
 
 .PHONY: apply
 ifeq ($(HAS_PLATFORM_GOAL),1)
-apply:
+apply: workflow-validate
 	@:
 else
-apply:
+apply: workflow-validate
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
+	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
+	@$(MAKE) ensure-kind-running
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	mode_enabled() { \
@@ -471,6 +550,46 @@ docker-health:
 	@echo "" && echo "Kind containers (if any):" && (docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' | grep -E '(^NAMES|kind-local|kindest/node)' || true)
 	@echo "" && echo "Kind networks (if any):" && (docker network ls --format 'table {{.Name}}\t{{.Driver}}' | grep -E '(^NAME|kind)' || true)
 
+.PHONY: status
+status:
+	@set -euo pipefail; \
+	$(MAKE) prepare-state >/dev/null; \
+	$(MAKE) check-docker-daemon >/dev/null; \
+	echo "=== Docker context ==="; \
+	docker context show; \
+	echo ""; \
+	echo "=== kind clusters ==="; \
+	if command -v kind >/dev/null 2>&1; then \
+		clusters="$$(kind get clusters 2>/dev/null || true)"; \
+		if [ -n "$$clusters" ]; then \
+			printf '%s\n' "$$clusters"; \
+		else \
+			echo "No kind clusters found."; \
+		fi; \
+	else \
+		echo "kind not found in PATH."; \
+	fi; \
+	echo ""; \
+	echo "=== kind containers ==="; \
+	containers="$$(docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E '^kind-local-(control-plane|worker([0-9]+)?)\t' || true)"; \
+	if [ -n "$$containers" ]; then \
+		printf 'NAME\tSTATUS\tPORTS\n%s\n' "$$containers"; \
+	else \
+		echo "No kind-local node containers found."; \
+	fi; \
+	if docker ps --format '{{.Names}}' | grep -qx 'kind-local-control-plane'; then \
+		$(MAKE) ensure-kind-kubeconfig >/dev/null; \
+		echo ""; \
+		echo "=== Kubernetes nodes ==="; \
+		KUBECONFIG="$(KUBECONFIG_PATH)" kubectl get nodes -o wide || true; \
+		echo ""; \
+		echo "=== Kubeconfig ==="; \
+		$(MAKE) check-kubeconfig; \
+	elif command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -qx "kind-local"; then \
+		echo ""; \
+		echo "kind-local metadata exists, but the control-plane container is not running."; \
+	fi
+
 .PHONY: stop-kind
 stop-kind:
 	@set -euo pipefail; \
@@ -496,6 +615,9 @@ start-kind:
 	if [ -z "$$nodes" ]; then \
 		echo "No kind-local node containers found."; \
 		exit 1; \
+	fi; \
+	if [ "$${SKIP_KIND_HOST_PORT_CHECK:-0}" != "1" ]; then \
+		$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
 	fi; \
 	echo "Starting kind-local node containers..."; \
 	docker start $$nodes >/dev/null; \

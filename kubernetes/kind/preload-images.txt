@@ -92,6 +92,7 @@ python:3.13-slim
 node:22-alpine
 
 # --- Platform support images ---
+dhi.io/litellm:1.81.12-debian13
 dhi.io/nginx:1.29.5-debian13
 python:3.12-alpine
 docker.io/curlimages/curl:8.9.1
