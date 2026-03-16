@@ -8,9 +8,10 @@ STACK_DIR := ../../terraform/kubernetes
 STATE_FILE ?= ../../terraform/.run/kubernetes-lima/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
-CHECK_KIND_STOPPED := $(SCRIPTS_DIR)/check-kind-stopped.sh
+CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -48,8 +49,16 @@ EXPECT_NAMESPACE_OBSERVABILITY ?= 0
 EXPECT_NAMESPACE_PLATFORM_GATEWAY ?= 0
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
+VALID_ACTIONS := plan apply
 VALID_HELPER_MODES := auto on off
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
+ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
+ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
+STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kubeconfig check-kind-stopped prereqs lima-vms-up bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
+
+include ../../mk/common.mk
 
 ifneq ($(STAGE_FROM_GOALS),)
 ifneq ($(origin STAGE),command line)
@@ -104,6 +113,9 @@ help:
 	@echo "  make 900 plan"
 	@echo "  make 900 apply AUTO_APPROVE=1"
 	@echo ""
+	@echo "Accepted variants:"
+	@echo "  make apply 100"
+	@echo ""
 	@echo "Targets:"
 	@echo "  make plan         100|200|300|...|900"
 	@echo "  make apply        100|200|300|...|900 [AUTO_APPROVE=1]"
@@ -113,6 +125,7 @@ help:
 	@echo "  make check-gateway-stack"
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
+	@echo "  make check-kind-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-security"
 	@echo "  make check-sso"
@@ -158,9 +171,36 @@ help:
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
 
+.PHONY: workflow-validate
+workflow-validate:
+	@set -euo pipefail; \
+	if [ "$(ACTION_COUNT)" -gt 1 ]; then \
+		echo "Specify only one workflow action: $(VALID_ACTIONS)" >&2; \
+		exit 2; \
+	fi; \
+	if [ "$(STAGE_COUNT)" -gt 1 ]; then \
+		echo "Specify only one stage: $(VALID_STAGES)" >&2; \
+		exit 2; \
+	fi; \
+	if [ -n "$(UNKNOWN_WORKFLOW_GOALS)" ]; then \
+		echo "Unknown workflow goal '$(firstword $(UNKNOWN_WORKFLOW_GOALS))'." >&2; \
+		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" "$(firstword $(UNKNOWN_WORKFLOW_GOALS))" $(VALID_ACTIONS) $(VALID_STAGES) )"; \
+		if [ -n "$$suggestion" ]; then \
+			echo "$$suggestion" >&2; \
+		fi; \
+		echo "Use: make <stage> <plan|apply> [AUTO_APPROVE=1]" >&2; \
+		exit 2; \
+	fi
+
 .PHONY: $(VALID_STAGES)
-$(VALID_STAGES):
-	@:
+$(VALID_STAGES): workflow-validate
+	@set -euo pipefail; \
+	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
+		echo "Stage $@ requires an action." >&2; \
+		echo "Try: make $@ plan" >&2; \
+		echo "  or: make $@ apply AUTO_APPROVE=1" >&2; \
+		exit 2; \
+	fi
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
@@ -222,6 +262,8 @@ prereqs:
 		exit 1; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
+	echo ""; \
+	$(MAKE) check-kind-stopped; \
 	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \
@@ -370,14 +412,14 @@ configure-k3s-apiserver-oidc:
 init:
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE) (missing $(stage_file))"; exit 1; fi
+	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
 
 .PHONY: plan
-plan:
+plan: workflow-validate
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
+	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
@@ -407,10 +449,10 @@ plan:
 	TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args
 
 .PHONY: apply
-apply:
+apply: workflow-validate
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE)"; exit 1; fi
+	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
 	mode_enabled() { \

@@ -86,7 +86,7 @@ ensure_org_exists() {
     return 0
   fi
 
-  local code
+  local code payload
   code=$(curl -sS -o /dev/null -w "%{http_code}" \
     -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \
     "${GITEA_HTTP_BASE}/api/v1/orgs/${GITEA_REPO_OWNER}" || echo 000)
@@ -95,7 +95,26 @@ ensure_org_exists() {
     return 0
   fi
 
-  fail "organization '${GITEA_REPO_OWNER}' not found; create it before syncing repos"
+  payload=$(cat <<EOF
+{"username":"${GITEA_REPO_OWNER}"}
+EOF
+)
+
+  echo "Gitea org '${GITEA_REPO_OWNER}' is missing; creating it before syncing repos" >&2
+  code=$(curl -sS -o /dev/null -w "%{http_code}" \
+    -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \
+    -H "Content-Type: application/json" \
+    -d "${payload}" \
+    "${GITEA_HTTP_BASE}/api/v1/orgs" || echo 000)
+
+  if [[ "${code}" != "201" && "${code}" != "409" && "${code}" != "422" ]]; then
+    fail "create org '${GITEA_REPO_OWNER}' returned HTTP ${code}"
+  fi
+
+  code=$(curl -sS -o /dev/null -w "%{http_code}" \
+    -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \
+    "${GITEA_HTTP_BASE}/api/v1/orgs/${GITEA_REPO_OWNER}" || echo 000)
+  [[ "${code}" == "200" ]] || fail "organization '${GITEA_REPO_OWNER}' is still unavailable after create attempt (HTTP ${code})"
 }
 
 transfer_repo_if_needed() {
@@ -230,7 +249,6 @@ seed_repo() {
       git remote add origin "${remote_url}"
     fi
     if GIT_SSH_COMMAND="$ssh_cmd" git push -q --force origin main; then
-      popd >/dev/null
       pushed="true"
       break
     fi

@@ -1,48 +1,25 @@
+USE_COMMON_HELP := 1
+MAKE_KNOWN_GOALS := help check-prerequisites clean-ports \
+  start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
+  start-direct-all-bg wait-direct-services \
+  start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
+  start-swa-04 start-swa-05 start-swa-06 start-swa-backends start-swa-all \
+  test-bruno-direct test-bruno-compose test-bruno-swa test-bruno-swa-all \
+  test-bruno-direct-full test-bruno-compose-full test-bruno-swa-full
+MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
+
+include ../../mk/common.mk
+
 .PHONY: help check-prerequisites clean-ports \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
-  start-swa-04 start-swa-05 start-swa-06 \
-  test-bruno-direct test-bruno-compose test-bruno-swa \
+  start-swa-04 start-swa-05 start-swa-06 start-swa-backends start-swa-all \
+  test-bruno-direct test-bruno-compose test-bruno-swa test-bruno-swa-all \
   test-bruno-direct-full test-bruno-compose-full test-bruno-swa-full
 
-help:
-	@echo "Subnet Calculator - Development Commands"
-	@echo ""
-	@echo "=== Prerequisites ==="
-	@echo "  make check-prerequisites            Check that podman/docker is running"
-	@echo ""
-	@echo "=== Direct Launches (7000s) ==="
-	@echo "  make start-direct-azure-function    Start Azure Function API (port 7071)"
-	@echo "  make start-direct-container-app     Start Container App API (port 7080)"
-	@echo "  make start-direct-flask             Start Flask frontend (port 7000)"
-	@echo "  make start-direct-vite              Start TypeScript Vite frontend (port 7010)"
-	@echo ""
-	@echo "=== Podman-Compose (8000s) ==="
-	@echo "  make start-compose-all              Start all compose stacks (8000-8003)"
-	@echo "  make start-compose-01               Start compose-01: Flask + Azure Function (8000)"
-	@echo "  make start-compose-02               Start compose-02: Static HTML + Container App (8001)"
-	@echo "  make start-compose-03               Start compose-03: Flask + Container App (8002)"
-	@echo "  make start-compose-04               Start compose-04: TypeScript Vite + Container App (8003)"
-	@echo ""
-	@echo "=== SWA CLI (4000s) ==="
-	@echo "  make start-swa-04                   Start SWA 04: No Auth (port 4280)"
-	@echo "  make start-swa-05                   Start SWA 05: JWT Auth (port 4281)"
-	@echo "  make start-swa-06                   Start SWA 06: Entra ID Auth (port 4282)"
-	@echo ""
-	@echo "=== Testing ==="
-	@echo "  make test-bruno-direct              Test direct launches with Bruno CLI"
-	@echo "  make test-bruno-direct-full         Start direct services + test + cleanup"
-	@echo "  make test-bruno-compose             Test compose stacks with Bruno CLI"
-	@echo "  make test-bruno-compose-full        Start compose services + test + cleanup"
-	@echo "  make test-bruno-swa                 Test SWA stacks with Bruno CLI"
-	@echo "  make test-bruno-swa-full            Start SWA services + test + cleanup"
-	@echo ""
-	@echo "=== Cleanup ==="
-	@echo "  make clean-ports                    Kill all processes on used ports"
-	@echo ""
-
-check-prerequisites:
+##@ Prerequisites
+check-prerequisites: ## Check that podman/docker tooling is available and running
 	@echo "Checking prerequisites..."
 	@echo ""
 	@echo "1. Checking for podman-compose or compose..."
@@ -82,8 +59,8 @@ check-prerequisites:
 	@echo ""
 	@echo "✓ All prerequisites satisfied"
 
-# Clean up all services
-clean-ports:
+##@ Cleanup
+clean-ports: ## Stop local services and clear the shared demo ports
 	@echo "Cleaning up services..."
 	@echo "  Stopping podman-compose stacks..."
 	@podman-compose down 2>/dev/null || true
@@ -100,40 +77,39 @@ clean-ports:
 
 ##@ Direct Launches
 
-start-direct-azure-function:
+start-direct-azure-function: ## Start the Azure Function API on port 7071
 	@echo "Starting Azure Function API (port 7071)..."
 	cd api-fastapi-azure-function && \
 		export AUTH_METHOD=jwt && \
 		uv run func start
 
-start-direct-container-app:
+start-direct-container-app: ## Start the Container App API on port 7080
 	@echo "Starting Container App API (port 7080)..."
 	cd api-fastapi-container-app && \
 		uv run uvicorn app.main:app --reload --port 7080
 
-start-direct-flask:
+start-direct-flask: ## Start the Flask frontend on port 7000
 	@echo "Starting Flask frontend (port 7000)..."
 	cd frontend-python-flask && \
 		export API_URL=http://localhost:7071 && \
 		uv run flask run --port 7000
 
-start-direct-vite:
+start-direct-vite: ## Start the Vite frontend on port 7010
 	@echo "Starting TypeScript Vite frontend (port 7010)..."
 	cd frontend-typescript-vite && \
-		VITE_API_URL=http://localhost:7080 npm run dev -- --port 7010
+		VITE_API_URL=http://localhost:7080 bun run dev -- --port 7010
 
-# Background service startup helpers
-start-direct-all-bg:
+start-direct-all-bg: ## Start all direct services in the background
 	@echo "Starting all direct services in background..."
 	@mkdir -p /tmp/subnet-calc-logs
 	@(cd api-fastapi-azure-function && export AUTH_METHOD=jwt && uv run func start) > /tmp/subnet-calc-logs/azure-func.log 2>&1 &
 	@(cd api-fastapi-container-app && uv run uvicorn app.main:app --reload --port 7080) > /tmp/subnet-calc-logs/container-app.log 2>&1 &
 	@(cd frontend-python-flask && export API_URL=http://localhost:7071 && uv run flask run --port 7000) > /tmp/subnet-calc-logs/flask.log 2>&1 &
-	@(cd frontend-typescript-vite && VITE_API_URL=http://localhost:7080 npm run dev -- --port 7010) > /tmp/subnet-calc-logs/vite.log 2>&1 &
+	@(cd frontend-typescript-vite && VITE_API_URL=http://localhost:7080 bun run dev -- --port 7010) > /tmp/subnet-calc-logs/vite.log 2>&1 &
 	@echo "✓ Services started in background"
 	@echo "  Logs available in /tmp/subnet-calc-logs/"
 
-wait-direct-services:
+wait-direct-services: ## Wait for the direct APIs to become healthy
 	@echo "Waiting for direct services to be ready..."
 	@for service in "Azure Function:7071" "Container App:7080"; do \
 		name=$${service%:*}; \
@@ -160,7 +136,7 @@ wait-direct-services:
 
 ##@ Podman-Compose
 
-start-compose-all: check-prerequisites
+start-compose-all: check-prerequisites ## Start all compose stacks
 	@echo "Starting all podman-compose stacks..."
 	@echo "  compose-01 (Flask + Azure Function):           http://localhost:8000"
 	@echo "  compose-02 (Static HTML + Container App):      http://localhost:8001"
@@ -168,25 +144,25 @@ start-compose-all: check-prerequisites
 	@echo "  compose-04 (TypeScript Vite + Container App):  http://localhost:8003"
 	podman-compose up
 
-start-compose-01: check-prerequisites
+start-compose-01: check-prerequisites ## Start compose-01 on port 8000
 	@echo "Starting compose-01: Flask + Azure Function (port 8000)..."
 	podman-compose up frontend-python-flask api-fastapi-azure-function
 
-start-compose-02: check-prerequisites
+start-compose-02: check-prerequisites ## Start compose-02 on port 8001
 	@echo "Starting compose-02: Static HTML + Container App (port 8001)..."
 	podman-compose up frontend-html-static api-fastapi-container-app
 
-start-compose-03: check-prerequisites
+start-compose-03: check-prerequisites ## Start compose-03 on port 8002
 	@echo "Starting compose-03: Flask + Container App (port 8002)..."
 	podman-compose up frontend-python-flask-container-app api-fastapi-container-app
 
-start-compose-04: check-prerequisites
+start-compose-04: check-prerequisites ## Start compose-04 on port 8003
 	@echo "Starting compose-04: TypeScript Vite + Container App (port 8003)..."
 	podman-compose up frontend-typescript-vite api-fastapi-container-app
 
 ##@ SWA CLI
 
-start-swa-04: check-prerequisites
+start-swa-04: check-prerequisites ## Start SWA 04 with no auth on port 4280
 	@echo "Checking if compose backend is running for SWA 04..."
 	@if ! curl -s http://localhost:8090/api/v1/health > /dev/null 2>&1; then \
 		echo "✗ Container App API (port 8090 - from compose) is not running"; \
@@ -203,7 +179,7 @@ start-swa-04: check-prerequisites
 	fi
 	@echo "✓ Container App (port 8090 - compose) is ready"
 	@echo "Building frontend..."
-	cd frontend-typescript-vite && VITE_API_URL= npm run build && cd ..
+	cd frontend-typescript-vite && VITE_API_URL= bun run build && cd ..
 	@if [ ! -d "frontend-typescript-vite/dist" ]; then \
 		echo "✗ Frontend build failed - dist folder not found"; \
 		exit 1; \
@@ -213,7 +189,7 @@ start-swa-04: check-prerequisites
 	@echo "Backend: http://localhost:8090 (compose)"
 	swa start --config-name swa-04
 
-start-swa-05: check-prerequisites
+start-swa-05: check-prerequisites ## Start SWA 05 with JWT auth on port 4281
 	@echo "Checking if compose backend is running for SWA 05..."
 	@if ! curl -s http://localhost:8080/api/v1/health > /dev/null 2>&1; then \
 		echo "✗ Azure Function API (port 8080 - from compose) is not running"; \
@@ -230,7 +206,7 @@ start-swa-05: check-prerequisites
 	fi
 	@echo "✓ Azure Function (port 8080 - compose) is ready"
 	@echo "Building frontend with JWT auth enabled..."
-	cd frontend-typescript-vite && VITE_API_URL= VITE_AUTH_ENABLED=true npm run build && cd ..
+	cd frontend-typescript-vite && VITE_API_URL= VITE_AUTH_ENABLED=true bun run build && cd ..
 	@if [ ! -d "frontend-typescript-vite/dist" ]; then \
 		echo "✗ Frontend build failed - dist folder not found"; \
 		exit 1; \
@@ -240,7 +216,7 @@ start-swa-05: check-prerequisites
 	@echo "Backend: http://localhost:8080 (compose)"
 	swa start --config-name swa-05
 
-start-swa-06: check-prerequisites
+start-swa-06: check-prerequisites ## Start SWA 06 with Entra ID on port 4282
 	@echo "Checking if compose backend is running for SWA 06..."
 	@if ! curl -s http://localhost:8090/api/v1/health > /dev/null 2>&1; then \
 		echo "✗ Container App API (port 8090 - from compose) is not running"; \
@@ -257,7 +233,7 @@ start-swa-06: check-prerequisites
 	fi
 	@echo "✓ Container App (port 8090 - compose) is ready"
 	@echo "Building frontend (Entra ID auth handled by SWA layer)..."
-	cd frontend-typescript-vite && VITE_API_URL= npm run build && cd ..
+	cd frontend-typescript-vite && VITE_API_URL= bun run build && cd ..
 	@if [ ! -d "frontend-typescript-vite/dist" ]; then \
 		echo "✗ Frontend build failed - dist folder not found"; \
 		exit 1; \
@@ -269,7 +245,7 @@ start-swa-06: check-prerequisites
 
 ##@ SWA Comparison (all stacks)
 
-start-swa-backends: check-prerequisites
+start-swa-backends: check-prerequisites ## Start the shared SWA backend services
 	@echo "Starting SWA backends (compose)..."
 	@echo "  Starting Container App (port 8090) for swa-04, swa-06..."
 	@podman-compose up -d api-fastapi-container-app
@@ -284,10 +260,10 @@ start-swa-backends: check-prerequisites
 		if [ $$i -lt 5 ]; then echo "  Attempt $$i/5, waiting..."; sleep 2; fi; \
 	done
 
-start-swa-all: start-swa-backends
+start-swa-all: start-swa-backends ## Print the three-SWA comparison workflow
 	@echo ""
 	@echo "Building frontend for all SWA stacks..."
-	cd frontend-typescript-vite && VITE_API_URL= npm run build && cd ..
+	cd frontend-typescript-vite && VITE_API_URL= bun run build && cd ..
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════════╗"
 	@echo "║ Starting all three SWA stacks for comparison                   ║"
@@ -304,30 +280,30 @@ start-swa-all: start-swa-backends
 
 ##@ Testing
 
-test-bruno-direct:
+test-bruno-direct: ## Run Bruno against the direct-launch stack
 	@echo "Testing direct launches with Bruno CLI..."
 	cd bruno-collections && \
-		npx @usebruno/cli@latest run direct-azure-function --env local && \
-		npx @usebruno/cli@latest run direct-container-app --env local
+		bun x @usebruno/cli@latest run direct-azure-function --env local && \
+		bun x @usebruno/cli@latest run direct-container-app --env local
 
-test-bruno-compose:
+test-bruno-compose: ## Run Bruno against the compose stacks
 	@echo "Testing compose stacks with Bruno CLI..."
 	cd bruno-collections && \
-		npx @usebruno/cli@latest run compose-01 --env local && \
-		npx @usebruno/cli@latest run compose-02 --env local && \
-		npx @usebruno/cli@latest run compose-03 --env local && \
-		npx @usebruno/cli@latest run compose-04 --env local
+		bun x @usebruno/cli@latest run compose-01 --env local && \
+		bun x @usebruno/cli@latest run compose-02 --env local && \
+		bun x @usebruno/cli@latest run compose-03 --env local && \
+		bun x @usebruno/cli@latest run compose-04 --env local
 
-test-bruno-swa:
+test-bruno-swa: ## Run Bruno against the SWA stacks
 	@echo "Testing SWA stacks with Bruno CLI..."
 	cd bruno-collections && \
-		npx @usebruno/cli@latest run swa-04 --env local && \
-		npx @usebruno/cli@latest run swa-05 --env local && \
-		npx @usebruno/cli@latest run swa-06 --env local
+		bun x @usebruno/cli@latest run swa-04 --env local && \
+		bun x @usebruno/cli@latest run swa-05 --env local && \
+		bun x @usebruno/cli@latest run swa-06 --env local
 
-test-bruno-swa-all: clean-ports start-swa-backends
+test-bruno-swa-all: clean-ports start-swa-backends ## Start all SWA stacks, test them, then stop them
 	@echo "Building frontend for all SWA stacks..."
-	cd frontend-typescript-vite && VITE_API_URL= npm run build && cd ..
+	cd frontend-typescript-vite && VITE_API_URL= bun run build && cd ..
 	@echo "Starting SWA emulators in background..."
 	@mkdir -p /tmp/subnet-calc-logs
 	@(swa start --config-name swa-04) > /tmp/subnet-calc-logs/swa-04.log 2>&1 &
@@ -340,9 +316,9 @@ test-bruno-swa-all: clean-ports start-swa-backends
 	@sleep 10
 	@echo "Running Bruno tests on all SWA stacks..."
 	cd bruno-collections && \
-		npx @usebruno/cli@latest run swa-04 --env local && \
-		npx @usebruno/cli@latest run swa-05 --env local && \
-		npx @usebruno/cli@latest run swa-06 --env local
+		bun x @usebruno/cli@latest run swa-04 --env local && \
+		bun x @usebruno/cli@latest run swa-05 --env local && \
+		bun x @usebruno/cli@latest run swa-06 --env local
 	@echo "Stopping SWA emulators..."
 	@kill $$(cat /tmp/swa-04.pid 2>/dev/null) 2>/dev/null || true
 	@kill $$(cat /tmp/swa-05.pid 2>/dev/null) 2>/dev/null || true
@@ -352,26 +328,26 @@ test-bruno-swa-all: clean-ports start-swa-backends
 
 ##@ Full Test Chains (Start + Test + Cleanup)
 
-test-bruno-direct-full: clean-ports start-direct-all-bg wait-direct-services test-bruno-direct clean-ports
+test-bruno-direct-full: clean-ports start-direct-all-bg wait-direct-services test-bruno-direct clean-ports ## Start, test, and clean up the direct stack
 	@echo ""
 	@echo "✓ Direct testing complete (services cleaned up)"
 
-test-bruno-compose-full: check-prerequisites
+test-bruno-compose-full: check-prerequisites ## Start, test, and clean up the compose stacks
 	@echo "Starting compose services..."
 	podman-compose up -d
 	@echo "Waiting for compose services to be ready..."
 	@sleep 10
 	@echo "Running compose tests..."
 	cd bruno-collections && \
-		npx @usebruno/cli@latest run compose-01 --env local && \
-		npx @usebruno/cli@latest run compose-02 --env local && \
-		npx @usebruno/cli@latest run compose-03 --env local && \
-		npx @usebruno/cli@latest run compose-04 --env local
+		bun x @usebruno/cli@latest run compose-01 --env local && \
+		bun x @usebruno/cli@latest run compose-02 --env local && \
+		bun x @usebruno/cli@latest run compose-03 --env local && \
+		bun x @usebruno/cli@latest run compose-04 --env local
 	@echo "Stopping compose services..."
 	podman-compose down
 	@echo "✓ Compose testing complete"
 
-test-bruno-swa-full: clean-ports check-prerequisites
+test-bruno-swa-full: clean-ports check-prerequisites ## Start, test, and clean up the SWA stacks
 	@echo "Starting SWA backend dependencies (via compose)..."
 	@mkdir -p /tmp/subnet-calc-logs
 	@echo "  Starting both backends..."
@@ -385,7 +361,7 @@ test-bruno-swa-full: clean-ports check-prerequisites
 		if [ $$i -lt 5 ]; then echo "  Attempt $$i/5, waiting..."; sleep 3; fi; \
 	done
 	@echo "Building frontends for SWA (using SWA proxy pattern)..."
-	@(cd frontend-typescript-vite && VITE_API_URL= npm run build) > /tmp/subnet-calc-logs/build-swa.log 2>&1
+	@(cd frontend-typescript-vite && VITE_API_URL= bun run build) > /tmp/subnet-calc-logs/build-swa.log 2>&1
 	@echo "Starting SWA services..."
 	@(swa start --config-name swa-04) > /tmp/subnet-calc-logs/swa-04.log 2>&1 &
 	@echo "$$!" > /tmp/swa-04.pid
@@ -397,9 +373,9 @@ test-bruno-swa-full: clean-ports check-prerequisites
 	@sleep 15
 	@echo "Running SWA tests..."
 	cd bruno-collections && \
-		npx @usebruno/cli@latest run swa-04 --env local || true; \
-		npx @usebruno/cli@latest run swa-05 --env local || true; \
-		npx @usebruno/cli@latest run swa-06 --env local || true
+		bun x @usebruno/cli@latest run swa-04 --env local || true; \
+		bun x @usebruno/cli@latest run swa-05 --env local || true; \
+		bun x @usebruno/cli@latest run swa-06 --env local || true
 	@echo "Stopping SWA services (4xxx ports)..."
 	@kill $$(cat /tmp/swa-04.pid 2>/dev/null) 2>/dev/null || true
 	@kill $$(cat /tmp/swa-05.pid 2>/dev/null) 2>/dev/null || true

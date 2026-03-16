@@ -32,7 +32,7 @@ brew install python@3.11
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # SWA CLI (auto-installs if missing)
-npm install -g @azure/static-web-apps-cli
+bun add -g @azure/static-web-apps-cli
 ```
 
 ### Azure Subscription

@@ -100,9 +100,8 @@ no longer the hidden prerequisite for stage `500+` applies.
   [`~/slicer-mac/slicer-mac.yaml`](/Users/nickromney/slicer-mac/slicer-mac.yaml),
   ensures the selected VM exists in the selected host group, installs k3s with
   `k3sup --local` inside the VM, and writes `~/.kube/slicer-k3s.yaml`.
-- The bootstrap keeps the Slicer-specific stability guards from the older
-  prototype: swap creation, ext4 error checks, and a default BPF-JIT disable
-  toggle for Cilium stability.
+- The bootstrap keeps the Slicer-specific host-health guards that still pull
+  their weight on current images: swap creation and ext4 error checks.
 - Stages `200+` reuse the shared Terraform platform root. The Slicer target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
   mounts, and the in-cluster actions runner.

@@ -542,7 +542,7 @@ open http://localhost:3007
 ```bash
 # Test OAuth flow end-to-end (requires browser automation)
 cd frontend-react
-npm run test:stack12
+bun run test:stack12
 
 # Or use curl to test endpoints
 curl -v http://localhost:3007/ping  # Should return OK

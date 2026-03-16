@@ -1,36 +1,36 @@
-.PHONY: test
+USE_COMMON_HELP := 1
+MAKE_KNOWN_GOALS := help install dev build lint type-check test test-headed test-ui
+MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
+
+include ../../../mk/common.mk
+
+.PHONY: help install dev build lint type-check test test-headed test-ui
+
+##@ Workflow
 test: ## Run Playwright tests
 	@echo "Running TypeScript frontend tests..."
-	@npm test
+	@bun run test
 
-.PHONY: test-headed
 test-headed: ## Run tests with browser visible
-	@npm run test:headed
+	@bun run test:headed
 
-.PHONY: test-ui
 test-ui: ## Run tests with Playwright UI
-	@npm run test:ui
+	@bun run test:ui
 
-.PHONY: install
+##@ Setup
 install: ## Install dependencies
-	@npm install
+	@bun install --frozen-lockfile
 
-.PHONY: dev
+##@ Run
 dev: ## Run development server
-	@npm run dev
+	@bun run dev
 
-.PHONY: build
 build: ## Build for production
-	@npm run build
+	@bun run build
 
-.PHONY: lint
+##@ Quality
 lint: ## Run linting
-	@npm run lint
+	@bun run lint
 
-.PHONY: type-check
 type-check: ## Run TypeScript type checking
-	@npm run type-check
-
-.PHONY: help
-help: ## Show this help message
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@bun run type-check

@@ -7,8 +7,8 @@ import { defineConfig, devices } from '@playwright/test'
  * Validates real JWT authentication and API calls
  *
  * Usage:
- *   npm run test:integration              # Stack 5 (JWT)
- *   npm run test:integration:stack4       # Stack 4 (no auth)
+ *   bun run test:integration              # Stack 5 (JWT)
+ *   bun run test:integration:stack4       # Stack 4 (no auth)
  */
 export default defineConfig({
   testDir: './tests',

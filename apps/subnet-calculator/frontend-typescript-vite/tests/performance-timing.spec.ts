@@ -4,10 +4,92 @@
  * Tests that performance metrics are displayed when API lookups are performed.
  */
 
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+
+const HEALTH_RESPONSE = {
+  status: 'ok',
+  service: 'subnet-calculator-api',
+  version: 'test',
+}
+
+const subnetInfoResponse = (network: string, mode: string) => ({
+  network,
+  mode,
+  network_address: network.split('/')[0],
+  broadcast_address: '10.0.0.255',
+  netmask: '255.255.255.0',
+  wildcard_mask: '0.0.0.255',
+  prefix_length: Number.parseInt(network.split('/')[1] || '24', 10),
+  total_addresses: 256,
+  usable_addresses: 254,
+  first_usable_ip: '10.0.0.1',
+  last_usable_ip: '10.0.0.254',
+})
+
+async function mockLookupApis(page: Page) {
+  await page.route('**/api/v1/health', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(HEALTH_RESPONSE),
+    })
+  )
+
+  await page.route('**/api/v1/ipv4/validate', async (route) => {
+    const { address } = route.request().postDataJSON() as { address: string }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        valid: true,
+        type: address.includes('/') ? 'network' : 'address',
+        address,
+        is_ipv4: true,
+        is_ipv6: false,
+      }),
+    })
+  })
+
+  await page.route('**/api/v1/ipv4/check-private', async (route) => {
+    const { address } = route.request().postDataJSON() as { address: string }
+    const isRfc1918 = address.startsWith('10.') || address.startsWith('192.168.') || address.startsWith('172.16.')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        is_rfc1918: isRfc1918,
+        is_rfc6598: false,
+        matched_rfc1918_range: isRfc1918 ? '10.0.0.0/8' : null,
+      }),
+    })
+  })
+
+  await page.route('**/api/v1/ipv4/check-cloudflare', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        is_cloudflare: false,
+        ip_version: 4,
+      }),
+    })
+  )
+
+  await page.route('**/api/v1/ipv4/subnet-info', async (route) => {
+    const { network, mode } = route.request().postDataJSON() as { network: string; mode: string }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(subnetInfoResponse(network, mode)),
+    })
+  })
+}
 
 test.describe('Performance Timing', () => {
   test.beforeEach(async ({ page }) => {
+    await mockLookupApis(page)
+
     // Start from the home page
     await page.goto('/')
 

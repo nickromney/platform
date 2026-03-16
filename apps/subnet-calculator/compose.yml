@@ -187,17 +187,13 @@ services:
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
-      args:
-        - VITE_AUTH_ENABLED=false
-        - VITE_API_URL=http://localhost:8090
     platform: linux/amd64
     image: subnet-calculator-frontend-typescript-vite:latest
     ports:
       - "8003:8080"
     environment:
-      # No authentication (default)
-      - VITE_AUTH_ENABLED=false
-      - VITE_API_URL=http://localhost:8090
+      - AUTH_METHOD=none
+      - API_BASE_URL=http://localhost:8090
     depends_on:
       api-fastapi-container-app:
         condition: service_healthy
@@ -206,20 +202,15 @@ services:
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
-      args:
-        - VITE_AUTH_ENABLED=true
-        - VITE_JWT_USERNAME=demo
-        - VITE_JWT_PASSWORD=password123
-        - VITE_API_URL=http://localhost:8080
     platform: linux/amd64
     image: subnet-calculator-frontend-typescript-vite-jwt:latest
     ports:
       - "3001:8080"
     environment:
-      - VITE_AUTH_ENABLED=true
-      - VITE_JWT_USERNAME=demo
-      - VITE_JWT_PASSWORD=password123
-      - VITE_API_URL=http://localhost:8080
+      - AUTH_METHOD=jwt
+      - JWT_USERNAME=demo
+      - JWT_PASSWORD=password123
+      - API_BASE_URL=http://localhost:8080
     depends_on:
       api-fastapi-azure-function:
         condition: service_healthy
@@ -228,16 +219,13 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        - VITE_API_URL=http://localhost:8090
-        - VITE_AUTH_METHOD=none
     platform: linux/amd64
     image: subnet-calculator-frontend-react:latest
     ports:
       - "8004:8080"
     environment:
-      - VITE_API_URL=http://localhost:8090
-      - VITE_AUTH_METHOD=none
+      - API_BASE_URL=http://localhost:8090
+      - AUTH_METHOD=none
     depends_on:
       api-fastapi-container-app:
         condition: service_healthy
@@ -246,20 +234,15 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        - VITE_API_URL=http://localhost:8080
-        - VITE_AUTH_METHOD=jwt
-        - VITE_JWT_USERNAME=demo
-        - VITE_JWT_PASSWORD=password123
     platform: linux/amd64
     image: subnet-calculator-frontend-react-jwt:latest
     ports:
       - "3002:8080"
     environment:
-      - VITE_API_URL=http://localhost:8080
-      - VITE_AUTH_METHOD=jwt
-      - VITE_JWT_USERNAME=demo
-      - VITE_JWT_PASSWORD=password123
+      - API_BASE_URL=http://localhost:8080
+      - AUTH_METHOD=jwt
+      - JWT_USERNAME=demo
+      - JWT_PASSWORD=password123
     depends_on:
       api-fastapi-azure-function:
         condition: service_healthy
@@ -268,20 +251,17 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        - VITE_API_URL=http://localhost:8080
-        - VITE_AUTH_METHOD=msal
-        # Note: MSAL requires Azure AD app registration
-        # Set these via environment variables or .env file:
-        # - VITE_AZURE_CLIENT_ID=your-client-id
-        # - VITE_AZURE_TENANT_ID=your-tenant-id
     platform: linux/amd64
     image: subnet-calculator-frontend-react-msal:latest
     ports:
       - "3003:8080"
     environment:
-      - VITE_API_URL=http://localhost:8080
-      - VITE_AUTH_METHOD=msal
+      - API_BASE_URL=http://localhost:8080
+      - AUTH_METHOD=msal
+      # Note: MSAL requires Azure AD app registration
+      # Set these via environment variables or .env file:
+      # - AZURE_CLIENT_ID=your-client-id
+      # - AZURE_TENANT_ID=your-tenant-id
     depends_on:
       api-fastapi-azure-function:
         condition: service_healthy
@@ -406,22 +386,16 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        - VITE_API_URL=http://localhost:8301
-        - VITE_AUTH_METHOD=oidc
-        - VITE_OIDC_AUTHORITY=http://localhost:8300/realms/subnet-calculator
-        - VITE_OIDC_CLIENT_ID=frontend-app
-        - VITE_OIDC_REDIRECT_URI=http://localhost:3006
     platform: linux/amd64
     image: subnet-calculator-frontend-react-keycloak:latest
     ports:
       - "3006:8080"
     environment:
-      - VITE_API_URL=http://localhost:8301
-      - VITE_AUTH_METHOD=oidc
-      - VITE_OIDC_AUTHORITY=http://localhost:8300/realms/subnet-calculator
-      - VITE_OIDC_CLIENT_ID=frontend-app
-      - VITE_OIDC_REDIRECT_URI=http://localhost:3006
+      - API_BASE_URL=http://localhost:8301
+      - AUTH_METHOD=oidc
+      - OIDC_AUTHORITY=http://localhost:8300/realms/subnet-calculator
+      - OIDC_CLIENT_ID=frontend-app
+      - OIDC_REDIRECT_URI=http://localhost:3006
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -439,16 +413,6 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        # API calls go directly to APIM simulator on :8302 (proxy mode disabled)
-        VITE_API_URL: http://localhost:8302
-        VITE_API_PROXY_ENABLED: "false"
-        VITE_AUTH_METHOD: "oidc"
-        VITE_OIDC_AUTHORITY: "http://localhost:8300/realms/subnet-calculator"
-        VITE_OIDC_CLIENT_ID: "frontend-app"
-        VITE_OIDC_REDIRECT_URI: "http://localhost:3007"
-        VITE_APIM_SUBSCRIPTION_KEY: ${STACK12_APIM_SUBSCRIPTION_KEY}
-        VITE_OIDC_AUTO_LOGIN: "true"
     platform: linux/amd64
     image: subnet-calculator-frontend-react-protected:latest
     # No ports exposed - only accessible through oauth2-proxy
@@ -456,14 +420,14 @@ services:
       - "8080"
     environment:
       # API calls go directly to APIM simulator on :8302 (proxy mode disabled)
-      VITE_API_URL: http://localhost:8302
-      VITE_API_PROXY_ENABLED: "false"
-      VITE_AUTH_METHOD: "oidc"
-      VITE_OIDC_AUTHORITY: "http://localhost:8300/realms/subnet-calculator"
-      VITE_OIDC_CLIENT_ID: "frontend-app"
-      VITE_OIDC_REDIRECT_URI: "http://localhost:3007"
-      VITE_OIDC_AUTO_LOGIN: "true"
-      VITE_APIM_SUBSCRIPTION_KEY: ${STACK12_APIM_SUBSCRIPTION_KEY}
+      API_BASE_URL: http://localhost:8302
+      API_PROXY_ENABLED: "false"
+      AUTH_METHOD: "oidc"
+      OIDC_AUTHORITY: "http://localhost:8300/realms/subnet-calculator"
+      OIDC_CLIENT_ID: "frontend-app"
+      OIDC_REDIRECT_URI: "http://localhost:3007"
+      OIDC_AUTO_LOGIN: "true"
+      APIM_SUBSCRIPTION_KEY: ${STACK12_APIM_SUBSCRIPTION_KEY}
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -477,33 +441,21 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        # API calls go to APIM simulator on :8302 but through the admin prefix.
-        VITE_API_URL: http://localhost:8302/admin
-        VITE_API_PROXY_ENABLED: "false"
-        VITE_AUTH_METHOD: "oidc"
-        VITE_OIDC_AUTHORITY: "http://localhost:8300/realms/subnet-calculator"
-        VITE_OIDC_CLIENT_ID: "frontend-app"
-        VITE_OIDC_REDIRECT_URI: "http://localhost:3008"
-        VITE_APIM_SUBSCRIPTION_KEY: ${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY}
-        VITE_OIDC_AUTO_LOGIN: "true"
-        VITE_OIDC_PROMPT: "login"
-        VITE_OIDC_FORCE_REAUTH: "true"
     platform: linux/amd64
     image: subnet-calculator-frontend-react-protected-admin:latest
     expose:
       - "8080"
     environment:
-      VITE_API_URL: http://localhost:8302/admin
-      VITE_API_PROXY_ENABLED: "false"
-      VITE_AUTH_METHOD: "oidc"
-      VITE_OIDC_AUTHORITY: "http://localhost:8300/realms/subnet-calculator"
-      VITE_OIDC_CLIENT_ID: "frontend-app"
-      VITE_OIDC_REDIRECT_URI: "http://localhost:3008"
-      VITE_OIDC_AUTO_LOGIN: "true"
-      VITE_APIM_SUBSCRIPTION_KEY: ${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY}
-      VITE_OIDC_PROMPT: "login"
-      VITE_OIDC_FORCE_REAUTH: "true"
+      API_BASE_URL: http://localhost:8302/admin
+      API_PROXY_ENABLED: "false"
+      AUTH_METHOD: "oidc"
+      OIDC_AUTHORITY: "http://localhost:8300/realms/subnet-calculator"
+      OIDC_CLIENT_ID: "frontend-app"
+      OIDC_REDIRECT_URI: "http://localhost:3008"
+      OIDC_AUTO_LOGIN: "true"
+      APIM_SUBSCRIPTION_KEY: ${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY}
+      OIDC_PROMPT: "login"
+      OIDC_FORCE_REAUTH: "true"
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -678,14 +630,14 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-      args:
-        VITE_API_URL: ""
-        VITE_API_PROXY_ENABLED: "true"
-        VITE_AUTH_METHOD: "easyauth"
     platform: linux/amd64
     image: subnet-calculator-frontend-react-easyauth-mock:latest
     expose:
       - "8080"
+    environment:
+      API_BASE_URL: ""
+      API_PROXY_ENABLED: "true"
+      AUTH_METHOD: "easyauth"
 
   easyauth-router:
     image: dhi.io/nginx:1.29.5-debian13

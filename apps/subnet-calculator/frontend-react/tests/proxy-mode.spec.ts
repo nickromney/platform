@@ -9,12 +9,12 @@ test.describe('Proxy runtime configuration', () => {
     }, {
       API_PROXY_ENABLED: 'true',
       API_BASE_URL: 'https://should-not-be-called.test',
-      AUTH_METHOD: 'easyauth',
+      AUTH_METHOD: 'none',
     })
 
     page.on('request', (request) => {
       const url = request.url()
-      if (url.includes('/api/')) {
+      if (request.resourceType() === 'fetch' && url.includes('/api/v1/')) {
         interceptedRequests.push(url)
       }
     })
@@ -23,16 +23,19 @@ test.describe('Proxy runtime configuration', () => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok' }),
+        body: JSON.stringify({ status: 'ok', service: 'proxy-mode', version: 'test' }),
       })
     })
 
     await page.goto('/')
-    await page.waitForRequest((request) => request.url().includes('/api/'), { timeout: 5000 })
+    await page.waitForRequest(
+      (request) => request.resourceType() === 'fetch' && request.url().includes('/api/v1/'),
+      { timeout: 5000 }
+    )
 
     expect(interceptedRequests.length).toBeGreaterThan(0)
     interceptedRequests.forEach((url) => {
-      expect(url.startsWith('http://localhost:5173/api/')).toBeTruthy()
+      expect(new URL(url).pathname.startsWith('/api/')).toBeTruthy()
       expect(url.includes('should-not-be-called.test')).toBeFalsy()
     })
   })

@@ -1,0 +1,4 @@
+services:
+  edge:
+    ports:
+      - "8305:8080"

@@ -480,7 +480,7 @@ uv run pytest -v
 
 # TypeScript frontend
 cd subnet-calculator/frontend-typescript-vite
-npm test
+bun run test
 ```
 
 ### Docker Compose
@@ -497,7 +497,7 @@ cd frontend-html-static
 uv run pytest --base-url=http://localhost:8001 -v
 
 cd frontend-typescript-vite
-BASE_URL=http://localhost:3000 npm test
+BASE_URL=http://localhost:3000 bun run test
 ```
 
 ### Root Makefile

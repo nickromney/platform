@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.7/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -34,14 +34,15 @@
     }
   },
   "files": {
-    "experimentalScannerIgnores": [
-      "node_modules",
-      "dist",
-      "build",
-      ".vite",
-      "coverage",
-      "playwright-report",
-      "test-results"
+    "includes": [
+      "**",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/.vite",
+      "!!**/coverage",
+      "!!**/playwright-report",
+      "!!**/test-results"
     ]
   }
 }

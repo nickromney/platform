@@ -75,7 +75,7 @@ x-ms-client-principal-name: user name
 The SWA CLI **emulates** Entra ID authentication for local testing:
 
 ```bash
-npm run swa -- start stack6-entra
+bun run swa -- start stack6-entra
 # Opens: http://localhost:4282
 ```
 

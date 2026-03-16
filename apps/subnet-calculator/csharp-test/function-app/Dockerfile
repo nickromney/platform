@@ -18,6 +18,8 @@ ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
     WEBSITES_PORT=8080 \
     ASPNETCORE_URLS=http://+:8080
 
-COPY --from=installer-env ["/home/site/wwwroot", "/home/site/wwwroot"]
+COPY --chown=app:app --from=installer-env ["/home/site/wwwroot", "/home/site/wwwroot"]
 
 EXPOSE 8080
+
+USER app

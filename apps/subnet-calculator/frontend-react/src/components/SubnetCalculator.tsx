@@ -488,8 +488,8 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
                       </tr>
                     </thead>
                     <tbody>
-                      {results.timing.apiCalls.map((call, index) => (
-                        <tr key={`${call.call}-${index}`}>
+                      {results.timing.apiCalls.map(call => (
+                        <tr key={`${call.call}-${call.requestTime}-${call.responseTime}`}>
                           <td>{call.call}</td>
                           <td>
                             <strong>{call.duration}ms</strong>

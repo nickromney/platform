@@ -7,7 +7,7 @@ This project uses Azure Static Web Apps CLI to emulate the cloud environment loc
 ### local-stack-04: TypeScript + Container App (No Auth)
 
 ```bash
-npm run swa -- start stack4-no-auth
+bun run swa -- start stack4-no-auth
 ```
 
 Access at: **<http://localhost:4280>**
@@ -21,7 +21,7 @@ Access at: **<http://localhost:4280>**
 ### local-stack-05: TypeScript + Azure Function (JWT Auth)
 
 ```bash
-npm run swa -- start stack5-jwt
+bun run swa -- start stack5-jwt
 ```
 
 Access at: **<http://localhost:4281>**
@@ -50,22 +50,22 @@ cd api-fastapi-container-app
 uv run uvicorn app.main:app --reload --port 8000
 
 # Terminal 2: Start SWA CLI
-npm run swa -- start stack4-no-auth
+bun run swa -- start stack4-no-auth
 
 # Terminal 3: Run tests
 cd frontend-typescript-vite
-npm run test:swa:stack4
+bun run test:swa:stack4
 ```
 
 ### local-stack-05 Tests
 
 ```bash
 # Terminal 1: Start SWA CLI
-npm run swa -- start stack5-jwt
+bun run swa -- start stack5-jwt
 
 # Terminal 2: Run tests
 cd frontend-typescript-vite
-npm run test:swa:stack5
+bun run test:swa:stack5
 ```
 
 ## Configuration

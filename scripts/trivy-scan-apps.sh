@@ -1,0 +1,401 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TRIVY_RUNNER="${SCRIPT_DIR}/trivy-run.sh"
+REPORT_ROOT="${TRIVY_REPORT_ROOT:-${REPO_ROOT}/.run/apps-security/trivy}"
+CLONE_ROOT="${REPORT_ROOT}/gitea-clones"
+TRIVY_IMAGE="${TRIVY_IMAGE:-aquasec/trivy:0.69.3}"
+
+TRIVY_SEVERITY="${TRIVY_SEVERITY:-HIGH,CRITICAL}"
+TRIVY_FS_SCANNERS="${TRIVY_FS_SCANNERS:-vuln,misconfig,secret}"
+TRIVY_IMAGE_SCANNERS="${TRIVY_IMAGE_SCANNERS:-vuln,secret}"
+TRIVY_TIMEOUT="${TRIVY_TIMEOUT:-20m}"
+TRIVY_IGNORE_UNFIXED="${TRIVY_IGNORE_UNFIXED:-1}"
+SCAN_GITEA="${SCAN_GITEA:-0}"
+TRIVY_SKIP_DIRS=(
+  node_modules
+  .venv
+  dist
+  build
+  coverage
+  test-results
+  playwright-report
+)
+
+mode="${1:-all}"
+
+SOURCE_TARGETS=(
+  "apps/sentiment-llm"
+  "apps/subnet-calculator"
+)
+
+# Keep this list aligned with kubernetes/lima/scripts/build-local-workload-images.sh.
+IMAGE_SPECS=(
+  "platform-security-scan/sentiment-api:scan|apps/sentiment-llm/api-sentiment|apps/sentiment-llm/api-sentiment/Dockerfile|"
+  "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment-llm/frontend-react-vite/sentiment-auth-ui|apps/sentiment-llm/frontend-react-vite/sentiment-auth-ui/Dockerfile|"
+  "platform-security-scan/subnetcalc-api-fastapi-container-app:scan|apps/subnet-calculator/api-fastapi-container-app|apps/subnet-calculator/api-fastapi-container-app/Dockerfile|"
+  "platform-security-scan/subnetcalc-apim-simulator:scan|apps/subnet-calculator/apim-simulator|apps/subnet-calculator/apim-simulator/Dockerfile|"
+  "platform-security-scan/subnetcalc-frontend-typescript-vite:scan|apps/subnet-calculator|apps/subnet-calculator/frontend-typescript-vite/Dockerfile|"
+  "platform-security-scan/subnetcalc-frontend-react:scan|apps/subnet-calculator|apps/subnet-calculator/frontend-react/Dockerfile|"
+)
+
+scan_failed=0
+gitea_helper_loaded=0
+CLONED_REPO_PATH=""
+
+log() {
+  printf '%s\n' "$*"
+}
+
+fail() {
+  printf 'trivy-scan-apps: %s\n' "$*" >&2
+  exit 1
+}
+
+is_true() {
+  case "${1}" in
+    1|true|TRUE|yes|YES|y|Y)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_prereqs() {
+  command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
+  command -v git >/dev/null 2>&1 || fail "git not found in PATH"
+  [[ -x "${TRIVY_RUNNER}" ]] || fail "missing Trivy runner at ${TRIVY_RUNNER}"
+
+  if ! command -v trivy >/dev/null 2>&1; then
+    command -v docker >/dev/null 2>&1 || fail "docker is required when trivy is not installed locally"
+    docker info >/dev/null 2>&1 || fail "docker daemon not reachable"
+  fi
+}
+
+load_gitea_helper() {
+  if [[ "${gitea_helper_loaded}" == "1" ]]; then
+    return 0
+  fi
+
+  # shellcheck source=/dev/null
+  source "${REPO_ROOT}/terraform/kubernetes/scripts/gitea-local-access.sh"
+  gitea_helper_loaded=1
+}
+
+cleanup() {
+  if [[ "${gitea_helper_loaded}" == "1" ]]; then
+    gitea_local_access_cleanup || true
+  fi
+}
+trap cleanup EXIT
+
+trivy_common_args() {
+  local scanners="$1"
+  local args=(
+    --quiet
+    --timeout "${TRIVY_TIMEOUT}"
+    --severity "${TRIVY_SEVERITY}"
+    --scanners "${scanners}"
+  )
+
+  if is_true "${TRIVY_IGNORE_UNFIXED}"; then
+    args+=(--ignore-unfixed)
+  fi
+
+  printf '%s\n' "${args[@]}"
+}
+
+report_summary() {
+  local report="$1"
+  jq -r '
+    {
+      vulnerabilities: ([.Results[]?.Vulnerabilities[]?] | length),
+      misconfigurations: ([.Results[]?.Misconfigurations[]?] | length),
+      secrets: ([.Results[]?.Secrets[]?] | length),
+      licenses: ([.Results[]?.Licenses[]?] | length)
+    }
+    | "vulns=\(.vulnerabilities) misconfig=\(.misconfigurations) secrets=\(.secrets) licenses=\(.licenses)"
+  ' "${report}"
+}
+
+to_repo_rel() {
+  local path="$1"
+  case "${path}" in
+    "${REPO_ROOT}/"*)
+      printf '%s\n' "${path#${REPO_ROOT}/}"
+      ;;
+    *)
+      printf '%s\n' "${path}"
+      ;;
+  esac
+}
+
+run_fs_scan() {
+  local label="$1"
+  local target="$2"
+  local report="$3"
+  local runner_report
+  local status=0
+  local args=()
+  local skip_dir
+
+  mkdir -p "$(dirname "${report}")"
+  runner_report="$(to_repo_rel "${report}")"
+  args=(
+    fs
+    --format json
+    --output "${runner_report}"
+    --exit-code 1
+  )
+  while IFS= read -r arg; do
+    args+=("${arg}")
+  done < <(trivy_common_args "${TRIVY_FS_SCANNERS}")
+  for skip_dir in "${TRIVY_SKIP_DIRS[@]}"; do
+    args+=(--skip-dirs "${skip_dir}")
+  done
+  args+=("${target}")
+
+  log "SCAN ${label}"
+  if (cd "${REPO_ROOT}" && "${TRIVY_RUNNER}" "${args[@]}"); then
+    status=0
+  else
+    status=$?
+    scan_failed=1
+  fi
+
+  if [[ -f "${report}" ]]; then
+    log "  ${label}: $(report_summary "${report}")"
+  else
+    log "  ${label}: no report written"
+    scan_failed=1
+  fi
+
+  return "${status}"
+}
+
+docker_build() {
+  if docker buildx version >/dev/null 2>&1; then
+    docker buildx build --load --provenance=false "$@"
+    return
+  fi
+
+  DOCKER_BUILDKIT=1 docker build "$@"
+}
+
+build_image() {
+  local image_ref="$1"
+  local context_dir="$2"
+  local dockerfile="$3"
+  shift 3
+
+  log "BUILD ${image_ref}"
+  (
+    cd "${REPO_ROOT}"
+    docker_build -t "${image_ref}" -f "${dockerfile}" "$@" "${context_dir}"
+  )
+}
+
+run_image_scan() {
+  local image_ref="$1"
+  local report="$2"
+  local runner_report
+  local status=0
+  local args=()
+
+  mkdir -p "$(dirname "${report}")"
+  runner_report="$(to_repo_rel "${report}")"
+  args=(
+    image
+    --format json
+    --output "${runner_report}"
+    --exit-code 1
+  )
+  while IFS= read -r arg; do
+    args+=("${arg}")
+  done < <(trivy_common_args "${TRIVY_IMAGE_SCANNERS}")
+  args+=("${image_ref}")
+
+  log "SCAN ${image_ref}"
+  if (cd "${REPO_ROOT}" && "${TRIVY_RUNNER}" "${args[@]}"); then
+    status=0
+  else
+    status=$?
+    scan_failed=1
+  fi
+
+  if [[ -f "${report}" ]]; then
+    log "  ${image_ref}: $(report_summary "${report}")"
+  else
+    log "  ${image_ref}: no report written"
+    scan_failed=1
+  fi
+
+  return "${status}"
+}
+
+scan_source_tree() {
+  local target
+  for target in "${SOURCE_TARGETS[@]}"; do
+    run_fs_scan "${target}" "${target}" "${REPORT_ROOT}/fs/$(basename "${target}").json" || true
+  done
+}
+
+scan_images() {
+  local spec
+  local image_ref context_dir dockerfile extra_args report label
+  local extra_args_arr
+
+  ensure_prereqs
+  command -v docker >/dev/null 2>&1 || fail "docker not found in PATH"
+  docker info >/dev/null 2>&1 || fail "docker daemon not reachable"
+
+  while IFS= read -r spec; do
+    [[ -n "${spec}" ]] || continue
+    IFS='|' read -r image_ref context_dir dockerfile extra_args <<<"${spec}"
+    label="$(basename "${image_ref%%:*}")"
+    extra_args_arr=""
+    if [[ -n "${extra_args}" ]]; then
+      extra_args_arr="${extra_args}"
+    fi
+    if [[ -n "${extra_args_arr}" ]]; then
+      # shellcheck disable=SC2206
+      build_image "${image_ref}" "${context_dir}" "${dockerfile}" ${extra_args_arr}
+    else
+      build_image "${image_ref}" "${context_dir}" "${dockerfile}"
+    fi
+    report="${REPORT_ROOT}/images/${label}.json"
+    run_image_scan "${image_ref}" "${report}" || true
+  done <<<"$(printf '%s\n' "${IMAGE_SPECS[@]}")"
+}
+
+clone_gitea_repo() {
+  local repo_name="$1"
+  local dest_rel=".run/apps-security/trivy/gitea-clones/${repo_name}"
+  local dest_abs="${REPO_ROOT}/${dest_rel}"
+  local remote_url auth_header
+  local admin_user="${GITEA_ADMIN_USERNAME:-gitea-admin}"
+  local admin_pwd="${GITEA_ADMIN_PWD:-ChangeMe123!}"
+
+  rm -rf "${dest_abs}"
+  mkdir -p "$(dirname "${dest_abs}")"
+
+  remote_url="${GITEA_HTTP_BASE%/}/${GITEA_REPO_OWNER:-platform}/${repo_name}.git"
+  auth_header="Authorization: Basic $(printf '%s' "${admin_user}:${admin_pwd}" | base64)"
+
+  printf 'CLONE %s\n' "${remote_url}" >&2
+  git -c "http.extraHeader=${auth_header}" clone -q --depth 1 "${remote_url}" "${dest_abs}"
+  CLONED_REPO_PATH="${dest_rel}"
+}
+
+gitea_repo_exists() {
+  local repo_name="$1"
+  local admin_user="${GITEA_ADMIN_USERNAME:-gitea-admin}"
+  local admin_pwd="${GITEA_ADMIN_PWD:-ChangeMe123!}"
+  local code
+
+  code="$(
+    curl -s -o /dev/null -w '%{http_code}' \
+      -u "${admin_user}:${admin_pwd}" \
+      "${GITEA_HTTP_BASE%/}/api/v1/repos/${GITEA_REPO_OWNER:-platform}/${repo_name}" || true
+  )"
+  [[ "${code}" == "200" ]]
+}
+
+scan_gitea_repos() {
+  local repo_name
+
+  if ! is_true "${SCAN_GITEA}"; then
+    log "SKIP Gitea repo scan (set SCAN_GITEA=1 or use make -C apps trivy-scan-gitea)"
+    return 0
+  fi
+
+  load_gitea_helper
+  gitea_local_access_setup http
+
+  for repo_name in sentiment-llm subnet-calculator; do
+    if ! gitea_repo_exists "${repo_name}"; then
+      log "SKIP gitea/${repo_name} mirror missing at ${GITEA_REPO_OWNER:-platform}/${repo_name}"
+      continue
+    fi
+    if ! clone_gitea_repo "${repo_name}"; then
+      scan_failed=1
+      continue
+    fi
+    run_fs_scan "gitea/${repo_name}" "${CLONED_REPO_PATH}" "${REPORT_ROOT}/gitea/${repo_name}.json" || true
+  done
+}
+
+print_final_status() {
+  log ""
+  log "Reports: ${REPORT_ROOT}"
+  if [[ "${scan_failed}" -eq 0 ]]; then
+    log "Result: no ${TRIVY_SEVERITY} findings in the scanned targets"
+    return 0
+  fi
+
+  log "Result: findings detected; inspect the JSON reports under ${REPORT_ROOT}"
+  return 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: trivy-scan-apps.sh [prereqs|fs|images|gitea|all]
+
+Environment:
+  SCAN_GITEA=1            Also clone and scan the seeded private app repos from Gitea.
+  TRIVY_SEVERITY=...      Severity filter passed to Trivy (default: HIGH,CRITICAL).
+  TRIVY_IGNORE_UNFIXED=1  Ignore unfixed vulnerabilities (default: enabled).
+EOF
+}
+
+main() {
+  mkdir -p "${REPORT_ROOT}" "${CLONE_ROOT}"
+
+  case "${mode}" in
+    prereqs)
+      ensure_prereqs
+      log "Trivy runner: ${TRIVY_RUNNER}"
+      if command -v trivy >/dev/null 2>&1; then
+        log "Runner mode: local trivy binary"
+      else
+        log "Runner mode: dockerized ${TRIVY_IMAGE}"
+      fi
+      log "Reports: ${REPORT_ROOT}"
+      ;;
+    fs)
+      ensure_prereqs
+      scan_source_tree
+      print_final_status
+      ;;
+    images)
+      ensure_prereqs
+      scan_images
+      print_final_status
+      ;;
+    gitea)
+      ensure_prereqs
+      scan_gitea_repos
+      print_final_status
+      ;;
+    all)
+      ensure_prereqs
+      scan_source_tree
+      scan_images
+      scan_gitea_repos
+      print_final_status
+      ;;
+    -h|--help|help)
+      usage
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

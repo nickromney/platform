@@ -3,24 +3,22 @@
  * @packageDocumentation
  */
 
-// Export all types
-export type {
-  CloudMode,
-  HealthResponse,
-  ValidateResponse,
-  PrivateCheckResponse,
-  CloudflareCheckResponse,
-  SubnetInfoResponse,
-  ApiResults,
-  ApiCallTiming,
-  PerformanceTiming,
-  LookupResult,
-  UserInfo,
-} from './types'
-
 // Export API utilities and interface
 export type { IApiClient } from './api'
-export { isIpv6, getApiPrefix, handleFetchError, parseJsonResponse } from './api'
-
+export { getApiPrefix, handleFetchError, isIpv6, parseJsonResponse } from './api'
 // Export authentication utilities
 export { TokenManager } from './auth'
+// Export all types
+export type {
+  ApiCallTiming,
+  ApiResults,
+  CloudflareCheckResponse,
+  CloudMode,
+  HealthResponse,
+  LookupResult,
+  PerformanceTiming,
+  PrivateCheckResponse,
+  SubnetInfoResponse,
+  UserInfo,
+  ValidateResponse,
+} from './types'

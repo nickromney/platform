@@ -1,53 +1,45 @@
+USE_COMMON_HELP := 1
+MAKE_KNOWN_GOALS := help install dev build preview test lint format type-check docker-build docker-run clean
+MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
+
+include ../../../mk/common.mk
+
 .PHONY: help install dev build preview test lint format type-check docker-build docker-run clean
 
-# Default target
-help:
-	@echo "Available targets:"
-	@echo "  install      - Install dependencies"
-	@echo "  dev          - Start development server"
-	@echo "  build        - Build for production"
-	@echo "  preview      - Preview production build"
-	@echo "  test         - Run Playwright tests"
-	@echo "  lint         - Run Biome linting and formatting"
-	@echo "  format       - Format code with Biome"
-	@echo "  type-check   - Run TypeScript type checking"
-	@echo "  docker-build - Build Docker image"
-	@echo "  docker-run   - Run Docker container"
-	@echo "  clean        - Remove build artifacts"
+##@ Setup
+install: ## Install dependencies
+	@bun install --frozen-lockfile
 
-# Development
-install:
-	npm install
+##@ Run
+dev: ## Start the development server
+	@bun run dev
 
-dev:
-	npm run dev
+build: ## Build for production
+	@bun run build
 
-build:
-	npm run build
+preview: ## Preview the production build
+	@bun run preview
 
-preview:
-	npm run preview
+##@ Quality
+test: ## Run Playwright tests
+	@bun run test
 
-# Testing and Quality
-test:
-	npm run test
+lint: ## Run Biome linting
+	@bun run lint
 
-lint:
-	npm run lint
+format: ## Format code with Biome
+	@bun run format
 
-format:
-	npm run format
+type-check: ## Run TypeScript type checking
+	@bun run type-check
 
-type-check:
-	npm run type-check
+##@ Container
+docker-build: ## Build the Docker image
+	@docker build -t subnet-calculator-react .
 
-# Docker
-docker-build:
-	docker build -t subnet-calculator-react .
+docker-run: ## Run the Docker container
+	@docker run -p 8080:8080 subnet-calculator-react
 
-docker-run:
-	docker run -p 8080:8080 subnet-calculator-react
-
-# Cleanup
-clean:
-	rm -rf node_modules dist .vite coverage playwright-report test-results
+##@ Cleanup
+clean: ## Remove generated artifacts
+	@rm -rf node_modules dist .vite coverage playwright-report test-results

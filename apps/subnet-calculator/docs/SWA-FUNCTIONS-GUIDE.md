@@ -317,7 +317,7 @@ export LOCATION=uksouth
 
 ```bash
 export VITE_API_URL="https://func-subnet-calc-xyz.azurewebsites.net"
-npm run build
+bun run build
 ```
 
 #### Step 3: Deploy Frontend (SWA with empty api_location, no linking)

@@ -431,7 +431,7 @@ az staticwebapp create \
 
 # Build frontend
 cd frontend-typescript-vite
-VITE_API_URL="" npm run build # Empty = use /api route
+VITE_API_URL="" bun run build # Empty = use /api route
 
 # Deploy with managed functions
 DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
@@ -440,7 +440,7 @@ DEPLOYMENT_TOKEN=$(az staticwebapp secrets list \
  --query properties.apiKey -o tsv)
 
 # CRITICAL: api-location is NOT empty (path to your API code)
-npx @azure/static-web-apps-cli deploy \
+bun x @azure/static-web-apps-cli deploy \
  --app-location dist \
  --api-location ../api-fastapi-azure-function \
  --deployment-token "${DEPLOYMENT_TOKEN}" \
@@ -786,7 +786,7 @@ export const API_CONFIG = {
 }
 
 // Build command
-VITE_API_URL="" npm run build
+VITE_API_URL="" bun run build
 ```
 
 **Browser Dev Tools:**
@@ -1718,13 +1718,13 @@ az staticwebapp appsettings set \
 
 # Build frontend
 cd frontend-typescript-vite
-VITE_API_URL="" npm run build
+VITE_API_URL="" bun run build
 
 # Copy auth config
 cp staticwebapp-entraid.config.json dist/
 
 # Deploy both frontend and API
-npx @azure/static-web-apps-cli deploy \
+bun x @azure/static-web-apps-cli deploy \
  --app-location dist \
  --api-location ../api-fastapi-azure-function \
  --deployment-token "${DEPLOYMENT_TOKEN}" \
@@ -1907,7 +1907,7 @@ export TENANT_ID="your-tenant-id"
 
 - Azure CLI: `brew install azure-cli`
 - Azure Functions Core Tools: `brew install azure-functions-core-tools`
-- Azure Static Web Apps CLI: `npm install -g @azure/static-web-apps-cli`
+- Azure Static Web Apps CLI: `bun add -g @azure/static-web-apps-cli`
 
 **Verify:**
 
@@ -1936,7 +1936,7 @@ az account show
 
 ```bash
 cd frontend-typescript-vite
-npm install
+bun install
 ```
 
 **Backend Dependencies:**
@@ -2625,7 +2625,7 @@ az network vnet subnet update \
 ```bash
 # Check build configuration
 # Should have been built with:
-VITE_AUTH_ENABLED=true npm run build
+VITE_AUTH_ENABLED=true bun run build
 
 # Check deployed config
 # In browser console:

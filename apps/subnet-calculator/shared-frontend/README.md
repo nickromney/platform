@@ -43,16 +43,16 @@ try {
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Build
-npm run build
+bun run build
 
 # Lint
-npm run lint
+bun run lint
 
 # Test with coverage
-npm run test:coverage
+bun run test:coverage
 ```
 
 ## Type Definitions
@@ -75,8 +75,8 @@ Supported cloud provider modes: `Standard` | `AWS` | `Azure` | `OCI`
 Tests are written with Vitest and achieve 100% coverage of runtime code.
 
 ```bash
-npm test
-npm run test:coverage
+bun run test
+bun run test:coverage
 ```
 
 ## Linting
@@ -84,8 +84,8 @@ npm run test:coverage
 Biome is configured for fast, consistent linting:
 
 ```bash
-npm run lint        # Check and fix issues
-npm run lint:check  # Check only (CI mode)
+bun run lint        # Check and fix issues
+bun run lint:check  # Check only (CI mode)
 ```
 
 ## Build Output

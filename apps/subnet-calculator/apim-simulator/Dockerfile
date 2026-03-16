@@ -1,27 +1,31 @@
-FROM python:3.13-slim AS base
+FROM dhi.io/python:3.13-debian13-dev AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Build deps for cryptography (pyjwt[crypto])
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libffi-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
 
-COPY pyproject.toml ./pyproject.toml
+COPY pyproject.toml uv.lock ./
 
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir .
+RUN uv sync --frozen --no-cache --no-dev --no-install-project
 
-COPY app ./app
-COPY config ./config
+FROM dhi.io/python:3.13-debian13
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:/opt/python/bin:$PATH" \
+    PORT=8000
+
+WORKDIR /app
+
+COPY --chown=nonroot:nonroot --from=builder /app/.venv /app/.venv
+COPY --chown=nonroot:nonroot app ./app
+COPY --chown=nonroot:nonroot config ./config
 
 EXPOSE 8000
 
-ENV PORT=8000
+USER nonroot
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

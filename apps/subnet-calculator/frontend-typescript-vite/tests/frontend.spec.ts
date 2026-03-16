@@ -11,7 +11,7 @@
  * When auth enabled (VITE_AUTH_ENABLED=true), login endpoint is mocked.
  */
 
-import { type Page, expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 
 /**
  * Mock JWT login endpoint if authentication is enabled
