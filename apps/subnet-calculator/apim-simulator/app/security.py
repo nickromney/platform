@@ -228,9 +228,9 @@ def authenticate_request(
         issuer, audience = _default_issuer_audience(config)
         claims = {
             "sub": "anon-demo",
-            "email": "demo@example.com",
+            "email": "demo@dev.test",
             "name": "Demo User",
-            "preferred_username": "demo",
+            "preferred_username": "demo@dev.test",
             "iss": issuer,
             "aud": audience,
         }

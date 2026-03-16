@@ -39,11 +39,13 @@ That routing is documented in:
 - [`subnetcalc-l7-dev.yaml`](../../../terraform/kubernetes/cluster-policies/cilium/dev/subnetcalc-l7-dev.yaml)
 - [`apim/all.yaml`](../../../terraform/kubernetes/apps/apim/all.yaml)
 
-## Sentiment LLM
+## Sentiment
 
-The `sentiment` demo has the same frontend/router split, but the backend also calls an LLM gateway.
+The `sentiment` demo has the same frontend/router split, but unlike
+`subnetcalc` it does not add an APIM hop. The router sends browser routes to
+the UI and `/api/*` directly to `sentiment-api`.
 
-With SSO enabled at stage `900`, the current shipped kind-stage path looks like this:
+With SSO enabled at stage `900`, the shipped kind-stage path looks like this:
 
 ```mermaid
 flowchart LR
@@ -51,27 +53,24 @@ flowchart LR
     sso --> router["sentiment-router"]
     router --> fe["sentiment-auth-ui"]
     router --> api["sentiment-api"]
-    api --> broker["llm-gateway"]
-    broker --> host["host.docker.internal"]
-    host --> ext["Host-side LLM service"]
+    api -. "default in-process inference" .-> sst["SST classifier"]
 ```
 
 Without SSO, remove the `oauth2-proxy` hop and start at `sentiment-router`.
 
-For the shipped kind stages, the key point is that `llm-gateway` is host-backed, not an in-cluster model service. The stage tfvars set:
+For the shipped kind stages, the key points are:
 
-- `llm_gateway_mode = "direct"`
-- `llm_gateway_external_name = "host.docker.internal"`
+- `sentiment-router` talks to `sentiment-auth-ui` and `sentiment-api`, not to an APIM simulator
+- `sentiment-api` serves the default SST classifier in-process
+- the checked-in kind stage files set `llm_gateway_mode = "disabled"`
+- the shared workload config sets `SENTIMENT_BACKEND_MODE = "sst"`
 
-That means the sentiment backend expects a host-side LLM endpoint to exist. In practice that usually means:
+That means the shipped kind path does not require a host-side model endpoint
+for sentiment to work.
 
-- Docker Desktop model runner on `127.0.0.1:12434` in the current local setup
-- LM Studio running on the host with an OpenAI-compatible API
-- a host-side gateway in front of Apple MLX or another local model runtime
+## Legacy LLM Modes
 
-## Alternative In-Cluster LLM Mode
-
-The repo also contains an in-cluster LiteLLM path. That shape looks like this:
+The repo still keeps two opt-in LLM-backed paths for teams that want them:
 
 ```mermaid
 flowchart LR
@@ -80,9 +79,15 @@ flowchart LR
     litellm --> llama["llama.cpp"]
 ```
 
-That mode exists in:
+Those modes exist in:
 
 - [`llm-litellm.yaml`](../../../terraform/kubernetes/apps/workloads/base/llm-litellm.yaml)
 - [`variables.tf`](../../../terraform/kubernetes/variables.tf)
 
-But it is not the default selected by the checked-in kind stage files for stages `700`, `800`, and `900`.
+Use:
+
+- `llm_gateway_mode = "direct"` for the legacy host-backed `llm-gateway` path
+- `llm_gateway_mode = "litellm"` for the legacy in-cluster `LiteLLM -> llama.cpp` path
+
+Neither mode is the default selected by the checked-in kind stage files for
+stages `700`, `800`, and `900`.

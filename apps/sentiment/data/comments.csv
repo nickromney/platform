@@ -1,0 +1,8 @@
+timestamp,text,label,confidence,latency_ms
+"2026-03-16T11:59:22.294Z","I love how small and fast this is.","positive","1","8235"
+"2026-03-16T13:25:27.759Z","I absolutely love this. Great work and fantastic experience.","positive","1","17775"
+"2026-03-16T13:28:17.339Z","I love how small and fast this is.","positive","1","2481"
+"2026-03-16T13:28:21.309Z","Some parts are fine, but overall I am disappointed and frustrated.","neutral","0.65","162"
+"2026-03-16T13:28:26.826Z","I absolutely love this. Great work and fantastic experience.","positive","1","106"
+"2026-03-16T13:28:37.053Z","This is terrible. I want a refund and I will not use this again.","negative","1","753"
+"2026-03-16T13:32:22.908Z","I love how small and fast this is.","positive","1","354"

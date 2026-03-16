@@ -33,8 +33,8 @@ trivy-scan-all: ## Scan local apps/, workload images, and the optional in-cluste
 ##@ Smoke
 compose-smoke: compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for both apps
 
-compose-smoke-sentiment: ## Run the lightweight sentiment-llm compose smoke check
-	@./sentiment-llm/tests/compose-smoke.sh
+compose-smoke-sentiment: ## Run the lightweight sentiment compose smoke check
+	@./sentiment/tests/compose-smoke.sh
 
 compose-smoke-subnetcalc: ## Run the lightweight subnet-calculator compose smoke check
 	@./subnet-calculator/tests/compose-smoke.sh

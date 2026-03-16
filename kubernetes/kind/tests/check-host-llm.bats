@@ -10,9 +10,9 @@ setup() {
 }
 
 @test "skips the host-side LLM probe when the selected mode is not direct" {
-  tfvars="${BATS_TEST_TMPDIR}/litellm.tfvars"
+  tfvars="${BATS_TEST_TMPDIR}/disabled.tfvars"
   cat >"${tfvars}" <<'EOF'
-llm_gateway_mode = "litellm"
+llm_gateway_mode = "disabled"
 EOF
 
   cat >"${TEST_BIN}/curl" <<'EOF'

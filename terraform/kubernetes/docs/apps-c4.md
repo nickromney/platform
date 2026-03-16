@@ -7,7 +7,7 @@ showing the intended design before traffic is observed.
 Scope:
 
 - stage `900` style flow, with SSO enabled
-- current shipped kind default for sentiment: direct host-backed LLM mode
+- current shipped kind default for sentiment: in-process SST mode
 - both `dev` and `uat`, with the key intentional split called out explicitly
 
 ## Reading Guide
@@ -51,10 +51,11 @@ Key intent:
 Key intent:
 
 - the router splits browser traffic between UI and API
-- in the shipped kind flow, `sentiment-api` is effectively talking to a
-  host-backed endpoint via `llm-gateway`
-- the repo still contains a fully in-cluster LiteLLM plus `llama.cpp` mode,
-  but that is not the default selected by the checked-in kind stages
+- the shipped default keeps sentiment classification inside `sentiment-api`
+  with an in-process SST model
+- the repo still contains legacy direct host-backed and in-cluster LiteLLM
+  plus `llama.cpp` modes, but those are not the default selected by the
+  checked-in kind stages
 
 ## UML State Views
 
@@ -81,11 +82,11 @@ What this view is trying to make obvious:
 
 What this view is trying to make obvious:
 
-- the sentiment system has one browser entry flow but two backend inference
+- the sentiment system has one browser entry flow but three backend execution
   modes
 - mode selection happens at the API/backend stage, not at the router
-- the direct host-backed LLM path and the in-cluster LiteLLM path are mutually
-  exclusive runtime branches, not an undifferentiated dependency graph
+- the shipped SST path and the two legacy LLM paths are mutually exclusive
+  runtime branches, not an undifferentiated dependency graph
 
 ## Dynamic Views
 
@@ -123,17 +124,19 @@ Control points:
   control entry into `sentiment`.
 - `sentiment-router-http-routes` plus `sentiment-backend-ingress` constrain the
   router to API hop.
-- `allow-sentiment-api-llm-egress` constrains the direct-mode LLM path.
+- the shipped default keeps inference inside `sentiment-api`; the only steady
+  state network egress from the request path is trace export.
 
-### Sentiment Alternative LLM Path
+### Sentiment Legacy LLM Path
 
-[![Sentiment alternative LLM path dynamic diagram](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.svg)](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.mmd)
+[![Sentiment legacy LLM path dynamic diagram](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.svg)](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.mmd)
 
 Control points:
 
-- `sentiment-api-egress` allows `sentiment-api` to reach `litellm`.
-- `sentiment-litellm-ingress-egress` and `sentiment-llama-ingress` constrain
-  the in-cluster LLM path.
+- `allow-sentiment-api-llm-egress` constrains the legacy direct host-backed
+  path when that mode is selected.
+- `sentiment-api-egress`, `sentiment-litellm-ingress-egress`, and
+  `sentiment-llama-ingress` constrain the legacy in-cluster LLM path.
 
 ## Journey Views
 
@@ -166,9 +169,11 @@ Control points:
 | `oauth2-proxy -> sentiment-router` | Authenticated reverse proxy | `sso-hardened` plus `sentiment-router-ingress` | Mirrors the subnetcalc entry path. |
 | `sentiment-router -> sentiment-auth-ui` | Router UI path | `sentiment-frontend-ingress` | Frontend is isolated behind the router. |
 | `sentiment-router -> sentiment-api` | Router API path | `sentiment-router-http-routes` plus `sentiment-backend-ingress` | UI and API stay separate. |
-| `sentiment-api -> llm-gateway -> host LLM` | Direct mode LLM call | `allow-sentiment-api-llm-egress` | The Service is `ExternalName`; the policy is enforced at the API pod. |
-| `sentiment-api -> litellm -> llama.cpp` | In-cluster LLM mode | `sentiment-api-egress`, `sentiment-litellm-ingress-egress`, and `sentiment-llama-ingress` | Present in repo, but not the checked-in default kind mode. |
-| `sentiment-api` and `subnetcalc-api` -> `otel-collector` | Trace export | `sentiment-api-egress` and `subnetcalc-api-http-routes` | Observability is part of the application path, not an afterthought. |
+| `sentiment-api -> in-process SST classifier` | Default sentiment inference | `SENTIMENT_BACKEND_MODE=sst` in the workload config | No inference network hop in the shipped default. |
+| `sentiment-api -> llm-gateway -> host LLM` | Legacy direct mode LLM call | `allow-sentiment-api-llm-egress` | The Service is `ExternalName`; this is no longer the checked-in default kind mode. |
+| `sentiment-api -> litellm -> llama.cpp` | Legacy in-cluster LLM mode | `sentiment-api-egress`, `sentiment-litellm-ingress-egress`, and `sentiment-llama-ingress` | Present in repo, but not the checked-in default kind mode. |
+| `sentiment-api -> otel-collector` | Trace export | `sentiment-api-egress` | Observability remains part of the application path even when inference stays local to the pod. |
+| `subnetcalc-api -> otel-collector` | Trace export | `subnetcalc-api-http-routes` | Observability is part of the application path, not an afterthought. |
 
 ## Policy Layering Cheatsheet
 

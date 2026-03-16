@@ -12,7 +12,7 @@ Top-level `kustomization.yaml` composes `shared`, `dev`, `uat`, and `sit`.
 See:
 
 - [../AUDIT.md](../AUDIT.md) for the current policy-by-policy audit and posture summary.
-- [../COMPOSITION.md](../COMPOSITION.md) for the rendered composition of `shared/`, `dev/`, and `uat/`.
+- [../COMPOSITION.md](../COMPOSITION.md) for the rendered composition of `shared/`, `dev/`, `uat/`, and `sit`.
 - [../../docs/apps-c4.md](../../docs/apps-c4.md) for the Mermaid native C4 application and policy control model.
 
 ## Design notes

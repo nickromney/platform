@@ -13,7 +13,9 @@ RUN_DIR := $(MAKEFILE_DIR).run
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
+CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
 CHECK_HOST_PORTS := $(SCRIPTS_DIR)/check-slicer-host-ports.sh
+HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 START_DAEMON := $(SCRIPTS_DIR)/start-daemon.sh
 STOP_DAEMON := $(SCRIPTS_DIR)/stop-daemon.sh
 ENSURE_SBOX_VM := $(SCRIPTS_DIR)/ensure-sbox-vm.sh
@@ -34,11 +36,12 @@ SLICER_SOCKET ?= $(SLICER_SYSTEM_SOCKET)
 SLICER_CONFIG ?= $(HOME)/slicer-mac/slicer-mac.yaml
 SLICER_SYSTEM_SOCKET_WAIT_SECONDS ?= 240
 SLICER_NETWORK_PROFILE ?= cilium
-SLICER_VM_GROUP ?= sbox
+SLICER_VM_GROUP ?= slicer
 SLICER_VM_NAME ?= $(SLICER_VM_GROUP)-1
 SLICER_VM_USER ?= ubuntu
 SLICER_VM_READY_TIMEOUT ?= 300s
-SLICER_GATEWAY_HTTPS_GUEST_PORT ?= 443
+SLICER_GATEWAY_HTTPS_GUEST_PORT ?= 30070
+SLICER_GATEWAY_HTTPS_FORWARD_PORT ?= 8443
 SLICER_VM_CPUS ?=
 SLICER_VM_RAM_GB ?=
 SLICER_SWAP_SIZE ?= 4G
@@ -69,6 +72,7 @@ EXPECT_NAMESPACE_SSO ?= 0
 EXPECT_NAMESPACE_OBSERVABILITY ?= 0
 EXPECT_NAMESPACE_PLATFORM_GATEWAY ?= 0
 FORWARD_PID_FILE ?= $(RUN_DIR)/slicer-host-forwards.pid
+SLICER_CHECK_LIMA_INSTANCE_PREFIX ?= k3s-node
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
@@ -78,7 +82,7 @@ STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
 
 include ../../mk/common.mk
@@ -159,6 +163,7 @@ help:
 	@echo "  make check-health"
 	@echo "  make check-host-ports"
 	@echo "  make check-kind-stopped"
+	@echo "  make check-lima-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-security"
 	@echo "  make check-sso"
@@ -253,6 +258,15 @@ check-stage-monotonicity:
 check-kind-stopped:
 	@"$(CHECK_KIND_STOPPED)"
 
+.PHONY: check-lima-stopped
+check-lima-stopped:
+	@LIMA_INSTANCE_PREFIX="$(SLICER_CHECK_LIMA_INSTANCE_PREFIX)" "$(CHECK_LIMA_STOPPED)"
+
+.PHONY: check-conflicting-clusters-stopped
+check-conflicting-clusters-stopped:
+	@$(MAKE) check-kind-stopped
+	@$(MAKE) check-lima-stopped
+
 .PHONY: prepare-state
 prepare-state:
 	@mkdir -p "$(dir $(STATE_FILE))"
@@ -287,8 +301,8 @@ check-host-ports:
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
-	required=(curl docker git jq kubectl slicer slicer-mac tofu terragrunt); \
-	optional=(k3sup k3sup-pro helm bats kubectx mkcert node npm shellcheck); \
+	required=(curl docker git jq kubectl slicer slicer-mac ssh-keygen tofu terragrunt); \
+	optional=(helm bats kubectx mkcert node npm shellcheck); \
 	missing_required=(); \
 	check_bin() { \
 		local bin="$$1"; local required_flag="$$2"; \
@@ -305,6 +319,19 @@ prereqs:
 	}; \
 	for b in "$${required[@]}"; do check_bin "$$b" 1; done; \
 	for b in "$${optional[@]}"; do check_bin "$$b" 0; done; \
+	bootstrap_client=""; \
+	for candidate in "$${K3SUP_PRO_BIN:-}" "$$(command -v k3sup-pro 2>/dev/null || true)" "$${K3SUP_BIN:-}" "$$(command -v k3sup 2>/dev/null || true)" "$$HOME/.arkade/bin/k3sup"; do \
+		[ -n "$$candidate" ] || continue; \
+		[ -x "$$candidate" ] || continue; \
+		bootstrap_client="$$candidate"; \
+		break; \
+	done; \
+	if [ -n "$$bootstrap_client" ]; then \
+		echo "OK   bootstrap client: $$(basename "$$bootstrap_client")"; \
+	else \
+		echo "FAIL bootstrap client (neither k3sup-pro nor k3sup found)"; \
+		missing_required+=("k3sup-pro|k3sup"); \
+	fi; \
 	if [ $${#missing_required[@]} -gt 0 ]; then \
 		echo ""; \
 		echo "Missing required tools: $${missing_required[*]}"; \
@@ -318,7 +345,7 @@ prereqs:
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
 	echo ""; \
-	$(MAKE) check-kind-stopped; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
 	echo "Slicer daemon:"; \
 	SLICER_URL="$(SLICER_SYSTEM_SOCKET)" slicer info || exit 1; \
@@ -346,6 +373,7 @@ daemon-down:
 
 .PHONY: slicer-vm-up
 slicer-vm-up:
+	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) daemon-up
 	@socket="$$($(RESOLVE_SOCKET))"; \
 	SLICER_URL="$$socket" \
@@ -362,6 +390,7 @@ bootstrap-k3s:
 	SLICER_URL="$$socket" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
 	SLICER_VM_USER="$(SLICER_VM_USER)" \
+	RUN_DIR="$(RUN_DIR)" \
 	K3SUP_CONTEXT="$(K3SUP_CONTEXT)" \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 	DEFAULT_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" \
@@ -378,11 +407,18 @@ bootstrap-k3s:
 ensure-host-forwards:
 	@set -euo pipefail; \
 	socket="$$($(RESOLVE_SOCKET))"; \
+	proxy_name="slicer-platform-gateway-443"; \
+	proxy_image="platform/slicer-gateway-proxy:dev"; \
+	llm_proxy_name="slicer-platform-llm-12434"; \
+	llm_proxy_image="platform/slicer-llm-proxy:dev"; \
 	tfvar_files=(); \
 	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
+	gateway_forward_port="$(SLICER_GATEWAY_HTTPS_FORWARD_PORT)"; \
+	llm_gateway_mode="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode direct "$${tfvar_files[@]}" )"; \
 	SLICER_URL="$$socket" \
 	RUN_DIR="$(RUN_DIR)" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
@@ -394,17 +430,53 @@ ensure-host-forwards:
 	SIGNOZ_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" signoz_ui_node_port 30301 "$${tfvar_files[@]}" )" \
 	GRAFANA_LOCAL_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" grafana_ui_host_port 3302 "$${tfvar_files[@]}" )" \
 	GRAFANA_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" grafana_ui_node_port 30302 "$${tfvar_files[@]}" )" \
-	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 8443 "$${tfvar_files[@]}" )" \
-	GATEWAY_HTTPS_GUEST_PORT="$(SLICER_GATEWAY_HTTPS_GUEST_PORT)" \
-	"$(HOST_FORWARDS)" ensure
+	GATEWAY_HTTPS_FORWARD_PORT="$$gateway_forward_port" \
+	GATEWAY_HTTPS_GUEST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_node_port $(SLICER_GATEWAY_HTTPS_GUEST_PORT) "$${tfvar_files[@]}" )" \
+	"$(HOST_FORWARDS)" ensure; \
+	if [ "$$gateway_public_port" != "$$gateway_forward_port" ]; then \
+		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" ensure; \
+	else \
+		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
+	fi; \
+	if [ "$$llm_gateway_mode" = "direct" ]; then \
+		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" ensure; \
+	else \
+		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
+	fi
 
 stop-host-forwards:
-	@socket="$$($(RESOLVE_SOCKET))"; \
+	@set -euo pipefail; \
+	socket="$$($(RESOLVE_SOCKET))"; \
+	proxy_name="slicer-platform-gateway-443"; \
+	proxy_image="platform/slicer-gateway-proxy:dev"; \
+	llm_proxy_name="slicer-platform-llm-12434"; \
+	llm_proxy_image="platform/slicer-llm-proxy:dev"; \
+	CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
+	CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
 	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(HOST_FORWARDS)" stop
 
 host-forward-status:
-	@socket="$$($(RESOLVE_SOCKET))"; \
-	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(HOST_FORWARDS)" status
+	@set -euo pipefail; \
+	socket="$$($(RESOLVE_SOCKET))"; \
+	proxy_name="slicer-platform-gateway-443"; \
+	proxy_image="platform/slicer-gateway-proxy:dev"; \
+	llm_proxy_name="slicer-platform-llm-12434"; \
+	llm_proxy_image="platform/slicer-llm-proxy:dev"; \
+	tfvar_files=(); \
+	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
+	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
+	gateway_forward_port="$(SLICER_GATEWAY_HTTPS_FORWARD_PORT)"; \
+	llm_gateway_mode="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode direct "$${tfvar_files[@]}" )"; \
+	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" GATEWAY_HTTPS_FORWARD_PORT="$$gateway_forward_port" "$(HOST_FORWARDS)" status; \
+	if [ "$$gateway_public_port" != "$$gateway_forward_port" ]; then \
+		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" status; \
+	fi; \
+	if [ "$$llm_gateway_mode" = "direct" ]; then \
+		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" status; \
+	fi
 
 .PHONY: ensure-image-cache
 ensure-image-cache:
@@ -452,8 +524,7 @@ status:
 	echo "Build workload images: $(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)"; \
 	echo ""; \
 	echo "=== Host forwards ==="; \
-	socket="$$($(RESOLVE_SOCKET))"; \
-	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(HOST_FORWARDS)" status || true
+	$(MAKE) host-forward-status || true
 
 .PHONY: stop-slicer
 stop-slicer:
@@ -486,7 +557,8 @@ stop-slicer:
 	fi; \
 	echo "Cleaning any stale repo-managed slicer daemon state (best-effort)..."; \
 	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
-	echo "OK   stale repo-managed daemon state cleaned"
+	echo "OK   stale repo-managed daemon state cleaned"; \
+	$(MAKE) check-conflicting-clusters-stopped
 
 .PHONY: stop
 stop:
@@ -510,7 +582,7 @@ configure-k3s-apiserver-oidc:
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	SLICER_URL="$$socket" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
-	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 8443 "$${tfvar_files[@]}" )" \
+	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	"$(CONFIGURE_K3S_APISERVER_OIDC)"
 
@@ -531,6 +603,7 @@ plan: workflow-validate
 	stage_num=$$((10#$(STAGE))); \
 		if [ "$$stage_num" -eq 100 ]; then \
 			echo "Stage 100 plan:"; \
+			echo "  - ensure Kind and Lima are stopped"; \
 			echo "  - preflight target host ports"; \
 			echo "  - require the on-device slicer-mac daemon at $(SLICER_SYSTEM_SOCKET)"; \
 			echo "  - ensure $(SLICER_VM_NAME) exists in host group $(SLICER_VM_GROUP)"; \
@@ -540,6 +613,7 @@ plan: workflow-validate
 			$(MAKE) status || true; \
 			exit 0; \
 		fi; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable. Run: make 100 apply"; \
@@ -605,6 +679,7 @@ apply: workflow-validate
 			$(MAKE) check-kubeconfig; \
 			exit 0; \
 		fi; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \

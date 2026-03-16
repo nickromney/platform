@@ -46,7 +46,7 @@ If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's 
 
 - expected binaries are on `PATH`
 - Docker Desktop is reachable through `docker info`
-- the host-side LLM endpoint is reachable when the selected stage uses `llm_gateway_mode = "direct"`
+- the host-side LLM endpoint is reachable when the selected stage opts into legacy `llm_gateway_mode = "direct"`
 - versions for the main tools can be queried
 - kubeconfig files and contexts look sane
 
@@ -56,20 +56,25 @@ Run it from this directory with:
 make prereqs
 ```
 
-## Extra Requirement For The Sentiment Demo
+## Optional Legacy LLM Requirement For The Sentiment Demo
 
 From stage `700` onward, the shipped kind stages use:
 
-- `llm_gateway_mode = "direct"`
-- `llm_gateway_external_name = "host.docker.internal"`
+- `llm_gateway_mode = "disabled"`
 
-That means the sentiment demo expects a host-side LLM endpoint to be reachable from Docker Desktop via `host.docker.internal`.
+That means the default sentiment demo path does not require a host-side LLM
+endpoint. The backend runs SST in-process inside `sentiment-api`.
 
-`make prereqs` now checks that endpoint explicitly for the shipped full-stack kind path and will report what it finds on `127.0.0.1:12434` when `llm_gateway_mode = "direct"`. On this machine, that check currently identifies a Docker Desktop model runner endpoint.
+`make prereqs` only checks `127.0.0.1:12434` when you opt into
+`llm_gateway_mode = "direct"`. That legacy direct mode still expects a
+host-side endpoint to be reachable from Docker Desktop via
+`host.docker.internal`.
 
 In practice, that means you need one of:
 
 - LM Studio exposing an OpenAI-compatible endpoint on the host
 - your own host-side gateway that fronts Apple MLX or another local model runtime with an OpenAI-compatible API
 
-The current kind stages do not default to the in-cluster LiteLLM plus `llama.cpp` path. That mode exists in the repo, but it is not what the `700`, `800`, and `900` stage tfvars select.
+The repo also keeps a legacy in-cluster `LiteLLM + llama.cpp` mode behind
+`llm_gateway_mode = "litellm"`, but that is not what the `700`, `800`, and
+`900` stage tfvars select.

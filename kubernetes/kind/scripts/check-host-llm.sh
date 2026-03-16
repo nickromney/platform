@@ -94,7 +94,7 @@ main() {
   command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
 
   local mode host probe_host port body_file code description
-  mode="$(tfvar_value llm_gateway_mode litellm)"
+  mode="$(tfvar_value llm_gateway_mode disabled)"
   host="$(tfvar_value llm_gateway_external_name host.docker.internal)"
   port="${LLM_HOST_PORT:-12434}"
 

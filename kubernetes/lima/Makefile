@@ -12,6 +12,7 @@ MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
+CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -39,6 +40,8 @@ PLATFORM_LOCAL_IMAGE_CACHE_MODE ?= auto
 PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE ?= auto
 GITEA_REGISTRY_HOST ?= localhost:30090
 GITEA_REGISTRY_SCHEME ?= http
+LIMA_CHECK_SLICER_VM_NAME ?= slicer-1
+LIMA_CHECK_SLICER_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
 WORKLOAD_IMAGE_NAMESPACE ?= platform
 WORKLOAD_IMAGE_TAG ?= latest
 EXPECT_SENTIMENT_REPO ?= 0
@@ -55,7 +58,7 @@ STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kubeconfig check-kind-stopped prereqs lima-vms-up bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped prereqs lima-vms-up bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
 
 include ../../mk/common.mk
@@ -126,6 +129,7 @@ help:
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
 	@echo "  make check-kind-stopped"
+	@echo "  make check-slicer-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-security"
 	@echo "  make check-sso"
@@ -229,6 +233,15 @@ check-kubeconfig:
 check-kind-stopped:
 	@"$(CHECK_KIND_STOPPED)"
 
+.PHONY: check-slicer-stopped
+check-slicer-stopped:
+	@SLICER_URL="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(LIMA_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)"
+
+.PHONY: check-conflicting-clusters-stopped
+check-conflicting-clusters-stopped:
+	@$(MAKE) check-kind-stopped
+	@$(MAKE) check-slicer-stopped
+
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
@@ -263,7 +276,7 @@ prereqs:
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
 	echo ""; \
-	$(MAKE) check-kind-stopped; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \
@@ -280,7 +293,7 @@ prereqs:
 
 .PHONY: lima-vms-up
 lima-vms-up:
-	@$(MAKE) check-kind-stopped
+	@$(MAKE) check-conflicting-clusters-stopped
 	@LIMA_INSTANCE_PREFIX="$(LIMA_INSTANCE_PREFIX)" \
 	DESIRED_NODES="$(DESIRED_NODES)" \
 	LIMA_CONFIG="$(LIMA_CONFIG)" \
@@ -382,7 +395,8 @@ stop-lima:
 		echo "No running Lima VMs matching $(LIMA_INSTANCE_PREFIX)-*."; \
 	else \
 		echo "Stopped $$stopped Lima VM(s)."; \
-	fi
+	fi; \
+	$(MAKE) check-conflicting-clusters-stopped
 
 .PHONY: stop
 stop:
@@ -390,7 +404,7 @@ stop:
 
 .PHONY: ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status
 ensure-host-gateway-proxy:
-	@$(MAKE) check-kind-stopped
+	@$(MAKE) check-conflicting-clusters-stopped
 	@"$(HOST_GATEWAY_PROXY)" ensure
 	@CONTAINER_NAME="limavm-platform-llm-12434" LISTEN_PORT="12434" UPSTREAM_HOST="host.docker.internal" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" ensure
 
@@ -425,14 +439,14 @@ plan: workflow-validate
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -eq 100 ]; then \
 		echo "Stage 100 plan:"; \
-		echo "  - ensure kind-local is stopped"; \
+		echo "  - ensure Kind and Slicer are stopped"; \
 		echo "  - ensure $(DESIRED_NODES) Lima VM(s) named $(LIMA_INSTANCE_PREFIX)-* are running"; \
 		echo "  - bootstrap or refresh the $(K3SUP_CONTEXT) kubeconfig at $(KUBECONFIG_PATH)"; \
 		echo ""; \
 		$(MAKE) status || true; \
 		exit 0; \
 	fi; \
-	$(MAKE) check-kind-stopped; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG="$(KUBECONFIG_PATH)" kubectl get nodes >/dev/null 2>&1; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable. Run: make 100 apply"; \
@@ -470,13 +484,13 @@ apply: workflow-validate
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -eq 100 ]; then \
 		$(MAKE) prereqs; \
-		$(MAKE) check-kind-stopped; \
+		$(MAKE) check-conflicting-clusters-stopped; \
 		$(MAKE) lima-vms-up; \
 		$(MAKE) bootstrap-k3s; \
 		$(MAKE) check-kubeconfig; \
 		exit 0; \
 	fi; \
-	$(MAKE) check-kind-stopped; \
+	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG="$(KUBECONFIG_PATH)" kubectl get nodes >/dev/null 2>&1; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \

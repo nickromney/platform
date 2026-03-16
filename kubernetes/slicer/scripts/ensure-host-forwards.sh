@@ -9,7 +9,7 @@ warn() { echo "WARN $*" >&2; }
 : "${SLICER_URL:?SLICER_URL is required}"
 
 COMMAND="${1:-ensure}"
-SLICER_VM_NAME="${SLICER_VM_NAME:-sbox-1}"
+SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 FORWARD_PID_FILE="${FORWARD_PID_FILE:-${RUN_DIR}/slicer-host-forwards.pid}"
 FORWARD_LOG_FILE="${FORWARD_LOG_FILE:-${RUN_DIR}/slicer-host-forwards.log}"
 ARGOCD_NODE_PORT="${ARGOCD_NODE_PORT:-30080}"
@@ -20,7 +20,7 @@ SIGNOZ_LOCAL_PORT="${SIGNOZ_LOCAL_PORT:-3301}"
 SIGNOZ_NODE_PORT="${SIGNOZ_NODE_PORT:-30301}"
 GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3302}"
 GRAFANA_NODE_PORT="${GRAFANA_NODE_PORT:-30302}"
-GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-8443}"
+GATEWAY_HTTPS_FORWARD_PORT="${GATEWAY_HTTPS_FORWARD_PORT:-${GATEWAY_HTTPS_HOST_PORT:-8443}}"
 GATEWAY_HTTPS_GUEST_PORT="${GATEWAY_HTTPS_GUEST_PORT:-443}"
 
 LOCAL_PORTS=(
@@ -30,7 +30,7 @@ LOCAL_PORTS=(
   "${GITEA_SSH_NODE_PORT}"
   "${SIGNOZ_LOCAL_PORT}"
   "${GRAFANA_LOCAL_PORT}"
-  "${GATEWAY_HTTPS_HOST_PORT}"
+  "${GATEWAY_HTTPS_FORWARD_PORT}"
 )
 
 FORWARD_ARGS=(
@@ -40,7 +40,7 @@ FORWARD_ARGS=(
   -L "127.0.0.1:${GITEA_SSH_NODE_PORT}:127.0.0.1:${GITEA_SSH_NODE_PORT}"
   -L "127.0.0.1:${SIGNOZ_LOCAL_PORT}:127.0.0.1:${SIGNOZ_NODE_PORT}"
   -L "127.0.0.1:${GRAFANA_LOCAL_PORT}:127.0.0.1:${GRAFANA_NODE_PORT}"
-  -L "127.0.0.1:${GATEWAY_HTTPS_HOST_PORT}:127.0.0.1:${GATEWAY_HTTPS_GUEST_PORT}"
+  -L "127.0.0.1:${GATEWAY_HTTPS_FORWARD_PORT}:127.0.0.1:${GATEWAY_HTTPS_GUEST_PORT}"
 )
 
 port_listening() {
@@ -159,6 +159,9 @@ start_forwarder() {
 
   warn "timed out waiting for slicer host forwards; recent log:"
   tail -n 40 "${FORWARD_LOG_FILE}" >&2 || true
+  if grep -Fq "bind: permission denied" "${FORWARD_LOG_FILE}" && [[ "${GATEWAY_HTTPS_FORWARD_PORT}" =~ ^[0-9]+$ ]] && [ "${GATEWAY_HTTPS_FORWARD_PORT}" -lt 1024 ]; then
+    warn "macOS denied the privileged bind for localhost:${GATEWAY_HTTPS_FORWARD_PORT}; use an unprivileged forward port such as 8443 or add a separate privileged proxy on the host"
+  fi
   return 1
 }
 

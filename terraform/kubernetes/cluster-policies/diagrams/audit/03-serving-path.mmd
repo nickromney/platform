@@ -5,8 +5,6 @@ flowchart LR
     SSO --> SubnetRouter["subnetcalc-router"]
     SentRouter --> SentAPI["sentiment-api"]
     SentRouter --> SentUI["sentiment-auth-ui"]
-    SentAPI --> LiteLLM["litellm"]
-    LiteLLM --> Llama["llama-cpp"]
     SubnetRouter --> APIM["subnetcalc-apim-simulator"]
     APIM --> SubnetAPI["subnetcalc-api"]
     SentAPI --> OTel["otel-collector"]

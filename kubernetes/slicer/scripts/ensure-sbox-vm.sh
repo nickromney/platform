@@ -6,8 +6,8 @@ ok() { echo "OK   $*"; }
 warn() { echo "WARN $*" >&2; }
 
 slicer_url="${SLICER_URL:-${SLICER_SOCKET:-}}"
-vm_name="${SLICER_VM_NAME:-sbox-1}"
-vm_group="${SLICER_VM_GROUP:-sbox}"
+vm_name="${SLICER_VM_NAME:-slicer-1}"
+vm_group="${SLICER_VM_GROUP:-slicer}"
 ready_timeout="${SLICER_VM_READY_TIMEOUT:-300s}"
 tag_target="${SLICER_TARGET_TAG:-target=slicer}"
 tag_workspace="${SLICER_WORKSPACE_TAG:-workspace=platform}"

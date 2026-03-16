@@ -25,9 +25,9 @@ services:
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
       # Test users (Argon2 hashed passwords)
-      # demo: password123
-      # admin: securepass
-      - JWT_TEST_USERS={"demo":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","admin":"$$argon2id$$v=19$$m=65536,t=3,p=4$$JiTJZlTwD/1jJLlMQMOwCA$$HbubnE11kzEfcszqKtMOmjvxj14vjooqbdZtgc1NYCs"}
+      # demo@dev.test: password123
+      # demo@admin.test: password123
+      - JWT_TEST_USERS={"demo@dev.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","demo@admin.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo"}
     volumes:
       # Mount app directory for hot reload during development
       - ./app:/app/app

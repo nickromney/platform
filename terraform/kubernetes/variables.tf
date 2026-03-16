@@ -554,13 +554,13 @@ variable "apps_dir_read_only" {
 }
 
 variable "enable_app_repo_sentiment_llm" {
-  description = "Seed the monorepo app apps/sentiment-llm into in-cluster Gitea as a standalone repo (enables Gitea Actions pipelines)."
+  description = "Seed the monorepo app apps/sentiment into in-cluster Gitea as a standalone repo (enables Gitea Actions pipelines)."
   type        = bool
   default     = false
 }
 
 variable "sentiment_llm_source_dir" {
-  description = "Host path to the monorepo app directory for sentiment-llm. Empty means auto-detect (repo_root/apps/sentiment-llm)."
+  description = "Host path to the monorepo app directory for sentiment-llm. Empty means auto-detect (repo_root/apps/sentiment)."
   type        = string
   default     = ""
 }
@@ -781,13 +781,13 @@ variable "llm_gateway_external_cidr" {
 }
 
 variable "llm_gateway_mode" {
-  description = "LLM gateway mode for sentiment workloads. Use 'litellm' for the in-cluster LiteLLM broker or 'direct' for a host-backed ExternalName service."
+  description = "Legacy LLM gateway mode for sentiment workloads. Use 'disabled' for the SST default, 'litellm' for the in-cluster LiteLLM broker, or 'direct' for a host-backed ExternalName service."
   type        = string
-  default     = "litellm"
+  default     = "disabled"
 
   validation {
-    condition     = contains(["litellm", "direct"], var.llm_gateway_mode)
-    error_message = "llm_gateway_mode must be one of: litellm, direct."
+    condition     = contains(["disabled", "litellm", "direct"], var.llm_gateway_mode)
+    error_message = "llm_gateway_mode must be one of: disabled, litellm, direct."
   }
 }
 

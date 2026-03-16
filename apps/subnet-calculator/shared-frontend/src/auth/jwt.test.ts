@@ -22,7 +22,7 @@ describe('TokenManager', () => {
 
   describe('isAuthEnabled', () => {
     it('should return true when username and password are provided', () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
       expect(manager.isAuthEnabled()).toBe(true)
     })
 
@@ -32,7 +32,7 @@ describe('TokenManager', () => {
     })
 
     it('should return false when password is empty', () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', '')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', '')
       expect(manager.isAuthEnabled()).toBe(false)
     })
 
@@ -50,7 +50,7 @@ describe('TokenManager', () => {
     })
 
     it('should login and return token on first call', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -71,7 +71,7 @@ describe('TokenManager', () => {
     })
 
     it('should return cached token when still valid', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -90,7 +90,7 @@ describe('TokenManager', () => {
     })
 
     it('should refresh token when cache expires', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch
         .mockResolvedValueOnce({
@@ -116,7 +116,7 @@ describe('TokenManager', () => {
     })
 
     it('should retry once on network error', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockRejectedValueOnce(new Error('Network error')).mockResolvedValueOnce({
         ok: true,
@@ -133,7 +133,7 @@ describe('TokenManager', () => {
     })
 
     it('should throw error when login fails with non-2xx status', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'wrong-password')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'wrong-password')
 
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -144,7 +144,7 @@ describe('TokenManager', () => {
     })
 
     it('should clear cache on login error', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       // First successful login
       mockFetch.mockResolvedValueOnce({
@@ -185,7 +185,7 @@ describe('TokenManager', () => {
     })
 
     it('should return Authorization header with Bearer token', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -200,7 +200,7 @@ describe('TokenManager', () => {
     })
 
     it('should return empty object when token retrieval fails', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -213,7 +213,7 @@ describe('TokenManager', () => {
 
   describe('clearCache', () => {
     it('should clear cached token', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch
         .mockResolvedValueOnce({
@@ -241,7 +241,7 @@ describe('TokenManager', () => {
 
   describe('login request format', () => {
     it('should send credentials as form-urlencoded', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -253,12 +253,12 @@ describe('TokenManager', () => {
       const callArgs = mockFetch.mock.calls[0]
       const body = callArgs[1].body as URLSearchParams
 
-      expect(body.get('username')).toBe('demo')
+      expect(body.get('username')).toBe('demo@dev.test')
       expect(body.get('password')).toBe('password123')
     })
 
     it('should include 5 second timeout', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -276,7 +276,7 @@ describe('TokenManager', () => {
 
   describe('token expiration handling', () => {
     it('should cache token for 25 minutes (5 minutes before actual expiry)', async () => {
-      const manager = new TokenManager('http://localhost:8080', 'demo', 'password123')
+      const manager = new TokenManager('http://localhost:8080', 'demo@dev.test', 'password123')
 
       mockFetch.mockResolvedValueOnce({
         ok: true,

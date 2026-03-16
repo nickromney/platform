@@ -12,7 +12,7 @@ function escapeRegex(value: string) {
 const RETURN_HOST_PATTERN = new RegExp(escapeRegex(new URL(BASE_URL).host), 'i')
 
 const demoUser = {
-  username: process.env.STACK12_USERNAME || 'demo',
+  username: process.env.STACK12_USERNAME || 'demo@dev.test',
   password: process.env.STACK12_PASSWORD || 'password123',
 }
 

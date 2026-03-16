@@ -2,7 +2,7 @@
 set -euo pipefail
 
 socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
-vm_name="${SLICER_VM_NAME:-sbox-1}"
+vm_name="${SLICER_VM_NAME:-slicer-1}"
 delete_timeout="${SLICER_RESET_DELETE_TIMEOUT_SECONDS:-20}"
 
 warn() { echo "WARN $*" >&2; }

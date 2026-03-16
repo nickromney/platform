@@ -33,7 +33,7 @@ def _make_rsa_jwks() -> tuple[dict, rsa.RSAPrivateKey]:
 def _make_token(*, private_key: rsa.RSAPrivateKey, issuer: str, audience: str, scope: str = "") -> str:
     claims = {
         "sub": "user-123",
-        "preferred_username": "demo",
+        "preferred_username": "demo@dev.test",
         "iss": issuer,
         "aud": audience,
     }

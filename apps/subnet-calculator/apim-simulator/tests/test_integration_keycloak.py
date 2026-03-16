@@ -19,7 +19,7 @@ def test_keycloak_password_grant_token_validates_via_jwks_uri() -> None:
     realm = os.getenv("APIM_SIM_KEYCLOAK_REALM", "subnet-calculator")
     client_id = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_ID", "api-app")
     client_secret = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_SECRET")
-    username = os.getenv("APIM_SIM_KEYCLOAK_USERNAME", "demo")
+    username = os.getenv("APIM_SIM_KEYCLOAK_USERNAME", "demo@dev.test")
     password = os.getenv("APIM_SIM_KEYCLOAK_PASSWORD", "password123")
 
     issuer = f"{base_url}/realms/{realm}"

@@ -161,9 +161,9 @@ export function getAppConfig(): AppConfig {
 
   // API Base URL priority: Runtime > Environment > Default (relative for SWA)
   let apiBaseUrl =
-    window.RUNTIME_CONFIG?.API_BASE_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    import.meta.env.VITE_API_URL ||
+    window.RUNTIME_CONFIG?.API_BASE_URL ??
+    import.meta.env.VITE_API_BASE_URL ??
+    import.meta.env.VITE_API_URL ??
     (isAzureSWA() ? '' : 'http://localhost:7071')
 
   if (apiProxyEnabled) {
@@ -224,9 +224,9 @@ export function getConfig(): AppConfig {
     const authMethod = (window.RUNTIME_CONFIG?.AUTH_METHOD || getAuthMethod()) as AuthConfig['method']
 
     let apiBaseUrl =
-      window.RUNTIME_CONFIG?.API_BASE_URL ||
-      import.meta.env.VITE_API_BASE_URL ||
-      import.meta.env.VITE_API_URL ||
+      window.RUNTIME_CONFIG?.API_BASE_URL ??
+      import.meta.env.VITE_API_BASE_URL ??
+      import.meta.env.VITE_API_URL ??
       (isAzureSWA() ? '' : 'http://localhost:7071')
 
     const runtimeProxyFlag = window.RUNTIME_CONFIG?.API_PROXY_ENABLED ?? import.meta.env.VITE_API_PROXY_ENABLED

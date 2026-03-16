@@ -24,6 +24,9 @@ podman-compose up -d
 
 # Or with Docker
 docker compose up -d
+
+# Or from this directory, start the default stack-04
+make up
 ```
 
 **Stack 1 - Flask + Azure Function** (Traditional):
@@ -149,7 +152,7 @@ make start-swa-04
 ```bash
 make start-swa-05
 # Access at: http://localhost:4281
-# Login with: username=demo, password=password123
+# Login with: username=demo@dev.test, password=password123
 ```
 
 **Stack 6 - Entra ID Authentication:**
@@ -174,7 +177,7 @@ make start-swa-06
 - Login endpoint: `POST /api/v1/auth/login`
 - JWT token in `Authorization: Bearer <token>` header
 - Backend validates JWT and checks Argon2 password hashes
-- Test user: `demo` / `password123`
+- Test user: `demo@dev.test` / `password123`
 
 **Stack 6 (Entra ID Auth)**:
 
@@ -424,18 +427,18 @@ xh POST localhost:4280/api/v1/calculate \
 # curl
 curl -X POST http://localhost:4281/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"demo","password":"password123"}' \
+  -d '{"username":"demo@dev.test","password":"password123"}' \
   | jq -r '.access_token'
 
 # xh
 xh POST localhost:4281/api/v1/auth/login \
-  username=demo \
+  username=demo@dev.test \
   password=password123
 
 # Save token to variable
 TOKEN=$(curl -s -X POST http://localhost:4281/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"demo","password":"password123"}' \
+  -d '{"username":"demo@dev.test","password":"password123"}' \
   | jq -r '.access_token')
 
 echo $TOKEN
@@ -527,7 +530,7 @@ curl -b cookies.txt http://localhost:4282/.auth/me
 # Response when authenticated
 {
   "clientPrincipal": {
-    "userId": "demo@example.com",
+    "userId": "demo@dev.test",
     "userRoles": ["authenticated"],
     "claims": [...]
   }
@@ -589,7 +592,7 @@ post {
 
 body:json {
   {
-    "username": "demo",
+    "username": "demo@dev.test",
     "password": "password123"
   }
 }

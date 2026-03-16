@@ -1,5 +1,6 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help check-prerequisites clean-ports \
+MAKE_KNOWN_GOALS := help check-prerequisites check-docker-prerequisites clean-ports \
+  up down urls logs ps \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -10,13 +11,17 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
 
-.PHONY: help check-prerequisites clean-ports \
+.PHONY: help check-prerequisites check-docker-prerequisites clean-ports up down urls logs ps \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
   start-swa-04 start-swa-05 start-swa-06 start-swa-backends start-swa-all \
   test-bruno-direct test-bruno-compose test-bruno-swa test-bruno-swa-all \
   test-bruno-direct-full test-bruno-compose-full test-bruno-swa-full
+
+DEFAULT_STACK_URL := http://localhost:8003
+DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
+DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000 STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 
 ##@ Prerequisites
 check-prerequisites: ## Check that podman/docker tooling is available and running
@@ -58,6 +63,41 @@ check-prerequisites: ## Check that podman/docker tooling is available and runnin
 	fi
 	@echo ""
 	@echo "✓ All prerequisites satisfied"
+
+check-docker-prerequisites: ## Check that docker compose is installed and Docker is running
+	@if ! command -v docker >/dev/null 2>&1; then \
+		echo "docker is required but was not found in PATH." >&2; \
+		exit 1; \
+	fi
+	@if ! docker compose version >/dev/null 2>&1; then \
+		echo "'docker compose' is required but not available." >&2; \
+		exit 1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "Docker is not running. Start Docker Desktop and try again." >&2; \
+		exit 1; \
+	fi
+
+##@ Run
+up: check-docker-prerequisites ## Start the default compose stack and print the local URL
+	@$(DEFAULT_COMPOSE_ENV) docker compose up -d --build api-fastapi-container-app frontend-typescript-vite
+	@echo "Subnet Calculator URL: $(DEFAULT_STACK_URL)"
+	@echo "API docs:              $(DEFAULT_API_DOCS_URL)"
+	@echo "Default stack:         stack 04 (frontend-typescript-vite + api-fastapi-container-app)"
+
+urls: ## Print the default local URLs for the compose stack
+	@echo "Subnet Calculator URL: $(DEFAULT_STACK_URL)"
+	@echo "API docs:              $(DEFAULT_API_DOCS_URL)"
+	@echo "Default stack:         stack 04 (frontend-typescript-vite + api-fastapi-container-app)"
+
+logs: check-docker-prerequisites ## Tail compose logs
+	@$(DEFAULT_COMPOSE_ENV) docker compose logs -f --tail=200
+
+ps: check-docker-prerequisites ## Show compose container status
+	@$(DEFAULT_COMPOSE_ENV) docker compose ps
+
+down: check-docker-prerequisites ## Stop the compose stack
+	@$(DEFAULT_COMPOSE_ENV) docker compose down --remove-orphans
 
 ##@ Cleanup
 clean-ports: ## Stop local services and clear the shared demo ports

@@ -40,4 +40,4 @@ gitea_ssh_node_port     = 30022
 signoz_ui_node_port     = 30301
 signoz_ui_host_port     = 3301
 gateway_https_node_port = 30070
-gateway_https_host_port = 8443
+gateway_https_host_port = 443

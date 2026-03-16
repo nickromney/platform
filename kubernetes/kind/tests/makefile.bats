@@ -145,7 +145,22 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/lsof"
 
+  cat >"${TEST_BIN}/ps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ps"
+
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
   run env \
+    KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" \
     KUBECONFIG_HELPER=/bin/true \
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
     DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
@@ -234,7 +249,22 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/lsof"
 
+  cat >"${TEST_BIN}/ps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ps"
+
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
   run env \
+    KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" \
     KUBECONFIG_HELPER=/bin/true \
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
     DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \

@@ -138,12 +138,12 @@
   ],
   "users": [
     {
-      "username": "demo",
+      "username": "demo@dev.test",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "User",
-      "email": "demo@example.com",
+      "email": "demo@dev.test",
       "credentials": [
         {
           "type": "password",
@@ -156,16 +156,16 @@
       ]
     },
     {
-      "username": "admin",
+      "username": "demo@admin.test",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Admin",
       "lastName": "User",
-      "email": "admin@example.com",
+      "email": "demo@admin.test",
       "credentials": [
         {
           "type": "password",
-          "value": "securepass",
+          "value": "password123",
           "temporary": false
         }
       ],
