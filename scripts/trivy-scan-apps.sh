@@ -42,8 +42,13 @@ IMAGE_SPECS=(
 )
 
 scan_failed=0
+gate_failed=0
 gitea_helper_loaded=0
 CLONED_REPO_PATH=""
+SUMMARY_REPORT="${REPORT_ROOT}/summary.md"
+GATE_SEVERITIES="$(printf '%s' "${TRIVY_SEVERITY}" | tr '[:lower:]' '[:upper:]' | tr -d ' ')"
+FINDINGS_TSV=""
+REPORT_INDEX_FILE=""
 
 log() {
   printf '%s\n' "$*"
@@ -90,6 +95,12 @@ cleanup() {
   if [[ "${gitea_helper_loaded}" == "1" ]]; then
     gitea_local_access_cleanup || true
   fi
+  if [[ -n "${FINDINGS_TSV}" && -f "${FINDINGS_TSV}" ]]; then
+    rm -f "${FINDINGS_TSV}"
+  fi
+  if [[ -n "${REPORT_INDEX_FILE}" && -f "${REPORT_INDEX_FILE}" ]]; then
+    rm -f "${REPORT_INDEX_FILE}"
+  fi
 }
 trap cleanup EXIT
 
@@ -109,17 +120,374 @@ trivy_common_args() {
   printf '%s\n' "${args[@]}"
 }
 
+init_run_state() {
+  FINDINGS_TSV="$(mktemp "${TMPDIR:-/tmp}/trivy-findings.XXXXXX")"
+  REPORT_INDEX_FILE="$(mktemp "${TMPDIR:-/tmp}/trivy-reports.XXXXXX")"
+}
+
+append_report_findings() {
+  local label="$1"
+  local report="$2"
+
+  printf '%s\t%s\n' "${label}" "${report}" >> "${REPORT_INDEX_FILE}"
+  jq -r --arg report "${label}" '
+    .Results[]? as $result
+    | (
+        ($result.Vulnerabilities // [])[]?
+        | [
+            $report,
+            "vulnerability",
+            ($result.Target // "unknown"),
+            (.Severity // "UNKNOWN"),
+            (.VulnerabilityID // .PkgName // "unknown"),
+            (.PkgName // ""),
+            (.InstalledVersion // ""),
+            (.FixedVersion // ""),
+            (.Title // .Description // "")
+          ]
+      ),
+      (
+        ($result.Misconfigurations // [])[]?
+        | [
+            $report,
+            "misconfiguration",
+            ($result.Target // "unknown"),
+            (.Severity // "UNKNOWN"),
+            (.ID // "unknown"),
+            "",
+            "",
+            "",
+            (.Title // .Message // "")
+          ]
+      ),
+      (
+        ($result.Secrets // [])[]?
+        | [
+            $report,
+            "secret",
+            ($result.Target // "unknown"),
+            (.Severity // "UNKNOWN"),
+            (.RuleID // "secret"),
+            "",
+            "",
+            "",
+            (.Title // "Secret finding")
+          ]
+      ),
+      (
+        ($result.Licenses // [])[]?
+        | [
+            $report,
+            "license",
+            ($result.Target // "unknown"),
+            (.Severity // "UNKNOWN"),
+            (.Name // "license"),
+            "",
+            "",
+            "",
+            (.Category // "License finding")
+          ]
+      )
+    | @tsv
+  ' "${report}" >> "${FINDINGS_TSV}"
+}
+
 report_summary() {
-  local report="$1"
-  jq -r '
-    {
-      vulnerabilities: ([.Results[]?.Vulnerabilities[]?] | length),
-      misconfigurations: ([.Results[]?.Misconfigurations[]?] | length),
-      secrets: ([.Results[]?.Secrets[]?] | length),
-      licenses: ([.Results[]?.Licenses[]?] | length)
+  local label="$1"
+  awk -F '\t' -v report="${label}" -v gate="${GATE_SEVERITIES}" '
+    BEGIN {
+      split(gate, parts, ",")
+      for (i in parts) {
+        if (parts[i] != "") {
+          gated[parts[i]] = 1
+        }
+      }
+      order[1] = "CRITICAL"
+      order[2] = "HIGH"
+      order[3] = "MEDIUM"
+      order[4] = "LOW"
+      order[5] = "UNKNOWN"
     }
-    | "vulns=\(.vulnerabilities) misconfig=\(.misconfigurations) secrets=\(.secrets) licenses=\(.licenses)"
-  ' "${report}"
+    $1 == report {
+      total++
+      kind[$2]++
+      severity[$4]++
+      if ($4 in gated) {
+        gated_total++
+      } else {
+        advisory_total++
+      }
+    }
+    END {
+      printf "gate=%d advisory=%d total=%d types[vulns=%d misconfig=%d secrets=%d licenses=%d]",
+        gated_total + 0,
+        advisory_total + 0,
+        total + 0,
+        kind["vulnerability"] + 0,
+        kind["misconfiguration"] + 0,
+        kind["secret"] + 0,
+        kind["license"] + 0
+      first = 1
+      for (i = 1; i <= 5; i++) {
+        sev = order[i]
+        if (severity[sev] > 0) {
+          if (first) {
+            printf " severities["
+            first = 0
+          } else {
+            printf " "
+          }
+          printf "%s=%d", sev, severity[sev]
+        }
+      }
+      if (!first) {
+        printf "]"
+      }
+      printf "\n"
+    }
+  ' "${FINDINGS_TSV}"
+}
+
+report_gate_count() {
+  local label="$1"
+  awk -F '\t' -v report="${label}" -v gate="${GATE_SEVERITIES}" '
+    BEGIN {
+      split(gate, parts, ",")
+      for (i in parts) {
+        if (parts[i] != "") {
+          gated[parts[i]] = 1
+        }
+      }
+    }
+    $1 == report && ($4 in gated) {
+      count++
+    }
+    END {
+      print count + 0
+    }
+  ' "${FINDINGS_TSV}"
+}
+
+total_counts() {
+  awk -F '\t' -v gate="${GATE_SEVERITIES}" '
+    BEGIN {
+      split(gate, parts, ",")
+      for (i in parts) {
+        if (parts[i] != "") {
+          gated[parts[i]] = 1
+        }
+      }
+      order[1] = "CRITICAL"
+      order[2] = "HIGH"
+      order[3] = "MEDIUM"
+      order[4] = "LOW"
+      order[5] = "UNKNOWN"
+    }
+    {
+      total++
+      severity[$4]++
+      if ($4 in gated) {
+        gated_total++
+      } else {
+        advisory_total++
+      }
+    }
+    END {
+      printf "gate=%d advisory=%d total=%d", gated_total + 0, advisory_total + 0, total + 0
+      first = 1
+      for (i = 1; i <= 5; i++) {
+        sev = order[i]
+        if (severity[sev] > 0) {
+          if (first) {
+            printf " severities["
+            first = 0
+          } else {
+            printf " "
+          }
+          printf "%s=%d", sev, severity[sev]
+        }
+      }
+      if (!first) {
+        printf "]"
+      }
+      printf "\n"
+    }
+  ' "${FINDINGS_TSV}"
+}
+
+write_terminal_summary() {
+  local label report
+  local display_label
+  local gate advisory total vulns misconfig secrets licenses
+  local total_gate=0
+  local total_advisory=0
+  local total_findings=0
+  local total_vulns=0
+  local total_misconfig=0
+  local total_secrets=0
+  local total_licenses=0
+  local target_width=52
+  local header_format='%-52s %6s %9s %7s %7s %11s %8s %9s\n'
+  local row_format='%-52s %6d %9d %7d %7d %11d %8d %9d\n'
+
+  printf 'Summary Table\n'
+  printf "${header_format}" "Target" "Gate" "Advisory" "Total" "Vulns" "Misconfig" "Secrets" "Licenses"
+  printf "${header_format}" "------" "----" "--------" "-----" "-----" "----------" "-------" "--------"
+
+  while IFS=$'\t' read -r label report; do
+    IFS=$'\t' read -r gate advisory total vulns misconfig secrets licenses <<EOF
+$(awk -F '\t' -v report="${label}" -v gate="${GATE_SEVERITIES}" '
+  BEGIN {
+    split(gate, parts, ",")
+    for (i in parts) {
+      if (parts[i] != "") {
+        gated[parts[i]] = 1
+      }
+    }
+  }
+  $1 == report {
+    total++
+    kind[$2]++
+    if ($4 in gated) {
+      gated_total++
+    } else {
+      advisory_total++
+    }
+  }
+  END {
+    printf "%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+      gated_total + 0,
+      advisory_total + 0,
+      total + 0,
+      kind["vulnerability"] + 0,
+      kind["misconfiguration"] + 0,
+      kind["secret"] + 0,
+      kind["license"] + 0
+  }
+' "${FINDINGS_TSV}")
+EOF
+    display_label="${label}"
+    if [[ "${#display_label}" -gt "${target_width}" ]]; then
+      display_label="...${display_label:$((${#display_label} - (target_width - 3)))}"
+    fi
+    printf "${row_format}" "${display_label}" "${gate}" "${advisory}" "${total}" "${vulns}" "${misconfig}" "${secrets}" "${licenses}"
+    total_gate=$((total_gate + gate))
+    total_advisory=$((total_advisory + advisory))
+    total_findings=$((total_findings + total))
+    total_vulns=$((total_vulns + vulns))
+    total_misconfig=$((total_misconfig + misconfig))
+    total_secrets=$((total_secrets + secrets))
+    total_licenses=$((total_licenses + licenses))
+  done < "${REPORT_INDEX_FILE}"
+
+  printf "${header_format}" "------" "----" "--------" "-----" "-----" "----------" "-------" "--------"
+  printf "${row_format}" "Totals" "${total_gate}" "${total_advisory}" "${total_findings}" "${total_vulns}" "${total_misconfig}" "${total_secrets}" "${total_licenses}"
+}
+
+write_summary_report() {
+  {
+    printf '# Trivy Summary\n\n'
+    printf -- '- Generated: `%s`\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    printf -- '- Gate severities: `%s`\n' "${GATE_SEVERITIES}"
+    printf -- '- Reports directory: `%s`\n' "${REPORT_ROOT}"
+    printf '\n## Reports\n\n'
+    while IFS=$'\t' read -r label report; do
+      printf -- '- `%s`: %s\n' "${label}" "$(report_summary "${label}")"
+      printf '  Report: `%s`\n' "${report}"
+    done < "${REPORT_INDEX_FILE}"
+
+    printf '\n## Gate Findings\n\n'
+    if awk -F '\t' -v gate="${GATE_SEVERITIES}" '
+      BEGIN {
+        split(gate, parts, ",")
+        for (i in parts) {
+          if (parts[i] != "") {
+            gated[parts[i]] = 1
+          }
+        }
+      }
+      ($4 in gated) {
+        found = 1
+      }
+      END {
+        exit(found ? 0 : 1)
+      }
+    ' "${FINDINGS_TSV}"; then
+      awk -F '\t' -v gate="${GATE_SEVERITIES}" '
+        BEGIN {
+          split(gate, parts, ",")
+          for (i in parts) {
+            if (parts[i] != "") {
+              gated[parts[i]] = 1
+            }
+          }
+        }
+        ($4 in gated) {
+          title = $9
+          gsub(/\\n/, " ", title)
+          printf -- "- `%s` `%s` `%s` `%s` on `%s`", $1, $4, $2, $5, $3
+          if ($6 != "") {
+            printf " package `%s` `%s`", $6, $7
+          }
+          if ($8 != "") {
+            printf " -> `%s`", $8
+          }
+          if (title != "") {
+            printf ": %s", title
+          }
+          printf "\n"
+        }
+      ' "${FINDINGS_TSV}"
+    else
+      printf '_None._\n'
+    fi
+
+    printf '\n## Advisory Findings Outside Gate\n\n'
+    if awk -F '\t' -v gate="${GATE_SEVERITIES}" '
+      BEGIN {
+        split(gate, parts, ",")
+        for (i in parts) {
+          if (parts[i] != "") {
+            gated[parts[i]] = 1
+          }
+        }
+      }
+      !($4 in gated) {
+        found = 1
+      }
+      END {
+        exit(found ? 0 : 1)
+      }
+    ' "${FINDINGS_TSV}"; then
+      awk -F '\t' -v gate="${GATE_SEVERITIES}" '
+        BEGIN {
+          split(gate, parts, ",")
+          for (i in parts) {
+            if (parts[i] != "") {
+              gated[parts[i]] = 1
+            }
+          }
+        }
+        !($4 in gated) {
+          title = $9
+          gsub(/\\n/, " ", title)
+          printf -- "- `%s` `%s` `%s` `%s` on `%s`", $1, $4, $2, $5, $3
+          if ($6 != "") {
+            printf " package `%s` `%s`", $6, $7
+          }
+          if ($8 != "") {
+            printf " -> `%s`", $8
+          }
+          if (title != "") {
+            printf ": %s", title
+          }
+          printf "\n"
+        }
+      ' "${FINDINGS_TSV}"
+    else
+      printf '_None._\n'
+    fi
+  } > "${SUMMARY_REPORT}"
 }
 
 to_repo_rel() {
@@ -149,7 +517,7 @@ run_fs_scan() {
     fs
     --format json
     --output "${runner_report}"
-    --exit-code 1
+    --exit-code 0
   )
   while IFS= read -r arg; do
     args+=("${arg}")
@@ -168,7 +536,11 @@ run_fs_scan() {
   fi
 
   if [[ -f "${report}" ]]; then
-    log "  ${label}: $(report_summary "${report}")"
+    append_report_findings "${label}" "${report}"
+    log "  ${label}: $(report_summary "${label}")"
+    if [[ "$(report_gate_count "${label}")" -gt 0 ]]; then
+      gate_failed=1
+    fi
   else
     log "  ${label}: no report written"
     scan_failed=1
@@ -212,7 +584,7 @@ run_image_scan() {
     image
     --format json
     --output "${runner_report}"
-    --exit-code 1
+    --exit-code 0
   )
   while IFS= read -r arg; do
     args+=("${arg}")
@@ -228,7 +600,11 @@ run_image_scan() {
   fi
 
   if [[ -f "${report}" ]]; then
-    log "  ${image_ref}: $(report_summary "${report}")"
+    append_report_findings "${image_ref}" "${report}"
+    log "  ${image_ref}: $(report_summary "${image_ref}")"
+    if [[ "$(report_gate_count "${image_ref}")" -gt 0 ]]; then
+      gate_failed=1
+    fi
   else
     log "  ${image_ref}: no report written"
     scan_failed=1
@@ -330,14 +706,24 @@ scan_gitea_repos() {
 }
 
 print_final_status() {
+  write_summary_report
+  log ""
+  write_terminal_summary
   log ""
   log "Reports: ${REPORT_ROOT}"
-  if [[ "${scan_failed}" -eq 0 ]]; then
-    log "Result: no ${TRIVY_SEVERITY} findings in the scanned targets"
+  log "Summary: ${SUMMARY_REPORT}"
+  if [[ "${scan_failed}" -ne 0 ]]; then
+    log "Result: scan execution failed; inspect the logs, JSON reports, and ${SUMMARY_REPORT}"
+    return 1
+  fi
+
+  log "Totals: $(total_counts)"
+  if [[ "${gate_failed}" -eq 0 ]]; then
+    log "Result: no ${GATE_SEVERITIES} findings in the scanned targets"
     return 0
   fi
 
-  log "Result: findings detected; inspect the JSON reports under ${REPORT_ROOT}"
+  log "Result: ${GATE_SEVERITIES} findings detected; inspect ${SUMMARY_REPORT}"
   return 1
 }
 
@@ -354,6 +740,7 @@ EOF
 
 main() {
   mkdir -p "${REPORT_ROOT}" "${CLONE_ROOT}"
+  init_run_state
 
   case "${mode}" in
     prereqs)

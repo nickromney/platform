@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
+MAKE_KNOWN_GOALS := help trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 include ../mk/common.mk
@@ -7,9 +7,11 @@ include ../mk/common.mk
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 
-.PHONY: trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
+.PHONY: trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
 
 ##@ Security
+trivy: trivy-scan ## Alias for trivy-scan
+
 trivy-prereqs: ## Check Trivy runner and local prerequisites
 	@"$(TRIVY_SCAN_SCRIPT)" prereqs
 
