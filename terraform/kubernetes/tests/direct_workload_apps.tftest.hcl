@@ -10,7 +10,7 @@ run "direct_mode_creates_workload_apps" {
     enable_gateway_tls                = true
     enable_actions_runner             = true
     enable_app_of_apps                = false
-    enable_app_repo_sentiment_llm     = true
+    enable_app_repo_sentiment         = true
     enable_app_repo_subnet_calculator = true
   }
 

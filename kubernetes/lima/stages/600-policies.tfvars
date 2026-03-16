@@ -23,7 +23,7 @@ enable_apps_dir_mount             = false
 enable_docker_socket_mount        = false
 enable_actions_runner             = false
 enable_app_repo_subnet_calculator = false
-enable_app_repo_sentiment_llm     = false
+enable_app_repo_sentiment         = false
 
 cilium_version             = "1.19.1"
 argocd_chart_version       = "9.4.7"

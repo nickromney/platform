@@ -36,7 +36,7 @@ run "registry_secret_namespaces_auto_from_app_repos" {
     enable_argocd                     = true
     enable_gitea                      = true
     enable_actions_runner             = true
-    enable_app_repo_sentiment_llm     = true
+    enable_app_repo_sentiment         = true
     enable_app_repo_subnet_calculator = true
 
     registry_secret_namespaces = []

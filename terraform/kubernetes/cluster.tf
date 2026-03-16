@@ -127,10 +127,10 @@ resource "null_resource" "preload_images" {
   count = var.enable_image_preload && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    cluster_id        = kind_cluster.local[0].id
-    preload_script    = filesha256("${path.module}/scripts/preload-images.sh")
-    preload_image_set = filesha256(local.preload_image_list_path_effective)
-    preload_image_list = local.preload_image_list_path_effective
+    cluster_id            = kind_cluster.local[0].id
+    preload_script        = filesha256("${path.module}/scripts/preload-images.sh")
+    preload_image_set     = filesha256(local.preload_image_list_path_effective)
+    preload_image_list    = local.preload_image_list_path_effective
     enable_signoz         = tostring(var.enable_signoz)
     enable_prometheus     = tostring(var.enable_prometheus)
     enable_grafana        = tostring(var.enable_grafana)
@@ -145,7 +145,7 @@ resource "null_resource" "preload_images" {
   provisioner "local-exec" {
     command = "${path.module}/scripts/preload-images.sh --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
     environment = {
-      PRELOAD_IMAGE_LIST             = local.preload_image_list_path_effective
+      PRELOAD_IMAGE_LIST            = local.preload_image_list_path_effective
       PRELOAD_ENABLE_SIGNOZ         = tostring(var.enable_signoz)
       PRELOAD_ENABLE_PROMETHEUS     = tostring(var.enable_prometheus)
       PRELOAD_ENABLE_GRAFANA        = tostring(var.enable_grafana)

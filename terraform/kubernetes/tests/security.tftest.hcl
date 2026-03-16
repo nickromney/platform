@@ -79,14 +79,14 @@ run "uat_namespace_has_isolate_label" {
   command = plan
 
   variables {
-    cni_provider                  = "cilium"
-    enable_hubble                 = true
-    enable_argocd                 = true
-    enable_gitea                  = true
-    enable_policies               = true
-    enable_actions_runner         = true
-    enable_app_repo_sentiment_llm = true
-    enable_signoz                 = false
+    cni_provider              = "cilium"
+    enable_hubble             = true
+    enable_argocd             = true
+    enable_gitea              = true
+    enable_policies           = true
+    enable_actions_runner     = true
+    enable_app_repo_sentiment = true
+    enable_signoz             = false
   }
 
   assert {
@@ -119,14 +119,14 @@ run "dev_namespace_has_isolate_label" {
   command = plan
 
   variables {
-    cni_provider                  = "cilium"
-    enable_hubble                 = true
-    enable_argocd                 = true
-    enable_gitea                  = true
-    enable_policies               = true
-    enable_actions_runner         = true
-    enable_app_repo_sentiment_llm = true
-    enable_signoz                 = false
+    cni_provider              = "cilium"
+    enable_hubble             = true
+    enable_argocd             = true
+    enable_gitea              = true
+    enable_policies           = true
+    enable_actions_runner     = true
+    enable_app_repo_sentiment = true
+    enable_signoz             = false
   }
 
   assert {
@@ -154,12 +154,12 @@ run "sit_namespace_has_application_defaults" {
   command = plan
 
   variables {
-    cni_provider      = "cilium"
-    enable_hubble     = false
-    enable_argocd     = true
-    enable_gitea      = true
-    enable_policies   = true
-    enable_signoz     = false
+    cni_provider    = "cilium"
+    enable_hubble   = false
+    enable_argocd   = true
+    enable_gitea    = true
+    enable_policies = true
+    enable_signoz   = false
   }
 
   assert {

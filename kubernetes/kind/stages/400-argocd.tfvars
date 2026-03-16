@@ -25,7 +25,7 @@ enable_sso                 = false
 
 enable_apps_dir_mount             = true
 enable_actions_runner             = false
-enable_app_repo_sentiment_llm     = false
+enable_app_repo_sentiment         = false
 enable_app_repo_subnet_calculator = false
 
 cilium_version             = "1.19.1"

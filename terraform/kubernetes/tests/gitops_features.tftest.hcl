@@ -224,38 +224,38 @@ run "prometheus_observability_enabled" {
   }
 }
 
-run "app_repo_sentiment_llm_enabled" {
+run "app_repo_sentiment_enabled" {
   command = plan
 
   variables {
-    cni_provider                  = "none"
-    enable_hubble                 = false
-    enable_argocd                 = true
-    enable_gitea                  = true
-    enable_signoz                 = false
-    enable_sso                    = false
-    enable_actions_runner         = true
-    enable_app_repo_sentiment_llm = true
+    cni_provider              = "none"
+    enable_hubble             = false
+    enable_argocd             = true
+    enable_gitea              = true
+    enable_signoz             = false
+    enable_sso                = false
+    enable_actions_runner     = true
+    enable_app_repo_sentiment = true
   }
 
   assert {
     condition     = length(kubernetes_namespace_v1.dev) == 1
-    error_message = "Expected kubernetes_namespace_v1.dev to exist when enable_app_repo_sentiment_llm=true"
+    error_message = "Expected kubernetes_namespace_v1.dev to exist when enable_app_repo_sentiment=true"
   }
 
   assert {
     condition     = length(kubernetes_namespace_v1.uat) == 1
-    error_message = "Expected kubernetes_namespace_v1.uat to exist when enable_app_repo_sentiment_llm=true"
+    error_message = "Expected kubernetes_namespace_v1.uat to exist when enable_app_repo_sentiment=true"
   }
 
   assert {
-    condition     = length(null_resource.sync_gitea_app_repo_sentiment_llm) == 1
-    error_message = "Expected null_resource.sync_gitea_app_repo_sentiment_llm to exist when enable_app_repo_sentiment_llm=true"
+    condition     = length(null_resource.sync_gitea_app_repo_sentiment) == 1
+    error_message = "Expected null_resource.sync_gitea_app_repo_sentiment to exist when enable_app_repo_sentiment=true"
   }
 
   assert {
-    condition     = length(tls_private_key.app_repo_sentiment_llm) == 1
-    error_message = "Expected tls_private_key.app_repo_sentiment_llm to exist when enable_app_repo_sentiment_llm=true"
+    condition     = length(tls_private_key.app_repo_sentiment) == 1
+    error_message = "Expected tls_private_key.app_repo_sentiment to exist when enable_app_repo_sentiment=true"
   }
 }
 

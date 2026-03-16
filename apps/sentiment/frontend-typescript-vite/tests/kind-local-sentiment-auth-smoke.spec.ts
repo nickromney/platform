@@ -4,14 +4,61 @@ import path from 'node:path'
 import { type Page, expect, test } from '@playwright/test'
 
 const BASE_URL = process.env.BASE_URL || 'https://sentiment.dev.127.0.0.1.sslip.io'
-const USERNAME = process.env.KEYCLOAK_USERNAME || 'demo@dev.test'
-const PASSWORD = process.env.KEYCLOAK_PASSWORD || 'password123'
+const USERNAME = process.env.OIDC_USERNAME || process.env.KEYCLOAK_USERNAME || 'demo@dev.test'
+const PASSWORD = process.env.OIDC_PASSWORD || process.env.KEYCLOAK_PASSWORD || 'password123'
+const APP_TITLE = 'Sentiment Analysis (Authenticated UI)'
+
+async function submitIdentityProviderLogin(page: Page) {
+  const keycloakUsername = page.locator('#username')
+  if (await keycloakUsername.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await keycloakUsername.fill(USERNAME)
+    await page.locator('#password').fill(PASSWORD)
+    await page.click('#kc-login')
+    return
+  }
+
+  const dexEmail = page.getByPlaceholder(/email address/i)
+  if (await dexEmail.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await dexEmail.fill(USERNAME)
+    await page.getByPlaceholder(/^password$/i).fill(PASSWORD)
+    await page.getByRole('button', { name: /^login$/i }).click()
+    return
+  }
+
+  throw new Error(`Unsupported identity-provider login page at ${page.url()}`)
+}
+
+async function grantAccessIfPrompted(page: Page) {
+  const grantAccessButton = page.getByRole('button', { name: /^grant access$/i })
+  if (await grantAccessButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await grantAccessButton.click()
+  }
+}
+
+async function waitForInteractiveLogin(page: Page, timeout: number) {
+  const providerButton = page.getByRole('button', { name: /sign in with openid connect/i })
+  const keycloakUsername = page.locator('#username')
+  const dexEmail = page.getByPlaceholder(/email address/i)
+
+  await expect
+    .poll(
+      async () =>
+        page.url().includes('/oauth2/sign_in') ||
+        page.url().includes('/dex/auth/local/login') ||
+        page.url().includes('/protocol/openid-connect/logout') ||
+        (await providerButton.isVisible().catch(() => false)) ||
+        (await keycloakUsername.isVisible().catch(() => false)) ||
+        (await dexEmail.isVisible().catch(() => false)),
+      { timeout }
+    )
+    .toBe(true)
+}
 
 async function ensureLoggedIn(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
 
   // If already on the app, nothing to do.
-  const appTitle = page.getByText('Sentiment Analysis (Authenticated UI)')
+  const appTitle = page.getByText(APP_TITLE)
   if (await appTitle.isVisible().catch(() => false)) return
 
   // oauth2-proxy sign-in page (provider selection)
@@ -20,13 +67,10 @@ async function ensureLoggedIn(page: Page) {
     await providerButton.click()
   }
 
-  // Keycloak login form.
-  await page.waitForSelector('#username', { timeout: 60_000 })
-  await page.fill('#username', USERNAME)
-  await page.fill('#password', PASSWORD)
-  await page.click('#kc-login')
+  await submitIdentityProviderLogin(page)
+  await grantAccessIfPrompted(page)
 
-  await expect(page.getByText('Sentiment Analysis (Authenticated UI)')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(APP_TITLE)).toBeVisible({ timeout: 60_000 })
 }
 
 function isLocalComposeUrl(baseUrl: string) {
@@ -145,6 +189,6 @@ test.describe('sentiment authenticated UI: smoke', () => {
 
     // 5) Logout button should navigate away to oauth2-proxy.
     await logoutButton.click()
-    await page.waitForURL(/(oauth2\/sign_in|protocol\/openid-connect\/logout)/, { timeout: 60_000 })
+    await waitForInteractiveLogin(page, 60_000)
   })
 })

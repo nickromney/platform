@@ -5,14 +5,14 @@ metadata:
 spec:
   description: >-
     Hard isolation for the kindlocal project across every application
-    namespace. Pods labeled app=sentiment-llm may not talk to pods labeled
+    namespace. Pods labeled app=sentiment may not talk to pods labeled
     app=subnetcalc, regardless of environment.
   endpointSelector:
     matchLabels:
       "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
       "k8s:project": kindlocal
       "k8s:team": dolphin
-      "k8s:app": sentiment-llm
+      "k8s:app": sentiment
   egressDeny:
     - toEndpoints:
         - matchLabels:
@@ -36,7 +36,7 @@ spec:
   description: >-
     Hard isolation for the kindlocal project across every application
     namespace. Pods labeled app=subnetcalc may not talk to pods labeled
-    app=sentiment-llm, regardless of environment.
+    app=sentiment, regardless of environment.
   endpointSelector:
     matchLabels:
       "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
@@ -49,11 +49,11 @@ spec:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
             "k8s:project": kindlocal
             "k8s:team": dolphin
-            "k8s:app": sentiment-llm
+            "k8s:app": sentiment
   ingressDeny:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
             "k8s:project": kindlocal
             "k8s:team": dolphin
-            "k8s:app": sentiment-llm
+            "k8s:app": sentiment

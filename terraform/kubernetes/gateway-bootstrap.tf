@@ -42,8 +42,8 @@ resource "null_resource" "wait_for_gateway_bootstrap_crds" {
   count = var.enable_gateway_tls ? 1 : 0
 
   triggers = {
-    crd_names         = join(",", local.gateway_bootstrap_crd_names)
-    kubeconfig_path   = local.kubeconfig_path_for_providers
+    crd_names          = join(",", local.gateway_bootstrap_crd_names)
+    kubeconfig_path    = local.kubeconfig_path_for_providers
     kubeconfig_context = local.kubeconfig_context_for_providers != null ? local.kubeconfig_context_for_providers : ""
   }
 

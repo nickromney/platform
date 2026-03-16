@@ -83,11 +83,11 @@ locals {
     local.apps_dir_mount
   )
 
-  sentiment_llm_repo_name        = "sentiment-llm"
+  sentiment_repo_name            = "sentiment"
   subnet_calculator_repo_name    = "subnet-calculator"
-  sentiment_llm_source_dir       = var.sentiment_llm_source_dir != "" ? abspath(pathexpand(var.sentiment_llm_source_dir)) : abspath("${local.monorepo_apps_dir}/${local.sentiment_llm_repo_name}")
+  sentiment_source_dir           = var.sentiment_source_dir != "" ? abspath(pathexpand(var.sentiment_source_dir)) : abspath("${local.monorepo_apps_dir}/sentiment")
   subnet_calculator_source_dir   = var.subnet_calculator_source_dir != "" ? abspath(pathexpand(var.subnet_calculator_source_dir)) : abspath("${local.monorepo_apps_dir}/${local.subnet_calculator_repo_name}")
-  sentiment_llm_content_hash     = var.enable_app_repo_sentiment_llm ? try(sha1(join("", [for f in sort(fileset(local.sentiment_llm_source_dir, "**")) : filesha256("${local.sentiment_llm_source_dir}/${f}")])), "") : ""
+  sentiment_content_hash         = var.enable_app_repo_sentiment ? try(sha1(join("", [for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")])), "") : ""
   subnet_calculator_content_hash = var.enable_app_repo_subnet_calculator ? try(sha1(join("", [for f in sort(fileset(local.subnet_calculator_source_dir, "**")) : filesha256("${local.subnet_calculator_source_dir}/${f}")])), "") : ""
   enable_sentiment_external_images = (
     var.prefer_external_workload_images &&
@@ -103,7 +103,7 @@ locals {
   # External image refs choose where workload images come from, but they should
   # not advance the teaching-stage rollout on their own. Stage files remain the
   # source of truth for when these workloads are introduced.
-  enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment_llm
+  enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment
   enable_subnetcalc_workloads_effective = var.enable_app_repo_subnet_calculator
 
   policies_repo_name        = "policies"
@@ -187,7 +187,7 @@ locals {
     gateway_https_host_port       = var.gateway_https_host_port
     enable_cert_manager           = var.enable_cert_manager
     enable_actions_runner         = var.enable_actions_runner
-    enable_app_repo_sentiment     = var.enable_app_repo_sentiment_llm
+    enable_app_repo_sentiment     = var.enable_app_repo_sentiment
     enable_app_repo_subnetcalc    = var.enable_app_repo_subnet_calculator
     enable_prometheus             = var.enable_prometheus
     enable_grafana                = var.enable_grafana

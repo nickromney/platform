@@ -44,9 +44,9 @@ setup() {
   grep -Fq "restart_deployment()" "${script}"
   grep -Fq 'rollout restart "deploy/${deploy_name}"' "${script}"
   grep -Fq 'retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}"' "${script}"
-  grep -Fq 'restart_deployment \' "${script}"
-  grep -Fq '"${NGINX_GATEWAY_NAMESPACE}"' "${script}"
-  grep -Fq '"${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
+  grep -Fq 'restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
+  grep -Fq 'wait_for_deployment_rollout "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${GATEWAY_DEPLOY_WAIT_SECONDS}"' "${script}"
+  grep -Fq 'wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}"' "${script}"
 }
 
 @test "cluster health script distinguishes gitea gateway reachability from direct api reachability" {

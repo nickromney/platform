@@ -553,14 +553,14 @@ variable "apps_dir_read_only" {
   default     = true
 }
 
-variable "enable_app_repo_sentiment_llm" {
+variable "enable_app_repo_sentiment" {
   description = "Seed the monorepo app apps/sentiment into in-cluster Gitea as a standalone repo (enables Gitea Actions pipelines)."
   type        = bool
   default     = false
 }
 
-variable "sentiment_llm_source_dir" {
-  description = "Host path to the monorepo app directory for sentiment-llm. Empty means auto-detect (repo_root/apps/sentiment)."
+variable "sentiment_source_dir" {
+  description = "Host path to the monorepo app directory for sentiment. Empty means auto-detect (repo_root/apps/sentiment)."
   type        = string
   default     = ""
 }
@@ -683,9 +683,9 @@ check "enable_actions_runner_requires_gitea_and_argocd" {
   }
 }
 
-check "enable_app_repo_sentiment_llm_requires_gitea_and_actions_runner" {
+check "enable_app_repo_sentiment_requires_gitea_and_actions_runner" {
   assert {
-    condition = !var.enable_app_repo_sentiment_llm || (
+    condition = !var.enable_app_repo_sentiment || (
       var.enable_gitea && (
         var.enable_actions_runner || (
           var.prefer_external_workload_images &&
@@ -694,7 +694,7 @@ check "enable_app_repo_sentiment_llm_requires_gitea_and_actions_runner" {
         )
       )
     )
-    error_message = "enable_app_repo_sentiment_llm requires enable_gitea=true and either enable_actions_runner=true or explicit external sentiment image refs when prefer_external_workload_images=true."
+    error_message = "enable_app_repo_sentiment requires enable_gitea=true and either enable_actions_runner=true or explicit external sentiment image refs when prefer_external_workload_images=true."
   }
 }
 

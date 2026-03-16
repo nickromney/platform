@@ -1,4 +1,4 @@
-name: Build sentiment-llm images
+name: Build sentiment images
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
 
 env:
   DOCKER_HOST: unix:///var/run/docker.sock
-  WORKDIR: /tmp/sentiment-llm
+  WORKDIR: /tmp/sentiment
 
 jobs:
   build:
@@ -37,7 +37,7 @@ jobs:
             "${proto}" "${host}" "${REGISTRY_USERNAME}" "${REGISTRY_PWD}" \
             | git credential-store store
 
-          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/sentiment-llm.git" "${WORKDIR}"
+          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/sentiment.git" "${WORKDIR}"
           cd "${WORKDIR}" && git checkout main
 
       - name: Log in to registry
