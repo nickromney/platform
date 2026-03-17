@@ -1,7 +1,10 @@
 #!/bin/bash
 # Setup CoreDNS for each cloud
 # Reads CLOUD_NUM, DNS_IP, PROJECT_DIR from environment
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 echo "=== Setting up CoreDNS for $CLOUD_NAME ==="
 

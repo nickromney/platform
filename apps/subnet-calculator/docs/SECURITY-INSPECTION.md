@@ -93,7 +93,7 @@ POST /api/v1/auth/login HTTP/1.1
 Host: localhost:4281
 Content-Type: application/json
 
-{"username":"demo","password":"password123"}
+{"username":"demo","password":"demo-password"}
 ```
 
 **Login Response:**
@@ -371,7 +371,7 @@ curl -v http://localhost:4280/api/v1/health
 # Stack 5 - JWT auth
 TOKEN=$(curl -s -X POST http://localhost:4281/api/v1/auth/login \
  -H "Content-Type: application/json" \
- -d '{"username":"demo","password":"password123"}' | jq -r '.access_token')
+ -d '{"username":"demo","password":"demo-password"}' | jq -r '.access_token')
 curl -v -H "Authorization: Bearer $TOKEN" http://localhost:4281/api/v1/health
 
 # Stack 6 - Cookie auth

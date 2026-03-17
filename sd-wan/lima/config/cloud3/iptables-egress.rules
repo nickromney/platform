@@ -2,7 +2,10 @@
 # Cloud3 (AWS) egress firewall rules
 # Applied on outbound gateway (10.10.1.254)
 # AWS internal uses 172.31.1.0/24
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 # Default: drop forwarded traffic
 iptables -P FORWARD DROP

@@ -1,6 +1,9 @@
 #!/bin/bash
 # Cloud1 (Azure) specific provisioning
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 echo "=== Cloud1 (Azure) provisioning ==="
 

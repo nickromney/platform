@@ -20,7 +20,7 @@ def test_keycloak_password_grant_token_validates_via_jwks_uri() -> None:
     client_id = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_ID", "api-app")
     client_secret = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_SECRET")
     username = os.getenv("APIM_SIM_KEYCLOAK_USERNAME", "demo@dev.test")
-    password = os.getenv("APIM_SIM_KEYCLOAK_PASSWORD", "password123")
+    password = os.getenv("APIM_SIM_KEYCLOAK_PASSWORD", "demo-password")
 
     issuer = f"{base_url}/realms/{realm}"
     jwks_uri = f"{issuer}/protocol/openid-connect/certs"

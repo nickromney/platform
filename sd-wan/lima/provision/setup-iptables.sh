@@ -1,7 +1,10 @@
 #!/bin/bash
 # Setup iptables outbound gateway (egress firewall)
 # Reads CLOUD_NUM, CLOUD_NAME, PROJECT_DIR from environment
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 echo "=== Setting up iptables outbound gateway for $CLOUD_NAME ==="
 

@@ -44,6 +44,17 @@ resource "random_password" "oauth2_proxy_cookie_secret" {
   special = false
 }
 
+resource "terraform_data" "dex_demo_password_hash" {
+  count = var.enable_sso ? 1 : 0
+
+  triggers_replace = sha256(var.gitea_member_user_pwd)
+  input            = bcrypt(var.gitea_member_user_pwd)
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
 resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
   count = var.enable_sso ? 1 : 0
 
@@ -74,7 +85,26 @@ resource "kubernetes_secret_v1" "signoz_auth_proxy_credentials" {
   data = {
     SIGNOZ_URL      = "http://signoz:8080"
     SIGNOZ_USER     = "demo@admin.test"
-    SIGNOZ_PASSWORD = "password123"
+    SIGNOZ_PASSWORD = var.gitea_member_user_pwd
+  }
+
+  depends_on = [
+    kubernetes_namespace_v1.observability,
+  ]
+}
+
+resource "kubernetes_secret_v1" "signoz_bootstrap_credentials" {
+  count = var.enable_sso && var.enable_signoz ? 1 : 0
+
+  metadata {
+    name      = "signoz-bootstrap-credentials"
+    namespace = "observability"
+  }
+
+  type = "Opaque"
+
+  data = {
+    SIGNOZ_BOOTSTRAP_PASSWORD = var.gitea_member_user_pwd
   }
 
   depends_on = [
@@ -156,20 +186,17 @@ spec:
           staticPasswords:
             - email: "demo@admin.test"
               emailVerified: true
-              # password: password123
-              hash: "$2y$10$/n1XH6BhemBb2RUv0w9.8OIoWOoCNpBB2hSidX9vEjV40O5aepT3G"
+              hash: "${terraform_data.dex_demo_password_hash[0].output}"
               username: "demo-admin"
               userID: "0a1f0e7f-75fa-40cc-90bc-9e876c0919dc"
             - email: "demo@dev.test"
               emailVerified: true
-              # password: password123
-              hash: "$2y$10$aDc6H5h5HocWZQqVW4atMuhcFKMdu1HIeN0cXd3SlTxmp8ggfknd6"
+              hash: "${terraform_data.dex_demo_password_hash[0].output}"
               username: "demo@dev.test"
               userID: "cfe2f539-3972-4310-bc7e-8579af6c4b20"
             - email: "demo@uat.test"
               emailVerified: true
-              # password: password123
-              hash: "$2y$10$aDc6H5h5HocWZQqVW4atMuhcFKMdu1HIeN0cXd3SlTxmp8ggfknd6"
+              hash: "${terraform_data.dex_demo_password_hash[0].output}"
               username: "demo@uat.test"
               userID: "e3bbece5-a293-47d9-9d7d-3d8cb218fc23"
 

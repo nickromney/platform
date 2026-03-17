@@ -8,6 +8,7 @@ STACK_DIR := ../../terraform/kubernetes
 STATE_FILE ?= ../../terraform/.run/kubernetes-slicer/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 RUN_DIR := $(MAKEFILE_DIR).run
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
@@ -34,6 +35,11 @@ DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 SLICER_SYSTEM_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
 SLICER_SOCKET ?= $(SLICER_SYSTEM_SOCKET)
 SLICER_CONFIG ?= $(HOME)/slicer-mac/slicer-mac.yaml
+SLICER_URL_OVERRIDE := $(strip $(filter-out $(SLICER_SYSTEM_SOCKET),$(SLICER_URL)))
+SLICER_SOCKET_OVERRIDE := $(strip $(filter-out $(SLICER_SYSTEM_SOCKET),$(SLICER_SOCKET)))
+SLICER_ACTIVE_URL := $(if $(SLICER_URL_OVERRIDE),$(SLICER_URL_OVERRIDE),$(if $(SLICER_SOCKET_OVERRIDE),$(SLICER_SOCKET_OVERRIDE),$(SLICER_SYSTEM_SOCKET)))
+SLICER_ENDPOINT_SOURCE := $(if $(SLICER_URL_OVERRIDE),SLICER_URL,$(if $(SLICER_SOCKET_OVERRIDE),SLICER_SOCKET,SLICER_SYSTEM_SOCKET))
+SLICER_USE_LOCAL_MAC := $(if $(filter SLICER_SYSTEM_SOCKET,$(SLICER_ENDPOINT_SOURCE)),1,0)
 SLICER_SYSTEM_SOCKET_WAIT_SECONDS ?= 240
 SLICER_NETWORK_PROFILE ?= cilium
 SLICER_VM_GROUP ?= slicer
@@ -73,6 +79,12 @@ EXPECT_NAMESPACE_OBSERVABILITY ?= 0
 EXPECT_NAMESPACE_PLATFORM_GATEWAY ?= 0
 FORWARD_PID_FILE ?= $(RUN_DIR)/slicer-host-forwards.pid
 SLICER_CHECK_LIMA_INSTANCE_PREFIX ?= k3s-node
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+PLATFORM_ADMIN_PASSWORD ?=
+PLATFORM_DEMO_PASSWORD ?=
+PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+-include $(PLATFORM_ENV_FILE)
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
@@ -104,6 +116,12 @@ endif
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export PLATFORM_ADMIN_PASSWORD
+export PLATFORM_DEMO_PASSWORD
+export TF_VAR_gitea_admin_pwd ?= $(PLATFORM_ADMIN_PASSWORD)
+export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
 ifeq ($(filter $(SLICER_NETWORK_PROFILE),$(VALID_SLICER_NETWORK_PROFILES)),)
 $(error Invalid SLICER_NETWORK_PROFILE="$(SLICER_NETWORK_PROFILE)". Expected one of: $(VALID_SLICER_NETWORK_PROFILES))
@@ -140,7 +158,7 @@ target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 stage_dir_abs = $(abspath $(MAKEFILE_DIR)$(STAGES_DIR))
 
-RESOLVE_SOCKET = echo "$(SLICER_SYSTEM_SOCKET)"
+RESOLVE_SOCKET = printf '%s\n' "$(SLICER_ACTIVE_URL)"
 
 .PHONY: help
 help:
@@ -209,10 +227,10 @@ help:
 	@echo "  SLICER_NETWORK_PROFILE=default -> keep k3s default CNI; stages 200/300 become no-op placeholders"
 	@echo "  Switching profiles requires a fresh VM reset; bootstrap refuses in-place flannel/Cilium flips."
 	@echo ""
-	@echo "Daemon requirement:"
-	@echo "  on-device socket        -> $(SLICER_SYSTEM_SOCKET)"
-	@echo "  slicer config           -> $(SLICER_CONFIG)"
-	@echo "  start manually from     -> ~/slicer-mac"
+	@echo "Slicer endpoint:"
+	@echo "  default (macOS)         -> $(SLICER_SYSTEM_SOCKET)"
+	@echo "  override                -> SLICER_URL=<socket|http://...> or SLICER_SOCKET=/path/to.sock"
+	@echo "  Docker-only hosts       -> use ../kind (Slicer is optional, not the teaching path)"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
@@ -301,7 +319,20 @@ check-host-ports:
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
-	required=(curl docker git jq kubectl slicer slicer-mac ssh-keygen tofu terragrunt); \
+	stage_num=$$((10#$(STAGE))); \
+	endpoint="$(SLICER_ACTIVE_URL)"; \
+	endpoint_source="$(SLICER_ENDPOINT_SOURCE)"; \
+	use_local_slicer_mac="$(SLICER_USE_LOCAL_MAC)"; \
+	if [ "$$use_local_slicer_mac" = "1" ] && [ "$$(uname -s)" != "Darwin" ]; then \
+		echo "FAIL kubernetes/slicer defaults to the local slicer-mac socket ($(SLICER_SYSTEM_SOCKET))."; \
+		echo "Set SLICER_URL or SLICER_SOCKET to a real Slicer endpoint if you want this personal target."; \
+		echo "For a teaching or Docker-only Linux host, use kubernetes/kind instead."; \
+		exit 1; \
+	fi; \
+	required=(curl docker git jq kubectl slicer ssh-keygen tofu terragrunt); \
+	if [ "$$use_local_slicer_mac" = "1" ]; then \
+		required+=(slicer-mac); \
+	fi; \
 	optional=(helm bats kubectx mkcert node npm shellcheck); \
 	missing_required=(); \
 	check_bin() { \
@@ -340,7 +371,11 @@ prereqs:
 	echo ""; \
 	echo "Docker daemon:"; \
 	if ! docker info >/dev/null 2>&1; then \
-		echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
+		else \
+			echo "FAIL docker daemon not reachable"; \
+		fi; \
 		exit 1; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
@@ -348,7 +383,17 @@ prereqs:
 	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
 	echo "Slicer daemon:"; \
-	SLICER_URL="$(SLICER_SYSTEM_SOCKET)" slicer info || exit 1; \
+	echo "OK   active endpoint ($$endpoint_source): $$endpoint"; \
+	if ! SLICER_URL="$$endpoint" slicer info; then \
+		echo ""; \
+		echo "FAIL slicer daemon not reachable at $$endpoint"; \
+		if [ "$$use_local_slicer_mac" = "1" ]; then \
+			echo "Start the on-device slicer-mac daemon or point SLICER_URL/SLICER_SOCKET at another Slicer endpoint."; \
+		else \
+			echo "Verify SLICER_URL/SLICER_SOCKET (and SLICER_TOKEN_FILE/SLICER_TOKEN if required), or use kubernetes/kind on Docker-only hosts."; \
+		fi; \
+		exit 1; \
+	fi; \
 	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \
@@ -357,11 +402,17 @@ prereqs:
 	if command -v k3sup >/dev/null 2>&1; then k3sup version 2>/dev/null || true; fi; \
 	if command -v k3sup-pro >/dev/null 2>&1; then k3sup-pro version 2>/dev/null || true; fi; \
 	echo ""; \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+		echo ""; \
+	fi; \
 	$(MAKE) check-kubeconfig
 
 .PHONY: daemon-up
 daemon-up:
 	@mkdir -p "$(RUN_DIR)"; \
+	SLICER_URL="$(SLICER_URL)" \
+	SLICER_SOCKET="$(SLICER_SOCKET)" \
 	SLICER_SYSTEM_SOCKET="$(SLICER_SYSTEM_SOCKET)" \
 	RUN_DIR="$(RUN_DIR)" \
 	SLICER_SYSTEM_SOCKET_WAIT_SECONDS="$(SLICER_SYSTEM_SOCKET_WAIT_SECONDS)" \
@@ -502,7 +553,7 @@ status:
 	@set -euo pipefail; \
 	socket="$$($(RESOLVE_SOCKET))"; \
 	echo "=== Slicer daemon ==="; \
-	echo "Active socket: $$socket"; \
+	echo "Active endpoint: $$socket"; \
 	SLICER_URL="$$socket" slicer info || true; \
 	echo ""; \
 	echo "=== Slicer VMs ==="; \
@@ -533,7 +584,7 @@ stop-slicer:
 	echo "Stopping host forwards (best-effort)..."; \
 	$(MAKE) stop-host-forwards >/dev/null 2>&1 || true; \
 	echo "OK   host forwards stopped"; \
-	if [ -S "$$socket" ] && SLICER_URL="$$socket" slicer vm list >/dev/null 2>&1; then \
+	if SLICER_URL="$$socket" slicer vm list >/dev/null 2>&1; then \
 		status="$$(SLICER_URL="$$socket" slicer vm list --json 2>/dev/null | jq -r --arg vm "$(SLICER_VM_NAME)" '.[] | select(.hostname == $$vm) | .status' | head -n 1 || true)"; \
 		if [ "$$status" = "Running" ]; then \
 			echo "Requesting shutdown for $(SLICER_VM_NAME)..."; \
@@ -601,11 +652,14 @@ plan: workflow-validate
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+	fi; \
 		if [ "$$stage_num" -eq 100 ]; then \
 			echo "Stage 100 plan:"; \
 			echo "  - ensure Kind and Lima are stopped"; \
 			echo "  - preflight target host ports"; \
-			echo "  - require the on-device slicer-mac daemon at $(SLICER_SYSTEM_SOCKET)"; \
+			echo "  - require a reachable Slicer daemon at $(SLICER_ACTIVE_URL)"; \
 			echo "  - ensure $(SLICER_VM_NAME) exists in host group $(SLICER_VM_GROUP)"; \
 			echo "  - use networking profile: $(SLICER_NETWORK_PROFILE)"; \
 		echo "  - bootstrap or refresh the $(K3SUP_CONTEXT) kubeconfig at $(KUBECONFIG_PATH)"; \
@@ -669,6 +723,9 @@ apply: workflow-validate
 		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
 	}; \
 	stage_num=$$((10#$(STAGE))); \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+	fi; \
 	if [ "$$stage_num" -eq 100 ]; then \
 		$(MAKE) prereqs; \
 		if [ "$(SLICER_HOST_FORWARDS_MODE)" = "on" ]; then \
@@ -768,12 +825,13 @@ check-gateway-stack:
 
 .PHONY: check-cluster
 check-cluster:
+	@$(MAKE) check-platform-env
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" \
 		GITEA_USER="gitea-admin" \
-		GITEA_PWD="ChangeMe123!" \
+		GITEA_PWD="$${GITEA_PWD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 		REGISTRY_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 		EXPECT_SENTIMENT_REPO="$(EXPECT_SENTIMENT_REPO)" \
 		EXPECT_SUBNETCALC_REPO="$(EXPECT_SUBNETCALC_REPO)" \
@@ -865,6 +923,7 @@ check-sso-e2e:
 .PHONY: gitea-sync
 gitea-sync:
 	@set -euo pipefail; \
+	$(MAKE) check-platform-env; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
@@ -875,7 +934,7 @@ gitea-sync:
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
-	GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
+	GITEA_PASSWORD="$${GITEA_PASSWORD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-port-forward}" \
 	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
 	STACK_DIR="$$stack_path" \

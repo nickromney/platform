@@ -30,7 +30,7 @@ Start the API with:
     podman-compose up                               # All services
 
 AUTHENTICATION:
-    - Uses demo@dev.test:password123 credentials
+    - Uses demo@dev.test:demo-password credentials
     - Automatically gets JWT token before testing
 
 EOF
@@ -91,7 +91,7 @@ echo "✓ API is reachable"
 echo "Getting JWT token..."
 if ! TOKEN_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/auth/login" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "username=demo@dev.test&password=password123" 2>/dev/null); then
+    -d "username=demo@dev.test&password=demo-password" 2>/dev/null); then
     echo "ERROR: Failed to get JWT token"
     exit 1
 fi

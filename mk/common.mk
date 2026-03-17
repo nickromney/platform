@@ -41,6 +41,43 @@ help:
 	}'
 endif
 
+.PHONY: check-platform-env
+check-platform-env:
+	@set -euo pipefail; \
+	required_vars="$(strip $(PLATFORM_REQUIRED_ENV_VARS))"; \
+	if [ -z "$$required_vars" ]; then \
+		exit 0; \
+	fi; \
+	env_file="$(strip $(PLATFORM_ENV_FILE))"; \
+	template_file="$(strip $(PLATFORM_ENV_TEMPLATE))"; \
+	if [ -z "$$env_file" ]; then \
+		echo "PLATFORM_ENV_FILE is not set" >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$$env_file" ]; then \
+		echo "Missing platform env file: $$env_file" >&2; \
+		if [ -n "$$template_file" ] && [ -f "$$template_file" ]; then \
+			echo "Copy $$template_file to $$env_file and set: $$required_vars" >&2; \
+		else \
+			echo "Set these vars in $$env_file: $$required_vars" >&2; \
+		fi; \
+		exit 1; \
+	fi; \
+	missing=(); \
+	for name in $$required_vars; do \
+		value="$${!name-}"; \
+		if [ -z "$$value" ]; then \
+			missing+=("$$name"); \
+		fi; \
+	done; \
+	if [ $${#missing[@]} -gt 0 ]; then \
+		echo "Missing required platform secrets in $$env_file: $${missing[*]}" >&2; \
+		if [ -n "$$template_file" ] && [ -f "$$template_file" ]; then \
+			echo "Use $$template_file as the template." >&2; \
+		fi; \
+		exit 1; \
+	fi
+
 .DEFAULT:
 	@set -euo pipefail; \
 	echo "Unknown make goal '$@'." >&2; \

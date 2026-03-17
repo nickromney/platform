@@ -18,7 +18,7 @@ require_docker() {
     exit 1
   }
   docker info >/dev/null 2>&1 || {
-    echo "docker is not available; start Docker Desktop first" >&2
+    echo "docker daemon not reachable" >&2
     exit 1
   }
 }

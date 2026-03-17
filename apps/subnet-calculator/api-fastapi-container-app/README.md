@@ -59,9 +59,9 @@ curl http://localhost:8000/health/live
 ### JWT Authentication
 
 ```bash
-# Login (username: demo@dev.test, password: password123)
+# Login (username: demo@dev.test, password: demo-password)
 curl -X POST http://localhost:8000/auth/login \
-  -d "username=demo@dev.test&password=password123"
+  -d "username=demo@dev.test&password=demo-password"
 
 # Returns: {"access_token": "...", "token_type": "bearer"}
 ```
@@ -71,7 +71,7 @@ curl -X POST http://localhost:8000/auth/login \
 ```bash
 # Get token
 TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
-  -d "username=demo@dev.test&password=password123" | jq -r .access_token)
+  -d "username=demo@dev.test&password=demo-password" | jq -r .access_token)
 
 # Calculate IPv4 subnet
 curl -X POST http://localhost:8000/subnets/ipv4 \

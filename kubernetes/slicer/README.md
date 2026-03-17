@@ -2,6 +2,10 @@
 
 Working, with caveats.
 
+This is an optional personal target, not the repo's default teaching path.
+For a subscription-free Docker-backed host on macOS or Linux, use
+[`../kind`](../kind/README.md).
+
 `kubernetes/slicer` now reaches the full shared stage ladder again on the
 current on-device `slicer-mac` image, including the `cilium` profile through
 stage `900`.
@@ -30,6 +34,11 @@ This target still carries useful operational caveats:
 This target follows the current Kind/Lima plus shared Terraform shape. The old
 `publiccloudexperiments/platforms/slicervm` tree is reference material only for
 bootstrap/runtime details.
+
+If you want to experiment with Slicer on Linux or WSL2 later, set
+`SLICER_URL=<socket|http://...>` or `SLICER_SOCKET=/path/to.sock` explicitly.
+Without that override, this target assumes the local `slicer-mac` socket and
+`make prereqs` now fails early on Docker-only Linux hosts.
 
 ## Reference commands
 
@@ -98,11 +107,11 @@ no longer the hidden prerequisite for stage `500+` applies.
   used the current on-device image plus a `25G` root disk; smaller roots hit
   node disk pressure at later stages.
 - Stage `100` is the bootstrap boundary. It requires the on-device
-  `slicer-mac` daemon at
-  [`~/slicer-mac/slicer-mac.yaml`](/Users/nickromney/slicer-mac/slicer-mac.yaml),
-  ensures the selected VM exists in the selected host group, authorizes a
-  dedicated bootstrap SSH key, installs k3s from the host with `k3sup-pro`
-  when present and `k3sup` otherwise, and writes `~/.kube/slicer-k3s.yaml`.
+  `slicer-mac` daemon by default, or a reachable endpoint from `SLICER_URL` or
+  `SLICER_SOCKET` when you override it. It ensures the selected VM exists in
+  the selected host group, authorizes a dedicated bootstrap SSH key, installs
+  k3s from the host with `k3sup-pro` when present and `k3sup` otherwise, and writes
+  `~/.kube/slicer-k3s.yaml`.
 - The bootstrap keeps the Slicer-specific host-health guards that still pull
   their weight on current images: swap creation and ext4 error checks.
 - Stages `200+` reuse the shared Terraform platform root. The Slicer target

@@ -107,7 +107,7 @@ uv run pytest -v
 
 **Authentication:**
 
-- Automatically obtains JWT token using `demo:password123`
+- Automatically obtains JWT token using `demo:demo-password`
 - Tests all endpoints with proper authentication
 - No manual token management required
 
@@ -287,7 +287,7 @@ podman ps # Check all containers are running
 The test script automatically handles JWT authentication. If it fails:
 
 1. Check API is running: `curl http://localhost:8090/api/v1/health`
-1. Verify credentials in compose.yml match `demo:password123`
+1. Verify credentials in compose.yml match `demo:demo-password`
 
 ### Tests timeout
 

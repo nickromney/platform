@@ -118,22 +118,27 @@ if (INCLUDE_HEADLAMP) {
 }
 
 function creds(segment: Segment) {
+  const sharedPassword = process.env.PLATFORM_DEMO_PASSWORD || ''
   if (segment === 'dev') {
     return {
       login: process.env.DEX_DEV_LOGIN || 'demo@dev.test',
-      password: process.env.DEX_DEV_PASSWORD || 'password123',
+      password: process.env.DEX_DEV_PASSWORD || sharedPassword,
     }
   }
   if (segment === 'uat') {
     return {
       login: process.env.DEX_UAT_LOGIN || 'demo@uat.test',
-      password: process.env.DEX_UAT_PASSWORD || 'password123',
+      password: process.env.DEX_UAT_PASSWORD || sharedPassword,
     }
   }
   return {
     login: process.env.DEX_ADMIN_LOGIN || 'demo@admin.test',
-    password: process.env.DEX_ADMIN_PASSWORD || 'password123',
+    password: process.env.DEX_ADMIN_PASSWORD || sharedPassword,
   }
+}
+
+if (!creds('admin').password || !creds('dev').password || !creds('uat').password) {
+  throw new Error('Set PLATFORM_DEMO_PASSWORD or the DEX_*_PASSWORD variables before running the SSO smoke tests')
 }
 
 async function maybeClickOauth2ProxyProvider(page: Page) {

@@ -61,7 +61,7 @@ if jq -e --arg vm "${vm_name}" '.[] | select(.hostname == $vm)' >/dev/null 2>&1 
       SLICER_URL="${slicer_url}" slicer vm restore "${vm_name}" >/dev/null
       ;;
     Stopped)
-      fail "Existing VM ${vm_name} is stopped. Restart slicer-mac from /Users/nickromney/slicer-mac/slicer-mac.yaml or recreate ${vm_name}.img before retrying."
+      fail "Existing VM ${vm_name} is stopped. Start the Slicer daemon that owns it, or recreate ${vm_name} before retrying."
       ;;
     *)
       fail "Existing VM ${vm_name} is in unexpected state '${existing_status}'."

@@ -46,6 +46,7 @@ oci-cache/
 **/kind-config.yaml
 
 # Env files
+/.env
 .env
 .env.local
 .env.*.local

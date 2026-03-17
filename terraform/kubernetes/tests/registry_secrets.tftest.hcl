@@ -7,7 +7,7 @@ run "registry_secret_namespaces_explicit" {
     registry_secret_namespaces = ["team-a", "team-b"]
     gitea_registry_host        = "localhost:30090"
     gitea_admin_username       = "gitea-admin"
-    gitea_admin_pwd            = "ChangeMe123!"
+    gitea_admin_pwd            = "test-admin-password"
   }
 
   assert {

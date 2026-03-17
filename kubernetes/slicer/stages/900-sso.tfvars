@@ -44,7 +44,6 @@ gitea_repo_owner_is_org               = true
 gitea_org_full_name                   = "Platform"
 gitea_org_visibility                  = "private"
 gitea_org_member_emails               = ["demo@admin.test"]
-gitea_member_user_pwd                 = "password123"
 gitea_chart_version                   = "12.5.0"
 signoz_chart_version                  = "0.114.1"
 opentelemetry_collector_chart_version = "0.146.1"

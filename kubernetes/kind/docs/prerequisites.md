@@ -1,10 +1,15 @@
 # Prerequisites
 
-This kind path is macOS-first and Docker-Desktop-first.
+This kind path is the repo's Docker-backed teaching target.
+
+Supported host shapes:
+
+- macOS with Docker Desktop
+- Linux with Docker Engine or Docker Desktop
 
 ## Install
 
-Install Docker Desktop separately, then install the CLI tools with Homebrew.
+Install a working Docker daemon first. On macOS that usually means Docker Desktop. On Linux, Docker Engine is enough. Then install the CLI tools; the examples below use Homebrew because it works on both macOS and Ubuntu.
 
 Core tools:
 
@@ -24,7 +29,7 @@ If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's 
 ## What The Core Tools Do
 
 - `make` runs the workflow entrypoints in [`Makefile`](../Makefile).
-- Docker Desktop plus the `docker` CLI runs the kind node containers.
+- The Docker daemon plus the `docker` CLI runs the kind node containers.
 - `jq` is used by the health and audit scripts.
 - `kubectl` talks to the cluster during applies and checks.
 - `kind` creates and deletes the local cluster.
@@ -45,7 +50,7 @@ If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's 
 `make prereqs` is the fastest sanity check after installation. It verifies:
 
 - expected binaries are on `PATH`
-- Docker Desktop is reachable through `docker info`
+- the Docker daemon is reachable through `docker info`
 - the host-side LLM endpoint is reachable when the selected stage opts into legacy `llm_gateway_mode = "direct"`
 - versions for the main tools can be queried
 - kubeconfig files and contexts look sane
@@ -67,8 +72,7 @@ endpoint. The backend runs SST in-process inside `sentiment-api`.
 
 `make prereqs` only checks `127.0.0.1:12434` when you opt into
 `llm_gateway_mode = "direct"`. That legacy direct mode still expects a
-host-side endpoint to be reachable from Docker Desktop via
-`host.docker.internal`.
+host-side endpoint to be reachable from the Docker host.
 
 In practice, that means you need one of:
 

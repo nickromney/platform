@@ -89,7 +89,7 @@ EOF
   chmod +x "${STACK_DIR}/scripts/gitea-local-access.sh"
   export GITEA_HTTP_BASE="http://127.0.0.1:30090"
   export GITEA_ADMIN_USERNAME="gitea-admin"
-  export GITEA_ADMIN_PWD="ChangeMe123!"
+  export GITEA_ADMIN_PWD="test-admin-password"
   export GITEA_SSH_USERNAME="git"
   export GITEA_SSH_HOST="127.0.0.1"
   export GITEA_SSH_PORT="30022"

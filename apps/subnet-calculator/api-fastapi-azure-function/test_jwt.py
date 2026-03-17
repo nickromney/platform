@@ -104,16 +104,16 @@ class TestLoginEndpoint:
         """Set up environment for JWT auth with Argon2 hashed passwords."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
-        # Use Argon2 hashed passwords (alice=password123, bob=password123)
+        # Use Argon2 hashed passwords for the demo test users.
         monkeypatch.setenv(
             "JWT_TEST_USERS",
-            '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$3MKxLJSv0Ol1eueygZAV6w$mb8m63Id29lRAjPrYv+K180PAqxhRyoqkWBLQMPZ0ZM",'
-            '"bob":"$argon2id$v=19$m=65536,t=3,p=4$2QqZOyq9uYoLXvPnS2cRtA$w3sYdUCtbDNu2myGr8Z9g9qi9Ya2NDGdXBs5f6cbjR0"}',
+            '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$oYwUidtZ9Y8t+NU9ccv+jw$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI",'
+            '"bob":"$argon2id$v=19$m=65536,t=3,p=4$oYwUidtZ9Y8t+NU9ccv+jw$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}',
         )
 
     def test_login_with_valid_credentials_returns_token(self):
         """Login with valid credentials should return access token."""
-        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -123,7 +123,7 @@ class TestLoginEndpoint:
         """Login with invalid username should return 401."""
         response = client.post(
             "/api/v1/auth/login",
-            data={"username": "invalid", "password": "password123"},
+            data={"username": "invalid", "password": "demo-password"},
         )
         assert response.status_code == 401
         assert "incorrect username or password" in response.json()["detail"].lower()
@@ -138,7 +138,7 @@ class TestLoginEndpoint:
 
     def test_login_missing_username_returns_422(self):
         """Login without username should return 422 (validation error)."""
-        response = client.post("/api/v1/auth/login", data={"password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"password": "demo-password"})
         assert response.status_code == 422
 
     def test_login_missing_password_returns_422(self):
@@ -148,9 +148,9 @@ class TestLoginEndpoint:
 
     def test_login_returns_different_tokens(self):
         """Each login should generate a different token (iat differs)."""
-        response1 = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response1 = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         time.sleep(1)
-        response2 = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response2 = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
 
         token1 = response1.json()["access_token"]
         token2 = response2.json()["access_token"]
@@ -158,7 +158,7 @@ class TestLoginEndpoint:
 
     def test_login_token_contains_username(self):
         """JWT payload should contain username in 'sub' claim."""
-        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         token = response.json()["access_token"]
 
         # Decode without verification (for testing only)
@@ -167,7 +167,7 @@ class TestLoginEndpoint:
 
     def test_login_token_has_expiration(self):
         """JWT should have 'exp' claim set to 30 minutes from now."""
-        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         token = response.json()["access_token"]
 
         payload = pyjwt.decode(token, options={"verify_signature": False})
@@ -189,15 +189,15 @@ class TestJWTTokenValidation:
         """Set up environment for JWT auth with Argon2 hashed password."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
-        # Use Argon2 hashed password (alice=password123)
+        # Use an Argon2 hashed password for the demo test user.
         monkeypatch.setenv(
             "JWT_TEST_USERS",
-            '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$3MKxLJSv0Ol1eueygZAV6w$mb8m63Id29lRAjPrYv+K180PAqxhRyoqkWBLQMPZ0ZM"}',
+            '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$oYwUidtZ9Y8t+NU9ccv+jw$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}',
         )
 
     def get_valid_token(self):
         """Helper to get a valid JWT token."""
-        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         return response.json()["access_token"]
 
     def test_missing_authorization_header_returns_401(self):
@@ -244,7 +244,7 @@ class TestJWTTokenValidation:
         monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "0")
 
         # Need to get a fresh token with the new expiration
-        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         token = response.json()["access_token"]
 
         time.sleep(2)  # Wait for expiration
@@ -337,15 +337,15 @@ class TestJWTEdgeCases:
         """Set up environment for JWT auth with Argon2 hashed password."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
-        # Use Argon2 hashed password (alice=password123)
+        # Use an Argon2 hashed password for the demo test user.
         monkeypatch.setenv(
             "JWT_TEST_USERS",
-            '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$3MKxLJSv0Ol1eueygZAV6w$mb8m63Id29lRAjPrYv+K180PAqxhRyoqkWBLQMPZ0ZM"}',
+            '{"alice":"$argon2id$v=19$m=65536,t=3,p=4$oYwUidtZ9Y8t+NU9ccv+jw$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}',
         )
 
     def get_valid_token(self):
         """Helper to get a valid JWT token."""
-        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "password123"})
+        response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         return response.json()["access_token"]
 
     def test_empty_authorization_header_returns_401(self):

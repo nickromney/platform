@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+
 fail() { echo "ensure-gitea-org: $*" >&2; exit 1; }
 warn() { echo "ensure-gitea-org: $*" >&2; }
 ok() { echo "ensure-gitea-org: $*"; }
@@ -8,7 +15,11 @@ ok() { echo "ensure-gitea-org: $*"; }
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
 : "${GITEA_ORG_NAME:?GITEA_ORG_NAME is required}"
-: "${GITEA_MEMBERS_DEFAULT_PWD:=password123}"
+: "${GITEA_MEMBERS_DEFAULT_PWD:=${PLATFORM_DEMO_PASSWORD:-}}"
+if [[ -z "${GITEA_MEMBERS_DEFAULT_PWD}" ]]; then
+  platform_require_vars PLATFORM_DEMO_PASSWORD || exit 1
+  GITEA_MEMBERS_DEFAULT_PWD="${PLATFORM_DEMO_PASSWORD}"
+fi
 
 GITEA_ORG_FULL_NAME="${GITEA_ORG_FULL_NAME:-}"
 GITEA_ORG_EMAIL="${GITEA_ORG_EMAIL:-}"
@@ -20,7 +31,6 @@ command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v jq >/dev/null 2>&1 || fail "jq not found"
 
 GITEA_WAIT_MAX_SECONDS="${GITEA_WAIT_MAX_SECONDS:-600}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/gitea-local-access.sh"

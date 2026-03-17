@@ -8,6 +8,7 @@ STACK_DIR := ../../terraform/kubernetes
 STATE_FILE ?= ../../terraform/.run/kubernetes-lima/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
@@ -50,6 +51,12 @@ EXPECT_ACTIONS_RUNS ?= 0
 EXPECT_NAMESPACE_SSO ?= 0
 EXPECT_NAMESPACE_OBSERVABILITY ?= 0
 EXPECT_NAMESPACE_PLATFORM_GATEWAY ?= 0
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+PLATFORM_ADMIN_PASSWORD ?=
+PLATFORM_DEMO_PASSWORD ?=
+PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+-include $(PLATFORM_ENV_FILE)
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
@@ -80,6 +87,12 @@ endif
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export PLATFORM_ADMIN_PASSWORD
+export PLATFORM_DEMO_PASSWORD
+export TF_VAR_gitea_admin_pwd ?= $(PLATFORM_ADMIN_PASSWORD)
+export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
 ifeq ($(filter $(LIMA_HOST_GATEWAY_PROXY_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid LIMA_HOST_GATEWAY_PROXY_MODE="$(LIMA_HOST_GATEWAY_PROXY_MODE)". Expected one of: $(VALID_HELPER_MODES))
@@ -245,6 +258,7 @@ check-conflicting-clusters-stopped:
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
+	stage_num=$$((10#$(STAGE))); \
 	required=(curl docker git jq kubectl limactl k3sup tofu terragrunt); \
 	optional=(k3sup-pro helm bats kubectx mkcert node npm shellcheck); \
 	missing_required=(); \
@@ -289,6 +303,10 @@ prereqs:
 		k3sup-pro version 2>/dev/null || true; \
 	fi; \
 	echo ""; \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+		echo ""; \
+	fi; \
 	$(MAKE) check-kubeconfig
 
 .PHONY: lima-vms-up
@@ -446,6 +464,9 @@ plan: workflow-validate
 		$(MAKE) status || true; \
 		exit 0; \
 	fi; \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+	fi; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG="$(KUBECONFIG_PATH)" kubectl get nodes >/dev/null 2>&1; then \
@@ -482,6 +503,9 @@ apply: workflow-validate
 		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
 	}; \
 	stage_num=$$((10#$(STAGE))); \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+	fi; \
 	if [ "$$stage_num" -eq 100 ]; then \
 		$(MAKE) prereqs; \
 		$(MAKE) check-conflicting-clusters-stopped; \
@@ -552,9 +576,10 @@ check-gateway-stack:
 
 .PHONY: check-cluster
 check-cluster:
+	@$(MAKE) check-platform-env
 	@KUBECONFIG="$(KUBECONFIG_PATH)" \
 		GITEA_USER="gitea-admin" \
-		GITEA_PWD="ChangeMe123!" \
+		GITEA_PWD="$${GITEA_PWD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 		REGISTRY_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 		EXPECT_SENTIMENT_REPO="$(EXPECT_SENTIMENT_REPO)" \
 		EXPECT_SUBNETCALC_REPO="$(EXPECT_SUBNETCALC_REPO)" \
@@ -627,6 +652,7 @@ check-sso-e2e:
 .PHONY: gitea-sync
 gitea-sync:
 	@set -euo pipefail; \
+	$(MAKE) check-platform-env; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
@@ -637,7 +663,7 @@ gitea-sync:
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
-	GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
+	GITEA_PASSWORD="$${GITEA_PASSWORD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-port-forward}" \
 	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
 	STACK_DIR="$$stack_path" \

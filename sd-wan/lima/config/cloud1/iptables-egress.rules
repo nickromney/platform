@@ -1,7 +1,10 @@
 #!/bin/bash
 # Cloud1 (Azure) egress firewall rules
 # Applied on outbound gateway (10.10.1.254)
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 # Default: drop forwarded traffic
 iptables -P FORWARD DROP

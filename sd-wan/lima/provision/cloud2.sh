@@ -1,6 +1,9 @@
 #!/bin/bash
 # Cloud2 (on-prem) specific provisioning
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 echo "=== Cloud2 (on-prem) provisioning ==="
 
@@ -35,6 +38,12 @@ bash "$PROJECT_DIR/provision/setup-iptables.sh"
 # --- Deploy subnet-calculator API ---
 # Find the repo root (PROJECT_DIR is sd-wan/lima)
 REPO_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+platform_require_vars PLATFORM_DEMO_PASSWORD || exit 1
+
 cp -r "$REPO_ROOT/apps/subnet-calculator/api-fastapi-container-app/app" /opt/app/app
 
 cat > /etc/systemd/system/sdwan-app.service << 'UNIT'
@@ -54,7 +63,10 @@ WantedBy=multi-user.target
 UNIT
 
 # Generate hashed password for demo user
-DEMO_HASH=$(/opt/app-venv/bin/python3 -c "from pwdlib import PasswordHash; from pwdlib.hashers.argon2 import Argon2Hasher; h = PasswordHash((Argon2Hasher(),)); print(h.hash('password123'))")
+DEMO_HASH=$(
+  PLATFORM_DEMO_PASSWORD="${PLATFORM_DEMO_PASSWORD}" \
+  /opt/app-venv/bin/python3 -c "import os; from pwdlib import PasswordHash; from pwdlib.hashers.argon2 import Argon2Hasher; h = PasswordHash((Argon2Hasher(),)); print(h.hash(os.environ['PLATFORM_DEMO_PASSWORD']))"
+)
 
 # Write environment file (avoids systemd quoting issues)
 cat > /etc/default/sdwan-app << EOF

@@ -8,6 +8,10 @@ VARIABLES_FILE="${STACK_DIR}/variables.tf"
 DEFAULT_GITEA_SYNC_TFVARS_FILE="${REPO_ROOT}/kubernetes/kind/stages/900-sso.tfvars"
 GITEA_SYNC_TFVARS_FILE="${GITEA_SYNC_TFVARS_FILE:-${DEFAULT_GITEA_SYNC_TFVARS_FILE}}"
 
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+
 usage() {
   cat <<'EOF'
 Usage: sync-gitea.sh [--dry-run]
@@ -148,12 +152,17 @@ main() {
 
   gitea_http_port="$(resolve_string GITEA_HTTP_NODE_PORT gitea_http_node_port 30090)"
   gitea_admin_username="$(resolve_string GITEA_ADMIN_USERNAME gitea_admin_username gitea-admin)"
-  gitea_admin_pwd="$(resolve_string GITEA_ADMIN_PWD gitea_admin_pwd ChangeMe123!)"
+  gitea_admin_pwd="$(resolve_string GITEA_ADMIN_PWD gitea_admin_pwd "${PLATFORM_ADMIN_PASSWORD:-}")"
   gitea_ssh_username="$(resolve_string GITEA_SSH_USERNAME gitea_ssh_username git)"
   gitea_local_access_mode="$(resolve_string GITEA_LOCAL_ACCESS_MODE gitea_local_access_mode nodeport)"
   gitea_ssh_port="$(resolve_string GITEA_SSH_PORT gitea_ssh_node_port 30022)"
   gitea_repo_owner="$(resolve_string GITEA_REPO_OWNER gitea_repo_owner "")"
   gitea_repo_owner_is_org="$(resolve_bool GITEA_REPO_OWNER_IS_ORG gitea_repo_owner_is_org false)"
+
+  if [[ -z "${gitea_admin_pwd}" ]]; then
+    platform_require_vars PLATFORM_ADMIN_PASSWORD || exit 1
+    gitea_admin_pwd="${PLATFORM_ADMIN_PASSWORD}"
+  fi
 
   if [[ -z "${gitea_repo_owner}" ]]; then
     gitea_repo_owner="${gitea_admin_username}"

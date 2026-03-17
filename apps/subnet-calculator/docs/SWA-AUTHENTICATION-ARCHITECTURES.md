@@ -1464,7 +1464,7 @@ export const API_CONFIG = {
  auth: {
  enabled: true, // Enable JWT auth
  username: "demo",
- password: "password123",
+ password: "demo-password",
  },
 };
 ```
@@ -1485,7 +1485,7 @@ export LOCATION=uksouth
 # 4. Deploy frontend with auth enabled
 # VITE_AUTH_ENABLED=true
 # VITE_JWT_USERNAME=demo
-# VITE_JWT_PASSWORD=password123
+# VITE_JWT_PASSWORD=demo-password
 ```
 
 **Browser Dev Tools:**
@@ -1502,7 +1502,7 @@ export LOCATION=uksouth
 1. Check API health → 401 Unauthorized
 1. TokenManager automatically logs in:
  POST /api/v1/auth/login
- Body: username=demo&password=password123
+ Body: username=demo&password=demo-password
  Response: {"access_token": "eyJ...", "token_type": "bearer"}
 1. Store token in memory
 1. Subsequent requests:
@@ -1522,7 +1522,7 @@ open https://jwt.publiccloudexperiments.net
 # Open browser dev tools → Network tab
 # See login request:
 POST https://func-subnet-calc-jwt.azurewebsites.net/api/v1/auth/login
-# username=demo&password=password123
+# username=demo&password=demo-password
 
 # See token in response:
 # {"access_token": "eyJ...", "token_type": "bearer"}

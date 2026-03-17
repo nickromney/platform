@@ -5,6 +5,7 @@ set -euo pipefail
 
 mkdir -p "$RUN_DIR"
 system_socket="${SLICER_SYSTEM_SOCKET:-${HOME}/slicer-mac/slicer.sock}"
+configured_url="${SLICER_URL:-${SLICER_SOCKET:-}}"
 system_wait_seconds="${SLICER_SYSTEM_SOCKET_WAIT_SECONDS:-240}"
 
 socket_ready() {
@@ -17,6 +18,25 @@ socket_ready() {
   fi
   return 1
 }
+
+if [ -n "$configured_url" ] && [ "$configured_url" != "$system_socket" ]; then
+  for _ in $(seq 1 "$system_wait_seconds"); do
+    if socket_ready "$configured_url"; then
+      echo "Using configured Slicer endpoint ${configured_url}"
+      exit 0
+    fi
+    rc=$?
+    if [ "$rc" = "2" ]; then
+      sleep 1
+      continue
+    fi
+    sleep 1
+  done
+
+  echo "Configured Slicer endpoint ${configured_url} was not ready after ${system_wait_seconds}s" >&2
+  echo "Verify SLICER_URL/SLICER_SOCKET (and SLICER_TOKEN_FILE/SLICER_TOKEN if needed), or use kubernetes/kind on Docker-only hosts." >&2
+  exit 1
+fi
 
 if [ ! -S "$system_socket" ]; then
   echo "Missing slicer-mac socket: ${system_socket}" >&2

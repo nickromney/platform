@@ -1,6 +1,9 @@
 #!/bin/bash
 # Cloud3 (AWS) specific provisioning
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 echo "=== Cloud3 (AWS) provisioning ==="
 

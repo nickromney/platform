@@ -33,7 +33,7 @@ This directory contains configuration for running a complete OAuth2/OIDC authent
 └──────┬───────────┘       │
        │                   │
        │ 3. User logs in   │
-       │    (demo@dev.test / password123)
+       │    (demo@dev.test / demo-password)
        │                   │
        │ 4. Returns auth code
        │                   │
@@ -65,11 +65,11 @@ This directory contains configuration for running a complete OAuth2/OIDC authent
 2. **Access the application:**
    - React Frontend: <http://localhost:3006>
    - API Documentation: <http://localhost:8081/api/v1/docs>
-   - Keycloak Admin: <http://localhost:8180> (demo@admin.test / password123)
+   - Keycloak Admin: <http://localhost:8180> (demo@admin.test / demo-password)
 
 3. **Test users:**
-   - Username: `demo@dev.test`, Password: `password123`
-   - Username: `demo@admin.test`, Password: `password123`
+   - Username: `demo@dev.test`, Password: `demo-password`
+   - Username: `demo@admin.test`, Password: `demo-password`
 
 ## How It Works
 
@@ -79,7 +79,7 @@ When you access <http://localhost:3006>:
 
 1. React app checks if you're authenticated
 2. If not, redirects to Keycloak login page
-3. You enter credentials (demo@dev.test / password123)
+3. You enter credentials (demo@dev.test / demo-password)
 4. Keycloak validates and returns authorization code
 5. React app exchanges code for access token using PKCE
 6. Token is stored securely in browser localStorage
@@ -133,8 +133,8 @@ The realm is pre-configured via `realm-export.json` with:
 
 | Username | Password     | Roles       | Email               |
 |----------|--------------|-------------|---------------------|
-| demo@dev.test   | password123  | user        | <demo@dev.test>     |
-| demo@admin.test | password123  | admin, user | <demo@admin.test>   |
+| demo@dev.test   | demo-password  | user        | <demo@dev.test>     |
+| demo@admin.test | demo-password  | admin, user | <demo@admin.test>   |
 
 ## Security Warning
 
@@ -142,7 +142,7 @@ The realm is pre-configured via `realm-export.json` with:
 
 The `realm-export.json` file contains:
 
-- Hardcoded passwords (`password123`)
+- Hardcoded passwords (`demo-password`)
 - Pre-configured client secrets
 - Permissive security settings (SSL not required, etc.)
 
@@ -184,7 +184,7 @@ VITE_OIDC_REDIRECT_URI=http://localhost:3006
 
 Access the admin console at <http://localhost:8180>
 
-**Login:** demo@admin.test / password123
+**Login:** demo@admin.test / demo-password
 
 ### Common Admin Tasks
 
@@ -240,7 +240,7 @@ podman-compose up keycloak api-fastapi-keycloak frontend-react-keycloak
 # Wait for Keycloak to start (60s)
 # Access http://localhost:3006
 # Click "Login" button
-# Enter: demo@dev.test / password123
+# Enter: demo@dev.test / demo-password
 # Should redirect back with user info displayed
 ```
 

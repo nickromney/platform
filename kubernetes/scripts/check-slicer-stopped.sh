@@ -7,7 +7,7 @@ running_slicer_vm=""
 running_slicer_forwards=""
 running_slicer_proxies=""
 
-if command -v slicer >/dev/null 2>&1 && [ -S "${slicer_socket}" ]; then
+if command -v slicer >/dev/null 2>&1; then
   if command -v jq >/dev/null 2>&1; then
     running_slicer_vm="$(
       SLICER_URL="${slicer_socket}" slicer vm list --json 2>/dev/null | \

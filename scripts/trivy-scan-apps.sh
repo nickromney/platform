@@ -8,6 +8,10 @@ REPORT_ROOT="${TRIVY_REPORT_ROOT:-${REPO_ROOT}/.run/apps-security/trivy}"
 CLONE_ROOT="${REPORT_ROOT}/gitea-clones"
 TRIVY_IMAGE="${TRIVY_IMAGE:-aquasec/trivy:0.69.3}"
 
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+
 TRIVY_SEVERITY="${TRIVY_SEVERITY:-HIGH,CRITICAL}"
 TRIVY_FS_SCANNERS="${TRIVY_FS_SCANNERS:-vuln,misconfig,secret}"
 TRIVY_IMAGE_SCANNERS="${TRIVY_IMAGE_SCANNERS:-vuln,secret}"
@@ -654,7 +658,12 @@ clone_gitea_repo() {
   local dest_abs="${REPO_ROOT}/${dest_rel}"
   local remote_url auth_header
   local admin_user="${GITEA_ADMIN_USERNAME:-gitea-admin}"
-  local admin_pwd="${GITEA_ADMIN_PWD:-ChangeMe123!}"
+  local admin_pwd="${GITEA_ADMIN_PWD:-${PLATFORM_ADMIN_PASSWORD:-}}"
+
+  if [[ -z "${admin_pwd}" ]]; then
+    platform_require_vars PLATFORM_ADMIN_PASSWORD || exit 1
+    admin_pwd="${PLATFORM_ADMIN_PASSWORD}"
+  fi
 
   rm -rf "${dest_abs}"
   mkdir -p "$(dirname "${dest_abs}")"
@@ -670,8 +679,13 @@ clone_gitea_repo() {
 gitea_repo_exists() {
   local repo_name="$1"
   local admin_user="${GITEA_ADMIN_USERNAME:-gitea-admin}"
-  local admin_pwd="${GITEA_ADMIN_PWD:-ChangeMe123!}"
+  local admin_pwd="${GITEA_ADMIN_PWD:-${PLATFORM_ADMIN_PASSWORD:-}}"
   local code
+
+  if [[ -z "${admin_pwd}" ]]; then
+    platform_require_vars PLATFORM_ADMIN_PASSWORD || exit 1
+    admin_pwd="${PLATFORM_ADMIN_PASSWORD}"
+  fi
 
   code="$(
     curl -s -o /dev/null -w '%{http_code}' \

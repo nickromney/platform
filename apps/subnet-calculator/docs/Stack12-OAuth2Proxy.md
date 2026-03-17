@@ -143,7 +143,7 @@ podman-compose logs -f oauth2-proxy-frontend
 2. **Automatic redirect:** You'll be redirected to Keycloak login
 3. **Login:** Use demo credentials:
    - Username: `demo`
-   - Password: `password123`
+   - Password: `demo-password`
 4. **Redirected back:** After login, you'll be redirected to the frontend
 5. **Access granted:** You now have access to the subnet calculator
 
@@ -528,7 +528,7 @@ watch podman-compose ps
 # 3. Open browser
 open http://localhost:3007
 
-# 4. Login with demo/password123
+# 4. Login with demo/demo-password
 
 # 5. Verify authentication
 # Check browser cookies for _oauth2_proxy

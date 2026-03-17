@@ -59,11 +59,11 @@ Defaults match the demo creds in the platform stack. Override with env vars if y
 
 ```bash
 export DEX_DEV_LOGIN="demo@dev.test"
-export DEX_DEV_PASSWORD="password123"
+export DEX_DEV_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
 
 export DEX_UAT_LOGIN="demo@uat.test"
-export DEX_UAT_PASSWORD="password123"
+export DEX_UAT_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
 
 export DEX_ADMIN_LOGIN="demo@admin.test"
-export DEX_ADMIN_PASSWORD="password123"
+export DEX_ADMIN_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
 ```
