@@ -113,7 +113,7 @@ uv run pytest -v
 ./test_endpoints.sh --detailed https://your-api.example.com/api
 ```
 
-**Authentication:** Automatically obtains JWT token using `demo:password123`
+**Authentication:** Automatically obtains JWT token using `demo:demo-password`
 
 ### Frontend Testing
 
@@ -349,7 +349,7 @@ open http://localhost:4281
 # curl test (must extract JWT first)
 TOKEN=$(curl -s -X POST http://localhost:4281/api/v1/auth/login \
  -H "Content-Type: application/x-www-form-urlencoded" \
- -d "username=demo&password=password123" | jq -r '.access_token')
+ -d "username=demo&password=demo-password" | jq -r '.access_token')
 curl -H "Authorization: Bearer $TOKEN" http://localhost:4281/api/v1/health
 ```
 

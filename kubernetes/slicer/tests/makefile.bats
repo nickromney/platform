@@ -11,6 +11,7 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
+  [[ "${output}" == *"Docker-only hosts       -> use ../kind"* ]]
 }
 
 @test "slicer stage without action shows guidance" {
@@ -26,4 +27,11 @@ setup() {
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Did you mean 'apply'?"* ]]
+}
+
+@test "slicer stage 100 plan explains the daemon requirement" {
+  run make -C "${REPO_ROOT}/kubernetes/slicer" 100 plan
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"require a reachable Slicer daemon"* ]]
 }

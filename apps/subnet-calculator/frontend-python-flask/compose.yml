@@ -29,4 +29,4 @@ services:
       - API_BASE_URL=http://localhost:8080/api/v1
       # JWT Authentication credentials (if using JWT auth)
       - JWT_USERNAME=demo@dev.test
-      - JWT_PASSWORD=password123
+      - JWT_PASSWORD=demo-password

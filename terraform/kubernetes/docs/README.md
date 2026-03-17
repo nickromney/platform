@@ -53,15 +53,19 @@ The broader health check at [`../scripts/check-cluster-health.sh`](../scripts/ch
 The same Terraform root can now run without provisioning Kind by setting `provision_kind_cluster = false`.
 
 - Single stack path: `terraform/kubernetes`
-- Backend profile inputs:
-  - `targets/kind.tfvars` (Kind provisioning enabled)
-  - `targets/k3s.tfvars` (existing kubeconfig cluster)
+- Default teaching path: [`../../../kubernetes/kind`](../../../kubernetes/kind/README.md), which provisions a Docker-backed kind cluster on macOS or Linux
+- Existing-cluster wrappers in this repo:
+  - [`../../../kubernetes/lima`](../../../kubernetes/lima/Makefile)
+  - [`../../../kubernetes/slicer`](../../../kubernetes/slicer/README.md)
 
-Example:
+Example for an already-existing cluster:
 
 ```bash
-cd kubernetes/kind
-KUBECONFIG_CONTEXT=my-context make k3s apply 900 AUTO_APPROVE=1
+cd terraform/kubernetes
+terragrunt plan \
+  -var 'provision_kind_cluster=false' \
+  -var 'kubeconfig_path=~/.kube/config' \
+  -var 'kubeconfig_context=my-context'
 ```
 
 ## Architecture Views

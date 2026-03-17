@@ -1,7 +1,10 @@
 #!/bin/bash
 # Setup PKI with step-ca for mTLS
 # Reads CLOUD_NUM, CLOUD_NAME, PROJECT_DIR from environment
-set -eux
+set -euo pipefail
+# Parent provisioners may run with xtrace enabled; turn it off here so
+# private keys, CA material, and leaf cert generation do not end up in logs.
+set +x
 
 echo "=== Setting up PKI for $CLOUD_NAME ==="
 

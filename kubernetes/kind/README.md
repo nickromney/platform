@@ -4,25 +4,26 @@ Local Kubernetes cluster, built in cumulative stages from a bare kind bootstrap 
 
 ## Environment
 
-This README is for the kind-on-Docker-Desktop path.
+This README covers the Docker-backed teaching path for the repo.
 
-- Tested on macOS Tahoe 26.4.
-- Tested on a Mac mini M4 with 16 GB RAM.
-- Docker Desktop was configured with "full" local resources, which on this machine meant 8 GB RAM.
-- If Docker Desktop is not running, kind provisioning and later stages will fail.
+- Validated on macOS with Docker Desktop.
+- Validated on Linux with a local Docker daemon.
+- On macOS, Docker Desktop must be running before you plan, apply, or reset.
+- On Linux, Docker Engine is enough; Docker Desktop is not required.
+- `kind` is still required on a bare Ubuntu host even if Docker is already installed.
 
 ## Operational truths
 
 - Stage `100` is expected to look unhealthy. The cluster exists, but there is no CNI until stage `200` installs Cilium.
 - The stage model is cumulative. `make kind apply 900` means "bring the stack to the stage-900 shape", not "apply only the last step".
 - Treat every planned destroy as something to explain before apply. In this stack, some `null_resource` replacements are expected orchestration churn, but they should still be inspected.
-- kind uses Docker Desktop, and this path assumes it is running before you plan, apply, or reset.
+- kind uses the local Docker daemon. On macOS that normally means Docker Desktop; on Linux Docker Engine is enough.
 - Exposed service ports bind to `127.0.0.1`, not `0.0.0.0`, so the local platform stays local and can coexist with other local VM-based stacks.
 - `make reset` is destructive local cleanup. Without `AUTO_APPROVE=1`, it should prompt before removing cluster, kubeconfig, or local state.
 
 ## Prerequisites
 
-Install Docker Desktop separately, then use Homebrew for the CLI toolchain.
+Install a working Docker daemon first. On macOS that usually means Docker Desktop. On Linux, Docker Engine or Docker Desktop is fine. The commands below use Homebrew for the CLI toolchain, but `make prereqs` is the source of truth for what must exist.
 
 Core tools:
 
@@ -37,7 +38,7 @@ brew install cilium-cli helm hubble kubectx mkcert yq
 mkcert -install
 ```
 
-Then start Docker Desktop, give it enough resources, and run:
+Then start the Docker daemon, give it enough resources, and run:
 
 ```bash
 make prereqs

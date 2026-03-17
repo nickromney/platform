@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
@@ -22,7 +29,12 @@ require curl
 require jq
 
 GITEA_USER="${GITEA_USER:-gitea-admin}"
-GITEA_PWD="${GITEA_PWD:-ChangeMe123!}"
+if [[ -z "${GITEA_PWD:-}" ]]; then
+	platform_require_vars PLATFORM_ADMIN_PASSWORD || exit 1
+	GITEA_PWD="${PLATFORM_ADMIN_PASSWORD}"
+else
+	GITEA_PWD="${GITEA_PWD}"
+fi
 GITEA_HOST="${GITEA_HOST:-localhost:30090}"
 REGISTRY_HOST="${REGISTRY_HOST:-localhost:30090}"
 EXPECT_SENTIMENT_REPO="${EXPECT_SENTIMENT_REPO:-1}"

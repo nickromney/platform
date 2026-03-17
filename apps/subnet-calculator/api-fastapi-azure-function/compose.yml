@@ -28,9 +28,9 @@ services:
       - WEBSITES_PORT=8080
       - ASPNETCORE_URLS=http://+:8080
       # Test users (Argon2 hashed passwords)
-      # demo@dev.test: password123
-      # demo@admin.test: password123
-      - JWT_TEST_USERS={"demo@dev.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo","demo@admin.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$TklhcmEkyMzqJaH3KHQQDA$$rgp8AmtaR6PzBgjyZGNsivb2yJRqULRt5B+BmzUnzbo"}
+      # demo@dev.test: demo-password
+      # demo@admin.test: demo-password
+      - JWT_TEST_USERS={"demo@dev.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$oYwUidtZ9Y8t+NU9ccv+jw$$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI","demo@admin.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$oYwUidtZ9Y8t+NU9ccv+jw$$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 10s

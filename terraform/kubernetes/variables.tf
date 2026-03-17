@@ -441,16 +441,17 @@ variable "gitea_ssh_username" {
 }
 
 variable "gitea_admin_pwd" {
-  description = "Gitea admin password (local dev). Override via TF_VAR_gitea_admin_pwd."
+  description = "Shared local admin password for Gitea/Grafana bootstrap. Set via TF_VAR_gitea_admin_pwd or the repo .env."
   type        = string
   sensitive   = true
-  default     = "ChangeMe123!"
+  default     = null
 }
 
 variable "gitea_member_user_pwd" {
-  description = "Default password for auto-created Gitea members (unused for OAuth users)."
+  description = "Shared demo password for auto-created Gitea members and SSO bootstrap users. Set via TF_VAR_gitea_member_user_pwd or the repo .env."
   type        = string
-  default     = "password123"
+  sensitive   = true
+  default     = null
 }
 
 variable "gitea_repo_owner" {

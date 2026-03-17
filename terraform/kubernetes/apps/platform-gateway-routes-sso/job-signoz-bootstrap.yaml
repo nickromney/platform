@@ -31,6 +31,12 @@ spec:
         - name: bootstrap
           image: curlimages/curl:8.10.1
           imagePullPolicy: IfNotPresent
+          env:
+            - name: SIGNOZ_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: signoz-bootstrap-credentials
+                  key: SIGNOZ_BOOTSTRAP_PASSWORD
           command:
             - /bin/sh
             - -c
@@ -42,7 +48,7 @@ spec:
               SECRET_NAME="signoz-auth-proxy-credentials"
 
               EMAIL="${SIGNOZ_BOOTSTRAP_EMAIL:-demo@admin.test}"
-              PASSWORD="${SIGNOZ_BOOTSTRAP_PASSWORD:-password123}"
+              PASSWORD="${SIGNOZ_BOOTSTRAP_PASSWORD:?missing SIGNOZ_BOOTSTRAP_PASSWORD from signoz-bootstrap-credentials secret}"
               LOGIN_WAIT_SECONDS="${SIGNOZ_BOOTSTRAP_LOGIN_WAIT_SECONDS:-600}"
 
               K8S_API="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"

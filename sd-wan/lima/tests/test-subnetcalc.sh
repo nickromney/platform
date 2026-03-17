@@ -2,6 +2,14 @@
 # Subnet calculator end-to-end tests: frontend, mTLS proxy, JWT auth
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+platform_require_vars PLATFORM_DEMO_PASSWORD || exit 1
+
 PASS=0
 FAIL=0
 
@@ -37,7 +45,7 @@ fi
 
 echo ""
 echo "--- JWT login via API proxy ---"
-token=$(limactl shell cloud1 -- bash -c "curl -s -X POST http://10.10.1.4:8080/api/v1/auth/login -H 'Content-Type: application/x-www-form-urlencoded' --data 'username=demo&password=password123'" || echo "")
+token=$(limactl shell cloud1 -- bash -c "curl -s -X POST http://10.10.1.4:8080/api/v1/auth/login -H 'Content-Type: application/x-www-form-urlencoded' --data 'username=demo&password=${PLATFORM_DEMO_PASSWORD}'" || echo "")
 if echo "$token" | grep -q "access_token"; then
     echo "  PASS: JWT login returns access token"
     PASS=$((PASS + 1))

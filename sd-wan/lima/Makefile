@@ -7,11 +7,22 @@ MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 include ../../mk/common.mk
 PROJECT_DIR := $(patsubst %/,%,$(MAKEFILE_DIR))
 REPO_ROOT := $(abspath $(PROJECT_DIR)/../..)
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+PLATFORM_ADMIN_PASSWORD ?=
+PLATFORM_DEMO_PASSWORD ?=
+PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+-include $(PLATFORM_ENV_FILE)
 FRONTEND_SHARED_DIR := $(REPO_ROOT)/apps/subnet-calculator/shared-frontend
 FRONTEND_DIR := $(REPO_ROOT)/apps/subnet-calculator/frontend-typescript-vite
 CHECK_HOST_PORTS := $(PROJECT_DIR)/scripts/check-lima-host-ports.sh
 CLOUDS := cloud1 cloud2 cloud3
 LIMA_START_TIMEOUT ?= 30m
+
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export PLATFORM_ADMIN_PASSWORD
+export PLATFORM_DEMO_PASSWORD
 
 .PHONY: prereqs check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e \
         ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
@@ -22,6 +33,7 @@ LIMA_START_TIMEOUT ?= 30m
 prereqs: ## Check macOS host prerequisites for Lima + networking
 	@echo "=== Checking host prerequisites ==="
 	@set -e; \
+	$(MAKE) check-platform-env; \
 	missing=0; \
 	LIMA_NETWORKS_FILE="$$HOME/.lima/_config/networks.yaml"; \
 	if [ "$$(uname -s)" != "Darwin" ]; then \
@@ -93,6 +105,7 @@ fix-guest-hostnames:
 	done
 
 build-frontend: ## Build subnet-calculator frontend for deployment
+	@$(MAKE) check-platform-env
 	@echo "=== Building frontend ==="
 	@npm --prefix "$(FRONTEND_SHARED_DIR)" run build
 	@cd "$(FRONTEND_DIR)" && \
@@ -100,7 +113,7 @@ build-frontend: ## Build subnet-calculator frontend for deployment
 		VITE_AUTH_ENABLED=true \
 		VITE_AUTH_METHOD=jwt \
 		VITE_JWT_USERNAME=demo \
-		VITE_JWT_PASSWORD=password123 \
+		VITE_JWT_PASSWORD="$${PLATFORM_DEMO_PASSWORD}" \
 		VITE_SHOW_NETWORK_PATH=true \
 		VITE_FRONTEND_STATUS_LABEL='Frontend origin' \
 		VITE_API_INGRESS_STATUS_LABEL='Cloud1 ingress' \
@@ -115,7 +128,7 @@ build-frontend: ## Build subnet-calculator frontend for deployment
 		VITE_AUTH_ENABLED=true \
 		VITE_AUTH_METHOD=jwt \
 		VITE_JWT_USERNAME=demo \
-		VITE_JWT_PASSWORD=password123 \
+		VITE_JWT_PASSWORD="$${PLATFORM_DEMO_PASSWORD}" \
 		VITE_SHOW_NETWORK_PATH=true \
 		VITE_FRONTEND_STATUS_LABEL='Frontend origin' \
 		VITE_API_INGRESS_STATUS_LABEL='Cloud1 ingress' \

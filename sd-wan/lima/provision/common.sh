@@ -1,7 +1,10 @@
 #!/bin/bash
 # Common provisioning for all Lima VMs
 # Installs shared packages and sets up base networking
-set -eux
+set -euo pipefail
+if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
+    set -x
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 

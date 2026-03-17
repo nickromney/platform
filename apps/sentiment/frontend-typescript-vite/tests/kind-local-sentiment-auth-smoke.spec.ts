@@ -5,8 +5,12 @@ import { type Page, expect, test } from '@playwright/test'
 
 const BASE_URL = process.env.BASE_URL || 'https://sentiment.dev.127.0.0.1.sslip.io'
 const USERNAME = process.env.OIDC_USERNAME || process.env.KEYCLOAK_USERNAME || 'demo@dev.test'
-const PASSWORD = process.env.OIDC_PASSWORD || process.env.KEYCLOAK_PASSWORD || 'password123'
+const PASSWORD = process.env.OIDC_PASSWORD || process.env.KEYCLOAK_PASSWORD || process.env.PLATFORM_DEMO_PASSWORD || ''
 const APP_TITLE = 'Sentiment Analysis (Authenticated UI)'
+
+if (!PASSWORD) {
+  throw new Error('Set PLATFORM_DEMO_PASSWORD (or OIDC_PASSWORD / KEYCLOAK_PASSWORD) before running this test')
+}
 
 async function submitIdentityProviderLogin(page: Page) {
   const keycloakUsername = page.locator('#username')

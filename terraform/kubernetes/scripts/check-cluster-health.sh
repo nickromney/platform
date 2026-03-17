@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/platform-env.sh"
+platform_load_env
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
@@ -548,9 +555,15 @@ if [[ -z "${GITEA_ADMIN_PWD_EFFECTIVE}" ]]; then
   pwd_from_tfvars=$(tfvar_get gitea_admin_pwd)
   if [[ -n "${pwd_from_tfvars}" ]]; then
     GITEA_ADMIN_PWD_EFFECTIVE="${pwd_from_tfvars}"
+  elif [[ -n "${PLATFORM_ADMIN_PASSWORD:-}" ]]; then
+    GITEA_ADMIN_PWD_EFFECTIVE="${PLATFORM_ADMIN_PASSWORD}"
   else
-    GITEA_ADMIN_PWD_EFFECTIVE="ChangeMe123!"
+    GITEA_ADMIN_PWD_EFFECTIVE=""
   fi
+fi
+GITEA_ADMIN_AUTH_AVAILABLE=0
+if [[ -n "${GITEA_ADMIN_PWD_EFFECTIVE}" ]]; then
+  GITEA_ADMIN_AUTH_AVAILABLE=1
 fi
 
 ARGOCD_NS=$(tfvar_get argocd_namespace)
@@ -615,9 +628,8 @@ print_gateway_urls() {
     echo ""
     echo "SSO (Dex + oauth2-proxy):"
     echo "  • Dex:      https://dex.127.0.0.1.sslip.io${port_suffix}/dex"
-    echo "  • Admin:    demo@admin.test / password123"
-    echo "  • Dev:      demo@dev.test / password123"
-    echo "  • UAT:      demo@uat.test / password123"
+    echo "  • Users:    demo@admin.test, demo@dev.test, demo@uat.test"
+    echo "  • Password: set via PLATFORM_DEMO_PASSWORD in .env"
   fi
 }
 
@@ -713,6 +725,11 @@ check_gitea_api_surface() {
   local local_url="http://127.0.0.1:${port}${path}"
   local local_code node_ip node_url node_code
 
+  if [[ "${GITEA_ADMIN_AUTH_AVAILABLE}" != "1" ]]; then
+    warn "Skipping Gitea API auth checks; set PLATFORM_ADMIN_PASSWORD in .env or export GITEA_ADMIN_PWD"
+    return 0
+  fi
+
   if ! have_cmd curl; then
     warn "curl not found; skipping Gitea API reachability checks"
     return 0
@@ -753,9 +770,8 @@ print_success_dashboard_hint() {
 
   echo "Grafana launchpad: ${grafana_url}"
   if [[ "${EXPECT_SSO}" == "true" ]]; then
-    echo "User: demo@admin.test / password123"
-    echo "UAT: demo@uat.test / password123"
-    echo "Dev: demo@dev.test / password123"
+    echo "Users: demo@admin.test, demo@uat.test, demo@dev.test"
+    echo "Password: set via PLATFORM_DEMO_PASSWORD in .env"
   fi
 }
 
@@ -1118,6 +1134,11 @@ gitea_repo_check() {
     return 0
   fi
 
+  if [[ "${GITEA_ADMIN_AUTH_AVAILABLE}" != "1" ]]; then
+    warn "${repo}: skipping authenticated Gitea checks; set PLATFORM_ADMIN_PASSWORD in .env or export GITEA_ADMIN_PWD"
+    return 0
+  fi
+
   if [[ "${EXPECT_ACTIONS_RUNNER}" != "true" && "${EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES}" == "true" ]]; then
     ok "${repo}: repo sync skipped (external images + runner disabled${tfvars_hint})"
     return 0
@@ -1135,7 +1156,7 @@ gitea_repo_check() {
     ok "${repo}: repo present in Gitea (${GITEA_REPO_OWNER}/${repo})"
   else
     if [[ "${code}" == "401" || "${code}" == "403" ]]; then
-      fail_soft "${repo}: repo check unauthorized (HTTP ${code}). If you set a non-default password, export GITEA_ADMIN_PWD before running this script."
+      fail_soft "${repo}: repo check unauthorized (HTTP ${code}). Set GITEA_ADMIN_PWD or PLATFORM_ADMIN_PASSWORD before running this script."
     else
       fail_soft "${repo}: repo missing/unreachable (HTTP ${code})"
     fi

@@ -16,7 +16,7 @@ High-level design:
 ## Demo login
 
 - Email: `demo@example.com`
-- Password: `password123`
+- Password: your `PLATFORM_DEMO_PASSWORD` value from the repo root `.env`
 
 1. Do you want SSO for **all** UIs (`argocd`, `gitea`, `hubble`, `signoz`) — or just ArgoCD/Gitea?
 2. Which IdP do you want: **Keycloak**, **Authentik**, or **Dex with static users**?

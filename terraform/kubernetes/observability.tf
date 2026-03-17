@@ -310,7 +310,10 @@ spec:
             registry: ${var.hardened_image_registry}
             repository: k8s-sidecar
             tag: 2.5.1-debian13
-        adminPassword: "ChangeMe123!"
+        admin:
+          existingSecret: grafana-admin-credentials
+          userKey: admin-user
+          passwordKey: admin-password
         persistence:
           enabled: false
         resources:
@@ -1413,6 +1416,26 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.observability,
     kubectl_manifest.argocd_app_prometheus,
+  ]
+}
+
+resource "kubernetes_secret_v1" "grafana_admin_credentials" {
+  count = local.enable_grafana_effective ? 1 : 0
+
+  metadata {
+    name      = "grafana-admin-credentials"
+    namespace = "observability"
+  }
+
+  type = "Opaque"
+
+  data = {
+    "admin-user"     = "admin"
+    "admin-password" = var.gitea_admin_pwd
+  }
+
+  depends_on = [
+    kubernetes_namespace_v1.observability,
   ]
 }
 

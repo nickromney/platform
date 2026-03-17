@@ -15,6 +15,7 @@ setup() {
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
   [[ "${output}" == *"900 - full stack + sso"* ]]
+  [[ "${output}" == *"Linux -> Docker Engine or Docker Desktop"* ]]
   [[ "${output}" == *"make status"* ]]
 }
 

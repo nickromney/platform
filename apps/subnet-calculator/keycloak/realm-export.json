@@ -147,7 +147,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "password123",
+          "value": "demo-password",
           "temporary": false
         }
       ],
@@ -165,7 +165,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "password123",
+          "value": "demo-password",
           "temporary": false
         }
       ],

@@ -73,7 +73,7 @@ podman-compose up api-fastapi-container-app frontend-typescript-vite
 podman-compose up api-fastapi-azure-function frontend-typescript-vite-jwt
 # Access frontend at http://localhost:3001
 # Access API docs at http://localhost:8080/api/v1/docs
-# JWT authentication handled automatically (demo/password123)
+# JWT authentication handled automatically (demo/demo-password)
 ```
 
 ## JWT Authentication
@@ -106,7 +106,7 @@ For containers, the frontend now reads runtime config from `/runtime-config.js` 
 # Development with JWT authentication
 VITE_AUTH_ENABLED=true \
 VITE_JWT_USERNAME=demo@dev.test \
-VITE_JWT_PASSWORD=password123 \
+VITE_JWT_PASSWORD=demo-password \
 VITE_API_URL=http://localhost:8080 \
 bun run dev
 
@@ -124,7 +124,7 @@ podman build -t subnet-calculator-frontend-typescript-vite-jwt:latest .
 podman run --rm -p 3001:8080 \
   -e AUTH_METHOD=jwt \
   -e JWT_USERNAME=demo@dev.test \
-  -e JWT_PASSWORD=password123 \
+  -e JWT_PASSWORD=demo-password \
   -e API_BASE_URL=http://api-fastapi-azure-function:8080 \
   subnet-calculator-frontend-typescript-vite-jwt:latest
 ```
@@ -251,7 +251,7 @@ When `AUTH_METHOD=none` in runtime config, or `VITE_AUTH_ENABLED=false` (default
 # Run tests with JWT mocking enabled
 AUTH_METHOD=jwt \
 JWT_USERNAME=demo@dev.test \
-JWT_PASSWORD=password123 \
+JWT_PASSWORD=demo-password \
 bun run test
 
 # All 30 tests pass with or without JWT enabled

@@ -66,7 +66,7 @@ services:
     entrypoint: ["/bin/sh", "/opt/keycloak/local/start-with-templated-realm.sh"]
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN_USERNAME:-demo@admin.test}
-      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-password123}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${PLATFORM_DEMO_PASSWORD:?Set PLATFORM_DEMO_PASSWORD in the repo .env or export it before running docker compose}
       - KC_DB=dev-file
       - KC_HTTP_ENABLED=true
       - KC_HOSTNAME_STRICT=false
@@ -74,8 +74,8 @@ services:
       - KC_PROXY_HEADERS=xforwarded
       - KC_HEALTH_ENABLED=true
       - KC_METRICS_ENABLED=true
-      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_PROXY_CLIENT_SECRET:-password123}
-      - KEYCLOAK_DEMO_PASSWORD=${KEYCLOAK_DEMO_PASSWORD:-password123}
+      - OAUTH2_PROXY_CLIENT_SECRET=${PLATFORM_DEMO_PASSWORD:?Set PLATFORM_DEMO_PASSWORD in the repo .env or export it before running docker compose}
+      - KEYCLOAK_DEMO_PASSWORD=${PLATFORM_DEMO_PASSWORD:?Set PLATFORM_DEMO_PASSWORD in the repo .env or export it before running docker compose}
     ports:
       - "8300:8080"
     volumes:
@@ -149,7 +149,7 @@ services:
       - --oidc-jwks-url=http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs
       - --validate-url=http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/userinfo
       - --client-id=oauth2-proxy
-      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-password123}
+      - --client-secret=${PLATFORM_DEMO_PASSWORD:?Set PLATFORM_DEMO_PASSWORD in the repo .env or export it before running docker compose}
       - --redirect-url=http://localhost:8304/oauth2/callback
       - --code-challenge-method=S256
       - --upstream=http://edge:8080

@@ -98,7 +98,7 @@ https://static-swa-no-auth.publiccloudexperiments.net
 ### 2. Frontend prompts for credentials
 
 - Username: `demo` (default)
-- Password: `password123` (default)
+- Password: `demo-password` (default)
 
 ### 3. Frontend calls `/api/v1/auth/login`
 
@@ -106,7 +106,7 @@ https://static-swa-no-auth.publiccloudexperiments.net
 POST https://subnet-calc-fa-jwt-auth.publiccloudexperiments.net/api/v1/auth/login
 Content-Type: application/x-www-form-urlencoded
 
-username=demo&password=password123
+username=demo&password=demo-password
 ```
 
 ### 4. Function validates credentials and returns JWT
@@ -146,7 +146,7 @@ curl https://subnet-calc-fa-jwt-auth.publiccloudexperiments.net/api/v1/health
 ```bash
 curl -X POST https://subnet-calc-fa-jwt-auth.publiccloudexperiments.net/api/v1/auth/login \
  -H "Content-Type: application/x-www-form-urlencoded" \
- -d "username=demo&password=password123"
+ -d "username=demo&password=demo-password"
 
 # Should return JWT token
 ```

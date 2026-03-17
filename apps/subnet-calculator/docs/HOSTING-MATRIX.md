@@ -17,7 +17,7 @@ This page summarizes the supported ways to run the Subnet Calculator frontend + 
 - **Where**: `make start-swa-05` (local SWA CLI) and `terraform/terragrunt/personal-sub/subnet-calc-static-web-apps` stack `"noauth"`.
 - **Frontend**: SWA hosting the TypeScript SPA (ports 4281 locally, Standard SKU in prod).
 - **Backend**: Internet-accessible FastAPI Function App with `AUTH_METHOD=jwt`.
-- **Auth Flow**: SPA manages login via `/api/v1/auth/login`, stores a JWT (demo/password123 for dev), and attaches `Authorization: Bearer` headers for every request.
+- **Auth Flow**: SPA manages login via `/api/v1/auth/login`, stores a JWT (demo/demo-password for dev), and attaches `Authorization: Bearer` headers for every request.
 - **Status**: Unchanged by the Easy Auth work; keep using JWT when you need simple credential-based access or when SWA proxies directly to the function without federated SSO.
 
 ## 3. Azure Static Web Apps + Easy Auth (Platform)

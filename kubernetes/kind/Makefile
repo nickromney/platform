@@ -9,6 +9,7 @@ STATE_FILE ?= ../../terraform/.run/kubernetes/terraform.tfstate
 LEGACY_STATE_FILE ?= ../../terraform/.run/platform/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 CHECK_STAGE_MONOTONICITY := $(MAKEFILE_DIR)scripts/check-stage-monotonicity.sh
 CHECK_KIND_HOST_PORTS := $(MAKEFILE_DIR)scripts/check-kind-host-ports.sh
@@ -29,6 +30,12 @@ KIND_API_READY_DELAY_SECONDS ?= 2
 KIND_CHECK_LIMA_INSTANCE_PREFIX ?= k3s-node
 KIND_CHECK_SLICER_VM_NAME ?= slicer-1
 KIND_CHECK_SLICER_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+PLATFORM_ADMIN_PASSWORD ?=
+PLATFORM_DEMO_PASSWORD ?=
+PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+-include $(PLATFORM_ENV_FILE)
 
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
@@ -67,6 +74,12 @@ KUBECONFIG_CONTEXT ?= $(KIND_KUBECONFIG_CONTEXT)
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export PLATFORM_ADMIN_PASSWORD
+export PLATFORM_DEMO_PASSWORD
+export TF_VAR_gitea_admin_pwd ?= $(PLATFORM_ADMIN_PASSWORD)
+export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
 ifeq ($(filter $(KIND_PRELOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid KIND_PRELOAD_IMAGES_MODE="$(KIND_PRELOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
@@ -91,7 +104,7 @@ prereq_llm_stage_file = $(abspath $(if $(filter 1,$(STAGE_SPECIFIED)),$(stage_fi
 
 .PHONY: help
 help:
-	@echo "kind demo (Docker Desktop + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/Loki)"
+	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/Loki)"
 	@echo ""
 	@echo "Workflow syntax:"
 	@echo "  make 100 apply"
@@ -153,6 +166,10 @@ help:
 	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo ""
+	@echo "Host runtime:"
+	@echo "  macOS -> Docker Desktop"
+	@echo "  Linux -> Docker Engine or Docker Desktop"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
@@ -355,6 +372,9 @@ plan: workflow-validate
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+	fi; \
 	if [ "$$stage_num" -ge 200 ]; then \
 		if ! command -v kind >/dev/null 2>&1; then \
 			echo "kind not found in PATH (required for STAGE>=200 checks)"; exit 1; \
@@ -400,6 +420,9 @@ apply: workflow-validate
 		esac; \
 	}; \
 	stage_num=$$((10#$(STAGE))); \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+	fi; \
 	cluster_name="$${TARGET_CLUSTER_NAME:-kind-local}"; \
 	if [ "$$stage_num" -gt 200 ]; then \
 		if ! command -v kind >/dev/null 2>&1; then \
@@ -477,6 +500,7 @@ check-gateway-stack:
 
 .PHONY: check-cluster
 check-cluster:
+	@$(MAKE) check-platform-env
 	"$(STACK_DIR)/scripts/check-cluster.sh"
 
 .PHONY: check-gateway-urls
@@ -527,6 +551,7 @@ check-sso-e2e:
 .PHONY: gitea-sync
 gitea-sync:
 	@set -euo pipefail; \
+	$(MAKE) check-platform-env; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
@@ -537,7 +562,7 @@ gitea-sync:
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
-	GITEA_PASSWORD="$${GITEA_PASSWORD:-ChangeMe123!}" \
+	GITEA_PASSWORD="$${GITEA_PASSWORD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-nodeport}" \
 	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
 	STACK_DIR="$$stack_path" \
@@ -656,6 +681,7 @@ start:
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
+	stage_num=$$((10#$(STAGE))); \
 	required=(curl docker git jq kubectl kind ssh tofu terragrunt); \
 	optional=(helm cilium hubble kubectx mkcert); \
 	missing_required=(); \
@@ -688,9 +714,13 @@ prereqs:
 		fi; \
 	fi; \
 	echo ""; \
-	echo "Docker daemon / Desktop:"; \
+	echo "Docker daemon:"; \
 	if ! docker info >/dev/null 2>&1; then \
-		echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
+		else \
+			echo "FAIL docker daemon not reachable"; \
+		fi; \
 		exit 1; \
 	fi; \
 	os=$$(docker info --format '{{.OperatingSystem}}' 2>/dev/null || true); \
@@ -724,6 +754,10 @@ prereqs:
 	tofu -version 2>/dev/null | head -n 1 || true; \
 	terragrunt --version 2>/dev/null || true; \
 	echo ""; \
+	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-platform-env; \
+		echo ""; \
+	fi; \
 	$(MAKE) check-kubeconfig
 
 .PHONY: preload-images
@@ -770,12 +804,12 @@ reset:
 	echo "  - Clean stack caches (.terraform/.terragrunt-cache)"; \
 	echo ""; \
 	echo "Preflight:"; \
-	echo "  - Checking Docker daemon / Docker Desktop"; \
+	echo "  - Checking Docker daemon"; \
 	if ! $(MAKE) check-docker-daemon; then \
 		echo ""; \
 		echo "FAIL reset cannot continue because Docker is not reachable."; \
 		echo "kind clusters are Docker containers, so reset cannot delete or inspect them while the daemon is down."; \
-		echo "Start Docker Desktop and rerun: make reset AUTO_APPROVE=1"; \
+		echo "Start Docker Desktop or the Docker service and rerun: make reset AUTO_APPROVE=1"; \
 		exit 1; \
 	fi; \
 	echo "  - Docker daemon reachable"; \

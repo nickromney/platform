@@ -52,6 +52,6 @@ curl -fsS "http://localhost:8003/runtime-config.js" | grep -q 'AUTH_METHOD: "non
 curl -fsS "http://localhost:8003/runtime-config.js" | grep -q 'API_BASE_URL: "http://localhost:8090"'
 curl -fsS "http://localhost:3002/" | grep -q "IPv4 Subnet Calculator"
 curl -fsS "http://localhost:3002/runtime-config.js" | grep -q 'AUTH_METHOD: "jwt"'
-curl -fsS "http://localhost:3002/runtime-config.js" | grep -q 'JWT_PASSWORD: "password123"'
+curl -fsS "http://localhost:3002/runtime-config.js" | grep -q 'JWT_PASSWORD: "demo-password"'
 
 echo "compose smoke passed for subnet-calculator"
