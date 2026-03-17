@@ -1,0 +1,5 @@
+# Local Docker Desktop experiment artifacts
+.run/
+
+# OS
+.DS_Store
