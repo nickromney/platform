@@ -341,7 +341,7 @@ spec:
       releaseName: oauth2-proxy-argocd
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -443,7 +443,7 @@ spec:
       releaseName: oauth2-proxy-gitea
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -545,7 +545,7 @@ spec:
       releaseName: oauth2-proxy-hubble
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -646,7 +646,7 @@ spec:
       releaseName: oauth2-proxy-grafana
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -752,7 +752,7 @@ spec:
           value: http://signoz-auth-proxy.observability.svc.cluster.local:3000
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -856,7 +856,7 @@ spec:
       releaseName: oauth2-proxy-sentiment-dev
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -961,7 +961,7 @@ spec:
       releaseName: oauth2-proxy-sentiment-uat
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -1067,7 +1067,7 @@ spec:
       releaseName: oauth2-proxy-subnetcalc-dev
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:
@@ -1174,7 +1174,7 @@ spec:
       releaseName: oauth2-proxy-subnetcalc-uat
       values: |
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
           tag: 7.14.2-debian13
         config:

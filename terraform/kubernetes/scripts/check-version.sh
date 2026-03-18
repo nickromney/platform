@@ -43,6 +43,9 @@ PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload
 ARGOCD_APPS_DIR="${STACK_DIR}/apps/argocd-apps"
 VARIABLES_FILE="${STACK_DIR}/variables.tf"
 
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/tf-defaults.sh"
+
 tfvar_get_from_file() {
   local file="$1"
   local key="$2"
@@ -94,29 +97,6 @@ tfvar_get_any_stage_or_default() {
   else
     echo "$fallback"
   fi
-}
-
-tf_default_from_variables() {
-  local key="$1"
-
-  if [ ! -f "${VARIABLES_FILE}" ]; then
-    echo ""
-    return 0
-  fi
-
-  awk -v key="$key" '
-    $0 ~ "^[[:space:]]*variable[[:space:]]+\"" key "\"[[:space:]]*{" { in_var=1; next }
-    in_var && $0 ~ "^[[:space:]]*default[[:space:]]*=" {
-      val=$0
-      sub(/^[^=]*=[[:space:]]*/, "", val)
-      gsub(/\"/, "", val)
-      gsub(/[[:space:]]+$/, "", val)
-      gsub(/^[[:space:]]+/, "", val)
-      print val
-      exit
-    }
-    in_var && $0 ~ "^[[:space:]]*}" { in_var=0 }
-  ' "${VARIABLES_FILE}" || true
 }
 
 helm_latest_chart_version() {
@@ -251,6 +231,7 @@ check_preload_image_version_alignment() {
   local expected_grafana_tag="$3"
   local expected_loki_tag="$4"
   local expected_tempo_tag="$5"
+  local expected_victoria_logs_tag="$6"
 
   if [ ! -f "${preload_file}" ]; then
     warn "preload image list not found at ${preload_file}"
@@ -262,6 +243,7 @@ check_preload_image_version_alignment() {
   check_preload_repo_tag_alignment "${preload_file}" "Grafana" '^[[:space:]]*(docker\.io/)?grafana/grafana:' 's|^[[:space:]]*(docker\.io/)?grafana/grafana:([^[:space:]]+).*|\2|' "${expected_grafana_tag}"
   check_preload_repo_tag_alignment "${preload_file}" "Loki" '^[[:space:]]*(docker\.io/)?grafana/loki:' 's|^[[:space:]]*(docker\.io/)?grafana/loki:([^[:space:]]+).*|\2|' "${expected_loki_tag}"
   check_preload_repo_tag_alignment "${preload_file}" "Tempo" '^[[:space:]]*(docker\.io/)?grafana/tempo:' 's|^[[:space:]]*(docker\.io/)?grafana/tempo:([^[:space:]]+).*|\2|' "${expected_tempo_tag}"
+  check_preload_repo_tag_alignment "${preload_file}" "VictoriaLogs" '^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:' 's|^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:([^[:space:]]+).*|\2|' "${expected_victoria_logs_tag}"
   echo ""
 }
 
@@ -376,6 +358,7 @@ preload_expected_chart_version_for_section() {
     SigNoz) echo "${CODE_SIGNOZ}" ;;
     Prometheus) echo "${CODE_PROMETHEUS}" ;;
     Loki) echo "${CODE_LOKI}" ;;
+    VictoriaLogs) echo "${CODE_VICTORIA_LOGS}" ;;
     Tempo) echo "${CODE_TEMPO}" ;;
     Grafana) echo "${CODE_GRAFANA}" ;;
     Headlamp) echo "${CODE_HEADLAMP}" ;;
@@ -599,6 +582,7 @@ check_app_yaml_tfvar_drift() {
       prometheus) tfvar_key="prometheus_chart_version" ;;
       grafana) tfvar_key="grafana_chart_version" ;;
       loki) tfvar_key="loki_chart_version" ;;
+      victoria-logs) tfvar_key="victoria_logs_chart_version" ;;
       tempo) tfvar_key="tempo_chart_version" ;;
       signoz) tfvar_key="signoz_chart_version" ;;
       otel-collector-agent|otel-collector-prometheus) tfvar_key="opentelemetry_collector_chart_version" ;;
@@ -631,23 +615,25 @@ echo ""
 ok "Version check (Deployed vs Codebase vs Latest)"
 echo ""
 
-CODE_ARGOCD=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "argocd_chart_version")
-CODE_ARGOCD_IMAGE_REPO=$(tfvar_get_any_stage_or_default "argocd_image_repository" "$(tf_default_from_variables "argocd_image_repository")")
-CODE_ARGOCD_IMAGE_TAG=$(tfvar_get_any_stage_or_default "argocd_image_tag" "$(tf_default_from_variables "argocd_image_tag")")
-CODE_GITEA=$(tfvar_get "${STAGES_DIR}/500-gitea.tfvars" "gitea_chart_version")
-CODE_CILIUM=$(tfvar_get "${STAGES_DIR}/200-cilium.tfvars" "cilium_version")
-CODE_PROMETHEUS=$(tfvar_get_any_stage_or_default "prometheus_chart_version" "$(tf_default_from_variables "prometheus_chart_version")")
-CODE_GRAFANA=$(tfvar_get_any_stage_or_default "grafana_chart_version" "$(tf_default_from_variables "grafana_chart_version")")
-CODE_LOKI=$(tfvar_get_any_stage_or_default "loki_chart_version" "$(tf_default_from_variables "loki_chart_version")")
-CODE_TEMPO=$(tfvar_get_any_stage_or_default "tempo_chart_version" "$(tf_default_from_variables "tempo_chart_version")")
-CODE_SIGNOZ=$(tfvar_get_any_stage_or_default "signoz_chart_version" "$(tf_default_from_variables "signoz_chart_version")")
-CODE_OTEL_COLLECTOR=$(tfvar_get_any_stage_or_default "opentelemetry_collector_chart_version" "$(tf_default_from_variables "opentelemetry_collector_chart_version")")
-CODE_HEADLAMP=$(tfvar_get "${STAGES_DIR}/800-gateway-tls.tfvars" "headlamp_chart_version")
-CODE_KYVERNO=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "kyverno_chart_version")
-CODE_POLICY_REPORTER=$(tfvar_get_any_stage_or_default "policy_reporter_chart_version" "$(tf_default_from_variables "policy_reporter_chart_version")")
-CODE_CERT_MANAGER=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "cert_manager_chart_version")
-CODE_DEX=$(tfvar_get "${STAGES_DIR}/900-sso.tfvars" "dex_chart_version")
-CODE_OAUTH2_PROXY=$(tfvar_get "${STAGES_DIR}/900-sso.tfvars" "oauth2_proxy_chart_version")
+CODE_ARGOCD=$(tf_default_from_variables "argocd_chart_version")
+CODE_ARGOCD_IMAGE_REPO=$(tf_default_from_variables "argocd_image_repository")
+CODE_ARGOCD_IMAGE_TAG=$(tf_default_from_variables "argocd_image_tag")
+CODE_GITEA=$(tf_default_from_variables "gitea_chart_version")
+CODE_CILIUM=$(tf_default_from_variables "cilium_version")
+CODE_PROMETHEUS=$(tf_default_from_variables "prometheus_chart_version")
+CODE_GRAFANA=$(tf_default_from_variables "grafana_chart_version")
+CODE_GRAFANA_IMAGE_TAG=$(tf_default_from_variables "grafana_image_tag")
+CODE_LOKI=$(tf_default_from_variables "loki_chart_version")
+CODE_VICTORIA_LOGS=$(tf_default_from_variables "victoria_logs_chart_version")
+CODE_TEMPO=$(tf_default_from_variables "tempo_chart_version")
+CODE_SIGNOZ=$(tf_default_from_variables "signoz_chart_version")
+CODE_OTEL_COLLECTOR=$(tf_default_from_variables "opentelemetry_collector_chart_version")
+CODE_HEADLAMP=$(tf_default_from_variables "headlamp_chart_version")
+CODE_KYVERNO=$(tf_default_from_variables "kyverno_chart_version")
+CODE_POLICY_REPORTER=$(tf_default_from_variables "policy_reporter_chart_version")
+CODE_CERT_MANAGER=$(tf_default_from_variables "cert_manager_chart_version")
+CODE_DEX=$(tf_default_from_variables "dex_chart_version")
+CODE_OAUTH2_PROXY=$(tf_default_from_variables "oauth2_proxy_chart_version")
 if [ -z "${CODE_ARGOCD_IMAGE_REPO}" ]; then
   CODE_ARGOCD_IMAGE_REPO="quay.io/argoproj/argocd"
 fi
@@ -670,6 +656,7 @@ LATEST_CILIUM=$(helm_latest_chart_version "cilium" "https://helm.cilium.io" "cil
 LATEST_PROMETHEUS=$(helm_latest_chart_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus")
 LATEST_GRAFANA=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "grafana")
 LATEST_LOKI=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "loki")
+LATEST_VICTORIA_LOGS=$(helm_latest_chart_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single")
 LATEST_TEMPO=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "tempo")
 LATEST_SIGNOZ=$(helm_latest_chart_version "signoz" "https://charts.signoz.io" "signoz")
 LATEST_OTEL_COLLECTOR=$(helm_latest_chart_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector")
@@ -686,7 +673,11 @@ CODETAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gi
 CODETAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${CODE_CILIUM}")
 CODETAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${CODE_PROMETHEUS}")
 CODETAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${CODE_GRAFANA}")
+if [ -n "${CODE_GRAFANA_IMAGE_TAG}" ]; then
+  CODETAG_GRAFANA="${CODE_GRAFANA_IMAGE_TAG}"
+fi
 CODETAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${CODE_LOKI}")
+CODETAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${CODE_VICTORIA_LOGS}")
 CODETAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${CODE_TEMPO}")
 CODETAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${CODE_SIGNOZ}")
 CODETAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${CODE_OTEL_COLLECTOR}")
@@ -704,6 +695,7 @@ LATESTTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cil
 LATESTTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${LATEST_PROMETHEUS}")
 LATESTTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${LATEST_GRAFANA}")
 LATESTTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${LATEST_LOKI}")
+LATESTTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${LATEST_VICTORIA_LOGS}")
 LATESTTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${LATEST_TEMPO}")
 LATESTTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${LATEST_SIGNOZ}")
 LATESTTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${LATEST_OTEL_COLLECTOR}")
@@ -738,6 +730,7 @@ DEPLOYED_SIGNOZ=""
 DEPLOYED_PROMETHEUS=""
 DEPLOYED_GRAFANA=""
 DEPLOYED_LOKI=""
+DEPLOYED_VICTORIA_LOGS=""
 DEPLOYED_TEMPO=""
 DEPLOYED_OTEL_COLLECTOR=""
 DEPLOYED_HEADLAMP=""
@@ -753,6 +746,7 @@ DEPLOYEDTAG_GITEA=""
 DEPLOYEDTAG_PROMETHEUS=""
 DEPLOYEDTAG_GRAFANA=""
 DEPLOYEDTAG_LOKI=""
+DEPLOYEDTAG_VICTORIA_LOGS=""
 DEPLOYEDTAG_TEMPO=""
 DEPLOYEDTAG_SIGNOZ=""
 DEPLOYEDTAG_OTEL_COLLECTOR=""
@@ -772,6 +766,7 @@ if [ "${CLUSTER_OK}" -eq 1 ]; then
   DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus")
   DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana")
   DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki")
+  DEPLOYED_VICTORIA_LOGS=$(argocd_app_deployed_chart_version "victoria-logs" "victoria-logs-single")
   DEPLOYED_TEMPO=$(argocd_app_deployed_chart_version "tempo" "tempo")
   DEPLOYED_SIGNOZ=$(argocd_app_deployed_chart_version "signoz" "signoz")
   DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-agent" "opentelemetry-collector")
@@ -796,6 +791,7 @@ if [ "${CLUSTER_OK}" -eq 1 ]; then
   DEPLOYEDTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${DEPLOYED_PROMETHEUS}")
   DEPLOYEDTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${DEPLOYED_GRAFANA}")
   DEPLOYEDTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${DEPLOYED_LOKI}")
+  DEPLOYEDTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${DEPLOYED_VICTORIA_LOGS}")
   DEPLOYEDTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${DEPLOYED_TEMPO}")
   DEPLOYEDTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${DEPLOYED_SIGNOZ}")
   DEPLOYEDTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${DEPLOYED_OTEL_COLLECTOR}")
@@ -812,6 +808,7 @@ else
   DEPLOYED_PROMETHEUS="Unavailable"
   DEPLOYED_GRAFANA="Unavailable"
   DEPLOYED_LOKI="Unavailable"
+  DEPLOYED_VICTORIA_LOGS="Unavailable"
   DEPLOYED_TEMPO="Unavailable"
   DEPLOYED_SIGNOZ="Unavailable"
   DEPLOYED_OTEL_COLLECTOR="Unavailable"
@@ -827,6 +824,7 @@ else
   DEPLOYEDTAG_PROMETHEUS="Unavailable"
   DEPLOYEDTAG_GRAFANA="Unavailable"
   DEPLOYEDTAG_LOKI="Unavailable"
+  DEPLOYEDTAG_VICTORIA_LOGS="Unavailable"
   DEPLOYEDTAG_TEMPO="Unavailable"
   DEPLOYEDTAG_SIGNOZ="Unavailable"
   DEPLOYEDTAG_OTEL_COLLECTOR="Unavailable"
@@ -849,6 +847,7 @@ rows+=("$(print_row "cilium chart" "${DEPLOYED_CILIUM}" "${CODE_CILIUM}" "${LATE
 rows+=("$(print_row "prometheus chart" "${DEPLOYED_PROMETHEUS}" "${CODE_PROMETHEUS}" "${LATEST_PROMETHEUS}" "${DEPLOYEDTAG_PROMETHEUS}" "${CODETAG_PROMETHEUS}" "" "${LATESTTAG_PROMETHEUS}" "0")")
 rows+=("$(print_row "grafana chart" "${DEPLOYED_GRAFANA}" "${CODE_GRAFANA}" "${LATEST_GRAFANA}" "${DEPLOYEDTAG_GRAFANA}" "${CODETAG_GRAFANA}" "" "${LATESTTAG_GRAFANA}" "0")")
 rows+=("$(print_row "loki chart" "${DEPLOYED_LOKI}" "${CODE_LOKI}" "${LATEST_LOKI}" "${DEPLOYEDTAG_LOKI}" "${CODETAG_LOKI}" "" "${LATESTTAG_LOKI}" "0")")
+rows+=("$(print_row "victoria-logs" "${DEPLOYED_VICTORIA_LOGS}" "${CODE_VICTORIA_LOGS}" "${LATEST_VICTORIA_LOGS}" "${DEPLOYEDTAG_VICTORIA_LOGS}" "${CODETAG_VICTORIA_LOGS}" "" "${LATESTTAG_VICTORIA_LOGS}" "0")")
 rows+=("$(print_row "tempo chart" "${DEPLOYED_TEMPO}" "${CODE_TEMPO}" "${LATEST_TEMPO}" "${DEPLOYEDTAG_TEMPO}" "${CODETAG_TEMPO}" "" "${LATESTTAG_TEMPO}" "0")")
 rows+=("$(print_row "signoz chart" "${DEPLOYED_SIGNOZ}" "${CODE_SIGNOZ}" "${LATEST_SIGNOZ}" "${DEPLOYEDTAG_SIGNOZ}" "${CODETAG_SIGNOZ}" "" "${LATESTTAG_SIGNOZ}" "0")")
 rows+=("$(print_row "otel-collector" "${DEPLOYED_OTEL_COLLECTOR}" "${CODE_OTEL_COLLECTOR}" "${LATEST_OTEL_COLLECTOR}" "${DEPLOYEDTAG_OTEL_COLLECTOR}" "${CODETAG_OTEL_COLLECTOR}" "" "${LATESTTAG_OTEL_COLLECTOR}" "0")")
@@ -873,6 +872,7 @@ check_consistent_tfvars "cilium_version"
 check_consistent_tfvars "prometheus_chart_version"
 check_consistent_tfvars "grafana_chart_version"
 check_consistent_tfvars "loki_chart_version"
+check_consistent_tfvars "victoria_logs_chart_version"
 check_consistent_tfvars "tempo_chart_version"
 check_consistent_tfvars "signoz_chart_version"
 check_consistent_tfvars "opentelemetry_collector_chart_version"
@@ -885,7 +885,7 @@ check_consistent_tfvars "oauth2_proxy_chart_version"
 
 check_app_yaml_tfvar_drift
 check_preload_chart_section_version_alignment
-check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}"
+check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
 
 if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then
   ok "Argo CD image override active: ${CODE_ARGOCD_IMAGE_REF} (chart appVersion ${CODETAG_ARGOCD_CHART}, latest upstream appVersion ${LATESTTAG_ARGOCD_CHART})"

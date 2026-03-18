@@ -30,11 +30,23 @@ setup() {
 
   grep -Fq "TFVARS_FILES=()" "${script}"
   grep -Fq 'TFVARS_FILES+=("${2:-}")' "${script}"
+  grep -Fq "approved_image_prefixes_from_policy" "${script}"
+  grep -Fq "restrict-image-registries.yaml" "${script}"
   grep -Fq "expected_platform_gateway_tls_directives" "${script}"
   grep -Fq "live_platform_gateway_nginx_conf" "${script}"
   grep -Fq "Rendered NGINX config includes:" "${script}"
   grep -Fq "Rendered NGINX config missing expected directive:" "${script}"
   grep -Fq "app.kubernetes.io/name=sentiment-api" "${script}"
+}
+
+@test "image registry policy no longer blanket-trusts Docker Hub" {
+  policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml"
+
+  grep -Fq 'host.docker.internal:5002/*' "${policy}"
+  grep -Fq 'docker.io/bitnamilegacy/*' "${policy}"
+  grep -Fq 'docker.io/grafana/*' "${policy}"
+  grep -Fq 'docker.io/victoriametrics/*' "${policy}"
+  ! grep -Fq 'docker.io/*"' "${policy}"
 }
 
 @test "oidc bootstrap script performs a controlled nginx gateway restart after kube-apiserver restart" {

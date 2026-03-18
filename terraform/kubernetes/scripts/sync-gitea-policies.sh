@@ -4,6 +4,7 @@ set -euo pipefail
 fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
 
 DRY_RUN=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 : "${STACK_DIR:?STACK_DIR is required}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
@@ -14,6 +15,9 @@ DRY_RUN=0
 : "${DEPLOY_KEY_TITLE:?DEPLOY_KEY_TITLE is required}"
 : "${DEPLOY_PUBLIC_KEY:?DEPLOY_PUBLIC_KEY is required}"
 : "${SSH_PRIVATE_KEY_PATH:?SSH_PRIVATE_KEY_PATH is required}"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/tf-defaults.sh"
 
 POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${GITEA_SSH_USERNAME}@gitea-ssh.gitea.svc.cluster.local:22/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git}"
 GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
@@ -29,6 +33,7 @@ ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
 ENABLE_PROMETHEUS="${ENABLE_PROMETHEUS:-false}"
 ENABLE_GRAFANA="${ENABLE_GRAFANA:-false}"
 ENABLE_LOKI="${ENABLE_LOKI:-false}"
+ENABLE_VICTORIA_LOGS="${ENABLE_VICTORIA_LOGS:-false}"
 ENABLE_TEMPO="${ENABLE_TEMPO:-false}"
 ENABLE_SIGNOZ="${ENABLE_SIGNOZ:-false}"
 ENABLE_OTEL_GATEWAY="${ENABLE_OTEL_GATEWAY:-false}"
@@ -41,11 +46,16 @@ EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI="${EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI:-
 EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR="${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
+PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
+EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
+EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP="${EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP:-}"
+EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
 LLM_GATEWAY_MODE="${LLM_GATEWAY_MODE:-disabled}"
 LLM_GATEWAY_EXTERNAL_NAME="${LLM_GATEWAY_EXTERNAL_NAME:-host.docker.internal}"
 LLM_GATEWAY_EXTERNAL_CIDR="${LLM_GATEWAY_EXTERNAL_CIDR:-}"
 LLAMA_CPP_IMAGE="${LLAMA_CPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}"
+SIGNOZ_AUTH_PROXY_IMAGE="${SIGNOZ_AUTH_PROXY_IMAGE:-ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest}"
 LLAMA_CPP_HF_REPO="${LLAMA_CPP_HF_REPO:-bartowski/SmolLM2-1.7B-Instruct-GGUF}"
 LLAMA_CPP_HF_FILE="${LLAMA_CPP_HF_FILE:-SmolLM2-1.7B-Instruct-Q4_K_M.gguf}"
 LLAMA_CPP_MODEL_ALIAS="${LLAMA_CPP_MODEL_ALIAS:-local-classifier}"
@@ -53,18 +63,27 @@ LLAMA_CPP_CTX_SIZE="${LLAMA_CPP_CTX_SIZE:-2048}"
 LITELLM_UPSTREAM_MODEL="${LITELLM_UPSTREAM_MODEL:-openai/local-classifier}"
 LITELLM_UPSTREAM_API_BASE="${LITELLM_UPSTREAM_API_BASE:-http://llama-cpp:8080/v1}"
 LITELLM_UPSTREAM_API_KEY="${LITELLM_UPSTREAM_API_KEY:-dummy}"
-CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-v1.19.4}"
-DEX_CHART_VERSION="${DEX_CHART_VERSION:-0.24.0}"
-GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-10.5.15}"
-HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-0.40.0}"
-KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-3.7.1}"
-LOKI_CHART_VERSION="${LOKI_CHART_VERSION:-6.53.0}"
-OAUTH2_PROXY_CHART_VERSION="${OAUTH2_PROXY_CHART_VERSION:-10.1.4}"
-OPENTELEMETRY_COLLECTOR_CHART_VERSION="${OPENTELEMETRY_COLLECTOR_CHART_VERSION:-0.146.1}"
-POLICY_REPORTER_CHART_VERSION="${POLICY_REPORTER_CHART_VERSION:-3.7.3}"
-PROMETHEUS_CHART_VERSION="${PROMETHEUS_CHART_VERSION:-28.13.0}"
-SIGNOZ_CHART_VERSION="${SIGNOZ_CHART_VERSION:-0.114.0}"
-TEMPO_CHART_VERSION="${TEMPO_CHART_VERSION:-1.24.4}"
+CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-$(tf_default_from_variables cert_manager_chart_version)}"
+DEX_CHART_VERSION="${DEX_CHART_VERSION:-$(tf_default_from_variables dex_chart_version)}"
+GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-$(tf_default_from_variables grafana_chart_version)}"
+GRAFANA_IMAGE_REGISTRY="${GRAFANA_IMAGE_REGISTRY:-$(tf_default_from_variables grafana_image_registry)}"
+GRAFANA_IMAGE_REPOSITORY="${GRAFANA_IMAGE_REPOSITORY:-$(tf_default_from_variables grafana_image_repository)}"
+GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-$(tf_default_from_variables grafana_image_tag)}"
+GRAFANA_SIDECAR_IMAGE_REGISTRY="${GRAFANA_SIDECAR_IMAGE_REGISTRY:-$(tf_default_from_variables grafana_sidecar_image_registry)}"
+GRAFANA_SIDECAR_IMAGE_REPOSITORY="${GRAFANA_SIDECAR_IMAGE_REPOSITORY:-$(tf_default_from_variables grafana_sidecar_image_repository)}"
+GRAFANA_SIDECAR_IMAGE_TAG="${GRAFANA_SIDECAR_IMAGE_TAG:-$(tf_default_from_variables grafana_sidecar_image_tag)}"
+GRAFANA_VICTORIA_LOGS_PLUGIN_URL="${GRAFANA_VICTORIA_LOGS_PLUGIN_URL:-$(tf_default_from_variables grafana_victoria_logs_plugin_url)}"
+GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS="${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS:-$(tf_default_from_variables grafana_liveness_initial_delay_seconds)}"
+HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-$(tf_default_from_variables headlamp_chart_version)}"
+KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-$(tf_default_from_variables kyverno_chart_version)}"
+LOKI_CHART_VERSION="${LOKI_CHART_VERSION:-$(tf_default_from_variables loki_chart_version)}"
+OAUTH2_PROXY_CHART_VERSION="${OAUTH2_PROXY_CHART_VERSION:-$(tf_default_from_variables oauth2_proxy_chart_version)}"
+OPENTELEMETRY_COLLECTOR_CHART_VERSION="${OPENTELEMETRY_COLLECTOR_CHART_VERSION:-$(tf_default_from_variables opentelemetry_collector_chart_version)}"
+POLICY_REPORTER_CHART_VERSION="${POLICY_REPORTER_CHART_VERSION:-$(tf_default_from_variables policy_reporter_chart_version)}"
+PROMETHEUS_CHART_VERSION="${PROMETHEUS_CHART_VERSION:-$(tf_default_from_variables prometheus_chart_version)}"
+SIGNOZ_CHART_VERSION="${SIGNOZ_CHART_VERSION:-$(tf_default_from_variables signoz_chart_version)}"
+TEMPO_CHART_VERSION="${TEMPO_CHART_VERSION:-$(tf_default_from_variables tempo_chart_version)}"
+VICTORIA_LOGS_CHART_VERSION="${VICTORIA_LOGS_CHART_VERSION:-$(tf_default_from_variables victoria_logs_chart_version)}"
 
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
@@ -387,6 +406,64 @@ replace_literal() {
   mv "${out}" "${file}"
 }
 
+replace_literal_block() {
+  local file="$1"
+  local from="$2"
+  local to="$3"
+
+  [[ -f "${file}" ]] || return 0
+
+  FILE_PATH="${file}" FROM_LITERAL="${from}" TO_LITERAL="${to}" perl -0pi -e '
+    my $from = $ENV{"FROM_LITERAL"};
+    my $to = $ENV{"TO_LITERAL"};
+    s/\Q$from\E/$to/g;
+  ' "${file}"
+}
+
+parse_image_ref() {
+  local image_ref="$1"
+  local __registry_var="$2"
+  local __repository_var="$3"
+  local __tag_var="$4"
+  local repo tag registry repository
+
+  repo="${image_ref%:*}"
+  tag="${image_ref##*:}"
+
+  if [[ -z "${image_ref}" || "${repo}" == "${image_ref}" || -z "${repo}" || -z "${tag}" || "${repo}" != */* ]]; then
+    fail "invalid image ref '${image_ref}'"
+  fi
+
+  registry="${repo%%/*}"
+  repository="${repo#*/}"
+
+  if [[ -z "${registry}" || -z "${repository}" ]]; then
+    fail "invalid image ref '${image_ref}'"
+  fi
+
+  printf -v "${__registry_var}" '%s' "${registry}"
+  printf -v "${__repository_var}" '%s' "${repository}"
+  printf -v "${__tag_var}" '%s' "${tag}"
+}
+
+join_by() {
+  local delimiter="$1"
+  shift
+
+  local out=""
+  local item
+  for item in "$@"; do
+    [[ -n "${item}" ]] || continue
+    if [[ -z "${out}" ]]; then
+      out="${item}"
+    else
+      out="${out}${delimiter}${item}"
+    fi
+  done
+
+  printf '%s\n' "${out}"
+}
+
 strip_wrapping_quotes() {
   local value="$1"
   value="${value%\"}"
@@ -421,6 +498,7 @@ chart_version_override_for_name() {
     prometheus) printf '%s\n' "${PROMETHEUS_CHART_VERSION}" ;;
     signoz) printf '%s\n' "${SIGNOZ_CHART_VERSION}" ;;
     tempo) printf '%s\n' "${TEMPO_CHART_VERSION}" ;;
+    victoria-logs-single) printf '%s\n' "${VICTORIA_LOGS_CHART_VERSION}" ;;
     *) printf '%s\n' "" ;;
   esac
 }
@@ -450,6 +528,20 @@ vendor_chart() {
   helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
   helm repo update "${repo_name}" >/dev/null 2>&1 || true
   helm pull "${repo_name}/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+}
+
+patch_vendored_headlamp_chart() {
+  local vendor_root="$1"
+  local deployment_file="${vendor_root}/headlamp/templates/deployment.yaml"
+  local schema_file="${vendor_root}/headlamp/values.schema.json"
+
+  [[ -f "${deployment_file}" ]] || return 0
+
+  perl -0pi -e 's/\{\{- if hasKey \.Values\.config "sessionTTL" \}\}\n            - "-session-ttl=\{\{ \.Values\.config\.sessionTTL \}\}"\n            \{\{- end \}\}/{{- with .Values.config.sessionTTL }}\n            - "-session-ttl={{ . }}"\n            {{- end }}/g' "${deployment_file}"
+
+  if [[ -f "${schema_file}" ]]; then
+    perl -0pi -e 's/("sessionTTL":\s*\{\s*"type":\s*"integer",\s*"description":\s*"The time in seconds for the session to be valid",\s*"default":\s*86400,\s*"minimum":\s*)1,/${1}0,/s' "${schema_file}"
+  fi
 }
 
 rewrite_argocd_app_to_vendored_chart() {
@@ -528,6 +620,7 @@ vendor_direct_tf_only_charts() {
   vendor_chart "https://charts.dexidp.io" "dex" "${DEX_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${OAUTH2_PROXY_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${HEADLAMP_CHART_VERSION}" "${vendor_root}"
+  patch_vendored_headlamp_chart "${vendor_root}"
 }
 
 rewrite_llm_gateway_mode_value() {
@@ -638,6 +731,55 @@ apply_external_workload_images() {
   replace_image_ref "${workload_file}" "subnetcalc-frontend-typescript-vite" "${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT}"
 }
 
+apply_external_platform_images() {
+  local root_dir="$1"
+  local litellm_manifest="${root_dir}/apps/workloads/base/llm-litellm.yaml"
+  local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
+
+  if ! is_true "${PREFER_EXTERNAL_PLATFORM_IMAGES}"; then
+    return 0
+  fi
+
+  if [[ -n "${EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP}" ]]; then
+    LLAMA_CPP_IMAGE="${EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP}"
+  fi
+
+  if [[ -n "${EXTERNAL_PLATFORM_IMAGE_GRAFANA}" ]]; then
+    parse_image_ref "${EXTERNAL_PLATFORM_IMAGE_GRAFANA}" GRAFANA_IMAGE_REGISTRY GRAFANA_IMAGE_REPOSITORY GRAFANA_IMAGE_TAG
+    GRAFANA_VICTORIA_LOGS_PLUGIN_URL=""
+  fi
+
+  if [[ -n "${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY}" ]]; then
+    SIGNOZ_AUTH_PROXY_IMAGE="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY}"
+  fi
+
+  replace_image_ref "${signoz_manifest}" "signoz-auth-proxy" "${SIGNOZ_AUTH_PROXY_IMAGE}"
+
+  if [[ -f "${litellm_manifest}" && -n "${LLAMA_CPP_IMAGE}" ]]; then
+    replace_literal "${litellm_manifest}" "__LLAMA_CPP_IMAGE__" "${LLAMA_CPP_IMAGE}"
+  fi
+}
+
+render_grafana_application_manifest() {
+  local app_file="$1"
+  local plugins_block="        plugins: []"
+
+  [[ -f "${app_file}" ]] || return 0
+
+  if [[ -n "${GRAFANA_VICTORIA_LOGS_PLUGIN_URL}" ]]; then
+    plugins_block=$'        plugins:\n          - '"${GRAFANA_VICTORIA_LOGS_PLUGIN_URL}"
+  fi
+
+  replace_literal "${app_file}" "__GRAFANA_IMAGE_REGISTRY__" "${GRAFANA_IMAGE_REGISTRY}"
+  replace_literal "${app_file}" "__GRAFANA_IMAGE_REPOSITORY__" "${GRAFANA_IMAGE_REPOSITORY}"
+  replace_literal "${app_file}" "__GRAFANA_IMAGE_TAG__" "${GRAFANA_IMAGE_TAG}"
+  replace_literal "${app_file}" "__GRAFANA_SIDECAR_IMAGE_REGISTRY__" "${GRAFANA_SIDECAR_IMAGE_REGISTRY}"
+  replace_literal "${app_file}" "__GRAFANA_SIDECAR_IMAGE_REPOSITORY__" "${GRAFANA_SIDECAR_IMAGE_REPOSITORY}"
+  replace_literal "${app_file}" "__GRAFANA_SIDECAR_IMAGE_TAG__" "${GRAFANA_SIDECAR_IMAGE_TAG}"
+  replace_literal_block "${app_file}" "__GRAFANA_PLUGINS_VALUES__" "${plugins_block}"
+  replace_literal "${app_file}" "__GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__" "${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS}"
+}
+
 remove_if_present() {
   local path="$1"
   if [[ -e "$path" ]]; then
@@ -733,14 +875,18 @@ render_otel_gateway_manifest() {
   local gateway_enabled="false"
   local prom_fanout="false"
   local loki_fanout="false"
+  local victoria_logs_fanout="false"
   local tempo_fanout="false"
   local signoz_fanout="false"
-  local mode="debug"
-  local template_dir="${STACK_DIR}/templates/otel-gateway"
   local destination="${apps_dir}/96-otel-collector-prometheus.application.yaml"
-  local template_path=""
+  local traces_exporters=()
+  local metrics_exporters=()
+  local logs_exporters=()
+  local traces_exporters_csv=""
+  local metrics_exporters_csv=""
+  local logs_exporters_csv=""
 
-  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
+  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_VICTORIA_LOGS}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
     gateway_enabled="true"
   fi
 
@@ -750,6 +896,10 @@ render_otel_gateway_manifest() {
 
   if is_true "${ENABLE_LOKI}"; then
     loki_fanout="true"
+  fi
+
+  if is_true "${ENABLE_VICTORIA_LOGS}"; then
+    victoria_logs_fanout="true"
   fi
 
   if is_true "${ENABLE_TEMPO}"; then
@@ -765,18 +915,249 @@ render_otel_gateway_manifest() {
     return 0
   fi
 
-  # Determine mode based on enabled exporters
-  if is_true "${prom_fanout}" && is_true "${signoz_fanout}"; then
-    mode="hybrid"
-  elif is_true "${prom_fanout}" || is_true "${loki_fanout}" || is_true "${tempo_fanout}"; then
-    mode="prometheus"  # prometheus template now handles loki/tempo too
-  elif is_true "${signoz_fanout}"; then
-    mode="signoz"
+  if is_true "${prom_fanout}"; then
+    traces_exporters+=("spanmetrics")
+    metrics_exporters+=("prometheus")
   fi
 
-  template_path="${template_dir}/${mode}.application.yaml"
-  [[ -f "${template_path}" ]] || fail "missing OTEL gateway template: ${template_path}"
-  cp "${template_path}" "${destination}"
+  if is_true "${signoz_fanout}"; then
+    traces_exporters+=("otlp/signoz")
+    metrics_exporters+=("otlp/signoz")
+  fi
+
+  if is_true "${tempo_fanout}"; then
+    traces_exporters+=("otlp/tempo")
+  fi
+
+  if is_true "${loki_fanout}"; then
+    logs_exporters+=("otlphttp/loki")
+  fi
+
+  if is_true "${victoria_logs_fanout}"; then
+    logs_exporters+=("otlphttp/victoria-logs")
+  fi
+
+  if [[ "${#logs_exporters[@]}" -eq 0 ]] && is_true "${signoz_fanout}"; then
+    logs_exporters+=("otlp/signoz")
+  fi
+
+  if [[ "${#traces_exporters[@]}" -eq 0 ]]; then
+    traces_exporters=("debug")
+  fi
+
+  if [[ "${#metrics_exporters[@]}" -eq 0 ]]; then
+    metrics_exporters=("debug")
+  fi
+
+  if [[ "${#logs_exporters[@]}" -eq 0 ]]; then
+    logs_exporters=("debug")
+  fi
+
+  traces_exporters_csv="$(join_by ", " "${traces_exporters[@]}")"
+  metrics_exporters_csv="$(join_by ", " "${metrics_exporters[@]}")"
+  logs_exporters_csv="$(join_by ", " "${logs_exporters[@]}")"
+
+  cat > "${destination}" <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-prometheus
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "96"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: ${OPENTELEMETRY_COLLECTOR_CHART_VERSION}
+    helm:
+      releaseName: otel-collector-prometheus
+      values: |
+        mode: deployment
+
+        nameOverride: otel-collector
+        fullnameOverride: otel-collector
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        replicaCount: 1
+
+        service:
+          enabled: true
+          type: ClusterIP
+EOF
+
+  if is_true "${prom_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/path: /metrics
+            prometheus.io/port: "9464"
+EOF
+  fi
+
+  cat >> "${destination}" <<EOF
+
+        ports:
+          otlp:
+            enabled: true
+            hostPort: 0
+            containerPort: 4317
+            servicePort: 4317
+          otlp-http:
+            enabled: true
+            hostPort: 0
+            containerPort: 4318
+            servicePort: 4318
+          metrics:
+            enabled: ${prom_fanout}
+            hostPort: 0
+            containerPort: 9464
+            servicePort: 9464
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+
+        presets:
+          kubernetesAttributes:
+            enabled: true
+          logsCollection:
+            enabled: true
+            includeCollectorLogs: false
+            storeCheckpoints: true
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 384Mi
+
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+
+          processors:
+            batch:
+              timeout: 1s
+              send_batch_size: 1024
+            memory_limiter:
+              check_interval: 1s
+              limit_percentage: 75
+              spike_limit_percentage: 15
+EOF
+
+  if is_true "${prom_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+
+          connectors:
+            spanmetrics:
+              histogram:
+                unit: ms
+              dimensions:
+                - name: k8s.namespace.name
+                - name: http.method
+                - name: http.status_code
+                - name: service.version
+EOF
+  fi
+
+  cat >> "${destination}" <<'EOF'
+
+          exporters:
+EOF
+
+  if is_true "${prom_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+            prometheus:
+              endpoint: 0.0.0.0:9464
+              resource_to_telemetry_conversion:
+                enabled: true
+EOF
+  fi
+
+  if is_true "${signoz_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+            otlp/signoz:
+              endpoint: signoz-otel-collector.observability.svc.cluster.local:4317
+              tls:
+                insecure: true
+EOF
+  fi
+
+  if is_true "${loki_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+            otlphttp/loki:
+              endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+EOF
+  fi
+
+  if is_true "${victoria_logs_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+            otlphttp/victoria-logs:
+              logs_endpoint: http://victoria-logs-victoria-logs-single-server.observability.svc.cluster.local:9428/insert/opentelemetry/v1/logs
+EOF
+  fi
+
+  if is_true "${tempo_fanout}"; then
+    cat >> "${destination}" <<'EOF'
+            otlp/tempo:
+              endpoint: tempo.observability.svc.cluster.local:4317
+              tls:
+                insecure: true
+EOF
+  fi
+
+  if [[ "${traces_exporters_csv}" == "debug" || "${metrics_exporters_csv}" == "debug" || "${logs_exporters_csv}" == "debug" ]]; then
+    cat >> "${destination}" <<'EOF'
+            debug:
+              verbosity: basic
+EOF
+  fi
+
+  cat >> "${destination}" <<EOF
+
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [${traces_exporters_csv}]
+              metrics:
+                receivers: [$(if is_true "${prom_fanout}"; then printf 'otlp, spanmetrics'; else printf 'otlp'; fi)]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [${metrics_exporters_csv}]
+              logs:
+                receivers: [filelog]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [${logs_exporters_csv}]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+EOF
 }
 
 prune_argocd_app_manifests() {
@@ -784,11 +1165,11 @@ prune_argocd_app_manifests() {
   local otel_gateway_enabled="false"
   local observability_enabled="false"
 
-  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
+  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_VICTORIA_LOGS}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
     otel_gateway_enabled="true"
   fi
 
-  if is_true "${otel_gateway_enabled}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
+  if is_true "${otel_gateway_enabled}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_VICTORIA_LOGS}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
     observability_enabled="true"
   fi
 
@@ -832,6 +1213,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/80-observability.namespace.yaml"
     remove_if_present "${apps_dir}/90-prometheus.application.yaml"
     remove_if_present "${apps_dir}/91-loki.application.yaml"
+    remove_if_present "${apps_dir}/92-victoria-logs.application.yaml"
     remove_if_present "${apps_dir}/92-tempo.application.yaml"
     remove_if_present "${apps_dir}/95-grafana.application.yaml"
     remove_if_present "${apps_dir}/96-otel-collector-prometheus.application.yaml"
@@ -847,11 +1229,23 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/110-grafana-ui-nodeport.service.yaml"
   fi
 
+  if ! is_true "${ENABLE_LOKI}"; then
+    remove_if_present "${apps_dir}/91-loki.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_VICTORIA_LOGS}"; then
+    remove_if_present "${apps_dir}/92-victoria-logs.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_TEMPO}"; then
+    remove_if_present "${apps_dir}/92-tempo.application.yaml"
+  fi
+
   if ! is_true "${ENABLE_OBSERVABILITY_AGENT}" || ! is_true "${ENABLE_SIGNOZ}"; then
     remove_if_present "${apps_dir}/100-otel-collector-agent.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_SIGNOZ}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
+  if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_LOKI}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_SIGNOZ}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
     remove_if_present "${apps_dir}/80-observability.namespace.yaml"
   fi
 }
@@ -1122,6 +1516,8 @@ render_repo() {
   apply_external_workload_images "${repo_dir}/apps/workloads/base/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
+  apply_external_platform_images "${repo_dir}"
+  render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   render_llm_gateway_manifests "${repo_dir}/apps/workloads/base"
   render_llm_gateway_policies "${repo_dir}/cluster-policies/cilium/shared"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"

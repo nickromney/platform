@@ -20,14 +20,14 @@ spec:
       releaseName: grafana
       values: |
         image:
-          registry: dhi.io
-          repository: grafana
-          tag: 12.3.3-debian13
+          registry: __GRAFANA_IMAGE_REGISTRY__
+          repository: __GRAFANA_IMAGE_REPOSITORY__
+          tag: __GRAFANA_IMAGE_TAG__
         sidecar:
           image:
-            registry: dhi.io
-            repository: k8s-sidecar
-            tag: 2.5.1-debian13
+            registry: __GRAFANA_SIDECAR_IMAGE_REGISTRY__
+            repository: __GRAFANA_SIDECAR_IMAGE_REPOSITORY__
+            tag: __GRAFANA_SIDECAR_IMAGE_TAG__
         admin:
           existingSecret: grafana-admin-credentials
           userKey: admin-user
@@ -41,6 +41,31 @@ spec:
           limits:
             cpu: 300m
             memory: 512Mi
+        extraInitContainers:
+          - name: stage-victorialogs-plugin
+            image: __GRAFANA_IMAGE_REGISTRY__/__GRAFANA_IMAGE_REPOSITORY__:__GRAFANA_IMAGE_TAG__
+            imagePullPolicy: IfNotPresent
+            command:
+              - /bin/sh
+              - -ec
+            args:
+              - |
+                plugin_src=/opt/grafana/plugins/victoriametrics-logs-datasource
+                plugin_dst=/var/lib/grafana/plugins/victoriametrics-logs-datasource
+                if [ ! -d "${plugin_src}" ]; then
+                  exit 0
+                fi
+                mkdir -p /var/lib/grafana/plugins
+                rm -rf "${plugin_dst}"
+                cp -a "${plugin_src}" "${plugin_dst}"
+            volumeMounts:
+              - name: storage
+                mountPath: /var/lib/grafana
+        env:
+          TMPDIR: /var/lib/grafana
+__GRAFANA_PLUGINS_VALUES__
+        livenessProbe:
+          initialDelaySeconds: __GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__
         service:
           type: ClusterIP
           port: 3000
@@ -112,6 +137,13 @@ spec:
                 jsonData:
                   timeInterval: 15s
                   httpMethod: POST
+              - name: VictoriaLogs
+                type: victoriametrics-logs-datasource
+                access: proxy
+                url: http://victoria-logs-victoria-logs-single-server.observability.svc.cluster.local:9428
+                uid: victorialogs
+                jsonData:
+                  maxLines: 1000
               - name: Loki
                 type: loki
                 access: proxy
@@ -1184,6 +1216,87 @@ spec:
                   "time": {"from": "now-6h", "to": "now"},
                   "title": "Platform Namespace Health",
                   "uid": "platform-namespace-health",
+                  "version": 1
+                }
+            platform-logs:
+              json: |
+                {
+                  "annotations": {"list": []},
+                  "editable": true,
+                  "graphTooltip": 1,
+                  "panels": [
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+                      "id": 1,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "* | stats by (k8s.namespace.name) count() logs_total",
+                          "legendFormat": "{{k8s.namespace.name}}",
+                          "queryType": "statsRange",
+                          "refId": "A",
+                          "step": "1m"
+                        }
+                      ],
+                      "title": "Logs by Namespace",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+                      "id": 2,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "error | stats by (k8s.namespace.name) count() error_logs",
+                          "legendFormat": "{{k8s.namespace.name}}",
+                          "queryType": "statsRange",
+                          "refId": "A",
+                          "step": "1m"
+                        }
+                      ],
+                      "title": "Error Logs by Namespace",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 8},
+                      "id": 3,
+                      "options": {
+                        "dedupStrategy": "none",
+                        "enableLogDetails": true,
+                        "prettifyLogMessage": false,
+                        "showCommonLabels": false,
+                        "showLabels": true,
+                        "showTime": true,
+                        "sortOrder": "Descending",
+                        "wrapLogMessage": true
+                      },
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "error",
+                          "maxLines": 100,
+                          "queryType": "instant",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Recent Error Logs",
+                      "type": "logs"
+                    }
+                  ],
+                  "refresh": "30s",
+                  "schemaVersion": 39,
+                  "tags": ["platform", "logs", "victorialogs"],
+                  "templating": {"list": []},
+                  "time": {"from": "now-6h", "to": "now"},
+                  "title": "Platform Logs",
+                  "uid": "platform-logs",
                   "version": 1
                 }
           kubernetes:

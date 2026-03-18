@@ -15,7 +15,7 @@ spec:
   source:
     repoURL: https://grafana.github.io/helm-charts
     chart: loki
-    targetRevision: 6.53.0
+    targetRevision: 6.55.0
     helm:
       releaseName: loki
       values: |
@@ -25,7 +25,7 @@ spec:
           image:
             registry: dhi.io
             repository: loki
-            tag: 3.6.6-debian13
+            tag: 3.6.7-debian13
           auth_enabled: false
           containerSecurityContext:
             readOnlyRootFilesystem: false

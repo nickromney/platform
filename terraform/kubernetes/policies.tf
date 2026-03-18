@@ -152,12 +152,12 @@ spec:
               requests:
                 memory: 128Mi
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: kyverno
             tag: 1.17.1-debian13
           initContainer:
             image:
-              registry: ${var.hardened_image_registry}
+              registry: ${local.hardened_image_registry_effective}
               repository: kyverno-init
               tag: 1.17.1-debian13
             securityContext:
@@ -177,7 +177,7 @@ spec:
               requests:
                 memory: 64Mi
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: kyverno-background-controller
             tag: 1.17.1-debian13
         cleanupController:
@@ -193,7 +193,7 @@ spec:
               requests:
                 memory: 64Mi
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: kyverno-cleanup-controller
             tag: 1.17.1-debian13
         reportsController:
@@ -209,7 +209,7 @@ spec:
               requests:
                 memory: 64Mi
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: kyverno-reports-controller
             tag: 1.17.1-debian13
         cleanupJobs:

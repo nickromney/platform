@@ -5,6 +5,7 @@ and exercise real post-login app behavior for the endpoints that support it.
 They target the shared `*.127.0.0.1.sslip.io` endpoints, so they work against the Kind, Lima, or Slicer platform stacks.
 The runner derives the HTTPS host port from the active stage tfvars, so Kind/Lima stay on `443` while Slicer uses `:8443`.
 By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTIONS=0` only when you explicitly want login-only coverage.
+When `enable_victoria_logs=true` in the active stage tfvars, the Grafana smoke path also verifies the `victorialogs` datasource/plugin and the `platform-logs` dashboard.
 
 ## Setup
 

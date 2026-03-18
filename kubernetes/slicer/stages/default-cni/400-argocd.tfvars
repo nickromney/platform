@@ -27,15 +27,9 @@ enable_actions_runner             = false
 enable_app_repo_sentiment         = false
 enable_app_repo_subnet_calculator = false
 
-cilium_version             = "1.19.1"
-argocd_chart_version       = "9.4.7"
-argocd_namespace           = "argocd"
-gitea_admin_username       = "gitea-admin"
-gitea_ssh_username         = "git"
-gitea_chart_version        = "12.5.0"
-signoz_chart_version       = "0.114.1"
-kyverno_chart_version      = "3.7.1"
-cert_manager_chart_version = "v1.19.4"
+argocd_namespace     = "argocd"
+gitea_admin_username = "gitea-admin"
+gitea_ssh_username   = "git"
 
 argocd_applicationset_enabled = false
 argocd_notifications_enabled  = false

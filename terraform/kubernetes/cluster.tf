@@ -27,12 +27,29 @@ resource "local_file" "containerd_hosts_gitea" {
   directory_permission = "0755"
   file_permission      = "0644"
 
-  content = trimspace(join("\n", [
+  content = trimspace(join("\n", compact([
     "server = \"${var.gitea_registry_scheme}://${var.gitea_registry_host}\"",
     "",
-    "[host.\"${var.gitea_registry_scheme}://${var.gitea_registry_host}\"]",
+    "[host.\"${var.gitea_registry_scheme}://${local.gitea_registry_node_host_effective}\"]",
     "  capabilities = [\"pull\", \"resolve\"]",
-  ]))
+    var.gitea_registry_scheme == "http" ? "  skip_verify = true" : "",
+  ])))
+}
+
+resource "local_file" "containerd_hosts_host_local_registry" {
+  count = var.provision_kind_cluster && local.host_local_registry_enabled ? 1 : 0
+
+  filename             = "${local.containerd_certs_dir}/${local.host_local_registry_host_effective}/hosts.toml"
+  directory_permission = "0755"
+  file_permission      = "0644"
+
+  content = trimspace(join("\n", compact([
+    "server = \"${local.host_local_registry_scheme_effective}://${local.host_local_registry_host_effective}\"",
+    "",
+    "[host.\"${local.host_local_registry_scheme_effective}://${local.host_local_registry_host_effective}\"]",
+    "  capabilities = [\"pull\", \"resolve\"]",
+    local.host_local_registry_scheme_effective == "http" ? "  skip_verify = true" : "",
+  ])))
 }
 
 resource "local_file" "kind_config" {
@@ -110,6 +127,7 @@ resource "kind_cluster" "local" {
   depends_on = [
     local_file.containerd_hosts_dockerio,
     local_file.containerd_hosts_gitea,
+    local_file.containerd_hosts_host_local_registry,
     local_file.kind_config,
   ]
 }
@@ -135,6 +153,7 @@ resource "null_resource" "preload_images" {
     enable_prometheus     = tostring(var.enable_prometheus)
     enable_grafana        = tostring(var.enable_grafana)
     enable_loki           = tostring(var.enable_loki)
+    enable_victoria_logs  = tostring(var.enable_victoria_logs)
     enable_tempo          = tostring(var.enable_tempo)
     enable_headlamp       = tostring(var.enable_headlamp)
     enable_sso            = tostring(var.enable_sso)
@@ -150,6 +169,7 @@ resource "null_resource" "preload_images" {
       PRELOAD_ENABLE_PROMETHEUS     = tostring(var.enable_prometheus)
       PRELOAD_ENABLE_GRAFANA        = tostring(var.enable_grafana)
       PRELOAD_ENABLE_LOKI           = tostring(var.enable_loki)
+      PRELOAD_ENABLE_VICTORIA_LOGS  = tostring(var.enable_victoria_logs)
       PRELOAD_ENABLE_TEMPO          = tostring(var.enable_tempo)
       PRELOAD_ENABLE_HEADLAMP       = tostring(var.enable_headlamp)
       PRELOAD_ENABLE_SSO            = tostring(var.enable_sso)
@@ -160,5 +180,60 @@ resource "null_resource" "preload_images" {
   depends_on = [
     kind_cluster.local,
     local_sensitive_file.kubeconfig,
+    null_resource.kind_restart_containerd_on_registry_config_change,
+  ]
+}
+
+resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
+  count = var.provision_kind_cluster ? 1 : 0
+
+  triggers = {
+    cluster_id                 = kind_cluster.local[0].id
+    dockerio_hosts_toml_sha    = sha256(local_file.containerd_hosts_dockerio[0].content)
+    gitea_registry_host        = var.gitea_registry_host
+    gitea_registry_node_host   = local.gitea_registry_node_host_effective
+    gitea_hosts_toml_sha       = sha256(local_file.containerd_hosts_gitea[0].content)
+    host_local_registry_host   = local.host_local_registry_host_effective
+    host_local_registry_scheme = local.host_local_registry_scheme_effective
+    host_local_registry_sha    = local.host_local_registry_enabled ? sha256(local_file.containerd_hosts_host_local_registry[0].content) : ""
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -eu
+      kind get nodes --name "${var.cluster_name}" | while IFS= read -r node; do
+        [ -n "$${node}" ] || continue
+        echo "Restarting containerd on $${node}..."
+        timeout 60 docker exec "$${node}" sh -lc 'set -eu; systemctl restart containerd; systemctl is-active containerd >/dev/null'
+      done
+      if [ "$${KIND_DISABLE_DEFAULT_CNI}" = "true" ]; then
+        echo "Default CNI disabled; waiting for kind nodes to register before CNI install..."
+        timeout 120 sh -eu -c '
+          while :; do
+            node_count="$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d " ")"
+            if [ "$${node_count}" -ge "$${EXPECTED_KIND_NODE_COUNT}" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+        '
+      else
+        echo "Waiting for nodes to become Ready..."
+        timeout 240 kubectl wait --for=condition=Ready nodes --all --timeout=180s >/dev/null
+      fi
+    EOT
+    environment = {
+      EXPECTED_KIND_NODE_COUNT = tostring(var.worker_count + 1)
+      KIND_DISABLE_DEFAULT_CNI = tostring(local.kind_disable_default_cni)
+      KUBECONFIG               = local.kubeconfig_path_expanded
+    }
+  }
+
+  depends_on = [
+    kind_cluster.local,
+    local_sensitive_file.kubeconfig,
+    local_file.containerd_hosts_dockerio,
+    local_file.containerd_hosts_gitea,
+    local_file.containerd_hosts_host_local_registry,
   ]
 }

@@ -86,6 +86,41 @@ wait_for_service_endpoints() {
   return 1
 }
 
+wait_for_kube_apiserver_ready() {
+  local timeout_seconds="${1}"
+  local required_consecutive_successes="${2:-3}"
+  local end=$((SECONDS + timeout_seconds))
+  local consecutive_successes=0
+  local probe_output=""
+  local last_error=""
+
+  while (( SECONDS < end )); do
+    set +e
+    probe_output="$(kubectl get --raw='/readyz' --request-timeout=5s 2>&1)"
+    probe_status=$?
+    set -e
+
+    if [[ "${probe_status}" -eq 0 ]]; then
+      consecutive_successes=$((consecutive_successes + 1))
+      if (( consecutive_successes >= required_consecutive_successes )); then
+        ok "kube-apiserver ready"
+        return 0
+      fi
+      sleep 1
+      continue
+    fi
+
+    last_error="${probe_output}"
+    consecutive_successes=0
+    sleep 2
+  done
+
+  if [[ -n "${last_error}" ]]; then
+    warn "last kube-apiserver readiness probe error: ${last_error}"
+  fi
+  return 1
+}
+
 retry_webhook_fail() {
   local max_attempts="${1}"
   shift
@@ -367,15 +402,7 @@ fi
 EOF
 
 ok "waiting for kube-apiserver readiness (this may take ~30s)"
-for _ in {1..60}; do
-  if kubectl get --raw='/readyz' >/dev/null 2>&1; then
-    ok "kube-apiserver ready"
-    break
-  fi
-  sleep 2
-done
-
-if ! kubectl get --raw='/readyz' >/dev/null 2>&1; then
+if ! wait_for_kube_apiserver_ready 120 3; then
   fail "timed out waiting for kube-apiserver readiness"
 fi
 

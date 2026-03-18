@@ -168,12 +168,12 @@ spec:
         configmapReload:
           prometheus:
             image:
-              repository: ${var.hardened_image_registry}/prometheus-config-reloader
+              repository: ${local.hardened_image_registry_effective}/prometheus-config-reloader
               tag: 0.89.0-debian13
         kube-state-metrics:
           enabled: true
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: kube-state-metrics
             tag: 2.18.0-debian13
           resources:
@@ -186,7 +186,7 @@ spec:
         prometheus-node-exporter:
           enabled: true
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: node-exporter
             tag: 1.10.2-debian13
           resources:
@@ -200,7 +200,7 @@ spec:
           enabled: false
         server:
           image:
-            repository: ${var.hardened_image_registry}/prometheus
+            repository: ${local.hardened_image_registry_effective}/prometheus
             tag: ${var.prometheus_image_tag}
           persistentVolume:
             enabled: false
@@ -214,6 +214,7 @@ spec:
           extraFlags:
             - enable-feature=promql-at-modifier
             - enable-feature=extra-scrape-metrics
+            - web.enable-lifecycle
             - web.enable-remote-write-receiver
           retention: 4h
         extraScrapeConfigs: |
@@ -302,14 +303,14 @@ spec:
       releaseName: grafana
       values: |
         image:
-          registry: ${var.hardened_image_registry}
-          repository: grafana
-          tag: 12.3.3-debian13
+          registry: ${local.grafana_image_registry_effective}
+          repository: ${local.grafana_image_repository_effective}
+          tag: ${local.grafana_image_tag_effective}
         sidecar:
           image:
-            registry: ${var.hardened_image_registry}
-            repository: k8s-sidecar
-            tag: 2.5.1-debian13
+            registry: ${var.grafana_sidecar_image_registry}
+            repository: ${var.grafana_sidecar_image_repository}
+            tag: ${var.grafana_sidecar_image_tag}
         admin:
           existingSecret: grafana-admin-credentials
           userKey: admin-user
@@ -323,6 +324,31 @@ spec:
           limits:
             cpu: 75m
             memory: 192Mi
+        extraInitContainers:
+          - name: stage-victorialogs-plugin
+            image: ${local.grafana_image_registry_effective}/${local.grafana_image_repository_effective}:${local.grafana_image_tag_effective}
+            imagePullPolicy: IfNotPresent
+            command:
+              - /bin/sh
+              - -ec
+            args:
+              - |
+                plugin_src=/opt/grafana/plugins/victoriametrics-logs-datasource
+                plugin_dst=/var/lib/grafana/plugins/victoriametrics-logs-datasource
+                if [ ! -d "$${plugin_src}" ]; then
+                  exit 0
+                fi
+                mkdir -p /var/lib/grafana/plugins
+                rm -rf "$${plugin_dst}"
+                cp -a "$${plugin_src}" "$${plugin_dst}"
+            volumeMounts:
+              - name: storage
+                mountPath: /var/lib/grafana
+        env:
+          TMPDIR: /var/lib/grafana
+${local.grafana_plugins_values_yaml}
+        livenessProbe:
+          initialDelaySeconds: ${var.grafana_liveness_initial_delay_seconds}
         service:
           type: ClusterIP
           port: 3000
@@ -359,6 +385,20 @@ spec:
                 access: proxy
                 url: http://prometheus-server.observability.svc.cluster.local
                 isDefault: true
+              - name: VictoriaLogs
+                type: victoriametrics-logs-datasource
+                access: proxy
+                url: http://victoria-logs-victoria-logs-single-server.observability.svc.cluster.local:9428
+                uid: victorialogs
+                jsonData:
+                  maxLines: 1000
+              - name: Loki
+                type: loki
+                access: proxy
+                url: http://loki.observability.svc.cluster.local:3100
+                uid: loki
+                jsonData:
+                  maxLines: 1000
         dashboards:
           default:
             # codex:platform-launchpad:start
@@ -1395,6 +1435,87 @@ spec:
                   "uid": "platform-namespace-health",
                   "version": 1
                 }
+            platform-logs:
+              json: |
+                {
+                  "annotations": {"list": []},
+                  "editable": true,
+                  "graphTooltip": 1,
+                  "panels": [
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+                      "id": 1,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "* | stats by (k8s.namespace.name) count() logs_total",
+                          "legendFormat": "{{k8s.namespace.name}}",
+                          "queryType": "statsRange",
+                          "refId": "A",
+                          "step": "1m"
+                        }
+                      ],
+                      "title": "Logs by Namespace",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+                      "id": 2,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "error | stats by (k8s.namespace.name) count() error_logs",
+                          "legendFormat": "{{k8s.namespace.name}}",
+                          "queryType": "statsRange",
+                          "refId": "A",
+                          "step": "1m"
+                        }
+                      ],
+                      "title": "Error Logs by Namespace",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 8},
+                      "id": 3,
+                      "options": {
+                        "dedupStrategy": "none",
+                        "enableLogDetails": true,
+                        "prettifyLogMessage": false,
+                        "showCommonLabels": false,
+                        "showLabels": true,
+                        "showTime": true,
+                        "sortOrder": "Descending",
+                        "wrapLogMessage": true
+                      },
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "error",
+                          "maxLines": 100,
+                          "queryType": "instant",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Recent Error Logs",
+                      "type": "logs"
+                    }
+                  ],
+                  "refresh": "30s",
+                  "schemaVersion": 39,
+                  "tags": ["platform", "logs", "victorialogs"],
+                  "templating": {"list": []},
+                  "time": {"from": "now-6h", "to": "now"},
+                  "title": "Platform Logs",
+                  "uid": "platform-logs",
+                  "version": 1
+                }
   syncPolicy:
     automated:
       prune: true
@@ -1450,6 +1571,7 @@ resource "kubectl_manifest" "argocd_app_otel_collector_prometheus" {
     enable_prometheus_fanout              = local.enable_prometheus_effective || local.enable_grafana_effective
     enable_signoz_fanout                  = var.enable_signoz
     enable_loki_fanout                    = local.enable_loki_effective
+    enable_victoria_logs_fanout           = local.enable_victoria_logs_effective
     enable_tempo_fanout                   = local.enable_tempo_effective
   })
 
@@ -1494,9 +1616,9 @@ spec:
 
         loki:
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: loki
-            tag: 3.6.6-debian13
+            tag: ${var.loki_image_tag}
           auth_enabled: false
           containerSecurityContext:
             readOnlyRootFilesystem: false
@@ -1539,7 +1661,7 @@ spec:
 
         sidecar:
           image:
-            repository: ${var.hardened_image_registry}/k8s-sidecar
+            repository: ${local.hardened_image_registry_effective}/k8s-sidecar
             tag: 2.5.1-debian13
 
         gateway:
@@ -1591,6 +1713,63 @@ __YAML__
   ]
 }
 
+resource "kubectl_manifest" "argocd_app_victoria_logs" {
+  count = local.enable_victoria_logs_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: victoria-logs
+  namespace: ${var.argocd_namespace}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: observability
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.victoria_logs}
+    helm:
+      releaseName: victoria-logs
+      values: |
+        server:
+          retentionPeriod: 1d
+          persistentVolume:
+            enabled: false
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 150m
+              memory: 256Mi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = false
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
+    kubernetes_namespace_v1.observability,
+  ]
+}
+
 resource "kubectl_manifest" "argocd_app_tempo" {
   count = local.enable_tempo_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
@@ -1616,7 +1795,7 @@ spec:
       values: |
         tempo:
           image:
-            repository: ${var.hardened_image_registry}/tempo
+            repository: ${local.hardened_image_registry_effective}/tempo
             tag: 2.10.1-debian13
           memBallastSizeMbs: 0
           storage:

@@ -51,6 +51,17 @@ run "observability_agent_requires_signoz_and_argocd" {
   expect_failures = [check.enable_observability_agent_requires_signoz_and_argocd]
 }
 
+run "victoria_logs_requires_argocd" {
+  command = plan
+
+  variables {
+    enable_argocd        = false
+    enable_victoria_logs = true
+  }
+
+  expect_failures = [check.enable_victoria_logs_requires_argocd]
+}
+
 run "sso_requires_gateway_tls_argocd_gitea" {
   command = plan
 

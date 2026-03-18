@@ -109,6 +109,12 @@ variable "enable_loki" {
   default     = false
 }
 
+variable "enable_victoria_logs" {
+  description = "Deploy VictoriaLogs for log aggregation via Argo CD (Helm chart)."
+  type        = bool
+  default     = false
+}
+
 variable "enable_tempo" {
   description = "Deploy Grafana Tempo for distributed tracing via Argo CD (Helm chart)."
   type        = bool
@@ -257,10 +263,70 @@ variable "grafana_chart_version" {
   default     = "10.5.15"
 }
 
+variable "grafana_image_registry" {
+  description = "Grafana container image registry."
+  type        = string
+  default     = "docker.io"
+}
+
+variable "grafana_image_repository" {
+  description = "Grafana container image repository."
+  type        = string
+  default     = "grafana/grafana"
+}
+
+variable "grafana_image_tag" {
+  description = "Grafana container image tag."
+  type        = string
+  default     = "12.3.1"
+}
+
+variable "grafana_sidecar_image_registry" {
+  description = "Grafana sidecar container image registry."
+  type        = string
+  default     = "quay.io"
+}
+
+variable "grafana_sidecar_image_repository" {
+  description = "Grafana sidecar container image repository."
+  type        = string
+  default     = "kiwigrid/k8s-sidecar"
+}
+
+variable "grafana_sidecar_image_tag" {
+  description = "Grafana sidecar container image tag."
+  type        = string
+  default     = "2.5.0"
+}
+
+variable "grafana_victoria_logs_plugin_url" {
+  description = "VictoriaLogs Grafana datasource plugin bundle URL. Leave empty when the plugin is already baked into the Grafana image."
+  type        = string
+  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.26.3/victoriametrics-logs-datasource-v0.26.3.zip;victoriametrics-logs-datasource"
+}
+
+variable "grafana_liveness_initial_delay_seconds" {
+  description = "Grafana liveness probe initial delay in seconds."
+  type        = number
+  default     = 120
+}
+
 variable "loki_chart_version" {
   description = "Loki chart version (grafana/loki)."
   type        = string
-  default     = "6.53.0"
+  default     = "6.55.0"
+}
+
+variable "loki_image_tag" {
+  description = "Loki hardened container image tag."
+  type        = string
+  default     = "3.6.7-debian13"
+}
+
+variable "victoria_logs_chart_version" {
+  description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
+  type        = string
+  default     = "0.11.30"
 }
 
 variable "tempo_chart_version" {
@@ -272,13 +338,13 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.114.0"
+  default     = "0.116.0"
 }
 
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.40.0"
+  default     = "0.40.1"
 }
 
 variable "kyverno_chart_version" {
@@ -326,7 +392,7 @@ variable "oauth2_proxy_chart_version" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.146.1"
+  default     = "0.147.0"
 }
 
 # -----------------------------------------------------------------------------
@@ -520,6 +586,24 @@ variable "gitea_registry_scheme" {
   default     = "http"
 }
 
+variable "enable_host_local_registry" {
+  description = "Write containerd registry overrides for a host-local registry so Kind nodes can pull developer-supplied images directly from the host."
+  type        = bool
+  default     = false
+}
+
+variable "host_local_registry_host" {
+  description = "Host-local registry host:port reachable from Kind nodes when enable_host_local_registry=true."
+  type        = string
+  default     = "host.docker.internal:5002"
+}
+
+variable "host_local_registry_scheme" {
+  description = "Scheme for the host-local registry (http for local Docker registry shortcuts; https for secured registries)."
+  type        = string
+  default     = "http"
+}
+
 variable "enable_actions_runner" {
   description = "Deploy an in-cluster Gitea Actions runner (requires enable_gitea + enable_argocd)."
   type        = bool
@@ -635,6 +719,13 @@ check "enable_loki_requires_argocd" {
   }
 }
 
+check "enable_victoria_logs_requires_argocd" {
+  assert {
+    condition     = !var.enable_victoria_logs || var.enable_argocd
+    error_message = "enable_victoria_logs requires enable_argocd=true."
+  }
+}
+
 check "enable_tempo_requires_argocd" {
   assert {
     condition     = !var.enable_tempo || var.enable_argocd
@@ -681,6 +772,50 @@ check "enable_actions_runner_requires_gitea_and_argocd" {
   assert {
     condition     = !var.enable_actions_runner || (var.enable_gitea && var.enable_argocd)
     error_message = "enable_actions_runner requires enable_gitea=true and enable_argocd=true."
+  }
+}
+
+check "prefer_external_platform_images_requires_host_local_registry" {
+  assert {
+    condition = !var.prefer_external_platform_images || !var.provision_kind_cluster || (
+      var.enable_host_local_registry &&
+      trimspace(var.host_local_registry_host) != ""
+    )
+    error_message = "prefer_external_platform_images requires enable_host_local_registry=true and a non-empty host_local_registry_host."
+  }
+}
+
+check "prefer_external_workload_images_requires_host_local_registry" {
+  assert {
+    condition = !var.prefer_external_workload_images || !var.provision_kind_cluster || (
+      var.enable_host_local_registry &&
+      trimspace(var.host_local_registry_host) != ""
+    )
+    error_message = "prefer_external_workload_images requires enable_host_local_registry=true and a non-empty host_local_registry_host."
+  }
+}
+
+check "external_platform_image_refs_use_host_local_registry" {
+  assert {
+    condition = !var.prefer_external_platform_images || !var.provision_kind_cluster || alltrue([
+      for key, ref in var.external_platform_image_refs :
+      trimspace(ref) == "" || (
+        key == "hardened-registry"
+        ? trimspace(ref) == trimspace(var.host_local_registry_host)
+        : startswith(trimspace(ref), "${trimspace(var.host_local_registry_host)}/")
+      )
+    ])
+    error_message = "external_platform_image_refs must point at the configured host_local_registry_host when prefer_external_platform_images=true."
+  }
+}
+
+check "external_workload_image_refs_use_host_local_registry" {
+  assert {
+    condition = !var.prefer_external_workload_images || !var.provision_kind_cluster || alltrue([
+      for ref in values(var.external_workload_image_refs) :
+      trimspace(ref) == "" || startswith(trimspace(ref), "${trimspace(var.host_local_registry_host)}/")
+    ])
+    error_message = "external_workload_image_refs must point at the configured host_local_registry_host when prefer_external_workload_images=true."
   }
 }
 
@@ -765,6 +900,18 @@ variable "prefer_external_workload_images" {
 
 variable "external_workload_image_refs" {
   description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api-fastapi-container-app, subnetcalc-apim-simulator, subnetcalc-frontend-react, subnetcalc-frontend-typescript-vite)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "prefer_external_platform_images" {
+  description = "Prefer external platform image refs when intentionally short-circuiting platform work outside the cluster. Default platform rollout remains the in-cluster path."
+  type        = bool
+  default     = false
+}
+
+variable "external_platform_image_refs" {
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: grafana, hardened-registry, llama-cpp, signoz-auth-proxy."
   type        = map(string)
   default     = {}
 }

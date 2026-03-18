@@ -15,7 +15,7 @@ spec:
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
     chart: opentelemetry-collector
-    targetRevision: 0.146.1
+    targetRevision: 0.147.0
     helm:
       releaseName: otel-collector-prometheus
       values: |
@@ -115,8 +115,8 @@ spec:
               endpoint: tempo.observability.svc.cluster.local:4317
               tls:
                 insecure: true
-            otlphttp/loki:
-              endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+            otlphttp/victoria-logs:
+              logs_endpoint: http://victoria-logs-victoria-logs-single-server.observability.svc.cluster.local:9428/insert/opentelemetry/v1/logs
 
           service:
             pipelines:
@@ -131,7 +131,7 @@ spec:
               logs:
                 receivers: [filelog]
                 processors: [memory_limiter, k8sattributes, batch]
-                exporters: [otlphttp/loki]
+                exporters: [otlphttp/victoria-logs]
   syncPolicy:
     automated:
       prune: true

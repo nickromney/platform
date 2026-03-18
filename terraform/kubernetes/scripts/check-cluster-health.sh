@@ -526,6 +526,7 @@ EXPECT_GITEA=$(expected_from_tfvars enable_gitea)
 EXPECT_POLICIES=$(expected_from_tfvars enable_policies)
 EXPECT_SIGNOZ=$(expected_from_tfvars enable_signoz)
 EXPECT_LOKI=$(expected_from_tfvars enable_loki)
+EXPECT_VICTORIA_LOGS=$(expected_from_tfvars enable_victoria_logs)
 EXPECT_TEMPO=$(expected_from_tfvars enable_tempo)
 EXPECT_HEADLAMP=$(expected_from_tfvars enable_headlamp)
 EXPECT_GATEWAY_TLS=$(expected_from_tfvars enable_gateway_tls)
@@ -967,6 +968,9 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   if kubectl -n "${ARGOCD_NS}" get app loki >/dev/null 2>&1; then
     ok "Argo CD app loki exists"
   fi
+  if kubectl -n "${ARGOCD_NS}" get app victoria-logs >/dev/null 2>&1; then
+    ok "Argo CD app victoria-logs exists"
+  fi
   if kubectl -n "${ARGOCD_NS}" get app tempo >/dev/null 2>&1; then
     ok "Argo CD app tempo exists"
   fi
@@ -1203,8 +1207,8 @@ else
 fi
 
 echo ""
-echo "Observability (SigNoz/Prometheus/Grafana/Loki/Tempo):"
-if ! section_active 800 "${EXPECT_SIGNOZ}" && ! section_active 800 "${EXPECT_PROMETHEUS}" && ! section_active 800 "${EXPECT_GRAFANA}" && ! section_active 800 "${EXPECT_LOKI}" && ! section_active 800 "${EXPECT_TEMPO}"; then
+echo "Observability (SigNoz/Prometheus/Grafana/Loki/VictoriaLogs/Tempo):"
+if ! section_active 800 "${EXPECT_SIGNOZ}" && ! section_active 800 "${EXPECT_PROMETHEUS}" && ! section_active 800 "${EXPECT_GRAFANA}" && ! section_active 800 "${EXPECT_LOKI}" && ! section_active 800 "${EXPECT_VICTORIA_LOGS}" && ! section_active 800 "${EXPECT_TEMPO}"; then
   ok "Skipped until stage 800"
 elif kubectl get ns observability >/dev/null 2>&1; then
   ok "Detected observability namespace"
@@ -1266,6 +1270,18 @@ elif kubectl get ns observability >/dev/null 2>&1; then
     fi
   fi
 
+  # VictoriaLogs
+  if kubectl -n observability get svc victoria-logs-victoria-logs-single-server >/dev/null 2>&1; then
+    ok "VictoriaLogs detected (enable_victoria_logs=${EXPECT_VICTORIA_LOGS}${tfvars_hint})"
+    kubectl -n observability get svc victoria-logs-victoria-logs-single-server || true
+  else
+    if [[ "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then
+      fail_soft "VictoriaLogs not detected (enable_victoria_logs=true${tfvars_hint})"
+    else
+      ok "VictoriaLogs not detected (enable_victoria_logs=${EXPECT_VICTORIA_LOGS}${tfvars_hint})"
+    fi
+  fi
+
   # Tempo
   if kubectl -n observability get svc tempo >/dev/null 2>&1; then
     ok "Tempo detected (enable_tempo=${EXPECT_TEMPO}${tfvars_hint})"
@@ -1302,7 +1318,7 @@ elif kubectl get ns observability >/dev/null 2>&1; then
     fi
   fi
 else
-  if [[ "${EXPECT_SIGNOZ}" == "true" || "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_LOKI}" == "true" || "${EXPECT_TEMPO}" == "true" ]]; then
+  if [[ "${EXPECT_SIGNOZ}" == "true" || "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_LOKI}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" || "${EXPECT_TEMPO}" == "true" ]]; then
     fail_soft "observability namespace not found (observability components enabled${tfvars_hint})"
   else
     ok "Observability namespace not detected"
