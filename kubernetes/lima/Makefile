@@ -14,6 +14,8 @@ SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
+RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
+BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -38,6 +40,7 @@ LOCAL_IMAGE_CACHE_PUSH_HOST ?= 127.0.0.1:5002
 LOCAL_IMAGE_CACHE_SCHEME ?= http
 LOCAL_IMAGE_CACHE_OPTIONAL ?= 1
 PLATFORM_LOCAL_IMAGE_CACHE_MODE ?= auto
+PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE ?= auto
 PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE ?= auto
 GITEA_REGISTRY_HOST ?= localhost:30090
 GITEA_REGISTRY_SCHEME ?= http
@@ -100,6 +103,9 @@ endif
 ifeq ($(filter $(PLATFORM_LOCAL_IMAGE_CACHE_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid PLATFORM_LOCAL_IMAGE_CACHE_MODE="$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)". Expected one of: $(VALID_HELPER_MODES))
 endif
+ifeq ($(filter $(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE),$(VALID_HELPER_MODES)),)
+$(error Invalid PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE="$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
 ifeq ($(filter $(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE="$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
 endif
@@ -136,6 +142,7 @@ help:
 	@echo "  make apply        100|200|300|...|900 [AUTO_APPROVE=1]"
 	@echo "  make bootstrap-k3s"
 	@echo "  make build-workload-images"
+	@echo "  make build-local-platform-images"
 	@echo "  make check-app    APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
 	@echo "  make check-cluster"
 	@echo "  make check-gateway-stack"
@@ -186,6 +193,7 @@ help:
 	@echo "Local helper modes:"
 	@echo "  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
+	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
 
 .PHONY: workflow-validate
@@ -346,10 +354,26 @@ merge-default-kubeconfig:
 
 .PHONY: sync-image-cache
 sync-image-cache:
-	@IMAGE_LIST_FILE="$(preload_images_file)" \
+	@set -euo pipefail; \
+	tfvar_files=(); \
+	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
+	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	IMAGE_LIST_FILE="$(preload_images_file)" \
 	CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
+	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" enable_signoz false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_prometheus false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" enable_grafana false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" enable_loki false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_victoria_logs false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_tempo false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
+	PRELOAD_LLM_GATEWAY_MODE="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode disabled "$${tfvar_files[@]}" )" \
 	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
 
 .PHONY: build-workload-images
@@ -358,6 +382,11 @@ build-workload-images:
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
 	"$(SCRIPTS_DIR)/build-local-workload-images.sh"
+
+.PHONY: build-local-platform-images
+build-local-platform-images:
+	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
+	"$(BUILD_LOCAL_PLATFORM_IMAGES)"
 
 .PHONY: status
 status:
@@ -502,6 +531,12 @@ apply: workflow-validate
 	local_cache_available() { \
 		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
 	}; \
+	tfvar_files=(); \
+	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
+	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-platform-env; \
@@ -520,12 +555,23 @@ apply: workflow-validate
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \
 		$(MAKE) apply STAGE=100 AUTO_APPROVE=1; \
 	fi; \
+	case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
+		auto) if [ "$$stage_num" -ge 500 ]; then $(MAKE) ensure-host-gateway-proxy >/dev/null; fi ;; \
+		off) ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac; \
 	if mode_enabled "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" 700 "$$stage_num"; then \
 		$(MAKE) sync-image-cache; \
 	elif [ "$$stage_num" -ge 700 ] && ! local_cache_available; then \
 		echo "Stage $(STAGE) expects workload images from $(LOCAL_IMAGE_CACHE_HOST), but PLATFORM_LOCAL_IMAGE_CACHE_MODE=off and no registry is reachable at http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/."; \
 		echo "Set PLATFORM_LOCAL_IMAGE_CACHE_MODE=on or start a compatible cache manually."; \
 		exit 1; \
+	fi; \
+	if [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)" 800 "$$stage_num"; then \
+		$(MAKE) build-local-platform-images; \
+	elif [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ]; then \
+		echo "Skipping platform image build (PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE))"; \
 	fi; \
 	if [ "$$stage_num" -ge 700 ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)" 700 "$$stage_num"; then \
 		$(MAKE) build-workload-images; \
@@ -547,6 +593,11 @@ apply: workflow-validate
 
 .PHONY: check-health
 check-health:
+	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
+		off) ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac
 	@$(MAKE) check-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
@@ -591,6 +642,11 @@ check-cluster:
 
 .PHONY: check-gateway-urls
 check-gateway-urls:
+	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
+		off) ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac
 	@$(MAKE) check-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
@@ -603,6 +659,11 @@ check-gateway-urls:
 
 .PHONY: check-app
 check-app:
+	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
+		off) ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
@@ -623,6 +684,11 @@ check-app:
 
 .PHONY: check-sso
 check-sso:
+	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
+		off) ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac
 	@$(MAKE) check-kubeconfig >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
@@ -681,6 +747,11 @@ launchpad-render:
 
 .PHONY: show-urls
 show-urls:
+	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
+		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
+		off) ;; \
+		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
+	esac
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \

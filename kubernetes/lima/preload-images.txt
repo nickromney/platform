@@ -1,9 +1,9 @@
-# Platform image set for the Lima-backed k3s target.
+# Platform image set for local cluster bootstrap and cache warmup.
 # One image per line. Blank lines and lines starting with # are ignored.
 #
 # IMPORTANT: Do NOT add images built from source via Gitea Actions
-# or the local Lima workload build path.
-# Those are built separately for stage 700+ and pushed into the local cache.
+# or local host-side debug override flows.
+# Those are built separately and pushed only when that workflow is enabled.
 
 # --- Cilium (chart 1.19.1) ---
 quay.io/cilium/cilium:v1.19.1
@@ -17,7 +17,7 @@ ghcr.io/nginx/nginx-gateway-fabric:2.4.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.1
 
 # --- ArgoCD (chart 9.4.7) ---
-quay.io/argoproj/argocd:v3.3.2
+dhi.io/argocd:3.3.2-debian13
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine
 
 # --- Gitea (chart 12.5.0) ---
@@ -94,6 +94,7 @@ python:3.13-slim
 node:22-alpine
 
 # --- Platform support images ---
+dhi.io/litellm:1.81.12-debian13
 dhi.io/nginx:1.29.5-debian13
 python:3.12-alpine
 docker.io/curlimages/curl:8.9.1

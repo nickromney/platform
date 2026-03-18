@@ -24,7 +24,10 @@ if [[ ! -f "${CA_CERT}" || ! -f "${CA_KEY}" ]]; then
   exit 0
 fi
 
-kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1 || kubectl create namespace "${NAMESPACE}" >/dev/null
+if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+  echo "Required namespace ${NAMESPACE} does not exist; Terraform should create it before mkcert bootstrap runs." >&2
+  exit 1
+fi
 
 kubectl -n "${NAMESPACE}" create secret tls "${SECRET_NAME}" \
   --cert="${CA_CERT}" \

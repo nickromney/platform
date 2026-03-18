@@ -62,17 +62,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-DEFAULT_TFVARS_FILE="${SCRIPT_DIR}/../stages/900-sso.tfvars"
-if [[ -z "${TFVARS_FILE}" && -f "${DEFAULT_TFVARS_FILE}" ]]; then
-  TFVARS_FILE="${DEFAULT_TFVARS_FILE}"
-fi
-
 is_true() {
   case "${1:-}" in
     true|TRUE|1|yes|YES|y|Y) return 0 ;;
     *) return 1 ;;
   esac
 }
+
+has_toggle_env_overrides() {
+  local env_key
+
+  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_LLM_GATEWAY_MODE; do
+    if [[ -n "${!env_key:-}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+DEFAULT_TFVARS_FILE="${SCRIPT_DIR}/../stages/900-sso.tfvars"
+if [[ -z "${TFVARS_FILE}" && -f "${DEFAULT_TFVARS_FILE}" ]] && ! has_toggle_env_overrides; then
+  TFVARS_FILE="${DEFAULT_TFVARS_FILE}"
+fi
 
 terminate_pid_safe() {
   local pid="$1"
@@ -869,10 +881,10 @@ if [[ -n "${required_workflow_images}" ]]; then
   done <<< "${required_workflow_images}"
 
   if [[ -n "${missing_required_images}" ]]; then
-    echo "Auto-adding workflow-required build base image(s) missing from ${IMAGE_LIST}:"
+    echo "Auto-adding workflow-required build base image(s) missing from ${IMAGE_LIST}:" >&2
     while IFS= read -r required_img; do
       [[ -z "${required_img}" ]] && continue
-      echo "  - ${required_img}"
+      echo "  - ${required_img}" >&2
     done <<< "${missing_required_images}"
     images="$(printf '%s\n%s' "${images}" "${missing_required_images}" | awk 'NF && !seen[$0]++')"
   fi

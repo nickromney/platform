@@ -59,8 +59,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
 __YAML__
 
   wait              = true
@@ -94,6 +92,7 @@ resource "null_resource" "bootstrap_mkcert_ca" {
 
   depends_on = [
     local_sensitive_file.kubeconfig,
+    kubectl_manifest.namespace_cert_manager,
   ]
 }
 
@@ -124,7 +123,6 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
       - SkipDryRunOnMissingResource=true
 __YAML__
