@@ -70,6 +70,8 @@ spec:
                       - "docker.io/groundnuty/*"
                       - "docker.io/signoz/*"
                       - "docker.io/victoriametrics/*"
+                      # Some upstream Helm charts omit the explicit docker.io prefix.
+                      - "victoriametrics/*"
                       - "signoz/*"
                       - "otel/*"
                       - "docker:*"

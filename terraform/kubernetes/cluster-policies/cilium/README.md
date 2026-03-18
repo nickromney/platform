@@ -14,6 +14,8 @@ See:
 - [../AUDIT.md](../AUDIT.md) for the current policy-by-policy audit and posture summary.
 - [../COMPOSITION.md](../COMPOSITION.md) for the rendered composition of `shared/`, `dev/`, `uat/`, and `sit`.
 - [../../docs/apps-c4.md](../../docs/apps-c4.md) for the Mermaid native C4 application and policy control model.
+- [../../scripts/show-policy-composition.sh](../../scripts/show-policy-composition.sh) for a filterable view of the checked-in policy tree.
+- [../../scripts/render-cilium-policy-values.sh](../../scripts/render-cilium-policy-values.sh) to convert raw Cilium manifests from this repo into Helm values objects shaped like `metadata + specs`.
 
 ## Design notes
 
