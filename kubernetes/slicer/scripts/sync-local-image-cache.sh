@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 IMAGE_LIST_FILE="${IMAGE_LIST_FILE:-${REPO_ROOT}/kubernetes/slicer/preload-images.txt}"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 OPTIONAL="${OPTIONAL:-0}"
+PRELOAD_IMAGES_SCRIPT="${PRELOAD_IMAGES_SCRIPT:-${REPO_ROOT}/terraform/kubernetes/scripts/preload-images.sh}"
 
 warn() { echo "WARN $*" >&2; }
 
@@ -23,6 +24,7 @@ command -v curl >/dev/null 2>&1 || skip_or_fail "curl not found"
 command -v docker >/dev/null 2>&1 || skip_or_fail "docker not found"
 
 [ -f "${IMAGE_LIST_FILE}" ] || skip_or_fail "image list not found: ${IMAGE_LIST_FILE}"
+[ -f "${PRELOAD_IMAGES_SCRIPT}" ] || skip_or_fail "preload helper not found: ${PRELOAD_IMAGES_SCRIPT}"
 curl -fsS "http://${CACHE_PUSH_HOST}/v2/" >/dev/null 2>&1 || skip_or_fail "local cache not reachable at http://${CACHE_PUSH_HOST}/v2/"
 
 if [ -z "${DOCKER_CONFIG:-}" ]; then
@@ -100,7 +102,11 @@ mirror_remote_image() {
   fi
 }
 
+image_stream() {
+  "${PRELOAD_IMAGES_SCRIPT}" --print-images --image-list "${IMAGE_LIST_FILE}"
+}
+
 while IFS= read -r image; do
   [[ -z "${image}" || "${image}" =~ ^# ]] && continue
   mirror_remote_image "${image}"
-done < "${IMAGE_LIST_FILE}"
+done < <(image_stream)

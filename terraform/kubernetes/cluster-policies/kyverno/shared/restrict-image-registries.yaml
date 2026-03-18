@@ -39,8 +39,9 @@ spec:
           Container image is not from an approved source.
           Only images from registries listed in kubernetes/*/preload-images.txt,
           images built by Gitea CI/CD (localhost:30090/*), Lima local-build
-          images (host.lima.internal:5002/*), and Docker Desktop local-build
-          images (host.docker.internal:5002/*) are allowed.
+          images (host.lima.internal:5002/*), Docker Desktop local-build
+          images (host.docker.internal:5002/*), and explicit Docker Hub repos
+          required by the current staged platform set are allowed.
         foreach:
           - list: "request.object.spec.[initContainers, containers][]"
             deny:
@@ -61,7 +62,14 @@ spec:
                       - "dhi.io/*"
                       - "ecr-public.aws.com/*"
                       - "docker.gitea.com/*"
-                      - "docker.io/*"
+                      - "docker.io/altinity/*"
+                      - "docker.io/bitnamilegacy/*"
+                      - "docker.io/clickhouse/*"
+                      - "docker.io/curlimages/*"
+                      - "docker.io/grafana/*"
+                      - "docker.io/groundnuty/*"
+                      - "docker.io/signoz/*"
+                      - "docker.io/victoriametrics/*"
                       - "signoz/*"
                       - "otel/*"
                       - "docker:*"

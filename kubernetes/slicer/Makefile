@@ -26,7 +26,8 @@ WAIT_FOR_KUBECTL := $(SCRIPTS_DIR)/wait-for-kubectl.sh
 HOST_FORWARDS := $(SCRIPTS_DIR)/ensure-host-forwards.sh
 ENSURE_IMAGE_CACHE := $(SCRIPTS_DIR)/ensure-image-cache.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
-RESOLVE_TFVAR_VALUE := $(SCRIPTS_DIR)/resolve-tfvar-value.sh
+RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
+BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
@@ -68,6 +69,7 @@ LOCAL_IMAGE_CACHE_SCHEME ?= http
 LOCAL_IMAGE_CACHE_OPTIONAL ?= 1
 LOCAL_IMAGE_CACHE_CONTAINER ?= slicer-image-cache
 PLATFORM_LOCAL_IMAGE_CACHE_MODE ?= auto
+PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE ?= auto
 PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE ?= auto
 WORKLOAD_IMAGE_NAMESPACE ?= platform
 WORKLOAD_IMAGE_TAG ?= latest
@@ -131,6 +133,9 @@ $(error Invalid SLICER_HOST_FORWARDS_MODE="$(SLICER_HOST_FORWARDS_MODE)". Expect
 endif
 ifeq ($(filter $(PLATFORM_LOCAL_IMAGE_CACHE_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid PLATFORM_LOCAL_IMAGE_CACHE_MODE="$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
+ifeq ($(filter $(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE),$(VALID_HELPER_MODES)),)
+$(error Invalid PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE="$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
 endif
 ifeq ($(filter $(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE="$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
@@ -207,6 +212,7 @@ help:
 	@echo "  make stop-host-forwards"
 	@echo "  make sync-image-cache"
 	@echo "  make test"
+	@echo "  make build-local-platform-images"
 	@echo ""
 	@echo "Stages:"
 	@echo "  100 - bootstrap k3s on Slicer"
@@ -235,6 +241,7 @@ help:
 	@echo "Local helper modes:"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
+	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
 
 .PHONY: workflow-validate
@@ -535,10 +542,26 @@ ensure-image-cache:
 
 .PHONY: sync-image-cache
 sync-image-cache:
-	@IMAGE_LIST_FILE="$(preload_images_file)" \
+	@set -euo pipefail; \
+	tfvar_files=(); \
+	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
+	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	IMAGE_LIST_FILE="$(preload_images_file)" \
 	CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
+	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" enable_signoz false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_prometheus false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" enable_grafana false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" enable_loki false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_victoria_logs false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_tempo false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
+	PRELOAD_LLM_GATEWAY_MODE="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode disabled "$${tfvar_files[@]}" )" \
 	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
 
 .PHONY: build-workload-images
@@ -547,6 +570,11 @@ build-workload-images:
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
 	"$(SCRIPTS_DIR)/build-local-workload-images.sh"
+
+.PHONY: build-local-platform-images
+build-local-platform-images:
+	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
+	"$(BUILD_LOCAL_PLATFORM_IMAGES)"
 
 .PHONY: status
 status:
@@ -722,6 +750,12 @@ apply: workflow-validate
 	local_cache_available() { \
 		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
 	}; \
+	tfvar_files=(); \
+	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
+	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-platform-env; \
@@ -750,6 +784,11 @@ apply: workflow-validate
 		echo "Stage $(STAGE) expects workload images from $(LOCAL_IMAGE_CACHE_HOST), but PLATFORM_LOCAL_IMAGE_CACHE_MODE=off and no registry is reachable at http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/."; \
 		echo "Set PLATFORM_LOCAL_IMAGE_CACHE_MODE=on or start a compatible cache manually."; \
 		exit 1; \
+	fi; \
+	if [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)" 800 "$$stage_num"; then \
+		$(MAKE) build-local-platform-images; \
+	elif [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ]; then \
+		echo "Skipping platform image build (PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE))"; \
 	fi; \
 	if [ "$$stage_num" -ge 700 ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)" 700 "$$stage_num"; then \
 		$(MAKE) build-workload-images; \

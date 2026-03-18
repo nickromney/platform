@@ -57,6 +57,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       ENABLE_PROMETHEUS                             = tostring(var.enable_prometheus)
       ENABLE_GRAFANA                                = tostring(var.enable_grafana)
       ENABLE_LOKI                                   = tostring(var.enable_loki)
+      ENABLE_VICTORIA_LOGS                          = tostring(var.enable_victoria_logs)
       ENABLE_TEMPO                                  = tostring(var.enable_tempo)
       ENABLE_SIGNOZ                                 = tostring(var.enable_signoz)
       ENABLE_OTEL_GATEWAY                           = tostring(var.enable_otel_gateway)
@@ -69,7 +70,11 @@ resource "null_resource" "sync_gitea_policies_repo" {
       EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR      = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT      = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
-      HARDENED_IMAGE_REGISTRY                       = var.hardened_image_registry
+      PREFER_EXTERNAL_PLATFORM_IMAGES               = tostring(var.prefer_external_platform_images)
+      EXTERNAL_PLATFORM_IMAGE_GRAFANA               = lookup(var.external_platform_image_refs, "grafana", "")
+      EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP             = lookup(var.external_platform_image_refs, "llama-cpp", "")
+      EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY     = lookup(var.external_platform_image_refs, "signoz-auth-proxy", "")
+      HARDENED_IMAGE_REGISTRY                       = local.hardened_image_registry_effective
       LLM_GATEWAY_MODE                              = var.llm_gateway_mode
       LLM_GATEWAY_EXTERNAL_NAME                     = var.llm_gateway_external_name
       LLM_GATEWAY_EXTERNAL_CIDR                     = var.llm_gateway_external_cidr
@@ -77,6 +82,14 @@ resource "null_resource" "sync_gitea_policies_repo" {
       CERT_MANAGER_CHART_VERSION                    = var.cert_manager_chart_version
       DEX_CHART_VERSION                             = var.dex_chart_version
       GRAFANA_CHART_VERSION                         = var.grafana_chart_version
+      GRAFANA_IMAGE_REGISTRY                        = local.grafana_image_registry_effective
+      GRAFANA_IMAGE_REPOSITORY                      = local.grafana_image_repository_effective
+      GRAFANA_IMAGE_TAG                             = local.grafana_image_tag_effective
+      GRAFANA_SIDECAR_IMAGE_REGISTRY                = var.grafana_sidecar_image_registry
+      GRAFANA_SIDECAR_IMAGE_REPOSITORY              = var.grafana_sidecar_image_repository
+      GRAFANA_SIDECAR_IMAGE_TAG                     = var.grafana_sidecar_image_tag
+      GRAFANA_VICTORIA_LOGS_PLUGIN_URL              = local.grafana_victoria_logs_plugin_url_effective
+      GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS        = tostring(var.grafana_liveness_initial_delay_seconds)
       HEADLAMP_CHART_VERSION                        = var.headlamp_chart_version
       KYVERNO_CHART_VERSION                         = var.kyverno_chart_version
       LOKI_CHART_VERSION                            = var.loki_chart_version
@@ -86,7 +99,9 @@ resource "null_resource" "sync_gitea_policies_repo" {
       PROMETHEUS_CHART_VERSION                      = var.prometheus_chart_version
       SIGNOZ_CHART_VERSION                          = var.signoz_chart_version
       TEMPO_CHART_VERSION                           = var.tempo_chart_version
-      LLAMA_CPP_IMAGE                               = var.llama_cpp_image
+      VICTORIA_LOGS_CHART_VERSION                   = var.victoria_logs_chart_version
+      LLAMA_CPP_IMAGE                               = local.llama_cpp_image_effective
+      SIGNOZ_AUTH_PROXY_IMAGE                       = local.signoz_auth_proxy_image_effective
       LLAMA_CPP_HF_REPO                             = var.llama_cpp_hf_repo
       LLAMA_CPP_HF_FILE                             = var.llama_cpp_hf_file
       LLAMA_CPP_MODEL_ALIAS                         = var.llama_cpp_model_alias
@@ -272,10 +287,11 @@ require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH"
 require_cmd curl
 require_cmd jq
 require_cmd kubectl
+require_cmd git
 
 # shellcheck source=/dev/null
 source "${path.module}/scripts/gitea-local-access.sh"
-trap 'gitea_local_access_cleanup || true' EXIT
+trap 'gitea_local_access_cleanup || true; policies_repo_cleanup || true' EXIT
 gitea_local_access_setup http
 
 GITEA_HTTP_BASE="$${GITEA_HTTP_BASE:?}"
@@ -294,6 +310,17 @@ RUNNER_WAIT_SECONDS="$${RUNNER_WAIT_SECONDS:-900}"
 ARGOCD_NAMESPACE="$${ARGOCD_NAMESPACE:-argocd}"
 SUBNETCALC_WORKFLOW_ID="$${SUBNETCALC_WORKFLOW_ID:-build-images.yaml}"
 ACTIONS_RETRIGGERED_TAG=""
+POLICIES_REPO_DIR=""
+POLICIES_REPO_HOME=""
+
+policies_repo_cleanup() {
+  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}" ]; then
+    rm -rf "$${POLICIES_REPO_DIR}"
+  fi
+  if [ -n "$${POLICIES_REPO_HOME}" ] && [ -d "$${POLICIES_REPO_HOME}" ]; then
+    rm -rf "$${POLICIES_REPO_HOME}"
+  fi
+}
 
 decode_base64() {
   if base64 --help 2>&1 | grep -q -- '-d'; then
@@ -301,6 +328,31 @@ decode_base64() {
   else
     base64 -D
   fi
+}
+
+policies_repo_setup() {
+  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}/.git" ]; then
+    return 0
+  fi
+
+  local gitea_host repo_url
+  gitea_host="$${GITEA_HTTP_BASE#*://}"
+  gitea_host="$${gitea_host%%/*}"
+  gitea_host="$${gitea_host%%:*}"
+
+  POLICIES_REPO_HOME="$(mktemp -d)"
+  chmod 700 "$${POLICIES_REPO_HOME}"
+  cat >"$${POLICIES_REPO_HOME}/.netrc" <<EOF
+machine $${gitea_host}
+login $${GITEA_ADMIN_USERNAME}
+password $${GITEA_ADMIN_PWD}
+EOF
+  chmod 600 "$${POLICIES_REPO_HOME}/.netrc"
+
+  POLICIES_REPO_DIR="$(mktemp -d)"
+  repo_url="$${GITEA_HTTP_BASE}/$${GITEA_REPO_OWNER}/policies.git"
+  HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
+    git clone --quiet --depth=1 --branch main "$${repo_url}" "$${POLICIES_REPO_DIR}"
 }
 
 wait_for_gitea() {
@@ -420,18 +472,18 @@ wait_for_tag() {
 wait_for_policies_tag() {
   local file="$1"
   local waited=0
+  policies_repo_setup
   while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
     check_actions_failure "$${TAG}"
-    local json content decoded
-    json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-      "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/policies/contents/$${file}?ref=main" || true)"
-    content="$(echo "$${json}" | jq -r '.content // empty' | tr -d '\n')"
-    if [ -n "$${content}" ]; then
-      decoded="$(printf '%s' "$${content}" | decode_base64)"
-      if echo "$${decoded}" | grep -q "subnetcalc-frontend-react:$${TAG}"; then
-        echo "Policies updated in $${file}"
-        return 0
-      fi
+    local decoded
+    HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
+      git -C "$${POLICIES_REPO_DIR}" fetch --quiet origin main
+    decoded="$(
+      git -C "$${POLICIES_REPO_DIR}" show "FETCH_HEAD:$${file}" 2>/dev/null || true
+    )"
+    if [ -n "$${decoded}" ] && echo "$${decoded}" | grep -q "subnetcalc-frontend-react:$${TAG}"; then
+      echo "Policies updated in $${file}"
+      return 0
     fi
     sleep "$${SLEEP_SECONDS}"
     waited=$((waited + SLEEP_SECONDS))
@@ -796,7 +848,7 @@ resource "null_resource" "argocd_repo_server_restart" {
       tls_private_key.policies_repo[0].private_key_openssh,
       data.local_file.gitea_known_hosts_cluster[0].content,
     ]))
-    restart_script_ver = "5"
+    restart_script_ver = "6"
   }
 
   provisioner "local-exec" {
@@ -844,6 +896,42 @@ retry_webhook_fail() {
     echo "$out" >&2
     return "$rc"
   done
+}
+
+wait_for_gitea_ssh() {
+  local gitea_ns="gitea"
+  local deadline=$((SECONDS + 300))
+  local pod_name=""
+  local ssh_target_port=""
+
+  if ! kubectl -n "$gitea_ns" get deployment gitea >/dev/null 2>&1; then
+    echo "Gitea deployment not found in namespace $gitea_ns" >&2
+    return 1
+  fi
+
+  kubectl -n "$gitea_ns" rollout status deployment/gitea --timeout=300s
+
+  while (( SECONDS < deadline )); do
+    pod_name="$(kubectl -n "$gitea_ns" get pods -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    ssh_target_port="$(kubectl -n "$gitea_ns" get endpoints gitea-ssh -o jsonpath='{.subsets[0].ports[0].port}' 2>/dev/null || true)"
+    if [[ -n "$pod_name" && -n "$ssh_target_port" ]] && kubectl -n "$gitea_ns" exec "$pod_name" -- sh -c '
+      ssh_target_port="$1"
+      if command -v ss >/dev/null 2>&1; then
+        ss -ltn | grep -qE "[[:space:]]:$ssh_target_port[[:space:]]"
+      elif command -v netstat >/dev/null 2>&1; then
+        netstat -ltn 2>/dev/null | grep -qE "[.:]$ssh_target_port[[:space:]]"
+      else
+        exit 1
+      fi
+    ' sh "$ssh_target_port" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 5
+  done
+
+  echo "Timed out waiting for Gitea SSH listener to become ready" >&2
+  kubectl -n "$gitea_ns" get pods,svc,endpoints gitea gitea-ssh -o wide 2>/dev/null || true
+  return 1
 }
 
 patch_known_hosts() {
@@ -897,6 +985,7 @@ force_delete_stuck_repo_server_pods() {
 }
 
 if kubectl -n ${var.argocd_namespace} get deployment argocd-repo-server >/dev/null 2>&1; then
+  wait_for_gitea_ssh
   patch_known_hosts
   retry_webhook_fail kubectl rollout restart deployment argocd-repo-server -n ${var.argocd_namespace}
   if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s; then

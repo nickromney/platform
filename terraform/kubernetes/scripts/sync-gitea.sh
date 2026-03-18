@@ -10,6 +10,8 @@ GITEA_SYNC_TFVARS_FILE="${GITEA_SYNC_TFVARS_FILE:-${DEFAULT_GITEA_SYNC_TFVARS_FI
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/tf-defaults.sh"
 platform_load_env
 
 usage() {
@@ -63,28 +65,6 @@ tfvar_string_or_default() {
   else
     printf '%s\n' "${default_value}"
   fi
-}
-
-tf_default_from_variables() {
-  local key="$1"
-
-  if [[ ! -f "${VARIABLES_FILE}" ]]; then
-    printf '\n'
-    return 0
-  fi
-
-  awk -v key="$key" '
-    $0 ~ "^[[:space:]]*variable[[:space:]]+\"" key "\"[[:space:]]*{" { in_var=1; next }
-    in_var && $0 ~ "^[[:space:]]*default[[:space:]]*=" {
-      value=$0
-      sub(/^[^=]*=[[:space:]]*/, "", value)
-      gsub(/"/, "", value)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-      print value
-      exit
-    }
-    in_var && $0 ~ "^[[:space:]]*}" { in_var=0 }
-  ' "${VARIABLES_FILE}" || true
 }
 
 resolve_bool() {

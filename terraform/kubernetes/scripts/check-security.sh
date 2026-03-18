@@ -20,6 +20,7 @@ require_cmd kubectl
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+IMAGE_REGISTRY_POLICY_FILE="${STACK_DIR}/cluster-policies/kyverno/shared/restrict-image-registries.yaml"
 
 TFVARS_FILES=()
 while [[ $# -gt 0 ]]; do
@@ -62,6 +63,20 @@ tfvar_get() {
 tfvar_bool() {
   local v; v=$(tfvar_get "$1")
   case "$v" in true|false) echo "$v" ;; *) echo "" ;; esac
+}
+
+approved_image_prefixes_from_policy() {
+  awk '
+    /^[[:space:]]*value:[[:space:]]*$/ { in_value=1; next }
+    in_value && /^[[:space:]]*-[[:space:]]*"/ {
+      line=$0
+      sub(/^[[:space:]]*-[[:space:]]*"/, "", line)
+      sub(/".*$/, "", line)
+      print line
+      next
+    }
+    in_value && /^[[:space:]]+[[:alnum:]_-]+:/ { exit }
+  ' "${IMAGE_REGISTRY_POLICY_FILE}"
 }
 
 expected_platform_gateway_tls_directives() {
@@ -336,23 +351,21 @@ echo ""
 # -------------------------------------------------------------------------
 echo "--- Image registry audit (uat namespace) ---"
 if kubectl get ns uat >/dev/null 2>&1; then
-  APPROVED_PREFIXES="quay.io/ ghcr.io/ docker.io/ dhi.io/ docker.gitea.com/ ecr-public.aws.com/ otel/ signoz/ gitea/ curlimages/ localhost:30090/ host.lima.internal:5002/"
+  mapfile -t APPROVED_PREFIXES < <(approved_image_prefixes_from_policy)
+  if [[ "${#APPROVED_PREFIXES[@]}" -eq 0 ]]; then
+    fail_soft "Could not read approved image prefixes from ${IMAGE_REGISTRY_POLICY_FILE}"
+    APPROVED_PREFIXES=()
+  fi
   unapproved=0
   while IFS= read -r image; do
     [[ -z "${image}" ]] && continue
     approved=0
-    for prefix in ${APPROVED_PREFIXES}; do
-      if [[ "${image}" == ${prefix}* ]]; then
+    for prefix in "${APPROVED_PREFIXES[@]}"; do
+      if [[ "${image}" == ${prefix} ]]; then
         approved=1
         break
       fi
     done
-    # Also allow short-form images (nginx:*, python:*, docker:*)
-    if [[ "${approved}" -eq 0 ]]; then
-      case "${image}" in
-        nginx:*|python:*|docker:*|node:*) approved=1 ;;
-      esac
-    fi
     if [[ "${approved}" -eq 0 ]]; then
       warn "Unapproved image in uat: ${image}"
       unapproved=$((unapproved + 1))

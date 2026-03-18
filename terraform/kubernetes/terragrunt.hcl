@@ -14,17 +14,11 @@ inputs = {
   kubeconfig_path       = pathexpand("~/.kube/kind-kind-local.yaml")
   kubeconfig_context    = "kind-kind-local"
 
-  cilium_version        = "1.19.1"
-  argocd_chart_version  = "9.4.7"
   argocd_namespace      = "argocd"
 
-  gitea_chart_version   = "12.5.0"
   gitea_admin_username  = "gitea-admin"
   gitea_ssh_username    = "git"
 
-  signoz_chart_version  = "0.114.1"
-  kyverno_chart_version = "3.7.1"
-  cert_manager_chart_version = "v1.19.4"
 
   argocd_server_node_port = 30080
   hubble_ui_node_port      = 31235

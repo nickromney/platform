@@ -25,7 +25,7 @@ spec:
       values: |
         installCRDs: true
         image:
-          registry: ${var.hardened_image_registry}
+          registry: ${local.hardened_image_registry_effective}
           repository: cert-manager-controller
           tag: ${var.cert_manager_image_tag}
         containerSecurityContext:
@@ -33,7 +33,7 @@ spec:
           runAsUser: 65532
         webhook:
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: cert-manager-webhook
             tag: ${var.cert_manager_image_tag}
           containerSecurityContext:
@@ -41,7 +41,7 @@ spec:
             runAsUser: 65532
         cainjector:
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: cert-manager-cainjector
             tag: ${var.cert_manager_image_tag}
           containerSecurityContext:
@@ -49,7 +49,7 @@ spec:
             runAsUser: 65532
         startupapicheck:
           image:
-            registry: ${var.hardened_image_registry}
+            registry: ${local.hardened_image_registry_effective}
             repository: cert-manager-startupapicheck
             tag: ${var.cert_manager_image_tag}
           containerSecurityContext:
@@ -59,8 +59,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
 __YAML__
 
   wait              = true
@@ -94,6 +92,7 @@ resource "null_resource" "bootstrap_mkcert_ca" {
 
   depends_on = [
     local_sensitive_file.kubeconfig,
+    kubectl_manifest.namespace_cert_manager,
   ]
 }
 
@@ -124,7 +123,6 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
       - ServerSideApply=true
       - SkipDryRunOnMissingResource=true
 __YAML__

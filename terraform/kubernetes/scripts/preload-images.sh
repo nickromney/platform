@@ -62,17 +62,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-DEFAULT_TFVARS_FILE="${SCRIPT_DIR}/../stages/900-sso.tfvars"
-if [[ -z "${TFVARS_FILE}" && -f "${DEFAULT_TFVARS_FILE}" ]]; then
-  TFVARS_FILE="${DEFAULT_TFVARS_FILE}"
-fi
-
 is_true() {
   case "${1:-}" in
     true|TRUE|1|yes|YES|y|Y) return 0 ;;
     *) return 1 ;;
   esac
 }
+
+has_toggle_env_overrides() {
+  local env_key
+
+  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_LLM_GATEWAY_MODE; do
+    if [[ -n "${!env_key:-}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+DEFAULT_TFVARS_FILE="${SCRIPT_DIR}/../stages/900-sso.tfvars"
+if [[ -z "${TFVARS_FILE}" && -f "${DEFAULT_TFVARS_FILE}" ]] && ! has_toggle_env_overrides; then
+  TFVARS_FILE="${DEFAULT_TFVARS_FILE}"
+fi
 
 terminate_pid_safe() {
   local pid="$1"
@@ -216,7 +228,7 @@ is_prometheus_image() {
 is_grafana_image() {
   local img="$1"
   case "${img}" in
-    dhi.io/grafana:*|dhi.io/k8s-sidecar:*|grafana/grafana:*|docker.io/grafana/grafana:*) return 0 ;;
+    dhi.io/grafana:*|dhi.io/k8s-sidecar:*|grafana/grafana:*|docker.io/grafana/grafana:*|quay.io/kiwigrid/k8s-sidecar:*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -225,6 +237,14 @@ is_loki_image() {
   local img="$1"
   case "${img}" in
     dhi.io/loki:*|grafana/loki:*|docker.io/grafana/loki:*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_victoria_logs_image() {
+  local img="$1"
+  case "${img}" in
+    victoriametrics/victoria-logs:*|docker.io/victoriametrics/victoria-logs:*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -274,11 +294,12 @@ filter_images_by_toggles() {
   local enable_prometheus="$2"
   local enable_grafana="$3"
   local enable_loki="$4"
-  local enable_tempo="$5"
-  local enable_headlamp="$6"
-  local enable_sso="$7"
-  local enable_actions_runner="$8"
-  local llm_gateway_mode="$9"
+  local enable_victoria_logs="$5"
+  local enable_tempo="$6"
+  local enable_headlamp="$7"
+  local enable_sso="$8"
+  local enable_actions_runner="$9"
+  local llm_gateway_mode="${10}"
   local output=""
   local img
 
@@ -298,6 +319,10 @@ filter_images_by_toggles() {
     fi
 
     if ! is_true "${enable_loki}" && is_loki_image "${img}"; then
+      continue
+    fi
+
+    if ! is_true "${enable_victoria_logs}" && is_victoria_logs_image "${img}"; then
       continue
     fi
 
@@ -321,7 +346,7 @@ filter_images_by_toggles() {
       continue
     fi
 
-    if ! is_true "${enable_signoz}" && ! is_true "${enable_prometheus}" && ! is_true "${enable_grafana}" && ! is_true "${enable_loki}" && ! is_true "${enable_tempo}" && is_otel_collector_image "${img}"; then
+    if ! is_true "${enable_signoz}" && ! is_true "${enable_prometheus}" && ! is_true "${enable_grafana}" && ! is_true "${enable_loki}" && ! is_true "${enable_victoria_logs}" && ! is_true "${enable_tempo}" && is_otel_collector_image "${img}"; then
       continue
     fi
 
@@ -856,10 +881,10 @@ if [[ -n "${required_workflow_images}" ]]; then
   done <<< "${required_workflow_images}"
 
   if [[ -n "${missing_required_images}" ]]; then
-    echo "Auto-adding workflow-required build base image(s) missing from ${IMAGE_LIST}:"
+    echo "Auto-adding workflow-required build base image(s) missing from ${IMAGE_LIST}:" >&2
     while IFS= read -r required_img; do
       [[ -z "${required_img}" ]] && continue
-      echo "  - ${required_img}"
+      echo "  - ${required_img}" >&2
     done <<< "${missing_required_images}"
     images="$(printf '%s\n%s' "${images}" "${missing_required_images}" | awk 'NF && !seen[$0]++')"
   fi
@@ -869,7 +894,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_LLM_GATEWAY_MODE; do
+for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_LLM_GATEWAY_MODE; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -881,6 +906,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   ENABLE_PROMETHEUS="$(toggle_input_or_default "PRELOAD_ENABLE_PROMETHEUS" "enable_prometheus" "false")"
   ENABLE_GRAFANA="$(toggle_input_or_default "PRELOAD_ENABLE_GRAFANA" "enable_grafana" "false")"
   ENABLE_LOKI="$(toggle_input_or_default "PRELOAD_ENABLE_LOKI" "enable_loki" "false")"
+  ENABLE_VICTORIA_LOGS="$(toggle_input_or_default "PRELOAD_ENABLE_VICTORIA_LOGS" "enable_victoria_logs" "false")"
   ENABLE_TEMPO="$(toggle_input_or_default "PRELOAD_ENABLE_TEMPO" "enable_tempo" "false")"
   ENABLE_HEADLAMP="$(toggle_input_or_default "PRELOAD_ENABLE_HEADLAMP" "enable_headlamp" "false")"
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
@@ -898,6 +924,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
     "${ENABLE_PROMETHEUS}" \
     "${ENABLE_GRAFANA}" \
     "${ENABLE_LOKI}" \
+    "${ENABLE_VICTORIA_LOGS}" \
     "${ENABLE_TEMPO}" \
     "${ENABLE_HEADLAMP}" \
     "${ENABLE_SSO}" \

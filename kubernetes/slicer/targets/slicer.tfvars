@@ -11,14 +11,16 @@ enable_cilium_node_encryption = false
 gitea_local_access_mode       = "port-forward"
 gateway_https_host_port       = 443
 
-argocd_image_repository = "quay.io/argoproj/argocd"
-argocd_image_tag        = "v3.3.2"
-
 hardened_image_registry         = "dhi.io"
+prefer_external_platform_images = true
 prefer_external_workload_images = true
 llm_gateway_mode                = "disabled"
 llm_gateway_external_name       = "192.168.64.1"
 llm_gateway_external_cidr       = "192.168.64.1/32"
+
+external_platform_image_refs = {
+  grafana = "192.168.64.1:5002/platform/grafana-victorialogs:latest"
+}
 
 external_workload_image_refs = {
   sentiment-api                        = "192.168.64.1:5002/platform/sentiment-api:latest"

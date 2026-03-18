@@ -1,5 +1,6 @@
 locals {
   kind_workers                      = range(var.worker_count)
+  kind_control_plane_container_name = "${var.cluster_name}-control-plane"
   kind_config_path_expanded         = abspath(pathexpand(var.kind_config_path))
   kubeconfig_path_expanded          = abspath(pathexpand(var.kubeconfig_path))
   preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${path.module}/../../kubernetes/kind/preload-images.txt")
@@ -12,6 +13,12 @@ locals {
   gitea_http_host_local             = "127.0.0.1"
   gitea_ssh_host_local              = "127.0.0.1"
   gitea_local_access_mode_effective = lower(var.gitea_local_access_mode)
+  gitea_registry_host_parts         = split(":", var.gitea_registry_host)
+  gitea_registry_host_name          = lower(trimspace(local.gitea_registry_host_parts[0]))
+  gitea_registry_port               = length(local.gitea_registry_host_parts) > 1 ? local.gitea_registry_host_parts[length(local.gitea_registry_host_parts) - 1] : ""
+  gitea_registry_node_host_effective = contains(["localhost", "127.0.0.1"], local.gitea_registry_host_name) ? (
+    local.gitea_registry_port != "" ? "${local.kind_control_plane_container_name}:${local.gitea_registry_port}" : local.kind_control_plane_container_name
+  ) : var.gitea_registry_host
 
   gitea_ssh_host_cluster         = "gitea-ssh.gitea.svc.cluster.local"
   gitea_ssh_port_cluster         = 22
@@ -45,13 +52,45 @@ locals {
   enable_prometheus_effective    = var.enable_prometheus
   enable_grafana_effective       = var.enable_grafana
   enable_loki_effective          = var.enable_loki
+  enable_victoria_logs_effective = var.enable_victoria_logs
   enable_tempo_effective         = var.enable_tempo
-  enable_otel_gateway_effective  = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_tempo_effective || var.enable_signoz
+  enable_otel_gateway_effective  = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_victoria_logs_effective || local.enable_tempo_effective || var.enable_signoz
   enable_observability_effective = local.enable_otel_gateway_effective || var.enable_observability_agent
   gitea_admin_promote_users_effective = var.enable_gitea ? distinct(compact(concat(
     [var.gitea_admin_username],
     var.gitea_admin_promote_users,
   ))) : []
+  host_local_registry_enabled          = trimspace(var.host_local_registry_host) != "" && var.enable_host_local_registry
+  host_local_registry_host_effective   = trimspace(var.host_local_registry_host)
+  host_local_registry_scheme_effective = trimspace(var.host_local_registry_scheme) != "" ? trimspace(var.host_local_registry_scheme) : "http"
+  external_platform_grafana_image      = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
+  external_platform_hardened_registry  = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
+  external_platform_llama_cpp_image    = trimspace(lookup(var.external_platform_image_refs, "llama-cpp", ""))
+  external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
+  external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
+  external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
+  external_platform_grafana_tag        = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[1] : ""
+  external_platform_grafana_segments   = local.external_platform_grafana_repo != "" ? split("/", local.external_platform_grafana_repo) : []
+  external_platform_grafana_registry   = length(local.external_platform_grafana_segments) > 1 ? local.external_platform_grafana_segments[0] : ""
+  external_platform_grafana_repository = length(local.external_platform_grafana_segments) > 1 ? join("/", slice(local.external_platform_grafana_segments, 1, length(local.external_platform_grafana_segments))) : ""
+  default_signoz_auth_proxy_image      = "ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest"
+  use_external_platform_grafana = (
+    var.prefer_external_platform_images &&
+    local.external_platform_grafana_registry != "" &&
+    local.external_platform_grafana_repository != "" &&
+    local.external_platform_grafana_tag != ""
+  )
+  hardened_image_registry_effective          = var.prefer_external_platform_images && local.external_platform_hardened_registry != "" ? local.external_platform_hardened_registry : var.hardened_image_registry
+  grafana_image_registry_effective           = local.use_external_platform_grafana ? local.external_platform_grafana_registry : var.grafana_image_registry
+  grafana_image_repository_effective         = local.use_external_platform_grafana ? local.external_platform_grafana_repository : var.grafana_image_repository
+  grafana_image_tag_effective                = local.use_external_platform_grafana ? local.external_platform_grafana_tag : var.grafana_image_tag
+  grafana_victoria_logs_plugin_url_effective = local.use_external_platform_grafana ? "" : trimspace(var.grafana_victoria_logs_plugin_url)
+  grafana_plugins_values_yaml = local.grafana_victoria_logs_plugin_url_effective != "" ? join("\n", [
+    "        plugins:",
+    "          - ${local.grafana_victoria_logs_plugin_url_effective}",
+  ]) : "        plugins: []"
+  llama_cpp_image_effective         = var.prefer_external_platform_images && local.external_platform_llama_cpp_image != "" ? local.external_platform_llama_cpp_image : var.llama_cpp_image
+  signoz_auth_proxy_image_effective = var.prefer_external_platform_images && local.external_platform_signoz_auth_proxy != "" ? local.external_platform_signoz_auth_proxy : local.default_signoz_auth_proxy_image
 
   containerd_certs_dir = abspath("${path.module}/.run/containerd-certs.d")
   docker_socket_mount = var.enable_docker_socket_mount ? [
@@ -121,6 +160,7 @@ locals {
     prometheus              = "apps/vendor/charts/prometheus"
     signoz                  = "apps/vendor/charts/signoz"
     tempo                   = "apps/vendor/charts/tempo"
+    victoria_logs           = "apps/vendor/charts/victoria-logs-single"
   }
 
   policies_repo_private_key_path = "${local.run_dir}/policies-repo.id_ed25519"
@@ -136,6 +176,7 @@ locals {
     local.enable_prometheus_effective ||
     local.enable_grafana_effective ||
     local.enable_loki_effective ||
+    local.enable_victoria_logs_effective ||
     local.enable_tempo_effective ||
     var.enable_signoz ||
     var.enable_headlamp ||
@@ -153,6 +194,7 @@ locals {
     local.enable_prometheus_effective && var.enable_argocd && !var.enable_app_of_apps ? ["prometheus"] : [],
     local.enable_grafana_effective && var.enable_argocd && !var.enable_app_of_apps ? ["grafana"] : [],
     local.enable_loki_effective && var.enable_argocd && !var.enable_app_of_apps ? ["loki"] : [],
+    local.enable_victoria_logs_effective && var.enable_argocd && !var.enable_app_of_apps ? ["victoria-logs"] : [],
     local.enable_otel_gateway_effective && var.enable_argocd && !var.enable_app_of_apps ? ["otel-collector-prometheus"] : [],
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
@@ -178,56 +220,74 @@ locals {
     [for f in sort(fileset(path.module, "templates/otel-gateway/**")) : filesha256("${path.module}/${f}")]
   )))
   policies_repo_render_hash = sha1(jsonencode({
-    content_hash                  = local.policies_repo_content_hash
-    repo_owner                    = local.gitea_repo_owner
-    repo_is_org                   = local.gitea_repo_owner_is_org
-    enable_hubble                 = var.enable_hubble
-    enable_policies               = var.enable_policies
-    enable_gateway_tls            = var.enable_gateway_tls
-    gateway_https_host_port       = var.gateway_https_host_port
-    enable_cert_manager           = var.enable_cert_manager
-    enable_actions_runner         = var.enable_actions_runner
-    enable_app_repo_sentiment     = var.enable_app_repo_sentiment
-    enable_app_repo_subnetcalc    = var.enable_app_repo_subnet_calculator
-    enable_prometheus             = var.enable_prometheus
-    enable_grafana                = var.enable_grafana
-    enable_loki                   = var.enable_loki
-    enable_tempo                  = var.enable_tempo
-    enable_signoz                 = var.enable_signoz
-    enable_otel_gateway           = var.enable_otel_gateway
-    enable_headlamp               = var.enable_headlamp
-    enable_observability_agent    = var.enable_observability_agent
-    prefer_external_images        = var.prefer_external_workload_images
-    external_sentiment_api        = lookup(var.external_workload_image_refs, "sentiment-api", "")
-    external_sentiment_ui         = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
-    external_subnetcalc_api       = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
-    external_subnetcalc_apim      = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
-    external_subnetcalc_fe        = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
-    external_subnetcalc_fe_ts     = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
-    hardened_image_registry       = var.hardened_image_registry
-    cert_manager_chart_version    = var.cert_manager_chart_version
-    dex_chart_version             = var.dex_chart_version
-    grafana_chart_version         = var.grafana_chart_version
-    headlamp_chart_version        = var.headlamp_chart_version
-    kyverno_chart_version         = var.kyverno_chart_version
-    loki_chart_version            = var.loki_chart_version
-    oauth2_proxy_chart_version    = var.oauth2_proxy_chart_version
-    otel_chart_version            = var.opentelemetry_collector_chart_version
-    policy_reporter_chart_version = var.policy_reporter_chart_version
-    prometheus_chart_version      = var.prometheus_chart_version
-    signoz_chart_version          = var.signoz_chart_version
-    tempo_chart_version           = var.tempo_chart_version
-    llm_gateway_mode              = var.llm_gateway_mode
-    llm_gateway_external_name     = var.llm_gateway_external_name
-    llm_gateway_external_cidr     = var.llm_gateway_external_cidr
-    llama_cpp_image               = var.llama_cpp_image
-    llama_cpp_hf_repo             = var.llama_cpp_hf_repo
-    llama_cpp_hf_file             = var.llama_cpp_hf_file
-    llama_cpp_model_alias         = var.llama_cpp_model_alias
-    llama_cpp_ctx_size            = var.llama_cpp_ctx_size
-    litellm_upstream_model        = var.litellm_upstream_model
-    litellm_upstream_api_base     = var.litellm_upstream_api_base
-    litellm_upstream_api_key      = nonsensitive(var.litellm_upstream_api_key)
+    content_hash                           = local.policies_repo_content_hash
+    repo_owner                             = local.gitea_repo_owner
+    repo_is_org                            = local.gitea_repo_owner_is_org
+    enable_hubble                          = var.enable_hubble
+    enable_policies                        = var.enable_policies
+    enable_gateway_tls                     = var.enable_gateway_tls
+    gateway_https_host_port                = var.gateway_https_host_port
+    enable_cert_manager                    = var.enable_cert_manager
+    enable_actions_runner                  = var.enable_actions_runner
+    enable_app_repo_sentiment              = var.enable_app_repo_sentiment
+    enable_app_repo_subnetcalc             = var.enable_app_repo_subnet_calculator
+    enable_prometheus                      = var.enable_prometheus
+    enable_grafana                         = var.enable_grafana
+    enable_loki                            = var.enable_loki
+    enable_victoria_logs                   = var.enable_victoria_logs
+    enable_tempo                           = var.enable_tempo
+    enable_signoz                          = var.enable_signoz
+    enable_otel_gateway                    = var.enable_otel_gateway
+    enable_headlamp                        = var.enable_headlamp
+    enable_observability_agent             = var.enable_observability_agent
+    prefer_external_images                 = var.prefer_external_workload_images
+    external_sentiment_api                 = lookup(var.external_workload_image_refs, "sentiment-api", "")
+    external_sentiment_ui                  = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
+    external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
+    external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
+    external_subnetcalc_fe                 = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
+    external_subnetcalc_fe_ts              = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
+    prefer_external_platform               = var.prefer_external_platform_images
+    host_local_registry_enabled            = local.host_local_registry_enabled
+    host_local_registry_host               = local.host_local_registry_host_effective
+    external_platform_grafana              = local.external_platform_grafana_image
+    hardened_image_registry                = local.hardened_image_registry_effective
+    external_platform_hardened             = local.external_platform_hardened_registry
+    external_platform_llama_cpp            = local.external_platform_llama_cpp_image
+    external_platform_signoz_auth          = local.external_platform_signoz_auth_proxy
+    cert_manager_chart_version             = var.cert_manager_chart_version
+    dex_chart_version                      = var.dex_chart_version
+    grafana_chart_version                  = var.grafana_chart_version
+    grafana_image_registry                 = local.grafana_image_registry_effective
+    grafana_image_repository               = local.grafana_image_repository_effective
+    grafana_image_tag                      = local.grafana_image_tag_effective
+    grafana_sidecar_image_registry         = var.grafana_sidecar_image_registry
+    grafana_sidecar_image_repository       = var.grafana_sidecar_image_repository
+    grafana_sidecar_image_tag              = var.grafana_sidecar_image_tag
+    grafana_victoria_logs_plugin_url       = local.grafana_victoria_logs_plugin_url_effective
+    grafana_liveness_initial_delay_seconds = var.grafana_liveness_initial_delay_seconds
+    headlamp_chart_version                 = var.headlamp_chart_version
+    kyverno_chart_version                  = var.kyverno_chart_version
+    loki_chart_version                     = var.loki_chart_version
+    oauth2_proxy_chart_version             = var.oauth2_proxy_chart_version
+    otel_chart_version                     = var.opentelemetry_collector_chart_version
+    policy_reporter_chart_version          = var.policy_reporter_chart_version
+    prometheus_chart_version               = var.prometheus_chart_version
+    signoz_chart_version                   = var.signoz_chart_version
+    tempo_chart_version                    = var.tempo_chart_version
+    victoria_logs_chart_version            = var.victoria_logs_chart_version
+    llm_gateway_mode                       = var.llm_gateway_mode
+    llm_gateway_external_name              = var.llm_gateway_external_name
+    llm_gateway_external_cidr              = var.llm_gateway_external_cidr
+    llama_cpp_image                        = local.llama_cpp_image_effective
+    signoz_auth_proxy_image                = local.signoz_auth_proxy_image_effective
+    llama_cpp_hf_repo                      = var.llama_cpp_hf_repo
+    llama_cpp_hf_file                      = var.llama_cpp_hf_file
+    llama_cpp_model_alias                  = var.llama_cpp_model_alias
+    llama_cpp_ctx_size                     = var.llama_cpp_ctx_size
+    litellm_upstream_model                 = var.litellm_upstream_model
+    litellm_upstream_api_base              = var.litellm_upstream_api_base
+    litellm_upstream_api_key               = nonsensitive(var.litellm_upstream_api_key)
   }))
 
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.
@@ -546,6 +606,7 @@ locals {
   headlamp_config = merge(
     {
       watchPlugins = true
+      sessionTTL   = 0
     },
     var.enable_sso ? {
       oidc = {

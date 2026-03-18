@@ -28,19 +28,13 @@ prefer_external_workload_images   = true
 llm_gateway_mode                  = "disabled"
 llm_gateway_external_name         = "192.168.64.1"
 
-cilium_version             = "1.19.1"
-argocd_chart_version       = "9.4.7"
-argocd_namespace           = "argocd"
-gitea_admin_username       = "gitea-admin"
-gitea_ssh_username         = "git"
-gitea_repo_owner           = "platform"
-gitea_repo_owner_is_org    = true
-gitea_org_full_name        = "Platform"
-gitea_org_visibility       = "private"
-gitea_chart_version        = "12.5.0"
-signoz_chart_version       = "0.114.1"
-kyverno_chart_version      = "3.7.1"
-cert_manager_chart_version = "v1.19.4"
+argocd_namespace        = "argocd"
+gitea_admin_username    = "gitea-admin"
+gitea_ssh_username      = "git"
+gitea_repo_owner        = "platform"
+gitea_repo_owner_is_org = true
+gitea_org_full_name     = "Platform"
+gitea_org_visibility    = "private"
 
 argocd_server_node_port = 30080
 hubble_ui_node_port     = 31235

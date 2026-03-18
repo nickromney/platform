@@ -16,6 +16,8 @@ CHECK_KIND_HOST_PORTS := $(MAKEFILE_DIR)scripts/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
 CHECK_HOST_LLM := $(MAKEFILE_DIR)scripts/check-host-llm.sh
+BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)scripts/build-local-platform-images.sh
+BUILD_LOCAL_WORKLOAD_IMAGES := $(MAKEFILE_DIR)scripts/build-local-workload-images.sh
 ENSURE_KIND_KUBECONFIG := $(MAKEFILE_DIR)scripts/ensure-kind-kubeconfig.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
@@ -47,7 +49,7 @@ ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
 STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images build-local-platform-images build-local-workload-images reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
@@ -118,6 +120,8 @@ help:
 	@echo "Targets (workflow syntax above is preferred):"
 	@echo "  make apply        900 [AUTO_APPROVE=1]"
 	@echo "  make audit-bootstrap                         Post-bootstrap audit: apps, pods, events, restarts, previous logs"
+	@echo "  make build-local-platform-images             Build host-side platform shortcut images into 127.0.0.1:5002"
+	@echo "  make build-local-workload-images             Build host-side workload shortcut images into 127.0.0.1:5002"
 	@echo "  make check-app  APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
 	@echo "  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals"
 	@echo "  make check-gateway-urls"
@@ -208,6 +212,14 @@ $(VALID_STAGES): workflow-validate
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
 	@"$(CHECK_STAGE_MONOTONICITY)"
+
+.PHONY: build-local-platform-images
+build-local-platform-images:
+	@"$(BUILD_LOCAL_PLATFORM_IMAGES)"
+
+.PHONY: build-local-workload-images
+build-local-workload-images:
+	@"$(BUILD_LOCAL_WORKLOAD_IMAGES)"
 
 .PHONY: check-docker-daemon
 check-docker-daemon:

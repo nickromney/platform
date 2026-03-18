@@ -15,7 +15,8 @@ enable_policies               = true
 enable_signoz                 = false
 enable_prometheus             = true
 enable_grafana                = true
-enable_loki                   = true
+enable_loki                   = false
+enable_victoria_logs          = true
 enable_tempo                  = false
 enable_observability_agent    = false
 enable_headlamp               = true
@@ -33,27 +34,17 @@ prefer_external_workload_images   = true
 llm_gateway_mode                  = "disabled"
 llm_gateway_external_name         = "host.lima.internal"
 
-cilium_version                        = "1.19.1"
-argocd_chart_version                  = "9.4.7"
-argocd_namespace                      = "argocd"
-gitea_admin_username                  = "gitea-admin"
-gitea_ssh_username                    = "git"
-gitea_admin_promote_users             = ["demo-admin", "CiQwYTFmMGU3Zi03NWZhLTQwY2MtOTBiYy05ZTg3NmMwOTE5ZGMSBWxvY2Fs"]
-gitea_repo_owner                      = "platform"
-gitea_repo_owner_is_org               = true
-gitea_org_full_name                   = "Platform"
-gitea_org_visibility                  = "private"
-gitea_org_member_emails               = ["demo@admin.test"]
-gitea_chart_version                   = "12.5.0"
-signoz_chart_version                  = "0.114.1"
-opentelemetry_collector_chart_version = "0.146.1"
-headlamp_chart_version                = "0.40.0"
-kyverno_chart_version                 = "3.7.1"
-cert_manager_chart_version            = "v1.19.4"
+argocd_namespace          = "argocd"
+gitea_admin_username      = "gitea-admin"
+gitea_ssh_username        = "git"
+gitea_admin_promote_users = ["demo-admin", "CiQwYTFmMGU3Zi03NWZhLTQwY2MtOTBiYy05ZTg3NmMwOTE5ZGMSBWxvY2Fs"]
+gitea_repo_owner          = "platform"
+gitea_repo_owner_is_org   = true
+gitea_org_full_name       = "Platform"
+gitea_org_visibility      = "private"
+gitea_org_member_emails   = ["demo@admin.test"]
 
 # SSO components
-dex_chart_version          = "0.24.0"
-oauth2_proxy_chart_version = "10.1.4"
 
 argocd_server_node_port = 30080
 hubble_ui_node_port     = 31235

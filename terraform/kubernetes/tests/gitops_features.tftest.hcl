@@ -224,6 +224,45 @@ run "prometheus_observability_enabled" {
   }
 }
 
+run "victoria_logs_enabled" {
+  command = plan
+
+  variables {
+    cni_provider         = "none"
+    enable_hubble        = false
+    enable_argocd        = true
+    enable_gitea         = true
+    enable_signoz        = false
+    enable_victoria_logs = true
+    enable_sso           = false
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.observability) == 1
+    error_message = "Expected kubernetes_namespace_v1.observability to exist when enable_victoria_logs=true"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_victoria_logs) == 1
+    error_message = "Expected kubectl_manifest.argocd_app_victoria_logs to exist when enable_victoria_logs=true"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_victoria_logs[0].yaml_body, "path: ${local.vendored_chart_paths.victoria_logs}")
+    error_message = "Expected VictoriaLogs ArgoCD Application YAML to track the vendored chart on main"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_otel_collector_prometheus) == 1
+    error_message = "Expected kubectl_manifest.argocd_app_otel_collector_prometheus to exist when enable_victoria_logs=true"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "otlphttp/victoria-logs") && strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "/insert/opentelemetry/v1/logs")
+    error_message = "Expected the OTel gateway to fan logs out to VictoriaLogs when enable_victoria_logs=true"
+  }
+}
+
 run "app_repo_sentiment_enabled" {
   command = plan
 

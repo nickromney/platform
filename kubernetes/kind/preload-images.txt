@@ -37,8 +37,8 @@ dhi.io/cert-manager-webhook:1.19.4-debian13
 dhi.io/cert-manager-cainjector:1.19.4-debian13
 dhi.io/cert-manager-startupapicheck:1.19.4-debian13
 
-# --- SigNoz (chart 0.114.1) ---
-docker.io/signoz/signoz:v0.114.1
+# --- SigNoz (chart 0.116.0) ---
+docker.io/signoz/signoz:v0.116.0
 docker.io/signoz/signoz-otel-collector:v0.144.2
 docker.io/signoz/signoz-schema-migrator:v0.144.2
 docker.io/clickhouse/clickhouse-server:25.5.6
@@ -55,10 +55,12 @@ dhi.io/alertmanager:0.31.1-debian13
 dhi.io/kube-state-metrics:2.18.0-debian13
 dhi.io/node-exporter:1.10.2-debian13
 
-# --- Loki (chart 6.53.0) ---
-docker.io/grafana/loki:3.6.5
-dhi.io/loki:3.6.6-debian13
-dhi.io/k8s-sidecar:2.5.1-debian13
+# --- Loki (chart 6.55.0) ---
+docker.io/grafana/loki:3.6.7
+dhi.io/loki:3.6.7-debian13
+
+# --- VictoriaLogs (chart 0.11.30) ---
+docker.io/victoriametrics/victoria-logs:v1.48.0
 
 # --- Tempo (chart 1.24.4) ---
 docker.io/grafana/tempo:2.9.0
@@ -66,11 +68,11 @@ dhi.io/tempo:2.10.1-debian13
 docker.io/grafana/tempo-query:2.9.0
 
 # --- Grafana (chart 10.5.15) ---
+quay.io/kiwigrid/k8s-sidecar:2.5.0
 docker.io/grafana/grafana:12.3.1
-dhi.io/grafana:12.3.3-debian13
 
-# --- Headlamp (chart 0.40.0) ---
-ghcr.io/headlamp-k8s/headlamp:v0.40.0
+# --- Headlamp (chart 0.40.1) ---
+ghcr.io/headlamp-k8s/headlamp:v0.40.1
 node:lts-alpine
 
 # --- Dex (chart 0.24.0) ---
@@ -79,8 +81,8 @@ dhi.io/dex:2.44.0-debian13
 # --- oauth2-proxy (chart 10.1.4) ---
 dhi.io/oauth2-proxy:7.14.2-debian13
 
-# --- OpenTelemetry Collector (chart 0.146.1) ---
-otel/opentelemetry-collector-contrib:0.146.1
+# --- OpenTelemetry Collector (chart 0.147.0) ---
+otel/opentelemetry-collector-contrib:0.147.0
 
 # --- Gitea Actions Runner ---
 docker:27.5-cli

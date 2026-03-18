@@ -11,6 +11,7 @@ type Target = {
   flow?: Flow
   postLogin?:
     | 'grafana-launchpad'
+    | 'grafana-victoria-logs'
     | 'sentiment-sample-positive'
     | 'subnetcalc-rfc1918-lookup'
     | 'hubble-namespace-argocd'
@@ -25,6 +26,7 @@ function isEnabled(envName: string, defaultValue: boolean) {
 
 const INCLUDE_SIGNOZ = isEnabled('SSO_E2E_ENABLE_SIGNOZ', false)
 const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', true)
+const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
 const BASE_DOMAIN = process.env.SSO_E2E_BASE_DOMAIN || '127.0.0.1.sslip.io'
@@ -94,7 +96,13 @@ const BASE_TARGETS: Target[] = [
 
   { name: 'dex', url: absolutePlatformUrl('dex', '/dex/'), segment: 'admin', flow: 'none' },
   { name: 'gitea-admin', url: platformUrl('gitea.admin'), segment: 'admin', flow: 'oauth2-proxy' },
-  { name: 'grafana-admin', url: platformUrl('grafana.admin'), segment: 'admin', flow: 'oauth2-proxy' },
+  {
+    name: 'grafana-admin',
+    url: platformUrl('grafana.admin'),
+    segment: 'admin',
+    flow: 'oauth2-proxy',
+    postLogin: INCLUDE_VICTORIA_LOGS ? 'grafana-victoria-logs' : undefined,
+  },
   { name: 'argocd-admin', url: platformUrl('argocd.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   { name: 'hubble-admin', url: platformUrl('hubble.admin'), segment: 'admin', flow: 'oauth2-proxy', postLogin: 'hubble-namespace-argocd' },
   { name: 'kyverno-admin', url: platformUrl('kyverno.admin'), segment: 'admin', flow: 'none' },
@@ -581,6 +589,37 @@ async function grafanaLaunchpadShowsHealthyTiles(page: Page) {
   }
 }
 
+async function grafanaVictoriaLogsDashboardWorks(page: Page, baseUrl: string) {
+  const plugin = await page.evaluate(async () => {
+    const response = await fetch('/api/plugins/victoriametrics-logs-datasource/settings', { credentials: 'include' })
+    const body = await response.text()
+    return { status: response.status, body }
+  })
+  expect(plugin.status, plugin.body).toBe(200)
+  expect(plugin.body).toContain('victoriametrics-logs-datasource')
+
+  const datasource = await page.evaluate(async () => {
+    const response = await fetch('/api/datasources/uid/victorialogs', { credentials: 'include' })
+    const body = await response.text()
+    return { status: response.status, body }
+  })
+  expect(datasource.status, datasource.body).toBe(200)
+  expect(datasource.body).toContain('"type":"victoriametrics-logs-datasource"')
+
+  const dashboardUrl = new URL('/d/platform-logs/platform-logs?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s', baseUrl)
+  await gotoWithGatewayRetry(page, dashboardUrl.toString())
+  await page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => undefined)
+  await assertNoGatewayErrorWithReloads(page, 'grafana-victoria-logs')
+
+  const body = page.locator('body')
+  await expect(body).toContainText(/Platform Logs/i, { timeout: 120_000 })
+  await expect(body).toContainText(/Logs by Namespace/i, { timeout: 120_000 })
+  await expect(body).toContainText(/Error Logs by Namespace/i, { timeout: 120_000 })
+  await expect(body).toContainText(/Recent Error Logs/i, { timeout: 120_000 })
+  await expect(body).not.toContainText(/Datasource victorialogs was not found/i)
+  await expect(body).not.toContainText(/Could not find plugin definition for data source/i)
+}
+
 async function signozLogsExplorerHasContent(page: Page, baseUrl: string) {
   const u = new URL('/logs/logs-explorer', baseUrl)
   await gotoWithGatewayRetry(page, u.toString())
@@ -690,6 +729,9 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'grafana-launchpad') {
           await grafanaLaunchpadShowsHealthyTiles(page)
+        }
+        if (t.postLogin === 'grafana-victoria-logs') {
+          await grafanaVictoriaLogsDashboardWorks(page, t.url)
         }
         if (t.postLogin === 'signoz-logs-and-metrics') {
           await signozVerifyLogsAndMetrics(page, t.url)

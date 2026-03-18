@@ -125,13 +125,17 @@ spec:
             otlphttp/loki:
               endpoint: http://loki.observability.svc.cluster.local:3100/otlp
 %{ endif ~}
+%{ if enable_victoria_logs_fanout ~}
+            otlphttp/victoria-logs:
+              logs_endpoint: http://victoria-logs-victoria-logs-single-server.observability.svc.cluster.local:9428/insert/opentelemetry/v1/logs
+%{ endif ~}
 %{ if enable_tempo_fanout ~}
             otlp/tempo:
               endpoint: tempo.observability.svc.cluster.local:4317
               tls:
                 insecure: true
 %{ endif ~}
-%{ if !enable_prometheus_fanout && !enable_signoz_fanout && !enable_loki_fanout && !enable_tempo_fanout ~}
+%{ if !enable_prometheus_fanout && !enable_signoz_fanout && !enable_loki_fanout && !enable_victoria_logs_fanout && !enable_tempo_fanout ~}
             debug:
               verbosity: basic
 %{ endif ~}
@@ -149,7 +153,7 @@ spec:
               logs:
                 receivers: [filelog]
                 processors: [memory_limiter, k8sattributes, batch]
-                exporters: [%{ if enable_loki_fanout }otlphttp/loki%{ endif }%{ if enable_signoz_fanout && !enable_loki_fanout }otlp/signoz%{ endif }%{ if !enable_loki_fanout && !enable_signoz_fanout }debug%{ endif }]
+                exporters: [%{ if enable_loki_fanout }otlphttp/loki%{ endif }%{ if enable_loki_fanout && enable_victoria_logs_fanout }, %{ endif }%{ if enable_victoria_logs_fanout }otlphttp/victoria-logs%{ endif }%{ if enable_signoz_fanout && !enable_loki_fanout && !enable_victoria_logs_fanout }otlp/signoz%{ endif }%{ if !enable_loki_fanout && !enable_victoria_logs_fanout && !enable_signoz_fanout }debug%{ endif }]
   syncPolicy:
     automated:
       prune: true
