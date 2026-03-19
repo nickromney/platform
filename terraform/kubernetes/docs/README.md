@@ -33,7 +33,7 @@ For the platform gateway, it now does two different kinds of proof:
 
 - black-box checks from outside the cluster:
   - TLS 1.3 succeeds
-  - TLS 1.2 is rejected
+  - TLS 1.2 compatibility is available on the host-facing gateway path
   - HTTP/2 negotiates
   - HSTS and `X-Content-Type-Options: nosniff` are present on the wire
 - white-box checks inside the cluster:

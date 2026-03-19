@@ -5,11 +5,15 @@ resource "local_file" "containerd_hosts_dockerio" {
   directory_permission = "0755"
   file_permission      = "0644"
 
-  # Use Google's Docker Hub mirror (mirror.gcr.io) as primary to avoid rate limits.
-  # Falls back to registry-1.docker.io if the mirror doesn't have the image.
+  # Prefer the host-local registry cache when enabled, then fall back to
+  # Google's Docker Hub mirror and finally Docker Hub itself.
   content = trimspace(join("\n", [
     "server = \"https://registry-1.docker.io\"",
     "",
+    local.host_local_registry_enabled ? "[host.\"${local.host_local_registry_scheme_effective}://${local.host_local_registry_host_effective}\"]" : "",
+    local.host_local_registry_enabled ? "  capabilities = [\"pull\", \"resolve\"]" : "",
+    local.host_local_registry_enabled && local.host_local_registry_scheme_effective == "http" ? "  skip_verify = true" : "",
+    local.host_local_registry_enabled ? "" : "",
     "# Google's Docker Hub mirror - no rate limits for public images",
     "[host.\"https://mirror.gcr.io\"]",
     "  capabilities = [\"pull\", \"resolve\"]",
@@ -18,6 +22,25 @@ resource "local_file" "containerd_hosts_dockerio" {
     "[host.\"https://registry-1.docker.io\"]",
     "  capabilities = [\"pull\", \"resolve\"]",
   ]))
+}
+
+resource "local_file" "containerd_hosts_upstream_registry_mirrors" {
+  for_each = var.provision_kind_cluster && local.host_local_registry_enabled ? local.host_local_registry_mirror_registries : toset([])
+
+  filename             = "${local.containerd_certs_dir}/${each.value}/hosts.toml"
+  directory_permission = "0755"
+  file_permission      = "0644"
+
+  content = trimspace(join("\n", compact([
+    "server = \"https://${each.value}\"",
+    "",
+    "[host.\"${local.host_local_registry_scheme_effective}://${local.host_local_registry_host_effective}\"]",
+    "  capabilities = [\"pull\", \"resolve\"]",
+    local.host_local_registry_scheme_effective == "http" ? "  skip_verify = true" : "",
+    "",
+    "[host.\"https://${each.value}\"]",
+    "  capabilities = [\"pull\", \"resolve\"]",
+  ])))
 }
 
 resource "local_file" "containerd_hosts_gitea" {
@@ -128,6 +151,7 @@ resource "kind_cluster" "local" {
     local_file.containerd_hosts_dockerio,
     local_file.containerd_hosts_gitea,
     local_file.containerd_hosts_host_local_registry,
+    local_file.containerd_hosts_upstream_registry_mirrors,
     local_file.kind_config,
   ]
 }
@@ -196,6 +220,10 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
     host_local_registry_host   = local.host_local_registry_host_effective
     host_local_registry_scheme = local.host_local_registry_scheme_effective
     host_local_registry_sha    = local.host_local_registry_enabled ? sha256(local_file.containerd_hosts_host_local_registry[0].content) : ""
+    upstream_registry_mirrors_sha = sha256(jsonencode({
+      for registry, file in local_file.containerd_hosts_upstream_registry_mirrors :
+      registry => file.content
+    }))
   }
 
   provisioner "local-exec" {
@@ -235,5 +263,6 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
     local_file.containerd_hosts_dockerio,
     local_file.containerd_hosts_gitea,
     local_file.containerd_hosts_host_local_registry,
+    local_file.containerd_hosts_upstream_registry_mirrors,
   ]
 }

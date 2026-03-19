@@ -106,6 +106,13 @@ no longer the hidden prerequisite for stage `500+` applies.
 - The current working shape depends on VM sizing. The validated full-stack run
   used the current on-device image plus a `25G` root disk; smaller roots hit
   node disk pressure at later stages.
+- Stage `100` now refuses to reuse or proceed with a Slicer VM whose root disk
+  is smaller than `25G`, so undersized `slicer-1` instances fail fast before
+  bootstrap or Terraform work starts.
+- On the local `slicer-mac` daemon, `slicer-1` is host-group managed. If it is
+  missing or undersized, fix `~/slicer-mac/slicer-mac.yaml`, stop the daemon,
+  delete the backing image, and start the daemon again; this target does not
+  pretend `slicer vm add` can repair that case.
 - Stage `100` is the bootstrap boundary. It requires the on-device
   `slicer-mac` daemon by default, or a reachable endpoint from `SLICER_URL` or
   `SLICER_SOCKET` when you override it. It ensures the selected VM exists in

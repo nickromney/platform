@@ -27,11 +27,13 @@ run "policies_requires_argocd_gitea_cilium" {
   command = plan
 
   variables {
-    enable_hubble   = false
-    enable_argocd   = true
-    enable_gitea    = true
-    cni_provider    = "none"
-    enable_policies = true
+    enable_hubble         = false
+    enable_argocd         = true
+    enable_gitea          = true
+    gitea_admin_pwd       = "test-admin-password"
+    gitea_member_user_pwd = "test-member-password"
+    cni_provider          = "none"
+    enable_policies       = true
   }
 
   expect_failures = [check.enable_policies_requires_argocd_gitea_cilium]
@@ -66,12 +68,14 @@ run "sso_requires_gateway_tls_argocd_gitea" {
   command = plan
 
   variables {
-    cni_provider       = "none"
-    enable_hubble      = false
-    enable_gateway_tls = false
-    enable_argocd      = true
-    enable_gitea       = true
-    enable_sso         = true
+    cni_provider          = "none"
+    enable_hubble         = false
+    enable_gateway_tls    = false
+    enable_argocd         = true
+    enable_gitea          = true
+    gitea_admin_pwd       = "test-admin-password"
+    gitea_member_user_pwd = "test-member-password"
+    enable_sso            = true
   }
 
   expect_failures = [check.enable_sso_requires_gateway_tls_argocd_gitea]
@@ -84,6 +88,8 @@ run "app_repo_sentiment_requires_gitea_and_actions_runner" {
     cni_provider              = "none"
     enable_hubble             = false
     enable_gitea              = true
+    gitea_admin_pwd           = "test-admin-password"
+    gitea_member_user_pwd     = "test-member-password"
     enable_actions_runner     = false
     enable_app_repo_sentiment = true
   }
@@ -98,6 +104,8 @@ run "app_repo_subnetcalc_requires_gitea_and_actions_runner" {
     cni_provider                      = "none"
     enable_hubble                     = false
     enable_gitea                      = true
+    gitea_admin_pwd                   = "test-admin-password"
+    gitea_member_user_pwd             = "test-member-password"
     enable_actions_runner             = false
     enable_app_repo_subnet_calculator = true
   }
@@ -112,6 +120,10 @@ run "app_repo_sentiment_allows_external_images_without_runner" {
     cni_provider                    = "none"
     enable_hubble                   = false
     enable_gitea                    = true
+    gitea_admin_pwd                 = "test-admin-password"
+    gitea_member_user_pwd           = "test-member-password"
+    enable_host_local_registry      = true
+    host_local_registry_host        = "host.lima.internal:5002"
     enable_actions_runner           = false
     enable_app_repo_sentiment       = true
     prefer_external_workload_images = true
@@ -129,6 +141,10 @@ run "app_repo_subnetcalc_allows_external_images_without_runner" {
     cni_provider                      = "none"
     enable_hubble                     = false
     enable_gitea                      = true
+    gitea_admin_pwd                   = "test-admin-password"
+    gitea_member_user_pwd             = "test-member-password"
+    enable_host_local_registry        = true
+    host_local_registry_host          = "host.lima.internal:5002"
     enable_actions_runner             = false
     enable_app_repo_subnet_calculator = true
     prefer_external_workload_images   = true

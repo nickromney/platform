@@ -11,6 +11,7 @@ MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 RUN_DIR := $(MAKEFILE_DIR).run
+PROFILE_LIB := $(STACK_DIR)/scripts/profile-lib.sh
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
@@ -51,6 +52,7 @@ SLICER_GATEWAY_HTTPS_GUEST_PORT ?= 30070
 SLICER_GATEWAY_HTTPS_FORWARD_PORT ?= 8443
 SLICER_VM_CPUS ?=
 SLICER_VM_RAM_GB ?=
+SLICER_VM_MIN_DISK_GB ?= 25
 SLICER_SWAP_SIZE ?= 4G
 SLICER_HOST_FORWARDS_MODE ?= auto
 K3SUP_CONTEXT ?= slicer-k3s
@@ -68,6 +70,14 @@ LOCAL_IMAGE_CACHE_PUSH_HOST ?= 127.0.0.1:5002
 LOCAL_IMAGE_CACHE_SCHEME ?= http
 LOCAL_IMAGE_CACHE_OPTIONAL ?= 1
 LOCAL_IMAGE_CACHE_CONTAINER ?= slicer-image-cache
+PLATFORM_PROFILE_MODE ?= off
+PLATFORM_PROFILE_DIR ?= $(REPO_ROOT)/.run/profiles
+PLATFORM_PROFILE_RUN_ID ?=
+PLATFORM_PROFILE_CAPTURE_DOCKER ?= auto
+PLATFORM_PROFILE_CAPTURE_KUBECTL ?= auto
+PLATFORM_PROFILE_KEEP_SUCCESS ?= 1
+PLATFORM_PROFILE_ENABLE_PLUGIN_CACHE ?= 0
+PLATFORM_PROFILE_PLUGIN_CACHE_DIR ?= $(REPO_ROOT)/.run/tofu-plugin-cache
 PLATFORM_LOCAL_IMAGE_CACHE_MODE ?= auto
 PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE ?= auto
 PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE ?= auto
@@ -90,30 +100,13 @@ PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
+VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
-ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
-ACTION_COUNT := $(words $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
-STAGE_COUNT := $(words $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
-UNKNOWN_WORKFLOW_GOALS := $(filter-out $(MAKE_KNOWN_GOALS),$(MAKECMDGOALS))
 
 include ../../mk/common.mk
-
-ifneq ($(STAGE_FROM_GOALS),)
-ifneq ($(origin STAGE),command line)
-override STAGE := $(STAGE_FROM_GOALS)
-endif
-endif
-
-STAGE_SPECIFIED := 0
-ifneq ($(STAGE_FROM_GOALS),)
-STAGE_SPECIFIED := 1
-endif
-ifeq ($(origin STAGE),command line)
-STAGE_SPECIFIED := 1
-endif
+include ../../mk/stage-workflow.mk
 
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
@@ -122,6 +115,14 @@ export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
 export PLATFORM_ADMIN_PASSWORD
 export PLATFORM_DEMO_PASSWORD
+export PLATFORM_PROFILE_MODE
+export PLATFORM_PROFILE_DIR
+export PLATFORM_PROFILE_RUN_ID
+export PLATFORM_PROFILE_CAPTURE_DOCKER
+export PLATFORM_PROFILE_CAPTURE_KUBECTL
+export PLATFORM_PROFILE_KEEP_SUCCESS
+export PLATFORM_PROFILE_ENABLE_PLUGIN_CACHE
+export PLATFORM_PROFILE_PLUGIN_CACHE_DIR
 export TF_VAR_gitea_admin_pwd ?= $(PLATFORM_ADMIN_PASSWORD)
 export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
@@ -176,6 +177,7 @@ help:
 	@echo ""
 	@echo "Accepted variants:"
 	@echo "  make apply 100"
+	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make apply        100|200|300|...|900 [AUTO_APPROVE=1]"
@@ -225,6 +227,11 @@ help:
 	@echo "  800 - gateway tls + observability"
 	@echo "  900 - sso"
 	@echo ""
+	@echo "Stage examples:"
+	@echo "  make 100 plan"
+	@echo "  make 900 apply AUTO_APPROVE=1"
+	@echo "  make 900 check-security"
+	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  slicer -> $(KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
 	@echo ""
@@ -243,37 +250,7 @@ help:
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
-
-.PHONY: workflow-validate
-workflow-validate:
-	@set -euo pipefail; \
-	if [ "$(ACTION_COUNT)" -gt 1 ]; then \
-		echo "Specify only one workflow action: $(VALID_ACTIONS)" >&2; \
-		exit 2; \
-	fi; \
-	if [ "$(STAGE_COUNT)" -gt 1 ]; then \
-		echo "Specify only one stage: $(VALID_STAGES)" >&2; \
-		exit 2; \
-	fi; \
-	if [ -n "$(UNKNOWN_WORKFLOW_GOALS)" ]; then \
-		echo "Unknown workflow goal '$(firstword $(UNKNOWN_WORKFLOW_GOALS))'." >&2; \
-		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" "$(firstword $(UNKNOWN_WORKFLOW_GOALS))" $(VALID_ACTIONS) $(VALID_STAGES) )"; \
-		if [ -n "$$suggestion" ]; then \
-			echo "$$suggestion" >&2; \
-		fi; \
-		echo "Use: make <stage> <plan|apply> [AUTO_APPROVE=1]" >&2; \
-		exit 2; \
-	fi
-
-.PHONY: $(VALID_STAGES)
-$(VALID_STAGES): workflow-validate
-	@set -euo pipefail; \
-	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
-		echo "Stage $@ requires an action." >&2; \
-		echo "Try: make $@ plan" >&2; \
-		echo "  or: make $@ apply AUTO_APPROVE=1" >&2; \
-		exit 2; \
-	fi
+	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(REPO_ROOT)/.run/profiles"
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
@@ -440,6 +417,9 @@ slicer-vm-up:
 	SLICER_VM_READY_TIMEOUT="$(SLICER_VM_READY_TIMEOUT)" \
 	SLICER_VM_CPUS="$(SLICER_VM_CPUS)" \
 	SLICER_VM_RAM_GB="$(SLICER_VM_RAM_GB)" \
+	SLICER_VM_MIN_DISK_GB="$(SLICER_VM_MIN_DISK_GB)" \
+	SLICER_USE_LOCAL_MAC="$(SLICER_USE_LOCAL_MAC)" \
+	SLICER_CONFIG="$(SLICER_CONFIG)" \
 	"$(ENSURE_SBOX_VM)"
 
 .PHONY: bootstrap-k3s
@@ -615,18 +595,18 @@ stop-slicer:
 	if SLICER_URL="$$socket" slicer vm list >/dev/null 2>&1; then \
 		status="$$(SLICER_URL="$$socket" slicer vm list --json 2>/dev/null | jq -r --arg vm "$(SLICER_VM_NAME)" '.[] | select(.hostname == $$vm) | .status' | head -n 1 || true)"; \
 		if [ "$$status" = "Running" ]; then \
-			echo "Requesting shutdown for $(SLICER_VM_NAME)..."; \
-			SLICER_URL="$$socket" slicer vm shutdown "$(SLICER_VM_NAME)" >/dev/null 2>&1 || true; \
+			echo "Requesting pause for $(SLICER_VM_NAME)..."; \
+			SLICER_URL="$$socket" slicer vm pause "$(SLICER_VM_NAME)" >/dev/null 2>&1 || true; \
 			for _ in $$(seq 1 30); do \
 				status="$$(SLICER_URL="$$socket" slicer vm list --json 2>/dev/null | jq -r --arg vm "$(SLICER_VM_NAME)" '.[] | select(.hostname == $$vm) | .status' | head -n 1 || true)"; \
-				if [ "$$status" != "Running" ]; then \
+				if [ "$$status" = "Paused" ] || [ "$$status" = "Stopped" ] || [ -z "$$status" ]; then \
 					echo "OK   $(SLICER_VM_NAME) is $${status:-absent}"; \
 					break; \
 				fi; \
 				sleep 1; \
 			done; \
 			if [ "$$status" = "Running" ]; then \
-				echo "WARN $(SLICER_VM_NAME) is still Running after shutdown request"; \
+				echo "WARN $(SLICER_VM_NAME) is still Running after pause request"; \
 			fi; \
 		else \
 			echo "OK   $(SLICER_VM_NAME) is $${status:-absent}"; \
@@ -679,6 +659,21 @@ plan: workflow-validate
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@set -euo pipefail; \
+	. "$(PROFILE_LIB)"; \
+	profile_setup_session "slicer" "$(STAGE)" "plan" "$(KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
+	profile_enabled=0; \
+	if profile_is_enabled; then \
+		profile_enabled=1; \
+		trap 'rc=$$?; profile_finish_session "$$rc"' EXIT; \
+	fi; \
+	run_step() { \
+		local step="$$1"; shift; \
+		if [ "$$profile_enabled" = "1" ]; then \
+			profile_run_step "$$step" "$$@"; \
+		else \
+			"$@"; \
+		fi; \
+	}; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-platform-env; \
@@ -707,9 +702,16 @@ plan: workflow-validate
 	if [ -n "$${TARGET_CLUSTER_NAME:-}" ]; then plan_args="$$plan_args -var cluster_name=$${TARGET_CLUSTER_NAME}"; fi; \
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_BASE_TFVARS}"; fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_TFVARS}"; fi; \
-	cd "$(STACK_DIR)" && \
-	TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS) && \
-	TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args
+	tg_init() { \
+		cd "$(STACK_DIR)" && \
+		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+	}; \
+	tg_plan() { \
+		cd "$(STACK_DIR)" && \
+		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args; \
+	}; \
+	run_step "terragrunt-init" tg_init; \
+	run_step "terragrunt-plan" tg_plan
 
 .PHONY: apply
 apply: workflow-validate
@@ -727,6 +729,21 @@ apply: workflow-validate
 			*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
 		esac; \
 	}; \
+	. "$(PROFILE_LIB)"; \
+	profile_setup_session "slicer" "$(STAGE)" "apply" "$(KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
+	profile_enabled=0; \
+	if profile_is_enabled; then \
+		profile_enabled=1; \
+		trap 'rc=$$?; profile_finish_session "$$rc"' EXIT; \
+	fi; \
+	run_step() { \
+		local step="$$1"; shift; \
+		if [ "$$profile_enabled" = "1" ]; then \
+			profile_run_step "$$step" "$$@"; \
+		else \
+			"$@"; \
+		fi; \
+	}; \
 	prepare_host_forwards() { \
 		local mode="$$1"; local stage_num_local="$$2"; local tmp_log=""; \
 		if ! mode_enabled "$$mode" 500 "$$stage_num_local"; then \
@@ -736,7 +753,7 @@ apply: workflow-validate
 			tmp_log=$$(mktemp); \
 			if $(MAKE) check-host-ports >"$$tmp_log" 2>&1; then \
 				rm -f "$$tmp_log"; \
-				$(MAKE) ensure-host-forwards; \
+				run_step "ensure-host-forwards" $(MAKE) ensure-host-forwards; \
 			else \
 				cat "$$tmp_log"; \
 				rm -f "$$tmp_log"; \
@@ -744,8 +761,8 @@ apply: workflow-validate
 			fi; \
 			return 0; \
 		fi; \
-		$(MAKE) check-host-ports; \
-		$(MAKE) ensure-host-forwards; \
+		run_step "check-host-ports" $(MAKE) check-host-ports; \
+		run_step "ensure-host-forwards" $(MAKE) ensure-host-forwards; \
 	}; \
 	local_cache_available() { \
 		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
@@ -763,13 +780,13 @@ apply: workflow-validate
 	if [ "$$stage_num" -eq 100 ]; then \
 		$(MAKE) prereqs; \
 		if [ "$(SLICER_HOST_FORWARDS_MODE)" = "on" ]; then \
-			$(MAKE) check-host-ports; \
+			run_step "check-host-ports" $(MAKE) check-host-ports; \
 		fi; \
-		$(MAKE) slicer-vm-up; \
-		$(MAKE) bootstrap-k3s; \
-			$(MAKE) check-kubeconfig; \
-			exit 0; \
-		fi; \
+		run_step "slicer-vm-up" $(MAKE) slicer-vm-up; \
+		run_step "bootstrap-k3s" $(MAKE) bootstrap-k3s; \
+		run_step "check-kubeconfig" $(MAKE) check-kubeconfig; \
+		exit 0; \
+	fi; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null; then \
@@ -778,20 +795,20 @@ apply: workflow-validate
 	fi; \
 	prepare_host_forwards "$(SLICER_HOST_FORWARDS_MODE)" "$$stage_num"; \
 	if mode_enabled "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" 700 "$$stage_num"; then \
-		$(MAKE) ensure-image-cache; \
-		$(MAKE) sync-image-cache; \
+		run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
+		run_step "sync-image-cache" $(MAKE) sync-image-cache; \
 	elif [ "$$stage_num" -ge 700 ] && ! local_cache_available; then \
 		echo "Stage $(STAGE) expects workload images from $(LOCAL_IMAGE_CACHE_HOST), but PLATFORM_LOCAL_IMAGE_CACHE_MODE=off and no registry is reachable at http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/."; \
 		echo "Set PLATFORM_LOCAL_IMAGE_CACHE_MODE=on or start a compatible cache manually."; \
 		exit 1; \
 	fi; \
 	if [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)" 800 "$$stage_num"; then \
-		$(MAKE) build-local-platform-images; \
+		run_step "build-local-platform-images" $(MAKE) build-local-platform-images; \
 	elif [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ]; then \
 		echo "Skipping platform image build (PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE))"; \
 	fi; \
 	if [ "$$stage_num" -ge 700 ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)" 700 "$$stage_num"; then \
-		$(MAKE) build-workload-images; \
+		run_step "build-workload-images" $(MAKE) build-workload-images; \
 	elif [ "$$stage_num" -ge 700 ]; then \
 		echo "Skipping workload image build (PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE))"; \
 	fi; \
@@ -804,9 +821,16 @@ apply: workflow-validate
 	if [ "$(AUTO_APPROVE)" = "1" ]; then \
 		apply_args="$$apply_args -auto-approve"; \
 	fi; \
-	cd "$(STACK_DIR)" && \
-	TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS) && \
-	TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args
+	tg_init() { \
+		cd "$(STACK_DIR)" && \
+		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+	}; \
+	tg_apply() { \
+		cd "$(STACK_DIR)" && \
+		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args; \
+	}; \
+	run_step "terragrunt-init" tg_init; \
+	run_step "terragrunt-apply" tg_apply
 
 .PHONY: check-health
 check-health:

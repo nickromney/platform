@@ -16,7 +16,16 @@ setup() {
   [[ "${output}" == *"make apply 100"* ]]
   [[ "${output}" == *"900 - full stack + sso"* ]]
   [[ "${output}" == *"Linux -> Docker Engine or Docker Desktop"* ]]
+  [[ "${output}" == *"KIND_WORKER_COUNT=1|2|..."* ]]
+  [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
+  [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
+}
+
+@test "kind run_step helper preserves shell arguments instead of invoking macOS apply" {
+  run grep -Fn '"$${@}"' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "kind stage without action shows guidance" {
@@ -25,6 +34,7 @@ setup() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Stage 100 requires an action."* ]]
   [[ "${output}" == *"make 100 apply AUTO_APPROVE=1"* ]]
+  [[ "${output}" == *"make 100 check-security"* ]]
 }
 
 @test "kind typo suggests the closest workflow action" {
@@ -32,6 +42,13 @@ setup() {
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Did you mean 'apply'?"* ]]
+}
+
+@test "kind supports stage-first check-security syntax" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" 900 check-security
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"check-security.sh"* ]]
 }
 
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {
