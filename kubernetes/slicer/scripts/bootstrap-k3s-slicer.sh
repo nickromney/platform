@@ -2,11 +2,13 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/../../.." && pwd)"
 run_dir="${RUN_DIR:-$(cd "${script_dir}/.." && pwd)/.run}"
 
 slicer_socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
 [ -n "${slicer_socket}" ] || { echo "ERROR: SLICER_URL or SLICER_SOCKET must be set" >&2; exit 1; }
 
+kubeconfig_helper="${KUBECONFIG_HELPER:-${repo_root}/terraform/kubernetes/scripts/manage-kubeconfig.sh}"
 server_vm="${SLICER_VM_NAME:-slicer-1}"
 slicer_vm_user="${SLICER_VM_USER:-ubuntu}"
 k3sup_context="${K3SUP_CONTEXT:-slicer-k3s}"
@@ -148,7 +150,9 @@ fix_vm_dns() {
     return 0
   fi
   echo "==> Setting ${server_vm} DNS to gateway resolver (${gw})"
-  vm_exec_retry "$server_vm" "sudo chattr -i /etc/resolv.conf || true; printf 'nameserver ${gw}\noptions timeout:1 attempts:2\n' | sudo tee /etc/resolv.conf >/dev/null; sudo chattr +i /etc/resolv.conf || true" 5 2 >/dev/null
+  if ! vm_exec_retry "$server_vm" "sudo chattr -i /etc/resolv.conf || true; printf 'nameserver ${gw}\noptions timeout:1 attempts:2\n' | sudo tee /etc/resolv.conf >/dev/null; sudo chattr +i /etc/resolv.conf || true" 5 2 >/dev/null; then
+    echo "WARN: failed to override DNS on ${server_vm}; continuing with the guest default resolver" >&2
+  fi
 }
 
 refresh_kubeconfig() {
@@ -170,19 +174,25 @@ refresh_kubeconfig() {
     fi
     KUBECONFIG="$kubeconfig_path" kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
     if [ "$merge_kubeconfig_to_default" = "1" ]; then
-      local merged_kubeconfig
-      merged_kubeconfig="${default_kubeconfig_path}.merged.$$"
       mkdir -p "$(dirname "$default_kubeconfig_path")"
-      if [ -s "$default_kubeconfig_path" ]; then
-        if KUBECONFIG="${default_kubeconfig_path}:${kubeconfig_path}" kubectl config view --flatten > "$merged_kubeconfig"; then
-          chmod 600 "$merged_kubeconfig" || true
-          mv "$merged_kubeconfig" "$default_kubeconfig_path"
-        else
-          rm -f "$merged_kubeconfig"
+      if [ -x "$kubeconfig_helper" ]; then
+        if ! "$kubeconfig_helper" merge "$kubeconfig_path" "$default_kubeconfig_path" "$k3sup_context"; then
           echo "WARN: failed to merge ${kubeconfig_path} into ${default_kubeconfig_path}" >&2
         fi
       else
-        cp "$kubeconfig_path" "$default_kubeconfig_path"
+        local merged_kubeconfig
+        merged_kubeconfig="${default_kubeconfig_path}.merged.$$"
+        if [ -s "$default_kubeconfig_path" ]; then
+          if KUBECONFIG="${default_kubeconfig_path}:${kubeconfig_path}" kubectl config view --flatten > "$merged_kubeconfig"; then
+            chmod 600 "$merged_kubeconfig" || true
+            mv "$merged_kubeconfig" "$default_kubeconfig_path"
+          else
+            rm -f "$merged_kubeconfig"
+            echo "WARN: failed to merge ${kubeconfig_path} into ${default_kubeconfig_path}" >&2
+          fi
+        else
+          cp "$kubeconfig_path" "$default_kubeconfig_path"
+        fi
       fi
       kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
     fi

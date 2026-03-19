@@ -42,6 +42,9 @@ if [[ "${1:-}" == "vm" && "${2:-}" == "exec" ]]; then
       printf '192.168.64.1\n'
       ;;
     "sudo chattr -i /etc/resolv.conf || true; printf 'nameserver 192.168.64.1\noptions timeout:1 attempts:2\n' | sudo tee /etc/resolv.conf >/dev/null; sudo chattr +i /etc/resolv.conf || true")
+      if [[ "${SLICER_DNS_WRITE_FAIL:-0}" == "1" ]]; then
+        exit 1
+      fi
       ;;
     "sudo mkdir -p /etc/rancher/k3s; if ! sudo cmp -s /tmp/registries.yaml /etc/rancher/k3s/registries.yaml 2>/dev/null; then sudo mv /tmp/registries.yaml /etc/rancher/k3s/registries.yaml; sudo systemctl is-active --quiet k3s && sudo systemctl restart k3s || true; else rm -f /tmp/registries.yaml; fi")
       ;;
@@ -148,4 +151,21 @@ EOF
   [[ "${output}" == *"refreshing kubeconfig only"* ]]
   [[ -f "${kubeconfig}" ]]
   grep -q "https://192.168.64.2:6443" "${kubeconfig}"
+}
+
+@test "dns override failure is reported as a warning and bootstrap continues" {
+  kubeconfig="${BATS_TEST_TMPDIR}/slicer-k3s.yaml"
+
+  run env \
+    SLICER_URL="${BATS_TEST_TMPDIR}/slicer.sock" \
+    KUBECONFIG_PATH="${kubeconfig}" \
+    DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
+    MERGE_KUBECONFIG_TO_DEFAULT=0 \
+    SLICER_ALLOW_EXISTING_K3S=1 \
+    SLICER_DNS_WRITE_FAIL=1 \
+    "${SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"WARN: failed to override DNS on slicer-1"* ]]
+  [[ "${output}" == *"refreshing kubeconfig only"* ]]
 }

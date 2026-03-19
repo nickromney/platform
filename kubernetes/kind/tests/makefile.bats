@@ -190,6 +190,13 @@ EOF
   [[ "$(cat "${state_file}")" == "running" ]]
 }
 
+@test "kind reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
+  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind ensure-kind-running fails before docker start when planned host ports are occupied" {
   state_file="${BATS_TEST_TMPDIR}/docker-state"
   printf 'stopped' >"${state_file}"

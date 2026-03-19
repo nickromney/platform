@@ -51,9 +51,23 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "lima stage 900 apply waits for cluster health after k3s apiserver OIDC" {
+  run grep -Fn 'run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "lima check-sso-e2e does not repair k3s apiserver OIDC" {
   run sed -n '/^check-sso-e2e:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"configure-k3s-apiserver-oidc"* ]]
+}
+
+@test "lima reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
+  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
 }

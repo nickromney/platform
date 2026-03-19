@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/../../.." && pwd)"
 : "${LIMA_INSTANCE_PREFIX:?LIMA_INSTANCE_PREFIX is required}"
 : "${DESIRED_NODES:?DESIRED_NODES is required}"
 
+kubeconfig_helper="${KUBECONFIG_HELPER:-${repo_root}/terraform/kubernetes/scripts/manage-kubeconfig.sh}"
 k3sup_context="${K3SUP_CONTEXT:-limavm-k3s}"
 kubeconfig_path="${KUBECONFIG_PATH:-$HOME/.kube/${k3sup_context}.yaml}"
 default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-$HOME/.kube/config}"
@@ -198,18 +201,22 @@ get_node_count() {
 merge_kubeconfig_into_default() {
   local source_kubeconfig="$1"
   local target_kubeconfig="$2"
-  local tmp_file
 
   [ -f "$source_kubeconfig" ] || return 0
   [ "$source_kubeconfig" != "$target_kubeconfig" ] || return 0
 
+  if [ -x "$kubeconfig_helper" ]; then
+    "$kubeconfig_helper" merge "$source_kubeconfig" "$target_kubeconfig" "$k3sup_context"
+    return 0
+  fi
+
+  local tmp_file
   mkdir -p "$(dirname "$target_kubeconfig")"
   if [ ! -f "$target_kubeconfig" ]; then
     cp "$source_kubeconfig" "$target_kubeconfig"
     kubectl config use-context "$k3sup_context" --kubeconfig "$target_kubeconfig" >/dev/null 2>&1 || true
     return 0
   fi
-
   tmp_file="$(mktemp)"
   KUBECONFIG="${target_kubeconfig}:${source_kubeconfig}" kubectl config view --flatten >"$tmp_file"
   mv "$tmp_file" "$target_kubeconfig"

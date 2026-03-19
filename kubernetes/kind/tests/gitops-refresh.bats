@@ -19,6 +19,18 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
+  run grep -n 'soft_only_stable_passes=0' "${GITOPS_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -n 'if \[\[ "\$\${#hard_pending_apps\[@\]}" -eq 0 && "\$\${#soft_pending_apps\[@\]}" -gt 0 \]\]' "${GITOPS_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'soft_only_stable_passes=$((soft_only_stable_passes + 1))' "${GITOPS_FILE}"
+
+  [ "${status}" -eq 0 ]
+
   run grep -n 'WARN repo-backed Argo CD applications were still waiting on parent health after refresh' "${GITOPS_FILE}"
 
   [ "${status}" -eq 0 ]

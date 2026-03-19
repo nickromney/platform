@@ -442,6 +442,7 @@ bootstrap-k3s:
 	K3S_VERSION="$(K3S_VERSION)" \
 	K3S_CHANNEL="$(K3S_CHANNEL)" \
 	K3S_SERVER_EXTRA_ARGS="$(K3S_SERVER_EXTRA_ARGS)" \
+	KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" \
 	SLICER_SWAP_SIZE="$(SLICER_SWAP_SIZE)" \
 	IMAGE_LIST_FILE="$(preload_images_file)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
@@ -843,6 +844,7 @@ apply: workflow-validate
 	run_step "terragrunt-apply" tg_apply; \
 	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
 		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
+		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
 	fi
 
 .PHONY: check-health
@@ -1050,7 +1052,7 @@ reset:
 	state_dir="$(dir $(STATE_FILE))"; \
 	reset_incomplete=0; \
 	echo "This will:"; \
-	echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present"; \
+	echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present (auto-recycle on-device slicer-mac state if needed)"; \
 	echo "  - Stop host forwards"; \
 	echo "  - Clean any stale repo-managed slicer daemon state from older revisions"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
@@ -1072,14 +1074,14 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$ctx" ]; then \
 		if [ -e "$(KUBECONFIG_PATH)" ]; then \
-			"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$(KUBECONFIG_PATH)"; \
 			"$(KUBECONFIG_HELPER)" delete-context "$(KUBECONFIG_PATH)" "$$ctx" "$$ctx" "$$ctx" 1; \
 			echo "OK   cleaned $$ctx from $(KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(KUBECONFIG_PATH)"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$(DEFAULT_KUBECONFIG_PATH)"; \
 			"$(KUBECONFIG_HELPER)" delete-context "$(DEFAULT_KUBECONFIG_PATH)" "$$ctx" "$$ctx" "$$ctx" 0; \
 			echo "OK   cleaned $$ctx from $(DEFAULT_KUBECONFIG_PATH)"; \
 		else \
