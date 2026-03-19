@@ -99,6 +99,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubectl_manifest.argocd_app_cilium_policies,
     kubectl_manifest.argocd_app_apim,
+    null_resource.wait_sentiment_images,
     null_resource.wait_subnetcalc_images,
   ]
 }
@@ -152,6 +153,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubectl_manifest.argocd_app_cilium_policies,
     kubectl_manifest.argocd_app_apim,
+    null_resource.wait_sentiment_images,
     null_resource.wait_subnetcalc_images,
   ]
 }

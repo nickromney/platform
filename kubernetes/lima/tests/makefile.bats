@@ -11,6 +11,7 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
+  [[ "${output}" == *"make 900 check-security"* ]]
 }
 
 @test "lima stage without action shows guidance" {
@@ -19,6 +20,7 @@ setup() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Stage 100 requires an action."* ]]
   [[ "${output}" == *"make 100 plan"* ]]
+  [[ "${output}" == *"make 100 check-security"* ]]
 }
 
 @test "lima typo suggests the closest workflow action" {
@@ -26,4 +28,11 @@ setup() {
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Did you mean 'apply'?"* ]]
+}
+
+@test "lima supports stage-first check-security syntax" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" 900 check-security
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"check-security.sh"* ]]
 }

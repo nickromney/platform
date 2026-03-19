@@ -63,6 +63,12 @@ locals {
   host_local_registry_enabled          = trimspace(var.host_local_registry_host) != "" && var.enable_host_local_registry
   host_local_registry_host_effective   = trimspace(var.host_local_registry_host)
   host_local_registry_scheme_effective = trimspace(var.host_local_registry_scheme) != "" ? trimspace(var.host_local_registry_scheme) : "http"
+  host_local_registry_mirror_registries = local.host_local_registry_enabled ? toset([
+    "dhi.io",
+    "ghcr.io",
+    "public.ecr.aws",
+    "quay.io",
+  ]) : toset([])
   external_platform_grafana_image      = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
   external_platform_hardened_registry  = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
   external_platform_llama_cpp_image    = trimspace(lookup(var.external_platform_image_refs, "llama-cpp", ""))
@@ -186,7 +192,7 @@ locals {
   enable_gitops_repo = var.enable_gitea && var.enable_argocd && local.enable_gitops_repo_requested
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
-    var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno-policies", "cilium-policies"] : [],
+    var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno", "kyverno-policies", "cilium-policies"] : [],
     var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["policy-reporter"] : [],
     var.enable_cert_manager && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager"] : [],
     var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],

@@ -264,9 +264,8 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
   ]
 }
 
-# Reference pattern: wait for a single app's images + policy stamping to complete
-# after a full reset. Keep this scoped to subnetcalc to avoid boiling the ocean;
-# replicate for other apps only when needed.
+# Reference pattern: wait for app images + policy stamping to complete after a
+# full reset. Keep this scoped to the repos that feed live workloads.
 resource "null_resource" "wait_subnetcalc_images" {
   count = var.enable_app_repo_subnet_calculator && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
 
@@ -599,6 +598,366 @@ EOT
 
   depends_on = [
     null_resource.sync_gitea_app_repo_subnet_calculator,
+    kubernetes_secret_v1.gitea_runner,
+  ]
+}
+
+resource "null_resource" "wait_sentiment_images" {
+  count = var.enable_app_repo_sentiment && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
+
+  triggers = {
+    app_repo_sync       = null_resource.sync_gitea_app_repo_sentiment[0].id
+    registry_host       = var.gitea_registry_host
+    registry_scheme     = var.gitea_registry_scheme
+    repo_owner          = local.gitea_repo_owner
+    registry_repo_owner = local.gitea_repo_owner
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<EOT
+set -euo pipefail
+
+require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
+require_cmd curl
+require_cmd jq
+require_cmd kubectl
+require_cmd git
+
+# shellcheck source=/dev/null
+source "${path.module}/scripts/gitea-local-access.sh"
+trap 'gitea_local_access_cleanup || true; policies_repo_cleanup || true' EXIT
+gitea_local_access_setup http
+
+GITEA_HTTP_BASE="$${GITEA_HTTP_BASE:?}"
+GITEA_ADMIN_USERNAME="$${GITEA_ADMIN_USERNAME:?}"
+GITEA_ADMIN_PWD="$${GITEA_ADMIN_PWD:?}"
+GITEA_REPO_OWNER="$${GITEA_REPO_OWNER:?}"
+REGISTRY_HOST="$${REGISTRY_HOST:?}"
+REGISTRY_SCHEME="$${REGISTRY_SCHEME:?}"
+REGISTRY_REPO_OWNER="$${REGISTRY_REPO_OWNER:?}"
+REGISTRY_USERNAME="$${REGISTRY_USERNAME:?}"
+REGISTRY_PWD="$${REGISTRY_PWD:?}"
+
+WAIT_SECONDS="$${WAIT_SECONDS:-600}"
+SLEEP_SECONDS="$${SLEEP_SECONDS:-5}"
+RUNNER_WAIT_SECONDS="$${RUNNER_WAIT_SECONDS:-900}"
+ARGOCD_NAMESPACE="$${ARGOCD_NAMESPACE:-argocd}"
+SENTIMENT_WORKFLOW_ID="$${SENTIMENT_WORKFLOW_ID:-build-images.yaml}"
+ACTIONS_RETRIGGERED_TAG=""
+POLICIES_REPO_DIR=""
+POLICIES_REPO_HOME=""
+
+policies_repo_cleanup() {
+  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}" ]; then
+    rm -rf "$${POLICIES_REPO_DIR}"
+  fi
+  if [ -n "$${POLICIES_REPO_HOME}" ] && [ -d "$${POLICIES_REPO_HOME}" ]; then
+    rm -rf "$${POLICIES_REPO_HOME}"
+  fi
+}
+
+policies_repo_setup() {
+  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}/.git" ]; then
+    return 0
+  fi
+
+  local gitea_host repo_url
+  gitea_host="$${GITEA_HTTP_BASE#*://}"
+  gitea_host="$${gitea_host%%/*}"
+  gitea_host="$${gitea_host%%:*}"
+
+  POLICIES_REPO_HOME="$(mktemp -d)"
+  chmod 700 "$${POLICIES_REPO_HOME}"
+  cat >"$${POLICIES_REPO_HOME}/.netrc" <<EOF
+machine $${gitea_host}
+login $${GITEA_ADMIN_USERNAME}
+password $${GITEA_ADMIN_PWD}
+EOF
+  chmod 600 "$${POLICIES_REPO_HOME}/.netrc"
+
+  POLICIES_REPO_DIR="$(mktemp -d)"
+  repo_url="$${GITEA_HTTP_BASE}/$${GITEA_REPO_OWNER}/policies.git"
+  HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
+    git clone --quiet --depth=1 --branch main "$${repo_url}" "$${POLICIES_REPO_DIR}"
+}
+
+wait_for_gitea() {
+  local code
+  for i in {1..120}; do
+    code="$(curl -sS -o /dev/null -w "%%{http_code}" --connect-timeout 2 --max-time 5 \
+      "$${GITEA_HTTP_BASE}/api/v1/version" 2>/dev/null || echo 000)"
+    if [[ "$${code}" =~ ^[234][0-9][0-9]$ ]]; then
+      return 0
+    fi
+    echo "Waiting for Gitea API... ($i/120)" >&2
+    sleep 2
+  done
+  echo "Gitea API not reachable at $${GITEA_HTTP_BASE}" >&2
+  exit 1
+}
+
+wait_for_namespace() {
+  local ns="$1"
+  local waited=0
+  while [ "$${waited}" -lt "$${RUNNER_WAIT_SECONDS}" ]; do
+    if kubectl get ns "$${ns}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "Timed out waiting for namespace $${ns}" >&2
+  exit 1
+}
+
+wait_for_deployment() {
+  local ns="$1"
+  local name="$2"
+  local waited=0
+  while [ "$${waited}" -lt "$${RUNNER_WAIT_SECONDS}" ]; do
+    if kubectl -n "$${ns}" get deploy "$${name}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  echo "Timed out waiting for deployment $${ns}/$${name}" >&2
+
+  if [ "$${ns}" = "gitea-runner" ] && [ "$${name}" = "act-runner" ]; then
+    echo "ArgoCD app status (gitea-actions-runner):" >&2
+    kubectl -n "$${ARGOCD_NAMESPACE}" get applications.argoproj.io gitea-actions-runner \
+      -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}' 2>/dev/null || true
+    kubectl -n "$${ARGOCD_NAMESPACE}" get applications.argoproj.io gitea-actions-runner \
+      -o jsonpath='{range .status.conditions[*]}{.type}{": "}{.message}{"\n"}{end}' 2>/dev/null || true
+  fi
+
+  exit 1
+}
+
+wait_for_runner() {
+  echo "Waiting for Gitea Actions runner (gitea-runner/act-runner)..."
+  wait_for_namespace "gitea-runner"
+  wait_for_deployment "gitea-runner" "act-runner"
+  if ! kubectl -n gitea-runner rollout status deploy/act-runner --timeout="$${RUNNER_WAIT_SECONDS}s"; then
+    echo "Gitea Actions runner not ready" >&2
+    kubectl -n gitea-runner get pods -o wide || true
+    exit 1
+  fi
+}
+
+latest_sentiment_sha() {
+  local waited=0
+  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
+    local resp code json sha
+    resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
+      "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/commits?limit=1" \
+      -w '\n%%{http_code}')"
+    code="$(printf '%s' "$${resp}" | tail -n 1)"
+    json="$(printf '%s' "$${resp}" | sed '$d')"
+
+    if [ "$${code}" = "200" ]; then
+      sha="$(printf '%s' "$${json}" | jq -r '.[0].sha // empty')"
+      if [ -n "$${sha}" ] && [ "$${sha}" != "null" ]; then
+        echo "$${sha}"
+        return 0
+      fi
+    elif [ "$${code}" = "409" ]; then
+      echo "Sentiment repo has no commits yet; waiting..." >&2
+    else
+      echo "Unexpected HTTP $${code} from sentiment commits API" >&2
+    fi
+
+    sleep "$${SLEEP_SECONDS}"
+    waited=$((waited + SLEEP_SECONDS))
+  done
+
+  return 1
+}
+
+dispatch_sentiment_workflow() {
+  local resp code body
+  resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"ref":"main"}' \
+    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/workflows/$${SENTIMENT_WORKFLOW_ID}/dispatches" \
+    -w '\n%%{http_code}' || true)"
+  code="$(printf '%s' "$${resp}" | tail -n 1)"
+  body="$(printf '%s' "$${resp}" | sed '$d')"
+
+  if [ "$${code}" = "204" ] || [ "$${code}" = "201" ]; then
+    return 0
+  fi
+
+  echo "Failed to dispatch sentiment workflow ($${SENTIMENT_WORKFLOW_ID}), HTTP $${code}" >&2
+  if [ -n "$${body}" ]; then
+    echo "$${body}" >&2
+  fi
+  return 1
+}
+
+check_actions_failure() {
+  local tag="$1"
+  local json status conclusion run_id run_url
+  json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
+    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/runs?limit=5" || true)"
+  if [ -z "$${json}" ]; then
+    return 0
+  fi
+  status="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .status' | head -n1)"
+  conclusion="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .conclusion' | head -n1)"
+  run_id="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .id // empty' | head -n1)"
+  run_url="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .html_url // empty' | head -n1)"
+  if [ "$${status}" = "completed" ] && [ -n "$${conclusion}" ] && [ "$${conclusion}" != "success" ]; then
+    if [ "$${ACTIONS_RETRIGGERED_TAG}" != "$${tag}" ]; then
+      echo "Sentiment Actions run for $${tag} failed ($${conclusion}). Triggering one workflow_dispatch retry..." >&2
+      if dispatch_sentiment_workflow; then
+        ACTIONS_RETRIGGERED_TAG="$${tag}"
+        return 0
+      fi
+      echo "Automatic retry dispatch failed; surfacing workflow failure details." >&2
+    fi
+
+    echo "Sentiment Actions run for $${tag} failed ($${conclusion}). Registry images will not appear until it succeeds." >&2
+    if [ -n "$${run_url}" ]; then
+      echo "Run URL: $${run_url}" >&2
+    fi
+    if [ -n "$${run_id}" ]; then
+      local job_json job_id excerpt
+      job_json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
+        "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/runs/$${run_id}/jobs" || true)"
+      job_id="$(echo "$${job_json}" | jq -r '.jobs[0].id // empty')"
+      if [ -n "$${job_id}" ]; then
+        excerpt="$(
+          curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
+            "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/jobs/$${job_id}/logs" 2>/dev/null \
+            | tr -d '\r' \
+            | grep -Ei "ERROR|failed to|\\bFailure\\b|exit status|timed out|timeout|denied|unauthorized|DeadlineExceeded" \
+            | tail -n 30 || true
+        )"
+        if [ -n "$${excerpt}" ]; then
+          echo "Failure excerpts (job $${job_id}):" >&2
+          printf '%s\n' "$${excerpt}" >&2
+        fi
+      fi
+    fi
+    exit 1
+  fi
+}
+
+ensure_sentiment_workflow_started() {
+  local json status conclusion
+  json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
+    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/runs?limit=10" || true)"
+  if [ -n "$${json}" ]; then
+    status="$(echo "$${json}" | jq -r --arg tag "$${TAG}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .status' | head -n1)"
+    conclusion="$(echo "$${json}" | jq -r --arg tag "$${TAG}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .conclusion' | head -n1)"
+
+    if [ "$${status}" = "queued" ] || [ "$${status}" = "waiting" ] || [ "$${status}" = "running" ]; then
+      echo "Sentiment workflow already in progress for $${TAG}"
+      return 0
+    fi
+    if [ "$${status}" = "completed" ] && [ "$${conclusion}" = "success" ]; then
+      echo "Sentiment workflow already completed for $${TAG}"
+      return 0
+    fi
+    if [ "$${status}" = "completed" ] && [ -n "$${conclusion}" ] && [ "$${conclusion}" != "success" ]; then
+      echo "Sentiment workflow previously failed for $${TAG}; dispatching retry"
+      ACTIONS_RETRIGGERED_TAG="$${TAG}"
+      dispatch_sentiment_workflow
+      return 0
+    fi
+  fi
+
+  echo "No sentiment workflow run found for $${TAG}; dispatching build-images workflow"
+  ACTIONS_RETRIGGERED_TAG="$${TAG}"
+  dispatch_sentiment_workflow
+}
+
+wait_for_tag() {
+  local image="$1"
+  local url="$${REGISTRY_SCHEME}://$${REGISTRY_HOST}/v2/$${REGISTRY_REPO_OWNER}/$${image}/tags/list"
+  local waited=0
+  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
+    check_actions_failure "$${TAG}"
+    local json
+    json="$(curl -fsS -u "$${REGISTRY_USERNAME}:$${REGISTRY_PWD}" "$${url}" || true)"
+    if [ -n "$${json}" ] && ! echo "$${json}" | jq -e '.errors? | length > 0' >/dev/null 2>&1; then
+      if echo "$${json}" | jq -r '.tags[]?' | grep -qx "$${TAG}"; then
+        echo "Found $${image}:$${TAG} in registry"
+        return 0
+      fi
+    fi
+    sleep "$${SLEEP_SECONDS}"
+    waited=$((waited + SLEEP_SECONDS))
+  done
+  echo "Timed out waiting for $${image}:$${TAG} in registry" >&2
+  exit 1
+}
+
+wait_for_policies_tag() {
+  local file="$1"
+  local waited=0
+  policies_repo_setup
+  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
+    check_actions_failure "$${TAG}"
+    local decoded
+    HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
+      git -C "$${POLICIES_REPO_DIR}" fetch --quiet origin main
+    decoded="$(
+      git -C "$${POLICIES_REPO_DIR}" show "FETCH_HEAD:$${file}" 2>/dev/null || true
+    )"
+    if [ -n "$${decoded}" ] \
+      && echo "$${decoded}" | grep -q "sentiment-api:$${TAG}" \
+      && echo "$${decoded}" | grep -q "sentiment-auth-ui:$${TAG}"; then
+      echo "Policies updated in $${file}"
+      return 0
+    fi
+    sleep "$${SLEEP_SECONDS}"
+    waited=$((waited + SLEEP_SECONDS))
+  done
+  echo "Timed out waiting for policies $${file} to reference $${TAG}" >&2
+  exit 1
+}
+
+wait_for_gitea
+wait_for_runner
+if ! sha="$(latest_sentiment_sha)"; then
+  echo "Failed to resolve sentiment commit SHA" >&2
+  exit 1
+fi
+TAG="$${sha:0:12}"
+echo "Waiting for sentiment images and policies to reach tag $${TAG}..."
+
+ensure_sentiment_workflow_started
+wait_for_tag "sentiment-api"
+wait_for_tag "sentiment-auth-ui"
+wait_for_policies_tag "apps/workloads/base/all.yaml"
+
+echo "Sentiment images and policies are ready for tag $${TAG}"
+EOT
+
+    environment = {
+      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT    = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME    = var.gitea_admin_username
+      GITEA_ADMIN_PWD         = var.gitea_admin_pwd
+      GITEA_REPO_OWNER        = local.gitea_repo_owner
+      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      REGISTRY_REPO_OWNER     = local.gitea_repo_owner
+      REGISTRY_HOST           = var.gitea_registry_host
+      REGISTRY_SCHEME         = var.gitea_registry_scheme
+      REGISTRY_USERNAME       = var.gitea_admin_username
+      REGISTRY_PWD            = var.gitea_admin_pwd
+      KUBECONFIG              = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
+    }
+  }
+
+  depends_on = [
+    null_resource.sync_gitea_app_repo_sentiment,
     kubernetes_secret_v1.gitea_runner,
   ]
 }
@@ -1018,7 +1377,7 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = sha1(local.argocd_ssh_known_hosts_merged)
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_ver = "5"
+    refresh_script_ver = "8"
   }
 
   provisioner "local-exec" {
@@ -1085,19 +1444,105 @@ refresh_app() {
   kubectl -n "$ARGOCD_NS" annotate app "$app" argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
 }
 
+get_resource_jsonpath() {
+  local resource_kind="$1"
+  local resource_namespace="$2"
+  local resource_name="$3"
+  local jsonpath_expr="$4"
+
+  if [[ -n "$resource_namespace" ]]; then
+    kubectl -n "$resource_namespace" get "$resource_kind" "$resource_name" -o "jsonpath=$jsonpath_expr" 2>/dev/null || true
+  else
+    kubectl get "$resource_kind" "$resource_name" -o "jsonpath=$jsonpath_expr" 2>/dev/null || true
+  fi
+}
+
+managed_workloads_ready() {
+  local app="$1"
+  local workloads=""
+  local found_workload=0
+
+  workloads="$(kubectl -n "$ARGOCD_NS" get app "$app" -o json 2>/dev/null | jq -r '
+    .status.resources[]?
+    | select(.status == "Synced")
+    | select(.kind == "Deployment" or .kind == "StatefulSet" or .kind == "DaemonSet" or .kind == "Job")
+    | [(.kind // ""), (.namespace // ""), (.name // "")]
+    | @tsv
+  ' 2>/dev/null || true)"
+
+  while IFS=$'\t' read -r workload_kind workload_namespace workload_name; do
+    local desired=""
+    local ready=""
+    local complete=""
+
+    [[ -n "$workload_kind" && -n "$workload_name" ]] || continue
+    found_workload=1
+
+    case "$workload_kind" in
+      Deployment)
+        desired="$(get_resource_jsonpath deployment "$workload_namespace" "$workload_name" '{.spec.replicas}')"
+        ready="$(get_resource_jsonpath deployment "$workload_namespace" "$workload_name" '{.status.readyReplicas}')"
+        ;;
+      StatefulSet)
+        desired="$(get_resource_jsonpath statefulset "$workload_namespace" "$workload_name" '{.spec.replicas}')"
+        ready="$(get_resource_jsonpath statefulset "$workload_namespace" "$workload_name" '{.status.readyReplicas}')"
+        ;;
+      DaemonSet)
+        desired="$(get_resource_jsonpath daemonset "$workload_namespace" "$workload_name" '{.status.desiredNumberScheduled}')"
+        ready="$(get_resource_jsonpath daemonset "$workload_namespace" "$workload_name" '{.status.numberReady}')"
+        ;;
+      Job)
+        complete="$(get_resource_jsonpath job "$workload_namespace" "$workload_name" '{.status.conditions[?(@.type=="Complete")].status}')"
+        [[ "$complete" == "True" ]] || return 1
+        continue
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    if [[ -z "$desired" ]]; then
+      desired="1"
+    fi
+    if [[ -z "$ready" ]]; then
+      ready="0"
+    fi
+
+    [[ "$ready" -ge "$desired" ]] || return 1
+  done <<< "$workloads"
+
+  [[ "$found_workload" -eq 1 ]]
+}
+
+needs_refresh_reason=""
 needs_refresh() {
   local app="$1"
   local sync_status
+  local health_status
   local comparison_msg
 
+  needs_refresh_reason=""
+
   sync_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
+  health_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
   comparison_msg="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)"
 
   if [[ "$sync_status" == "Unknown" ]]; then
+    needs_refresh_reason="sync=Unknown"
     return 0
   fi
 
   if grep -qiE 'knownhosts: key is unknown|failed to list refs: dial tcp .*:22: connect: connection refused|failed to list refs: unexpected EOF' <<<"$comparison_msg"; then
+    needs_refresh_reason="comparison=$comparison_msg"
+    return 0
+  fi
+
+  # Argo can keep the parent Application at Degraded/Progressing after the child
+  # resources have all become ready. Only treat that as stale cache when the
+  # live managed workloads are actually ready; some Argo versions leave child
+  # resource health empty while the workloads are still converging.
+  if [[ "$sync_status" == "Synced" && "$health_status" != "Healthy" ]] && managed_workloads_ready "$app"; then
+    needs_refresh_reason="managed-workloads-ready"
     return 0
   fi
 
@@ -1117,8 +1562,14 @@ sleep 15
 
 end=$((SECONDS + 180))
 stable_passes=0
+last_pending_summary=""
+last_hard_pending_summary=""
+last_soft_pending_summary=""
 while (( SECONDS < end )); do
   pending=0
+  pending_apps=()
+  hard_pending_apps=()
+  soft_pending_apps=()
   while IFS= read -r app; do
     [[ -n "$app" ]] || continue
     if ! kubectl -n "$ARGOCD_NS" get app "$app" >/dev/null 2>&1; then
@@ -1126,24 +1577,54 @@ while (( SECONDS < end )); do
     fi
 
     if needs_refresh "$app"; then
-      refresh_app "$app"
       pending=1
+      pending_apps+=("$app:$needs_refresh_reason")
+      if [[ "$needs_refresh_reason" == "managed-workloads-ready" ]]; then
+        # Once the initial hard-refresh wave has landed, a Synced app with live
+        # workloads ready usually just needs the controller to settle its parent
+        # health. Re-refreshing every few seconds can keep the app looking
+        # perpetually unsettled. Treat this as a soft wait condition instead.
+        soft_pending_apps+=("$app:$needs_refresh_reason")
+      else
+        refresh_app "$app"
+        hard_pending_apps+=("$app:$needs_refresh_reason")
+      fi
     fi
   done <<< "$app_list"
 
   if [[ "$pending" -eq 0 ]]; then
     stable_passes=$((stable_passes + 1))
+    last_pending_summary=""
+    last_hard_pending_summary=""
+    last_soft_pending_summary=""
     if [[ "$stable_passes" -ge 2 ]]; then
       exit 0
     fi
   else
     stable_passes=0
+    last_pending_summary="$${pending_apps[*]-}"
+    last_hard_pending_summary="$${hard_pending_apps[*]-}"
+    last_soft_pending_summary="$${soft_pending_apps[*]-}"
   fi
 
   sleep 5
 done
 
-echo "Repo-backed Argo CD applications still have stale comparison state after refresh" >&2
+if [[ -n "$last_hard_pending_summary" ]]; then
+  echo "Repo-backed Argo CD applications still have stale comparison state after refresh: $last_hard_pending_summary" >&2
+  exit 1
+fi
+
+if [[ -n "$last_soft_pending_summary" ]]; then
+  echo "WARN repo-backed Argo CD applications were still waiting on parent health after refresh, but no repo comparison errors remained: $last_soft_pending_summary" >&2
+  exit 0
+fi
+
+if [[ -n "$last_pending_summary" ]]; then
+  echo "Repo-backed Argo CD applications still have stale comparison state after refresh: $last_pending_summary" >&2
+else
+  echo "Repo-backed Argo CD applications still have stale comparison state after refresh" >&2
+fi
 exit 1
 EOT
     interpreter = ["/bin/bash", "-c"]
@@ -1155,6 +1636,7 @@ EOT
     null_resource.wait_for_gateway_bootstrap_crds,
     kubectl_manifest.argocd_app_of_apps,
     kubectl_manifest.argocd_app_gitea_actions_runner,
+    kubectl_manifest.argocd_app_kyverno,
     kubectl_manifest.argocd_app_kyverno_policies,
     kubectl_manifest.argocd_app_cilium_policies,
     kubectl_manifest.argocd_app_cert_manager_config,

@@ -21,6 +21,11 @@ require_cmd kubectl
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 IMAGE_REGISTRY_POLICY_FILE="${STACK_DIR}/cluster-policies/kyverno/shared/restrict-image-registries.yaml"
+POLICY_PROBE_NAMESPACE="uat"
+POLICY_PROBE_POD="policy-probe"
+POLICY_PROBE_IMAGE="curlimages/curl:8.16.0"
+POLICY_PROBE_LABELS="app=sentiment,project=kindlocal,team=dolphin,tier=backend,role=backend,app.kubernetes.io/name=sentiment-api,app.kubernetes.io/component=backend"
+POLICY_PROBE_CREATED=0
 
 TFVARS_FILES=()
 while [[ $# -gt 0 ]]; do
@@ -65,6 +70,45 @@ tfvar_bool() {
   case "$v" in true|false) echo "$v" ;; *) echo "" ;; esac
 }
 
+cleanup_policy_probe() {
+  kubectl -n "${POLICY_PROBE_NAMESPACE}" delete pod "${POLICY_PROBE_POD}" --ignore-not-found >/dev/null 2>&1 || true
+}
+
+ensure_policy_probe() {
+  if [[ "${POLICY_PROBE_CREATED}" -eq 1 ]]; then
+    return 0
+  fi
+
+  cleanup_policy_probe
+  kubectl -n "${POLICY_PROBE_NAMESPACE}" run "${POLICY_PROBE_POD}" \
+    --image="${POLICY_PROBE_IMAGE}" \
+    --restart=Never \
+    --labels="${POLICY_PROBE_LABELS}" \
+    --command -- sleep 3600 >/dev/null
+  kubectl -n "${POLICY_PROBE_NAMESPACE}" wait --for=condition=Ready "pod/${POLICY_PROBE_POD}" --timeout=120s >/dev/null
+  POLICY_PROBE_CREATED=1
+}
+
+probe_must_block_url() {
+  local description="$1"
+  local url="$2"
+  local output=""
+
+  ensure_policy_probe || {
+    fail_soft "Could not create the policy probe pod for ${description}"
+    return 0
+  }
+
+  if output=$(kubectl -n "${POLICY_PROBE_NAMESPACE}" exec "${POLICY_PROBE_POD}" -- \
+    curl -sS -o /dev/null --connect-timeout 3 --max-time 5 "${url}" 2>&1); then
+    fail_soft "${description} reachable from ${POLICY_PROBE_POD}"
+  else
+    ok "${description} blocked (negative test)"
+  fi
+}
+
+trap cleanup_policy_probe EXIT
+
 approved_image_prefixes_from_policy() {
   awk '
     /^[[:space:]]*value:[[:space:]]*$/ { in_value=1; next }
@@ -99,6 +143,55 @@ expected_platform_gateway_tls_directives() {
 live_platform_gateway_nginx_conf() {
   kubectl -n platform-gateway exec deploy/platform-gateway-nginx -- \
     sh -c 'find /etc/nginx -type f ! -path "*/secrets/*" -exec cat {} + 2>/dev/null' 2>/dev/null || true
+}
+
+platform_gateway_headers() {
+  local port_suffix=""
+  [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]] && port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+  curl -skI "https://argocd.admin.127.0.0.1.sslip.io${port_suffix}/" 2>/dev/null || true
+}
+
+platform_gateway_headers_ready() {
+  local headers="$1"
+  echo "${headers}" | grep -qi "strict-transport-security" &&
+    echo "${headers}" | grep -qi "x-content-type-options.*nosniff"
+}
+
+platform_gateway_config_ready() {
+  local nginx_conf="$1"
+  local directive=""
+
+  [[ -n "${nginx_conf}" ]] || return 1
+
+  while IFS= read -r directive; do
+    [[ -z "${directive}" ]] && continue
+    printf '%s\n' "${nginx_conf}" | grep -Fq -- "${directive}" || return 1
+  done < <(expected_platform_gateway_tls_directives)
+
+  return 0
+}
+
+PLATFORM_GATEWAY_HEADERS=""
+PLATFORM_GATEWAY_NGINX_CONF=""
+
+wait_for_platform_gateway_hardening() {
+  local deadline=$((SECONDS + 60))
+
+  while (( SECONDS < deadline )); do
+    PLATFORM_GATEWAY_HEADERS="$(platform_gateway_headers)"
+    PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
+
+    if platform_gateway_headers_ready "${PLATFORM_GATEWAY_HEADERS}" &&
+      platform_gateway_config_ready "${PLATFORM_GATEWAY_NGINX_CONF}"; then
+      return 0
+    fi
+
+    sleep 3
+  done
+
+  PLATFORM_GATEWAY_HEADERS="$(platform_gateway_headers)"
+  PLATFORM_GATEWAY_NGINX_CONF="$(live_platform_gateway_nginx_conf)"
+  return 1
 }
 
 EXPECT_WIREGUARD=$(tfvar_bool enable_cilium_wireguard)
@@ -187,9 +280,16 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     fi
   fi
 
+  # Give the controller a short settle window so the first post-apply security
+  # check does not race the Gateway/SnippetsPolicy becoming observable.
+  wait_for_platform_gateway_hardening || true
+
   # Check security headers
   if have_cmd curl; then
-    headers=$(curl -skI "https://argocd.admin.127.0.0.1.sslip.io${port_suffix}/" 2>/dev/null || true)
+    headers="${PLATFORM_GATEWAY_HEADERS}"
+    if [[ -z "${headers}" ]]; then
+      headers="$(platform_gateway_headers)"
+    fi
     if echo "${headers}" | grep -qi "strict-transport-security"; then
       ok "HSTS header present"
     else
@@ -224,7 +324,10 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     fail_soft "NGINX Gateway ClusterRole is missing SnippetsFilter RBAC"
   fi
 
-  nginx_conf=$(live_platform_gateway_nginx_conf)
+  nginx_conf="${PLATFORM_GATEWAY_NGINX_CONF}"
+  if [[ -z "${nginx_conf}" ]]; then
+    nginx_conf=$(live_platform_gateway_nginx_conf)
+  fi
   if [[ -z "${nginx_conf}" ]]; then
     fail_soft "Could not read live platform gateway NGINX config"
   else
@@ -280,47 +383,18 @@ echo ""
 # -------------------------------------------------------------------------
 echo "--- Cilium policy enforcement (negative tests) ---"
 if [[ "${EXPECT_POLICIES}" == "true" ]]; then
-  # Test: sentiment pods in uat should NOT be able to reach subnetcalc pods
-  sentiment_pod=$(kubectl -n uat get pods -l app.kubernetes.io/name=sentiment-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-  subnetcalc_router_svc=$(kubectl -n uat get svc subnetcalc-router -o jsonpath='{.metadata.name}' 2>/dev/null || true)
-
-  if [[ -n "${sentiment_pod}" && -n "${subnetcalc_router_svc}" ]]; then
-    cross_project=$(kubectl -n uat exec "${sentiment_pod}" --request-timeout=5s -- \
-      wget -q -O- --timeout=3 "http://${subnetcalc_router_svc}:8080/" 2>&1 || true)
-    if echo "${cross_project}" | grep -qiE "timed out|connection refused|Network is unreachable|command terminated|exit code [1-9]"; then
-      ok "Cross-project traffic blocked: sentiment cannot reach subnetcalc in uat (negative test)"
-    else
-      fail_soft "Cross-project traffic NOT blocked: sentiment CAN reach subnetcalc in uat"
-    fi
+  if kubectl get ns "${POLICY_PROBE_NAMESPACE}" >/dev/null 2>&1; then
+    probe_must_block_url \
+      "Cross-project traffic from sentiment to subnetcalc in uat" \
+      "http://subnetcalc-router.uat.svc.cluster.local:8080/"
+    probe_must_block_url \
+      "Direct UAT application traffic to Gitea" \
+      "http://gitea-http.gitea.svc.cluster.local:3000/"
+    probe_must_block_url \
+      "Direct UAT application traffic to Argo CD" \
+      "http://argocd-server.argocd.svc.cluster.local:8080/"
   else
-    skip "Cross-project isolation test skipped (pods not found: sentiment_pod=${sentiment_pod:-none}, subnetcalc_router_svc=${subnetcalc_router_svc:-none})"
-  fi
-
-  # Test: uat pods should NOT be able to reach gitea directly
-  uat_pod=$(kubectl -n uat get pods -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-  if [[ -n "${uat_pod}" ]]; then
-    gitea_reach=$(kubectl -n uat exec "${uat_pod}" --request-timeout=5s -- \
-      wget -q -O- --timeout=3 "http://gitea-http.gitea.svc.cluster.local:3000/" 2>&1 || true)
-    if echo "${gitea_reach}" | grep -qiE "timed out|connection refused|Network is unreachable|command terminated|exit code [1-9]"; then
-      ok "UAT pods cannot reach Gitea directly (negative test)"
-    else
-      warn "UAT pods may be able to reach Gitea (policy may be additive with baseline)"
-    fi
-  else
-    skip "UAT-to-Gitea isolation test skipped (no uat pods found)"
-  fi
-
-  # Test: uat pods should NOT be able to reach argocd directly
-  if [[ -n "${uat_pod}" ]]; then
-    argocd_reach=$(kubectl -n uat exec "${uat_pod}" --request-timeout=5s -- \
-      wget -q -O- --timeout=3 "http://argocd-server.argocd.svc.cluster.local:8080/" 2>&1 || true)
-    if echo "${argocd_reach}" | grep -qiE "timed out|connection refused|Network is unreachable|command terminated|exit code [1-9]"; then
-      ok "UAT pods cannot reach ArgoCD directly (negative test)"
-    else
-      warn "UAT pods may be able to reach ArgoCD (policy may be additive with baseline)"
-    fi
-  else
-    skip "UAT-to-ArgoCD isolation test skipped (no uat pods found)"
+    skip "Cilium negative tests skipped (namespace ${POLICY_PROBE_NAMESPACE} not found)"
   fi
 else
   skip "Cilium policy enforcement tests skipped (enable_policies=${EXPECT_POLICIES:-unset})"

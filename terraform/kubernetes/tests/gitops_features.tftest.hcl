@@ -76,6 +76,11 @@ run "policies_enabled" {
   }
 
   assert {
+    condition     = contains(local.argocd_gitops_repo_app_names, "kyverno")
+    error_message = "Expected kyverno to be included in the Git-backed Argo refresh list when enable_policies=true"
+  }
+
+  assert {
     condition     = strcontains(kubectl_manifest.argocd_app_policy_reporter[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
     error_message = "Expected Policy Reporter ArgoCD Application YAML to load from the policies repo"
   }
@@ -295,6 +300,11 @@ run "app_repo_sentiment_enabled" {
   assert {
     condition     = length(tls_private_key.app_repo_sentiment) == 1
     error_message = "Expected tls_private_key.app_repo_sentiment to exist when enable_app_repo_sentiment=true"
+  }
+
+  assert {
+    condition     = length(null_resource.wait_sentiment_images) == 1
+    error_message = "Expected null_resource.wait_sentiment_images to exist when enable_app_repo_sentiment=true"
   }
 }
 

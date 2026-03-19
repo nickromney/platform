@@ -63,11 +63,20 @@ This wrapper drives the Terraform stack in `../../terraform/kubernetes` using th
 
 Why Terragrunt is here, why OpenTofu is the default, and the raw non-`make` commands are documented in [docs/tooling.md](docs/tooling.md).
 
-Image preloading is explicit. The default remains the current behavior:
+Image preloading is explicit. The preload helper still stays opt-in:
 
 - `KIND_PRELOAD_IMAGES_MODE=off` means `apply` does not preload images for you.
 - `KIND_PRELOAD_IMAGES_MODE=auto|on` tells `apply` to run the existing
   `preload-images` step before Terraform.
+
+Kind now also has an operator-facing image distribution knob. The default is the faster Docker Desktop path:
+
+- `KIND_IMAGE_DISTRIBUTION_MODE=registry` is the default. It disables `kind load`, disables the in-cluster Actions runner path, mirrors the hot image set into the shared host registry on `127.0.0.1:5002`, and points workload manifests at `host.docker.internal:5002/...`.
+- `KIND_IMAGE_DISTRIBUTION_MODE=load` keeps the old `kind load` path.
+- `KIND_IMAGE_DISTRIBUTION_MODE=hybrid` does the same registry-based workload path, but also requires `KIND_BAKED_NODE_IMAGE=<image-ref>` so the stable node hot set can already be present in the custom kind node image.
+- `KIND_IMAGE_DISTRIBUTION_MODE=baked` disables `kind load` and uses `KIND_BAKED_NODE_IMAGE=<image-ref>`, while leaving the later-stage in-cluster Actions path intact.
+
+The registry path is intentionally the portable cache model. The same host-side registry can be reused by other targets; `kind` just consumes it through `host.docker.internal:5002`.
 
 The full Kind path remains the reference/default shape. Its target profile pins
 `gitea_local_access_mode = "nodeport"`, so host-side automation continues to
@@ -117,6 +126,7 @@ flowchart TB
 ```
 
 - `worker_count = 1` creates a 2-node cluster: 1 control-plane node and 1 worker node.
+- `KIND_WORKER_COUNT` overrides that worker count at the wrapper layer. `1` means 2 total nodes, `2` means 3 total nodes, and so on.
 - `cni_provider = "none"` and `kind_disable_default_cni = true` mean there is no working pod network yet.
 - `kubeconfig_context = ""` leaves bootstrap free to create the cluster before the final context name exists.
 
@@ -248,6 +258,8 @@ flowchart LR
 - `enable_actions_runner = true` adds the in-cluster CI executor.
 - `enable_app_repo_subnet_calculator = true` and `enable_app_repo_sentiment = true` seed the demo application repos.
 - `llm_gateway_mode = "direct"` keeps the local demo path simple for the LLM-backed sample app.
+
+With the default `KIND_IMAGE_DISTRIBUTION_MODE=registry` path, the served workloads stay the same but this stage takes the faster Docker-host route instead: the host registry becomes the image source of truth and the in-cluster Actions runner path is disabled for that run. Switch back to `load` if you explicitly want the old `kind load` behavior.
 
 The demo applications are explained in [docs/sample-apps.md](docs/sample-apps.md).
 

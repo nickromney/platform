@@ -13,7 +13,7 @@ setup() {
   grep -Fq "snippetsfilters" "${manifest}"
 }
 
-@test "platform gateway manifests declare TLS 1.3 and modern hardening directives" {
+@test "platform gateway manifests declare compatible modern TLS and hardening directives" {
   gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/gateway.yaml"
   hardening_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/tls-hardening.yaml"
 

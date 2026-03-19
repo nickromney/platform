@@ -9,12 +9,30 @@ slicer_url="${SLICER_URL:-${SLICER_SOCKET:-}}"
 vm_name="${SLICER_VM_NAME:-slicer-1}"
 vm_group="${SLICER_VM_GROUP:-slicer}"
 ready_timeout="${SLICER_VM_READY_TIMEOUT:-300s}"
+min_disk_gb="${SLICER_VM_MIN_DISK_GB:-25}"
+use_local_mac="${SLICER_USE_LOCAL_MAC:-0}"
+slicer_config="${SLICER_CONFIG:-${HOME}/slicer-mac/slicer-mac.yaml}"
 tag_target="${SLICER_TARGET_TAG:-target=slicer}"
 tag_workspace="${SLICER_WORKSPACE_TAG:-workspace=platform}"
 
 [ -n "${slicer_url}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
 command -v slicer >/dev/null 2>&1 || fail "slicer not found in PATH"
 command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
+[[ "${min_disk_gb}" =~ ^[0-9]+$ ]] || fail "SLICER_VM_MIN_DISK_GB must be an integer number of GiB"
+
+vm_root_disk_gb() {
+  local disk_bytes
+  disk_bytes="$(SLICER_URL="${slicer_url}" slicer vm exec "${vm_name}" -- "df -B1 --output=size / | awk 'NR==2 {print \$1}'" | tr -d '\r' | xargs)"
+  [[ "${disk_bytes}" =~ ^[0-9]+$ ]] || fail "Could not determine root disk size for ${vm_name}"
+  echo $(( (disk_bytes + 1073741824 - 1) / 1073741824 ))
+}
+
+local_mac_recreate_hint() {
+  cat >&2 <<EOF
+The local slicer-mac daemon manages ${vm_name} from ${slicer_config}.
+Update the host group storage_size there, stop the daemon, delete the backing *.img for ${vm_name}, and start the daemon again so ${vm_name} is recreated with the new disk size.
+EOF
+}
 
 group_line="$(SLICER_URL="${slicer_url}" slicer vm group 2>/dev/null | awk -v group="${vm_group}" '$1 == group { print $0 }')"
 [[ -n "${group_line}" ]] || fail "Host group '${vm_group}' not found on the active slicer daemon"
@@ -73,6 +91,12 @@ else
     fail "Expected ${vm_name}, but found other ${vm_group} VMs instead: ${other_vms}"
   fi
 
+  if [[ "${use_local_mac}" == "1" ]]; then
+    echo "FAIL ${vm_name} is missing from the active local slicer-mac daemon." >&2
+    local_mac_recreate_hint
+    exit 1
+  fi
+
   echo "Creating ${vm_name} in host group '${vm_group}' (${vm_cpus} CPU / ${vm_ram_gb}GiB)"
   SLICER_URL="${slicer_url}" slicer vm add "${vm_group}" \
     --cpus "${vm_cpus}" \
@@ -83,6 +107,17 @@ fi
 
 echo "Waiting for ${vm_name}..."
 SLICER_URL="${slicer_url}" slicer vm ready "${vm_name}" --timeout "${ready_timeout}" >/dev/null
+
+root_disk_gb="$(vm_root_disk_gb)"
+if (( root_disk_gb < min_disk_gb )); then
+  if [[ "${use_local_mac}" == "1" ]]; then
+    echo "FAIL ${vm_name} has a ${root_disk_gb}GiB root disk, but at least ${min_disk_gb}GiB is required. The disk cannot be resized in place." >&2
+    local_mac_recreate_hint
+    exit 1
+  fi
+  fail "${vm_name} has a ${root_disk_gb}GiB root disk, but at least ${min_disk_gb}GiB is required. Recreate ${vm_name} with a larger disk before retrying."
+fi
+ok "${vm_name} root disk ${root_disk_gb}GiB (minimum ${min_disk_gb}GiB)"
 
 vm_ip="$(SLICER_URL="${slicer_url}" slicer vm list --json | jq -r --arg vm "${vm_name}" '.[] | select(.hostname == $vm) | .ip')"
 [[ -n "${vm_ip}" ]] || fail "Could not determine IP for ${vm_name}"
