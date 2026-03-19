@@ -361,7 +361,9 @@ ${local.grafana_plugins_values_yaml}
             disable_login_form: true
           auth.proxy:
             enabled: true
-            header_name: X-Forwarded-User
+            # oauth2-proxy forwards the stable user email separately from the opaque OIDC subject.
+            # Use the email header so Grafana keys auth-proxy users consistently.
+            header_name: X-Forwarded-Email
             header_property: email
             auto_sign_up: true
         dashboardProviders:

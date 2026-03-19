@@ -17,11 +17,14 @@ k3s_channel="${K3S_CHANNEL:-stable}"
 server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb}"
 merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-1}"
 swap_size="${SLICER_SWAP_SIZE:-4G}"
+allow_existing_k3s="${SLICER_ALLOW_EXISTING_K3S:-0}"
 image_list_file="${IMAGE_LIST_FILE:-}"
 local_image_cache_host="${LOCAL_IMAGE_CACHE_HOST:-}"
 local_image_cache_scheme="${LOCAL_IMAGE_CACHE_SCHEME:-http}"
 bootstrap_key="${K3SUP_BOOTSTRAP_KEY:-${run_dir}/${server_vm}-k3sup-bootstrap}"
 bootstrap_pub="${bootstrap_key}.pub"
+
+[[ "${allow_existing_k3s}" =~ ^(0|1)$ ]] || { echo "ERROR: SLICER_ALLOW_EXISTING_K3S must be 0 or 1" >&2; exit 1; }
 
 find_bootstrap_client() {
   local candidate
@@ -345,7 +348,12 @@ configure_k3s_registries
 
 if remote_k3s_api_ready 2 2; then
   validate_existing_k3s_network_profile
-  echo "==> Existing k3s detected on ${server_vm}; refreshing kubeconfig only"
+  if [ "${allow_existing_k3s}" != "1" ]; then
+    echo "ERROR: existing k3s detected on ${server_vm}; stage 100 refuses to silently reuse a provisioned cluster." >&2
+    echo "Reset or recreate ${server_vm} for a fresh bootstrap, or rerun with SLICER_ALLOW_EXISTING_K3S=1 to refresh kubeconfig against the existing cluster." >&2
+    exit 1
+  fi
+  echo "==> Existing k3s detected on ${server_vm}; refreshing kubeconfig only (SLICER_ALLOW_EXISTING_K3S=1)"
   refresh_kubeconfig "${server_ip}"
   KUBECONFIG="$kubeconfig_path" kubectl --context "$k3sup_context" get nodes -o wide || true
   exit 0

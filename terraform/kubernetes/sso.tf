@@ -694,7 +694,6 @@ spec:
           show-debug-on-error: "true"
           pass-user-headers: "true"
           set-xauthrequest: "true"
-          set-authorization-header: "true"
           reverse-proxy: "true"
           skip-provider-button: "true"
   syncPolicy:

@@ -74,7 +74,7 @@ VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped prereqs lima-vms-up bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -195,6 +195,9 @@ help:
 	@echo ""
 	@echo "Default kubeconfigs:"
 	@echo "  lima -> $(KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo ""
+	@echo "Aliases:"
+	@echo "  make start                                   Alias for lima-vms-up"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)"
@@ -425,6 +428,10 @@ stop-lima:
 stop:
 	@$(MAKE) stop-lima
 
+.PHONY: start
+start:
+	@$(MAKE) lima-vms-up
+
 .PHONY: ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status
 ensure-host-gateway-proxy:
 	@$(MAKE) check-conflicting-clusters-stopped
@@ -471,7 +478,7 @@ plan: workflow-validate
 		if [ "$$profile_enabled" = "1" ]; then \
 			profile_run_step "$$step" "$$@"; \
 		else \
-			"$@"; \
+			"$$@"; \
 		fi; \
 	}; \
 	stage_num=$$((10#$(STAGE))); \
@@ -538,7 +545,7 @@ apply: workflow-validate
 		if [ "$$profile_enabled" = "1" ]; then \
 			profile_run_step "$$step" "$$@"; \
 		else \
-			"$@"; \
+			"$$@"; \
 		fi; \
 	}; \
 	local_cache_available() { \
@@ -550,6 +557,9 @@ apply: workflow-validate
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
+	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" enable_gateway_tls false "$${tfvar_files[@]}" )"; \
+	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )"; \
+	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-platform-env; \
@@ -609,7 +619,10 @@ apply: workflow-validate
 		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args; \
 	}; \
 	run_step "terragrunt-init" tg_init; \
-	run_step "terragrunt-apply" tg_apply
+	run_step "terragrunt-apply" tg_apply; \
+	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
+	fi
 
 .PHONY: check-health
 check-health:
@@ -728,7 +741,6 @@ check-sso-e2e:
 		off) echo "check-sso-e2e requires host gateway proxies or an equivalent manual setup. Set LIMA_HOST_GATEWAY_PROXY_MODE=on to let the Makefile manage them."; exit 1 ;; \
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac; \
-	$(MAKE) configure-k3s-apiserver-oidc; \
 	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \

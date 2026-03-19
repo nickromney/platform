@@ -54,6 +54,7 @@ SLICER_VM_CPUS ?=
 SLICER_VM_RAM_GB ?=
 SLICER_VM_MIN_DISK_GB ?= 25
 SLICER_SWAP_SIZE ?= 4G
+SLICER_ALLOW_EXISTING_K3S ?= 0
 SLICER_HOST_FORWARDS_MODE ?= auto
 K3SUP_CONTEXT ?= slicer-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
@@ -103,7 +104,7 @@ VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -208,6 +209,7 @@ help:
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make show-urls"
+	@echo "  make start        Alias for slicer-vm-up"
 	@echo "  make slicer-vm-up"
 	@echo "  make status"
 	@echo "  make stop"
@@ -247,6 +249,7 @@ help:
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
+	@echo "  SLICER_ALLOW_EXISTING_K3S=1                          -> let stage 100 reuse an existing k3s install and only refresh kubeconfig"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
@@ -422,6 +425,9 @@ slicer-vm-up:
 	SLICER_CONFIG="$(SLICER_CONFIG)" \
 	"$(ENSURE_SBOX_VM)"
 
+.PHONY: start
+start: slicer-vm-up
+
 .PHONY: bootstrap-k3s
 bootstrap-k3s:
 	@socket="$$($(RESOLVE_SOCKET))"; \
@@ -432,6 +438,7 @@ bootstrap-k3s:
 	K3SUP_CONTEXT="$(K3SUP_CONTEXT)" \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 	DEFAULT_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" \
+	SLICER_ALLOW_EXISTING_K3S="$(SLICER_ALLOW_EXISTING_K3S)" \
 	K3S_VERSION="$(K3S_VERSION)" \
 	K3S_CHANNEL="$(K3S_CHANNEL)" \
 	K3S_SERVER_EXTRA_ARGS="$(K3S_SERVER_EXTRA_ARGS)" \
@@ -671,7 +678,7 @@ plan: workflow-validate
 		if [ "$$profile_enabled" = "1" ]; then \
 			profile_run_step "$$step" "$$@"; \
 		else \
-			"$@"; \
+			"$$@"; \
 		fi; \
 	}; \
 	stage_num=$$((10#$(STAGE))); \
@@ -741,7 +748,7 @@ apply: workflow-validate
 		if [ "$$profile_enabled" = "1" ]; then \
 			profile_run_step "$$step" "$$@"; \
 		else \
-			"$@"; \
+			"$$@"; \
 		fi; \
 	}; \
 	prepare_host_forwards() { \
@@ -773,6 +780,9 @@ apply: workflow-validate
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
+	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" enable_gateway_tls false "$${tfvar_files[@]}" )"; \
+	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )"; \
+	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-platform-env; \
@@ -791,7 +801,7 @@ apply: workflow-validate
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \
-		$(MAKE) apply STAGE=100 AUTO_APPROVE=1; \
+		$(MAKE) apply STAGE=100 AUTO_APPROVE=1 SLICER_ALLOW_EXISTING_K3S=1; \
 	fi; \
 	prepare_host_forwards "$(SLICER_HOST_FORWARDS_MODE)" "$$stage_num"; \
 	if mode_enabled "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" 700 "$$stage_num"; then \
@@ -830,7 +840,10 @@ apply: workflow-validate
 		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args; \
 	}; \
 	run_step "terragrunt-init" tg_init; \
-	run_step "terragrunt-apply" tg_apply
+	run_step "terragrunt-apply" tg_apply; \
+	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
+	fi
 
 .PHONY: check-health
 check-health:
@@ -976,7 +989,6 @@ check-sso:
 check-sso-e2e:
 	@set -euo pipefail; \
 	$(MAKE) ensure-host-forwards >/dev/null; \
-	$(MAKE) configure-k3s-apiserver-oidc; \
 	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \

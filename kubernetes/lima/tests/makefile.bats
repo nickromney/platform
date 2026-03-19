@@ -12,6 +12,13 @@ setup() {
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
+  [[ "${output}" == *"make start"* ]]
+}
+
+@test "lima run_step helper preserves shell arguments instead of invoking macOS apply" {
+  run grep -Fn '"$$@"' "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "lima stage without action shows guidance" {
@@ -35,4 +42,18 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"check-security.sh"* ]]
+}
+
+@test "lima stage 900 apply wires k3s apiserver OIDC for Headlamp" {
+  run grep -Fn 'run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc;' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima check-sso-e2e does not repair k3s apiserver OIDC" {
+  run sed -n '/^check-sso-e2e:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"configure-k3s-apiserver-oidc"* ]]
 }

@@ -38,6 +38,20 @@ setup() {
   [[ "${output}" == *"check-security.sh"* ]]
 }
 
+@test "slicer stage 900 apply wires k3s apiserver OIDC for Headlamp" {
+  run grep -Fn 'run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc;' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer check-sso-e2e does not repair k3s apiserver OIDC" {
+  run sed -n '/^check-sso-e2e:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"configure-k3s-apiserver-oidc"* ]]
+}
+
 @test "slicer stage 100 plan explains the daemon requirement" {
   run make -C "${REPO_ROOT}/kubernetes/slicer" 100 plan
 

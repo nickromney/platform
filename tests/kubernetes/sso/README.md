@@ -3,9 +3,11 @@
 Browser tests that verify you can load each SSO-protected endpoint, complete the Dex local-login flow,
 and exercise real post-login app behavior for the endpoints that support it.
 They target the shared `*.127.0.0.1.sslip.io` endpoints, so they work against the Kind, Lima, or Slicer platform stacks.
-The runner derives the HTTPS host port from the active stage tfvars, so Kind/Lima stay on `443` while Slicer uses `:8443`.
+The operator-facing HTTPS origin is `:443` on all three targets. Slicer still uses `:8443` for its raw local forwarder behind the Docker proxy, but the browser tests should hit the shared `https://*.127.0.0.1.sslip.io/` surface.
 By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTIONS=0` only when you explicitly want login-only coverage.
 When `enable_victoria_logs=true` in the active stage tfvars, the Grafana smoke path also verifies the `victorialogs` datasource/plugin and the `platform-logs` dashboard.
+The target-specific `check-sso-e2e` wrappers no longer repair Slicer/Lima k3s apiserver OIDC settings before the browser run.
+If you are testing an older Slicer or Lima cluster, rerun `900 apply` first or invoke that target's `configure-k3s-apiserver-oidc` command manually.
 
 ## Setup
 
