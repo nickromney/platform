@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${SCRIPT_DIR}/docker-local-registry-lib.sh"
 IMAGE_LIST_FILE="${IMAGE_LIST_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 OPTIONAL="${OPTIONAL:-0}"
@@ -93,7 +94,7 @@ mirror_remote_image() {
     warn "could not tag ${source_ref} as ${cache_ref}"
     return 0
   fi
-  if ! docker push "${cache_ref}" >/dev/null 2>&1; then
+  if ! docker_push_local_registry "${cache_ref}" 2>/dev/null; then
     warn "could not push ${cache_ref}"
   fi
 }

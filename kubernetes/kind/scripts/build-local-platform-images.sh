@@ -57,12 +57,12 @@ build_and_push() {
   docker_build_local "${cmd[@]}"
 
   docker tag "${version_ref}" "${latest_ref}"
-  docker push "${version_ref}" >/dev/null
-  docker push "${latest_ref}" >/dev/null
+  docker_push_local_registry "${version_ref}"
+  docker_push_local_registry "${latest_ref}"
 
   if [ -n "${commit_ref}" ]; then
     docker tag "${version_ref}" "${commit_ref}"
-    docker push "${commit_ref}" >/dev/null
+    docker_push_local_registry "${commit_ref}"
   fi
 
   echo "PUSH  ${version_ref}"

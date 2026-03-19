@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+LOCAL_CACHE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${LOCAL_CACHE_LIB_DIR}/../../scripts/docker-local-registry-lib.sh"
+
 require_local_cache_tools() {
   command -v curl >/dev/null 2>&1 || { echo "${0##*/}: curl not found" >&2; exit 1; }
   command -v docker >/dev/null 2>&1 || { echo "${0##*/}: docker not found" >&2; exit 1; }
@@ -49,6 +52,6 @@ mirror_image_into_cache() {
   echo "MIRROR ${source_ref} -> ${target_ref}"
   docker pull "${source_ref}" >/dev/null
   docker tag "${source_ref}" "${target_ref}"
-  docker push "${target_ref}" >/dev/null
+  docker_push_local_registry "${target_ref}"
   echo "PUSH  ${target_ref}"
 }
