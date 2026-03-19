@@ -16,6 +16,7 @@ SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
+STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 CHECK_HOST_PORTS := $(SCRIPTS_DIR)/check-slicer-host-ports.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 START_DAEMON := $(SCRIPTS_DIR)/start-daemon.sh
@@ -104,7 +105,7 @@ VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -528,6 +529,15 @@ host-forward-status:
 ensure-image-cache:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" CACHE_CONTAINER_NAME="$(LOCAL_IMAGE_CACHE_CONTAINER)" "$(ENSURE_IMAGE_CACHE)"
 
+.PHONY: check-docker-daemon
+check-docker-daemon:
+	@set -euo pipefail; \
+	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
+	if ! docker info >/dev/null 2>&1; then \
+		echo "docker daemon not reachable (is Docker Desktop running?)"; \
+		exit 1; \
+	fi
+
 .PHONY: sync-image-cache
 sync-image-cache:
 	@set -euo pipefail; \
@@ -624,8 +634,7 @@ stop-slicer:
 	fi; \
 	echo "Cleaning any stale repo-managed slicer daemon state (best-effort)..."; \
 	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
-	echo "OK   stale repo-managed daemon state cleaned"; \
-	$(MAKE) check-conflicting-clusters-stopped
+	echo "OK   stale repo-managed daemon state cleaned"
 
 .PHONY: stop
 stop:
@@ -786,6 +795,7 @@ apply: workflow-validate
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-docker-daemon; \
 		$(MAKE) check-platform-env; \
 	fi; \
 	if [ "$$stage_num" -eq 100 ]; then \
@@ -1053,6 +1063,7 @@ reset:
 	reset_incomplete=0; \
 	echo "This will:"; \
 	echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present (auto-recycle on-device slicer-mac state if needed)"; \
+	echo "  - Stop conflicting kind/Lima runtimes (best-effort)"; \
 	echo "  - Stop host forwards"; \
 	echo "  - Clean any stale repo-managed slicer daemon state from older revisions"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
@@ -1066,6 +1077,10 @@ reset:
 			exit 0; \
 		fi; \
 	fi; \
+	echo ""; \
+	echo "Stopping conflicting platform runtimes (best-effort)..."; \
+	"$(STOP_PLATFORM_RUNTIMES)" --exclude slicer; \
+	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Stopping host forwards (best-effort)..."; \
 	$(MAKE) stop-host-forwards >/dev/null 2>&1 || true; \

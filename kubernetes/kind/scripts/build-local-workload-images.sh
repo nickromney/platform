@@ -49,10 +49,10 @@ build_and_push() {
 
   if [ -n "${commit_ref}" ]; then
     docker tag "${latest_ref}" "${commit_ref}"
-    docker push "${commit_ref}" >/dev/null
+    docker_push_local_registry "${commit_ref}"
   fi
 
-  docker push "${latest_ref}" >/dev/null
+  docker_push_local_registry "${latest_ref}"
   echo "PUSH  ${latest_ref}"
 }
 

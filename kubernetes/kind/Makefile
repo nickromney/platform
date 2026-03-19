@@ -18,6 +18,7 @@ CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
+STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 CHECK_HOST_LLM := $(SCRIPTS_DIR)/check-host-llm.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
@@ -822,15 +823,14 @@ status:
 stop-kind:
 	@set -euo pipefail; \
 	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
-	nodes="$$(docker ps -a --format '{{.Names}}' | grep -E '^kind-local-(control-plane|worker([0-9]+)?)$$' || true)"; \
+	nodes="$$(docker ps --format '{{.Names}}' | grep -E '^kind-local-(control-plane|worker([0-9]+)?)$$' || true)"; \
 	if [ -z "$$nodes" ]; then \
-		echo "No kind-local node containers found."; \
+		echo "No running kind-local node containers found."; \
 	else \
 		echo "Stopping kind-local node containers..."; \
 		docker stop $$nodes >/dev/null; \
 		echo "Stopped: $$nodes"; \
-	fi; \
-	$(MAKE) check-conflicting-clusters-stopped
+	fi
 
 .PHONY: stop
 stop:
@@ -976,6 +976,7 @@ reset:
 	STATE_DIR="$(dir $(STATE_FILE))"; \
 	echo "This will:"; \
 	echo "  - Delete kind cluster: $$CLUSTER_NAME"; \
+	echo "  - Stop conflicting Lima/Slicer runtimes (best-effort)"; \
 	if [ -n "$$CTX" ]; then \
 		echo "  - Remove kubeconfig context/cluster/user: $$CTX"; \
 	else \
@@ -1011,6 +1012,10 @@ reset:
 			if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: reset cancelled by user at the confirmation prompt. Docker preflight passed. No kubeconfig or local state changes were made."; exit 0; fi; \
 		fi; \
 	fi; \
+	echo ""; \
+	echo "Stopping conflicting platform runtimes (best-effort)..."; \
+	"$(STOP_PLATFORM_RUNTIMES)" --exclude kind; \
+	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \

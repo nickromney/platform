@@ -15,6 +15,7 @@ SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
+STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
@@ -74,7 +75,7 @@ VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -356,6 +357,15 @@ sync-image-cache:
 	PRELOAD_LLM_GATEWAY_MODE="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode disabled "$${tfvar_files[@]}" )" \
 	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
 
+.PHONY: check-docker-daemon
+check-docker-daemon:
+	@set -euo pipefail; \
+	command -v docker >/dev/null 2>&1 || { echo "docker not found in PATH"; exit 1; }; \
+	if ! docker info >/dev/null 2>&1; then \
+		echo "docker daemon not reachable (is Docker Desktop running?)"; \
+		exit 1; \
+	fi
+
 .PHONY: build-workload-images
 build-workload-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
@@ -422,8 +432,7 @@ stop-lima:
 		echo "No running Lima VMs matching $(LIMA_INSTANCE_PREFIX)-*."; \
 	else \
 		echo "Stopped $$stopped Lima VM(s)."; \
-	fi; \
-	$(MAKE) check-conflicting-clusters-stopped
+	fi
 
 .PHONY: stop
 stop:
@@ -563,6 +572,7 @@ apply: workflow-validate
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
+		$(MAKE) check-docker-daemon; \
 		$(MAKE) check-platform-env; \
 	fi; \
 	if [ "$$stage_num" -eq 100 ]; then \
@@ -803,6 +813,7 @@ reset:
 	vm_names="$$(limactl list -q 2>/dev/null | grep -E '^$(LIMA_INSTANCE_PREFIX)-[0-9]+$$' || true)"; \
 	echo "This will:"; \
 	echo "  - Delete Lima VMs matching $(LIMA_INSTANCE_PREFIX)-*"; \
+	echo "  - Stop conflicting kind/Slicer runtimes (best-effort)"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
 	echo "  - Stop host gateway proxy containers"; \
 	echo "  - Remove local terragrunt state: $$state_dir"; \
@@ -815,6 +826,10 @@ reset:
 			exit 0; \
 		fi; \
 	fi; \
+	echo ""; \
+	echo "Stopping conflicting platform runtimes (best-effort)..."; \
+	"$(STOP_PLATFORM_RUNTIMES)" --exclude lima; \
+	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Stopping host gateway proxy containers (best-effort)..."; \
 	$(MAKE) stop-host-gateway-proxy >/dev/null 2>&1 || true; \
