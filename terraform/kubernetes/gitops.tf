@@ -1562,6 +1562,7 @@ sleep 15
 
 end=$((SECONDS + 180))
 stable_passes=0
+soft_only_stable_passes=0
 last_pending_summary=""
 last_hard_pending_summary=""
 last_soft_pending_summary=""
@@ -1594,6 +1595,7 @@ while (( SECONDS < end )); do
 
   if [[ "$pending" -eq 0 ]]; then
     stable_passes=$((stable_passes + 1))
+    soft_only_stable_passes=0
     last_pending_summary=""
     last_hard_pending_summary=""
     last_soft_pending_summary=""
@@ -1605,6 +1607,15 @@ while (( SECONDS < end )); do
     last_pending_summary="$${pending_apps[*]-}"
     last_hard_pending_summary="$${hard_pending_apps[*]-}"
     last_soft_pending_summary="$${soft_pending_apps[*]-}"
+    if [[ "$${#hard_pending_apps[@]}" -eq 0 && "$${#soft_pending_apps[@]}" -gt 0 ]]; then
+      soft_only_stable_passes=$((soft_only_stable_passes + 1))
+      if [[ "$soft_only_stable_passes" -ge 2 ]]; then
+        echo "WARN repo-backed Argo CD applications were still waiting on parent health after refresh, but no repo comparison errors remained: $last_soft_pending_summary" >&2
+        exit 0
+      fi
+    else
+      soft_only_stable_passes=0
+    fi
   fi
 
   sleep 5

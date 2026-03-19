@@ -121,9 +121,17 @@ no longer the hidden prerequisite for stage `500+` applies.
   `~/.kube/slicer-k3s.yaml`.
 - The bootstrap keeps the Slicer-specific host-health guards that still pull
   their weight on current images: swap creation and ext4 error checks.
+- Direct `make -C kubernetes/slicer 100 apply` now fails fast if k3s is
+  already installed on `slicer-1`, because silently reusing an old control
+  plane is not a fresh bootstrap. Use `SLICER_ALLOW_EXISTING_K3S=1` only when
+  you intentionally want stage `100` to refresh kubeconfig against an existing
+  cluster.
 - Stages `200+` reuse the shared Terraform platform root. The Slicer target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
   mounts, and the in-cluster actions runner.
+- Stage `900` now also configures the Slicer k3s apiserver to trust Dex-issued
+  Headlamp tokens, so a fresh `900 apply` leaves Headlamp login-ready without a
+  separate repair step.
 - `SLICER_VM_NAME` now defaults to `$(SLICER_VM_GROUP)-1`. For the on-device
   Slicer group, `export SLICER_VM_GROUP=slicer` gives you `slicer-1` by
   default; override `SLICER_VM_NAME` explicitly if you want a different VM.
@@ -181,3 +189,9 @@ entrypoint on `:443`.
 - `scripts/` contains the Slicer bootstrap, daemon, host-forward, cache, and
   local image-build helpers.
 - `tests/` contains bats coverage for the Slicer-only scripts.
+
+For older Slicer clusters created before this wiring was moved into `900 apply`,
+rerun `make -C kubernetes/slicer 900 apply AUTO_APPROVE=1` or run
+`make -C kubernetes/slicer configure-k3s-apiserver-oidc` once before relying on
+Headlamp. `make -C kubernetes/slicer check-sso-e2e` now validates the
+provisioned state and no longer patches the VM first.

@@ -289,6 +289,41 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   ]
 }
 
+resource "null_resource" "check_kind_cluster_health_after_oidc" {
+  count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
+
+  triggers = {
+    health_script_sha      = filesha256(abspath("${path.module}/scripts/check-cluster-health.sh"))
+    stage_tfvars_sha       = filesha256(abspath("${path.module}/../../kubernetes/kind/stages/900-sso.tfvars"))
+    target_tfvars_sha      = filesha256(abspath("${path.module}/../../kubernetes/kind/targets/kind.tfvars"))
+    operator_overrides_sha = try(filesha256(abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")), "absent")
+    oidc_resource_id       = null_resource.configure_kind_apiserver_oidc[0].id
+  }
+
+  provisioner "local-exec" {
+    command     = <<__EOT__
+set -euo pipefail
+export KUBECONFIG="${local.kubeconfig_path_expanded}"
+KIND_OPERATOR_OVERRIDES_FILE="${abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")}"
+if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
+  "${path.module}/scripts/check-cluster-health.sh" \
+    --var-file "${path.module}/../../kubernetes/kind/stages/900-sso.tfvars" \
+    --var-file "${path.module}/../../kubernetes/kind/targets/kind.tfvars" \
+    --var-file "$${KIND_OPERATOR_OVERRIDES_FILE}"
+else
+  "${path.module}/scripts/check-cluster-health.sh" \
+    --var-file "${path.module}/../../kubernetes/kind/stages/900-sso.tfvars" \
+    --var-file "${path.module}/../../kubernetes/kind/targets/kind.tfvars"
+fi
+__EOT__
+    interpreter = ["/bin/bash", "-c"]
+  }
+
+  depends_on = [
+    null_resource.configure_kind_apiserver_oidc,
+  ]
+}
+
 resource "kubectl_manifest" "clusterrolebinding_oidc_demo_admin_cluster_admin" {
   count = var.enable_sso && var.enable_gateway_tls ? 1 : 0
 
@@ -313,7 +348,7 @@ __YAML__
   server_side_apply = true
 
   depends_on = [
-    null_resource.configure_kind_apiserver_oidc,
+    null_resource.check_kind_cluster_health_after_oidc,
   ]
 }
 
@@ -694,7 +729,6 @@ spec:
           show-debug-on-error: "true"
           pass-user-headers: "true"
           set-xauthrequest: "true"
-          set-authorization-header: "true"
           reverse-proxy: "true"
           skip-provider-button: "true"
   syncPolicy:

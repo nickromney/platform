@@ -1015,7 +1015,7 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
 		if [ -e "$$KUBECONFIG_PATH" ]; then \
-			"$(KUBECONFIG_HELPER)" ensure-valid "$$KUBECONFIG_PATH"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$$KUBECONFIG_PATH"; \
 			if KUBECONFIG="$$KUBECONFIG_PATH" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
 				local_ctx_found=1; \
 			else \
@@ -1031,7 +1031,7 @@ reset:
 			echo "OK   No kubeconfig file at $$KUBECONFIG_PATH"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$(DEFAULT_KUBECONFIG_PATH)"; \
 			if KUBECONFIG="$(DEFAULT_KUBECONFIG_PATH)" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
 				global_ctx_found=1; \
 			else \
