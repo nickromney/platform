@@ -319,12 +319,23 @@ prereqs:
 		echo "For a teaching or Docker-only Linux host, use kubernetes/kind instead."; \
 		exit 1; \
 	fi; \
-	required=(curl docker git jq kubectl slicer ssh-keygen tofu terragrunt); \
+	required=(curl docker git jq kubectl slicer ssh-keygen terragrunt tofu yq); \
 	if [ "$$use_local_slicer_mac" = "1" ]; then \
 		required+=(slicer-mac); \
 	fi; \
-	optional=(helm bats kubectx mkcert node npm shellcheck); \
+	optional=(bats helm kubectx mkcert node npm shellcheck); \
 	missing_required=(); \
+	is_required() { \
+		local target="$$1"; \
+		local req=""; \
+		for req in "$${required[@]}"; do \
+			if [ "$$req" = "$$target" ]; then \
+				return 0; \
+			fi; \
+		done; \
+		return 1; \
+	}; \
+	echo "Tool installation verification:"; \
 	check_bin() { \
 		local bin="$$1"; local required_flag="$$2"; \
 		if command -v "$$bin" >/dev/null 2>&1; then \
@@ -338,8 +349,14 @@ prereqs:
 			echo "WARN $$bin (missing, optional)"; \
 		fi; \
 	}; \
-	for b in "$${required[@]}"; do check_bin "$$b" 1; done; \
-	for b in "$${optional[@]}"; do check_bin "$$b" 0; done; \
+	sorted_tools=($$(printf '%s\n' "$${required[@]}" "$${optional[@]}" | LC_ALL=C sort -u)); \
+	for b in "$${sorted_tools[@]}"; do \
+		if is_required "$$b"; then \
+			check_bin "$$b" 1; \
+		else \
+			check_bin "$$b" 0; \
+		fi; \
+	done; \
 	bootstrap_client=""; \
 	for candidate in "$${K3SUP_PRO_BIN:-}" "$$(command -v k3sup-pro 2>/dev/null || true)" "$${K3SUP_BIN:-}" "$$(command -v k3sup 2>/dev/null || true)" "$$HOME/.arkade/bin/k3sup"; do \
 		[ -n "$$candidate" ] || continue; \
@@ -356,10 +373,13 @@ prereqs:
 	if [ $${#missing_required[@]} -gt 0 ]; then \
 		echo ""; \
 		echo "Missing required tools: $${missing_required[*]}"; \
+		echo ""; \
+		echo "Install hints:"; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
 	fi; \
 	echo ""; \
-	echo "Docker daemon:"; \
+	echo "Docker daemon verification:"; \
 	if ! docker info >/dev/null 2>&1; then \
 		if [ "$$(uname -s)" = "Darwin" ]; then \
 			echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
@@ -1154,6 +1174,7 @@ test:
 
 .PHONY: test-shell
 test-shell:
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \

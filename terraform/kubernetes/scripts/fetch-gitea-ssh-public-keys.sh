@@ -33,6 +33,7 @@ fi
 
 for attempt in $(seq 1 30); do
   raw="$(
+    # shellcheck disable=SC2016
     kubectl "${kubectl_args[@]}" -n "${gitea_namespace}" exec deploy/gitea -- sh -c '
       found=0
       for f in /data/ssh/*.pub; do
@@ -53,7 +54,9 @@ for attempt in $(seq 1 30); do
       '{keys_b64:$keys_b64,keys_sha1:$keys_sha1}'
     exit 0
   fi
-  sleep 4
+  if [[ "${attempt}" -lt 30 ]]; then
+    sleep 4
+  fi
 done
 
-fail "Failed to capture Gitea SSH public keys"
+fail "Failed to capture Gitea SSH public keys after ${attempt} attempts"

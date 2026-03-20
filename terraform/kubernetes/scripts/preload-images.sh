@@ -19,6 +19,17 @@
 
 set -euo pipefail
 
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+require_cmd() {
+  have_cmd "$1" || {
+    echo "$1 not found in PATH" >&2
+    exit 1
+  }
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 IMAGE_LIST="${REPO_ROOT}/kubernetes/kind/preload-images.txt"
@@ -714,54 +725,28 @@ resolve_platform_digest() {
   local img="$1"
   local os="${TARGET_PLATFORM%/*}"
   local arch="${TARGET_PLATFORM#*/}"
-  local tmp
+  local digest=""
 
-  if ! command -v python3 >/dev/null 2>&1; then
+  if ! digest="$(
+    docker buildx imagetools inspect --format '{{json .}}' "$img" 2>/dev/null | \
+      jq -r \
+        --arg os "$os" \
+        --arg arch "$arch" \
+        '
+        .manifest as $manifest
+        | ($manifest.manifests // []) as $manifests
+        | (
+            [ $manifests[]? | select((.platform.os // "") == $os and (.platform.architecture // "") == $arch) | .digest ]
+            | map(select(. != null and . != ""))
+            | .[0]
+          ) // ($manifest.digest // "")
+        '
+  )"; then
     return 1
   fi
 
-  tmp="$(mktemp)"
-  if ! docker buildx imagetools inspect --format '{{json .}}' "$img" >"$tmp" 2>/dev/null; then
-    rm -f "$tmp"
-    return 1
-  fi
-
-  python3 - "$os" "$arch" "$tmp" <<'PY'
-import json
-import sys
-
-os = sys.argv[1]
-arch = sys.argv[2]
-path = sys.argv[3]
-
-with open(path, "r", encoding="utf-8") as f:
-    data = json.load(f)
-manifest = data.get("manifest") or {}
-manifests = manifest.get("manifests") or []
-
-if manifests:
-    for entry in manifests:
-        platform = entry.get("platform") or {}
-        if platform.get("os") != os:
-            continue
-        if platform.get("architecture") != arch:
-            continue
-        digest = entry.get("digest")
-        if digest:
-            print(digest)
-            sys.exit(0)
-    sys.exit(1)
-
-digest = manifest.get("digest")
-if digest:
-    print(digest)
-    sys.exit(0)
-
-sys.exit(1)
-PY
-  rc=$?
-  rm -f "$tmp"
-  return "$rc"
+  [[ -n "${digest}" ]] || return 1
+  printf '%s\n' "${digest}"
 }
 
 pin_image_to_platform_digest() {
@@ -796,6 +781,7 @@ generate_lock_file() {
   local out="$1"
   local tmp
   local digest repo
+  require_cmd jq
   tmp="$(mktemp)"
 
   : >"$tmp"
@@ -848,10 +834,7 @@ ensure_pinned_tag() {
 
 # --- Discover mode: dump images from running cluster ---
 if [[ "$MODE" == "discover" ]]; then
-  if ! command -v kubectl >/dev/null 2>&1; then
-    echo "kubectl not found in PATH" >&2
-    exit 1
-  fi
+  require_cmd kubectl
   kubectl get pods --all-namespaces -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\n"}{end}{range .spec.initContainers[*]}{.image}{"\n"}{end}{end}' \
     | sort -u \
     | grep -v '^$' \
@@ -941,6 +924,8 @@ if [[ "$MODE" == "print-images" ]]; then
   printf '%s\n' "$images"
   exit 0
 fi
+
+require_cmd docker
 
 total="$(echo "$images" | wc -l | tr -d ' ')"
 echo "Found $total image(s) in $IMAGE_LIST"
@@ -1070,8 +1055,7 @@ fi
 
 # --- Load into kind cluster ---
 if ! command -v kind >/dev/null 2>&1; then
-  echo "kind not found in PATH" >&2
-  exit 1
+  require_cmd kind
 fi
 
 if ! kind_get_clusters_safe | grep -qx "$CLUSTER_NAME"; then

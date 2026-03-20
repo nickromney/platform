@@ -294,30 +294,20 @@ resolve_ipv4_for_host() {
     return 1
   fi
 
-  if command -v python3 >/dev/null 2>&1; then
-    ip="$(python3 - "${host}" <<'PY'
-import socket
-import sys
-
-host = sys.argv[1]
-try:
-    infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
-except socket.gaierror:
-    sys.exit(1)
-
-for info in infos:
-    ip = info[4][0]
-    if ip:
-        print(ip)
-        sys.exit(0)
-
-sys.exit(1)
-PY
-)"
-  elif command -v getent >/dev/null 2>&1; then
+  if command -v dscacheutil >/dev/null 2>&1; then
+    ip="$(dscacheutil -q host -a name "${host}" 2>/dev/null | awk '/^ip_address: / && $2 ~ /^([0-9]{1,3}\\.){3}[0-9]{1,3}$/ { print $2; exit }')"
+  fi
+  if [[ -z "${ip}" ]] && command -v getent >/dev/null 2>&1; then
     ip="$(getent ahostsv4 "${host}" 2>/dev/null | awk 'NR == 1 { print $1 }')"
-  elif command -v dig >/dev/null 2>&1; then
+  fi
+  if [[ -z "${ip}" ]] && command -v dig >/dev/null 2>&1; then
     ip="$(dig +short A "${host}" 2>/dev/null | awk 'NF { print; exit }')"
+  fi
+  if [[ -z "${ip}" ]] && command -v host >/dev/null 2>&1; then
+    ip="$(host -t A "${host}" 2>/dev/null | awk '/ has address / { print $NF; exit }')"
+  fi
+  if [[ -z "${ip}" ]] && command -v nslookup >/dev/null 2>&1; then
+    ip="$(nslookup "${host}" 2>/dev/null | awk '/^Address: / && $2 ~ /^([0-9]{1,3}\\.){3}[0-9]{1,3}$/ { print $2; exit }')"
   fi
 
   [[ -n "${ip}" ]] || return 1
@@ -1566,9 +1556,10 @@ clone_remote_repo() {
 
 show_dry_run_diff() {
   local rendered_dir="$1"
-  local remote_dir="$(dirname "${rendered_dir}")/remote"
+  local remote_dir
   local changes=""
 
+  remote_dir="$(dirname "${rendered_dir}")/remote"
   if ! clone_remote_repo "${remote_dir}"; then
     fail "could not clone remote repo for dry-run"
   fi

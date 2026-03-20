@@ -41,7 +41,7 @@ STAGES_DIR="${STAGES_DIR:-${REPO_ROOT}/kubernetes/kind/stages}"
 TARGET_TFVARS="${TARGET_TFVARS:-}"
 PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
 ARGOCD_APPS_DIR="${STACK_DIR}/apps/argocd-apps"
-VARIABLES_FILE="${STACK_DIR}/variables.tf"
+export VARIABLES_FILE="${STACK_DIR}/variables.tf"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"

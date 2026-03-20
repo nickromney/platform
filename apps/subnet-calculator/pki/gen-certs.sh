@@ -2,16 +2,25 @@
 # Generate local development PKI for TLS 1.3 compose experiment
 # Uses step CLI (same toolchain as platforms/lima)
 #
-# Prerequisites: brew install step
 # Usage: ./gen-certs.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+
+print_install_hint() {
+    local tool="$1"
+    if [ -x "${INSTALL_HINTS}" ]; then
+        echo "Install hint:" >&2
+        "${INSTALL_HINTS}" --plain "${tool}" >&2 || true
+    fi
+}
 
 STEP_BIN=$(command -v step 2>/dev/null || echo "")
 if [ -z "$STEP_BIN" ]; then
     echo "ERROR: step CLI not found"
-    echo "Install: brew install step"
+    print_install_hint "step"
     exit 1
 fi
 

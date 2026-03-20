@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help check-prerequisites check-docker-prerequisites clean-ports \
+MAKE_KNOWN_GOALS := help prereqs build test check-prerequisites check-docker-prerequisites clean-ports \
   up down urls logs ps \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
@@ -11,7 +11,7 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
 
-.PHONY: help check-prerequisites check-docker-prerequisites clean-ports up down urls logs ps \
+.PHONY: help prereqs test check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -24,6 +24,9 @@ DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
 DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000 STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 
 ##@ Prerequisites
+prereqs: ## Check local prerequisites
+	@$(MAKE) --no-print-directory check-prerequisites
+
 check-prerequisites: ## Check that podman/docker tooling is available and running
 	@echo "Checking prerequisites..."
 	@echo ""
@@ -34,7 +37,8 @@ check-prerequisites: ## Check that podman/docker tooling is available and runnin
 		echo "✓ compose found"; \
 	else \
 		echo "✗ Neither podman-compose nor compose found"; \
-		echo "  Install with: brew install podman-compose"; \
+		echo "  Install hints:"; \
+		"$(abspath ../../scripts/install-tool-hints.sh)" --plain podman-compose | sed 's/^/    /'; \
 		exit 1; \
 	fi
 	@echo ""
@@ -57,8 +61,8 @@ check-prerequisites: ## Check that podman/docker tooling is available and runnin
 		fi; \
 	else \
 		echo "✗ Neither podman nor docker found"; \
-		echo "  Install podman: brew install podman"; \
-		echo "  Or install docker: brew install docker"; \
+		echo "  Install hints:"; \
+		"$(abspath ../../scripts/install-tool-hints.sh)" --plain podman docker | sed 's/^/    /'; \
 		exit 1; \
 	fi
 	@echo ""
@@ -77,6 +81,9 @@ check-docker-prerequisites: ## Check that docker compose is installed and Docker
 		echo "Docker is not running. Start Docker Desktop and try again." >&2; \
 		exit 1; \
 	fi
+
+build: check-docker-prerequisites ## Build the default compose images
+	@$(DEFAULT_COMPOSE_ENV) docker compose build api-fastapi-container-app frontend-typescript-vite
 
 ##@ Run
 up: check-docker-prerequisites ## Start the default compose stack and print the local URL
@@ -319,6 +326,9 @@ start-swa-all: start-swa-backends ## Print the three-SWA comparison workflow
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 
 ##@ Testing
+test: ## Start, test, and clean up the default compose stack
+	@$(MAKE) --no-print-directory test-bruno-compose-full
+
 
 test-bruno-direct: ## Run Bruno against the direct-launch stack
 	@echo "Testing direct launches with Bruno CLI..."

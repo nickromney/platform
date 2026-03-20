@@ -81,6 +81,15 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "kind prereqs groups tool checks and does not run shell audit" {
+  run env PATH="/usr/bin:/bin" make -C "${REPO_ROOT}/kubernetes/kind" prereqs STAGE=100
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Tool installation verification:"* ]]
+  [[ "${output}" == *"Install hints:"* ]]
+  [[ "${output}" != *"Shell audit:"* ]]
+}
+
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {
   state_file="${BATS_TEST_TMPDIR}/docker-state"
   printf 'stopped' >"${state_file}"

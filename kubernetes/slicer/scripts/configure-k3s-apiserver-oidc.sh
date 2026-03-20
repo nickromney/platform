@@ -1,12 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 warn() { echo "WARN $*"; }
+print_install_hint() {
+  local tool="$1"
+  if [ -x "${INSTALL_HINTS}" ]; then
+    echo "Install hint:" >&2
+    "${INSTALL_HINTS}" --plain "${tool}" >&2 || true
+  fi
+}
 
 require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+  local tool="$1"
+  if command -v "${tool}" >/dev/null 2>&1; then
+    return 0
+  fi
+  print_install_hint "${tool}"
+  fail "${tool} not found in PATH"
 }
 
 SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
@@ -121,6 +137,7 @@ require_cmd shasum
 
 if ! command -v mkcert >/dev/null 2>&1; then
   warn "mkcert not found; skipping Slicer apiserver OIDC configuration"
+  print_install_hint "mkcert"
   exit 0
 fi
 

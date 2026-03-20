@@ -1,10 +1,10 @@
-MAKE_KNOWN_GOALS := help makefiles apps kubernetes sdwan
+MAKE_KNOWN_GOALS := help prereqs test makefiles apps kubernetes sdwan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 
 include mk/common.mk
 
-.PHONY: help makefiles apps kubernetes sdwan
+.PHONY: help prereqs test makefiles apps kubernetes sdwan
 
 help:
 	@echo "Platform workspace Makefile guide"
@@ -16,6 +16,8 @@ help:
 	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  Makefile$$/d'
 	@echo ""
 	@echo "Root shortcuts:"
+	@echo "  make prereqs      Show the focused prerequisite entrypoints"
+	@echo "  make test         Show the focused test entrypoints"
 	@echo "  make apps         Show the app/frontend Makefiles"
 	@echo "  make kubernetes   Show the staged Kubernetes Makefiles"
 	@echo "  make makefiles    List every Makefile in the repo"
@@ -51,3 +53,27 @@ sdwan:
 	@echo "  make -C sd-wan/<stack> up"
 	@echo "  make -C sd-wan/<stack> show-urls"
 	@echo "  make -C sd-wan/<stack> test"
+
+prereqs:
+	@echo "Root prereqs is informational."
+	@echo ""
+	@echo "Run one of:"
+	@echo "  make -C apps prereqs"
+	@echo "  make -C apps/sentiment prereqs"
+	@echo "  make -C apps/subnet-calculator prereqs"
+	@echo "  make -C kubernetes/kind prereqs"
+	@echo "  make -C kubernetes/lima prereqs"
+	@echo "  make -C kubernetes/slicer prereqs"
+	@echo "  make -C sd-wan/lima prereqs"
+
+test:
+	@echo "Root test is informational."
+	@echo ""
+	@echo "Run one of:"
+	@echo "  make -C apps test"
+	@echo "  make -C apps/sentiment test"
+	@echo "  make -C apps/subnet-calculator test"
+	@echo "  make -C kubernetes/kind test"
+	@echo "  make -C kubernetes/lima test"
+	@echo "  make -C kubernetes/slicer test"
+	@echo "  make -C sd-wan/lima test"

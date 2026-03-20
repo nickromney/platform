@@ -69,6 +69,24 @@ Examples:
 EOF
 }
 
+fail() {
+  echo "render-cilium-policy-values.sh: $*" >&2
+  exit 1
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+}
+
+sanitize_filename() {
+  local value="$1"
+  value="$(printf '%s' "${value}" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^[.-]+//; s/[.-]+$//')"
+  if [[ -z "${value}" ]]; then
+    value="policy"
+  fi
+  printf '%s\n' "${value}"
+}
+
 output_path=""
 list_key=""
 wrap_key=""
@@ -111,6 +129,13 @@ while [[ $# -gt 0 ]]; do
       shift
       break
       ;;
+    -)
+      if [[ -n "${input_path}" ]]; then
+        fail "only one input path is supported"
+      fi
+      input_path="-"
+      shift
+      ;;
     -*)
       echo "render-cilium-policy-values.sh: unknown argument: $1" >&2
       usage >&2
@@ -118,8 +143,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       if [[ -n "${input_path}" ]]; then
-        echo "render-cilium-policy-values.sh: only one input path is supported" >&2
-        exit 2
+        fail "only one input path is supported"
       fi
       input_path="$1"
       shift
@@ -134,154 +158,128 @@ if [[ -z "${input_path}" ]]; then
 fi
 
 if [[ -n "${output_path}" && -n "${split_dir}" ]]; then
-  echo "render-cilium-policy-values.sh: --output and --split-dir cannot be combined" >&2
-  exit 2
+  fail "--output and --split-dir cannot be combined"
 fi
 
+require_cmd jq
+require_cmd yq
+
+slurp_docs_json() {
+  local docs_json
+  if [[ "${input_path}" == "-" ]]; then
+    docs_json="$(yq eval-all -o=json '.' - | jq -sc '[.[] | select(. != null)]')" || fail "failed to parse YAML input"
+  else
+    docs_json="$(yq eval-all -o=json '.' "${input_path}" | jq -sc '[.[] | select(. != null)]')" || fail "failed to parse YAML input"
+  fi
+  printf '%s\n' "${docs_json}"
+}
+
+render_bundle_json() {
+  local docs_json="$1"
+  local jq_program_file
+
+  jq_program_file="$(mktemp "${TMPDIR:-/tmp}/render-cilium.XXXXXX")"
+  trap 'rm -f "${jq_program_file}"' RETURN
+
+  cat > "${jq_program_file}" <<'JQ'
+def fail($msg): error($msg);
+def apply_wrap_key($path; $value):
+  if $path == "" then $value
+  else ($path | split(".")) as $parts
+  | if any($parts[]; . == "") then fail("--wrap-key must be a dot-separated path with non-empty segments")
+    else reduce ($parts | reverse[]) as $part ($value; {($part): .})
+    end
+  end;
+def convert_doc($doc; $index):
+  if ($doc | type) != "object" then fail("document \($index) is not a mapping") else null end
+  | ($doc.kind // null) as $kind
+  | if ($kind != "CiliumNetworkPolicy" and $kind != "CiliumClusterwideNetworkPolicy") then fail("document \($index) has unsupported kind \($kind|@json); expected CiliumNetworkPolicy or CiliumClusterwideNetworkPolicy") else null end
+  | (($doc | has("spec")) and ($doc.spec != null)) as $has_spec
+  | (($doc | has("specs")) and ($doc.specs != null)) as $has_specs
+  | if (($has_spec | not) and ($has_specs | not)) then fail("document \($index) has neither spec nor specs")
+    elif ($has_spec and $has_specs) then fail("document \($index) has both spec and specs; refusing ambiguous input")
+    else null end
+  | ($doc.metadata // {}) as $metadata0
+  | if ($metadata0 | type) != "object" then fail("document \($index) metadata is not a mapping") else null end
+  | ($metadata0
+      | if $set_name != "" then .name = $set_name else . end
+      | if ((.name // "") == "") then fail("document \($index) metadata.name is required") else . end
+      | if $kind == "CiliumClusterwideNetworkPolicy" then
+          if $set_namespace != "" then fail("--set-namespace cannot be used with CiliumClusterwideNetworkPolicy input") else del(.namespace) end
+        elif $set_namespace != "" then .namespace = $set_namespace
+        else . end
+    ) as $metadata
+  | if $has_specs and (($doc.specs | type) != "array") then fail("document \($index) specs must be a list") else null end
+  | {metadata: $metadata, specs: (if $has_specs then $doc.specs else [$doc.spec] end)};
+
+if ($set_name != "" and ($docs | length) != 1) then fail("--set-name only supports single-document input") else null end
+| ($docs | to_entries | map(convert_doc(.value; (.key + 1)))) as $converted
+| ($list_key | if . != "" then {(.): $converted} else if ($converted | length) == 1 then $converted[0] else $converted end end) as $result
+| {converted: $converted, result: apply_wrap_key($wrap_key; $result)}
+JQ
+
+  jq -n \
+    -f "${jq_program_file}" \
+    --argjson docs "${docs_json}" \
+    --arg list_key "${list_key}" \
+    --arg wrap_key "${wrap_key}" \
+    --arg set_name "${set_name}" \
+    --arg set_namespace "${set_namespace}" \
+    2>/dev/null || fail "failed to transform input"
+}
+
+compose_result_json() {
+  local item_json="$1"
+
+  jq -cn \
+    --argjson item "${item_json}" \
+    --arg list_key "${list_key}" \
+    --arg wrap_key "${wrap_key}" \
+    '
+    def fail($msg): error($msg);
+    def apply_wrap_key($path; $value):
+      if $path == "" then $value
+      else ($path | split(".")) as $parts
+      | if any($parts[]; . == "") then fail("--wrap-key must be a dot-separated path with non-empty segments")
+        else reduce ($parts | reverse[]) as $part ($value; {($part): .})
+        end
+      end;
+    ($list_key | if . != "" then {(.): [$item]} else $item end) as $value
+    | apply_wrap_key($wrap_key; $value)
+    ' 2>/dev/null || fail "failed to compose rendered output"
+}
+
+emit_yaml() {
+  local json_input="$1"
+  printf '%s\n' "${json_input}" | yq -P '.' -
+}
+
 render() {
-  python3 - "${input_path}" "${list_key}" "${wrap_key}" "${set_name}" "${set_namespace}" "${split_dir}" <<'PY'
-import copy
-import os
-import re
-import sys
-import yaml
+  local docs_json
+  local bundle_json
 
+  docs_json="$(slurp_docs_json)"
+  if [[ "${docs_json}" == "[]" ]]; then
+    fail "input did not contain any YAML documents"
+  fi
 
-def fail(message: str) -> None:
-    print(f"render-cilium-policy-values.sh: {message}", file=sys.stderr)
-    raise SystemExit(1)
+  bundle_json="$(render_bundle_json "${docs_json}")"
 
-
-class DoubleQuotedWhenNeededDumper(yaml.SafeDumper):
-    """Prefer double quotes in cases where scalar quoting is required."""
-
-    def choose_scalar_style(self):
-        if self.analysis is None:
-            self.analysis = self.analyze_scalar(self.event.value)
-        if self.event.style == '"' or self.canonical:
-            return '"'
-        if not self.event.style and self.event.implicit[0]:
-            if (
-                not (self.simple_key_context and (self.analysis.empty or self.analysis.multiline))
-                and (
-                    (self.flow_level and self.analysis.allow_flow_plain)
-                    or (not self.flow_level and self.analysis.allow_block_plain)
-                )
-            ):
-                return ""
-        if self.event.style and self.event.style in "|>":
-            if not self.flow_level and not self.simple_key_context and self.analysis.allow_block:
-                return self.event.style
-        return '"'
-
-
-def sanitize_filename(value: str) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-.")
-    return sanitized or "policy"
-
-
-def apply_wrap_key(value, path: str):
-    if not path:
-        return value
-
-    parts = path.split(".")
-    if any(not part for part in parts):
-        fail("--wrap-key must be a dot-separated path with non-empty segments")
-
-    wrapped = value
-    for part in reversed(parts):
-        wrapped = {part: wrapped}
-    return wrapped
-
-
-def dump_yaml(value, handle) -> None:
-    yaml.dump(value, handle, Dumper=DoubleQuotedWhenNeededDumper, sort_keys=False)
-
-
-input_path, list_key, wrap_key, set_name, set_namespace, split_dir = sys.argv[1:7]
-
-if input_path == "-":
-    raw = sys.stdin.read()
-else:
-    with open(input_path, "r", encoding="utf-8") as handle:
-        raw = handle.read()
-
-docs = [doc for doc in yaml.safe_load_all(raw) if doc is not None]
-if not docs:
-    fail("input did not contain any YAML documents")
-
-if set_name and len(docs) != 1:
-    fail("--set-name only supports single-document input")
-
-converted = []
-for index, doc in enumerate(docs, start=1):
-    if not isinstance(doc, dict):
-        fail(f"document {index} is not a mapping")
-
-    kind = doc.get("kind")
-    if kind not in {"CiliumNetworkPolicy", "CiliumClusterwideNetworkPolicy"}:
-        fail(
-            f"document {index} has unsupported kind {kind!r}; "
-            "expected CiliumNetworkPolicy or CiliumClusterwideNetworkPolicy"
-        )
-
-    has_spec = "spec" in doc and doc.get("spec") is not None
-    has_specs = "specs" in doc and doc.get("specs") is not None
-    if not has_spec and not has_specs:
-        fail(f"document {index} has neither spec nor specs")
-    if has_spec and has_specs:
-        fail(f"document {index} has both spec and specs; refusing ambiguous input")
-
-    metadata = copy.deepcopy(doc.get("metadata") or {})
-    if not isinstance(metadata, dict):
-        fail(f"document {index} metadata is not a mapping")
-
-    if set_name:
-        metadata["name"] = set_name
-
-    if "name" not in metadata or not metadata["name"]:
-        fail(f"document {index} metadata.name is required")
-
-    if kind == "CiliumClusterwideNetworkPolicy":
-        if set_namespace:
-            fail("--set-namespace cannot be used with CiliumClusterwideNetworkPolicy input")
-        metadata.pop("namespace", None)
-    elif set_namespace:
-        metadata["namespace"] = set_namespace
-
-    if has_specs:
-        specs = copy.deepcopy(doc["specs"])
-        if not isinstance(specs, list):
-            fail(f"document {index} specs must be a list")
-    else:
-        specs = [copy.deepcopy(doc["spec"])]
-
-    converted.append(
-        {
-            "metadata": metadata,
-            "specs": specs,
-        }
-    )
-
-if list_key:
-    result = {list_key: converted}
-else:
-    result = converted[0] if len(converted) == 1 else converted
-
-result = apply_wrap_key(result, wrap_key)
-
-if split_dir:
-    os.makedirs(split_dir, exist_ok=True)
-    for index, item in enumerate(converted, start=1):
-        per_item = {list_key: [item]} if list_key else item
-        per_item = apply_wrap_key(per_item, wrap_key)
-        filename = f"{index:02d}-{sanitize_filename(item['metadata']['name'])}.yaml"
-        path = os.path.join(split_dir, filename)
-        with open(path, "w", encoding="utf-8") as handle:
-            dump_yaml(per_item, handle)
-else:
-    dump_yaml(result, sys.stdout)
-PY
+  if [[ -n "${split_dir}" ]]; then
+    local index=0
+    mkdir -p "${split_dir}"
+    while IFS= read -r item_json; do
+      local index name filename path per_item_json
+      index=$((index + 1))
+      name="$(jq -r '.metadata.name' <<< "${item_json}")"
+      filename="$(printf '%02d-%s.yaml' "${index}" "$(sanitize_filename "${name}")")"
+      path="${split_dir}/${filename}"
+      per_item_json="$(compose_result_json "${item_json}")"
+      emit_yaml "${per_item_json}" > "${path}"
+    done < <(jq -c '.converted[]' <<< "${bundle_json}")
+  else
+    emit_yaml "$(jq -c '.result' <<< "${bundle_json}")"
+  fi
 }
 
 if [[ -n "${output_path}" ]]; then

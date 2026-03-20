@@ -71,3 +71,12 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "lima prereqs groups tool checks and does not run shell audit" {
+  run env PATH="/usr/bin:/bin" make -C "${REPO_ROOT}/kubernetes/lima" prereqs STAGE=100
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Tool installation verification:"* ]]
+  [[ "${output}" == *"Install hints:"* ]]
+  [[ "${output}" != *"Shell audit:"* ]]
+}

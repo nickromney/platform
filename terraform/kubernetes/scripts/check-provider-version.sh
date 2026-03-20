@@ -48,10 +48,10 @@ constraint_clause_allows_version() {
     "~> "*)
       local base="${clause#~> }"
       local base_major="" base_minor="" base_patch=""
-      local version_major="" version_minor="" version_patch=""
+      local version_major="" version_minor=""
 
       IFS='.' read -r base_major base_minor base_patch <<<"${base}"
-      IFS='.' read -r version_major version_minor version_patch <<<"${version}"
+      IFS='.' read -r version_major version_minor _ <<<"${version}"
 
       if [ -n "${base_patch:-}" ]; then
         [ "${version_major}" = "${base_major}" ] && [ "${version_minor}" = "${base_minor}" ] && version_gte "${version}" "${base}"

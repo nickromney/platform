@@ -1,10 +1,10 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help install dev test test-headless
+MAKE_KNOWN_GOALS := help prereqs install dev test test-headless
 MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
 
 include ../../../mk/common.mk
 
-.PHONY: help install dev test test-headless
+.PHONY: help prereqs install dev test test-headless
 
 ##@ Workflow
 test: ## Run Playwright tests
@@ -15,6 +15,9 @@ test-headless: ## Run tests in headless mode
 	@uv run pytest -v --headed=false
 
 ##@ Setup
+prereqs: ## Install local frontend prerequisites
+	@$(MAKE) --no-print-directory install
+
 install: ## Install dependencies
 	@uv sync --frozen --extra dev
 

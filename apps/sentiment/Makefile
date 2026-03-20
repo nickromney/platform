@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help check-prerequisites up up-tls down logs ps smoke urls
+MAKE_KNOWN_GOALS := help prereqs build test check-prerequisites up up-tls down logs ps smoke urls
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -10,9 +10,12 @@ APP_TLS_BASE_URL := https://localhost:8443
 APP_TLS_URL := $(APP_TLS_BASE_URL)/oauth2/sign_in
 KEYCLOAK_URL := http://localhost:8300
 
-.PHONY: help check-prerequisites up up-tls down logs ps smoke urls
+.PHONY: help prereqs test check-prerequisites build up up-tls down logs ps smoke urls
 
 ##@ Setup
+prereqs: ## Check local prerequisites
+	@$(MAKE) --no-print-directory check-prerequisites
+
 check-prerequisites: ## Check that docker compose is installed and Docker is running
 	@if ! command -v docker >/dev/null 2>&1; then \
 		echo "docker is required but was not found in PATH." >&2; \
@@ -26,6 +29,9 @@ check-prerequisites: ## Check that docker compose is installed and Docker is run
 		echo "Docker is not running. Start Docker Desktop and try again." >&2; \
 		exit 1; \
 	fi
+
+build: check-prerequisites ## Build the local compose images
+	@docker compose build
 
 ##@ Run
 up: check-prerequisites ## Start the authenticated compose stack and print the local URL
@@ -56,6 +62,10 @@ ps: check-prerequisites ## Show compose container status
 
 smoke: check-prerequisites ## Run the local compose smoke test
 	@./tests/compose-smoke.sh
+
+##@ Test
+test: ## Run the local compose smoke test
+	@$(MAKE) --no-print-directory smoke
 
 ##@ Cleanup
 down: check-prerequisites ## Stop the compose stack

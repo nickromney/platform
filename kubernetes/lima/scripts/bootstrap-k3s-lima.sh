@@ -63,6 +63,42 @@ lima_exec() {
   limactl shell "$name" -- "$@"
 }
 
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  local pid=""
+  local start=""
+  local elapsed=""
+  local rc=0
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${seconds}" "$@"
+    return $?
+  fi
+
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${seconds}" "$@"
+    return $?
+  fi
+
+  "$@" &
+  pid=$!
+  start="$(date +%s)"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    elapsed=$(( $(date +%s) - start ))
+    if [ "${elapsed}" -ge "${seconds}" ]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}" || rc=$?
+  return "${rc}"
+}
+
 registry_for_image_ref() {
   local ref="${1%%@*}"
   local first
@@ -355,11 +391,7 @@ for i in "${!nodes[@]}"; do
   if [ -n "$agent_extra_args" ]; then
     join_cmd+=(--k3s-extra-args "$agent_extra_args")
   fi
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 180s "${join_cmd[@]}"
-  else
-    "${join_cmd[@]}"
-  fi
+  run_with_timeout 180 "${join_cmd[@]}"
 done
 
 nodes_ready=0

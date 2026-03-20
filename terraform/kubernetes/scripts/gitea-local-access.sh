@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 if [[ -n "${GITEA_LOCAL_ACCESS_HELPER_LOADED:-}" ]]; then
+  # shellcheck disable=SC2317
   return 0 2>/dev/null || exit 0
 fi
 GITEA_LOCAL_ACCESS_HELPER_LOADED=1
@@ -33,26 +34,6 @@ gitea_local_access_kubectl() {
     args+=(--context "${KUBECONFIG_CONTEXT}")
   fi
   kubectl "${args[@]}" "$@"
-}
-
-gitea_local_access_random_port() {
-  local python_bin=""
-  if command -v python3 >/dev/null 2>&1; then
-    python_bin="python3"
-  elif command -v python >/dev/null 2>&1; then
-    python_bin="python"
-  else
-    gitea_local_access_fail "python3 or python is required to allocate a free localhost port"
-    return 1
-  fi
-  "${python_bin}" - <<'PY'
-import socket
-
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("127.0.0.1", 0))
-print(s.getsockname()[1])
-s.close()
-PY
 }
 
 gitea_local_access_tcp_open() {
@@ -93,6 +74,45 @@ gitea_local_access_wait_for_service_endpoints() {
   gitea_local_access_fail "timed out waiting for ready endpoints for service/${service_name}"
 }
 
+gitea_local_access_forwarded_port() {
+  local remote_port="$1"
+  local log_file="$2"
+
+  sed -nE "s/.*:([0-9]+)[[:space:]]+->[[:space:]]*${remote_port}\$/\\1/p" "${log_file}" 2>/dev/null | head -n 1
+}
+
+gitea_local_access_wait_for_forward_port() {
+  local label="$1"
+  local remote_port="$2"
+  local pid="$3"
+  local log_file="$4"
+  local port_var="$5"
+  local waited=0
+  local port=""
+
+  while [[ "${waited}" -lt "${GITEA_LOCAL_ACCESS_WAIT_SECONDS}" ]]; do
+    port="$(gitea_local_access_forwarded_port "${remote_port}" "${log_file}")"
+    if [[ -n "${port}" ]]; then
+      printf -v "${port_var}" '%s' "${port}"
+      return 0
+    fi
+    if ! kill -0 "${pid}" >/dev/null 2>&1; then
+      if [[ -f "${log_file}" ]]; then
+        cat "${log_file}" >&2 || true
+      fi
+      gitea_local_access_fail "${label} port-forward exited before reporting a local port"
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  if [[ -f "${log_file}" ]]; then
+    cat "${log_file}" >&2 || true
+  fi
+  gitea_local_access_fail "timed out waiting for ${label} port-forward to report a local port"
+}
+
 gitea_local_access_wait_for_tcp() {
   local label="$1"
   local host="$2"
@@ -130,7 +150,6 @@ gitea_local_access_start_forward() {
   local port_var="$5"
   local port log_file pid
 
-  port="$(gitea_local_access_random_port)" || return 1
   log_file="$(mktemp "${TMPDIR:-/tmp}/gitea-local-access-${label}.XXXXXX")"
 
   gitea_local_access_require_cmd kubectl || return 1
@@ -139,8 +158,14 @@ gitea_local_access_start_forward() {
   gitea_local_access_kubectl -n "${GITEA_NAMESPACE}" port-forward \
     --address "${host}" \
     "svc/${service_name}" \
-    "${port}:${remote_port}" >"${log_file}" 2>&1 &
+    ":${remote_port}" >"${log_file}" 2>&1 &
   pid=$!
+
+  if ! gitea_local_access_wait_for_forward_port "${label}" "${remote_port}" "${pid}" "${log_file}" port; then
+    kill "${pid}" >/dev/null 2>&1 || true
+    wait "${pid}" >/dev/null 2>&1 || true
+    return 1
+  fi
 
   if ! gitea_local_access_wait_for_tcp "${label}" "${host}" "${port}" "${pid}" "${log_file}"; then
     kill "${pid}" >/dev/null 2>&1 || true

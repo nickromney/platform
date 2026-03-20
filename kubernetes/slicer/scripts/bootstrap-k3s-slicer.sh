@@ -59,6 +59,42 @@ vm_exec() {
   SLICER_URL="$slicer_socket" slicer vm exec "$vm" -- "$@"
 }
 
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  local pid=""
+  local start=""
+  local elapsed=""
+  local rc=0
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${seconds}" "$@"
+    return $?
+  fi
+
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${seconds}" "$@"
+    return $?
+  fi
+
+  "$@" &
+  pid=$!
+  start="$(date +%s)"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    elapsed=$(( $(date +%s) - start ))
+    if [ "${elapsed}" -ge "${seconds}" ]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}" || rc=$?
+  return "${rc}"
+}
+
 vm_exec_retry() {
   local vm="$1" cmd="$2" max="${3:-8}" wait="${4:-3}"
   local output
@@ -329,11 +365,7 @@ install_k3s_via_k3sup() {
   fi
 
   for _ in 1 2 3; do
-    if command -v timeout >/dev/null 2>&1; then
-      if timeout 300s "${install_cmd[@]}"; then
-        return 0
-      fi
-    elif "${install_cmd[@]}"; then
+    if run_with_timeout 300 "${install_cmd[@]}"; then
       return 0
     fi
     sleep 5

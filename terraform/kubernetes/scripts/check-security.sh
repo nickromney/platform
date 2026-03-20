@@ -38,7 +38,7 @@ done
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[$i]}" && ! -f "${TFVARS_FILES[$i]}" ]]; then
     if [[ -f "${STACK_DIR}/${TFVARS_FILES[$i]}" ]]; then
-      TFVARS_FILES[$i]="${STACK_DIR}/${TFVARS_FILES[$i]}"
+      TFVARS_FILES[i]="${STACK_DIR}/${TFVARS_FILES[$i]}"
     fi
   fi
 done
@@ -92,15 +92,14 @@ ensure_policy_probe() {
 probe_must_block_url() {
   local description="$1"
   local url="$2"
-  local output=""
 
   ensure_policy_probe || {
     fail_soft "Could not create the policy probe pod for ${description}"
     return 0
   }
 
-  if output=$(kubectl -n "${POLICY_PROBE_NAMESPACE}" exec "${POLICY_PROBE_POD}" -- \
-    curl -sS -o /dev/null --connect-timeout 3 --max-time 5 "${url}" 2>&1); then
+  if kubectl -n "${POLICY_PROBE_NAMESPACE}" exec "${POLICY_PROBE_POD}" -- \
+    curl -sS -o /dev/null --connect-timeout 3 --max-time 5 "${url}" >/dev/null 2>&1; then
     fail_soft "${description} reachable from ${POLICY_PROBE_POD}"
   else
     ok "${description} blocked (negative test)"
@@ -121,6 +120,16 @@ approved_image_prefixes_from_policy() {
     }
     in_value && /^[[:space:]]+[[:alnum:]_-]+:/ { exit }
   ' "${IMAGE_REGISTRY_POLICY_FILE}"
+}
+
+load_approved_image_prefixes() {
+  local prefix
+  APPROVED_PREFIXES=()
+
+  while IFS= read -r prefix; do
+    [[ -n "${prefix}" ]] || continue
+    APPROVED_PREFIXES+=("${prefix}")
+  done < <(approved_image_prefixes_from_policy)
 }
 
 expected_platform_gateway_tls_directives() {
@@ -425,7 +434,7 @@ echo ""
 # -------------------------------------------------------------------------
 echo "--- Image registry audit (uat namespace) ---"
 if kubectl get ns uat >/dev/null 2>&1; then
-  mapfile -t APPROVED_PREFIXES < <(approved_image_prefixes_from_policy)
+  load_approved_image_prefixes
   if [[ "${#APPROVED_PREFIXES[@]}" -eq 0 ]]; then
     fail_soft "Could not read approved image prefixes from ${IMAGE_REGISTRY_POLICY_FILE}"
     APPROVED_PREFIXES=()
@@ -435,10 +444,13 @@ if kubectl get ns uat >/dev/null 2>&1; then
     [[ -z "${image}" ]] && continue
     approved=0
     for prefix in "${APPROVED_PREFIXES[@]}"; do
-      if [[ "${image}" == ${prefix} ]]; then
-        approved=1
-        break
-      fi
+      # shellcheck disable=SC2254
+      case "${image}" in
+        ${prefix})
+          approved=1
+          break
+          ;;
+      esac
     done
     if [[ "${approved}" -eq 0 ]]; then
       warn "Unapproved image in uat: ${image}"

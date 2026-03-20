@@ -3,15 +3,22 @@ set -euo pipefail
 
 NAMESPACE="${CERT_MANAGER_NAMESPACE:-cert-manager}"
 SECRET_NAME="${MKCERT_CA_SECRET_NAME:-mkcert-ca-key-pair}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+
+print_install_hint() {
+  local tool="$1"
+  if [ -x "${INSTALL_HINTS}" ]; then
+    echo "Install hint:" >&2
+    "${INSTALL_HINTS}" --plain "${tool}" >&2 || true
+  fi
+}
 
 if ! command -v mkcert >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-mkcert not found; skipping mkcert CA bootstrap.
-
-Install on macOS:
-  brew install mkcert
-  mkcert -install
-EOF
+  echo "mkcert not found; skipping mkcert CA bootstrap." >&2
+  print_install_hint "mkcert"
+  echo "After install, run: mkcert -install" >&2
   exit 0
 fi
 

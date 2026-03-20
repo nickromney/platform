@@ -15,6 +15,7 @@ GITEA_ADMIN_PWD="$(jq -r '.gitea_admin_pwd // empty' <<<"${query}")"
 GITEA_LOCAL_ACCESS_MODE="$(jq -r '.gitea_local_access_mode // empty' <<<"${query}")"
 GITEA_HTTP_NODE_PORT="$(jq -r '.gitea_http_node_port // empty' <<<"${query}")"
 GITEA_SSH_NODE_PORT="$(jq -r '.gitea_ssh_node_port // empty' <<<"${query}")"
+export GITEA_LOCAL_ACCESS_MODE GITEA_HTTP_NODE_PORT GITEA_SSH_NODE_PORT
 GITEA_NAMESPACE="$(jq -r '.gitea_namespace // empty' <<<"${query}")"
 KUBECONFIG_PATH="$(jq -r '.kubeconfig_path // empty' <<<"${query}")"
 KUBECONFIG_CONTEXT="$(jq -r '.kubeconfig_context // empty' <<<"${query}")"

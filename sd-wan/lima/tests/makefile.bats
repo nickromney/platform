@@ -27,7 +27,9 @@ EOF
   run make -C "${REPO_ROOT}/sd-wan/lima" prereqs
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"Missing Lima: brew install lima"* ]]
+  [[ "${output}" == *"Missing Lima CLI: limactl"* ]]
+  [[ "${output}" == *"Install hints:"* ]]
+  [[ "${output}" == *"limactl:"* ]]
 }
 
 @test "sd-wan lima host port preflight passes when no listeners are present" {
