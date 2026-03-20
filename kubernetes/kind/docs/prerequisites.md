@@ -26,6 +26,23 @@ mkcert -install
 
 If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's `gnubin` directory to `PATH`.
 
+## Registry Auth
+
+The shipped kind path uses Docker Hardened Images from `dhi.io` for Argo CD,
+Kyverno, cert-manager, parts of observability, and some support images. On a
+fresh host, authenticate Docker before you expect those images to pull:
+
+```bash
+docker login dhi.io
+```
+
+If you also rely on Docker Hub pulls outside the Desktop sign-in flow, make
+sure those credentials are available too:
+
+```bash
+docker login
+```
+
 ## What The Core Tools Do
 
 - `make` runs the workflow entrypoints in [`Makefile`](../Makefile).
@@ -51,6 +68,7 @@ If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's 
 
 - expected binaries are on `PATH`
 - the Docker daemon is reachable through `docker info`
+- Docker auth status is visible for `dhi.io` and Docker Hub
 - the host-side LLM endpoint is reachable when the selected stage opts into legacy `llm_gateway_mode = "direct"`
 - versions for the main tools can be queried
 - kubeconfig files and contexts look sane

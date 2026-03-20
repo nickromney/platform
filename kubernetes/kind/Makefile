@@ -22,6 +22,7 @@ STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 CHECK_HOST_LLM := $(SCRIPTS_DIR)/check-host-llm.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
+CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
 ENSURE_KIND_KUBECONFIG := $(SCRIPTS_DIR)/ensure-kind-kubeconfig.sh
 ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
 SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
@@ -617,6 +618,9 @@ apply: workflow-validate
 			set -e; \
 		fi; \
 	fi; \
+	if [ $$rc -eq 0 ]; then \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"; \
+	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
 	fi; \
@@ -919,6 +923,10 @@ prereqs:
 		fi; \
 	fi; \
 	echo "OK   Docker context: $$(docker context show)"; \
+	echo ""; \
+	echo "Docker registry auth:"; \
+	"$(CHECK_DOCKER_REGISTRY_AUTH)" dhi.io "Docker Hardened Images (dhi.io)" || true; \
+	"$(CHECK_DOCKER_REGISTRY_AUTH)" index.docker.io "Docker Hub" || true; \
 	echo ""; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
