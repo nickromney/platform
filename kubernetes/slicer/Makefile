@@ -98,14 +98,16 @@ PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
 PLATFORM_ADMIN_PASSWORD ?=
 PLATFORM_DEMO_PASSWORD ?=
 PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
--include $(PLATFORM_ENV_FILE)
+ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
+include $(PLATFORM_ENV_FILE)
+endif
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -736,6 +738,7 @@ apply: workflow-validate
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
+	@$(MAKE) check-platform-env-file
 	@set -euo pipefail; \
 	mode_enabled() { \
 		local mode="$$1"; local auto_threshold="$$2"; local stage_num_local="$$3"; \
@@ -1062,9 +1065,13 @@ reset:
 	state_dir="$(dir $(STATE_FILE))"; \
 	reset_incomplete=0; \
 	echo "This will:"; \
-	echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present (auto-recycle on-device slicer-mac state if needed)"; \
+	if [ "$$socket" = "$(SLICER_SYSTEM_SOCKET)" ]; then \
+		echo "  - Stop slicer-mac and remove on-device disk images for $(SLICER_VM_NAME)"; \
+	else \
+		echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present"; \
+	fi; \
 	echo "  - Stop conflicting kind/Lima runtimes (best-effort)"; \
-	echo "  - Stop host forwards"; \
+	echo "  - Stop host forwards and Docker proxy helpers (best-effort)"; \
 	echo "  - Clean any stale repo-managed slicer daemon state from older revisions"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
 	echo "  - Remove local terragrunt state: $$state_dir"; \
@@ -1085,6 +1092,10 @@ reset:
 	echo "Stopping host forwards (best-effort)..."; \
 	$(MAKE) stop-host-forwards >/dev/null 2>&1 || true; \
 	echo "OK   host forwards stopped"; \
+	if command -v docker >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then \
+		echo "WARN Docker is not reachable, so existing Slicer proxy containers, if any, could not be removed."; \
+		echo "WARN When Docker is back, rerun: make -C kubernetes/slicer stop-host-forwards"; \
+	fi; \
 	echo ""; \
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$ctx" ]; then \
@@ -1104,7 +1115,11 @@ reset:
 		fi; \
 	fi; \
 	echo ""; \
-	echo "Deleting Slicer VM (best-effort)..."; \
+	if [ "$$socket" = "$(SLICER_SYSTEM_SOCKET)" ]; then \
+		echo "Stopping slicer-mac and pruning on-device disk images (best-effort)..."; \
+	else \
+		echo "Deleting Slicer VM (best-effort)..."; \
+	fi; \
 	if ! SLICER_URL="$$socket" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(DELETE_SLICER_VM)"; then \
 		reset_incomplete=1; \
 	fi; \
@@ -1121,7 +1136,7 @@ reset:
 	rm -f "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   done"; \
 	if [ "$$reset_incomplete" = "1" ]; then \
-		echo "WARN reset completed with manual Slicer VM recycle still required." >&2; \
+		echo "WARN reset completed with manual Slicer cleanup still required." >&2; \
 		exit 1; \
 	fi
 

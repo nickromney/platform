@@ -8,6 +8,7 @@ setup() {
   export HOME="${BATS_TEST_TMPDIR}/home"
   export SLICER_HOME="${HOME}/slicer-mac"
   export STATE_FILE="${BATS_TEST_TMPDIR}/vm-state.json"
+  export SLICER_LOG="${BATS_TEST_TMPDIR}/slicer.log"
   export SLICER_MAC_LOG="${BATS_TEST_TMPDIR}/slicer-mac.log"
   mkdir -p "${TEST_BIN}" "${SLICER_HOME}"
   export PATH="${TEST_BIN}:${PATH}"
@@ -17,6 +18,7 @@ setup() {
 set -euo pipefail
 
 state_file="${STATE_FILE:?}"
+printf '%s\n' "$*" >> "${SLICER_LOG:?}"
 
 case "${1:-} ${2:-} ${3:-}" in
   "vm list --json")
@@ -61,10 +63,6 @@ case "${1:-} ${2:-} ${3:-}" in
   "service stop daemon")
     exit 0
     ;;
-  "service start daemon")
-    printf '[{"hostname":"slicer-1","status":"Running"}]\n' > "${STATE_FILE:?}"
-    exit 0
-    ;;
   *)
     echo "unexpected slicer-mac invocation: $*" >&2
     exit 1
@@ -74,9 +72,12 @@ EOF
   chmod +x "${SLICER_HOME}/slicer-mac"
 }
 
-@test "system-socket delete failure falls back to slicer-mac recycle" {
-  printf '[{"hostname":"slicer-1","status":"Paused"}]\n' > "${STATE_FILE}"
-  touch "${SLICER_HOME}/slicer-1.img" "${SLICER_HOME}/slicer-1.log" "${SLICER_HOME}/slicer-1-vsock.sock"
+@test "system-socket cleanup stops slicer-mac and deletes matching disk images without backup" {
+  touch \
+    "${SLICER_HOME}/slicer-1.img" \
+    "${SLICER_HOME}/slicer-1-extra.img" \
+    "${SLICER_HOME}/slicer-1.log" \
+    "${SLICER_HOME}/slicer-1-vsock.sock"
 
   run env \
     SLICER_URL="${SLICER_HOME}/slicer.sock" \
@@ -84,23 +85,15 @@ EOF
     "${SCRIPT}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"recycled on-device slicer-mac state for slicer-1"* ]]
-  [[ "${output}" == *"archived prior VM artifacts under"* ]]
-  [[ "${output}" == *"left slicer-1 Paused after recycle"* ]]
+  [[ "${output}" == *"stopped on-device slicer-mac daemon"* ]]
+  [[ "${output}" == *"removed 2 on-device disk image(s) matching"* ]]
 
-  run find "${SLICER_HOME}" -maxdepth 1 -type d -name 'recycled-*'
-  [ "${status}" -eq 0 ]
-  [ -n "${output}" ]
-  recycle_dir="${output}"
-
-  [ -e "${recycle_dir}/slicer-1.img" ]
-  [ -e "${recycle_dir}/slicer-1.log" ]
-  [ -e "${recycle_dir}/slicer-1-vsock.sock" ]
   [ ! -e "${SLICER_HOME}/slicer-1.img" ]
-  [ ! -e "${SLICER_HOME}/slicer-1.log" ]
-  [ ! -e "${SLICER_HOME}/slicer-1-vsock.sock" ]
+  [ ! -e "${SLICER_HOME}/slicer-1-extra.img" ]
+  [ -e "${SLICER_HOME}/slicer-1.log" ]
+  [ -e "${SLICER_HOME}/slicer-1-vsock.sock" ]
   grep -q "service stop daemon" "${SLICER_MAC_LOG}"
-  grep -q "service start daemon" "${SLICER_MAC_LOG}"
+  [ ! -s "${SLICER_LOG}" ]
 }
 
 @test "non-system delete failure still exits nonzero" {

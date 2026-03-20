@@ -41,13 +41,9 @@ help:
 	}'
 endif
 
-.PHONY: check-platform-env
-check-platform-env:
+.PHONY: check-platform-env-file
+check-platform-env-file:
 	@set -euo pipefail; \
-	required_vars="$(strip $(PLATFORM_REQUIRED_ENV_VARS))"; \
-	if [ -z "$$required_vars" ]; then \
-		exit 0; \
-	fi; \
 	env_file="$(strip $(PLATFORM_ENV_FILE))"; \
 	template_file="$(strip $(PLATFORM_ENV_TEMPLATE))"; \
 	if [ -z "$$env_file" ]; then \
@@ -57,11 +53,21 @@ check-platform-env:
 	if [ ! -f "$$env_file" ]; then \
 		echo "Missing platform env file: $$env_file" >&2; \
 		if [ -n "$$template_file" ] && [ -f "$$template_file" ]; then \
-			echo "Copy $$template_file to $$env_file and set: $$required_vars" >&2; \
+			echo "Copy $$template_file to $$env_file and fill in the required values." >&2; \
 		else \
-			echo "Set these vars in $$env_file: $$required_vars" >&2; \
+			echo "Create $$env_file before running this target." >&2; \
 		fi; \
 		exit 1; \
+	fi
+
+.PHONY: check-platform-env
+check-platform-env: check-platform-env-file
+	@set -euo pipefail; \
+	required_vars="$(strip $(PLATFORM_REQUIRED_ENV_VARS))"; \
+	env_file="$(strip $(PLATFORM_ENV_FILE))"; \
+	template_file="$(strip $(PLATFORM_ENV_TEMPLATE))"; \
+	if [ -z "$$required_vars" ]; then \
+		exit 0; \
 	fi; \
 	missing=(); \
 	for name in $$required_vars; do \

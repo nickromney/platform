@@ -113,6 +113,9 @@ no longer the hidden prerequisite for stage `500+` applies.
   missing or undersized, fix `~/slicer-mac/slicer-mac.yaml`, stop the daemon,
   delete the backing image, and start the daemon again; this target does not
   pretend `slicer vm add` can repair that case.
+- `make -C kubernetes/slicer reset` follows that same local-daemon rule: it
+  stops `slicer-mac` and removes `~/slicer-mac/slicer-1*.img` directly instead
+  of attempting `slicer vm delete slicer-1`.
 - Stage `100` is the bootstrap boundary. It requires the on-device
   `slicer-mac` daemon by default, or a reachable endpoint from `SLICER_URL` or
   `SLICER_SOCKET` when you override it. It ensures the selected VM exists in

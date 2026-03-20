@@ -44,6 +44,16 @@ setup() {
   [[ "${output}" == *"Did you mean 'apply'?"* ]]
 }
 
+@test "kind apply with a missing env file fails cleanly instead of treating it as a make goal" {
+  missing_env="${BATS_TEST_TMPDIR}/missing.env"
+
+  run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/kubernetes/kind" 100 apply
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Missing platform env file: ${missing_env}"* ]]
+  [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
+}
+
 @test "kind supports stage-first check-security syntax" {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" 900 check-security
 
