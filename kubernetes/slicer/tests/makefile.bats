@@ -72,3 +72,17 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "slicer reset documents local slicer-mac disk cleanup instead of VM recycle" {
+  run grep -Fn 'Stop slicer-mac and remove on-device disk images for $(SLICER_VM_NAME)' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer reset warns when Docker proxy cleanup cannot be verified" {
+  run grep -Fn 'existing Slicer proxy containers, if any, could not be removed' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
