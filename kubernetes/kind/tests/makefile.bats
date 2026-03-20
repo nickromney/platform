@@ -61,6 +61,26 @@ setup() {
   [[ "${output}" == *"check-security.sh"* ]]
 }
 
+@test "kind apply refreshes kubeconfig after a successful apply" {
+  run grep -Fn 'if [ $$rc -eq 0 ]; then \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind prereqs surfaces Docker registry auth status" {
+  run grep -Fn 'echo "Docker registry auth:"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" dhi.io "Docker Hardened Images (dhi.io)" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {
   state_file="${BATS_TEST_TMPDIR}/docker-state"
   printf 'stopped' >"${state_file}"
