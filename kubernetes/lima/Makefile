@@ -249,9 +249,20 @@ check-conflicting-clusters-stopped:
 prereqs:
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
-	required=(curl docker git jq kubectl limactl k3sup tofu terragrunt); \
-	optional=(k3sup-pro helm bats kubectx mkcert node npm shellcheck); \
+	required=(curl docker git jq k3sup kubectl limactl terragrunt tofu yq); \
+	optional=(bats helm k3sup-pro kubectx mkcert node npm shellcheck); \
 	missing_required=(); \
+	is_required() { \
+		local target="$$1"; \
+		local req=""; \
+		for req in "$${required[@]}"; do \
+			if [ "$$req" = "$$target" ]; then \
+				return 0; \
+			fi; \
+		done; \
+		return 1; \
+	}; \
+	echo "Tool installation verification:"; \
 	check_bin() { \
 		local bin="$$1"; local required_flag="$$2"; \
 		if command -v "$$bin" >/dev/null 2>&1; then \
@@ -265,15 +276,24 @@ prereqs:
 			echo "WARN $$bin (missing, optional)"; \
 		fi; \
 	}; \
-	for b in "$${required[@]}"; do check_bin "$$b" 1; done; \
-	for b in "$${optional[@]}"; do check_bin "$$b" 0; done; \
+	sorted_tools=($$(printf '%s\n' "$${required[@]}" "$${optional[@]}" | LC_ALL=C sort -u)); \
+	for b in "$${sorted_tools[@]}"; do \
+		if is_required "$$b"; then \
+			check_bin "$$b" 1; \
+		else \
+			check_bin "$$b" 0; \
+		fi; \
+	done; \
 	if [ $${#missing_required[@]} -gt 0 ]; then \
 		echo ""; \
 		echo "Missing required tools: $${missing_required[*]}"; \
+		echo ""; \
+		echo "Install hints:"; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
 	fi; \
 	echo ""; \
-	echo "Docker daemon:"; \
+	echo "Docker daemon verification:"; \
 	if ! docker info >/dev/null 2>&1; then \
 		echo "FAIL docker daemon not reachable (is Docker Desktop running?)"; \
 		exit 1; \
@@ -885,6 +905,7 @@ test:
 
 .PHONY: test-shell
 test-shell:
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \

@@ -5,8 +5,21 @@ set -euo pipefail
 : "${DESIRED_NODES:?DESIRED_NODES is required}"
 : "${LIMA_CONFIG:?LIMA_CONFIG is required}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+
+print_install_hint() {
+  local tool="$1"
+  if [ -x "${INSTALL_HINTS}" ]; then
+    echo "Install hint:" >&2
+    "${INSTALL_HINTS}" --plain "${tool}" >&2 || true
+  fi
+}
+
 if ! command -v limactl >/dev/null 2>&1; then
-  echo "limactl not found. Install Lima: brew install lima"
+  echo "limactl not found in PATH" >&2
+  print_install_hint "limactl"
   exit 1
 fi
 

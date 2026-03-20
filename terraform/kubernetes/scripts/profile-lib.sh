@@ -207,8 +207,8 @@ profile_setup_session() {
 
   profile_validate_settings
 
-  PROFILE_LAST_STEP_LOG_FILE=""
-  PROFILE_LAST_STEP_TIME_FILE=""
+  export PROFILE_LAST_STEP_LOG_FILE=""
+  export PROFILE_LAST_STEP_TIME_FILE=""
 
   if ! profile_is_enabled; then
     return 0
@@ -219,7 +219,6 @@ profile_setup_session() {
 
   PROFILE_RUN_DIR_EFFECTIVE="${run_base_dir%/}/${run_id}"
   PROFILE_KUBECONFIG_PATH_EFFECTIVE="${kubeconfig_path}"
-  PROFILE_KUBECONFIG_CONTEXT_EFFECTIVE="${kubeconfig_context}"
   PROFILE_CAPTURE_DOCKER_EFFECTIVE=0
   PROFILE_CAPTURE_KUBECTL_EFFECTIVE=0
 
@@ -322,8 +321,8 @@ profile_run_step() {
     printf 'wall_clock_seconds=%s\n' "${duration_seconds}" >"${time_file}"
   fi
 
-  PROFILE_LAST_STEP_LOG_FILE="${log_file}"
-  PROFILE_LAST_STEP_TIME_FILE="${time_file}"
+  export PROFILE_LAST_STEP_LOG_FILE="${log_file}"
+  export PROFILE_LAST_STEP_TIME_FILE="${time_file}"
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${step}" \

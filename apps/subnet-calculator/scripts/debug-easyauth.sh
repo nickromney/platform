@@ -39,6 +39,55 @@ print_warning() {
   echo -e "${YELLOW}⚠ $1${NC}"
 }
 
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  local pid=""
+  local start=""
+  local elapsed=""
+  local rc=0
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${seconds}" "$@"
+    return $?
+  fi
+
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${seconds}" "$@"
+    return $?
+  fi
+
+  "$@" &
+  pid=$!
+  start="$(date +%s)"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    elapsed=$(( $(date +%s) - start ))
+    if [ "${elapsed}" -ge "${seconds}" ]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}" || rc=$?
+  return "${rc}"
+}
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+
+print_install_hint() {
+  local tool="$1"
+  if [ -x "${INSTALL_HINTS}" ]; then
+    "${INSTALL_HINTS}" --plain "${tool}" 2>/dev/null | while IFS= read -r line; do
+      print_warning "${line}"
+    done
+  fi
+}
+
 # Check if required commands exist
 check_dependencies() {
   print_section "Checking Dependencies"
@@ -50,7 +99,8 @@ check_dependencies() {
   print_success "Azure CLI installed"
 
   if ! command -v jq &> /dev/null; then
-    print_warning "jq not found. Install for better JSON parsing: brew install jq"
+    print_warning "jq not found. JSON output will be less readable."
+    print_install_hint "jq"
   else
     print_success "jq installed"
   fi
@@ -215,7 +265,7 @@ stream_logs() {
   echo "Make a request to the app in another terminal or browser"
   echo ""
 
-  timeout 30 az webapp log tail \
+  run_with_timeout 30 az webapp log tail \
     --name "$WEBAPP_NAME" \
     --resource-group "$RESOURCE_GROUP" 2>&1 | \
     grep -i --color=always "token\|error\|managed\|identity\|server" || true

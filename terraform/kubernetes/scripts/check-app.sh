@@ -155,12 +155,16 @@ fi
 
 require kubectl
 
-PYTHON_BIN=""
-if have python3; then
-  PYTHON_BIN="python3"
-elif have python; then
-  PYTHON_BIN="python"
-fi
+oauth2_proxy_arg_of_interest() {
+  case "$1" in
+    --cookie-name*|--cookie-domain*|--email-domain*|--redirect-url*|--upstream*|--skip-auth-regex*|--set-authorization-header*|--pass-access-token*|--set-xauthrequest*|--pass-user-headers*|--login-url*|--oidc-issuer-url*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 section() {
   echo
@@ -208,42 +212,22 @@ get_app_destination_namespace() {
 print_oauth2_proxy_args_summary() {
   local deploy="$1"
   local ns="$2"
-  if [[ -z "${PYTHON_BIN}" ]]; then
-    warn "python3/python missing; skipping oauth2-proxy args summary"
-    return 0
-  fi
   if ! kubectl -n "${ns}" get deploy "${deploy}" >/dev/null 2>&1; then
     return 0
   fi
-  local args_json
-  args_json="$(kubectl -n "${ns}" get deploy "${deploy}" -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || true)"
-  if [[ -z "${args_json}" ]]; then
+  local args_lines
+  args_lines="$(kubectl -n "${ns}" get deploy "${deploy}" -o jsonpath='{range .spec.template.spec.containers[0].args[*]}{@}{"\n"}{end}' 2>/dev/null || true)"
+  if [[ -z "${args_lines}" ]]; then
     return 0
   fi
 
   echo "Deployment args (selected): ${ns}/${deploy}"
-  printf '%s' "${args_json}" | "${PYTHON_BIN}" -c '
-import json, sys
-args = json.loads(sys.stdin.read() or "[]")
-keys = [
-  "--cookie-name",
-  "--cookie-domain",
-  "--email-domain",
-  "--redirect-url",
-  "--upstream",
-  "--upstream-timeout",
-  "--skip-auth-regex",
-  "--set-authorization-header",
-  "--pass-access-token",
-  "--set-xauthrequest",
-  "--pass-user-headers",
-  "--login-url",
-  "--oidc-issuer-url",
-]
-for a in args:
-  if any(k in a for k in keys):
-    print("  " + a)
-'
+  while IFS= read -r arg; do
+    [[ -n "${arg}" ]] || continue
+    if oauth2_proxy_arg_of_interest "${arg}"; then
+      printf '  %s\n' "${arg}"
+    fi
+  done <<< "${args_lines}"
 }
 
 curl_local() {

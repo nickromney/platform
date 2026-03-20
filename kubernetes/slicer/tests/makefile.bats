@@ -86,3 +86,12 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "slicer prereqs groups tool checks and does not run shell audit" {
+  run env PATH="/usr/bin:/bin" SLICER_USE_LOCAL_MAC=0 make -C "${REPO_ROOT}/kubernetes/slicer" prereqs STAGE=100
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Tool installation verification:"* ]]
+  [[ "${output}" == *"Install hints:"* ]]
+  [[ "${output}" != *"Shell audit:"* ]]
+}

@@ -17,11 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/gitea-local-access.sh"
 
 body_file=""
-cleanup() {
-  rm -f "${body_file:-}"
-  gitea_local_access_cleanup || true
-}
-trap cleanup EXIT
+trap 'rm -f "${body_file:-}"; gitea_local_access_cleanup || true' EXIT
 
 gitea_http_code() {
   local url="$1"

@@ -290,7 +290,7 @@ collect_target_records() {
 
     while IFS= read -r full_path <&4; do
       [[ -n "${full_path}" ]] || continue
-      relative_path="${full_path#${REPO_ROOT}/}"
+      relative_path="${full_path#"${REPO_ROOT}/"}"
 
       while IFS= read -r -d '' document <&5; do
         identity="$(extract_document_identity "${document}")"
@@ -423,7 +423,7 @@ display_source_label() {
   local path="$1"
 
   if [[ -n "${DISPLAY_LABEL_STRIP_PREFIX}" && "${path}" == "${DISPLAY_LABEL_STRIP_PREFIX}"* ]]; then
-    printf '%s' "${path#${DISPLAY_LABEL_STRIP_PREFIX}}"
+    printf '%s' "${path#"${DISPLAY_LABEL_STRIP_PREFIX}"}"
     return
   fi
 
@@ -447,7 +447,7 @@ format_source_links() {
       if [[ "${first}" -eq 0 ]]; then
         printf '<br />'
       fi
-      printf '[`%s`](%s)' "${label}" "$(source_link_target "${path}")"
+      printf "[\`%s\`](%s)" "${label}" "$(source_link_target "${path}")"
     else
       printf '      source: %s\n' "${label}"
     fi
@@ -462,7 +462,7 @@ print_name_source_row() {
 
   case "${FORMAT}" in
     markdown)
-      printf '| `%s` | ' "${name}"
+      printf "| \`%s\` | " "${name}"
       if [[ -n "${sources}" ]]; then
         format_source_links "${sources}"
       else
@@ -567,16 +567,16 @@ print_target() {
   case "${FORMAT}" in
     markdown)
       printf '## %s\n\n' "${display_name}"
-      printf 'Rendered from [`%s`](./%s) after filter application.\n\n' \
-        "${dir#${REPO_ROOT}/}" "${name}"
+      printf "Rendered from [\`%s\`](./%s) after filter application.\n\n" \
+        "${dir#"${REPO_ROOT}/"}" "${name}"
       if [[ -n "${DISPLAY_LABEL_PREFIX_PATH}" ]]; then
-        printf 'Displayed policy source paths below are relative to [`%s`](%s).\n\n' \
+        printf "Displayed policy source paths below are relative to [\`%s\`](%s).\n\n" \
           "${DISPLAY_LABEL_PREFIX_PATH}" "${DISPLAY_LABEL_PREFIX_TARGET}"
       fi
       ;;
     text)
       printf '%s\n\n' "${display_name}"
-      printf 'Rendered from %s after filter application.\n\n' "${dir#${REPO_ROOT}/}"
+      printf 'Rendered from %s after filter application.\n\n' "${dir#"${REPO_ROOT}/"}"
       ;;
   esac
 

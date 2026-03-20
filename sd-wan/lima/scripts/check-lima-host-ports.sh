@@ -86,7 +86,7 @@ parse_port_forwards_file() {
       host_port="${BASH_REMATCH[1]}"
       emitted=1
     elif [[ "${line}" =~ proto:[[:space:]]*([^[:space:]]+) ]]; then
-      proto="${BASH_REMATCH[1],,}"
+      proto="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
       proto="${proto//\"/}"
       proto="${proto//\'/}"
       emitted=1

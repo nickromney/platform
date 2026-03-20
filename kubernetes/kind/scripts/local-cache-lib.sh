@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 LOCAL_CACHE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=kubernetes/scripts/docker-local-registry-lib.sh
 source "${LOCAL_CACHE_LIB_DIR}/../../scripts/docker-local-registry-lib.sh"
 
 require_local_cache_tools() {

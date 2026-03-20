@@ -32,8 +32,6 @@ GITEA_USER="${GITEA_USER:-gitea-admin}"
 if [[ -z "${GITEA_PWD:-}" ]]; then
 	platform_require_vars PLATFORM_ADMIN_PASSWORD || exit 1
 	GITEA_PWD="${PLATFORM_ADMIN_PASSWORD}"
-else
-	GITEA_PWD="${GITEA_PWD}"
 fi
 GITEA_HOST="${GITEA_HOST:-localhost:30090}"
 REGISTRY_HOST="${REGISTRY_HOST:-localhost:30090}"

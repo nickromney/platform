@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=kubernetes/scripts/docker-local-registry-lib.sh
 source "${SCRIPT_DIR}/../../scripts/docker-local-registry-lib.sh"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-platform}"

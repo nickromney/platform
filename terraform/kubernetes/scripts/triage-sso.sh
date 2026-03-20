@@ -17,46 +17,32 @@ require() {
 
 require kubectl
 
-PYTHON_BIN=""
-if have python3; then
-  PYTHON_BIN="python3"
-elif have python; then
-  PYTHON_BIN="python"
-else
-  echo "Missing python3/python (needed to parse JSON arg arrays from kubectl jsonpath)" >&2
-  exit 1
-fi
+oauth2_proxy_arg_of_interest() {
+  case "$1" in
+    --cookie-name*|--cookie-domain*|--email-domain*|--redirect-url*|--upstream*|--skip-auth-regex*|--set-authorization-header*|--pass-access-token*|--set-xauthrequest*|--pass-user-headers*|--login-url*|--oidc-issuer-url*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 print_oauth2_proxy_args() {
   local deploy="$1"
   local ns="${2:-sso}"
 
-  local args_json
-  args_json="$(kubectl -n "${ns}" get deploy "${deploy}" -o jsonpath='{.spec.template.spec.containers[0].args}')"
+  local args_lines
+  args_lines="$(kubectl -n "${ns}" get deploy "${deploy}" -o jsonpath='{range .spec.template.spec.containers[0].args[*]}{@}{"\n"}{end}' 2>/dev/null || true)"
+  [[ -n "${args_lines}" ]] || return 0
 
   echo "Deployment: ${ns}/${deploy}"
-  # jsonpath prints a JSON array; parse and print selected flags for readability.
-  printf '%s' "${args_json}" | "${PYTHON_BIN}" -c '
-import json, sys
-args = json.loads(sys.stdin.read() or "[]")
-keys = [
-  "--cookie-name",
-  "--cookie-domain",
-  "--email-domain",
-  "--redirect-url",
-  "--upstream",
-  "--skip-auth-regex",
-  "--set-authorization-header",
-  "--pass-access-token",
-  "--set-xauthrequest",
-  "--pass-user-headers",
-  "--login-url",
-  "--oidc-issuer-url",
-]
-for a in args:
-  if any(k in a for k in keys):
-    print("  " + a)
-'
+  while IFS= read -r arg; do
+    [[ -n "${arg}" ]] || continue
+    if oauth2_proxy_arg_of_interest "${arg}"; then
+      printf '  %s\n' "${arg}"
+    fi
+  done <<< "${args_lines}"
 }
 
 curl_in_cluster() {

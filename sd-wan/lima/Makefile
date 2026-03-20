@@ -1,6 +1,6 @@
 # SD-WAN Multi-Cloud Simulation - Lima VM Orchestration
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
+MAKE_KNOWN_GOALS := help prereqs build check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -24,7 +24,7 @@ export PLATFORM_ENV_TEMPLATE
 export PLATFORM_ADMIN_PASSWORD
 export PLATFORM_DEMO_PASSWORD
 
-.PHONY: prereqs check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e \
+.PHONY: prereqs build check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e \
         ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
 
 ##@ Lifecycle
@@ -35,29 +35,36 @@ prereqs: ## Check macOS host prerequisites for Lima + networking
 	@set -e; \
 	$(MAKE) check-platform-env; \
 	missing=0; \
+	missing_tools=(); \
 	LIMA_NETWORKS_FILE="$$HOME/.lima/_config/networks.yaml"; \
+	echo "Tool installation verification:"; \
 	if [ "$$(uname -s)" != "Darwin" ]; then \
 		echo "  This SD-WAN Lima path currently assumes macOS (vmType=vz)."; \
 		missing=1; \
 	fi; \
 	if ! command -v limactl >/dev/null 2>&1; then \
-		echo "  Missing Lima: brew install lima"; \
+		echo "  Missing Lima CLI: limactl"; \
+		missing_tools+=("limactl"); \
 		missing=1; \
 	else \
 		echo "  OK: limactl found ($$(limactl --version 2>/dev/null | head -1))"; \
 	fi; \
 	if ! command -v node >/dev/null 2>&1; then \
-		echo "  Missing Node.js: brew install node"; \
+		echo "  Missing Node.js runtime: node"; \
+		missing_tools+=("node"); \
 		missing=1; \
 	else \
 		echo "  OK: node found ($$(node --version 2>/dev/null))"; \
 	fi; \
 	if ! command -v npm >/dev/null 2>&1; then \
 		echo "  Missing npm (usually installed with Node.js)"; \
+		missing_tools+=("npm"); \
 		missing=1; \
 	else \
 		echo "  OK: npm found ($$(npm --version 2>/dev/null))"; \
 	fi; \
+	echo ""; \
+	echo "Host configuration verification:"; \
 	if command -v socket_vmnet >/dev/null 2>&1; then \
 		echo "  Optional: socket_vmnet found (not required for lima:user-v2)"; \
 	else \
@@ -84,6 +91,9 @@ prereqs: ## Check macOS host prerequisites for Lima + networking
 		fi; \
 	fi; \
 	if [ $$missing -ne 0 ]; then \
+		echo ""; \
+		echo "Install hints:"; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_tools[@]}" | sed 's/^/  /'; \
 		echo ""; \
 		echo "Fix missing prerequisites and run: make prereqs"; \
 		exit 1; \
@@ -143,6 +153,9 @@ build-frontend: ## Build subnet-calculator frontend for deployment
 	@rm -rf /tmp/lima/frontend/*
 	@cp -r "$(FRONTEND_DIR)/dist/." /tmp/lima/frontend/
 	@echo "Frontend built and staged to /tmp/lima/frontend/"
+
+build: ## Build the frontend assets for deployment
+	@$(MAKE) --no-print-directory build-frontend
 
 up: prereqs build-frontend ## Start all 3 Lima VMs
 	@echo "=== Starting SD-WAN simulation ==="
@@ -418,6 +431,12 @@ test-subnetcalc: ## Subnet calculator mTLS + JWT flow
 
 test-e2e: ## Browser-based SD-WAN checks with Playwright
 	@cd "$(PROJECT_DIR)/e2e" && npm install && npx playwright install chromium && npx playwright test
+
+.PHONY: test-shell quality
+test-shell: ## Run shell portability and hidden-dependency audit
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
+
+quality: test-shell ## Run static shell quality checks
 
 ##@ Logs
 # --- Logs ---

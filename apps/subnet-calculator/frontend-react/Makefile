@@ -1,12 +1,15 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help install dev build preview test lint format type-check docker-build docker-run clean
+MAKE_KNOWN_GOALS := help prereqs install dev build preview test lint format type-check docker-build docker-run clean
 MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
 
 include ../../../mk/common.mk
 
-.PHONY: help install dev build preview test lint format type-check docker-build docker-run clean
+.PHONY: help prereqs install dev build preview test lint format type-check docker-build docker-run clean
 
 ##@ Setup
+prereqs: ## Install local frontend prerequisites
+	@$(MAKE) --no-print-directory install
+
 install: ## Install dependencies
 	@bun install --frozen-lockfile
 

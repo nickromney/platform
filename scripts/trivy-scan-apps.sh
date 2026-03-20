@@ -331,12 +331,10 @@ write_terminal_summary() {
   local total_secrets=0
   local total_licenses=0
   local target_width=52
-  local header_format='%-52s %6s %9s %7s %7s %11s %8s %9s\n'
-  local row_format='%-52s %6d %9d %7d %7d %11d %8d %9d\n'
 
   printf 'Summary Table\n'
-  printf "${header_format}" "Target" "Gate" "Advisory" "Total" "Vulns" "Misconfig" "Secrets" "Licenses"
-  printf "${header_format}" "------" "----" "--------" "-----" "-----" "----------" "-------" "--------"
+  printf '%-52s %6s %9s %7s %7s %11s %8s %9s\n' "Target" "Gate" "Advisory" "Total" "Vulns" "Misconfig" "Secrets" "Licenses"
+  printf '%-52s %6s %9s %7s %7s %11s %8s %9s\n' "------" "----" "--------" "-----" "-----" "----------" "-------" "--------"
 
   while IFS=$'\t' read -r label report; do
     IFS=$'\t' read -r gate advisory total vulns misconfig secrets licenses <<EOF
@@ -374,7 +372,7 @@ EOF
     if [[ "${#display_label}" -gt "${target_width}" ]]; then
       display_label="...${display_label:$((${#display_label} - (target_width - 3)))}"
     fi
-    printf "${row_format}" "${display_label}" "${gate}" "${advisory}" "${total}" "${vulns}" "${misconfig}" "${secrets}" "${licenses}"
+    printf '%-52s %6d %9d %7d %7d %11d %8d %9d\n' "${display_label}" "${gate}" "${advisory}" "${total}" "${vulns}" "${misconfig}" "${secrets}" "${licenses}"
     total_gate=$((total_gate + gate))
     total_advisory=$((total_advisory + advisory))
     total_findings=$((total_findings + total))
@@ -384,20 +382,20 @@ EOF
     total_licenses=$((total_licenses + licenses))
   done < "${REPORT_INDEX_FILE}"
 
-  printf "${header_format}" "------" "----" "--------" "-----" "-----" "----------" "-------" "--------"
-  printf "${row_format}" "Totals" "${total_gate}" "${total_advisory}" "${total_findings}" "${total_vulns}" "${total_misconfig}" "${total_secrets}" "${total_licenses}"
+  printf '%-52s %6s %9s %7s %7s %11s %8s %9s\n' "------" "----" "--------" "-----" "-----" "----------" "-------" "--------"
+  printf '%-52s %6d %9d %7d %7d %11d %8d %9d\n' "Totals" "${total_gate}" "${total_advisory}" "${total_findings}" "${total_vulns}" "${total_misconfig}" "${total_secrets}" "${total_licenses}"
 }
 
 write_summary_report() {
   {
     printf '# Trivy Summary\n\n'
-    printf -- '- Generated: `%s`\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-    printf -- '- Gate severities: `%s`\n' "${GATE_SEVERITIES}"
-    printf -- '- Reports directory: `%s`\n' "${REPORT_ROOT}"
+    printf -- "- Generated: \`%s\`\n" "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    printf -- "- Gate severities: \`%s\`\n" "${GATE_SEVERITIES}"
+    printf -- "- Reports directory: \`%s\`\n" "${REPORT_ROOT}"
     printf '\n## Reports\n\n'
     while IFS=$'\t' read -r label report; do
-      printf -- '- `%s`: %s\n' "${label}" "$(report_summary "${label}")"
-      printf '  Report: `%s`\n' "${report}"
+      printf -- "- \`%s\`: %s\n" "${label}" "$(report_summary "${label}")"
+      printf "  Report: \`%s\`\n" "${report}"
     done < "${REPORT_INDEX_FILE}"
 
     printf '\n## Gate Findings\n\n'
@@ -498,7 +496,7 @@ to_repo_rel() {
   local path="$1"
   case "${path}" in
     "${REPO_ROOT}/"*)
-      printf '%s\n' "${path#${REPO_ROOT}/}"
+      printf '%s\n' "${path#"${REPO_ROOT}/"}"
       ;;
     *)
       printf '%s\n' "${path}"
@@ -627,7 +625,7 @@ scan_source_tree() {
 scan_images() {
   local spec
   local image_ref context_dir dockerfile extra_args report label
-  local extra_args_arr
+  local -a extra_args_arr=()
 
   ensure_prereqs
   command -v docker >/dev/null 2>&1 || fail "docker not found in PATH"
@@ -637,13 +635,9 @@ scan_images() {
     [[ -n "${spec}" ]] || continue
     IFS='|' read -r image_ref context_dir dockerfile extra_args <<<"${spec}"
     label="$(basename "${image_ref%%:*}")"
-    extra_args_arr=""
     if [[ -n "${extra_args}" ]]; then
-      extra_args_arr="${extra_args}"
-    fi
-    if [[ -n "${extra_args_arr}" ]]; then
-      # shellcheck disable=SC2206
-      build_image "${image_ref}" "${context_dir}" "${dockerfile}" ${extra_args_arr}
+      IFS=' ' read -r -a extra_args_arr <<<"${extra_args}"
+      build_image "${image_ref}" "${context_dir}" "${dockerfile}" "${extra_args_arr[@]}"
     else
       build_image "${image_ref}" "${context_dir}" "${dockerfile}"
     fi

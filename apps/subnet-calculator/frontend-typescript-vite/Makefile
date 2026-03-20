@@ -1,10 +1,10 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help install dev build lint type-check test test-headed test-ui
+MAKE_KNOWN_GOALS := help prereqs install dev build lint type-check test test-headed test-ui
 MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
 
 include ../../../mk/common.mk
 
-.PHONY: help install dev build lint type-check test test-headed test-ui
+.PHONY: help prereqs install dev build lint type-check test test-headed test-ui
 
 ##@ Workflow
 test: ## Run Playwright tests
@@ -18,6 +18,9 @@ test-ui: ## Run tests with Playwright UI
 	@bun run test:ui
 
 ##@ Setup
+prereqs: ## Install local frontend prerequisites
+	@$(MAKE) --no-print-directory install
+
 install: ## Install dependencies
 	@bun install --frozen-lockfile
 

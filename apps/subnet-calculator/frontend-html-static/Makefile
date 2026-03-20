@@ -1,10 +1,10 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help install serve test test-docker
+MAKE_KNOWN_GOALS := help prereqs install serve test test-docker
 MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
 
 include ../../../mk/common.mk
 
-.PHONY: help install serve test test-docker
+.PHONY: help prereqs install serve test test-docker
 
 ##@ Workflow
 test: ## Run Playwright tests
@@ -15,6 +15,9 @@ test-docker: ## Run tests against Docker Compose
 	@uv run pytest --base-url=http://localhost:8001 -v
 
 ##@ Setup
+prereqs: ## Install local frontend prerequisites
+	@$(MAKE) --no-print-directory install
+
 install: ## Install dependencies
 	@uv sync --frozen --extra dev
 
