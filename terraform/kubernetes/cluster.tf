@@ -158,7 +158,15 @@ resource "kind_cluster" "local" {
 
 resource "local_sensitive_file" "kubeconfig" {
   count                = var.provision_kind_cluster ? 1 : 0
-  content              = kind_cluster.local[0].kubeconfig
+  content = var.platform_devcontainer ? replace(
+    replace(
+      kind_cluster.local[0].kubeconfig,
+      "server: https://127.0.0.1:${var.kind_api_server_port}",
+      "server: https://${var.devcontainer_host_alias}:${var.kind_api_server_port}\n    tls-server-name: ${var.devcontainer_tls_server_name}"
+    ),
+    "server: https://localhost:${var.kind_api_server_port}",
+    "server: https://${var.devcontainer_host_alias}:${var.kind_api_server_port}\n    tls-server-name: ${var.devcontainer_tls_server_name}"
+  ) : kind_cluster.local[0].kubeconfig
   filename             = local.kubeconfig_path_expanded
   file_permission      = "0600"
   directory_permission = "0700"

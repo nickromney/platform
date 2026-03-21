@@ -77,8 +77,16 @@ SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ:-$(tfvar_bool enable_signoz false
 SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP:-$(tfvar_bool enable_headlamp true)}"
 SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS:-$(tfvar_bool enable_victoria_logs false)}"
 SSO_E2E_BASE_PORT_VALUE="${SSO_E2E_BASE_PORT:-$(tfvar_value gateway_https_host_port 443)}"
+SSO_E2E_HOST_RESOLVER_RULES_VALUE="${SSO_E2E_HOST_RESOLVER_RULES:-}"
 if [ "${SSO_E2E_BASE_PORT_VALUE}" = "443" ]; then
   SSO_E2E_BASE_PORT_VALUE=""
+fi
+
+if [ -z "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" ] && [ "${PLATFORM_DEVCONTAINER:-0}" = "1" ]; then
+  devcontainer_host_ip="$(getent hosts host.docker.internal 2>/dev/null | awk 'NR==1 { print $1 }')"
+  if [ -n "${devcontainer_host_ip}" ]; then
+    SSO_E2E_HOST_RESOLVER_RULES_VALUE="MAP *.127.0.0.1.sslip.io ${devcontainer_host_ip},MAP 127.0.0.1.sslip.io ${devcontainer_host_ip}"
+  fi
 fi
 
 bun install --frozen-lockfile
@@ -89,11 +97,13 @@ if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
+  SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   bun run test:headed
 else
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
+  SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   bun run test
 fi

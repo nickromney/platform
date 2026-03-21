@@ -99,6 +99,13 @@ locals {
   signoz_auth_proxy_image_effective = var.prefer_external_platform_images && local.external_platform_signoz_auth_proxy != "" ? local.external_platform_signoz_auth_proxy : local.default_signoz_auth_proxy_image
 
   containerd_certs_dir = abspath("${path.module}/.run/containerd-certs.d")
+  kind_node_kubectl_wrapper_mount = [
+    {
+      host_path      = abspath("${path.module}/scripts/kind-node-kubectl-wrapper.sh")
+      container_path = "/usr/local/bin/kubectl"
+      read_only      = true
+    }
+  ]
   docker_socket_mount = var.enable_docker_socket_mount ? [
     {
       host_path      = var.docker_socket_path
@@ -124,6 +131,7 @@ locals {
         read_only      = true
       }
     ],
+    local.kind_node_kubectl_wrapper_mount,
     local.docker_socket_mount,
     local.apps_dir_mount
   )

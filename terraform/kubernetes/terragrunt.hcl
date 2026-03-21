@@ -13,6 +13,7 @@ inputs = {
   kind_config_path      = "${get_terragrunt_dir()}/kind-config.yaml"
   kubeconfig_path       = pathexpand("~/.kube/kind-kind-local.yaml")
   kubeconfig_context    = "kind-kind-local"
+  platform_devcontainer = get_env("PLATFORM_DEVCONTAINER", "0") == "1"
 
   argocd_namespace      = "argocd"
 

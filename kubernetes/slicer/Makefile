@@ -339,6 +339,9 @@ prereqs:
 	fi; \
 	optional=(bats bun cilium helm kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \
 	recommended_test_tools=(bun node npm npx); \
+	if [ "$$stage_num" -ge 900 ]; then \
+		required+=("$${recommended_test_tools[@]}"); \
+	fi; \
 	missing_required=(); \
 	missing_recommended=(); \
 	is_required() { \
@@ -409,7 +412,7 @@ prereqs:
 	fi; \
 	if [ $${#missing_recommended[@]} -gt 0 ]; then \
 		echo ""; \
-		echo "Recommended browser/E2E test tools missing: $${missing_recommended[*]}"; \
+		echo "Recommended browser/E2E test tools missing for stages below 900: $${missing_recommended[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
 		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \

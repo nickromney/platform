@@ -16,6 +16,7 @@ resource "null_resource" "hubble_ui_service_legacy_cleanup" {
       kubectl patch service hubble-ui -n kube-system --type=json \
         -p '[{"op":"replace","path":"/spec/ports","value":[{"name":"http","port":80,"protocol":"TCP","targetPort":8081,"nodePort":${var.hubble_ui_node_port}}]}]'
     EOT
+    interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = local.kubeconfig_path_expanded
     }
@@ -64,6 +65,7 @@ resource "null_resource" "cilium_restart_on_config_change" {
       kubectl -n kube-system rollout restart daemonset/cilium
       kubectl -n kube-system rollout status daemonset/cilium --timeout=300s
     EOT
+    interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = local.kubeconfig_path_expanded
     }

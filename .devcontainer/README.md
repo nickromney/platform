@@ -108,6 +108,9 @@ It also seeds shell startup for both `bash` and `zsh` so the container has:
 
 - `EDITOR=nvim` and `VISUAL=nvim`
 - `node`, `npm`, `npx`, and `bun` for browser/E2E test flows
+- the Linux Chromium runtime libraries that Playwright expects, while the
+  Playwright CLI itself stays project-local via `bun x playwright` or
+  `npx playwright`
 - generated completion scripts for `kubectl`, `kubie`, `kind`, `helm`,
   `cilium`, and `hubble` when those binaries are present
 - `starship` prompt init in both shells

@@ -41,7 +41,11 @@ KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_IMAGE_DISTRIBUTION_MODE ?= registry
 KIND_BAKED_NODE_IMAGE ?=
 KIND_LOCAL_IMAGE_CACHE_HOST ?= host.docker.internal:5002
+ifeq ($(PLATFORM_DEVCONTAINER),1)
+KIND_LOCAL_IMAGE_CACHE_PUSH_HOST ?= host.docker.internal:5002
+else
 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST ?= 127.0.0.1:5002
+endif
 KIND_LOCAL_IMAGE_CACHE_OPTIONAL ?= 0
 KIND_OPERATOR_OVERRIDES_DIR ?= $(REPO_ROOT)/.run/kind
 KIND_OPERATOR_OVERRIDES_FILE ?= $(KIND_OPERATOR_OVERRIDES_DIR)/operator-overrides.tfvars
@@ -662,7 +666,7 @@ check-health:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	"$(STACK_DIR)/scripts/check-cluster-health.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $$vf
 
 .PHONY: check-security
 check-security:
@@ -678,7 +682,7 @@ check-security:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	"$(STACK_DIR)/scripts/check-security.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $$vf
 
 .PHONY: check-gateway-stack
 check-gateway-stack:
@@ -904,6 +908,9 @@ prereqs:
 	required=(curl docker git jq kind kubectl ssh terragrunt tofu yq); \
 	optional=(bats bun cilium helm hubble kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \
 	recommended_test_tools=(bun node npm npx); \
+	if [ "$$stage_num" -ge 900 ]; then \
+		required+=("$${recommended_test_tools[@]}"); \
+	fi; \
 	missing_required=(); \
 	missing_recommended=(); \
 	is_required() { \
@@ -961,7 +968,7 @@ prereqs:
 	fi; \
 	if [ $${#missing_recommended[@]} -gt 0 ]; then \
 		echo ""; \
-		echo "Recommended browser/E2E test tools missing: $${missing_recommended[*]}"; \
+		echo "Recommended browser/E2E test tools missing for stages below 900: $${missing_recommended[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
 		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \

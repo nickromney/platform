@@ -33,10 +33,20 @@ Core tools:
 brew install jq kind kubernetes-cli make opentofu terragrunt
 ```
 
+Browser/E2E tools:
+
+```bash
+brew install bun node
+```
+
+`make -C kubernetes/kind 900 apply` runs `check-sso-e2e` before it returns
+success, so `bun` and `node` are part of the practical stage-900 toolchain.
+`node` provides `npm` and `npx`; Playwright stays project-local in the repo.
+
 Optional tools:
 
 ```bash
-brew install bun cilium-cli helm hubble kubectx kubie kyverno mkcert node yamllint yq
+brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yamllint yq
 mkcert -install
 ```
 

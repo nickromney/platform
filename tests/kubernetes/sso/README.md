@@ -8,6 +8,8 @@ By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTI
 When `enable_victoria_logs=true` in the active stage tfvars, the Grafana smoke path also verifies the `victorialogs` datasource/plugin and the `platform-logs` dashboard.
 The target-specific `check-sso-e2e` wrappers no longer repair Slicer/Lima k3s apiserver OIDC settings before the browser run.
 If you are testing an older Slicer or Lima cluster, rerun `900 apply` first or invoke that target's `configure-k3s-apiserver-oidc` command manually.
+The repo uses project-local Playwright from `@playwright/test`; no global
+`playwright` install is expected.
 
 ## Setup
 
@@ -16,6 +18,17 @@ cd tests/kubernetes/sso
 bun install
 bun x playwright install chromium
 ```
+
+Required local tooling:
+
+- `bun`
+- `node` (which provides `npm` and `npx`)
+
+The devcontainer image bakes the Linux Chromium runtime libraries already, so
+the container only needs the project-local browser download above.
+When `PLATFORM_DEVCONTAINER=1`, the runner also maps the shared
+`*.127.0.0.1.sslip.io` browser URLs back to the host gateway automatically so
+the same public origins work from inside the container.
 
 ## Run
 

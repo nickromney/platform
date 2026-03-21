@@ -46,6 +46,24 @@ variable "kubeconfig_context" {
   default     = ""
 }
 
+variable "platform_devcontainer" {
+  description = "Whether Terraform is running inside the host-socket devcontainer, where kind loopback endpoints must be rewritten to the host alias."
+  type        = bool
+  default     = false
+}
+
+variable "devcontainer_host_alias" {
+  description = "Host alias used from inside the devcontainer to reach host-bound kind services."
+  type        = string
+  default     = "host.docker.internal"
+}
+
+variable "devcontainer_tls_server_name" {
+  description = "TLS server name to retain when rewriting kind kubeconfig endpoints for the devcontainer."
+  type        = string
+  default     = "localhost"
+}
+
 # -----------------------------------------------------------------------------
 # Feature toggles (stage-driven)
 # -----------------------------------------------------------------------------

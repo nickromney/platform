@@ -255,6 +255,11 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   triggers = {
     script_sha          = filesha256(abspath("${path.module}/scripts/configure-kind-apiserver-oidc.sh"))
     gateway_service_uid = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
+    cluster_name        = var.cluster_name
+    dex_host            = "dex.127.0.0.1.sslip.io"
+    oidc_client_id      = "headlamp"
+    oidc_issuer_url     = local.dex_public_url
+    mkcert_ca_dest      = "/etc/kubernetes/pki/mkcert-rootCA.pem"
   }
 
   provisioner "local-exec" {

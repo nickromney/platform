@@ -34,6 +34,7 @@ resource "helm_release" "argocd" {
     kind_cluster.local,
     local_sensitive_file.kubeconfig,
     helm_release.cilium,
+    null_resource.kind_storage,
     kubernetes_namespace_v1.argocd,
   ]
 }
