@@ -89,3 +89,10 @@ setup() {
   [[ "${output}" == *"Install hints:"* ]]
   [[ "${output}" != *"Shell audit:"* ]]
 }
+
+@test "lima prereqs keeps kyverno in the optional host tool inventory" {
+  run grep -Fn 'optional=(bats bun cilium helm k3sup-pro kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}

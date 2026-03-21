@@ -337,7 +337,7 @@ prereqs:
 	if [ "$$use_local_slicer_mac" = "1" ]; then \
 		required+=(slicer-mac); \
 	fi; \
-	optional=(bats bun helm kubectx kubie mkcert node npm npx shellcheck); \
+	optional=(bats bun cilium helm kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \
 	recommended_test_tools=(bun node npm npx); \
 	missing_required=(); \
 	missing_recommended=(); \

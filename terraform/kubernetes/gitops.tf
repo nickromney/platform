@@ -1028,113 +1028,6 @@ data "external" "gitea_ssh_public_keys_cluster" {
   ]
 }
 
-resource "null_resource" "gitea_known_hosts_cluster" {
-  count = local.enable_gitops_repo ? 1 : 0
-
-  triggers = {
-    # Re-run if the cluster identity changes (kind reset/recreate or kubeconfig/context switch).
-    cluster_id       = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
-    host             = local.gitea_ssh_host_cluster
-    port             = tostring(local.gitea_ssh_port_cluster)
-    gitea_ns_uid     = kubernetes_namespace_v1.gitea[0].metadata[0].uid
-    ssh_pubkeys_sha1 = data.external.gitea_ssh_public_keys_cluster[0].result.keys_sha1
-    script_v         = "11"
-  }
-
-  provisioner "local-exec" {
-    command     = <<EOT
-set -euo pipefail
-mkdir -p "${local.run_dir}"
-
-HOST="${local.gitea_ssh_host_cluster}"
-PORT="${local.gitea_ssh_port_cluster}"
-OUT_TMP="${local.run_dir}/.gitea_known_hosts_cluster.tmp"
-RAW="${local.run_dir}/.gitea_known_hosts_cluster.raw"
-GITEA_NS="${kubernetes_namespace_v1.gitea[0].metadata[0].name}"
-GITEA_SVC="gitea-ssh"
-GITEA_SSH_KEYS_B64="${data.external.gitea_ssh_public_keys_cluster[0].result.keys_b64}"
-
-require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
-require_cmd kubectl
-require_cmd base64
-
-decode_base64() {
-  if base64 --help 2>&1 | grep -q -- '--decode'; then
-    base64 --decode
-  else
-    base64 -D
-  fi
-}
-
-CLUSTER_IP="$(kubectl -n "$GITEA_NS" get svc "$GITEA_SVC" -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
-HOSTS_FILE="${local.run_dir}/.gitea_known_hosts_cluster.hosts"
-printf '%s\n' "$HOST" > "$HOSTS_FILE"
-if [ -n "$CLUSTER_IP" ] && [ "$CLUSTER_IP" != "None" ]; then
-  printf '%s\n' "$CLUSTER_IP" >> "$HOSTS_FILE"
-fi
-
-printf '%s' "$GITEA_SSH_KEYS_B64" | decode_base64 > "$RAW"
-
-if ! grep -E '^ssh-' "$RAW" >/dev/null 2>&1; then
-  echo "Gitea SSH public key payload contained no host key lines" >&2
-  rm -f "$HOSTS_FILE" "$RAW" 2>/dev/null || true
-  exit 1
-fi
-
-KEYS_FILE="${local.run_dir}/.gitea_known_hosts_cluster.keys"
-: > "$KEYS_FILE"
-
-# Some Argo CD / go-git SSH paths verify against the resolved address, not the original host.
-# Emit known_hosts entries for both the service DNS name and its ClusterIP.
-while IFS= read -r h; do
-  [ -n "$h" ] || continue
-  while IFS= read -r key_line; do
-    [ -n "$key_line" ] || continue
-    echo "$h $key_line" >> "$KEYS_FILE"
-  done < <(grep -E '^ssh-' "$RAW")
-done < "$HOSTS_FILE"
-
-# ArgoCD treats explicit ports as part of the host identity for ssh:// URLs.
-# Emit both formats for every key line returned by ssh-keyscan.
-: > "$OUT_TMP"
-while IFS= read -r key_line; do
-  key_host="$(echo "$key_line" | awk '{print $1}')"
-  echo "$key_line" >> "$OUT_TMP"
-  echo "$key_line" | sed "s/^$key_host /[$key_host]:$PORT /" >> "$OUT_TMP"
-done < "$KEYS_FILE"
-
-mv "$OUT_TMP" "${local.gitea_known_hosts_cluster_path}"
-rm -f "$HOSTS_FILE" 2>/dev/null || true
-rm -f "$KEYS_FILE" 2>/dev/null || true
-rm -f "$RAW" 2>/dev/null || true
-exit 0
-
-EOT
-    interpreter = ["/bin/bash", "-c"]
-    environment = {
-      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
-      GITEA_SSH_NODE_PORT     = tostring(var.gitea_ssh_node_port)
-      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
-      KUBECONFIG              = local.kubeconfig_path_expanded
-      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
-    }
-  }
-
-  depends_on = [
-    kubectl_manifest.argocd_app_gitea,
-    local_sensitive_file.kubeconfig,
-    data.external.gitea_ssh_public_keys_cluster,
-  ]
-}
-
-data "local_file" "gitea_known_hosts_cluster" {
-  count    = local.enable_gitops_repo ? 1 : 0
-  filename = local.gitea_known_hosts_cluster_path
-  depends_on = [
-    null_resource.gitea_known_hosts_cluster,
-  ]
-}
-
 data "kubernetes_config_map_v1" "argocd_ssh_known_hosts_cm" {
   count = local.enable_gitops_repo ? 1 : 0
 
@@ -1149,9 +1042,27 @@ data "kubernetes_config_map_v1" "argocd_ssh_known_hosts_cm" {
 }
 
 locals {
-  argocd_ssh_known_hosts_base = local.enable_gitops_repo ? try(data.kubernetes_config_map_v1.argocd_ssh_known_hosts_cm[0].data["ssh_known_hosts"], "") : ""
+  gitea_ssh_public_key_lines = local.enable_gitops_repo ? compact(split("\n", trimspace(base64decode(data.external.gitea_ssh_public_keys_cluster[0].result.keys_b64)))) : []
+  gitea_known_hosts_cluster_hosts = local.enable_gitops_repo ? distinct(compact(concat(
+    [local.gitea_ssh_host_cluster],
+    [
+      for host in [try(data.external.gitea_ssh_public_keys_cluster[0].result.cluster_ip, "")] :
+      trimspace(host)
+      if trimspace(host) != "" && trimspace(host) != "None"
+    ]
+  ))) : []
+  gitea_known_hosts_cluster_lines = local.enable_gitops_repo ? distinct(flatten([
+    for host in local.gitea_known_hosts_cluster_hosts : [
+      for key_line in local.gitea_ssh_public_key_lines : [
+        "${host} ${trimspace(key_line)}",
+        "[${host}]:${local.gitea_ssh_port_cluster} ${trimspace(key_line)}",
+      ]
+    ]
+  ])) : []
+  gitea_known_hosts_cluster_content = local.enable_gitops_repo ? format("%s\n", join("\n", local.gitea_known_hosts_cluster_lines)) : ""
+  argocd_ssh_known_hosts_base       = local.enable_gitops_repo ? try(data.kubernetes_config_map_v1.argocd_ssh_known_hosts_cm[0].data["ssh_known_hosts"], "") : ""
   argocd_ssh_known_hosts_gitea_hosts = local.enable_gitops_repo ? distinct([
-    for line in compact(split("\n", trimspace(data.local_file.gitea_known_hosts_cluster[0].content))) :
+    for line in compact(split("\n", trimspace(local.gitea_known_hosts_cluster_content))) :
     split(" ", trimspace(line))[0]
   ]) : []
   argocd_ssh_known_hosts_base_filtered = local.enable_gitops_repo ? [
@@ -1166,7 +1077,7 @@ locals {
       "\n",
       distinct(concat(
         local.argocd_ssh_known_hosts_base_filtered,
-        compact(split("\n", trimspace(data.local_file.gitea_known_hosts_cluster[0].content))),
+        compact(split("\n", trimspace(local.gitea_known_hosts_cluster_content))),
       )),
     ),
   ) : ""
@@ -1189,8 +1100,6 @@ resource "kubernetes_config_map_v1_data" "argocd_ssh_known_hosts_cm" {
   depends_on = [
     helm_release.argocd,
     data.kubernetes_config_map_v1.argocd_ssh_known_hosts_cm,
-    null_resource.gitea_known_hosts_cluster,
-    data.local_file.gitea_known_hosts_cluster,
   ]
 }
 
@@ -1199,13 +1108,13 @@ resource "null_resource" "argocd_repo_server_restart" {
 
   triggers = {
     cluster_id       = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
-    gitea_host_key   = sha1(data.local_file.gitea_known_hosts_cluster[0].content)
+    gitea_host_key   = sha1(local.gitea_known_hosts_cluster_content)
     argocd_chart_ver = var.argocd_chart_version
     known_hosts_hash = sha1(local.argocd_ssh_known_hosts_merged)
     repo_secret_hash = sha1(join("\n", [
       local.policies_repo_url_cluster,
       tls_private_key.policies_repo[0].private_key_openssh,
-      data.local_file.gitea_known_hosts_cluster[0].content,
+      local.gitea_known_hosts_cluster_content,
     ]))
     restart_script_ver = "6"
   }
@@ -1215,6 +1124,11 @@ resource "null_resource" "argocd_repo_server_restart" {
 set -euo pipefail
 export KUBECONFIG="${local.kubeconfig_path_expanded}"
 KNOWN_HOSTS_FILE="${local.gitea_known_hosts_cluster_path}"
+mkdir -p "$(dirname "$KNOWN_HOSTS_FILE")"
+cat >"$KNOWN_HOSTS_FILE" <<'EOF_KNOWN_HOSTS'
+${local.gitea_known_hosts_cluster_content}
+EOF_KNOWN_HOSTS
+trap 'rm -f "$KNOWN_HOSTS_FILE"' EXIT
 
 # The Kubernetes provider state can drift from the live, Helm-owned ConfigMap.
 # Patch the live ConfigMap explicitly from the generated Gitea host key file, then
@@ -1364,7 +1278,6 @@ EOT
   depends_on = [
     helm_release.argocd,
     kubernetes_config_map_v1_data.argocd_ssh_known_hosts_cm,
-    data.local_file.gitea_known_hosts_cluster,
     kubernetes_secret_v1.argocd_repo_policies,
     kubernetes_secret_v1.argocd_repo_creds_gitea_ssh,
   ]
@@ -1686,15 +1599,13 @@ resource "kubernetes_secret_v1" "argocd_repo_policies" {
     type          = "git"
     url           = local.policies_repo_url_cluster
     sshPrivateKey = tls_private_key.policies_repo[0].private_key_openssh
-    sshKnownHosts = data.local_file.gitea_known_hosts_cluster[0].content
+    sshKnownHosts = local.gitea_known_hosts_cluster_content
     insecure      = "false"
   }
 
   depends_on = [
     kubernetes_namespace_v1.argocd,
     helm_release.argocd,
-    null_resource.gitea_known_hosts_cluster,
-    data.local_file.gitea_known_hosts_cluster,
     kubernetes_config_map_v1_data.argocd_ssh_known_hosts_cm,
   ]
 }
@@ -1714,15 +1625,13 @@ resource "kubernetes_secret_v1" "argocd_repo_creds_gitea_ssh" {
     type          = "git"
     url           = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/"
     sshPrivateKey = tls_private_key.policies_repo[0].private_key_openssh
-    sshKnownHosts = data.local_file.gitea_known_hosts_cluster[0].content
+    sshKnownHosts = local.gitea_known_hosts_cluster_content
     insecure      = "false"
   }
 
   depends_on = [
     kubernetes_namespace_v1.argocd,
     helm_release.argocd,
-    null_resource.gitea_known_hosts_cluster,
-    data.local_file.gitea_known_hosts_cluster,
     kubernetes_config_map_v1_data.argocd_ssh_known_hosts_cm,
   ]
 }

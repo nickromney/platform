@@ -1,0 +1,19 @@
+extends: default
+
+ignore: |
+  .git/
+  .run/
+  **/.run/
+  **/node_modules/
+  **/.venv/
+  **/.terraform/
+  terraform/kubernetes/apps/nginx-gateway-fabric-crds/*.yaml
+  terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml
+  terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml
+  terraform/kubernetes/apps/workloads/base/llm-direct.yaml
+  terraform/kubernetes/apps/workloads/base/llm-litellm.yaml
+
+rules:
+  document-start: disable
+  truthy: disable
+  line-length: disable

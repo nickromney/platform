@@ -15,7 +15,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/brew"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain k3sup-pro docker jq kubie
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain k3sup-pro docker jq kubie kyverno yamllint
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"Install hints for"* ]]
@@ -23,6 +23,8 @@ EOF
   [[ "${output}" == *"docker: brew install --cask docker"* ]]
   [[ "${output}" == *"jq: brew install jq"* ]]
   [[ "${output}" == *"kubie: brew install kubie"* ]]
+  [[ "${output}" == *"kyverno: brew install kyverno"* ]]
+  [[ "${output}" == *"yamllint: brew install yamllint"* ]]
 }
 
 @test "install-tool-hints prefers apt on Linux when brew and arkade are absent" {
@@ -50,13 +52,14 @@ esac
 EOF
   chmod +x "${TEST_BIN}/uname"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain docker jq node npx
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain docker jq node npx yamllint
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"docker: sudo apt-get update && sudo apt-get install -y docker.io"* ]]
   [[ "${output}" == *"jq: sudo apt-get update && sudo apt-get install -y jq"* ]]
   [[ "${output}" == *"node: sudo apt-get update && sudo apt-get install -y nodejs npm"* ]]
   [[ "${output}" == *"npx: sudo apt-get update && sudo apt-get install -y nodejs npm"* ]]
+  [[ "${output}" == *"yamllint: sudo apt-get update && sudo apt-get install -y yamllint"* ]]
 }
 
 @test "install-tool-hints prefers arkade for kubie when arkade is available" {

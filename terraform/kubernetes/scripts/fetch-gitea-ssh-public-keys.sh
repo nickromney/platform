@@ -46,12 +46,20 @@ for attempt in $(seq 1 30); do
   )"
   keys="$(printf '%s\n' "${raw}" | grep -E '^ssh-' || true)"
   if [[ -n "${keys}" ]]; then
+    cluster_ip="$(
+      kubectl "${kubectl_args[@]}" -n "${gitea_namespace}" get svc gitea-ssh \
+        -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true
+    )"
+    if [[ "${cluster_ip}" == "None" ]]; then
+      cluster_ip=""
+    fi
     keys_b64="$(printf '%s\n' "${keys}" | base64 | tr -d '\n')"
     keys_sha1="$(printf '%s\n' "${keys}" | shasum -a 1 | awk '{print $1}')"
     jq -n \
+      --arg cluster_ip "${cluster_ip}" \
       --arg keys_b64 "${keys_b64}" \
       --arg keys_sha1 "${keys_sha1}" \
-      '{keys_b64:$keys_b64,keys_sha1:$keys_sha1}'
+      '{cluster_ip:$cluster_ip,keys_b64:$keys_b64,keys_sha1:$keys_sha1}'
     exit 0
   fi
   if [[ "${attempt}" -lt 30 ]]; then

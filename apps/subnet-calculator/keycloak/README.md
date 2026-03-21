@@ -65,7 +65,7 @@ This directory contains configuration for running a complete OAuth2/OIDC authent
 2. **Access the application:**
    - React Frontend: <http://localhost:3006>
    - API Documentation: <http://localhost:8081/api/v1/docs>
-   - Keycloak Admin: <http://localhost:8180> (demo@admin.test / demo-password)
+   - Keycloak Admin: <http://localhost:8180> (<demo@admin.test> / demo-password)
 
 3. **Test users:**
    - Username: `demo@dev.test`, Password: `demo-password`
@@ -79,7 +79,7 @@ When you access <http://localhost:3006>:
 
 1. React app checks if you're authenticated
 2. If not, redirects to Keycloak login page
-3. You enter credentials (demo@dev.test / demo-password)
+3. You enter credentials (<demo@dev.test> / demo-password)
 4. Keycloak validates and returns authorization code
 5. React app exchanges code for access token using PKCE
 6. Token is stored securely in browser localStorage
@@ -133,8 +133,8 @@ The realm is pre-configured via `realm-export.json` with:
 
 | Username | Password     | Roles       | Email               |
 |----------|--------------|-------------|---------------------|
-| demo@dev.test   | demo-password  | user        | <demo@dev.test>     |
-| demo@admin.test | demo-password  | admin, user | <demo@admin.test>   |
+| <demo@dev.test>   | demo-password  | user        | <demo@dev.test>     |
+| <demo@admin.test> | demo-password  | admin, user | <demo@admin.test>   |
 
 ## Security Warning
 
@@ -184,7 +184,7 @@ VITE_OIDC_REDIRECT_URI=http://localhost:3006
 
 Access the admin console at <http://localhost:8180>
 
-**Login:** demo@admin.test / demo-password
+**Login:** <demo@admin.test> / demo-password
 
 ### Common Admin Tasks
 

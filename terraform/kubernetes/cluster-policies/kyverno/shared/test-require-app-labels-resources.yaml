@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: good-app
+  namespace: app-demo
+  labels:
+    app: demo
+    tier: frontend
+    project: kindlocal
+    team: dolphin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: demo
+        tier: frontend
+        project: kindlocal
+        team: dolphin
+    spec:
+      containers:
+        - name: app
+          image: quay.io/curl/curl:8.12.1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-app
+  namespace: app-demo
+  labels:
+    app: demo
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: demo
+        tier: frontend
+    spec:
+      containers:
+        - name: app
+          image: quay.io/curl/curl:8.12.1

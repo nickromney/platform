@@ -36,7 +36,7 @@ brew install jq kind kubernetes-cli make opentofu terragrunt
 Optional tools:
 
 ```bash
-brew install bun cilium-cli helm hubble kubectx kubie mkcert node yq
+brew install bun cilium-cli helm hubble kubectx kubie kyverno mkcert node yamllint yq
 mkcert -install
 ```
 
