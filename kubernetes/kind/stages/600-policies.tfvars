@@ -6,7 +6,7 @@ kubeconfig_context   = "kind-kind-local"
 kind_config_path     = "./kind-config.yaml"
 kind_api_server_port = 6443
 worker_count         = 1
-node_image           = "kindest/node:v1.35.0"
+node_image           = "kindest/node:v1.35.1"
 
 enable_image_preload          = true
 cni_provider                  = "cilium"

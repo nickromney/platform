@@ -64,9 +64,16 @@ Gitea access for repo/admin bootstrap is established on demand with
   last step".
 - Stage `100` is the bootstrap boundary. It creates or starts the Lima VM(s),
   installs k3s with `k3sup`, and writes `~/.kube/limavm-k3s.yaml`.
+- The repo-owned kubeconfig stays split by default. Use `kubie` across
+  `~/.kube/*.yaml`, and only run `make -C kubernetes/lima merge-default-kubeconfig`
+  if you intentionally want `limavm-k3s` copied into `~/.kube/config`.
 - Stage `900` now also configures the Lima k3s apiserver to trust Dex-issued
   Headlamp tokens, so a fresh `900 apply` leaves Headlamp login-ready without a
   separate repair step.
+- Stage `900` is the confidence path when you drive it through `make`. A
+  successful `make -C kubernetes/lima 900 apply` now also runs `check-health`
+  and `check-sso-e2e` before returning success. Raw Terragrunt/OpenTofu applies
+  remain apply-only.
 - Stages `200+` reuse the shared Terraform platform root. The Lima target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
   mounts, the in-cluster actions runner, and Cilium WireGuard.

@@ -8,7 +8,7 @@ include "root" {
 inputs = {
   cluster_name          = "kind-local"
   worker_count          = 1
-  node_image            = "kindest/node:v1.35.0"
+  node_image            = "kindest/node:v1.35.1"
   kind_api_server_port  = 6443
   kind_config_path      = "${get_terragrunt_dir()}/kind-config.yaml"
   kubeconfig_path       = pathexpand("~/.kube/kind-kind-local.yaml")

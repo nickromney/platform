@@ -17,7 +17,7 @@ default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-${HOME}/.kube/config}"
 k3s_version="${K3S_VERSION:-}"
 k3s_channel="${K3S_CHANNEL:-stable}"
 server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb}"
-merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-1}"
+merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-0}"
 swap_size="${SLICER_SWAP_SIZE:-4G}"
 allow_existing_k3s="${SLICER_ALLOW_EXISTING_K3S:-0}"
 image_list_file="${IMAGE_LIST_FILE:-}"
@@ -191,6 +191,14 @@ fix_vm_dns() {
   fi
 }
 
+remove_context_from_default_kubeconfig() {
+  [ -e "${default_kubeconfig_path}" ] || return 0
+  [ -x "${kubeconfig_helper}" ] || return 0
+
+  "${kubeconfig_helper}" ensure-valid "${default_kubeconfig_path}"
+  "${kubeconfig_helper}" delete-context "${default_kubeconfig_path}" "${k3sup_context}" "${k3sup_context}" "${k3sup_context}" 0
+}
+
 refresh_kubeconfig() {
   local vm_ip="$1"
   local tmp_path="${kubeconfig_path}.tmp"
@@ -231,6 +239,8 @@ refresh_kubeconfig() {
         fi
       fi
       kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
+    else
+      remove_context_from_default_kubeconfig
     fi
   fi
 }

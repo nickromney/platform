@@ -35,6 +35,7 @@ AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
+MERGE_KUBECONFIG_TO_DEFAULT ?= 0
 SLICER_SYSTEM_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
 SLICER_SOCKET ?= $(SLICER_SYSTEM_SOCKET)
 SLICER_CONFIG ?= $(HOME)/slicer-mac/slicer-mac.yaml
@@ -107,7 +108,7 @@ VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -115,6 +116,7 @@ include ../../mk/stage-workflow.mk
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+export MERGE_KUBECONFIG_TO_DEFAULT
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
 export PLATFORM_ADMIN_PASSWORD
@@ -132,6 +134,9 @@ export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
 ifeq ($(filter $(SLICER_NETWORK_PROFILE),$(VALID_SLICER_NETWORK_PROFILES)),)
 $(error Invalid SLICER_NETWORK_PROFILE="$(SLICER_NETWORK_PROFILE)". Expected one of: $(VALID_SLICER_NETWORK_PROFILES))
+endif
+ifeq ($(filter $(MERGE_KUBECONFIG_TO_DEFAULT),0 1),)
+$(error Invalid MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)". Expected one of: 0 1)
 endif
 ifeq ($(filter $(SLICER_HOST_FORWARDS_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid SLICER_HOST_FORWARDS_MODE="$(SLICER_HOST_FORWARDS_MODE)". Expected one of: $(VALID_HELPER_MODES))
@@ -208,6 +213,7 @@ help:
 	@echo "  make ensure-image-cache"
 	@echo "  make gitea-sync"
 	@echo "  make launchpad-render"
+	@echo "  make merge-default-kubeconfig"
 	@echo "  make plan         100|200|300|...|900"
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
@@ -238,7 +244,7 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"
-	@echo "  slicer -> $(KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo "  slicer -> $(KUBECONFIG_PATH) (split by default; merge explicitly into $(DEFAULT_KUBECONFIG_PATH) if needed)"
 	@echo ""
 	@echo "Networking profiles:"
 	@echo "  SLICER_NETWORK_PROFILE=cilium  -> k3s with flannel disabled, then stages 200/300 add Cilium/Hubble"
@@ -251,6 +257,7 @@ help:
 	@echo "  Docker-only hosts       -> use ../kind (Slicer is optional, not the teaching path)"
 	@echo ""
 	@echo "Local helper modes:"
+	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(KUBECONFIG_PATH) into $(DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
 	@echo "  SLICER_ALLOW_EXISTING_K3S=1                          -> let stage 100 reuse an existing k3s install and only refresh kubeconfig"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
@@ -292,7 +299,14 @@ check-kubeconfig:
 	target_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
 	target_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$target_current" ] || target_current="<none>"; \
-	echo "OK   slicer kubeconfig: $(KUBECONFIG_PATH) ($$target_count context(s), current=$$target_current)"
+	echo "OK   slicer kubeconfig: $(KUBECONFIG_PATH) ($$target_count context(s), current=$$target_current)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" lint || true)"; \
+	if [ -n "$$kubie_lint_output" ]; then \
+		echo "WARN kubie lint:"; \
+		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
+	elif command -v kubie >/dev/null 2>&1; then \
+		echo "OK   kubie lint"; \
+	fi
 
 .PHONY: check-host-ports
 check-host-ports:
@@ -323,13 +337,25 @@ prereqs:
 	if [ "$$use_local_slicer_mac" = "1" ]; then \
 		required+=(slicer-mac); \
 	fi; \
-	optional=(bats helm kubectx mkcert node npm shellcheck); \
+	optional=(bats bun helm kubectx kubie mkcert node npm npx shellcheck); \
+	recommended_test_tools=(bun node npm npx); \
 	missing_required=(); \
+	missing_recommended=(); \
 	is_required() { \
 		local target="$$1"; \
 		local req=""; \
 		for req in "$${required[@]}"; do \
 			if [ "$$req" = "$$target" ]; then \
+				return 0; \
+			fi; \
+		done; \
+		return 1; \
+	}; \
+	is_recommended() { \
+		local target="$$1"; \
+		local recommended=""; \
+		for recommended in "$${recommended_test_tools[@]}"; do \
+			if [ "$$recommended" = "$$target" ]; then \
 				return 0; \
 			fi; \
 		done; \
@@ -347,6 +373,9 @@ prereqs:
 			missing_required+=("$$bin"); \
 		else \
 			echo "WARN $$bin (missing, optional)"; \
+			if is_recommended "$$bin"; then \
+				missing_recommended+=("$$bin"); \
+			fi; \
 		fi; \
 	}; \
 	sorted_tools=($$(printf '%s\n' "$${required[@]}" "$${optional[@]}" | LC_ALL=C sort -u)); \
@@ -377,6 +406,13 @@ prereqs:
 		echo "Install hints:"; \
 		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
+	fi; \
+	if [ $${#missing_recommended[@]} -gt 0 ]; then \
+		echo ""; \
+		echo "Recommended browser/E2E test tools missing: $${missing_recommended[*]}"; \
+		echo ""; \
+		echo "Install hints:"; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
 	fi; \
 	echo ""; \
 	echo "Docker daemon verification:"; \
@@ -466,6 +502,7 @@ bootstrap-k3s:
 	K3S_CHANNEL="$(K3S_CHANNEL)" \
 	K3S_SERVER_EXTRA_ARGS="$(K3S_SERVER_EXTRA_ARGS)" \
 	KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" \
+	MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" \
 	SLICER_SWAP_SIZE="$(SLICER_SWAP_SIZE)" \
 	IMAGE_LIST_FILE="$(preload_images_file)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
@@ -512,6 +549,14 @@ ensure-host-forwards:
 	else \
 		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
 	fi
+
+.PHONY: merge-default-kubeconfig
+merge-default-kubeconfig:
+	@set -euo pipefail; \
+	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" merge "$(KUBECONFIG_PATH)" "$(DEFAULT_KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
+	echo "OK   merged $(KUBECONFIG_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 stop-host-forwards:
 	@set -euo pipefail; \
@@ -878,6 +923,7 @@ apply: workflow-validate
 	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
 		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
 		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+		run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 	fi
 
 .PHONY: check-health

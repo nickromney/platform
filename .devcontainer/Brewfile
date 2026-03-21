@@ -1,0 +1,7 @@
+brew "bats-core"
+brew "neovim"
+brew "node@24"
+brew "shellcheck"
+brew "starship"
+brew "step"
+brew "uv"

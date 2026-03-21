@@ -26,7 +26,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  printf 'quay.io/argoproj/argocd:v3.3.2\n' >"${IMAGE_LIST_FILE}"
+  printf 'quay.io/argoproj/argocd:v3.3.4\n' >"${IMAGE_LIST_FILE}"
 
   run env OPTIONAL=1 IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" "${SCRIPT}"
 
@@ -71,11 +71,11 @@ esac
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  printf 'python:3.13-slim\nquay.io/argoproj/argocd:v3.3.2\n' >"${IMAGE_LIST_FILE}"
+  printf 'python:3.13-slim\nquay.io/argoproj/argocd:v3.3.4\n' >"${IMAGE_LIST_FILE}"
 
   run env IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" LOG_FILE="${LOG_FILE}" "${SCRIPT}"
 
   [ "${status}" -eq 0 ]
   grep -F 'tag python:3.13-slim 127.0.0.1:5002/library/python:3.13-slim' "${LOG_FILE}"
-  grep -F 'tag quay.io/argoproj/argocd:v3.3.2 127.0.0.1:5002/argoproj/argocd:v3.3.2' "${LOG_FILE}"
+  grep -F 'tag quay.io/argoproj/argocd:v3.3.4 127.0.0.1:5002/argoproj/argocd:v3.3.4' "${LOG_FILE}"
 }

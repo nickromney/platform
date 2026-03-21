@@ -10,6 +10,7 @@ kubeconfig_helper="${KUBECONFIG_HELPER:-${repo_root}/terraform/kubernetes/script
 k3sup_context="${K3SUP_CONTEXT:-limavm-k3s}"
 kubeconfig_path="${KUBECONFIG_PATH:-$HOME/.kube/${k3sup_context}.yaml}"
 default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-$HOME/.kube/config}"
+merge_kubeconfig_to_default="${MERGE_KUBECONFIG_TO_DEFAULT:-0}"
 k3s_channel="${K3S_CHANNEL:-stable}"
 k3s_version="${K3S_VERSION:-}"
 server_extra_args="${K3S_SERVER_EXTRA_ARGS:---flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb}"
@@ -260,6 +261,28 @@ merge_kubeconfig_into_default() {
   kubectl config use-context "$k3sup_context" --kubeconfig "$target_kubeconfig" >/dev/null 2>&1 || true
 }
 
+remove_kubeconfig_from_default() {
+  local target_kubeconfig="$1"
+
+  [ -e "$target_kubeconfig" ] || return 0
+  [ -x "$kubeconfig_helper" ] || return 0
+
+  "$kubeconfig_helper" ensure-valid "$target_kubeconfig"
+  "$kubeconfig_helper" delete-context "$target_kubeconfig" "$k3sup_context" "$k3sup_context" "$k3sup_context" 0
+}
+
+reconcile_default_kubeconfig() {
+  local source_kubeconfig="$1"
+  local target_kubeconfig="$2"
+
+  if [ "$merge_kubeconfig_to_default" = "1" ]; then
+    merge_kubeconfig_into_default "$source_kubeconfig" "$target_kubeconfig"
+    return 0
+  fi
+
+  remove_kubeconfig_from_default "$target_kubeconfig"
+}
+
 write_kubeconfig_from_server() {
   local node_name="$1"
   local api_host="$2"
@@ -333,7 +356,7 @@ if [ "$(get_k3s_status "$server_node")" = "active" ]; then
       echo "Could not refresh kubeconfig from ${server_node}" >&2
       exit 1
     fi
-    merge_kubeconfig_into_default "$kubeconfig_path" "$default_kubeconfig_path"
+    reconcile_default_kubeconfig "$kubeconfig_path" "$default_kubeconfig_path"
     echo "kubeconfig updated: KUBECONFIG=${kubeconfig_path}"
     kubectl get nodes -o wide --kubeconfig "$kubeconfig_path" 2>/dev/null || true
     exit 0
@@ -414,7 +437,7 @@ if ! write_kubeconfig_from_server "$server_node" "$server_connect_host"; then
   exit 1
 fi
 
-merge_kubeconfig_into_default "$kubeconfig_path" "$default_kubeconfig_path"
+reconcile_default_kubeconfig "$kubeconfig_path" "$default_kubeconfig_path"
 
 echo "k3s cluster bootstrapped. KUBECONFIG=${kubeconfig_path}"
 kubectl get nodes -o wide --kubeconfig "$kubeconfig_path" 2>/dev/null || true

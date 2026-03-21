@@ -1,0 +1,213 @@
+# Get editor completions based on the config schema
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Inserts a blank line between shell prompts
+add_newline = true
+
+format = """
+$kubernetes\
+$directory\
+$git_branch\
+$git_commit\
+$git_state\
+$git_metrics\
+$git_status\
+$docker_context\
+$package\
+$helm\
+$nodejs\
+$pulumi\
+$ruby\
+$terraform\
+$vagrant\
+$memory_usage\
+$aws\
+$azure\
+$direnv\
+$env_var\
+$custom\
+$sudo\
+$cmd_duration\
+$line_break\
+$jobs\
+$battery\
+$time\
+$status\
+$os\
+$container\
+$shell\
+$character"""
+
+# right_format = """\
+# $battery
+# $nodejs
+# """
+
+[aws]
+format = '[$symbol($region)]($style) '
+symbol = "aws "
+style = 'yellow bold'
+disabled = false
+
+[azure]
+format = '[$symbol($subscription)]($style) '
+symbol = "az "
+style = 'blue bold'
+disabled = false
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[x](bold red)"
+vicmd_symbol = "[<](bold green)"
+
+[fill]
+symbol = '-'
+style = 'bold green'
+
+[git_branch]
+symbol = "git "
+
+[package]
+disabled = true
+
+[battery]
+full_symbol = "🔋"
+charging_symbol = "🔌"
+discharging_symbol = "⚡"
+
+[directory]
+truncation_length = 3
+truncate_to_repo = false
+fish_style_pwd_dir_length = 0
+use_logical_path = false
+format = '[$path]($style) [$read_only]($read_only_style)'
+style = 'fg:85 bold'
+disabled = false
+read_only = ''
+read_only_style = 'red'
+truncation_symbol = '.../'
+home_symbol = '~'
+
+[docker_context]
+symbol = '🐳 '
+style = 'blue bold'
+format = 'via [$symbol$context]($style) '
+only_with_files = true
+disabled = false
+detect_extensions = []
+detect_files = ['docker-compose.yml', 'docker-compose.yaml', 'Dockerfile']
+detect_folders = []
+
+[[battery.display]]
+threshold = 30
+style = "bold red"
+
+[git_commit]
+commit_hash_length = 8
+style = "bold white"
+
+
+[git_status]
+ahead = "↑${count} "
+behind = "↓${count} "
+diverged = "↕${ahead_count} ${behind_count}"
+untracked = ""
+modified = "!${count} "
+conflicted = "≠${count} "
+staged = "✓${count} "
+stashed = "*${count} "
+style = "bright-white"
+ignore_submodules = true
+format = """\
+[$ahead_behind](bold green)\
+[$stashed](bold green)\
+[$behind_behind](bold red)\
+[$diverged](bold yellow)\
+[$conflicted](bold red)\
+[$modified](bold blue)\
+[$untracked](bold cyan)\
+[$staged](bold green)\
+"""
+
+[kubernetes]
+format = '[$symbol$context( \($namespace\))]($style) '
+style = 'cyan bold'
+disabled = true
+
+[hostname]
+format = '([$ssh_symbol]($style)[$hostname]($style)) in '
+ssh_only = false
+ssh_symbol = "🌐 "
+trim_at = ""
+style = "bold yellow"
+disabled = true
+
+[username]
+show_always = false
+style_user = "bold yellow"
+format = "[$user]($style) @"
+
+[shell]
+disabled = false
+bash_indicator = "bash"
+powershell_indicator = "powershell"
+cmd_indicator = "cmd"
+zsh_indicator = "zsh"
+nu_indicator = "nu"
+
+[os]
+disabled = false
+format = "$symbol "
+symbols.Ubuntu = ""
+symbols.Windows = ""
+symbols.Macos = ""
+symbols.Debian = " "
+symbols.Unknown = " "
+
+[cmd_duration]
+min_time = 4
+show_milliseconds = false
+disabled = false
+style = "bold italic red"
+format = " [$duration]($style)"
+
+[nodejs]
+format = 'running [$symbol($version )]($style)'
+version_format = 'v${raw}'
+symbol = '󰎙 '
+style = 'bold green'
+disabled = false
+not_capable_style = 'bold red'
+detect_extensions = ['js', 'mjs', 'cjs', 'ts']
+detect_files = ['package.json', '.node-version', '.nvmrc']
+detect_folders = ['node_modules']
+
+[python]
+disabled = false
+detect_files = ["requirements.txt", "Pipfile"]
+detect_extensions = []
+
+[ruby]
+disabled = false
+detect_files = ["Gemfile"]
+detect_extensions = []
+
+[php]
+disabled = false
+detect_files = ["composer.json"]
+detect_extensions = []
+
+[dotnet]
+disabled = false
+detect_files = [".csproj", ".fsproj", ".xproj"]
+detect_extensions = []
+
+[terraform]
+disabled = false
+detect_files = ["*.tf"]
+detect_extensions = []
+
+[time]
+disabled = false
+format = '[ $time ]($style)'
+time_format = '%H:%M'

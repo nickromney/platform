@@ -15,13 +15,14 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/brew"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain k3sup-pro docker jq
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain k3sup-pro docker jq kubie
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"Install hints for"* ]]
   [[ "${output}" == *"k3sup-pro: brew install k3sup"* ]]
   [[ "${output}" == *"docker: brew install --cask docker"* ]]
   [[ "${output}" == *"jq: brew install jq"* ]]
+  [[ "${output}" == *"kubie: brew install kubie"* ]]
 }
 
 @test "install-tool-hints prefers apt on Linux when brew and arkade are absent" {
@@ -49,10 +50,40 @@ esac
 EOF
   chmod +x "${TEST_BIN}/uname"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain docker jq node
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain docker jq node npx
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"docker: sudo apt-get update && sudo apt-get install -y docker.io"* ]]
   [[ "${output}" == *"jq: sudo apt-get update && sudo apt-get install -y jq"* ]]
   [[ "${output}" == *"node: sudo apt-get update && sudo apt-get install -y nodejs npm"* ]]
+  [[ "${output}" == *"npx: sudo apt-get update && sudo apt-get install -y nodejs npm"* ]]
+}
+
+@test "install-tool-hints prefers arkade for kubie when arkade is available" {
+  cat >"${TEST_BIN}/arkade" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/arkade"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain kubie
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kubie: sudo arkade get kubie --path /usr/local/bin"* ]]
+}
+
+@test "install-tool-hints supports bun and npx" {
+  cat >"${TEST_BIN}/brew" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/brew"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain bun npx
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"bun: brew install bun"* ]]
+  [[ "${output}" == *"npx: brew install node"* ]]
 }

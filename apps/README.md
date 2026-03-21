@@ -21,13 +21,20 @@ For the higher-level Kubernetes-side walkthrough, including Mermaid diagrams of 
 
 ## Security Scanning
 
-Run the rerunnable Trivy workflow from this directory:
+If you already have a local `trivy` binary and want to use it, run the
+rerunnable app scan workflow from this directory:
 
 ```bash
 make -C apps trivy-scan
 ```
 
-That scans the local `apps/` source trees plus the canonical workload images built by the Kubernetes demos, and writes JSON reports under `.run/apps-security/trivy/`.
+That scans the local `apps/` source trees plus the canonical workload images
+built by the Kubernetes demos, and writes JSON reports under
+`.run/apps-security/trivy/`.
+
+`trivy` is optional in this repo. `make -C apps prereqs` reports whether the
+scan workflow is available on your machine, but it does not require or install
+Trivy for you.
 
 The in-cluster Gitea mirrors are intentionally opt-in because they usually mirror the same content already scanned from disk:
 

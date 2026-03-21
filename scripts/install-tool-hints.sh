@@ -36,7 +36,7 @@ normalize_tool() {
 
 tool_supports_arkade_get() {
   case "$1" in
-    cilium|gh|helm|hubble|jq|k3sup|kind|kubectl|kubectx|mkcert|terragrunt|tofu|yq)
+    cilium|gh|helm|hubble|jq|k3sup|kind|kubectl|kubie|kubectx|mkcert|terragrunt|tofu|yq)
       return 0
       ;;
     *)
@@ -47,7 +47,7 @@ tool_supports_arkade_get() {
 
 tool_supports_arkade_system() {
   case "$1" in
-    node|npm)
+    node|npm|npx)
       return 0
       ;;
     *)
@@ -80,10 +80,13 @@ brew_formula() {
     bats)
       printf 'bats-core\n'
       ;;
+    bun)
+      printf 'bun\n'
+      ;;
     cilium|hubble)
       printf 'cilium-cli\n'
       ;;
-    curl|gh|git|helm|jq|k3sup|kind|kubectx|mkcert|podman|podman-compose|shellcheck|step|terragrunt|yq)
+    curl|gh|git|helm|jq|k3sup|kind|kubie|kubectx|mkcert|podman|podman-compose|shellcheck|starship|step|terragrunt|yq)
       printf '%s\n' "${tool}"
       ;;
     docker)
@@ -99,7 +102,7 @@ brew_formula() {
     limactl)
       printf 'lima\n'
       ;;
-    node|npm)
+    node|npm|npx)
       printf 'node\n'
       ;;
     ssh|ssh-keygen)
@@ -150,7 +153,7 @@ apt_packages() {
     ssh|ssh-keygen)
       printf 'openssh-client\n'
       ;;
-    node|npm)
+    node|npm|npx)
       printf 'nodejs npm\n'
       ;;
     podman)
@@ -189,6 +192,10 @@ curl_hint() {
   local os_name="$2"
 
   case "${tool}" in
+    bun)
+      printf '%s\n' 'curl -fsSL https://bun.sh/install | bash'
+      return 0
+      ;;
     docker)
       if [[ "${os_name}" == "Linux" ]]; then
         printf 'curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh\n'

@@ -16,8 +16,8 @@ quay.io/cilium/hubble-ui:v0.13.3
 ghcr.io/nginx/nginx-gateway-fabric:2.4.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.1
 
-# --- ArgoCD (chart 9.4.7) ---
-dhi.io/argocd:3.3.2-debian13
+# --- ArgoCD (chart 9.4.15) ---
+dhi.io/argocd:3.3.4-debian13
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine
 
 # --- Gitea (chart 12.5.0) ---
@@ -37,8 +37,8 @@ dhi.io/cert-manager-webhook:1.19.4-debian13
 dhi.io/cert-manager-cainjector:1.19.4-debian13
 dhi.io/cert-manager-startupapicheck:1.19.4-debian13
 
-# --- SigNoz (chart 0.116.0) ---
-docker.io/signoz/signoz:v0.116.0
+# --- SigNoz (chart 0.116.2) ---
+docker.io/signoz/signoz:v0.116.1
 docker.io/signoz/signoz-otel-collector:v0.144.2
 docker.io/signoz/signoz-schema-migrator:v0.144.2
 docker.io/clickhouse/clickhouse-server:25.5.6
@@ -47,7 +47,7 @@ docker.io/altinity/metrics-exporter:0.21.2
 signoz/zookeeper:3.7.1
 docker.io/groundnuty/k8s-wait-for:v2.0
 
-# --- Prometheus (chart 28.13.0) ---
+# --- Prometheus (chart 28.14.0) ---
 quay.io/prometheus/prometheus:v3.10.0
 dhi.io/prometheus:3.10.0-debian13
 dhi.io/prometheus-config-reloader:0.89.0-debian13
@@ -81,7 +81,7 @@ dhi.io/dex:2.44.0-debian13
 # --- oauth2-proxy (chart 10.1.4) ---
 dhi.io/oauth2-proxy:7.14.2-debian13
 
-# --- OpenTelemetry Collector (chart 0.147.0) ---
+# --- OpenTelemetry Collector (chart 0.147.1) ---
 otel/opentelemetry-collector-contrib:0.147.0
 
 # --- Gitea Actions Runner ---

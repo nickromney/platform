@@ -80,3 +80,155 @@ EOF
 
   [ "${status}" -eq 0 ]
 }
+
+@test "keeps the split kubeconfig canonical and removes stale global repo context by default" {
+  helper_log="${BATS_TEST_TMPDIR}/helper.log"
+  global_kubeconfig="${BATS_TEST_TMPDIR}/config"
+
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  get)
+    printf 'kind-local\n'
+    ;;
+  export)
+    kubeconfig=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --kubeconfig)
+          kubeconfig="$2"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    mkdir -p "$(dirname "${kubeconfig}")"
+    cat >"${kubeconfig}" <<'YAML'
+apiVersion: v1
+kind: Config
+preferences: {}
+clusters: []
+contexts: []
+users: []
+current-context: ""
+YAML
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kind"
+
+  cat >"${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  cat >"${TEST_BIN}/helper" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${HELPER_LOG}"
+EOF
+  chmod +x "${TEST_BIN}/helper"
+
+  cat >"${global_kubeconfig}" <<'EOF'
+apiVersion: v1
+kind: Config
+preferences: {}
+clusters: []
+contexts: []
+users: []
+current-context: ""
+EOF
+
+  run env \
+    HELPER_LOG="${helper_log}" \
+    KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
+    GLOBAL_KUBECONFIG_PATH="${global_kubeconfig}" \
+    KUBECONFIG_HELPER="${TEST_BIN}/helper" \
+    MERGE_KUBECONFIG_TO_DEFAULT=0 \
+    "${SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+  run grep -F "delete-context ${global_kubeconfig} kind-kind-local kind-kind-local kind-kind-local 0" "${helper_log}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "merge mode updates the global kubeconfig and switches context there" {
+  helper_log="${BATS_TEST_TMPDIR}/helper.log"
+  kubectl_log="${BATS_TEST_TMPDIR}/kubectl.log"
+
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  get)
+    printf 'kind-local\n'
+    ;;
+  export)
+    kubeconfig=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --kubeconfig)
+          kubeconfig="$2"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    mkdir -p "$(dirname "${kubeconfig}")"
+    cat >"${kubeconfig}" <<'YAML'
+apiVersion: v1
+kind: Config
+preferences: {}
+clusters: []
+contexts: []
+users: []
+current-context: ""
+YAML
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kind"
+
+  cat >"${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${KUBECTL_LOG}"
+if [[ "${1:-}" == "--kubeconfig" && "${3:-}" == "config" && "${4:-}" == "get-contexts" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "--kubeconfig" && "${3:-}" == "config" && "${4:-}" == "use-context" ]]; then
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  cat >"${TEST_BIN}/helper" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${HELPER_LOG}"
+EOF
+  chmod +x "${TEST_BIN}/helper"
+
+  run env \
+    HELPER_LOG="${helper_log}" \
+    KUBECTL_LOG="${kubectl_log}" \
+    KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
+    GLOBAL_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
+    KUBECONFIG_HELPER="${TEST_BIN}/helper" \
+    MERGE_KUBECONFIG_TO_DEFAULT=1 \
+    "${SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+  run grep -F 'merge '"${BATS_TEST_TMPDIR}"'/kind-kind-local.yaml '"${BATS_TEST_TMPDIR}"'/config kind-kind-local' "${helper_log}"
+  [ "${status}" -eq 0 ]
+  run grep -F -- '--kubeconfig '"${BATS_TEST_TMPDIR}"'/config config use-context kind-kind-local' "${kubectl_log}"
+  [ "${status}" -eq 0 ]
+}

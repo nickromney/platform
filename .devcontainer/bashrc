@@ -1,0 +1,25 @@
+if [ -f /etc/profile.d/homebrew.sh ]; then
+  . /etc/profile.d/homebrew.sh
+fi
+
+export EDITOR=nvim
+export VISUAL=nvim
+
+if [ -f /usr/share/bash-completion/bash_completion ]; then
+  . /usr/share/bash-completion/bash_completion
+elif [ -f /etc/bash_completion ]; then
+  . /etc/bash_completion
+fi
+
+_platform_completion_dir="${HOME}/.local/share/platform-devcontainer/completions/bash"
+if [ -d "${_platform_completion_dir}" ]; then
+  for _platform_completion in "${_platform_completion_dir}"/*.bash; do
+    [ -r "${_platform_completion}" ] || continue
+    . "${_platform_completion}"
+  done
+fi
+unset _platform_completion_dir _platform_completion
+
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init bash)"
+fi

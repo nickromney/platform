@@ -19,7 +19,7 @@ variable "worker_count" {
 variable "node_image" {
   description = "Kind node image."
   type        = string
-  default     = "kindest/node:v1.35.0"
+  default     = "kindest/node:v1.35.1"
 }
 
 variable "kind_api_server_port" {
@@ -206,7 +206,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.4.7"
+  default     = "9.4.15"
 }
 
 variable "argocd_image_repository" {
@@ -218,7 +218,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.3.2-debian13"
+  default     = "3.3.4-debian13"
 }
 
 variable "provision_argocd" {
@@ -248,7 +248,7 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "28.13.0"
+  default     = "28.14.0"
 }
 
 variable "prometheus_image_tag" {
@@ -338,7 +338,7 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.116.0"
+  default     = "0.116.2"
 }
 
 variable "headlamp_chart_version" {
@@ -392,7 +392,7 @@ variable "oauth2_proxy_chart_version" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.147.0"
+  default     = "0.147.1"
 }
 
 # -----------------------------------------------------------------------------
