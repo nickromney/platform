@@ -20,6 +20,8 @@ This README covers the Docker-backed teaching path for the repo.
 - kind uses the local Docker daemon. On macOS that normally means Docker Desktop; on Linux Docker Engine is enough.
 - Exposed service ports bind to `127.0.0.1`, not `0.0.0.0`, so the local platform stays local and can coexist with other local VM-based stacks.
 - `make reset` is destructive local cleanup. Without `AUTO_APPROVE=1`, it should prompt before removing cluster, kubeconfig, or local state.
+- The repo-owned kubeconfig stays at `~/.kube/kind-kind-local.yaml` by default. Use `kubie` to work across split kubeconfigs, and only run `make merge-default-kubeconfig` if you intentionally want this context copied into `~/.kube/config`.
+- Stage `900` is the confidence path when you drive it through `make`. A successful `make kind apply 900` now also runs `check-health` and `check-sso-e2e` before returning success. Raw Terragrunt/OpenTofu applies remain apply-only.
 
 ## Prerequisites
 
@@ -34,7 +36,7 @@ brew install jq kind kubernetes-cli make opentofu terragrunt
 Optional tools:
 
 ```bash
-brew install cilium-cli helm hubble kubectx mkcert yq
+brew install bun cilium-cli helm hubble kubectx kubie mkcert node yq
 mkcert -install
 ```
 
@@ -43,6 +45,9 @@ Then start the Docker daemon, give it enough resources, and run:
 ```bash
 make prereqs
 ```
+
+The default operator shape is now a split kubeconfig plus `kubie`, not a repo
+context merged into `~/.kube/config`.
 
 Why these tools exist, what `make prereqs` checks, and the extra host-side LLM requirement for the sentiment demo are documented in [docs/prerequisites.md](docs/prerequisites.md).
 

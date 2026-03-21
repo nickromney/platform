@@ -1,0 +1,39 @@
+# Draft only.
+# This is intentionally not named `mise.toml` yet, so it does not change
+# behavior for contributors who already have mise installed.
+#
+# The goal of this draft is to show which parts of the current devcontainer
+# toolchain could move cleanly into mise if the repo later decides to adopt it.
+#
+# If adopted later, contributors would still need shell activation or
+# `mise exec`, which is why this remains a draft instead of a live repo file.
+
+[tools]
+# General runtimes and CLIs
+bats = "latest"
+bun = "latest"
+github-cli = "latest"
+node = "20"
+shellcheck = "latest"
+starship = "latest"
+uv = "latest"
+
+# Kubernetes and infra CLIs that map reasonably well to repo usage
+helm = "latest"
+jq = "latest"
+kind = "latest"
+kubectl = "latest"
+kubectx = "latest"
+kubie = "latest"
+mkcert = "latest"
+opentofu = "latest"
+terragrunt = "latest"
+yq = "latest"
+
+# Intentionally left outside this draft for now:
+# - docker / docker compose: host daemon integration
+# - limactl: host virtualization concerns
+# - arkade itself: still useful as the Kubernetes-focused meta-installer
+# - cilium / hubble / k3sup / slicer: keep aligned with the repo's arkade-first
+#   operational path until there is a reason to move them
+# - step: leave on brew/apt for now

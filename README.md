@@ -3,6 +3,60 @@
 Infrastructure and platform-engineering experiments, grouped by outcome first
 and implementation second.
 
+## Devcontainer
+
+There is an Ubuntu 24.04 devcontainer in
+[`./.devcontainer`](.devcontainer) for the Linux-friendly repo workflows.
+
+It uses the official devcontainers base image, shares the host Docker socket,
+and installs the repo toolchain using the same preference order reflected
+elsewhere in the repo: Homebrew for the general CLI/runtime layer and
+`arkade` for the Kubernetes tooling.
+
+The container now also includes `kubie` for split-kubeconfig context work and
+`starship`, seeded from
+[`./.devcontainer/starship.toml`](.devcontainer/starship.toml).
+
+That means `docker`, `kind`, and `docker compose` inside the devcontainer act
+on the same local Docker daemon as the host shell, so repo workflows behave
+the same way without special-case Makefile logic.
+
+For the `kubernetes/kind` workflow, the repo’s kubeconfig helper rewrites the
+kind API endpoint to `host.docker.internal` inside the devcontainer so
+`kubectl`, OpenTofu, and Helm can still reach the host-exposed API server.
+
+Repo-owned kubeconfigs now stay split by default, so `kubie lint` and `kubie`
+context commands can work across `~/.kube/*.yaml` without the repo also
+duplicating those contexts into `~/.kube/config`. If you want the older merged
+shape for a specific workflow, each cluster Makefile exposes an explicit
+`merge-default-kubeconfig` target.
+
+Once you reopen the workspace in the container, the main entrypoints are:
+
+```shell
+make -C apps prereqs
+make -C kubernetes/kind prereqs
+make -C apps/subnet-calculator/frontend-typescript-vite prereqs
+```
+
+For the actual startup flow, including the VS Code path versus the Dev
+Container CLI path, see
+[`./.devcontainer/README.md`](.devcontainer/README.md).
+
+A non-active draft of what a future `mise`-managed tool layer could look like
+is in [`./mise.toml.draft`](mise.toml.draft).
+
+Limits:
+
+- `sd-wan/lima` remains macOS-only by design.
+- `kubernetes/lima` includes `limactl` in the container, but nested Lima VM
+  workflows still depend on host virtualization rather than the devcontainer.
+- `kubernetes/slicer` expects `SLICER_URL` or `SLICER_SOCKET` to point at a
+  reachable Slicer endpoint, because the personal `slicer-mac` socket is not
+  present inside the container. The same limit means the `kubernetes/kind`
+  Slicer conflict check only sees a Slicer daemon if you deliberately surface
+  that socket into the container.
+
 ## Local Kubernetes in Docker cluster
 
 I spent several months making a "useful to me" local kubernetes cluster using
@@ -20,6 +74,10 @@ make -C kubernetes/kind check-health
 Stages are cumulative: `100` creates the cluster, `900` brings up the full
 local platform stack, but you could apply `500` if you "only" wanted Cilium,
 Hubble, ArgoCD, and Gitea running in-cluster.
+
+At stage `900`, the Make-based `apply` path now also runs the repo health check
+and browser SSO E2E verification before it returns success. A raw
+Terraform/OpenTofu apply still remains a strict apply-only path.
 
 See [kubernetes/kind/README.md](kubernetes/kind/README.md) for the stage
 model, prerequisites, diagrams, ports, and troubleshooting.
@@ -39,7 +97,9 @@ make -C kubernetes/lima check-health
 
 This keeps the same cumulative stage ladder as `kubernetes/kind`, but stage
 `100` bootstraps k3s on Lima and stages `200+` apply the shared Terraform stack
-against that kubeconfig-backed cluster.
+against that kubeconfig-backed cluster through the Lima target profile. At
+stage `900`, the Make-based `apply` path also runs the repo health check and
+browser SSO E2E verification before it returns success.
 
 See [kubernetes/lima/README.md](kubernetes/lima/README.md) for the Lima
 workflow, prerequisites, and operator targets.
@@ -64,6 +124,10 @@ make -C kubernetes/slicer 900 plan
 make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
 make -C kubernetes/slicer check-health
 ```
+
+At stage `900`, the Make-based `apply` path also runs the repo health check and
+browser SSO E2E verification before it returns success. A raw
+Terraform/OpenTofu apply remains apply-only.
 
 This keeps the same cumulative stage ladder as `kubernetes/kind`, but stage
 `100` bootstraps k3s on Slicer and stages `200+` apply the shared Terraform

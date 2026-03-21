@@ -33,6 +33,7 @@ AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
+MERGE_KUBECONFIG_TO_DEFAULT ?= 0
 KIND_KUBECONFIG_CONTEXT ?= kind-kind-local
 KIND_KUBECONFIG_PATH ?= $(HOME)/.kube/$(KIND_KUBECONFIG_CONTEXT).yaml
 KIND_WORKER_COUNT ?= 1
@@ -76,7 +77,7 @@ VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -91,6 +92,7 @@ KUBECONFIG_CONTEXT ?= $(KIND_KUBECONFIG_CONTEXT)
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+export MERGE_KUBECONFIG_TO_DEFAULT
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
 export PLATFORM_ADMIN_PASSWORD
@@ -108,6 +110,9 @@ export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
 ifeq ($(filter $(KIND_PRELOAD_IMAGES_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid KIND_PRELOAD_IMAGES_MODE="$(KIND_PRELOAD_IMAGES_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
+ifeq ($(filter $(MERGE_KUBECONFIG_TO_DEFAULT),0 1),)
+$(error Invalid MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)". Expected one of: 0 1)
 endif
 ifeq ($(filter $(KIND_IMAGE_DISTRIBUTION_MODE),$(VALID_KIND_IMAGE_DISTRIBUTION_MODES)),)
 $(error Invalid KIND_IMAGE_DISTRIBUTION_MODE="$(KIND_IMAGE_DISTRIBUTION_MODE)". Expected one of: $(VALID_KIND_IMAGE_DISTRIBUTION_MODES))
@@ -168,6 +173,7 @@ help:
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
 	@echo "  make init"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
+	@echo "  make merge-default-kubeconfig"
 	@echo "  make plan         900"
 	@echo "  make preload-images                           Pull + load images into kind"
 	@echo "  make preload-images-pull-only                 Warm Docker cache only"
@@ -199,7 +205,7 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"
-	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (split by default; merge explicitly into $(DEFAULT_KUBECONFIG_PATH) if needed)"
 	@echo ""
 	@echo "Host runtime:"
 	@echo "  macOS -> Docker Desktop"
@@ -207,6 +213,7 @@ help:
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
+	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(KIND_KUBECONFIG_PATH) into $(DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
@@ -313,6 +320,7 @@ check-kind-state:
 .PHONY: check-kubeconfig
 check-kubeconfig:
 	@set -euo pipefail; \
+	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
 	"$(KUBECONFIG_HELPER)" ensure-valid "$$default_kubeconfig"; \
 	default_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$$default_kubeconfig"); \
@@ -323,7 +331,14 @@ check-kubeconfig:
 	kind_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
 	kind_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$kind_current" ] || kind_current="<none>"; \
-	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)";
+	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" lint || true)"; \
+	if [ -n "$$kubie_lint_output" ]; then \
+		echo "WARN kubie lint:"; \
+		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
+	elif command -v kubie >/dev/null 2>&1; then \
+		echo "OK   kubie lint"; \
+	fi
 
 .PHONY: ensure-kind-running
 ensure-kind-running:
@@ -548,6 +563,9 @@ apply: workflow-validate
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then tfvar_files+=("$(KIND_OPERATOR_OVERRIDES_FILE)"); fi; \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
+	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" enable_gateway_tls false "$${tfvar_files[@]}" )"; \
+	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )"; \
+	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
 	cache_ensured=0; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 200 ]; then \
 		run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
@@ -604,7 +622,7 @@ apply: workflow-validate
 	fi; \
 	if [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tg_apply_log"; then \
 		echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"; \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \
 		if [ "$$profile_enabled" = "1" ]; then \
 			set +e; \
 			profile_run_step "terragrunt-apply-retry" tg_apply; \
@@ -619,7 +637,11 @@ apply: workflow-validate
 		fi; \
 	fi; \
 	if [ $$rc -eq 0 ]; then \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"; \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \
+		if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+			run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
+		fi; \
 	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
@@ -859,26 +881,46 @@ start-kind:
 	fi; \
 	echo "Starting kind-local node containers..."; \
 	docker start $$nodes >/dev/null; \
-	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)" || true; \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" || true; \
 	echo "Started: $$nodes"; \
-	kubectl --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)" get nodes -o wide || true
+	kubectl --kubeconfig "$(KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)" get nodes -o wide || true
 
 .PHONY: start
 start:
 	@$(MAKE) start-kind
+
+.PHONY: merge-default-kubeconfig
+merge-default-kubeconfig:
+	@set -euo pipefail; \
+	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" merge "$(KUBECONFIG_PATH)" "$(DEFAULT_KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
+	echo "OK   merged $(KUBECONFIG_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
 	required=(curl docker git jq kind kubectl ssh terragrunt tofu yq); \
-	optional=(cilium helm hubble kubectx mkcert); \
+	optional=(bun cilium helm hubble kubectx kubie mkcert node npm npx); \
+	recommended_test_tools=(bun node npm npx); \
 	missing_required=(); \
+	missing_recommended=(); \
 	is_required() { \
 		local target="$$1"; \
 		local req=""; \
 		for req in "$${required[@]}"; do \
 			if [ "$$req" = "$$target" ]; then \
+				return 0; \
+			fi; \
+		done; \
+		return 1; \
+	}; \
+	is_recommended() { \
+		local target="$$1"; \
+		local recommended=""; \
+		for recommended in "$${recommended_test_tools[@]}"; do \
+			if [ "$$recommended" = "$$target" ]; then \
 				return 0; \
 			fi; \
 		done; \
@@ -896,6 +938,9 @@ prereqs:
 			missing_required+=("$$bin"); \
 		else \
 			echo "WARN $$bin (missing, optional)"; \
+			if is_recommended "$$bin"; then \
+				missing_recommended+=("$$bin"); \
+			fi; \
 		fi; \
 	}; \
 	sorted_tools=($$(printf '%s\n' "$${required[@]}" "$${optional[@]}" | LC_ALL=C sort -u)); \
@@ -913,6 +958,13 @@ prereqs:
 		echo "Install hints:"; \
 		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
+	fi; \
+	if [ $${#missing_recommended[@]} -gt 0 ]; then \
+		echo ""; \
+		echo "Recommended browser/E2E test tools missing: $${missing_recommended[*]}"; \
+		echo ""; \
+		echo "Install hints:"; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
 	fi; \
 	if command -v mkcert >/dev/null 2>&1; then \
 		echo ""; \
@@ -1133,7 +1185,7 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh"
+	@KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh"
 	@echo ""
 	@"$(STACK_DIR)/scripts/check-provider-version.sh"
 
@@ -1143,7 +1195,7 @@ check-provider-version:
 
 .PHONY: ensure-kind-kubeconfig
 ensure-kind-kubeconfig:
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"
 
 .PHONY: audit-bootstrap
 audit-bootstrap:

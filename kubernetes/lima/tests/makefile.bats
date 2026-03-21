@@ -13,6 +13,8 @@ setup() {
   [[ "${output}" == *"make apply 100"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
   [[ "${output}" == *"make start"* ]]
+  [[ "${output}" == *"make merge-default-kubeconfig"* ]]
+  [[ "${output}" == *"split by default"* ]]
 }
 
 @test "lima run_step helper preserves shell arguments instead of invoking macOS apply" {
@@ -53,6 +55,13 @@ setup() {
 
 @test "lima stage 900 apply waits for cluster health after k3s apiserver OIDC" {
   run grep -Fn 'run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima stage 900 apply runs browser SSO E2E verification after health checks" {
+  run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]

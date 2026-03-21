@@ -6,11 +6,13 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TRIVY_RUNNER="${SCRIPT_DIR}/trivy-run.sh"
 REPORT_ROOT="${TRIVY_REPORT_ROOT:-${REPO_ROOT}/.run/apps-security/trivy}"
 CLONE_ROOT="${REPORT_ROOT}/gitea-clones"
-TRIVY_IMAGE="${TRIVY_IMAGE:-aquasec/trivy:0.69.3}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
 platform_load_env
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/trivy-common.sh"
 
 TRIVY_SEVERITY="${TRIVY_SEVERITY:-HIGH,CRITICAL}"
 TRIVY_FS_SCANNERS="${TRIVY_FS_SCANNERS:-vuln,misconfig,secret}"
@@ -78,11 +80,22 @@ ensure_prereqs() {
   command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
   command -v git >/dev/null 2>&1 || fail "git not found in PATH"
   [[ -x "${TRIVY_RUNNER}" ]] || fail "missing Trivy runner at ${TRIVY_RUNNER}"
+}
 
-  if ! command -v trivy >/dev/null 2>&1; then
-    command -v docker >/dev/null 2>&1 || fail "docker is required when trivy is not installed locally"
-    docker info >/dev/null 2>&1 || fail "docker daemon not reachable"
-  fi
+ensure_scan_prereqs() {
+  ensure_prereqs
+
+  case "$(trivy_local_status)" in
+    available:*)
+      return 0
+      ;;
+    unparseable)
+      fail "trivy is present in PATH but its version could not be determined"
+      ;;
+    *)
+      fail "trivy is not installed locally; install it if you want to run app scans"
+      ;;
+  esac
 }
 
 load_gitea_helper() {
@@ -752,32 +765,43 @@ main() {
 
   case "${mode}" in
     prereqs)
+      local local_status=""
       ensure_prereqs
+      local_status="$(trivy_local_status)"
       log "Trivy runner: ${TRIVY_RUNNER}"
-      if command -v trivy >/dev/null 2>&1; then
-        log "Runner mode: local trivy binary"
-      else
-        log "Runner mode: dockerized ${TRIVY_IMAGE}"
-      fi
+      case "${local_status}" in
+        available:*)
+          log "Runner mode: local trivy binary (${local_status#available:})"
+          ;;
+        unparseable)
+          log "Runner mode: unavailable"
+          log "Local trivy version: unavailable (binary present, version could not be determined)"
+          ;;
+        *)
+          log "Runner mode: unavailable"
+          log "Local trivy: not installed"
+          log "Scanning is optional. Install trivy locally if you want to run make -C apps trivy-scan."
+          ;;
+      esac
       log "Reports: ${REPORT_ROOT}"
       ;;
     fs)
-      ensure_prereqs
+      ensure_scan_prereqs
       scan_source_tree
       print_final_status
       ;;
     images)
-      ensure_prereqs
+      ensure_scan_prereqs
       scan_images
       print_final_status
       ;;
     gitea)
-      ensure_prereqs
+      ensure_scan_prereqs
       scan_gitea_repos
       print_final_status
       ;;
     all)
-      ensure_prereqs
+      ensure_scan_prereqs
       scan_source_tree
       scan_images
       scan_gitea_repos

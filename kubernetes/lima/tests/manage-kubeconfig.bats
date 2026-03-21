@@ -4,6 +4,9 @@ setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
   export HELPER="${REPO_ROOT}/terraform/kubernetes/scripts/manage-kubeconfig.sh"
+  export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${TEST_BIN}"
+  export PATH="${TEST_BIN}:${PATH}"
 }
 
 @test "delete-context removes the resolved cluster and user behind a repo context" {
@@ -203,4 +206,18 @@ YAML
   run env KUBECONFIG="${target_kubeconfig}" kubectl config view --raw -o jsonpath='{.users[*].name}'
   [ "${status}" -eq 0 ]
   [[ "${output}" == "limavm-k3s-user" ]]
+}
+
+@test "lint delegates to kubie when available" {
+  cat >"${TEST_BIN}/kubie" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "A context name 'kind-kind-local' appears more than once"
+EOF
+  chmod +x "${TEST_BIN}/kubie"
+
+  run "${HELPER}" lint
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"appears more than once"* ]]
 }

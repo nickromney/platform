@@ -15,9 +15,6 @@ require() {
   command -v "$bin" >/dev/null 2>&1 || fail "$bin not found in PATH"
 }
 
-require helm
-require jq
-
 cluster_reachable() {
   if ! command -v kubectl >/dev/null 2>&1; then
     return 1
@@ -34,14 +31,14 @@ cluster_reachable() {
   kubectl get ns --request-timeout=2s >/dev/null 2>&1
 }
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
-REPO_ROOT=$(cd "${SCRIPT_DIR}/../../.." && pwd)
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+STACK_DIR="${STACK_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 STAGES_DIR="${STAGES_DIR:-${REPO_ROOT}/kubernetes/kind/stages}"
 TARGET_TFVARS="${TARGET_TFVARS:-}"
 PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
-ARGOCD_APPS_DIR="${STACK_DIR}/apps/argocd-apps"
-export VARIABLES_FILE="${STACK_DIR}/variables.tf"
+ARGOCD_APPS_DIR="${ARGOCD_APPS_DIR:-${STACK_DIR}/apps/argocd-apps}"
+export VARIABLES_FILE="${VARIABLES_FILE:-${STACK_DIR}/variables.tf}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
@@ -144,6 +141,210 @@ image_tag_from_ref() {
   fi
 }
 
+github_latest_release_tag() {
+  local repo="$1"
+
+  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null | \
+    jq -r '.tag_name // empty' | xargs || true
+}
+
+kind_installed_version() {
+  local version=""
+
+  if ! command -v kind >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+
+  version="$(kind version -q 2>/dev/null | xargs || true)"
+  if [ -n "${version}" ]; then
+    echo "${version}"
+    return 0
+  fi
+
+  version="$(kind --version 2>/dev/null | sed -E 's/^kind version[[:space:]]+//; s/[[:space:]].*$//' | xargs || true)"
+  echo "${version}"
+}
+
+normalize_semver_like_tag() {
+  local version="$1"
+
+  if [ -z "${version}" ]; then
+    echo ""
+  elif [[ "${version}" == v* ]]; then
+    echo "${version}"
+  else
+    echo "v${version}"
+  fi
+}
+
+tag_version_prefix() {
+  local tag="$1"
+
+  if [[ "${tag}" =~ ^([vV]?[0-9]+(\.[0-9]+){1,2}) ]]; then
+    printf "%s\n" "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  printf "\n"
+}
+
+tag_suffix_after_version_prefix() {
+  local tag="$1"
+  local prefix
+
+  prefix="$(tag_version_prefix "${tag}")"
+  if [ -z "${prefix}" ]; then
+    printf "\n"
+    return 0
+  fi
+
+  printf "%s\n" "${tag#${prefix}}"
+}
+
+derive_tag_with_existing_suffix() {
+  local desired_version="$1"
+  local existing_tag="$2"
+  local existing_prefix
+  local normalized_version
+  local suffix
+
+  if [ -z "${desired_version}" ]; then
+    printf "\n"
+    return 0
+  fi
+
+  existing_prefix="$(tag_version_prefix "${existing_tag}")"
+  normalized_version="${desired_version#v}"
+  normalized_version="${normalized_version#V}"
+  if [[ "${existing_prefix}" == [vV]* ]]; then
+    normalized_version="v${normalized_version}"
+  fi
+
+  suffix="$(tag_suffix_after_version_prefix "${existing_tag}")"
+  printf "%s%s\n" "${normalized_version}" "${suffix}"
+}
+
+image_ref_availability() {
+  local image_ref="$1"
+  local stderr=""
+
+  if [ -z "${image_ref}" ]; then
+    printf "unknown\n"
+    return 0
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    printf "unknown\n"
+    return 0
+  fi
+
+  if stderr="$(docker manifest inspect "${image_ref}" 2>&1 >/dev/null)"; then
+    printf "available\n"
+    return 0
+  fi
+
+  if echo "${stderr}" | grep -Eqi 'unauthorized|authentication required|access denied|denied:'; then
+    printf "auth-required\n"
+    return 0
+  fi
+
+  printf "missing\n"
+}
+
+preferred_image_status() {
+  local configured_ref="$1"
+  local configured_state="$2"
+  local candidate_ref="$3"
+  local candidate_state="$4"
+
+  if [ -z "${configured_ref}" ]; then
+    printf "not configured\n"
+    return 0
+  fi
+
+  case "${configured_state}" in
+    available)
+      if [ -z "${candidate_ref}" ] || [ "${candidate_ref}" = "${configured_ref}" ]; then
+        printf "configured image exists\n"
+        return 0
+      fi
+
+      case "${candidate_state}" in
+        available) printf "latest preferred image exists\n" ;;
+        missing) printf "latest preferred image missing; hold configured image\n" ;;
+        auth-required) printf "latest preferred image requires registry auth\n" ;;
+        *) printf "latest preferred image unverified\n" ;;
+      esac
+      ;;
+    missing)
+      printf "configured image missing from registry\n"
+      ;;
+    auth-required)
+      printf "configured image requires registry auth\n"
+      ;;
+    *)
+      printf "configured image unverified\n"
+      ;;
+  esac
+}
+
+print_preferred_image_row() {
+  local name="$1"
+  local configured_ref="$2"
+  local configured_state="$3"
+  local candidate_ref="$4"
+  local candidate_state="$5"
+  local status_text
+  local color="${GREEN}"
+
+  status_text="$(preferred_image_status "${configured_ref}" "${configured_state}" "${candidate_ref}" "${candidate_state}")"
+
+  case "${configured_state}" in
+    missing) color="${RED}" ;;
+    auth-required|unknown) color="${YELLOW}" ;;
+    available)
+      case "${candidate_state}" in
+        missing|auth-required|unknown) color="${YELLOW}" ;;
+      esac
+      ;;
+  esac
+
+  printf "%s\t%s\t%s\t%s%s%s\n" \
+    "${name}" \
+    "${configured_ref:-}" \
+    "${candidate_ref:-}" \
+    "${color}" \
+    "${status_text}" \
+    "${NC}"
+}
+
+print_tool_row() {
+  local tool="$1"
+  local installed="$2"
+  local latest="$3"
+  local status=""
+  local normalized_installed=""
+  local normalized_latest=""
+
+  normalized_installed="$(normalize_semver_like_tag "${installed}")"
+  normalized_latest="$(normalize_semver_like_tag "${latest}")"
+
+  if [ -z "${installed}" ] && [ -z "${latest}" ]; then
+    status="${YELLOW}installed ?; latest ?${NC}"
+  elif [ -z "${installed}" ]; then
+    status="${YELLOW}not installed; latest == ${latest}${NC}"
+  elif [ -z "${latest}" ]; then
+    status="${YELLOW}installed == ${installed}; latest ?${NC}"
+  elif [ "${normalized_installed}" = "${normalized_latest}" ]; then
+    status="${GREEN}installed == latest (${normalized_latest})${NC}"
+  else
+    status="${YELLOW}installed != latest (${installed} vs ${latest})${NC}"
+  fi
+
+  printf "%s\t%s\t%s\t%s\n" "${tool}" "${installed:-}" "${latest:-}" "${status}"
+}
+
 k8s_deployment_container_image() {
   local namespace="$1"
   local deployment="$2"
@@ -169,14 +370,21 @@ print_row() {
   local dhi_tag="$7"
   local latest_tag="$8"
   local prefer_hardened="${9:-0}"
+  local preferred_tag_status="${10:-}"
   local status
   local deploy_state
   local latest_state
   local update_available=0
   local all_match=0
 
-  if [ -n "$codebase" ] && [ -n "$latest" ] && [ "$codebase" != "$latest" ] && ! { [ "${prefer_hardened}" = "1" ] && [ -n "${dhi_tag}" ]; }; then
-    update_available=1
+  if [ -n "$codebase" ] && [ -n "$latest" ] && [ "$codebase" != "$latest" ]; then
+    if [ "${prefer_hardened}" = "1" ]; then
+      if [ "${preferred_tag_status}" = "available" ]; then
+        update_available=1
+      fi
+    else
+      update_available=1
+    fi
   fi
 
   if [ "${CLUSTER_OK}" -ne 1 ]; then
@@ -196,7 +404,13 @@ print_row() {
   if [ -z "$latest" ]; then
     latest_state="latest ?"
   elif [ "${prefer_hardened}" = "1" ] && [ -n "${dhi_tag}" ]; then
-    latest_state="latest non-hardened ignored (DHI preferred: ${dhi_tag})"
+    case "${preferred_tag_status}" in
+      available) latest_state="latest preferred image available (${dhi_tag})" ;;
+      missing) latest_state="latest chart available, preferred image missing (${dhi_tag})" ;;
+      auth-required) latest_state="latest chart available, preferred image requires auth (${dhi_tag})" ;;
+      unknown) latest_state="latest chart available, preferred image unverified (${dhi_tag})" ;;
+      *) latest_state="latest chart available, preferred image candidate ${dhi_tag}" ;;
+    esac
   else
     latest_state="latest == ${latest}"
   fi
@@ -611,285 +825,341 @@ check_app_yaml_tfvar_drift() {
   echo ""
 }
 
-echo ""
-ok "Version check (Deployed vs Codebase vs Latest)"
-echo ""
+main() {
+  require curl
+  require helm
+  require jq
 
-CODE_ARGOCD=$(tf_default_from_variables "argocd_chart_version")
-CODE_ARGOCD_IMAGE_REPO=$(tf_default_from_variables "argocd_image_repository")
-CODE_ARGOCD_IMAGE_TAG=$(tf_default_from_variables "argocd_image_tag")
-CODE_GITEA=$(tf_default_from_variables "gitea_chart_version")
-CODE_CILIUM=$(tf_default_from_variables "cilium_version")
-CODE_PROMETHEUS=$(tf_default_from_variables "prometheus_chart_version")
-CODE_GRAFANA=$(tf_default_from_variables "grafana_chart_version")
-CODE_GRAFANA_IMAGE_TAG=$(tf_default_from_variables "grafana_image_tag")
-CODE_LOKI=$(tf_default_from_variables "loki_chart_version")
-CODE_VICTORIA_LOGS=$(tf_default_from_variables "victoria_logs_chart_version")
-CODE_TEMPO=$(tf_default_from_variables "tempo_chart_version")
-CODE_SIGNOZ=$(tf_default_from_variables "signoz_chart_version")
-CODE_OTEL_COLLECTOR=$(tf_default_from_variables "opentelemetry_collector_chart_version")
-CODE_HEADLAMP=$(tf_default_from_variables "headlamp_chart_version")
-CODE_KYVERNO=$(tf_default_from_variables "kyverno_chart_version")
-CODE_POLICY_REPORTER=$(tf_default_from_variables "policy_reporter_chart_version")
-CODE_CERT_MANAGER=$(tf_default_from_variables "cert_manager_chart_version")
-CODE_DEX=$(tf_default_from_variables "dex_chart_version")
-CODE_OAUTH2_PROXY=$(tf_default_from_variables "oauth2_proxy_chart_version")
-if [ -z "${CODE_ARGOCD_IMAGE_REPO}" ]; then
-  CODE_ARGOCD_IMAGE_REPO="quay.io/argoproj/argocd"
-fi
-
-CODE_ARGOCD_IMAGE_REF=""
-if [ -n "${CODE_ARGOCD_IMAGE_REPO}" ] && [ -n "${CODE_ARGOCD_IMAGE_TAG}" ]; then
-  CODE_ARGOCD_IMAGE_REF="${CODE_ARGOCD_IMAGE_REPO}:${CODE_ARGOCD_IMAGE_TAG}"
-fi
-CODE_DHI_TAG_ARGOCD=""
-if [ "${CODE_ARGOCD_IMAGE_REPO}" = "dhi.io/argocd" ] && [ -n "${CODE_ARGOCD_IMAGE_TAG}" ]; then
-  CODE_DHI_TAG_ARGOCD="${CODE_ARGOCD_IMAGE_TAG}"
-fi
-
-EXPECTED_CLUSTER_NAME=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "cluster_name")
-if [ -z "$EXPECTED_CLUSTER_NAME" ]; then EXPECTED_CLUSTER_NAME="kind-local"; fi
-
-LATEST_ARGOCD=$(helm_latest_chart_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd")
-LATEST_GITEA=$(helm_latest_chart_version "gitea" "https://dl.gitea.io/charts/" "gitea")
-LATEST_CILIUM=$(helm_latest_chart_version "cilium" "https://helm.cilium.io" "cilium")
-LATEST_PROMETHEUS=$(helm_latest_chart_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus")
-LATEST_GRAFANA=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "grafana")
-LATEST_LOKI=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "loki")
-LATEST_VICTORIA_LOGS=$(helm_latest_chart_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single")
-LATEST_TEMPO=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "tempo")
-LATEST_SIGNOZ=$(helm_latest_chart_version "signoz" "https://charts.signoz.io" "signoz")
-LATEST_OTEL_COLLECTOR=$(helm_latest_chart_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector")
-LATEST_HEADLAMP=$(helm_latest_chart_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp")
-LATEST_KYVERNO=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno")
-LATEST_POLICY_REPORTER=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter")
-LATEST_CERT_MANAGER=$(helm_latest_chart_version "jetstack" "https://charts.jetstack.io" "cert-manager")
-LATEST_DEX=$(helm_latest_chart_version "dex" "https://charts.dexidp.io" "dex")
-LATEST_OAUTH2_PROXY=$(helm_latest_chart_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy")
-
-CODETAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${CODE_ARGOCD}")
-CODETAG_ARGOCD="${CODETAG_ARGOCD_CHART}"
-CODETAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${CODE_GITEA}")
-CODETAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${CODE_CILIUM}")
-CODETAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${CODE_PROMETHEUS}")
-CODETAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${CODE_GRAFANA}")
-if [ -n "${CODE_GRAFANA_IMAGE_TAG}" ]; then
-  CODETAG_GRAFANA="${CODE_GRAFANA_IMAGE_TAG}"
-fi
-CODETAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${CODE_LOKI}")
-CODETAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${CODE_VICTORIA_LOGS}")
-CODETAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${CODE_TEMPO}")
-CODETAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${CODE_SIGNOZ}")
-CODETAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${CODE_OTEL_COLLECTOR}")
-CODETAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${CODE_HEADLAMP}")
-CODETAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${CODE_KYVERNO}")
-CODETAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${CODE_POLICY_REPORTER}")
-CODETAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${CODE_CERT_MANAGER}")
-CODETAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${CODE_DEX}")
-CODETAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${CODE_OAUTH2_PROXY}")
-
-LATESTTAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${LATEST_ARGOCD}")
-LATESTTAG_ARGOCD="${LATESTTAG_ARGOCD_CHART}"
-LATESTTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${LATEST_GITEA}")
-LATESTTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${LATEST_CILIUM}")
-LATESTTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${LATEST_PROMETHEUS}")
-LATESTTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${LATEST_GRAFANA}")
-LATESTTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${LATEST_LOKI}")
-LATESTTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${LATEST_VICTORIA_LOGS}")
-LATESTTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${LATEST_TEMPO}")
-LATESTTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${LATEST_SIGNOZ}")
-LATESTTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${LATEST_OTEL_COLLECTOR}")
-LATESTTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${LATEST_HEADLAMP}")
-LATESTTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${LATEST_KYVERNO}")
-LATESTTAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${LATEST_POLICY_REPORTER}")
-LATESTTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${LATEST_CERT_MANAGER}")
-LATESTTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${LATEST_DEX}")
-LATESTTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${LATEST_OAUTH2_PROXY}")
-
-CLUSTER_OK=0
-if command -v kind >/dev/null 2>&1; then
-  if ! kind get clusters 2>/dev/null | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
-    warn "Cluster '${EXPECTED_CLUSTER_NAME}' not found; Deployed=Unavailable"
-  elif cluster_reachable; then
-    CLUSTER_OK=1
-  else
-    warn "Cluster '${EXPECTED_CLUSTER_NAME}' exists but API is unreachable; Deployed=Unavailable"
-  fi
-else
-  if cluster_reachable; then
-    CLUSTER_OK=1
-  else
-    warn "Cluster API unreachable (and 'kind' not found); Deployed=Unavailable"
-  fi
-fi
-
-DEPLOYED_CILIUM=""
-DEPLOYED_ARGOCD=""
-DEPLOYED_GITEA=""
-DEPLOYED_SIGNOZ=""
-DEPLOYED_PROMETHEUS=""
-DEPLOYED_GRAFANA=""
-DEPLOYED_LOKI=""
-DEPLOYED_VICTORIA_LOGS=""
-DEPLOYED_TEMPO=""
-DEPLOYED_OTEL_COLLECTOR=""
-DEPLOYED_HEADLAMP=""
-DEPLOYED_KYVERNO=""
-DEPLOYED_POLICY_REPORTER=""
-DEPLOYED_CERT_MANAGER=""
-DEPLOYED_DEX=""
-DEPLOYED_OAUTH2_PROXY=""
-DEPLOYEDTAG_CILIUM=""
-DEPLOYEDTAG_ARGOCD=""
-DEPLOYED_ARGOCD_IMAGE_REF=""
-DEPLOYEDTAG_GITEA=""
-DEPLOYEDTAG_PROMETHEUS=""
-DEPLOYEDTAG_GRAFANA=""
-DEPLOYEDTAG_LOKI=""
-DEPLOYEDTAG_VICTORIA_LOGS=""
-DEPLOYEDTAG_TEMPO=""
-DEPLOYEDTAG_SIGNOZ=""
-DEPLOYEDTAG_OTEL_COLLECTOR=""
-DEPLOYEDTAG_HEADLAMP=""
-DEPLOYEDTAG_KYVERNO=""
-DEPLOYEDTAG_POLICY_REPORTER=""
-DEPLOYEDTAG_CERT_MANAGER=""
-DEPLOYEDTAG_DEX=""
-DEPLOYEDTAG_OAUTH2_PROXY=""
-
-if [ "${CLUSTER_OK}" -eq 1 ]; then
-  DEPLOYED_CILIUM=$(helm_deployed_chart_version "kube-system" "cilium")
-  DEPLOYED_ARGOCD=$(helm_deployed_chart_version "argocd" "argocd")
-  DEPLOYED_ARGOCD_IMAGE_REF=$(k8s_deployment_container_image "argocd" "argocd-server" "server")
-
-  DEPLOYED_GITEA=$(argocd_app_deployed_chart_version "gitea" "gitea")
-  DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus")
-  DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana")
-  DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki")
-  DEPLOYED_VICTORIA_LOGS=$(argocd_app_deployed_chart_version "victoria-logs" "victoria-logs-single")
-  DEPLOYED_TEMPO=$(argocd_app_deployed_chart_version "tempo" "tempo")
-  DEPLOYED_SIGNOZ=$(argocd_app_deployed_chart_version "signoz" "signoz")
-  DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-agent" "opentelemetry-collector")
-  if [ -z "${DEPLOYED_OTEL_COLLECTOR}" ]; then
-    DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-prometheus" "opentelemetry-collector")
-  fi
-  DEPLOYED_HEADLAMP=$(argocd_app_deployed_chart_version "headlamp" "headlamp")
-
-  DEPLOYED_KYVERNO=$(argocd_app_deployed_chart_version "kyverno" "kyverno")
-  DEPLOYED_POLICY_REPORTER=$(argocd_app_deployed_chart_version "policy-reporter" "policy-reporter")
-  DEPLOYED_CERT_MANAGER=$(argocd_app_deployed_chart_version "cert-manager" "cert-manager")
-
-  DEPLOYED_DEX=$(argocd_app_deployed_chart_version "dex" "dex")
-  DEPLOYED_OAUTH2_PROXY=$(argocd_app_deployed_chart_version "oauth2-proxy-argocd" "oauth2-proxy")
-
-  DEPLOYEDTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${DEPLOYED_CILIUM}")
-  DEPLOYEDTAG_ARGOCD=$(image_tag_from_ref "${DEPLOYED_ARGOCD_IMAGE_REF}")
-  if [ -z "${DEPLOYEDTAG_ARGOCD}" ]; then
-    DEPLOYEDTAG_ARGOCD=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${DEPLOYED_ARGOCD}")
-  fi
-  DEPLOYEDTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${DEPLOYED_GITEA}")
-  DEPLOYEDTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${DEPLOYED_PROMETHEUS}")
-  DEPLOYEDTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${DEPLOYED_GRAFANA}")
-  DEPLOYEDTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${DEPLOYED_LOKI}")
-  DEPLOYEDTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${DEPLOYED_VICTORIA_LOGS}")
-  DEPLOYEDTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${DEPLOYED_TEMPO}")
-  DEPLOYEDTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${DEPLOYED_SIGNOZ}")
-  DEPLOYEDTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${DEPLOYED_OTEL_COLLECTOR}")
-  DEPLOYEDTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${DEPLOYED_HEADLAMP}")
-  DEPLOYEDTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${DEPLOYED_KYVERNO}")
-  DEPLOYEDTAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${DEPLOYED_POLICY_REPORTER}")
-  DEPLOYEDTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${DEPLOYED_CERT_MANAGER}")
-  DEPLOYEDTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${DEPLOYED_DEX}")
-  DEPLOYEDTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}")
-else
-  DEPLOYED_CILIUM="Unavailable"
-  DEPLOYED_ARGOCD="Unavailable"
-  DEPLOYED_GITEA="Unavailable"
-  DEPLOYED_PROMETHEUS="Unavailable"
-  DEPLOYED_GRAFANA="Unavailable"
-  DEPLOYED_LOKI="Unavailable"
-  DEPLOYED_VICTORIA_LOGS="Unavailable"
-  DEPLOYED_TEMPO="Unavailable"
-  DEPLOYED_SIGNOZ="Unavailable"
-  DEPLOYED_OTEL_COLLECTOR="Unavailable"
-  DEPLOYED_HEADLAMP="Unavailable"
-  DEPLOYED_KYVERNO="Unavailable"
-  DEPLOYED_POLICY_REPORTER="Unavailable"
-  DEPLOYED_CERT_MANAGER="Unavailable"
-  DEPLOYED_DEX="Unavailable"
-  DEPLOYED_OAUTH2_PROXY="Unavailable"
-  DEPLOYEDTAG_CILIUM="Unavailable"
-  DEPLOYEDTAG_ARGOCD="Unavailable"
-  DEPLOYEDTAG_GITEA="Unavailable"
-  DEPLOYEDTAG_PROMETHEUS="Unavailable"
-  DEPLOYEDTAG_GRAFANA="Unavailable"
-  DEPLOYEDTAG_LOKI="Unavailable"
-  DEPLOYEDTAG_VICTORIA_LOGS="Unavailable"
-  DEPLOYEDTAG_TEMPO="Unavailable"
-  DEPLOYEDTAG_SIGNOZ="Unavailable"
-  DEPLOYEDTAG_OTEL_COLLECTOR="Unavailable"
-  DEPLOYEDTAG_HEADLAMP="Unavailable"
-  DEPLOYEDTAG_KYVERNO="Unavailable"
-  DEPLOYEDTAG_POLICY_REPORTER="Unavailable"
-  DEPLOYEDTAG_CERT_MANAGER="Unavailable"
-  DEPLOYEDTAG_DEX="Unavailable"
-  DEPLOYEDTAG_OAUTH2_PROXY="Unavailable"
-fi
-
-echo "Component versions"
-printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n" "Component" "Deployed" "Codebase" "Latest" "DeployTag" "CodeTag" "DHI" "LatestTag" "Status"
-printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n" "---------" "--------" "--------" "------" "---------" "-------" "---" "---------" "------"
-
-rows=()
-rows+=("$(print_row "argo-cd chart" "${DEPLOYED_ARGOCD}" "${CODE_ARGOCD}" "${LATEST_ARGOCD}" "${DEPLOYEDTAG_ARGOCD}" "${CODETAG_ARGOCD}" "${CODE_DHI_TAG_ARGOCD}" "${LATESTTAG_ARGOCD}" "1")")
-rows+=("$(print_row "gitea chart" "${DEPLOYED_GITEA}" "${CODE_GITEA}" "${LATEST_GITEA}" "${DEPLOYEDTAG_GITEA}" "${CODETAG_GITEA}" "" "${LATESTTAG_GITEA}" "0")")
-rows+=("$(print_row "cilium chart" "${DEPLOYED_CILIUM}" "${CODE_CILIUM}" "${LATEST_CILIUM}" "${DEPLOYEDTAG_CILIUM}" "${CODETAG_CILIUM}" "" "${LATESTTAG_CILIUM}" "0")")
-rows+=("$(print_row "prometheus chart" "${DEPLOYED_PROMETHEUS}" "${CODE_PROMETHEUS}" "${LATEST_PROMETHEUS}" "${DEPLOYEDTAG_PROMETHEUS}" "${CODETAG_PROMETHEUS}" "" "${LATESTTAG_PROMETHEUS}" "0")")
-rows+=("$(print_row "grafana chart" "${DEPLOYED_GRAFANA}" "${CODE_GRAFANA}" "${LATEST_GRAFANA}" "${DEPLOYEDTAG_GRAFANA}" "${CODETAG_GRAFANA}" "" "${LATESTTAG_GRAFANA}" "0")")
-rows+=("$(print_row "loki chart" "${DEPLOYED_LOKI}" "${CODE_LOKI}" "${LATEST_LOKI}" "${DEPLOYEDTAG_LOKI}" "${CODETAG_LOKI}" "" "${LATESTTAG_LOKI}" "0")")
-rows+=("$(print_row "victoria-logs" "${DEPLOYED_VICTORIA_LOGS}" "${CODE_VICTORIA_LOGS}" "${LATEST_VICTORIA_LOGS}" "${DEPLOYEDTAG_VICTORIA_LOGS}" "${CODETAG_VICTORIA_LOGS}" "" "${LATESTTAG_VICTORIA_LOGS}" "0")")
-rows+=("$(print_row "tempo chart" "${DEPLOYED_TEMPO}" "${CODE_TEMPO}" "${LATEST_TEMPO}" "${DEPLOYEDTAG_TEMPO}" "${CODETAG_TEMPO}" "" "${LATESTTAG_TEMPO}" "0")")
-rows+=("$(print_row "signoz chart" "${DEPLOYED_SIGNOZ}" "${CODE_SIGNOZ}" "${LATEST_SIGNOZ}" "${DEPLOYEDTAG_SIGNOZ}" "${CODETAG_SIGNOZ}" "" "${LATESTTAG_SIGNOZ}" "0")")
-rows+=("$(print_row "otel-collector" "${DEPLOYED_OTEL_COLLECTOR}" "${CODE_OTEL_COLLECTOR}" "${LATEST_OTEL_COLLECTOR}" "${DEPLOYEDTAG_OTEL_COLLECTOR}" "${CODETAG_OTEL_COLLECTOR}" "" "${LATESTTAG_OTEL_COLLECTOR}" "0")")
-rows+=("$(print_row "headlamp chart" "${DEPLOYED_HEADLAMP}" "${CODE_HEADLAMP}" "${LATEST_HEADLAMP}" "${DEPLOYEDTAG_HEADLAMP}" "${CODETAG_HEADLAMP}" "" "${LATESTTAG_HEADLAMP}" "0")")
-rows+=("$(print_row "kyverno chart" "${DEPLOYED_KYVERNO}" "${CODE_KYVERNO}" "${LATEST_KYVERNO}" "${DEPLOYEDTAG_KYVERNO}" "${CODETAG_KYVERNO}" "" "${LATESTTAG_KYVERNO}" "0")")
-rows+=("$(print_row "policy-reporter" "${DEPLOYED_POLICY_REPORTER}" "${CODE_POLICY_REPORTER}" "${LATEST_POLICY_REPORTER}" "${DEPLOYEDTAG_POLICY_REPORTER}" "${CODETAG_POLICY_REPORTER}" "" "${LATESTTAG_POLICY_REPORTER}" "0")")
-rows+=("$(print_row "cert-manager" "${DEPLOYED_CERT_MANAGER}" "${CODE_CERT_MANAGER}" "${LATEST_CERT_MANAGER}" "${DEPLOYEDTAG_CERT_MANAGER}" "${CODETAG_CERT_MANAGER}" "" "${LATESTTAG_CERT_MANAGER}" "0")")
-rows+=("$(print_row "dex chart" "${DEPLOYED_DEX}" "${CODE_DEX}" "${LATEST_DEX}" "${DEPLOYEDTAG_DEX}" "${CODETAG_DEX}" "" "${LATESTTAG_DEX}" "0")")
-rows+=("$(print_row "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}" "${CODE_OAUTH2_PROXY}" "${LATEST_OAUTH2_PROXY}" "${DEPLOYEDTAG_OAUTH2_PROXY}" "${CODETAG_OAUTH2_PROXY}" "" "${LATESTTAG_OAUTH2_PROXY}" "0")")
-
-printf "%s\n" "${rows[@]}" | sort -t $'\t' -k1,1 | \
-  awk -F $'\t' '{
-    printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9
-  }'
-echo ""
-
-check_consistent_tfvars "argocd_chart_version"
-check_consistent_tfvars "argocd_image_repository"
-check_consistent_tfvars "argocd_image_tag"
-check_consistent_tfvars "gitea_chart_version"
-check_consistent_tfvars "cilium_version"
-check_consistent_tfvars "prometheus_chart_version"
-check_consistent_tfvars "grafana_chart_version"
-check_consistent_tfvars "loki_chart_version"
-check_consistent_tfvars "victoria_logs_chart_version"
-check_consistent_tfvars "tempo_chart_version"
-check_consistent_tfvars "signoz_chart_version"
-check_consistent_tfvars "opentelemetry_collector_chart_version"
-check_consistent_tfvars "headlamp_chart_version"
-check_consistent_tfvars "kyverno_chart_version"
-check_consistent_tfvars "policy_reporter_chart_version"
-check_consistent_tfvars "cert_manager_chart_version"
-check_consistent_tfvars "dex_chart_version"
-check_consistent_tfvars "oauth2_proxy_chart_version"
-
-check_app_yaml_tfvar_drift
-check_preload_chart_section_version_alignment
-check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
-
-if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then
-  ok "Argo CD image override active: ${CODE_ARGOCD_IMAGE_REF} (chart appVersion ${CODETAG_ARGOCD_CHART}, latest upstream appVersion ${LATESTTAG_ARGOCD_CHART})"
   echo ""
+  ok "Version check (Deployed vs Codebase vs Latest)"
+  echo ""
+
+  CODE_ARGOCD=$(tf_default_from_variables "argocd_chart_version")
+  CODE_ARGOCD_IMAGE_REPO=$(tf_default_from_variables "argocd_image_repository")
+  CODE_ARGOCD_IMAGE_TAG=$(tf_default_from_variables "argocd_image_tag")
+  CODE_GITEA=$(tf_default_from_variables "gitea_chart_version")
+  CODE_CILIUM=$(tf_default_from_variables "cilium_version")
+  CODE_PROMETHEUS=$(tf_default_from_variables "prometheus_chart_version")
+  CODE_GRAFANA=$(tf_default_from_variables "grafana_chart_version")
+  CODE_GRAFANA_IMAGE_TAG=$(tf_default_from_variables "grafana_image_tag")
+  CODE_LOKI=$(tf_default_from_variables "loki_chart_version")
+  CODE_VICTORIA_LOGS=$(tf_default_from_variables "victoria_logs_chart_version")
+  CODE_TEMPO=$(tf_default_from_variables "tempo_chart_version")
+  CODE_SIGNOZ=$(tf_default_from_variables "signoz_chart_version")
+  CODE_OTEL_COLLECTOR=$(tf_default_from_variables "opentelemetry_collector_chart_version")
+  CODE_HEADLAMP=$(tf_default_from_variables "headlamp_chart_version")
+  CODE_KYVERNO=$(tf_default_from_variables "kyverno_chart_version")
+  CODE_POLICY_REPORTER=$(tf_default_from_variables "policy_reporter_chart_version")
+  CODE_CERT_MANAGER=$(tf_default_from_variables "cert_manager_chart_version")
+  CODE_DEX=$(tf_default_from_variables "dex_chart_version")
+  CODE_OAUTH2_PROXY=$(tf_default_from_variables "oauth2_proxy_chart_version")
+  if [ -z "${CODE_ARGOCD_IMAGE_REPO}" ]; then
+    CODE_ARGOCD_IMAGE_REPO="quay.io/argoproj/argocd"
+  fi
+
+  CODE_ARGOCD_IMAGE_REF=""
+  if [ -n "${CODE_ARGOCD_IMAGE_REPO}" ] && [ -n "${CODE_ARGOCD_IMAGE_TAG}" ]; then
+    CODE_ARGOCD_IMAGE_REF="${CODE_ARGOCD_IMAGE_REPO}:${CODE_ARGOCD_IMAGE_TAG}"
+  fi
+
+  EXPECTED_CLUSTER_NAME=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "cluster_name")
+  if [ -z "${EXPECTED_CLUSTER_NAME}" ]; then EXPECTED_CLUSTER_NAME="kind-local"; fi
+
+  LATEST_ARGOCD=$(helm_latest_chart_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd")
+  LATEST_GITEA=$(helm_latest_chart_version "gitea" "https://dl.gitea.io/charts/" "gitea")
+  LATEST_CILIUM=$(helm_latest_chart_version "cilium" "https://helm.cilium.io" "cilium")
+  LATEST_PROMETHEUS=$(helm_latest_chart_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus")
+  LATEST_GRAFANA=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "grafana")
+  LATEST_LOKI=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "loki")
+  LATEST_VICTORIA_LOGS=$(helm_latest_chart_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single")
+  LATEST_TEMPO=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "tempo")
+  LATEST_SIGNOZ=$(helm_latest_chart_version "signoz" "https://charts.signoz.io" "signoz")
+  LATEST_OTEL_COLLECTOR=$(helm_latest_chart_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector")
+  LATEST_HEADLAMP=$(helm_latest_chart_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp")
+  LATEST_KYVERNO=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno")
+  LATEST_POLICY_REPORTER=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter")
+  LATEST_CERT_MANAGER=$(helm_latest_chart_version "jetstack" "https://charts.jetstack.io" "cert-manager")
+  LATEST_DEX=$(helm_latest_chart_version "dex" "https://charts.dexidp.io" "dex")
+  LATEST_OAUTH2_PROXY=$(helm_latest_chart_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy")
+
+  CODETAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${CODE_ARGOCD}")
+  CODETAG_ARGOCD="${CODETAG_ARGOCD_CHART}"
+  CODETAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${CODE_GITEA}")
+  CODETAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${CODE_CILIUM}")
+  CODETAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${CODE_PROMETHEUS}")
+  CODETAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${CODE_GRAFANA}")
+  if [ -n "${CODE_GRAFANA_IMAGE_TAG}" ]; then
+    CODETAG_GRAFANA="${CODE_GRAFANA_IMAGE_TAG}"
+  fi
+  CODETAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${CODE_LOKI}")
+  CODETAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${CODE_VICTORIA_LOGS}")
+  CODETAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${CODE_TEMPO}")
+  CODETAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${CODE_SIGNOZ}")
+  CODETAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${CODE_OTEL_COLLECTOR}")
+  CODETAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${CODE_HEADLAMP}")
+  CODETAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${CODE_KYVERNO}")
+  CODETAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${CODE_POLICY_REPORTER}")
+  CODETAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${CODE_CERT_MANAGER}")
+  CODETAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${CODE_DEX}")
+  CODETAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${CODE_OAUTH2_PROXY}")
+
+  LATESTTAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${LATEST_ARGOCD}")
+  LATESTTAG_ARGOCD="${LATESTTAG_ARGOCD_CHART}"
+  LATESTTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${LATEST_GITEA}")
+  LATESTTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${LATEST_CILIUM}")
+  LATESTTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${LATEST_PROMETHEUS}")
+  LATESTTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${LATEST_GRAFANA}")
+  LATESTTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${LATEST_LOKI}")
+  LATESTTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${LATEST_VICTORIA_LOGS}")
+  LATESTTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${LATEST_TEMPO}")
+  LATESTTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${LATEST_SIGNOZ}")
+  LATESTTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${LATEST_OTEL_COLLECTOR}")
+  LATESTTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${LATEST_HEADLAMP}")
+  LATESTTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${LATEST_KYVERNO}")
+  LATESTTAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${LATEST_POLICY_REPORTER}")
+  LATESTTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${LATEST_CERT_MANAGER}")
+  LATESTTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${LATEST_DEX}")
+  LATESTTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${LATEST_OAUTH2_PROXY}")
+
+  CONFIGURED_ARGOCD_IMAGE_STATUS="$(image_ref_availability "${CODE_ARGOCD_IMAGE_REF}")"
+  LATEST_PREFERRED_ARGOCD_TAG=""
+  LATEST_PREFERRED_ARGOCD_IMAGE_REF=""
+  LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=""
+  if [ "${CODE_ARGOCD_IMAGE_REPO}" = "dhi.io/argocd" ] && [ -n "${CODE_ARGOCD_IMAGE_TAG}" ] && [ -n "${LATESTTAG_ARGOCD_CHART}" ]; then
+    LATEST_PREFERRED_ARGOCD_TAG="$(derive_tag_with_existing_suffix "${LATESTTAG_ARGOCD_CHART}" "${CODE_ARGOCD_IMAGE_TAG}")"
+    if [ -n "${LATEST_PREFERRED_ARGOCD_TAG}" ]; then
+      LATEST_PREFERRED_ARGOCD_IMAGE_REF="${CODE_ARGOCD_IMAGE_REPO}:${LATEST_PREFERRED_ARGOCD_TAG}"
+      LATEST_PREFERRED_ARGOCD_IMAGE_STATUS="$(image_ref_availability "${LATEST_PREFERRED_ARGOCD_IMAGE_REF}")"
+    fi
+  fi
+
+  CLUSTER_OK=0
+  if command -v kind >/dev/null 2>&1; then
+    if ! kind get clusters 2>/dev/null | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
+      warn "Cluster '${EXPECTED_CLUSTER_NAME}' not found; Deployed=Unavailable"
+    elif cluster_reachable; then
+      CLUSTER_OK=1
+    else
+      warn "Cluster '${EXPECTED_CLUSTER_NAME}' exists but API is unreachable; Deployed=Unavailable"
+    fi
+  else
+    if cluster_reachable; then
+      CLUSTER_OK=1
+    else
+      warn "Cluster API unreachable (and 'kind' not found); Deployed=Unavailable"
+    fi
+  fi
+
+  DEPLOYED_CILIUM=""
+  DEPLOYED_ARGOCD=""
+  DEPLOYED_GITEA=""
+  DEPLOYED_SIGNOZ=""
+  DEPLOYED_PROMETHEUS=""
+  DEPLOYED_GRAFANA=""
+  DEPLOYED_LOKI=""
+  DEPLOYED_VICTORIA_LOGS=""
+  DEPLOYED_TEMPO=""
+  DEPLOYED_OTEL_COLLECTOR=""
+  DEPLOYED_HEADLAMP=""
+  DEPLOYED_KYVERNO=""
+  DEPLOYED_POLICY_REPORTER=""
+  DEPLOYED_CERT_MANAGER=""
+  DEPLOYED_DEX=""
+  DEPLOYED_OAUTH2_PROXY=""
+  DEPLOYEDTAG_CILIUM=""
+  DEPLOYEDTAG_ARGOCD=""
+  DEPLOYED_ARGOCD_IMAGE_REF=""
+  DEPLOYEDTAG_GITEA=""
+  DEPLOYEDTAG_PROMETHEUS=""
+  DEPLOYEDTAG_GRAFANA=""
+  DEPLOYEDTAG_LOKI=""
+  DEPLOYEDTAG_VICTORIA_LOGS=""
+  DEPLOYEDTAG_TEMPO=""
+  DEPLOYEDTAG_SIGNOZ=""
+  DEPLOYEDTAG_OTEL_COLLECTOR=""
+  DEPLOYEDTAG_HEADLAMP=""
+  DEPLOYEDTAG_KYVERNO=""
+  DEPLOYEDTAG_POLICY_REPORTER=""
+  DEPLOYEDTAG_CERT_MANAGER=""
+  DEPLOYEDTAG_DEX=""
+  DEPLOYEDTAG_OAUTH2_PROXY=""
+
+  if [ "${CLUSTER_OK}" -eq 1 ]; then
+    DEPLOYED_CILIUM=$(helm_deployed_chart_version "kube-system" "cilium")
+    DEPLOYED_ARGOCD=$(helm_deployed_chart_version "argocd" "argocd")
+    DEPLOYED_ARGOCD_IMAGE_REF=$(k8s_deployment_container_image "argocd" "argocd-server" "server")
+
+    DEPLOYED_GITEA=$(argocd_app_deployed_chart_version "gitea" "gitea")
+    DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus")
+    DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana")
+    DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki")
+    DEPLOYED_VICTORIA_LOGS=$(argocd_app_deployed_chart_version "victoria-logs" "victoria-logs-single")
+    DEPLOYED_TEMPO=$(argocd_app_deployed_chart_version "tempo" "tempo")
+    DEPLOYED_SIGNOZ=$(argocd_app_deployed_chart_version "signoz" "signoz")
+    DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-agent" "opentelemetry-collector")
+    if [ -z "${DEPLOYED_OTEL_COLLECTOR}" ]; then
+      DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-prometheus" "opentelemetry-collector")
+    fi
+    DEPLOYED_HEADLAMP=$(argocd_app_deployed_chart_version "headlamp" "headlamp")
+
+    DEPLOYED_KYVERNO=$(argocd_app_deployed_chart_version "kyverno" "kyverno")
+    DEPLOYED_POLICY_REPORTER=$(argocd_app_deployed_chart_version "policy-reporter" "policy-reporter")
+    DEPLOYED_CERT_MANAGER=$(argocd_app_deployed_chart_version "cert-manager" "cert-manager")
+
+    DEPLOYED_DEX=$(argocd_app_deployed_chart_version "dex" "dex")
+    DEPLOYED_OAUTH2_PROXY=$(argocd_app_deployed_chart_version "oauth2-proxy-argocd" "oauth2-proxy")
+
+    DEPLOYEDTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${DEPLOYED_CILIUM}")
+    DEPLOYEDTAG_ARGOCD=$(image_tag_from_ref "${DEPLOYED_ARGOCD_IMAGE_REF}")
+    if [ -z "${DEPLOYEDTAG_ARGOCD}" ]; then
+      DEPLOYEDTAG_ARGOCD=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${DEPLOYED_ARGOCD}")
+    fi
+    DEPLOYEDTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${DEPLOYED_GITEA}")
+    DEPLOYEDTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${DEPLOYED_PROMETHEUS}")
+    DEPLOYEDTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${DEPLOYED_GRAFANA}")
+    DEPLOYEDTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${DEPLOYED_LOKI}")
+    DEPLOYEDTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${DEPLOYED_VICTORIA_LOGS}")
+    DEPLOYEDTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${DEPLOYED_TEMPO}")
+    DEPLOYEDTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${DEPLOYED_SIGNOZ}")
+    DEPLOYEDTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${DEPLOYED_OTEL_COLLECTOR}")
+    DEPLOYEDTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${DEPLOYED_HEADLAMP}")
+    DEPLOYEDTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${DEPLOYED_KYVERNO}")
+    DEPLOYEDTAG_POLICY_REPORTER=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/policy-reporter" "policy-reporter" "${DEPLOYED_POLICY_REPORTER}")
+    DEPLOYEDTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${DEPLOYED_CERT_MANAGER}")
+    DEPLOYEDTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${DEPLOYED_DEX}")
+    DEPLOYEDTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}")
+  else
+    DEPLOYED_CILIUM="Unavailable"
+    DEPLOYED_ARGOCD="Unavailable"
+    DEPLOYED_GITEA="Unavailable"
+    DEPLOYED_PROMETHEUS="Unavailable"
+    DEPLOYED_GRAFANA="Unavailable"
+    DEPLOYED_LOKI="Unavailable"
+    DEPLOYED_VICTORIA_LOGS="Unavailable"
+    DEPLOYED_TEMPO="Unavailable"
+    DEPLOYED_SIGNOZ="Unavailable"
+    DEPLOYED_OTEL_COLLECTOR="Unavailable"
+    DEPLOYED_HEADLAMP="Unavailable"
+    DEPLOYED_KYVERNO="Unavailable"
+    DEPLOYED_POLICY_REPORTER="Unavailable"
+    DEPLOYED_CERT_MANAGER="Unavailable"
+    DEPLOYED_DEX="Unavailable"
+    DEPLOYED_OAUTH2_PROXY="Unavailable"
+    DEPLOYEDTAG_CILIUM="Unavailable"
+    DEPLOYEDTAG_ARGOCD="Unavailable"
+    DEPLOYEDTAG_GITEA="Unavailable"
+    DEPLOYEDTAG_PROMETHEUS="Unavailable"
+    DEPLOYEDTAG_GRAFANA="Unavailable"
+    DEPLOYEDTAG_LOKI="Unavailable"
+    DEPLOYEDTAG_VICTORIA_LOGS="Unavailable"
+    DEPLOYEDTAG_TEMPO="Unavailable"
+    DEPLOYEDTAG_SIGNOZ="Unavailable"
+    DEPLOYEDTAG_OTEL_COLLECTOR="Unavailable"
+    DEPLOYEDTAG_HEADLAMP="Unavailable"
+    DEPLOYEDTAG_KYVERNO="Unavailable"
+    DEPLOYEDTAG_POLICY_REPORTER="Unavailable"
+    DEPLOYEDTAG_CERT_MANAGER="Unavailable"
+    DEPLOYEDTAG_DEX="Unavailable"
+    DEPLOYEDTAG_OAUTH2_PROXY="Unavailable"
+  fi
+
+  echo "Component versions"
+  printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n" "Component" "Deployed" "Codebase" "Latest" "DeployTag" "CodeTag" "PrefTag" "LatestTag" "Status"
+  printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n" "---------" "--------" "--------" "------" "---------" "-------" "-------" "---------" "------"
+
+  rows=()
+  rows+=("$(print_row "argo-cd chart" "${DEPLOYED_ARGOCD}" "${CODE_ARGOCD}" "${LATEST_ARGOCD}" "${DEPLOYEDTAG_ARGOCD}" "${CODETAG_ARGOCD}" "${LATEST_PREFERRED_ARGOCD_TAG}" "${LATESTTAG_ARGOCD}" "1" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
+  rows+=("$(print_row "gitea chart" "${DEPLOYED_GITEA}" "${CODE_GITEA}" "${LATEST_GITEA}" "${DEPLOYEDTAG_GITEA}" "${CODETAG_GITEA}" "" "${LATESTTAG_GITEA}" "0")")
+  rows+=("$(print_row "cilium chart" "${DEPLOYED_CILIUM}" "${CODE_CILIUM}" "${LATEST_CILIUM}" "${DEPLOYEDTAG_CILIUM}" "${CODETAG_CILIUM}" "" "${LATESTTAG_CILIUM}" "0")")
+  rows+=("$(print_row "prometheus chart" "${DEPLOYED_PROMETHEUS}" "${CODE_PROMETHEUS}" "${LATEST_PROMETHEUS}" "${DEPLOYEDTAG_PROMETHEUS}" "${CODETAG_PROMETHEUS}" "" "${LATESTTAG_PROMETHEUS}" "0")")
+  rows+=("$(print_row "grafana chart" "${DEPLOYED_GRAFANA}" "${CODE_GRAFANA}" "${LATEST_GRAFANA}" "${DEPLOYEDTAG_GRAFANA}" "${CODETAG_GRAFANA}" "" "${LATESTTAG_GRAFANA}" "0")")
+  rows+=("$(print_row "loki chart" "${DEPLOYED_LOKI}" "${CODE_LOKI}" "${LATEST_LOKI}" "${DEPLOYEDTAG_LOKI}" "${CODETAG_LOKI}" "" "${LATESTTAG_LOKI}" "0")")
+  rows+=("$(print_row "victoria-logs" "${DEPLOYED_VICTORIA_LOGS}" "${CODE_VICTORIA_LOGS}" "${LATEST_VICTORIA_LOGS}" "${DEPLOYEDTAG_VICTORIA_LOGS}" "${CODETAG_VICTORIA_LOGS}" "" "${LATESTTAG_VICTORIA_LOGS}" "0")")
+  rows+=("$(print_row "tempo chart" "${DEPLOYED_TEMPO}" "${CODE_TEMPO}" "${LATEST_TEMPO}" "${DEPLOYEDTAG_TEMPO}" "${CODETAG_TEMPO}" "" "${LATESTTAG_TEMPO}" "0")")
+  rows+=("$(print_row "signoz chart" "${DEPLOYED_SIGNOZ}" "${CODE_SIGNOZ}" "${LATEST_SIGNOZ}" "${DEPLOYEDTAG_SIGNOZ}" "${CODETAG_SIGNOZ}" "" "${LATESTTAG_SIGNOZ}" "0")")
+  rows+=("$(print_row "otel-collector" "${DEPLOYED_OTEL_COLLECTOR}" "${CODE_OTEL_COLLECTOR}" "${LATEST_OTEL_COLLECTOR}" "${DEPLOYEDTAG_OTEL_COLLECTOR}" "${CODETAG_OTEL_COLLECTOR}" "" "${LATESTTAG_OTEL_COLLECTOR}" "0")")
+  rows+=("$(print_row "headlamp chart" "${DEPLOYED_HEADLAMP}" "${CODE_HEADLAMP}" "${LATEST_HEADLAMP}" "${DEPLOYEDTAG_HEADLAMP}" "${CODETAG_HEADLAMP}" "" "${LATESTTAG_HEADLAMP}" "0")")
+  rows+=("$(print_row "kyverno chart" "${DEPLOYED_KYVERNO}" "${CODE_KYVERNO}" "${LATEST_KYVERNO}" "${DEPLOYEDTAG_KYVERNO}" "${CODETAG_KYVERNO}" "" "${LATESTTAG_KYVERNO}" "0")")
+  rows+=("$(print_row "policy-reporter" "${DEPLOYED_POLICY_REPORTER}" "${CODE_POLICY_REPORTER}" "${LATEST_POLICY_REPORTER}" "${DEPLOYEDTAG_POLICY_REPORTER}" "${CODETAG_POLICY_REPORTER}" "" "${LATESTTAG_POLICY_REPORTER}" "0")")
+  rows+=("$(print_row "cert-manager" "${DEPLOYED_CERT_MANAGER}" "${CODE_CERT_MANAGER}" "${LATEST_CERT_MANAGER}" "${DEPLOYEDTAG_CERT_MANAGER}" "${CODETAG_CERT_MANAGER}" "" "${LATESTTAG_CERT_MANAGER}" "0")")
+  rows+=("$(print_row "dex chart" "${DEPLOYED_DEX}" "${CODE_DEX}" "${LATEST_DEX}" "${DEPLOYEDTAG_DEX}" "${CODETAG_DEX}" "" "${LATESTTAG_DEX}" "0")")
+  rows+=("$(print_row "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}" "${CODE_OAUTH2_PROXY}" "${LATEST_OAUTH2_PROXY}" "${DEPLOYEDTAG_OAUTH2_PROXY}" "${CODETAG_OAUTH2_PROXY}" "" "${LATESTTAG_OAUTH2_PROXY}" "0")")
+
+  printf "%s\n" "${rows[@]}" | sort -t $'\t' -k1,1 | \
+    awk -F $'\t' '{
+      printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9
+    }'
+  echo ""
+
+  echo "Preferred image availability"
+  printf "%-16s %-38s %-38s %s\n" "Component" "Configured" "Candidate" "Status"
+  printf "%-16s %-38s %-38s %s\n" "---------" "----------" "---------" "------"
+
+  image_rows=()
+  if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" = "dhi.io/argocd" ]; then
+    image_rows+=("$(print_preferred_image_row "argo-cd image" "${CODE_ARGOCD_IMAGE_REF}" "${CONFIGURED_ARGOCD_IMAGE_STATUS}" "${LATEST_PREFERRED_ARGOCD_IMAGE_REF}" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
+  fi
+
+  if [ "${#image_rows[@]}" -eq 0 ]; then
+    warn "No preferred image overrides configured"
+    echo ""
+  else
+    printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1 | \
+      awk -F $'\t' '{
+        printf "%-16s %-38s %-38s %s\n", $1, $2, $3, $4
+      }'
+    echo ""
+  fi
+
+  INSTALLED_KIND="$(kind_installed_version)"
+  LATEST_KIND="$(github_latest_release_tag "kubernetes-sigs/kind")"
+
+  echo "Tool versions"
+  printf "%-16s %-12s %-12s %s\n" "Tool" "Installed" "Latest" "Status"
+  printf "%-16s %-12s %-12s %s\n" "----" "---------" "------" "------"
+
+  tool_rows=()
+  tool_rows+=("$(print_tool_row "kind cli" "${INSTALLED_KIND}" "${LATEST_KIND}")")
+
+  printf "%s\n" "${tool_rows[@]}" | sort -t $'\t' -k1,1 | \
+    awk -F $'\t' '{
+      printf "%-16s %-12s %-12s %s\n", $1, $2, $3, $4
+    }'
+  echo ""
+
+  check_consistent_tfvars "argocd_chart_version"
+  check_consistent_tfvars "argocd_image_repository"
+  check_consistent_tfvars "argocd_image_tag"
+  check_consistent_tfvars "gitea_chart_version"
+  check_consistent_tfvars "cilium_version"
+  check_consistent_tfvars "prometheus_chart_version"
+  check_consistent_tfvars "grafana_chart_version"
+  check_consistent_tfvars "loki_chart_version"
+  check_consistent_tfvars "victoria_logs_chart_version"
+  check_consistent_tfvars "tempo_chart_version"
+  check_consistent_tfvars "signoz_chart_version"
+  check_consistent_tfvars "opentelemetry_collector_chart_version"
+  check_consistent_tfvars "headlamp_chart_version"
+  check_consistent_tfvars "kyverno_chart_version"
+  check_consistent_tfvars "policy_reporter_chart_version"
+  check_consistent_tfvars "cert_manager_chart_version"
+  check_consistent_tfvars "dex_chart_version"
+  check_consistent_tfvars "oauth2_proxy_chart_version"
+
+  check_app_yaml_tfvar_drift
+  check_preload_chart_section_version_alignment
+  check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
+
+  if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then
+    ok "Argo CD image override active: ${CODE_ARGOCD_IMAGE_REF} (chart appVersion ${CODETAG_ARGOCD_CHART}, latest upstream appVersion ${LATESTTAG_ARGOCD_CHART})"
+    echo ""
+  fi
+
+  ok "Done"
+}
+
+if [ "${CHECK_VERSION_LIB_ONLY:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
 fi
 
-ok "Done"
+main "$@"

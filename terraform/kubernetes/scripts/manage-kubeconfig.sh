@@ -412,9 +412,18 @@ Usage:
   manage-kubeconfig.sh ensure-valid <kubeconfig>
   manage-kubeconfig.sh prepare-for-reset <kubeconfig>
   manage-kubeconfig.sh count-contexts <kubeconfig>
+  manage-kubeconfig.sh lint
   manage-kubeconfig.sh merge <source-kubeconfig> <target-kubeconfig> [context]
   manage-kubeconfig.sh delete-context <kubeconfig> <context> [cluster] [user] [delete_file_if_empty]
 EOF
+}
+
+lint_with_kubie() {
+  if ! command -v kubie >/dev/null 2>&1; then
+    return 0
+  fi
+
+  kubie lint
 }
 
 main() {
@@ -433,6 +442,10 @@ main() {
     count-contexts)
       [[ $# -eq 1 ]] || { usage >&2; exit 1; }
       count_contexts "$1"
+      ;;
+    lint)
+      [[ $# -eq 0 ]] || { usage >&2; exit 1; }
+      lint_with_kubie
       ;;
     merge)
       [[ $# -ge 2 && $# -le 3 ]] || { usage >&2; exit 1; }

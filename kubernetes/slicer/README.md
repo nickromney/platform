@@ -122,6 +122,9 @@ no longer the hidden prerequisite for stage `500+` applies.
   the selected host group, authorizes a dedicated bootstrap SSH key, installs
   k3s from the host with `k3sup-pro` when present and `k3sup` otherwise, and writes
   `~/.kube/slicer-k3s.yaml`.
+- The repo-owned kubeconfig stays split by default. Use `kubie` across
+  `~/.kube/*.yaml`, and only run `make -C kubernetes/slicer merge-default-kubeconfig`
+  if you intentionally want `slicer-k3s` copied into `~/.kube/config`.
 - The bootstrap keeps the Slicer-specific host-health guards that still pull
   their weight on current images: swap creation and ext4 error checks.
 - Direct `make -C kubernetes/slicer 100 apply` now fails fast if k3s is
@@ -135,6 +138,10 @@ no longer the hidden prerequisite for stage `500+` applies.
 - Stage `900` now also configures the Slicer k3s apiserver to trust Dex-issued
   Headlamp tokens, so a fresh `900 apply` leaves Headlamp login-ready without a
   separate repair step.
+- Stage `900` is the confidence path when you drive it through `make`. A
+  successful `make -C kubernetes/slicer 900 apply` now also runs
+  `check-health` and `check-sso-e2e` before returning success. Raw
+  Terragrunt/OpenTofu applies remain apply-only.
 - `SLICER_VM_NAME` now defaults to `$(SLICER_VM_GROUP)-1`. For the on-device
   Slicer group, `export SLICER_VM_GROUP=slicer` gives you `slicer-1` by
   default; override `SLICER_VM_NAME` explicitly if you want a different VM.

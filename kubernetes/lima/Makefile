@@ -25,6 +25,7 @@ AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
+MERGE_KUBECONFIG_TO_DEFAULT ?= 0
 DESIRED_NODES ?= 1
 LIMA_INSTANCE_PREFIX ?= k3s-node
 LIMA_VM_USER ?= $(USER)
@@ -85,6 +86,7 @@ include ../../mk/stage-workflow.mk
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
 export DEFAULT_KUBECONFIG_PATH
+export MERGE_KUBECONFIG_TO_DEFAULT
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
 export PLATFORM_ADMIN_PASSWORD
@@ -102,6 +104,9 @@ export TF_VAR_gitea_member_user_pwd ?= $(PLATFORM_DEMO_PASSWORD)
 
 ifeq ($(filter $(LIMA_HOST_GATEWAY_PROXY_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid LIMA_HOST_GATEWAY_PROXY_MODE="$(LIMA_HOST_GATEWAY_PROXY_MODE)". Expected one of: $(VALID_HELPER_MODES))
+endif
+ifeq ($(filter $(MERGE_KUBECONFIG_TO_DEFAULT),0 1),)
+$(error Invalid MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)". Expected one of: 0 1)
 endif
 ifeq ($(filter $(PLATFORM_LOCAL_IMAGE_CACHE_MODE),$(VALID_HELPER_MODES)),)
 $(error Invalid PLATFORM_LOCAL_IMAGE_CACHE_MODE="$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)". Expected one of: $(VALID_HELPER_MODES))
@@ -197,13 +202,14 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"
-	@echo "  lima -> $(KUBECONFIG_PATH) (merged into $(DEFAULT_KUBECONFIG_PATH) for kubectx)"
+	@echo "  lima -> $(KUBECONFIG_PATH) (split by default; merge explicitly into $(DEFAULT_KUBECONFIG_PATH) if needed)"
 	@echo ""
 	@echo "Aliases:"
 	@echo "  make start                                   Alias for lima-vms-up"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)"
+	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(KUBECONFIG_PATH) into $(DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
@@ -230,7 +236,14 @@ check-kubeconfig:
 	lima_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
 	lima_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$lima_current" ] || lima_current="<none>"; \
-	echo "OK   lima kubeconfig: $(KUBECONFIG_PATH) ($$lima_count context(s), current=$$lima_current)"
+	echo "OK   lima kubeconfig: $(KUBECONFIG_PATH) ($$lima_count context(s), current=$$lima_current)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" lint || true)"; \
+	if [ -n "$$kubie_lint_output" ]; then \
+		echo "WARN kubie lint:"; \
+		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
+	elif command -v kubie >/dev/null 2>&1; then \
+		echo "OK   kubie lint"; \
+	fi
 
 .PHONY: check-kind-stopped
 check-kind-stopped:
@@ -250,13 +263,25 @@ prereqs:
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
 	required=(curl docker git jq k3sup kubectl limactl terragrunt tofu yq); \
-	optional=(bats helm k3sup-pro kubectx mkcert node npm shellcheck); \
+	optional=(bats bun helm k3sup-pro kubectx kubie mkcert node npm npx shellcheck); \
+	recommended_test_tools=(bun node npm npx); \
 	missing_required=(); \
+	missing_recommended=(); \
 	is_required() { \
 		local target="$$1"; \
 		local req=""; \
 		for req in "$${required[@]}"; do \
 			if [ "$$req" = "$$target" ]; then \
+				return 0; \
+			fi; \
+		done; \
+		return 1; \
+	}; \
+	is_recommended() { \
+		local target="$$1"; \
+		local recommended=""; \
+		for recommended in "$${recommended_test_tools[@]}"; do \
+			if [ "$$recommended" = "$$target" ]; then \
 				return 0; \
 			fi; \
 		done; \
@@ -274,6 +299,9 @@ prereqs:
 			missing_required+=("$$bin"); \
 		else \
 			echo "WARN $$bin (missing, optional)"; \
+			if is_recommended "$$bin"; then \
+				missing_recommended+=("$$bin"); \
+			fi; \
 		fi; \
 	}; \
 	sorted_tools=($$(printf '%s\n' "$${required[@]}" "$${optional[@]}" | LC_ALL=C sort -u)); \
@@ -291,6 +319,13 @@ prereqs:
 		echo "Install hints:"; \
 		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
+	fi; \
+	if [ $${#missing_recommended[@]} -gt 0 ]; then \
+		echo ""; \
+		echo "Recommended browser/E2E test tools missing: $${missing_recommended[*]}"; \
+		echo ""; \
+		echo "Install hints:"; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
 	fi; \
 	echo ""; \
 	echo "Docker daemon verification:"; \
@@ -340,6 +375,7 @@ bootstrap-k3s:
 	K3S_SERVER_EXTRA_ARGS="$(K3S_SERVER_EXTRA_ARGS)" \
 	K3S_AGENT_EXTRA_ARGS="$(K3S_AGENT_EXTRA_ARGS)" \
 	KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" \
+	MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" \
 	IMAGE_LIST_FILE="$(preload_images_file)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
 	LOCAL_IMAGE_CACHE_SCHEME="$(LOCAL_IMAGE_CACHE_SCHEME)" \
@@ -657,6 +693,7 @@ apply: workflow-validate
 	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
 		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
 		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+		run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 	fi
 
 .PHONY: check-health

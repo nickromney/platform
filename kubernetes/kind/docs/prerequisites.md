@@ -20,7 +20,7 @@ brew install jq kind kubernetes-cli make opentofu terragrunt
 Optional tools:
 
 ```bash
-brew install cilium-cli helm hubble kubectx mkcert yq
+brew install cilium-cli helm hubble kubectx kubie mkcert yq
 mkcert -install
 ```
 
@@ -58,7 +58,10 @@ docker login
 - `cilium` is useful for manual Cilium inspection and troubleshooting.
 - `hubble` is useful for manual flow inspection once stage `300` is up.
 - `helm` is useful for version and chart debugging.
-- `kubectx` is just a convenience tool for context switching.
+- `kubectx` is just a convenience tool for context switching when you have
+  intentionally merged a repo kubeconfig into `~/.kube/config`.
+- `kubie` is useful for linting and switching across the repo's split
+  kubeconfig files.
 - `mkcert` is useful once HTTPS and local trust matter.
 - `yq` is helpful for ad hoc YAML inspection while debugging.
 
@@ -67,11 +70,17 @@ docker login
 `make prereqs` is the fastest sanity check after installation. It verifies:
 
 - expected binaries are on `PATH`
+- browser/E2E test tools such as `bun`, `node`, `npm`, and `npx` are surfaced as recommended tooling, with install hints when missing
 - the Docker daemon is reachable through `docker info`
 - Docker auth status is visible for `dhi.io` and Docker Hub
 - the host-side LLM endpoint is reachable when the selected stage opts into legacy `llm_gateway_mode = "direct"`
 - versions for the main tools can be queried
 - kubeconfig files and contexts look sane
+
+By default the repo keeps its own kubeconfigs split, for example
+`~/.kube/kind-kind-local.yaml`. If you need a legacy merged shape for a tool
+that only reads `~/.kube/config`, use `make merge-default-kubeconfig`
+explicitly rather than relying on the repo to auto-merge.
 
 Run it from this directory with:
 

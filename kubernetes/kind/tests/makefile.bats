@@ -16,6 +16,8 @@ setup() {
   [[ "${output}" == *"make apply 100"* ]]
   [[ "${output}" == *"900 - full stack + sso"* ]]
   [[ "${output}" == *"Linux -> Docker Engine or Docker Desktop"* ]]
+  [[ "${output}" == *"make merge-default-kubeconfig"* ]]
+  [[ "${output}" == *"split by default"* ]]
   [[ "${output}" == *"KIND_WORKER_COUNT=1|2|..."* ]]
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
@@ -66,7 +68,27 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" "$(ENSURE_KIND_KUBECONFIG)"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn 'KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind stage 900 apply waits for cluster health before browser SSO E2E verification" {
+  run grep -Fn 'run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind stage 900 apply runs browser SSO E2E verification after a successful apply" {
+  run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind check-kubeconfig refreshes the split kind kubeconfig first" {
+  run grep -Fn '$(MAKE) ensure-kind-kubeconfig >/dev/null; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
 }
