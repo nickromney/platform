@@ -167,7 +167,7 @@ help:
 	@echo "  make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity"
 	@echo "  make check-slicer-stopped"
 	@echo "  make check-sso"
-	@echo "  make check-sso-e2e                            Browser-based SSO end-to-end app checks (Playwright)"
+	@echo "  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)"
 	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version"
 	@echo "  make discover-images                          Dump images from running cluster"
@@ -640,13 +640,17 @@ apply: workflow-validate
 			set -e; \
 		fi; \
 	fi; \
-	if [ $$rc -eq 0 ]; then \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \
-		if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-			run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
+		if [ $$rc -eq 0 ]; then \
+			KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \
+			if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+				run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+				if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
+					echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
+				else \
+					run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
+				fi; \
+			fi; \
 		fi; \
-	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
 	fi; \
@@ -753,6 +757,11 @@ check-sso:
 .PHONY: check-sso-e2e
 check-sso-e2e:
 	@set -euo pipefail; \
+	if [ "$(PLATFORM_DEVCONTAINER)" = "1" ] && [ "$${ALLOW_DEVCONTAINER_BROWSER_E2E:-0}" != "1" ]; then \
+		echo "check-sso-e2e is host-oriented. The devcontainer image no longer bakes browser runtime dependencies."; \
+		echo "Run this target from the host, or set ALLOW_DEVCONTAINER_BROWSER_E2E=1 after provisioning browser deps manually."; \
+		exit 1; \
+	fi; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
 	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \

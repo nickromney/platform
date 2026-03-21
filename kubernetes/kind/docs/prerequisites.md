@@ -23,8 +23,9 @@ Browser/E2E tools:
 brew install bun node
 ```
 
-`make -C kubernetes/kind 900 apply` runs `check-sso-e2e` before it returns
-success, so `bun` and `node` are required for the stage-900 Makefile path.
+On the host, `make -C kubernetes/kind 900 apply` runs `check-sso-e2e` before it
+returns success, so `bun` and `node` are required for the host stage-900
+Makefile path.
 `node` provides `npm` and `npx`; Playwright stays project-local in the repo.
 
 Optional tools:

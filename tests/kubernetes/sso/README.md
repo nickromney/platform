@@ -11,6 +11,10 @@ If you are testing an older Slicer or Lima cluster, rerun `900 apply` first or i
 The repo uses project-local Playwright from `@playwright/test`; no global
 `playwright` install is expected.
 
+Full browser E2E is a host-oriented workflow. The devcontainer does not bake
+Chromium runtime libraries anymore, so run `check-sso-e2e` from the host unless
+you intentionally provision browser dependencies yourself.
+
 ## Setup
 
 ```bash
@@ -23,12 +27,6 @@ Required local tooling:
 
 - `bun`
 - `node` (which provides `npm` and `npx`)
-
-The devcontainer image bakes the Linux Chromium runtime libraries already, so
-the container only needs the project-local browser download above.
-When `PLATFORM_DEVCONTAINER=1`, the runner also maps the shared
-`*.127.0.0.1.sslip.io` browser URLs back to the host gateway automatically so
-the same public origins work from inside the container.
 
 ## Run
 

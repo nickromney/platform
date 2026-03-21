@@ -21,41 +21,10 @@ RUN apt-get update \
         curl \
         dnsutils \
         file \
-        fonts-freefont-ttf \
-        fonts-ipafont-gothic \
-        fonts-liberation \
-        fonts-noto-color-emoji \
-        fonts-tlwg-loma-otf \
-        fonts-unifont \
-        fonts-wqy-zenhei \
         git \
         iproute2 \
         iptables \
         iputils-ping \
-        libasound2t64 \
-        libatk-bridge2.0-0t64 \
-        libatk1.0-0t64 \
-        libatspi2.0-0t64 \
-        libcairo2 \
-        libcups2t64 \
-        libdbus-1-3 \
-        libdrm2 \
-        libfontconfig1 \
-        libfreetype6 \
-        libgbm1 \
-        libglib2.0-0t64 \
-        libnss3-tools \
-        libnspr4 \
-        libnss3 \
-        libpango-1.0-0 \
-        libx11-6 \
-        libxcb1 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxext6 \
-        libxfixes3 \
-        libxkbcommon0 \
-        libxrandr2 \
         locales \
         make \
         netcat-openbsd \
@@ -66,9 +35,6 @@ RUN apt-get update \
         rsync \
         sudo \
         unzip \
-        xfonts-cyrillic \
-        xfonts-scalable \
-        xvfb \
         xz-utils \
         zip \
     && locale-gen en_GB.UTF-8 \

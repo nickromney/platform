@@ -21,7 +21,7 @@ This README covers the Docker-backed teaching path for the repo.
 - Exposed service ports bind to `127.0.0.1`, not `0.0.0.0`, so the local platform stays local and can coexist with other local VM-based stacks.
 - `make reset` is destructive local cleanup. Without `AUTO_APPROVE=1`, it should prompt before removing cluster, kubeconfig, or local state.
 - The repo-owned kubeconfig stays at `~/.kube/kind-kind-local.yaml` by default. Use `kubie` to work across split kubeconfigs, and only run `make merge-default-kubeconfig` if you intentionally want this context copied into `~/.kube/config`.
-- Stage `900` is the confidence path when you drive it through `make`. A successful `make kind apply 900` now also runs `check-health` and `check-sso-e2e` before returning success. Raw Terragrunt/OpenTofu applies remain apply-only.
+- Stage `900` is the confidence path when you drive it through `make`. On the host, a successful `make kind apply 900` also runs `check-health` and `check-sso-e2e` before returning success. In the devcontainer, the stage-900 apply path stops at `check-health`; browser E2E remains host-oriented. Raw Terragrunt/OpenTofu applies remain apply-only.
 
 ## Prerequisites
 
@@ -39,8 +39,9 @@ Browser/E2E tools:
 brew install bun node
 ```
 
-`make -C kubernetes/kind 900 apply` runs `check-sso-e2e` before it returns
-success, so `bun` and `node` are part of the practical stage-900 toolchain.
+On the host, `make -C kubernetes/kind 900 apply` runs `check-sso-e2e` before it
+returns success, so `bun` and `node` are part of the practical stage-900
+toolchain.
 `node` provides `npm` and `npx`; Playwright stays project-local in the repo.
 
 Optional tools:
