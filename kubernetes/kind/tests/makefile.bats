@@ -112,6 +112,13 @@ setup() {
   [[ "${output}" != *"Shell audit:"* ]]
 }
 
+@test "kind prereqs keeps kyverno in the optional host tool inventory" {
+  run grep -Fn 'optional=(bats bun cilium helm hubble kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {
   state_file="${BATS_TEST_TMPDIR}/docker-state"
   printf 'stopped' >"${state_file}"

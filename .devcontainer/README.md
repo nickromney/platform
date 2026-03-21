@@ -64,13 +64,13 @@ npm install -g @devcontainers/cli
 If you already use the VS Code extension, you can also install the same CLI from
 the Command Palette with `Dev Containers: Install devcontainer CLI`.
 
-2. Verify the CLI is available:
+1. Verify the CLI is available:
 
 ```bash
 devcontainer --version
 ```
 
-3. Start and enter the container:
+1. Start and enter the container:
 
 ```bash
 devcontainer up --workspace-folder .
@@ -95,9 +95,14 @@ apply without special-case Makefile logic.
 
 The devcontainer prefers installers over hand-managed binaries:
 
-- Homebrew: general CLI/runtime layer, including `starship`.
+- Homebrew: general CLI/runtime layer, including `starship`, `yamllint`, and
+  `kyverno`.
 - `arkade`: Kubernetes-facing tools, including `kubectl`, `kind`, `helm`,
   `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, and `tofu`.
+
+The repo-level `make lint` entrypoint works inside the devcontainer too, and
+the image now includes both `yamllint` and `kyverno` for the recursive YAML and
+local policy validation passes.
 
 It also seeds shell startup for both `bash` and `zsh` so the container has:
 

@@ -5,6 +5,7 @@ Notes for implementing Headlamp as an in-cluster GUI for viewing workloads.
 ## Overview
 
 [Headlamp](https://headlamp.dev/) is a CNCF sandbox project providing a modern Kubernetes dashboard with:
+
 - Real-time cluster visualization
 - Plugin architecture for extensibility
 - OIDC/SSO support
@@ -12,12 +13,12 @@ Notes for implementing Headlamp as an in-cluster GUI for viewing workloads.
 
 ## Helm Chart
 
-```
+```text
 Repository: https://headlamp-k8s.github.io/headlamp/
 Chart: headlamp
 ```
 
-Docs: https://headlamp.dev/docs/latest/installation/in-cluster/
+Docs: <https://headlamp.dev/docs/latest/installation/in-cluster/>
 
 ## Implementation Plan
 
@@ -100,7 +101,7 @@ spec:
 
 ### 4. SSO Integration Options
 
-**Option A: Dex OIDC (recommended)**
+#### Option A: Dex OIDC (recommended)
 
 Add Headlamp as a client in Dex config:
 
@@ -115,12 +116,14 @@ staticClients:
 
 Configure Headlamp with OIDC settings pointing to Dex.
 
-**Option B: Service Account Token**
+#### Option B: Service Account Token
 
 No SSO - users authenticate with kubectl-generated tokens:
+
 ```bash
 kubectl create token headlamp -n headlamp --duration=24h
 ```
+
 Simpler but less convenient for regular use.
 
 ### 5. RBAC
@@ -137,7 +140,7 @@ For write access (editing resources via UI), bind to `edit` or `admin` ClusterRo
 
 ### 6. Files to Create
 
-```
+```text
 apps/headlamp/
 ├── kustomization.yaml
 ├── namespace.yaml
@@ -164,6 +167,6 @@ variable "enable_headlamp" {
 
 ## References
 
-- Headlamp docs: https://headlamp.dev/docs/latest/
-- Helm chart: https://github.com/headlamp-k8s/headlamp/tree/main/charts/headlamp
-- OIDC setup: https://headlamp.dev/docs/latest/installation/in-cluster/oidc/
+- Headlamp docs: <https://headlamp.dev/docs/latest/>
+- Helm chart: <https://github.com/headlamp-k8s/headlamp/tree/main/charts/headlamp>
+- OIDC setup: <https://headlamp.dev/docs/latest/installation/in-cluster/oidc/>

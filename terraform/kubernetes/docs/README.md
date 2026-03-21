@@ -158,6 +158,7 @@ These are the next setup steps for local builds/pulls and for onboarding applica
 ### 1) Gitea registry + Kind node trust (required for image pulls)
 
 This stack now writes containerd `hosts.toml` for:
+
 - `docker.io`
 - `gitea_registry_host` (default `localhost:30090`)
 
@@ -165,17 +166,20 @@ It also mounts `/etc/containerd/certs.d` into Kind nodes so containerd can pull 
 **Important:** Changing Kind mounts requires recreating the Kind cluster.
 
 Suggested values:
+
 - `gitea_registry_host = "localhost:30090"`
 - `gitea_registry_scheme = "http"`
 - `enable_docker_socket_mount = true`
 - `docker_socket_path = "/var/run/docker.sock"`
 
 Apply notes:
+
 - Any change to Kind mounts will recreate the cluster on the next `make apply`.
 
 ### 2) In-cluster Gitea Actions runner (optional, for local builds)
 
 Enable the runner via:
+
 - `enable_actions_runner = true`
 
 The runner uses the host Docker socket and registers itself against the in-cluster Gitea.
@@ -184,10 +188,12 @@ This gives you an in‑cluster CI path that can build/push images to the Gitea r
 ### 3) Registry pull secrets for namespaces
 
 If you want workloads to pull images from the local Gitea registry, add namespaces here:
+
 - `registry_secret_namespaces = ["<your-namespace>"]`
 
 This creates a `gitea-registry-creds` secret in each namespace.
 You still need to reference the secret from workloads/service accounts:
+
 - `imagePullSecrets: [{ name: gitea-registry-creds }]`
 
 ### 4) Flexible app repo onboarding (by design)
@@ -195,14 +201,17 @@ You still need to reference the secret from workloads/service accounts:
 We want this to be flexible across teammates and setups:
 
 Option A: **External repo (GitHub, etc.)**
+
 - Create an Argo CD Application that points directly to the external repo.
 - Add repo credentials in Argo CD (SSH key or HTTPS token).
 
 Option B: **Mirror into local Gitea**
+
 - Clone the repo locally (or from GitHub) and push into Gitea.
 - Point Argo CD at the in-cluster Gitea repo.
 
 We can implement a generic "seed repo" script later that supports:
+
 - `SOURCE=local path` or `SOURCE=git URL`
 - `DEST=gitea repo`
 - optional filters (subdir, overlays, kustomize/helm)

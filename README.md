@@ -34,6 +34,7 @@ shape for a specific workflow, each cluster Makefile exposes an explicit
 Once you reopen the workspace in the container, the main entrypoints are:
 
 ```shell
+make lint
 make -C apps prereqs
 make -C kubernetes/kind prereqs
 make -C apps/subnet-calculator/frontend-typescript-vite prereqs
@@ -56,6 +57,41 @@ Limits:
   present inside the container. The same limit means the `kubernetes/kind`
   Slicer conflict check only sees a Slicer daemon if you deliberately surface
   that socket into the container.
+
+## Repo validation
+
+From the project root:
+
+```shell
+make lint
+make fmt
+```
+
+`make lint` is reporting-only. It runs recursive YAML linting using
+[`./.yamllint`](.yamllint), tracked-file Markdown linting using
+[`./.markdownlint`](.markdownlint) when a Markdown linter is available, the
+repo's static Cilium policy validation pass, and checked-in Kyverno policy test
+suites.
+
+`make fmt` is the mutating path. Today it applies tracked-file Markdown
+auto-fixes when a Markdown linter is available.
+
+For live cluster-side validation against the current kubeconfig context:
+
+```shell
+make lint-cilium-live
+make lint-kyverno-live
+```
+
+The current Cilium toolchain in this repo does not expose a `cilium policy
+validate` file-mode command, so `make lint-cilium-live` runs
+`cilium-dbg preflight validate-cnp` using a local `cilium-dbg` when present,
+otherwise through a running in-cluster Cilium agent, and finally through the
+matching Cilium image when Docker is available.
+
+Kyverno's local repo-side validation uses `kyverno test`, and the optional live
+cluster-side pass uses `kyverno apply --cluster --policy-report` against the
+rendered in-repo policies.
 
 ## Local Kubernetes in Docker cluster
 

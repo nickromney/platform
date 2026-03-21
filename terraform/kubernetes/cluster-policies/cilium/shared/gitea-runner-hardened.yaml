@@ -60,4 +60,3 @@ spec:
         - ports:
             - port: "30090"
               protocol: TCP
-

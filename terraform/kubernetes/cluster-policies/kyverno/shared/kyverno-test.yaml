@@ -1,0 +1,53 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: shared-cluster-policies
+policies:
+  - namespace-default-deny.yaml
+  - protect-default-deny.yaml
+  - require-app-labels-application-namespaces.yaml
+  - restrict-image-registries.yaml
+resources:
+  - test-namespace-default-deny-resources.yaml
+  - test-protect-default-deny-resources.yaml
+  - test-require-app-labels-resources.yaml
+  - test-restrict-image-registries-resources.yaml
+variables: test-values.yaml
+results:
+  - policy: default-deny-namespaces
+    rule: add-default-deny-netpol
+    resources:
+      - isolated-demo
+    kind: Namespace
+    generatedResource: test-generated-default-deny.yaml
+    result: pass
+  - policy: protect-default-deny-netpol
+    rule: block-delete-default-deny-netpol
+    resources:
+      - default-deny
+    kind: NetworkPolicy
+    result: fail
+  - policy: require-app-labels-application-namespaces
+    rule: require-app-boundary-labels
+    resources:
+      - good-app
+    kind: Deployment
+    result: pass
+  - policy: require-app-labels-application-namespaces
+    rule: require-app-boundary-labels
+    resources:
+      - bad-app
+    kind: Deployment
+    result: fail
+  - policy: restrict-image-registries
+    rule: validate-image-source
+    resources:
+      - allowed-image
+    kind: Pod
+    result: pass
+  - policy: restrict-image-registries
+    rule: validate-image-source
+    resources:
+      - blocked-image
+    kind: Pod
+    result: fail

@@ -86,7 +86,7 @@ brew_formula() {
     cilium|hubble)
       printf 'cilium-cli\n'
       ;;
-    curl|gh|git|helm|jq|k3sup|kind|kubie|kubectx|mkcert|podman|podman-compose|shellcheck|starship|step|terragrunt|yq)
+    curl|gh|git|helm|jq|k3sup|kind|kubie|kubectx|kyverno|mkcert|podman|podman-compose|shellcheck|starship|step|terragrunt|yamllint|yq)
       printf '%s\n' "${tool}"
       ;;
     docker)
@@ -165,6 +165,9 @@ apt_packages() {
     shellcheck)
       printf 'shellcheck\n'
       ;;
+    yamllint)
+      printf 'yamllint\n'
+      ;;
     *)
       return 1
       ;;
@@ -227,6 +230,16 @@ curl_hint() {
       # shellcheck disable=SC2016
       printf '%s\n' \
         'os=$(uname -s | tr '\''[:upper:]'\'' '\''[:lower:]'\'') && arch=$(uname -m) && case "$arch" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported architecture: $arch" >&2; exit 1 ;; esac && tmp=$(mktemp -d) && curl -fsSL "https://dl.smallstep.com/cli/docs-cli-install/latest/step_${os}_${arch}.tar.gz" | tar -xz -C "$tmp" && sudo install "$tmp"/*/bin/step /usr/local/bin/step && rm -rf "$tmp"'
+      return 0
+      ;;
+    kyverno)
+      # shellcheck disable=SC2016
+      printf '%s\n' \
+        'os=$(uname -s | tr '\''[:upper:]'\'' '\''[:lower:]'\'') && arch=$(uname -m) && case "$arch" in x86_64|amd64) arch=x86_64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported architecture: $arch" >&2; exit 1 ;; esac && version=$(curl -fsSL https://api.github.com/repos/kyverno/kyverno/releases/latest | sed -n '\''s/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p'\'' | head -n 1) && archive="kyverno-cli_${version}_${os}_${arch}.tar.gz" && curl -fLO "https://github.com/kyverno/kyverno/releases/download/${version}/${archive}" && tar -xzf "${archive}" kyverno && sudo install kyverno /usr/local/bin/kyverno'
+      return 0
+      ;;
+    yamllint)
+      printf '%s\n' 'python3 -m pip install --user yamllint'
       return 0
       ;;
   esac

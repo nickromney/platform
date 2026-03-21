@@ -1,0 +1,17 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Values
+metadata:
+  name: shared-policy-values
+namespaceSelector:
+  - name: app-demo
+    labels:
+      platform.publiccloudexperiments.net/namespace-role: application
+  - name: isolated-demo
+    labels:
+      kyverno.io/isolate: "true"
+policies:
+  - name: protect-default-deny-netpol
+    resources:
+      - name: default-deny
+        values:
+          request.operation: DELETE

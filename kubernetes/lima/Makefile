@@ -263,7 +263,7 @@ prereqs:
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
 	required=(curl docker git jq k3sup kubectl limactl terragrunt tofu yq); \
-	optional=(bats bun helm k3sup-pro kubectx kubie mkcert node npm npx shellcheck); \
+	optional=(bats bun cilium helm k3sup-pro kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \
 	recommended_test_tools=(bun node npm npx); \
 	missing_required=(); \
 	missing_recommended=(); \

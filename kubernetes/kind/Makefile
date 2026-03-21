@@ -902,7 +902,7 @@ prereqs:
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
 	required=(curl docker git jq kind kubectl ssh terragrunt tofu yq); \
-	optional=(bun cilium helm hubble kubectx kubie mkcert node npm npx); \
+	optional=(bats bun cilium helm hubble kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \
 	recommended_test_tools=(bun node npm npx); \
 	missing_required=(); \
 	missing_recommended=(); \

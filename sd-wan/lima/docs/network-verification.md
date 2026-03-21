@@ -28,7 +28,7 @@ Browser → localhost:58081 → cloud1 nginx → WireGuard (wg0)
 > cross-cloud names still resolve to WireGuard VIPs (`172.16.x.x`), which are reachable
 > via `wg0` from every node.
 
-### Resolver viewpoint matters
+## Resolver viewpoint matters
 
 ```mermaid
 flowchart LR

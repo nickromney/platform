@@ -20,7 +20,7 @@ brew install jq kind kubernetes-cli make opentofu terragrunt
 Optional tools:
 
 ```bash
-brew install cilium-cli helm hubble kubectx kubie mkcert yq
+brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yq
 mkcert -install
 ```
 
@@ -62,6 +62,8 @@ docker login
   intentionally merged a repo kubeconfig into `~/.kube/config`.
 - `kubie` is useful for linting and switching across the repo's split
   kubeconfig files.
+- `kyverno` is useful for local and live Kyverno policy validation via the
+  root `make lint`, `make lint-kyverno`, and `make lint-kyverno-live` paths.
 - `mkcert` is useful once HTTPS and local trust matter.
 - `yq` is helpful for ad hoc YAML inspection while debugging.
 
@@ -70,6 +72,8 @@ docker login
 `make prereqs` is the fastest sanity check after installation. It verifies:
 
 - expected binaries are on `PATH`
+- optional repo-validation tools such as `yamllint`, `cilium`, and `kyverno`
+  are surfaced with their current host visibility
 - browser/E2E test tools such as `bun`, `node`, `npm`, and `npx` are surfaced as recommended tooling, with install hints when missing
 - the Docker daemon is reachable through `docker info`
 - Docker auth status is visible for `dhi.io` and Docker Hub

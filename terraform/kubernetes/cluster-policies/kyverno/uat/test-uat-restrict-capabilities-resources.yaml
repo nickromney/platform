@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-uat-pod
+  namespace: uat
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+    - name: app
+      image: quay.io/cilium/cilium:v1.19.1
+      securityContext:
+        privileged: false
+        capabilities:
+          drop:
+            - ALL
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: missing-drop-all
+  namespace: uat
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+    - name: app
+      image: quay.io/cilium/cilium:v1.19.1
+      securityContext:
+        privileged: false
+        capabilities:
+          drop:
+            - NET_RAW
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-uat-pod
+  namespace: uat
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+    - name: app
+      image: quay.io/cilium/cilium:v1.19.1
+      securityContext:
+        privileged: true
+        capabilities:
+          drop:
+            - ALL
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: host-namespaces-uat-pod
+  namespace: uat
+spec:
+  hostNetwork: true
+  hostPID: true
+  hostIPC: true
+  containers:
+    - name: app
+      image: quay.io/cilium/cilium:v1.19.1
+      securityContext:
+        privileged: false
+        capabilities:
+          drop:
+            - ALL

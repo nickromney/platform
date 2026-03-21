@@ -24,4 +24,3 @@ spec:
           namespace: sso
           port: 4180
           weight: 1
-

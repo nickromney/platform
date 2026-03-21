@@ -203,4 +203,3 @@ Rendered from [`terraform/kubernetes/cluster-policies/kyverno`](./kyverno) after
 | Name | Source |
 | --- | --- |
 | `uat-restrict-capabilities` | [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-capabilities.yaml`](./kyverno/uat/uat-restrict-capabilities.yaml) |
-

@@ -1,21 +1,30 @@
-MAKE_KNOWN_GOALS := help prereqs test makefiles apps kubernetes sdwan
+MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
+LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
+LINT_MARKDOWN_SCRIPT ?= scripts/lint-markdown.sh
+VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
+VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
+FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 
 include mk/common.mk
 
-.PHONY: help prereqs test makefiles apps kubernetes sdwan
+.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
 
 help:
 	@echo "Platform workspace Makefile guide"
 	@echo ""
-	@echo "This root Makefile is informational only."
-	@echo "Use the focused Makefiles directly with make -C <dir> ..."
+	@echo "This root Makefile is primarily informational."
+	@echo "Use the focused Makefiles directly with make -C <dir> ... for stack and app workflows."
 	@echo ""
 	@echo "Focused Makefiles:"
 	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  Makefile$$/d'
 	@echo ""
 	@echo "Root shortcuts:"
+	@echo "  make lint         Run repo-level reporting checks"
+	@echo "  make fmt          Apply repo-level auto-formatters"
+	@echo "  make lint-cilium-live  Validate deployed Cilium policies via the current kubeconfig"
+	@echo "  make lint-kyverno-live  Validate deployed Kyverno policy matches via the current kubeconfig"
 	@echo "  make prereqs      Show the focused prerequisite entrypoints"
 	@echo "  make test         Show the focused test entrypoints"
 	@echo "  make apps         Show the app/frontend Makefiles"
@@ -77,3 +86,33 @@ test:
 	@echo "  make -C kubernetes/lima test"
 	@echo "  make -C kubernetes/slicer test"
 	@echo "  make -C sd-wan/lima test"
+
+lint:
+	@$(MAKE) --no-print-directory lint-yaml
+	@$(MAKE) --no-print-directory lint-markdown
+	@$(MAKE) --no-print-directory lint-cilium
+	@$(MAKE) --no-print-directory lint-kyverno
+
+fmt:
+	@$(MAKE) --no-print-directory fmt-markdown
+
+lint-yaml:
+	@"$(LINT_YAML_SCRIPT)"
+
+lint-markdown:
+	@"$(LINT_MARKDOWN_SCRIPT)"
+
+lint-cilium:
+	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" static
+
+lint-cilium-live:
+	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" live
+
+lint-kyverno:
+	@"$(VALIDATE_KYVERNO_POLICIES_SCRIPT)" static
+
+lint-kyverno-live:
+	@"$(VALIDATE_KYVERNO_POLICIES_SCRIPT)" live
+
+fmt-markdown:
+	@"$(FMT_MARKDOWN_SCRIPT)"

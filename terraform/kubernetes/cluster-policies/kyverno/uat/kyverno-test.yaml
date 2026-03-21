@@ -1,0 +1,81 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: uat-restrict-capabilities
+policies:
+  - uat-restrict-capabilities.yaml
+resources:
+  - test-uat-restrict-capabilities-resources.yaml
+results:
+  - policy: uat-restrict-capabilities
+    rule: drop-all-capabilities
+    resources:
+      - good-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: drop-all-capabilities
+    resources:
+      - missing-drop-all
+    kind: Pod
+    result: fail
+  - policy: uat-restrict-capabilities
+    rule: drop-all-capabilities
+    resources:
+      - privileged-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: drop-all-capabilities
+    resources:
+      - host-namespaces-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-privileged
+    resources:
+      - good-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-privileged
+    resources:
+      - missing-drop-all
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-privileged
+    resources:
+      - privileged-uat-pod
+    kind: Pod
+    result: fail
+  - policy: uat-restrict-capabilities
+    rule: deny-privileged
+    resources:
+      - host-namespaces-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-host-namespaces
+    resources:
+      - good-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-host-namespaces
+    resources:
+      - missing-drop-all
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-host-namespaces
+    resources:
+      - privileged-uat-pod
+    kind: Pod
+    result: pass
+  - policy: uat-restrict-capabilities
+    rule: deny-host-namespaces
+    resources:
+      - host-namespaces-uat-pod
+    kind: Pod
+    result: fail
