@@ -25,7 +25,6 @@ RUN apt-get update \
         iproute2 \
         iptables \
         iputils-ping \
-        libnss3-tools \
         locales \
         make \
         netcat-openbsd \

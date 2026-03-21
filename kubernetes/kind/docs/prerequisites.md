@@ -17,6 +17,17 @@ Core tools:
 brew install jq kind kubernetes-cli make opentofu terragrunt
 ```
 
+Browser/E2E tools:
+
+```bash
+brew install bun node
+```
+
+On the host, `make -C kubernetes/kind 900 apply` runs `check-sso-e2e` before it
+returns success, so `bun` and `node` are required for the host stage-900
+Makefile path.
+`node` provides `npm` and `npx`; Playwright stays project-local in the repo.
+
 Optional tools:
 
 ```bash
@@ -52,6 +63,8 @@ docker login
 - `kind` creates and deletes the local cluster.
 - OpenTofu (`tofu`) runs the Terraform-compatible infrastructure plan.
 - `terragrunt` provides the wrapper layer over that OpenTofu/Terraform stack.
+- `bun` runs the checked-in stage-900 SSO E2E harness.
+- `node` provides the runtime plus `npm`/`npx` for browser tooling.
 
 ## What The Optional Tools Do
 
@@ -74,7 +87,9 @@ docker login
 - expected binaries are on `PATH`
 - optional repo-validation tools such as `yamllint`, `cilium`, and `kyverno`
   are surfaced with their current host visibility
-- browser/E2E test tools such as `bun`, `node`, `npm`, and `npx` are surfaced as recommended tooling, with install hints when missing
+- stage-aware browser/E2E tools such as `bun`, `node`, `npm`, and `npx` are
+  required from stage `900`, and are otherwise surfaced as recommended tooling
+  with install hints when missing
 - the Docker daemon is reachable through `docker info`
 - Docker auth status is visible for `dhi.io` and Docker Hub
 - the host-side LLM endpoint is reachable when the selected stage opts into legacy `llm_gateway_mode = "direct"`

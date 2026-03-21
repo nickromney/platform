@@ -259,6 +259,7 @@ require_cmd kind
 require_cmd kubectl
 require_cmd docker
 require_cmd curl
+require_cmd python3
 
 if ! command -v mkcert >/dev/null 2>&1; then
   warn "mkcert not found; skipping apiserver OIDC configuration"
@@ -371,57 +372,140 @@ fi
 MANIFEST="/etc/kubernetes/manifests/kube-apiserver.yaml"
 ok "patching kube-apiserver manifest for OIDC (idempotent): ${MANIFEST}"
 
-docker exec -i \
-  -e MANIFEST="${MANIFEST}" \
-  -e OIDC_ISSUER_URL="${OIDC_ISSUER_URL}" \
-  -e OIDC_CLIENT_ID="${OIDC_CLIENT_ID}" \
-  -e MKCERT_CA_DEST="${MKCERT_CA_DEST}" \
-  -e DEX_HOST="${DEX_HOST}" \
-  -e GATEWAY_IP="${GATEWAY_IP}" \
-  "${CONTROL_PLANE_NODE}" bash -s <<'EOF'
-set -euo pipefail
+ORIGINAL_MANIFEST_LOCAL="$(mktemp "${TMPDIR:-/tmp}/kube-apiserver-manifest.original.XXXXXX")"
+RENDERED_MANIFEST_LOCAL="$(mktemp "${TMPDIR:-/tmp}/kube-apiserver-manifest.rendered.XXXXXX")"
+CONTAINER_MANIFEST_BACKUP="${MANIFEST}.pre-oidc-backup"
+CONTAINER_MANIFEST_CANDIDATE="${MANIFEST}.oidc-candidate"
 
-if ! grep -q -- "--oidc-issuer-url=" "$MANIFEST"; then
-  tmp=$(mktemp)
-  awk -v issuer="$OIDC_ISSUER_URL" -v client="$OIDC_CLIENT_ID" -v ca="$MKCERT_CA_DEST" '
-    /--service-cluster-ip-range=/{
-      print
-      print "    - --oidc-issuer-url=" issuer
-      print "    - --oidc-client-id=" client
-      print "    - --oidc-username-claim=email"
-      print "    - --oidc-groups-claim=groups"
-      print "    - --oidc-ca-file=" ca
-      next
-    }
-    { print }
-  ' "$MANIFEST" > "$tmp"
-  mv "$tmp" "$MANIFEST"
+cleanup_render_temps() {
+  rm -f "${ORIGINAL_MANIFEST_LOCAL}" "${RENDERED_MANIFEST_LOCAL}"
+  docker exec "${CONTROL_PLANE_NODE}" rm -f "${CONTAINER_MANIFEST_CANDIDATE}" >/dev/null 2>&1 || true
+}
+
+trap cleanup_render_temps EXIT
+
+docker cp "${CONTROL_PLANE_NODE}:${MANIFEST}" "${ORIGINAL_MANIFEST_LOCAL}"
+
+python3 - \
+  "${ORIGINAL_MANIFEST_LOCAL}" \
+  "${RENDERED_MANIFEST_LOCAL}" \
+  "${OIDC_ISSUER_URL}" \
+  "${OIDC_CLIENT_ID}" \
+  "${MKCERT_CA_DEST}" \
+  "${DEX_HOST}" \
+  "${GATEWAY_IP}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source_path = Path(sys.argv[1])
+rendered_path = Path(sys.argv[2])
+issuer = sys.argv[3]
+client_id = sys.argv[4]
+ca_path = sys.argv[5]
+dex_host = sys.argv[6]
+gateway_ip = sys.argv[7]
+
+source_lines = source_path.read_text().splitlines()
+rendered_lines: list[str] = []
+inserted_oidc = False
+inserted_host_aliases = False
+seen_host_network = False
+
+oidc_line = re.compile(r"^\s*-\s*--oidc-(issuer-url|client-id|username-claim|groups-claim|ca-file)=")
+service_cluster_ip_range = re.compile(r"^\s*-\s*--service-cluster-ip-range=")
+top_level_spec_key = re.compile(r"^  [A-Za-z0-9_-]+:")
+host_network = re.compile(r"^  hostNetwork:\s*(true|false)\s*$")
+
+i = 0
+while i < len(source_lines):
+    line = source_lines[i]
+
+    if oidc_line.match(line):
+        i += 1
+        continue
+
+    if line == "  hostAliases:":
+        block_lines = [line]
+        i += 1
+        while i < len(source_lines) and not top_level_spec_key.match(source_lines[i]):
+            block_lines.append(source_lines[i])
+            i += 1
+        if any(dex_host in block_line for block_line in block_lines):
+            continue
+        raise SystemExit(
+            f"unexpected existing kube-apiserver hostAliases block unrelated to {dex_host}; "
+            "refusing to rewrite manifest automatically"
+        )
+
+    if service_cluster_ip_range.match(line):
+        rendered_lines.append(line)
+        rendered_lines.extend([
+            f"    - --oidc-issuer-url={issuer}",
+            f"    - --oidc-client-id={client_id}",
+            "    - --oidc-username-claim=email",
+            "    - --oidc-groups-claim=groups",
+            f"    - --oidc-ca-file={ca_path}",
+        ])
+        inserted_oidc = True
+        i += 1
+        continue
+
+    if host_network.match(line):
+        if not inserted_host_aliases:
+            rendered_lines.extend([
+                "  hostAliases:",
+                f"  - ip: \"{gateway_ip}\"",
+                "    hostnames:",
+                f"    - {dex_host}",
+            ])
+            inserted_host_aliases = True
+        if seen_host_network:
+            i += 1
+            continue
+        rendered_lines.append(line)
+        seen_host_network = True
+        i += 1
+        continue
+
+    rendered_lines.append(line)
+    i += 1
+
+if not inserted_oidc:
+    raise SystemExit("failed to locate --service-cluster-ip-range= anchor while rendering kube-apiserver manifest")
+
+if not seen_host_network:
+    raise SystemExit("failed to locate hostNetwork stanza while rendering kube-apiserver manifest")
+
+rendered_path.write_text("\n".join(rendered_lines) + "\n")
+PY
+
+if ! kubectl create --dry-run=client --validate=false -f "${RENDERED_MANIFEST_LOCAL}" >/dev/null 2>&1; then
+  kubectl create --dry-run=client --validate=false -f "${RENDERED_MANIFEST_LOCAL}" >/dev/null
 fi
 
-# kube-apiserver static pod uses its own /etc/hosts generated by kubelet.
-# Ensure Dex host resolves to the in-cluster gateway service from inside the pod.
-if ! grep -Fq -- "- ${DEX_HOST}" "$MANIFEST"; then
-  tmp=$(mktemp)
-  awk -v dex_host="$DEX_HOST" -v gateway_ip="$GATEWAY_IP" '
-    /^  hostNetwork:/{
-      print "  hostAliases:"
-      print "  - ip: \"" gateway_ip "\""
-      print "    hostnames:"
-      print "    - " dex_host
-      print
-      print
-      next
-    }
-    { print }
-  ' "$MANIFEST" > "$tmp"
-  mv "$tmp" "$MANIFEST"
+if cmp -s "${ORIGINAL_MANIFEST_LOCAL}" "${RENDERED_MANIFEST_LOCAL}"; then
+  ok "kube-apiserver manifest already matches desired OIDC config; skipping restart"
+  exit 0
 fi
-EOF
+
+ok "installing kube-apiserver OIDC manifest update with rollback safety"
+docker exec "${CONTROL_PLANE_NODE}" cp "${MANIFEST}" "${CONTAINER_MANIFEST_BACKUP}"
+docker cp "${RENDERED_MANIFEST_LOCAL}" "${CONTROL_PLANE_NODE}:${CONTAINER_MANIFEST_CANDIDATE}"
+docker exec "${CONTROL_PLANE_NODE}" mv "${CONTAINER_MANIFEST_CANDIDATE}" "${MANIFEST}"
 
 ok "waiting for kube-apiserver readiness (this may take ~30s)"
 if ! wait_for_kube_apiserver_ready 120 3; then
-  fail "timed out waiting for kube-apiserver readiness"
+  warn "kube-apiserver did not recover after OIDC patch; restoring previous manifest"
+  docker exec "${CONTROL_PLANE_NODE}" sh -lc \
+    "cp '${CONTAINER_MANIFEST_BACKUP}' '${CONTAINER_MANIFEST_CANDIDATE}' && mv '${CONTAINER_MANIFEST_CANDIDATE}' '${MANIFEST}'"
+  if wait_for_kube_apiserver_ready 120 3; then
+    fail "timed out waiting for kube-apiserver readiness after OIDC patch; restored previous manifest"
+  fi
+  fail "timed out waiting for kube-apiserver readiness after OIDC patch, and rollback also failed"
 fi
+
+docker exec "${CONTROL_PLANE_NODE}" rm -f "${CONTAINER_MANIFEST_BACKUP}" >/dev/null 2>&1 || true
 
 restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
 

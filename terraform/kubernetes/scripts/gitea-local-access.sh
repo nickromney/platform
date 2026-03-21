@@ -19,6 +19,48 @@ GITEA_LOCAL_ACCESS_SSH_READY="${GITEA_LOCAL_ACCESS_SSH_READY:-0}"
 GITEA_LOCAL_ACCESS_PIDS=()
 GITEA_LOCAL_ACCESS_LOGS=()
 
+gitea_local_access_is_devcontainer() {
+  [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]
+}
+
+gitea_local_access_rewrite_loopback_host() {
+  local host="${1:-}"
+
+  if gitea_local_access_is_devcontainer && [[ "${host}" == "127.0.0.1" || "${host}" == "localhost" ]]; then
+    printf '%s\n' "host.docker.internal"
+    return 0
+  fi
+
+  printf '%s\n' "${host}"
+}
+
+gitea_local_access_rewrite_loopback_base() {
+  local base="${1:-}"
+  local scheme host port path
+
+  if ! gitea_local_access_is_devcontainer; then
+    printf '%s\n' "${base}"
+    return 0
+  fi
+
+  if [[ ! "${base}" =~ ^([a-zA-Z][a-zA-Z0-9+.-]*)://([^/:]+)(:([0-9]+))?(.*)$ ]]; then
+    printf '%s\n' "${base}"
+    return 0
+  fi
+
+  scheme="${BASH_REMATCH[1]}"
+  host="${BASH_REMATCH[2]}"
+  port="${BASH_REMATCH[4]:-}"
+  path="${BASH_REMATCH[5]:-}"
+  host="$(gitea_local_access_rewrite_loopback_host "${host}")"
+
+  if [[ -n "${port}" ]]; then
+    printf '%s\n' "${scheme}://${host}:${port}${path}"
+  else
+    printf '%s\n' "${scheme}://${host}${path}"
+  fi
+}
+
 gitea_local_access_fail() {
   echo "gitea-local-access: $*" >&2
   return 1
@@ -75,25 +117,22 @@ gitea_local_access_wait_for_service_endpoints() {
 }
 
 gitea_local_access_forwarded_port() {
-  local remote_port="$1"
-  local log_file="$2"
+  local log_file="$1"
 
-  sed -nE "s/.*:([0-9]+)[[:space:]]+->[[:space:]]*${remote_port}\$/\\1/p" "${log_file}" 2>/dev/null | head -n 1
+  sed -nE 's/.*:([0-9]+)[[:space:]]+->[[:space:]]*[0-9]+$/\1/p' "${log_file}" 2>/dev/null | head -n 1
 }
 
 gitea_local_access_wait_for_forward_port() {
   local label="$1"
-  local remote_port="$2"
-  local pid="$3"
-  local log_file="$4"
-  local port_var="$5"
+  local pid="$2"
+  local log_file="$3"
   local waited=0
   local port=""
 
   while [[ "${waited}" -lt "${GITEA_LOCAL_ACCESS_WAIT_SECONDS}" ]]; do
-    port="$(gitea_local_access_forwarded_port "${remote_port}" "${log_file}")"
+    port="$(gitea_local_access_forwarded_port "${log_file}")"
     if [[ -n "${port}" ]]; then
-      printf -v "${port_var}" '%s' "${port}"
+      printf '%s\n' "${port}"
       return 0
     fi
     if ! kill -0 "${pid}" >/dev/null 2>&1; then
@@ -161,7 +200,7 @@ gitea_local_access_start_forward() {
     ":${remote_port}" >"${log_file}" 2>&1 &
   pid=$!
 
-  if ! gitea_local_access_wait_for_forward_port "${label}" "${remote_port}" "${pid}" "${log_file}" port; then
+  if ! port="$(gitea_local_access_wait_for_forward_port "${label}" "${pid}" "${log_file}")"; then
     kill "${pid}" >/dev/null 2>&1 || true
     wait "${pid}" >/dev/null 2>&1 || true
     return 1
@@ -181,11 +220,14 @@ gitea_local_access_start_forward() {
 
 gitea_local_access_setup_nodeport() {
   local require="${1:-both}"
+  local nodeport_host
+
+  nodeport_host="$(gitea_local_access_rewrite_loopback_host "${GITEA_LOCAL_ACCESS_HOST}")"
 
   if [[ "${require}" == "http" || "${require}" == "both" ]]; then
     if [[ "${GITEA_LOCAL_ACCESS_HTTP_READY}" != "1" ]]; then
       : "${GITEA_HTTP_NODE_PORT:=30090}"
-      export GITEA_HTTP_BASE="${GITEA_HTTP_BASE:-http://${GITEA_LOCAL_ACCESS_HOST}:${GITEA_HTTP_NODE_PORT}}"
+      export GITEA_HTTP_BASE="$(gitea_local_access_rewrite_loopback_base "${GITEA_HTTP_BASE:-http://${nodeport_host}:${GITEA_HTTP_NODE_PORT}}")"
       GITEA_LOCAL_ACCESS_HTTP_READY=1
     fi
   fi
@@ -193,7 +235,7 @@ gitea_local_access_setup_nodeport() {
   if [[ "${require}" == "ssh" || "${require}" == "both" ]]; then
     if [[ "${GITEA_LOCAL_ACCESS_SSH_READY}" != "1" ]]; then
       : "${GITEA_SSH_NODE_PORT:=30022}"
-      export GITEA_SSH_HOST="${GITEA_SSH_HOST:-${GITEA_LOCAL_ACCESS_HOST}}"
+      export GITEA_SSH_HOST="$(gitea_local_access_rewrite_loopback_host "${GITEA_SSH_HOST:-${nodeport_host}}")"
       export GITEA_SSH_PORT="${GITEA_SSH_PORT:-${GITEA_SSH_NODE_PORT}}"
       GITEA_LOCAL_ACCESS_SSH_READY=1
     fi

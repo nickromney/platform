@@ -101,13 +101,13 @@ The devcontainer prefers installers over hand-managed binaries:
   `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, and `tofu`.
 
 The repo-level `make lint` entrypoint works inside the devcontainer too, and
-the image now includes both `yamllint` and `kyverno` for the recursive YAML and
+the image includes both `yamllint` and `kyverno` for the recursive YAML and
 local policy validation passes.
 
 It also seeds shell startup for both `bash` and `zsh` so the container has:
 
 - `EDITOR=nvim` and `VISUAL=nvim`
-- `node`, `npm`, `npx`, and `bun` for browser/E2E test flows
+- `node`, `npm`, `npx`, and `bun` for local JavaScript tooling and repo scripts
 - generated completion scripts for `kubectl`, `kubie`, `kind`, `helm`,
   `cilium`, and `hubble` when those binaries are present
 - `starship` prompt init in both shells
@@ -130,3 +130,7 @@ and the repo no longer auto-merges them into `~/.kube/config` by default.
 
 If you deliberately need a repo context copied into `~/.kube/config`, use the
 explicit `make merge-default-kubeconfig` target in that cluster directory.
+
+Full Playwright browser E2E is host-oriented. The devcontainer no longer bakes
+Chromium runtime libraries, so `check-sso-e2e` should be run from the host
+unless you intentionally provision browser dependencies yourself.
