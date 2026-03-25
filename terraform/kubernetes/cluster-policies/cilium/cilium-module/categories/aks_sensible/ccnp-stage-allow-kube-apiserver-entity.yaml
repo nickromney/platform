@@ -1,0 +1,32 @@
+metadata:
+  name: ccnp-stage-allow-kube-apiserver-entity
+  annotations:
+    policies.cilium.io/title: Stage allow kube-apiserver entity
+    platform.publiccloudexperiments.net/source-kind: CiliumClusterwideNetworkPolicy
+specs:
+  - description: Plumbing baseline for application stages. Allows labeled application workloads in sandbox, dev, and uat to reach the Kubernetes API through Cilium's kube-apiserver entity.
+    endpointSelector:
+      matchExpressions:
+        - key: k8s:io.kubernetes.pod.namespace
+          operator: In
+          values:
+            - sandbox
+            - dev
+            - uat
+        - key: k8s:project
+          operator: Exists
+        - key: k8s:team
+          operator: Exists
+        - key: k8s:app
+          operator: Exists
+        - key: k8s:tier
+          operator: In
+          values:
+            - gateway
+            - frontend
+            - backend
+        - key: k8s:app.kubernetes.io/name
+          operator: Exists
+    egress:
+      - toEntities:
+          - kube-apiserver

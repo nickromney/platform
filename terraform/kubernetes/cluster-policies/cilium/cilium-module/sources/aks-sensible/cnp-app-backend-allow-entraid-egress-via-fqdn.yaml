@@ -1,0 +1,50 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-app-backend-allow-entraid-egress-via-fqdn
+  annotations:
+    "policies.cilium.io/title": "App backend allow Microsoft Entra ID egress"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+spec:
+  description: >-
+    End-user app egress policy. Allows backend pods to talk to Microsoft Entra
+    ID in the public cloud over HTTPS. Carries its own DNS proxy rule so
+    hostname enforcement does not depend on another policy.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:project"
+        operator: Exists
+      - key: "k8s:team"
+        operator: Exists
+      - key: "k8s:app"
+        operator: Exists
+      - key: "k8s:tier"
+        operator: In
+        values:
+          - backend
+      - key: "k8s:app.kubernetes.io/name"
+        operator: Exists
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:app.kubernetes.io/name": coredns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: login.microsoftonline.com
+        - matchName: aadcdn.msauth.net
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

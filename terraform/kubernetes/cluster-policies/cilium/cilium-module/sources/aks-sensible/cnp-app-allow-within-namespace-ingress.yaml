@@ -1,0 +1,45 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-app-allow-within-namespace-ingress
+  annotations:
+    "policies.cilium.io/title": "App allow within namespace ingress"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+spec:
+  description: >-
+    End-user app starter policy. Allows labeled application workloads to
+    receive traffic from other labeled application workloads in the same
+    rendered namespace without opening broader stage-wide traffic.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:project"
+        operator: Exists
+      - key: "k8s:team"
+        operator: Exists
+      - key: "k8s:app"
+        operator: Exists
+      - key: "k8s:tier"
+        operator: In
+        values:
+          - gateway
+          - frontend
+          - backend
+      - key: "k8s:app.kubernetes.io/name"
+        operator: Exists
+  ingress:
+    - fromEndpoints:
+        - matchExpressions:
+            - key: "k8s:project"
+              operator: Exists
+            - key: "k8s:team"
+              operator: Exists
+            - key: "k8s:app"
+              operator: Exists
+            - key: "k8s:tier"
+              operator: In
+              values:
+                - gateway
+                - frontend
+                - backend
+            - key: "k8s:app.kubernetes.io/name"
+              operator: Exists

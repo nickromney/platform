@@ -98,6 +98,18 @@ temporary `kubectl port-forward` tunnels instead of assuming
 is still useful for stable localhost UI surfaces and health checks, but it is
 no longer the hidden prerequisite for stage `500+` applies.
 
+If you need those tunnels manually while debugging from the host, run:
+
+```bash
+kubectl -n gitea port-forward svc/gitea-http 3000:3000
+kubectl -n gitea port-forward svc/gitea-ssh 2222:22
+```
+
+Then use:
+
+- `http://127.0.0.1:3000/` for the UI
+- `ssh://git@127.0.0.1:2222/<owner>/<repo>.git` for SSH clone URLs
+
 ## Operational truths
 
 - The stage model is cumulative. `make -C kubernetes/slicer 900 apply` means

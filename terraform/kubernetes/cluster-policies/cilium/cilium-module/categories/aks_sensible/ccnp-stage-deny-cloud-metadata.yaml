@@ -1,0 +1,34 @@
+metadata:
+  name: ccnp-stage-deny-cloud-metadata
+  annotations:
+    policies.cilium.io/title: Stage deny cloud metadata
+    platform.publiccloudexperiments.net/source-kind: CiliumClusterwideNetworkPolicy
+specs:
+  - description: Optional defense-in-depth rule for application stages. Blocks common cloud metadata endpoints including Azure IMDS for labeled application workloads in sandbox, dev, and uat.
+    endpointSelector:
+      matchExpressions:
+        - key: k8s:io.kubernetes.pod.namespace
+          operator: In
+          values:
+            - sandbox
+            - dev
+            - uat
+        - key: k8s:project
+          operator: Exists
+        - key: k8s:team
+          operator: Exists
+        - key: k8s:app
+          operator: Exists
+        - key: k8s:tier
+          operator: In
+          values:
+            - gateway
+            - frontend
+            - backend
+        - key: k8s:app.kubernetes.io/name
+          operator: Exists
+    egressDeny:
+      - toCIDRSet:
+          - cidr: 169.254.169.254/32
+          - cidr: 169.254.170.2/32
+          - cidr: 100.100.100.200/32

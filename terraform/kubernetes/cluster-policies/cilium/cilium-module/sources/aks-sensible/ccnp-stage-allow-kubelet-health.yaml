@@ -1,0 +1,38 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: ccnp-stage-allow-kubelet-health
+  annotations:
+    "policies.cilium.io/title": "Stage allow kubelet health probes"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumClusterwideNetworkPolicy"
+spec:
+  description: >-
+    Plumbing baseline for application stages. Allows kubelet health probes for
+    labeled application workloads in sandbox, dev, and uat so readiness and
+    liveness checks do not break during rollout.
+  endpointSelector:
+    matchExpressions:
+      - key: "k8s:io.kubernetes.pod.namespace"
+        operator: In
+        values:
+          - sandbox
+          - dev
+          - uat
+      - key: "k8s:project"
+        operator: Exists
+      - key: "k8s:team"
+        operator: Exists
+      - key: "k8s:app"
+        operator: Exists
+      - key: "k8s:tier"
+        operator: In
+        values:
+          - gateway
+          - frontend
+          - backend
+      - key: "k8s:app.kubernetes.io/name"
+        operator: Exists
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node

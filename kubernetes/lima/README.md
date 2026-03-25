@@ -57,6 +57,18 @@ separate localhost proxy is already exposing `30090`/`30022`; the narrow
 Gitea access for repo/admin bootstrap is established on demand with
 `kubectl port-forward`.
 
+If you need those tunnels manually while debugging from the host, run:
+
+```bash
+kubectl -n gitea port-forward svc/gitea-http 3000:3000
+kubectl -n gitea port-forward svc/gitea-ssh 2222:22
+```
+
+Then use:
+
+- `http://127.0.0.1:3000/` for the UI
+- `ssh://git@127.0.0.1:2222/<owner>/<repo>.git` for SSH clone URLs
+
 ## Operational truths
 
 - The stage model is cumulative. `make -C kubernetes/lima 900 apply` means
