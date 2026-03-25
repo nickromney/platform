@@ -1,0 +1,46 @@
+metadata:
+  name: cnp-app-gateway-to-frontend
+  annotations:
+    policies.cilium.io/title: App gateway to frontend
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+specs:
+  - description: End-user app flow policy. Allows gateway-tier pods that follow the standard project/team/app/tier/name label schema to reach frontend-tier pods on common HTTP app ports. This assumes a simple one-app-per-namespace layout.
+    endpointSelector:
+      matchExpressions:
+        - key: k8s:project
+          operator: Exists
+        - key: k8s:team
+          operator: Exists
+        - key: k8s:app
+          operator: Exists
+        - key: k8s:tier
+          operator: In
+          values:
+            - frontend
+        - key: k8s:app.kubernetes.io/name
+          operator: Exists
+    ingress:
+      - fromEndpoints:
+          - matchExpressions:
+              - key: k8s:project
+                operator: Exists
+              - key: k8s:team
+                operator: Exists
+              - key: k8s:app
+                operator: Exists
+              - key: k8s:tier
+                operator: In
+                values:
+                  - gateway
+              - key: k8s:app.kubernetes.io/name
+                operator: Exists
+        toPorts:
+          - ports:
+              - port: "80"
+                protocol: TCP
+              - port: "3000"
+                protocol: TCP
+              - port: "8000"
+                protocol: TCP
+              - port: "8080"
+                protocol: TCP
