@@ -24,34 +24,18 @@ spec:
       releaseName: cert-manager
       values: |
         installCRDs: true
-        image:
-          registry: ${local.hardened_image_registry_effective}
-          repository: cert-manager-controller
-          tag: ${var.cert_manager_image_tag}
         containerSecurityContext:
           runAsNonRoot: true
           runAsUser: 65532
         webhook:
-          image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: cert-manager-webhook
-            tag: ${var.cert_manager_image_tag}
           containerSecurityContext:
             runAsNonRoot: true
             runAsUser: 65532
         cainjector:
-          image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: cert-manager-cainjector
-            tag: ${var.cert_manager_image_tag}
           containerSecurityContext:
             runAsNonRoot: true
             runAsUser: 65532
         startupapicheck:
-          image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: cert-manager-startupapicheck
-            tag: ${var.cert_manager_image_tag}
           containerSecurityContext:
             runAsNonRoot: true
             runAsUser: 65532

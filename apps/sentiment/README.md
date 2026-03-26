@@ -2,7 +2,7 @@
 
 Local sentiment-analysis demo with a compose-first runtime that mirrors the
 same broad concerns as the Kubernetes demo: authenticated browser entry,
-frontend and API separation, and a switchable sentiment backend path.
+frontend and API separation, and an SST-backed API runtime.
 
 ## Start Here
 
@@ -16,8 +16,7 @@ frontend and API separation, and a switchable sentiment backend path.
 - `keycloak` provides the local OIDC provider.
 - `oauth2-proxy` forces browser login before forwarding traffic upstream.
 - `edge` splits browser traffic between the static UI and the API.
-- `sentiment-api` defaults to an in-process SST sentiment classifier.
-- `litellm` and `llama-cpp` remain available as an opt-in legacy LLM path.
+- `sentiment-api` runs the in-process SST sentiment classifier.
 
 ## Quick Start
 

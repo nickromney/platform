@@ -15,7 +15,7 @@ fi
 if command -v docker >/dev/null 2>&1; then
   running_lima_proxies="$(
     docker ps --format '{{.Names}}' 2>/dev/null | \
-      grep -E '^(limavm-platform-gateway-443|limavm-platform-llm-12434)$' || true
+      grep -E '^(limavm-platform-gateway-443)$' || true
   )"
 fi
 

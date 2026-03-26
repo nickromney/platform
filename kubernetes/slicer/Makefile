@@ -518,8 +518,6 @@ ensure-host-forwards:
 	socket="$$($(RESOLVE_SOCKET))"; \
 	proxy_name="slicer-platform-gateway-443"; \
 	proxy_image="platform/slicer-gateway-proxy:dev"; \
-	llm_proxy_name="slicer-platform-llm-12434"; \
-	llm_proxy_image="platform/slicer-llm-proxy:dev"; \
 	tfvar_files=(); \
 	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
@@ -527,7 +525,6 @@ ensure-host-forwards:
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
 	gateway_forward_port="$(SLICER_GATEWAY_HTTPS_FORWARD_PORT)"; \
-	llm_gateway_mode="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode direct "$${tfvar_files[@]}" )"; \
 	SLICER_URL="$$socket" \
 	RUN_DIR="$(RUN_DIR)" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
@@ -546,11 +543,6 @@ ensure-host-forwards:
 		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" ensure; \
 	else \
 		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
-	fi; \
-	if [ "$$llm_gateway_mode" = "direct" ]; then \
-		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" ensure; \
-	else \
-		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
 	fi
 
 .PHONY: merge-default-kubeconfig
@@ -566,10 +558,7 @@ stop-host-forwards:
 	socket="$$($(RESOLVE_SOCKET))"; \
 	proxy_name="slicer-platform-gateway-443"; \
 	proxy_image="platform/slicer-gateway-proxy:dev"; \
-	llm_proxy_name="slicer-platform-llm-12434"; \
-	llm_proxy_image="platform/slicer-llm-proxy:dev"; \
 	CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
-	CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
 	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(HOST_FORWARDS)" stop
 
 host-forward-status:
@@ -577,8 +566,6 @@ host-forward-status:
 	socket="$$($(RESOLVE_SOCKET))"; \
 	proxy_name="slicer-platform-gateway-443"; \
 	proxy_image="platform/slicer-gateway-proxy:dev"; \
-	llm_proxy_name="slicer-platform-llm-12434"; \
-	llm_proxy_image="platform/slicer-llm-proxy:dev"; \
 	tfvar_files=(); \
 	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
@@ -586,13 +573,9 @@ host-forward-status:
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
 	gateway_forward_port="$(SLICER_GATEWAY_HTTPS_FORWARD_PORT)"; \
-	llm_gateway_mode="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode direct "$${tfvar_files[@]}" )"; \
 	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" GATEWAY_HTTPS_FORWARD_PORT="$$gateway_forward_port" "$(HOST_FORWARDS)" status; \
 	if [ "$$gateway_public_port" != "$$gateway_forward_port" ]; then \
 		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" status; \
-	fi; \
-	if [ "$$llm_gateway_mode" = "direct" ]; then \
-		CONTAINER_NAME="$$llm_proxy_name" IMAGE_TAG="$$llm_proxy_image" LISTEN_PORT="12434" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" status; \
 	fi
 
 .PHONY: ensure-image-cache
@@ -629,7 +612,6 @@ sync-image-cache:
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
-	PRELOAD_LLM_GATEWAY_MODE="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode disabled "$${tfvar_files[@]}" )" \
 	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
 
 .PHONY: build-workload-images

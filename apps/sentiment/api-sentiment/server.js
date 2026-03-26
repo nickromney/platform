@@ -22,17 +22,6 @@ const sentimentInferenceLatencyMs = meter.createHistogram('sentiment_inference_l
 const sentimentWrites = meter.createCounter('sentiment_comments_created_total')
 const otelLogger = logs.getLogger('sentiment-api')
 
-const SENTIMENT_SYSTEM_PROMPT =
-  'You are a sentiment classifier. Return exactly one lowercase label: positive, negative, or neutral. Use neutral when the text contains both positive and negative sentiment or mixed feelings. Return only the label.'
-const SENTIMENT_EXAMPLES = [
-  'Examples:',
-  'Text: I love this product. It is excellent and delightful.',
-  'Label: positive',
-  'Text: This is awful, broken, and frustrating.',
-  'Label: negative',
-  'Text: Some parts are fine, but overall I am disappointed and frustrated.',
-  'Label: neutral',
-]
 const POSITIVE_MIXED_CUES = [
   'love',
   'great',
@@ -183,7 +172,6 @@ function createConfig(options = {}) {
   const port = Number.parseInt(String(options.port ?? process.env.PORT ?? '8080'), 10)
   const dataDir = options.dataDir ?? process.env.DATA_DIR ?? '/data'
   const csvPath = options.csvPath ?? path.join(dataDir, 'comments.csv')
-  const sentimentBackendMode = (options.sentimentBackendMode ?? process.env.SENTIMENT_BACKEND_MODE ?? 'sst').toLowerCase()
   const sentimentModelId =
     options.sentimentModelId ??
     process.env.SENTIMENT_MODEL_ID ??
@@ -202,60 +190,22 @@ function createConfig(options = {}) {
     options.sentimentNeutralMargin ?? process.env.SENTIMENT_NEUTRAL_MARGIN,
     0.45,
   )
-  const llmGatewayMode = (options.llmGatewayMode ?? process.env.LLM_GATEWAY_MODE ?? 'direct').toLowerCase()
-  const llmBaseUrl =
-    options.llmBaseUrl ??
-    process.env.LLM_BASE_URL ??
-    (llmGatewayMode === 'litellm'
-      ? process.env.LITELLM_BASE_URL || 'http://litellm:4000'
-      : process.env.LLM_BACKEND_BASE_URL || 'http://host.docker.internal:12434/engines')
-  const llmModel =
-    options.llmModel ??
-    process.env.LLM_MODEL ??
-    (llmGatewayMode === 'litellm' ? process.env.LITELLM_MODEL_ALIAS || 'sentiment-default' : 'auto')
 
   return {
     port,
     dataDir,
     csvPath,
-    sentimentBackendMode,
     sentimentModelId,
     sentimentModelCacheDir,
     sentimentModelLocalOnly,
     sentimentWarmOnStart,
     sentimentNeutralMargin,
-    llmGatewayMode,
-    llmBaseUrl,
-    llmModel,
   }
 }
 
 export function createApp(options = {}) {
   const config = createConfig(options)
-  let resolvedModel = null
   let classifierPromise = null
-
-  async function resolveModelId() {
-    if (config.llmModel !== 'auto') return config.llmModel
-    if (resolvedModel) return resolvedModel
-
-    const res = await fetch(`${config.llmBaseUrl}/v1/models`, {
-      headers: { 'Content-Type': 'application/json' },
-    })
-    if (!res.ok) {
-      const msg = await res.text().catch(() => '')
-      throw new Error(`llm models HTTP ${res.status}: ${msg}`)
-    }
-
-    const data = await res.json()
-    const id = data?.data?.[0]?.id
-    if (typeof id !== 'string' || !id.trim()) {
-      throw new Error('llm models: failed to resolve model id from /v1/models')
-    }
-
-    resolvedModel = id
-    return resolvedModel
-  }
 
   async function ensureCsv() {
     await fs.mkdir(config.dataDir, { recursive: true })
@@ -381,99 +331,12 @@ export function createApp(options = {}) {
         },
       ))
 
-  const analyzeWithLlm =
-    options.analyzeWithLlm ??
-    (async (text) =>
-      tracer.startActiveSpan(
-        'llm.chat',
-        {
-          attributes: {
-            'llm.model': config.llmModel,
-          },
-        },
-        async (span) => {
-          const start = Date.now()
-          try {
-            const modelId = await resolveModelId()
-            const body = {
-              model: modelId,
-              stream: false,
-              temperature: 0,
-              max_tokens: 8,
-              messages: [
-                {
-                  role: 'system',
-                  content: SENTIMENT_SYSTEM_PROMPT,
-                },
-                {
-                  role: 'user',
-                  content: [...SENTIMENT_EXAMPLES, '', `Text: ${text}`, 'Label:'].join('\n'),
-                },
-              ],
-            }
-
-            const res = await fetch(`${config.llmBaseUrl}/v1/chat/completions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
-            })
-
-            const latencyMs = Date.now() - start
-            span.setAttribute('llm.latency_ms', latencyMs)
-
-            if (!res.ok) {
-              const msg = await res.text().catch(() => '')
-              throw new Error(`llm HTTP ${res.status}: ${msg}`)
-            }
-
-            const data = await res.json()
-            const content = data?.choices?.[0]?.message?.content
-            const raw = typeof content === 'string' ? content.trim() : ''
-            const label = normalizeLabel(raw)
-            const confidence = raw === label ? 1 : 0.75
-
-            sentimentInferenceLatencyMs.record(latencyMs, {
-              'sentiment.backend': 'llm',
-              'llm.model': modelId,
-              'sentiment.label': label,
-            })
-
-            span.setAttribute('sentiment.backend', 'llm')
-            span.setAttribute('sentiment.label', label)
-            span.setAttribute('sentiment.confidence', confidence)
-
-            otelLogger.emit({
-              severityText: 'INFO',
-              body: 'llm sentiment inference complete',
-              attributes: {
-                'llm.model': modelId,
-                'sentiment.label': label,
-              },
-            })
-
-            return { label, confidence, latency_ms: latencyMs }
-          } catch (error) {
-            span.recordException(error)
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: error?.message || 'llm_error',
-            })
-            throw error
-          } finally {
-            span.end()
-          }
-        },
-      ))
-
-  const analyzeSentiment =
-    options.analyzeSentiment ??
-    options.analyzeWithLlm ??
-    (config.sentimentBackendMode === 'llm' ? analyzeWithLlm : analyzeWithSst)
+  const analyzeSentiment = options.analyzeSentiment ?? analyzeWithSst
 
   const warmSentimentBackend =
     options.warmSentimentBackend ??
     (async () => {
-      if (config.sentimentBackendMode === 'llm' || !config.sentimentWarmOnStart) {
+      if (!config.sentimentWarmOnStart) {
         return
       }
 
@@ -537,7 +400,6 @@ export function createApp(options = {}) {
     appendRecord,
     analyzeSentiment,
     analyzeWithSst,
-    analyzeWithLlm,
     warmSentimentBackend,
   }
 }

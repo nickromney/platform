@@ -32,9 +32,15 @@ That scans the local `apps/` source trees plus the canonical workload images
 built by the Kubernetes demos, and writes JSON reports under
 `.run/apps-security/trivy/`.
 
-`trivy` is optional in this repo. `make -C apps prereqs` reports whether the
-scan workflow is available on your machine, but it does not require or install
-Trivy for you.
+`trivy` is optional in this repo. The default app workflow does not install it,
+and `make -C apps prereqs` intentionally avoids checking for it. Use the
+explicit Trivy entrypoints when you want scanning:
+
+```bash
+make -C apps trivy-prereqs
+make -C apps trivy-scan
+make -C apps trivy-scan-all
+```
 
 The in-cluster Gitea mirrors are intentionally opt-in because they usually mirror the same content already scanned from disk:
 

@@ -25,8 +25,6 @@ enable_actions_runner             = false
 enable_app_repo_subnet_calculator = true
 enable_app_repo_sentiment         = true
 prefer_external_workload_images   = true
-llm_gateway_mode                  = "disabled"
-llm_gateway_external_name         = "host.lima.internal"
 
 argocd_namespace        = "argocd"
 gitea_admin_username    = "gitea-admin"

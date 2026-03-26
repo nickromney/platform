@@ -69,7 +69,7 @@ test('comments endpoints persist and return the newest records first', async () 
   await withServer(
     {
       dataDir: tempDir,
-      analyzeWithLlm: async (text) => {
+      analyzeWithSst: async (text) => {
         counter += 1
         return {
           label: counter === 1 ? 'positive' : 'negative',
@@ -149,6 +149,27 @@ test('resolveClassifierResult preserves clear positive and negative outcomes', (
   assert.equal(positive.confidence, 0.93)
   assert.equal(negative.label, 'negative')
   assert.equal(negative.confidence, 0.91)
+})
+
+test('createApp always uses the SST analyzer unless explicitly overridden', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sentiment-api-'))
+  let analyzed = 0
+  const runtime = createApp({
+    dataDir: tempDir,
+    analyzeWithSst: async () => {
+      analyzed += 1
+      return {
+        label: 'neutral',
+        confidence: 0.75,
+        latency_ms: 3,
+      }
+    },
+  })
+
+  const result = await runtime.analyzeSentiment('sst should remain the only default path')
+
+  assert.equal(result.label, 'neutral')
+  assert.equal(analyzed, 1)
 })
 
 test('startServer warms the sentiment backend before listening', async () => {

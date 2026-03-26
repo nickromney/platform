@@ -218,13 +218,13 @@ variable "enable_app_of_apps" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.19.1"
+  default     = "1.19.2"
 }
 
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.4.15"
+  default     = "9.4.16"
 }
 
 variable "argocd_image_repository" {
@@ -236,7 +236,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.3.4-debian13"
+  default     = "3.3.5-debian13"
 }
 
 variable "provision_argocd" {
@@ -266,7 +266,7 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "28.14.0"
+  default     = "28.14.1"
 }
 
 variable "prometheus_image_tag" {
@@ -356,13 +356,13 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.116.2"
+  default     = "0.117.0"
 }
 
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.40.1"
+  default     = "0.41.0"
 }
 
 variable "kyverno_chart_version" {
@@ -380,13 +380,7 @@ variable "policy_reporter_chart_version" {
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.19.4"
-}
-
-variable "cert_manager_image_tag" {
-  description = "cert-manager hardened container image tag."
-  type        = string
-  default     = "1.19.4-debian13"
+  default     = "v1.20.0"
 }
 
 variable "hardened_image_registry" {
@@ -404,7 +398,7 @@ variable "dex_chart_version" {
 variable "oauth2_proxy_chart_version" {
   description = "oauth2-proxy chart version (oauth2-proxy.github.io/manifests)."
   type        = string
-  default     = "10.1.4"
+  default     = "10.3.0"
 }
 
 variable "opentelemetry_collector_chart_version" {
@@ -929,79 +923,7 @@ variable "prefer_external_platform_images" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: grafana, hardened-registry, llama-cpp, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: grafana, hardened-registry, signoz-auth-proxy."
   type        = map(string)
   default     = {}
-}
-
-variable "llm_gateway_external_name" {
-  description = "DNS name used by the in-cluster llm-gateway ExternalName service."
-  type        = string
-  default     = "host.docker.internal"
-}
-
-variable "llm_gateway_external_cidr" {
-  description = "Optional explicit CIDR for the direct LLM gateway policy. Set this when the host-side name is not resolvable from the machine rendering the policies repo."
-  type        = string
-  default     = ""
-}
-
-variable "llm_gateway_mode" {
-  description = "Legacy LLM gateway mode for sentiment workloads. Use 'disabled' for the SST default, 'litellm' for the in-cluster LiteLLM broker, or 'direct' for a host-backed ExternalName service."
-  type        = string
-  default     = "disabled"
-
-  validation {
-    condition     = contains(["disabled", "litellm", "direct"], var.llm_gateway_mode)
-    error_message = "llm_gateway_mode must be one of: disabled, litellm, direct."
-  }
-}
-
-variable "llama_cpp_hf_repo" {
-  description = "Hugging Face repository containing the GGUF model used by the in-cluster llama.cpp backend when llm_gateway_mode is litellm."
-  type        = string
-  default     = "bartowski/SmolLM2-1.7B-Instruct-GGUF"
-}
-
-variable "llama_cpp_image" {
-  description = "Container image for the in-cluster llama.cpp backend."
-  type        = string
-  default     = "ghcr.io/ggml-org/llama.cpp:server"
-}
-
-variable "llama_cpp_hf_file" {
-  description = "GGUF filename fetched by the in-cluster llama.cpp backend when llm_gateway_mode is litellm."
-  type        = string
-  default     = "SmolLM2-1.7B-Instruct-Q4_K_M.gguf"
-}
-
-variable "llama_cpp_model_alias" {
-  description = "Model alias exposed by the in-cluster llama.cpp OpenAI-compatible API."
-  type        = string
-  default     = "local-classifier"
-}
-
-variable "llama_cpp_ctx_size" {
-  description = "Context size for the in-cluster llama.cpp backend."
-  type        = number
-  default     = 2048
-}
-
-variable "litellm_upstream_model" {
-  description = "LiteLLM upstream model identifier used by the in-cluster broker."
-  type        = string
-  default     = "openai/local-classifier"
-}
-
-variable "litellm_upstream_api_base" {
-  description = "LiteLLM upstream API base URL used by the in-cluster broker."
-  type        = string
-  default     = "http://llama-cpp:8080/v1"
-}
-
-variable "litellm_upstream_api_key" {
-  description = "LiteLLM upstream API key used by the in-cluster broker."
-  type        = string
-  default     = "dummy"
-  sensitive   = true
 }

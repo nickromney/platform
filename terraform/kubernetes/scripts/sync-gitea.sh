@@ -222,9 +222,6 @@ main() {
   export_resolved_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
   export_resolved_bool ENABLE_HEADLAMP enable_headlamp true
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
-  export_resolved_string LLM_GATEWAY_MODE llm_gateway_mode disabled
-  export_resolved_string LLM_GATEWAY_EXTERNAL_NAME llm_gateway_external_name host.docker.internal
-  export_resolved_string LLM_GATEWAY_EXTERNAL_CIDR llm_gateway_external_cidr ""
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
   export_resolved_string DEX_CHART_VERSION dex_chart_version "$(tf_default_from_variables dex_chart_version)"

@@ -415,7 +415,6 @@ sync-image-cache:
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
-	PRELOAD_LLM_GATEWAY_MODE="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode disabled "$${tfvar_files[@]}" )" \
 	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
 
 .PHONY: check-docker-daemon
@@ -457,7 +456,6 @@ status:
 		echo ""; \
 		echo "=== Host gateway proxies ==="; \
 		"$(HOST_GATEWAY_PROXY)" status || true; \
-		CONTAINER_NAME="limavm-platform-llm-12434" LISTEN_PORT="12434" UPSTREAM_HOST="host.docker.internal" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" status || true; \
 	fi
 	@echo ""
 	@echo "=== Helper modes ==="
@@ -507,15 +505,12 @@ start:
 ensure-host-gateway-proxy:
 	@$(MAKE) check-conflicting-clusters-stopped
 	@"$(HOST_GATEWAY_PROXY)" ensure
-	@CONTAINER_NAME="limavm-platform-llm-12434" LISTEN_PORT="12434" UPSTREAM_HOST="host.docker.internal" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" ensure
 
 stop-host-gateway-proxy:
 	@"$(HOST_GATEWAY_PROXY)" stop
-	@CONTAINER_NAME="limavm-platform-llm-12434" LISTEN_PORT="12434" UPSTREAM_HOST="host.docker.internal" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" stop
 
 proxy-status:
 	@"$(HOST_GATEWAY_PROXY)" status
-	@CONTAINER_NAME="limavm-platform-llm-12434" LISTEN_PORT="12434" UPSTREAM_HOST="host.docker.internal" UPSTREAM_PORT="12434" "$(HOST_GATEWAY_PROXY)" status
 
 .PHONY: configure-k3s-apiserver-oidc
 configure-k3s-apiserver-oidc:

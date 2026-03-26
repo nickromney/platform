@@ -12,7 +12,6 @@ resources:
   - application-backend-egress-via-cidrgroup.yaml
   - application-backend-egress-via-fqdn.yaml
   - sentiment-api-dns-egress.yaml
-  - sentiment-llama-cpp-world-egress.yaml
   - apim-baseline.yaml
   - platform-baseline.yaml
   - argocd-hardened.yaml

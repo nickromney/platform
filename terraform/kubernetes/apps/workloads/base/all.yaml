@@ -70,8 +70,6 @@ spec:
               value: "/data"
             - name: CSV_PATH
               value: "/data/comments.csv"
-            - name: SENTIMENT_BACKEND_MODE
-              value: "sst"
             - name: SENTIMENT_MODEL_CACHE_DIR
               value: "/opt/transformers-cache"
             - name: SENTIMENT_MODEL_LOCAL_ONLY

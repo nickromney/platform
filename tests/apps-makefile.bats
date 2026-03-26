@@ -17,6 +17,14 @@ setup() {
   [[ "${output}" == *"trivy-scan-gitea"* ]]
 }
 
+@test "apps prereqs stays Trivy-optional" {
+  run make -C "${REPO_ROOT}/apps" prereqs
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Trivy remains opt-in"* ]]
+  [[ "${output}" != *"Runner mode:"* ]]
+}
+
 @test "apps test delegates to the compose smoke workflow" {
   run make -n -C "${REPO_ROOT}/apps" test
 

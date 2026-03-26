@@ -9,6 +9,7 @@ NC=$'\033[0m'
 ok() { echo "${GREEN}✔${NC} $*"; }
 warn() { echo "${YELLOW}⚠${NC} $*"; }
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
+progress() { printf '... %s\n' "$*" >&2; }
 
 require() {
   local bin="$1"
@@ -145,8 +146,11 @@ LOCK_FILE="${STACK_DIR}/.terraform.lock.hcl"
 [ -f "${LOCK_FILE}" ] || fail "missing ${LOCK_FILE}"
 
 echo "Terraform provider versions"
-printf "%-18s %-12s %-12s %-12s %s\n" "Provider" "Constraint" "Locked" "Latest" "Status"
-printf "%-18s %-12s %-12s %-12s %s\n" "--------" "----------" "------" "------" "------"
+rows_file="$(mktemp)"
+trap 'rm -f "${rows_file}"' EXIT
+
+printf '%s\n' $'Provider\tConstraint\tLocked\tLatest\tStatus' >"${rows_file}"
+printf '%s\n' $'--------\t----------\t------\t------\t------' >>"${rows_file}"
 
 outdated_count=0
 error_count=0
@@ -154,6 +158,7 @@ error_count=0
 while IFS=$'\t' read -r full_source short_source locked_version constraint; do
   [ -n "${full_source}" ] || continue
 
+  progress "Checking latest Terraform provider release for ${short_source}"
   latest_version=""
   if ! latest_version="$(latest_registry_version "${full_source}" 2>/dev/null)"; then
     latest_version="unknown"
@@ -173,9 +178,30 @@ while IFS=$'\t' read -r full_source short_source locked_version constraint; do
     outdated_count=$((outdated_count + 1))
   fi
 
-  printf "%-18s %-12s %-12s %-12s %b\n" \
-    "${short_source}" "${constraint:--}" "${locked_version}" "${latest_version}" "${status}"
+  printf "%s\t%s\t%s\t%s\t%b\n" \
+    "${short_source}" "${constraint:--}" "${locked_version}" "${latest_version}" "${status}" >>"${rows_file}"
 done < <(extract_locked_providers)
+
+awk -F '\t' '
+  {
+    rows[NR] = $0
+    row_count = NR
+    for (i = 1; i < NF; i++) {
+      if (length($i) > widths[i]) {
+        widths[i] = length($i)
+      }
+    }
+  }
+  END {
+    for (row = 1; row <= row_count; row++) {
+      split(rows[row], fields, FS)
+      for (i = 1; i < length(fields); i++) {
+        printf "%-*s ", widths[i], fields[i]
+      }
+      printf "%s\n", fields[length(fields)]
+    }
+  }
+' "${rows_file}"
 
 if [ "${error_count}" -gt 0 ]; then
   warn "${error_count} provider registry lookup(s) failed"

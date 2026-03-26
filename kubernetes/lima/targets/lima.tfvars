@@ -13,9 +13,6 @@ gitea_local_access_mode       = "port-forward"
 hardened_image_registry         = "dhi.io"
 prefer_external_platform_images = true
 prefer_external_workload_images = true
-llm_gateway_mode                = "disabled"
-llm_gateway_external_name       = "host.lima.internal"
-llm_gateway_external_cidr       = "192.168.104.2/32"
 
 external_platform_image_refs = {
   grafana = "host.lima.internal:5002/platform/grafana-victorialogs:latest"

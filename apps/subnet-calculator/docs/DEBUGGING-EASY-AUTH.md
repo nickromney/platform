@@ -184,33 +184,23 @@ sleep 30
 
 ## Common Issues and Solutions
 
-### Issue 1: Async/Await Not Working in onProxyReq
+### Issue 1: Async Header Mutation Must Happen Before Proxying
 
 **Symptom**: Managed Identity token never gets added to requests, even though code looks correct.
 
-**Root Cause**: The `onProxyReq` callback in http-proxy-middleware v3 doesn't support async/await.
+**Root Cause**: The proxy request must be prepared before the outbound HTTP request is created. Async token acquisition inside a late proxy hook is too late.
 
 **Solution**: Move async token acquisition to Express middleware that runs before the proxy:
 
 ```javascript
-// WRONG - onProxyReq doesn't await async functions
-app.use('/api', createProxyMiddleware({
-  onProxyReq: async (proxyReq, req) => {
-    const token = await getManagedIdentityToken();  // Won't wait!
-    proxyReq.setHeader('Authorization', `Bearer ${token}`);
-  }
-}));
-
-// RIGHT - Use Express middleware before proxy
+// RIGHT - Use Express middleware before the proxy request is built
 app.use('/api', async (req, res, next) => {
   const token = await getManagedIdentityToken();
   req.headers.authorization = `Bearer ${token}`;
   next();
 });
 
-app.use('/api', createProxyMiddleware({
-  // proxy config
-}));
+app.use('/api', proxyApiRequest);
 ```
 
 ### Issue 2: Token Audience Mismatch
@@ -316,7 +306,7 @@ az webapp restart --name <app> --resource-group <rg>
 ## Key Learnings
 
 1. **Multiple apps can share display names** - Always use `appId` to distinguish
-2. **onProxyReq doesn't support async** - Use Express middleware instead
+2. **Acquire async tokens before building the proxy request** - Use Express middleware first
 3. **App role auth requires `.default`** - Don't forget the suffix
 4. **UAMI needs both assignment and config** - Must have app role AND `AZURE_CLIENT_ID` set
 5. **Logging is essential** - Enable early and watch for startup errors
@@ -327,4 +317,3 @@ az webapp restart --name <app> --resource-group <rg>
 - [Azure App Service Authentication](https://learn.microsoft.com/en-us/azure/app-service/overview-authentication-authorization)
 - [Azure Managed Identities](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview)
 - [Azure Identity SDK for JavaScript](https://learn.microsoft.com/en-us/javascript/api/overview/azure/identity-readme)
-- [http-proxy-middleware](https://github.com/chimurai/http-proxy-middleware)

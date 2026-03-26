@@ -72,12 +72,8 @@ resource "null_resource" "sync_gitea_policies_repo" {
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
       PREFER_EXTERNAL_PLATFORM_IMAGES               = tostring(var.prefer_external_platform_images)
       EXTERNAL_PLATFORM_IMAGE_GRAFANA               = lookup(var.external_platform_image_refs, "grafana", "")
-      EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP             = lookup(var.external_platform_image_refs, "llama-cpp", "")
       EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY     = lookup(var.external_platform_image_refs, "signoz-auth-proxy", "")
       HARDENED_IMAGE_REGISTRY                       = local.hardened_image_registry_effective
-      LLM_GATEWAY_MODE                              = var.llm_gateway_mode
-      LLM_GATEWAY_EXTERNAL_NAME                     = var.llm_gateway_external_name
-      LLM_GATEWAY_EXTERNAL_CIDR                     = var.llm_gateway_external_cidr
       POLICIES_REPO_URL_CLUSTER                     = local.policies_repo_url_cluster
       CERT_MANAGER_CHART_VERSION                    = var.cert_manager_chart_version
       DEX_CHART_VERSION                             = var.dex_chart_version
@@ -100,15 +96,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       SIGNOZ_CHART_VERSION                          = var.signoz_chart_version
       TEMPO_CHART_VERSION                           = var.tempo_chart_version
       VICTORIA_LOGS_CHART_VERSION                   = var.victoria_logs_chart_version
-      LLAMA_CPP_IMAGE                               = local.llama_cpp_image_effective
       SIGNOZ_AUTH_PROXY_IMAGE                       = local.signoz_auth_proxy_image_effective
-      LLAMA_CPP_HF_REPO                             = var.llama_cpp_hf_repo
-      LLAMA_CPP_HF_FILE                             = var.llama_cpp_hf_file
-      LLAMA_CPP_MODEL_ALIAS                         = var.llama_cpp_model_alias
-      LLAMA_CPP_CTX_SIZE                            = tostring(var.llama_cpp_ctx_size)
-      LITELLM_UPSTREAM_MODEL                        = var.litellm_upstream_model
-      LITELLM_UPSTREAM_API_BASE                     = var.litellm_upstream_api_base
-      LITELLM_UPSTREAM_API_KEY                      = nonsensitive(var.litellm_upstream_api_key)
       KUBECONFIG                                    = local.kubeconfig_path_expanded
       KUBECONFIG_CONTEXT                            = trimspace(var.kubeconfig_context)
     }

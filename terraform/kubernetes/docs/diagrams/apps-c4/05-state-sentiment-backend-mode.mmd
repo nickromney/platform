@@ -10,20 +10,8 @@ stateDiagram-v2
     RouterDispatch --> FrontendResponse : non-/api path
     RouterDispatch --> BackendRequest : /api/* path
 
-    BackendRequest --> SSTMode : SENTIMENT_BACKEND_MODE=sst
-    BackendRequest --> DirectMode : SENTIMENT_BACKEND_MODE=llm and LLM_GATEWAY_MODE=direct
-    BackendRequest --> BrokerMode : SENTIMENT_BACKEND_MODE=llm and LLM_GATEWAY_MODE=litellm
-
-    SSTMode --> SSTInference
+    BackendRequest --> SSTInference
     SSTInference --> TraceExport
-    DirectMode --> LLMGatewayCall
-    LLMGatewayCall --> HostLLMInference
-
-    BrokerMode --> LiteLLMCall
-    LiteLLMCall --> LlamaCppInference
-
-    HostLLMInference --> TraceExport
-    LlamaCppInference --> TraceExport
     TraceExport --> APIResponse
 
     FrontendResponse --> [*]

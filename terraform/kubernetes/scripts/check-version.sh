@@ -9,6 +9,41 @@ NC=$'\033[0m'
 ok() { echo "${GREEN}✔${NC} $*"; }
 warn() { echo "${YELLOW}⚠${NC} $*"; }
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
+progress() { printf '... %s\n' "$*" >&2; }
+
+CHECK_VERSION_HEARTBEAT_SECONDS="${CHECK_VERSION_HEARTBEAT_SECONDS:-10}"
+CHECK_VERSION_HEARTBEAT_PID=""
+
+start_heartbeat() {
+  local message="$1"
+  local interval="${CHECK_VERSION_HEARTBEAT_SECONDS}"
+
+  case "${interval}" in
+    ''|*[!0-9]*|0)
+      return 0
+      ;;
+  esac
+
+  (
+    while :; do
+      sleep "${interval}" || exit 0
+      printf '... %s\n' "${message}" >&2
+    done
+  ) &
+  CHECK_VERSION_HEARTBEAT_PID=$!
+}
+
+stop_heartbeat() {
+  local pid="${CHECK_VERSION_HEARTBEAT_PID:-}"
+
+  if [ -z "${pid}" ]; then
+    return 0
+  fi
+
+  kill "${pid}" >/dev/null 2>&1 || true
+  wait "${pid}" >/dev/null 2>&1 || true
+  CHECK_VERSION_HEARTBEAT_PID=""
+}
 
 require() {
   local bin="$1"
@@ -31,6 +66,33 @@ cluster_reachable() {
   kubectl get ns --request-timeout=2s >/dev/null 2>&1
 }
 
+kind_get_clusters_safe() {
+  local timeout="${CHECK_VERSION_KIND_GET_CLUSTERS_TIMEOUT_SECONDS:-5}"
+  local tmp pid start elapsed rc
+
+  tmp="$(mktemp)"
+  kind get clusters >"${tmp}" 2>/dev/null &
+  pid=$!
+  start="$(date +%s)"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    elapsed=$(( $(date +%s) - start ))
+    if [ "${elapsed}" -ge "${timeout}" ]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      rm -f "${tmp}"
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}"
+  rc=$?
+  cat "${tmp}"
+  rm -f "${tmp}"
+  return "${rc}"
+}
+
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 STACK_DIR="${STACK_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
@@ -39,6 +101,8 @@ TARGET_TFVARS="${TARGET_TFVARS:-}"
 PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
 ARGOCD_APPS_DIR="${ARGOCD_APPS_DIR:-${STACK_DIR}/apps/argocd-apps}"
 export VARIABLES_FILE="${VARIABLES_FILE:-${STACK_DIR}/variables.tf}"
+HELM_READY_REPOS=""
+CHECK_VERSION_CACHE_DIR="${CHECK_VERSION_CACHE_DIR:-}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
@@ -96,13 +160,41 @@ tfvar_get_any_stage_or_default() {
   fi
 }
 
+ensure_helm_repo_ready() {
+  local repo_name="$1"
+  local repo_url="$2"
+
+  case " ${HELM_READY_REPOS} " in
+    *" ${repo_name} "*) return 0 ;;
+  esac
+
+  helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
+  HELM_READY_REPOS="${HELM_READY_REPOS} ${repo_name}"
+}
+
+ensure_check_version_cache_dir() {
+  if [ -n "${CHECK_VERSION_CACHE_DIR}" ] && [ -d "${CHECK_VERSION_CACHE_DIR}" ]; then
+    return 0
+  fi
+
+  CHECK_VERSION_CACHE_DIR="$(mktemp -d)"
+}
+
+chart_app_version_cache_file() {
+  local repo_name="$1"
+  local chart="$2"
+  local version="$3"
+
+  ensure_check_version_cache_dir
+  printf "%s/%s\n" "${CHECK_VERSION_CACHE_DIR}" "$(printf '%s__%s__%s' "${repo_name}" "${chart}" "${version}" | tr '/:@' '____')"
+}
+
 helm_latest_chart_version() {
   local repo_name="$1"
   local repo_url="$2"
   local chart="$3"
 
-  helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
-  helm repo update "${repo_name}" >/dev/null 2>&1 || true
+  ensure_helm_repo_ready "${repo_name}" "${repo_url}"
   helm search repo "${repo_name}/${chart}" --versions -o json 2>/dev/null | jq -r '.[0].version // empty' || true
 }
 
@@ -111,16 +203,27 @@ helm_chart_app_version() {
   local repo_url="$2"
   local chart="$3"
   local version="$4"
+  local cache_file
+  local result
 
   if [ -z "${version}" ]; then
     echo ""
     return 0
   fi
 
-  helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
-  helm repo update "${repo_name}" >/dev/null 2>&1 || true
-  helm show chart "${repo_name}/${chart}" --version "${version}" 2>/dev/null | \
-    awk -F': ' '$1=="appVersion"{print $2; exit}' | tr -d '"' | xargs || true
+  cache_file="$(chart_app_version_cache_file "${repo_name}" "${chart}" "${version}")"
+  if [ -f "${cache_file}" ]; then
+    cat "${cache_file}"
+    return 0
+  fi
+
+  ensure_helm_repo_ready "${repo_name}" "${repo_url}"
+  result="$(
+    helm show chart "${repo_name}/${chart}" --version "${version}" 2>/dev/null | \
+      awk -F': ' '$1=="appVersion"{print $2; exit}' | tr -d '"' | xargs || true
+  )"
+  printf "%s" "${result}" >"${cache_file}"
+  printf "%s\n" "${result}"
 }
 
 image_tag_from_ref() {
@@ -228,6 +331,7 @@ derive_tag_with_existing_suffix() {
 image_ref_availability() {
   local image_ref="$1"
   local stderr=""
+  local rc=0
 
   if [ -z "${image_ref}" ]; then
     printf "unknown\n"
@@ -239,8 +343,14 @@ image_ref_availability() {
     return 0
   fi
 
-  if stderr="$(docker manifest inspect "${image_ref}" 2>&1 >/dev/null)"; then
+  stderr="$(docker_manifest_inspect_safe "${image_ref}")" || rc=$?
+  if [ "${rc}" -eq 0 ]; then
     printf "available\n"
+    return 0
+  fi
+
+  if [ "${rc}" -eq 124 ]; then
+    printf "unknown\n"
     return 0
   fi
 
@@ -250,6 +360,34 @@ image_ref_availability() {
   fi
 
   printf "missing\n"
+}
+
+docker_manifest_inspect_safe() {
+  local image_ref="$1"
+  local timeout="${CHECK_VERSION_DOCKER_MANIFEST_TIMEOUT_SECONDS:-5}"
+  local tmp pid start elapsed rc
+
+  tmp="$(mktemp)"
+  docker manifest inspect "${image_ref}" >/dev/null 2>"${tmp}" &
+  pid=$!
+  start="$(date +%s)"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    elapsed=$(( $(date +%s) - start ))
+    if [ "${elapsed}" -ge "${timeout}" ]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      rm -f "${tmp}"
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}"
+  rc=$?
+  cat "${tmp}"
+  rm -f "${tmp}"
+  return "${rc}"
 }
 
 preferred_image_status() {
@@ -865,6 +1003,8 @@ main() {
   EXPECTED_CLUSTER_NAME=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "cluster_name")
   if [ -z "${EXPECTED_CLUSTER_NAME}" ]; then EXPECTED_CLUSTER_NAME="kind-local"; fi
 
+  progress "Resolving latest upstream chart versions"
+  start_heartbeat "Still resolving latest upstream chart versions"
   LATEST_ARGOCD=$(helm_latest_chart_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd")
   LATEST_GITEA=$(helm_latest_chart_version "gitea" "https://dl.gitea.io/charts/" "gitea")
   LATEST_CILIUM=$(helm_latest_chart_version "cilium" "https://helm.cilium.io" "cilium")
@@ -881,7 +1021,10 @@ main() {
   LATEST_CERT_MANAGER=$(helm_latest_chart_version "jetstack" "https://charts.jetstack.io" "cert-manager")
   LATEST_DEX=$(helm_latest_chart_version "dex" "https://charts.dexidp.io" "dex")
   LATEST_OAUTH2_PROXY=$(helm_latest_chart_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy")
+  stop_heartbeat
 
+  progress "Resolving appVersion metadata for configured chart versions"
+  start_heartbeat "Still resolving configured chart appVersion metadata"
   CODETAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${CODE_ARGOCD}")
   CODETAG_ARGOCD="${CODETAG_ARGOCD_CHART}"
   CODETAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${CODE_GITEA}")
@@ -902,7 +1045,10 @@ main() {
   CODETAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${CODE_CERT_MANAGER}")
   CODETAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${CODE_DEX}")
   CODETAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${CODE_OAUTH2_PROXY}")
+  stop_heartbeat
 
+  progress "Resolving appVersion metadata for latest upstream chart versions"
+  start_heartbeat "Still resolving latest chart appVersion metadata"
   LATESTTAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${LATEST_ARGOCD}")
   LATESTTAG_ARGOCD="${LATESTTAG_ARGOCD_CHART}"
   LATESTTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${LATEST_GITEA}")
@@ -920,7 +1066,10 @@ main() {
   LATESTTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${LATEST_CERT_MANAGER}")
   LATESTTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${LATEST_DEX}")
   LATESTTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${LATEST_OAUTH2_PROXY}")
+  stop_heartbeat
 
+  progress "Checking preferred image availability and cluster reachability"
+  progress "Checking configured Argo CD image availability"
   CONFIGURED_ARGOCD_IMAGE_STATUS="$(image_ref_availability "${CODE_ARGOCD_IMAGE_REF}")"
   LATEST_PREFERRED_ARGOCD_TAG=""
   LATEST_PREFERRED_ARGOCD_IMAGE_REF=""
@@ -929,20 +1078,24 @@ main() {
     LATEST_PREFERRED_ARGOCD_TAG="$(derive_tag_with_existing_suffix "${LATESTTAG_ARGOCD_CHART}" "${CODE_ARGOCD_IMAGE_TAG}")"
     if [ -n "${LATEST_PREFERRED_ARGOCD_TAG}" ]; then
       LATEST_PREFERRED_ARGOCD_IMAGE_REF="${CODE_ARGOCD_IMAGE_REPO}:${LATEST_PREFERRED_ARGOCD_TAG}"
+      progress "Checking latest preferred Argo CD image availability"
       LATEST_PREFERRED_ARGOCD_IMAGE_STATUS="$(image_ref_availability "${LATEST_PREFERRED_ARGOCD_IMAGE_REF}")"
     fi
   fi
 
   CLUSTER_OK=0
   if command -v kind >/dev/null 2>&1; then
-    if ! kind get clusters 2>/dev/null | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
+    progress "Checking kind cluster presence"
+    if ! kind_get_clusters_safe | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
       warn "Cluster '${EXPECTED_CLUSTER_NAME}' not found; Deployed=Unavailable"
+      progress "Checking Kubernetes API reachability"
     elif cluster_reachable; then
       CLUSTER_OK=1
     else
       warn "Cluster '${EXPECTED_CLUSTER_NAME}' exists but API is unreachable; Deployed=Unavailable"
     fi
   else
+    progress "Checking Kubernetes API reachability"
     if cluster_reachable; then
       CLUSTER_OK=1
     else
@@ -985,6 +1138,8 @@ main() {
   DEPLOYEDTAG_OAUTH2_PROXY=""
 
   if [ "${CLUSTER_OK}" -eq 1 ]; then
+    progress "Inspecting deployed chart and image versions from cluster resources"
+    start_heartbeat "Still inspecting deployed chart and image versions"
     DEPLOYED_CILIUM=$(helm_deployed_chart_version "kube-system" "cilium")
     DEPLOYED_ARGOCD=$(helm_deployed_chart_version "argocd" "argocd")
     DEPLOYED_ARGOCD_IMAGE_REF=$(k8s_deployment_container_image "argocd" "argocd-server" "server")
@@ -1028,6 +1183,7 @@ main() {
     DEPLOYEDTAG_CERT_MANAGER=$(helm_chart_app_version "jetstack" "https://charts.jetstack.io" "cert-manager" "${DEPLOYED_CERT_MANAGER}")
     DEPLOYEDTAG_DEX=$(helm_chart_app_version "dex" "https://charts.dexidp.io" "dex" "${DEPLOYED_DEX}")
     DEPLOYEDTAG_OAUTH2_PROXY=$(helm_chart_app_version "oauth2-proxy" "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}")
+    stop_heartbeat
   else
     DEPLOYED_CILIUM="Unavailable"
     DEPLOYED_ARGOCD="Unavailable"
@@ -1112,6 +1268,7 @@ main() {
   fi
 
   INSTALLED_KIND="$(kind_installed_version)"
+  progress "Checking latest kind CLI release"
   LATEST_KIND="$(github_latest_release_tag "kubernetes-sigs/kind")"
 
   echo "Tool versions"
@@ -1146,6 +1303,7 @@ main() {
   check_consistent_tfvars "dex_chart_version"
   check_consistent_tfvars "oauth2_proxy_chart_version"
 
+  progress "Checking app-of-apps revisions and preload image alignment"
   check_app_yaml_tfvar_drift
   check_preload_chart_section_version_alignment
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"

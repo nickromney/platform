@@ -21,6 +21,6 @@ sequenceDiagram
         Router->>API: Forward /api/*
         Note over Router,API: Cilium: sentiment-router-http-routes + sentiment-backend-ingress
         API->>API: Run in-process SST classifier
-        Note over API: SENTIMENT_BACKEND_MODE=sst, model preloaded at startup
+        Note over API: SST classifier is preloaded at startup
         API->>OTel: Emit traces
     end

@@ -99,7 +99,7 @@ EOF
 
   cat >"${variables_file}" <<'EOF'
 variable "cilium_version" {
-  default = "1.19.1"
+  default = "1.19.2"
 }
 EOF
 
@@ -152,7 +152,7 @@ EOF
     /bin/bash "${SCRIPT}" live
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"quay.io/cilium/cilium:v1.19.1"* ]]
+  [[ "${output}" == *"quay.io/cilium/cilium:v1.19.2"* ]]
   [[ "${output}" == *"OK   cilium live policy validation"* ]]
 
   run cat "${log_file}"

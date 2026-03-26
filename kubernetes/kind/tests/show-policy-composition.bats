@@ -38,7 +38,6 @@ setup() {
   [[ "${output}" != *"Overlay: uat"* ]]
   [[ "${output}" == *"  CiliumNetworkPolicy"* ]]
   [[ "${output}" == *"sentiment-api-egress"* ]]
-  [[ "${output}" == *"sentiment-litellm-ingress-egress"* ]]
   [[ "${output}" == *"sentiment-router-http-routes"* ]]
   [[ "${output}" != *"sentiment-frontend-ingress"* ]]
   [[ "${output}" != *"sentiment-router-ingress"* ]]
@@ -54,7 +53,6 @@ setup() {
   [[ "${output}" == *"sentiment-router-ingress"* ]]
   [[ "${output}" == *"sentiment-backend-ingress"* ]]
   [[ "${output}" == *"sentiment-frontend-ingress"* ]]
-  [[ "${output}" == *"sentiment-litellm-ingress-egress"* ]]
   [[ "${output}" != *"sentiment-api-egress"* ]]
 }
 
@@ -64,8 +62,6 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"  CiliumClusterwideNetworkPolicy"* ]]
   [[ "${output}" == *"allow-application-backend-egress-via-fqdn"* ]]
-  [[ "${output}" == *"allow-sentiment-llama-cpp-world-egress"* ]]
-  [[ "${output}" != *"deny-cloud-metadata-egress"* ]]
 
   run "${SCRIPT}" --target cilium --label deny --egress --format text
 

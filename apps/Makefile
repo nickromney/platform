@@ -10,8 +10,13 @@ TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 .PHONY: prereqs test trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
 
 ##@ Workflow
-prereqs: ## Check shared app security prerequisites
-	@$(MAKE) --no-print-directory trivy-prereqs
+prereqs: ## Check shared app workflow prerequisites without requiring Trivy
+	@echo "compose smoke prerequisites are repo-local:"
+	@echo "  - docker"
+	@echo "  - docker compose"
+	@echo "  - bun (for frontend test/build workflows)"
+	@echo ""
+	@echo "Trivy remains opt-in. Use 'make trivy-prereqs' when you want scanning."
 
 test: ## Run the default app smoke checks
 	@$(MAKE) --no-print-directory compose-smoke

@@ -62,32 +62,7 @@ For the shipped kind stages, the key points are:
 
 - `sentiment-router` talks to `sentiment-auth-ui` and `sentiment-api`, not to an APIM simulator
 - `sentiment-api` serves the default SST classifier in-process
-- the checked-in kind stage files set `llm_gateway_mode = "disabled"`
-- the shared workload config sets `SENTIMENT_BACKEND_MODE = "sst"`
+- the shared workload config keeps inference inside `sentiment-api`
 
 That means the shipped kind path does not require a host-side model endpoint
 for sentiment to work.
-
-## Legacy LLM Modes
-
-The repo still keeps two opt-in LLM-backed paths for teams that want them:
-
-```mermaid
-flowchart LR
-    api["sentiment-api"] --> gateway["llm-gateway"]
-    gateway --> litellm["LiteLLM"]
-    litellm --> llama["llama.cpp"]
-```
-
-Those modes exist in:
-
-- [`llm-litellm.yaml`](../../../terraform/kubernetes/apps/workloads/base/llm-litellm.yaml)
-- [`variables.tf`](../../../terraform/kubernetes/variables.tf)
-
-Use:
-
-- `llm_gateway_mode = "direct"` for the legacy host-backed `llm-gateway` path
-- `llm_gateway_mode = "litellm"` for the legacy in-cluster `LiteLLM -> llama.cpp` path
-
-Neither mode is the default selected by the checked-in kind stage files for
-stages `700`, `800`, and `900`.

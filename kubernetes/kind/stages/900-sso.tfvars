@@ -35,8 +35,6 @@ docker_socket_path                = "/var/run/docker.sock"
 enable_actions_runner             = true
 enable_app_repo_subnet_calculator = true
 enable_app_repo_sentiment         = true
-llm_gateway_mode                  = "disabled"
-llm_gateway_external_name         = "host.docker.internal"
 
 argocd_namespace          = "argocd"
 gitea_admin_username      = "gitea-admin"
