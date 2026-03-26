@@ -7,6 +7,8 @@ VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 
+.DEFAULT_GOAL := help
+
 include mk/common.mk
 
 .PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan

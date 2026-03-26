@@ -21,6 +21,14 @@ setup() {
   [[ "${output}" == *"make sdwan"* ]]
 }
 
+@test "root bare make defaults to informational help" {
+  run make -C "${REPO_ROOT}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Platform workspace Makefile guide"* ]]
+  [[ "${output}" == *"This root Makefile is primarily informational."* ]]
+}
+
 @test "root prereqs and test are informational entrypoints" {
   run make -C "${REPO_ROOT}" prereqs
 

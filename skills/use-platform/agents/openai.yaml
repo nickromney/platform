@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Platform"
+  short_description: "Orient in the platform repo"
+  default_prompt: "Use $use-platform to choose the right Makefile, docs, and verification path in the platform repo."
