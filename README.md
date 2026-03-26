@@ -44,9 +44,6 @@ For the actual startup flow, including the VS Code path versus the Dev
 Container CLI path, see
 [`./.devcontainer/README.md`](.devcontainer/README.md).
 
-A non-active draft of what a future `mise`-managed tool layer could look like
-is in [`./mise.toml.draft`](mise.toml.draft).
-
 Limits:
 
 - `sd-wan/lima` remains macOS-only by design.
