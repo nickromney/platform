@@ -19,7 +19,6 @@ CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
 STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
-CHECK_HOST_LLM := $(SCRIPTS_DIR)/check-host-llm.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
@@ -137,8 +136,6 @@ target_profile_file = targets/kind.tfvars
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
-prereq_llm_stage_file = $(abspath $(if $(filter 1,$(STAGE_SPECIFIED)),$(stage_file),$(STAGE_FILE_900)))
-
 .PHONY: help
 help:
 	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/Loki)"
@@ -277,7 +274,6 @@ sync-image-cache:
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
-	PRELOAD_LLM_GATEWAY_MODE="$$( "$(RESOLVE_TFVAR_VALUE)" llm_gateway_mode disabled "$${tfvar_files[@]}" )" \
 	"$(SYNC_LOCAL_IMAGE_CACHE)"
 
 .PHONY: check-docker-daemon
@@ -1020,16 +1016,6 @@ prereqs:
 	echo ""; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
-	echo "Host-side LLM:"; \
-	args=(--var-file "$(prereq_llm_stage_file)" --var-file "$(target_var_file)"); \
-	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then \
-		args+=(--var-file "$${PLATFORM_BASE_TFVARS}"); \
-	fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
-		args+=(--var-file "$${PLATFORM_TFVARS}"); \
-	fi; \
-	"$(CHECK_HOST_LLM)" "$${args[@]}"; \
-	echo ""; \
 	echo "Versions:"; \
 	docker version --format 'client={{.Client.Version}} server={{.Server.Version}}' 2>/dev/null || true; \
 	kubectl version --client --output=yaml 2>/dev/null | sed -n '1,12p' || true; \
@@ -1201,8 +1187,10 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@echo "Running component and chart version audit..."
 	@KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh"
 	@echo ""
+	@echo "Running Terraform provider version audit..."
 	@"$(STACK_DIR)/scripts/check-provider-version.sh"
 
 .PHONY: check-provider-version

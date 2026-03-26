@@ -273,7 +273,6 @@ flowchart LR
 
 - `enable_actions_runner = true` adds the in-cluster CI executor.
 - `enable_app_repo_subnet_calculator = true` and `enable_app_repo_sentiment = true` seed the demo application repos.
-- `llm_gateway_mode = "direct"` keeps the local demo path simple for the LLM-backed sample app.
 
 With the default `KIND_IMAGE_DISTRIBUTION_MODE=registry` path, the served workloads stay the same but this stage takes the faster Docker-host route instead: the host registry becomes the image source of truth and the in-cluster Actions runner path is disabled for that run. Switch back to `load` if you explicitly want the old `kind load` behavior.
 

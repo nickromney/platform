@@ -71,7 +71,6 @@ locals {
   ]) : toset([])
   external_platform_grafana_image      = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
   external_platform_hardened_registry  = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
-  external_platform_llama_cpp_image    = trimspace(lookup(var.external_platform_image_refs, "llama-cpp", ""))
   external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
@@ -95,7 +94,6 @@ locals {
     "        plugins:",
     "          - ${local.grafana_victoria_logs_plugin_url_effective}",
   ]) : "        plugins: []"
-  llama_cpp_image_effective         = var.prefer_external_platform_images && local.external_platform_llama_cpp_image != "" ? local.external_platform_llama_cpp_image : var.llama_cpp_image
   signoz_auth_proxy_image_effective = var.prefer_external_platform_images && local.external_platform_signoz_auth_proxy != "" ? local.external_platform_signoz_auth_proxy : local.default_signoz_auth_proxy_image
 
   containerd_certs_dir = abspath("${path.module}/.run/containerd-certs.d")
@@ -267,7 +265,6 @@ locals {
     external_platform_grafana              = local.external_platform_grafana_image
     hardened_image_registry                = local.hardened_image_registry_effective
     external_platform_hardened             = local.external_platform_hardened_registry
-    external_platform_llama_cpp            = local.external_platform_llama_cpp_image
     external_platform_signoz_auth          = local.external_platform_signoz_auth_proxy
     cert_manager_chart_version             = var.cert_manager_chart_version
     dex_chart_version                      = var.dex_chart_version
@@ -290,18 +287,7 @@ locals {
     signoz_chart_version                   = var.signoz_chart_version
     tempo_chart_version                    = var.tempo_chart_version
     victoria_logs_chart_version            = var.victoria_logs_chart_version
-    llm_gateway_mode                       = var.llm_gateway_mode
-    llm_gateway_external_name              = var.llm_gateway_external_name
-    llm_gateway_external_cidr              = var.llm_gateway_external_cidr
-    llama_cpp_image                        = local.llama_cpp_image_effective
     signoz_auth_proxy_image                = local.signoz_auth_proxy_image_effective
-    llama_cpp_hf_repo                      = var.llama_cpp_hf_repo
-    llama_cpp_hf_file                      = var.llama_cpp_hf_file
-    llama_cpp_model_alias                  = var.llama_cpp_model_alias
-    llama_cpp_ctx_size                     = var.llama_cpp_ctx_size
-    litellm_upstream_model                 = var.litellm_upstream_model
-    litellm_upstream_api_base              = var.litellm_upstream_api_base
-    litellm_upstream_api_key               = nonsensitive(var.litellm_upstream_api_key)
   }))
 
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.

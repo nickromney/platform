@@ -1,66 +1,9 @@
 # Compose configuration for sentiment (local equivalent of kind-local demo)
 # Works with both docker compose and podman-compose.
 #
-# By default the local stack now uses a tiny in-process SST classifier inside
-# sentiment-api. To switch back to the legacy LLM path, set:
-#   SENTIMENT_BACKEND_MODE=llm
-#
-# To reach a direct OpenAI-compatible host endpoint (Docker Model Runner,
-# LM Studio, etc.), also set:
-#   LLM_GATEWAY_MODE=direct
-#   LLM_BACKEND_BASE_URL=http://host.docker.internal:12434
-#
-# If you want LiteLLM to broker to a host endpoint instead of llama.cpp, also set:
-#   COMPOSE_PROFILES=llm
-#   SENTIMENT_BACKEND_MODE=llm
-#   LLM_GATEWAY_MODE=litellm
-# and override:
-#   LITELLM_UPSTREAM_MODEL=openai/<your-model-id>
-#   LITELLM_UPSTREAM_API_BASE=http://host.docker.internal:12434/v1
-#   LITELLM_UPSTREAM_API_KEY=dummy
-# For Docker Model Runner, you may need:
-#   docker desktop enable model-runner --tcp=12434
+# The local stack uses the same SST-backed sentiment path as the Kubernetes demo.
 
 services:
-  llama-cpp:
-    profiles: ["llm"]
-    build:
-      context: ./llama-cpp
-      dockerfile: Dockerfile
-      args:
-        LLAMA_CPP_REF: ${LLAMA_CPP_REF:-2b10b6267}
-    image: platform/llama-cpp:latest
-    volumes:
-      - llama-cache:/models-cache
-    environment:
-      - LLAMA_CACHE=/models-cache
-      - LLAMA_ARG_HOST=0.0.0.0
-      - LLAMA_ARG_PORT=8080
-      - LLAMA_ARG_ALIAS=${LLAMA_CPP_ALIAS:-local-classifier}
-      - LLAMA_ARG_CTX_SIZE=${LLAMA_CPP_CTX_SIZE:-2048}
-      - LLAMA_ARG_HF_REPO=${LLAMA_CPP_HF_REPO:-bartowski/SmolLM2-1.7B-Instruct-GGUF}
-      - LLAMA_ARG_HF_FILE=${LLAMA_CPP_HF_FILE:-SmolLM2-1.7B-Instruct-Q4_K_M.gguf}
-    restart: unless-stopped
-
-  litellm:
-    profiles: ["llm"]
-    image: dhi.io/litellm:1.81.12-debian13
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      - LITELLM_UPSTREAM_MODEL=${LITELLM_UPSTREAM_MODEL:-openai/local-classifier}
-      - LITELLM_UPSTREAM_API_BASE=${LITELLM_UPSTREAM_API_BASE:-http://llama-cpp:8080/v1}
-      - LITELLM_UPSTREAM_API_KEY=${LITELLM_UPSTREAM_API_KEY:-dummy}
-    command:
-      - --config
-      - /app/config.yaml
-      - --port
-      - "4000"
-    volumes:
-      - ./litellm/config.yaml:/app/config.yaml:ro
-    depends_on:
-      - llama-cpp
-
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.7
     entrypoint: ["/bin/sh", "/opt/keycloak/local/start-with-templated-realm.sh"]
@@ -97,18 +40,11 @@ services:
     build:
       context: ./api-sentiment
       dockerfile: Dockerfile
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
-      - SENTIMENT_BACKEND_MODE=${SENTIMENT_BACKEND_MODE:-sst}
       - SENTIMENT_MODEL_ID
       - SENTIMENT_MODEL_CACHE_DIR=/opt/transformers-cache
       - SENTIMENT_MODEL_LOCAL_ONLY=1
       - SENTIMENT_NEUTRAL_MARGIN=${SENTIMENT_NEUTRAL_MARGIN:-0.45}
-      - LLM_GATEWAY_MODE=${LLM_GATEWAY_MODE:-litellm}
-      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://litellm:4000}
-      - LITELLM_MODEL_ALIAS=${LITELLM_MODEL_ALIAS:-sentiment-default}
-      - LLM_BACKEND_BASE_URL=${LLM_BACKEND_BASE_URL:-http://host.docker.internal:12434}
       - DATA_DIR=/data
       - CSV_PATH=/data/comments.csv
     volumes:
@@ -168,6 +104,3 @@ services:
     depends_on:
       - keycloak
       - edge
-
-volumes:
-  llama-cache: {}

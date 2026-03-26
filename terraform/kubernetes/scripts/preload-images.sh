@@ -83,7 +83,7 @@ is_true() {
 has_toggle_env_overrides() {
   local env_key
 
-  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_LLM_GATEWAY_MODE; do
+  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER; do
     if [[ -n "${!env_key:-}" ]]; then
       return 0
     fi
@@ -138,26 +138,6 @@ tfvar_bool() {
   esac
 }
 
-tfvar_string() {
-  local file="$1"
-  local key="$2"
-  local line value
-
-  if [[ -z "${file}" || ! -f "${file}" ]]; then
-    echo ""
-    return 0
-  fi
-
-  line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 || true)
-  if [[ -z "${line}" ]]; then
-    echo ""
-    return 0
-  fi
-
-  value=$(echo "${line}" | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs)
-  printf '%s\n' "${value}"
-}
-
 toggle_or_default() {
   local key="$1"
   local default="$2"
@@ -187,27 +167,6 @@ toggle_input_or_default() {
   fi
 
   toggle_or_default "${tfvar_key}" "${default}"
-}
-
-string_input_or_default() {
-  local env_key="$1"
-  local tfvar_key="$2"
-  local default="$3"
-  local env_val="${!env_key:-}"
-  local tfvar_val=""
-
-  if [[ -n "${env_val}" ]]; then
-    printf '%s\n' "${env_val}"
-    return 0
-  fi
-
-  tfvar_val="$(tfvar_string "${TFVARS_FILE}" "${tfvar_key}")"
-  if [[ -n "${tfvar_val}" ]]; then
-    printf '%s\n' "${tfvar_val}"
-    return 0
-  fi
-
-  printf '%s\n' "${default}"
 }
 
 is_signoz_image() {
@@ -284,14 +243,6 @@ is_sso_image() {
   esac
 }
 
-is_litellm_image() {
-  local img="$1"
-  case "${img}" in
-    dhi.io/litellm:*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 is_actions_runner_image() {
   local img="$1"
   case "${img}" in
@@ -310,7 +261,6 @@ filter_images_by_toggles() {
   local enable_headlamp="$7"
   local enable_sso="$8"
   local enable_actions_runner="$9"
-  local llm_gateway_mode="${10}"
   local output=""
   local img
 
@@ -350,10 +300,6 @@ filter_images_by_toggles() {
     fi
 
     if ! is_true "${enable_actions_runner}" && is_actions_runner_image "${img}"; then
-      continue
-    fi
-
-    if [[ "${llm_gateway_mode}" != "litellm" ]] && is_litellm_image "${img}"; then
       continue
     fi
 
@@ -877,7 +823,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_LLM_GATEWAY_MODE; do
+for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -894,7 +840,6 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   ENABLE_HEADLAMP="$(toggle_input_or_default "PRELOAD_ENABLE_HEADLAMP" "enable_headlamp" "false")"
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
   ENABLE_ACTIONS_RUNNER="$(toggle_input_or_default "PRELOAD_ENABLE_ACTIONS_RUNNER" "enable_actions_runner" "false")"
-  LLM_GATEWAY_MODE_SELECTED="$(string_input_or_default "PRELOAD_LLM_GATEWAY_MODE" "llm_gateway_mode" "disabled")"
 
   if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
     echo "Applying feature filters from ${TFVARS_FILE} with PRELOAD_ENABLE_* env overrides" >&2
@@ -911,8 +856,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
     "${ENABLE_TEMPO}" \
     "${ENABLE_HEADLAMP}" \
     "${ENABLE_SSO}" \
-    "${ENABLE_ACTIONS_RUNNER}" \
-    "${LLM_GATEWAY_MODE_SELECTED}")"
+    "${ENABLE_ACTIONS_RUNNER}")"
 fi
 
 if [[ -z "$images" ]]; then

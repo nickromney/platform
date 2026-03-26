@@ -11,13 +11,10 @@ enable_cilium_node_encryption = false
 gitea_local_access_mode       = "port-forward"
 
 argocd_image_repository = "quay.io/argoproj/argocd"
-argocd_image_tag        = "v3.3.4"
+argocd_image_tag        = "v3.3.5"
 
 hardened_image_registry         = "dhi.io"
 prefer_external_workload_images = true
-llm_gateway_mode                = "disabled"
-llm_gateway_external_name       = "host.docker.internal"
-llm_gateway_external_cidr       = "192.168.65.254/32"
 
 external_workload_image_refs = {
   sentiment-api                        = "host.docker.internal:5002/platform/sentiment-api:latest"

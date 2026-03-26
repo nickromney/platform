@@ -33,30 +33,6 @@ EOF
   [[ "${output}" == *"slicer-platform-gateway-443"* ]]
 }
 
-@test "fails when the slicer llm proxy container is still running" {
-  cat >"${TEST_BIN}/docker" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" == "ps" ]]; then
-  printf 'slicer-platform-llm-12434\n'
-fi
-EOF
-  chmod +x "${TEST_BIN}/docker"
-
-  cat >"${TEST_BIN}/ps" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-EOF
-  chmod +x "${TEST_BIN}/ps"
-
-  run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}"
-
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"make -C kubernetes/slicer stop-slicer"* ]]
-  [[ "${output}" == *"slicer-platform-llm-12434"* ]]
-}
-
 @test "returns success when slicer has no running vm, forwards, or proxy" {
   cat >"${TEST_BIN}/docker" <<'EOF'
 #!/usr/bin/env bash

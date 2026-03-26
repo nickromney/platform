@@ -11,7 +11,7 @@ This view answers three related questions:
 Important notes:
 
 - this is a source-tree composition view, not a shipped stage-default view
-- optional sentiment legacy LLM policies still appear here because they are checked in under `cluster-policies/`; the shipped kind, lima, and slicer stages default to in-process SST with `llm_gateway_mode = "disabled"`
+- the checked-in sentiment policy set now models only the shipped SST path
 
 Active filters:
 
@@ -39,7 +39,6 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | --- | --- |
 | `allow-application-backend-egress-via-cidrgroup` | [`shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
 | `allow-application-backend-egress-via-fqdn` | [`shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
-| `allow-sentiment-llama-cpp-world-egress` | [`shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
 | `allow-sentiment-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
 | `allow-shared-identity-egress-via-fqdn` | [`shared/shared-identity-egress-via-fqdn.yaml`](./cilium/shared/shared-identity-egress-via-fqdn.yaml) |
 | `apim-baseline` | [`shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
@@ -68,8 +67,6 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
 | `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
@@ -92,7 +89,6 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | --- | --- |
 | `allow-application-backend-egress-via-cidrgroup` | [`shared/application-backend-egress-via-cidrgroup.yaml`](./cilium/shared/application-backend-egress-via-cidrgroup.yaml) |
 | `allow-application-backend-egress-via-fqdn` | [`shared/application-backend-egress-via-fqdn.yaml`](./cilium/shared/application-backend-egress-via-fqdn.yaml) |
-| `allow-sentiment-llama-cpp-world-egress` | [`shared/sentiment-llama-cpp-world-egress.yaml`](./cilium/shared/sentiment-llama-cpp-world-egress.yaml) |
 | `allow-sentiment-dns-egress` | [`shared/sentiment-api-dns-egress.yaml`](./cilium/shared/sentiment-api-dns-egress.yaml) |
 | `allow-shared-identity-egress-via-fqdn` | [`shared/shared-identity-egress-via-fqdn.yaml`](./cilium/shared/shared-identity-egress-via-fqdn.yaml) |
 | `apim-baseline` | [`shared/apim-baseline.yaml`](./cilium/shared/apim-baseline.yaml) |
@@ -123,8 +119,6 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
 | `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
@@ -142,8 +136,6 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
 | `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
@@ -160,8 +152,6 @@ Displayed policy source paths below are relative to [`terraform/kubernetes/clust
 | `sentiment-api-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-backend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-frontend-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-litellm-ingress-egress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
-| `sentiment-llama-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `sentiment-router-http-routes` | [`projects/sentiment/sentiment-http-routes.yaml`](./cilium/projects/sentiment/sentiment-http-routes.yaml) |
 | `sentiment-router-ingress` | [`projects/sentiment/sentiment-runtime.yaml`](./cilium/projects/sentiment/sentiment-runtime.yaml) |
 | `subnetcalc-api-http-routes` | [`projects/subnetcalc/subnetcalc-http-routes.yaml`](./cilium/projects/subnetcalc/subnetcalc-http-routes.yaml) |
@@ -203,3 +193,4 @@ Rendered from [`terraform/kubernetes/cluster-policies/kyverno`](./kyverno) after
 | Name | Source |
 | --- | --- |
 | `uat-restrict-capabilities` | [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-capabilities.yaml`](./kyverno/uat/uat-restrict-capabilities.yaml) |
+

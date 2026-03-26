@@ -1,6 +1,0 @@
-model_list:
-  - model_name: sentiment-default
-    litellm_params:
-      model: os.environ/LITELLM_UPSTREAM_MODEL
-      api_base: os.environ/LITELLM_UPSTREAM_API_BASE
-      api_key: os.environ/LITELLM_UPSTREAM_API_KEY

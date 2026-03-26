@@ -29,7 +29,7 @@ running_slicer_forwards="$(
 if command -v docker >/dev/null 2>&1; then
   running_slicer_proxies="$(
     docker ps --format '{{.Names}}' 2>/dev/null | \
-      grep -E '^(slicer-platform-gateway-443|slicer-platform-llm-12434)$' || true
+      grep -E '^(slicer-platform-gateway-443)$' || true
   )"
 fi
 

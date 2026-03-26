@@ -92,7 +92,6 @@ docker login
   with install hints when missing
 - the Docker daemon is reachable through `docker info`
 - Docker auth status is visible for `dhi.io` and Docker Hub
-- the host-side LLM endpoint is reachable when the selected stage opts into legacy `llm_gateway_mode = "direct"`
 - versions for the main tools can be queried
 - kubeconfig files and contexts look sane
 
@@ -107,24 +106,7 @@ Run it from this directory with:
 make prereqs
 ```
 
-## Optional Legacy LLM Requirement For The Sentiment Demo
+## Sentiment Runtime Requirement
 
-From stage `700` onward, the shipped kind stages use:
-
-- `llm_gateway_mode = "disabled"`
-
-That means the default sentiment demo path does not require a host-side LLM
-endpoint. The backend runs SST in-process inside `sentiment-api`.
-
-`make prereqs` only checks `127.0.0.1:12434` when you opt into
-`llm_gateway_mode = "direct"`. That legacy direct mode still expects a
-host-side endpoint to be reachable from the Docker host.
-
-In practice, that means you need one of:
-
-- LM Studio exposing an OpenAI-compatible endpoint on the host
-- your own host-side gateway that fronts Apple MLX or another local model runtime with an OpenAI-compatible API
-
-The repo also keeps a legacy in-cluster `LiteLLM + llama.cpp` mode behind
-`llm_gateway_mode = "litellm"`, but that is not what the `700`, `800`, and
-`900` stage tfvars select.
+The shipped sentiment demo runs SST in-process inside `sentiment-api`, so the
+default kind path does not require any host-side model endpoint.

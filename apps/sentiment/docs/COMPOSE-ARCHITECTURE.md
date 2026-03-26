@@ -7,15 +7,13 @@ compose files in this app directory, without Kubernetes or Terraform.
 
 - `compose.yml` is the primary local runtime.
 - `compose.tls.yml` is a thin overlay that adds a TLS 1.3 front door.
-- The default path is `sentiment-api -> in-process SST classifier`.
-- A legacy LLM path is still supported through compose profiles and
-  environment overrides.
+- The runtime path is `sentiment-api -> in-process SST classifier`.
 
 ## Compose Files
 
 | File | Role |
 | --- | --- |
-| [`compose.yml`](../compose.yml) | Main authenticated local stack: Keycloak, oauth2-proxy, edge router, API, UI, and model path. |
+| [`compose.yml`](../compose.yml) | Main authenticated local stack: Keycloak, oauth2-proxy, edge router, API, UI, and SST inference. |
 | [`compose.tls.yml`](../compose.tls.yml) | Optional TLS 1.3 overlay in front of `oauth2-proxy`. |
 
 ## Important Local Quirk
@@ -37,9 +35,6 @@ flowchart LR
     UI["sentiment-auth-frontend<br/>static SPA"]
     API["sentiment-api"]
     SST["SST classifier<br/>loaded inside sentiment-api"]
-    LiteLLM["litellm<br/>optional profile"]
-    Llama["llama-cpp<br/>optional profile"]
-    HostLLM["Host OpenAI-compatible endpoint<br/>host.docker.internal:12434"]
 
     Browser -->|"default HTTP"| OAuth
     Browser -->|"optional TLS"| TLS
@@ -48,11 +43,7 @@ flowchart LR
     OAuth --> Edge
     Edge -->|" / "| UI
     Edge -->|" /api/* "| API
-    API -->|"default"| SST
-    API -->|"SENTIMENT_BACKEND_MODE=llm"| LiteLLM
-    LiteLLM -->|"default upstream"| Llama
-    API -->|"SENTIMENT_BACKEND_MODE=llm + LLM_GATEWAY_MODE=direct"| HostLLM
-    LiteLLM -. "optional overridden upstream" .-> HostLLM
+    API --> SST
 ```
 
 ## Runtime Slices
@@ -61,33 +52,21 @@ flowchart LR
   management, then forwards all authenticated traffic upstream.
 - `edge` is the internal application router. It sends `/api/*` to
   `sentiment-api` and everything else to the static UI.
-- `sentiment-api` owns the backend mode switch. The browser never chooses the
-  model path directly.
-- The default local setup is fully self-contained inside `sentiment-api`.
-- `litellm` is a broker, not the model itself. In the optional LLM profile it
-  forwards to `llama-cpp`, but it can also proxy to a host endpoint.
+- `sentiment-api` owns inference directly. The browser never chooses the model
+  path.
+- The local setup is fully self-contained inside `sentiment-api`.
 
-## Backend Mode State Diagram
+## Backend State Diagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ReadEnv
-
-    ReadEnv --> SSTMode: SENTIMENT_BACKEND_MODE=sst or unset
-    ReadEnv --> LlmMode: SENTIMENT_BACKEND_MODE=llm
-
-    state SSTMode {
-        [*] --> LocalClassifier
-        LocalClassifier: sentiment-api loads\nan SST classifier model
-    }
-
-    state LlmMode {
-        [*] --> HostEndpoint
-        HostEndpoint: when LLM_GATEWAY_MODE=direct
-        [*] --> Broker
-        Broker --> LlamaDefault: when LLM_GATEWAY_MODE=litellm\nLITELLM_UPSTREAM_API_BASE=http://llama-cpp:8080/v1
-        Broker --> HostBrokered: overridden\nLITELLM_UPSTREAM_API_BASE=http://host.docker.internal:12434/v1
-    }
+    [*] --> Start
+    Start --> LoadClassifier
+    LoadClassifier --> WarmClassifier: SENTIMENT_WARM_ON_START=true
+    LoadClassifier --> Ready: SENTIMENT_WARM_ON_START=false
+    WarmClassifier --> Ready
+    Ready --> ClassifyRequest
+    ClassifyRequest --> Ready
 ```
 
 ## Authenticated Request Journey
@@ -145,12 +124,10 @@ flowchart LR
 | `oauth2-proxy` -> `edge` | Authenticated upstream | Keeps auth separate from the app router. |
 | `edge` -> `sentiment-auth-frontend` | UI split | Static assets and API stay separate. |
 | `edge` -> `sentiment-api` | API split | `/api/*` stays on the backend path. |
-| `sentiment-api` -> in-process SST classifier | Default inference path | Fully local and self-contained. |
-| `sentiment-api` -> `litellm` -> `llama-cpp` | Optional LLM profile | Keeps the previous compose path available. |
-| `sentiment-api` -> host LLM | Optional direct LLM mode | Useful when testing a host-backed model runner. |
+| `sentiment-api` -> in-process SST classifier | Inference path | Fully local and self-contained. |
 
 ## Practical Reading Guide
 
 - Use the system context diagram when you want to know which containers matter.
-- Use the state diagram when you want to know which sentiment backend is active.
+- Use the state diagram when you want to know when the SST classifier is loaded.
 - Use the sequence diagram when debugging auth, routing, or upstream latency.

@@ -48,21 +48,9 @@ EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_R
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
 PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
 EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
-EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP="${EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP:-}"
 EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
-LLM_GATEWAY_MODE="${LLM_GATEWAY_MODE:-disabled}"
-LLM_GATEWAY_EXTERNAL_NAME="${LLM_GATEWAY_EXTERNAL_NAME:-host.docker.internal}"
-LLM_GATEWAY_EXTERNAL_CIDR="${LLM_GATEWAY_EXTERNAL_CIDR:-}"
-LLAMA_CPP_IMAGE="${LLAMA_CPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}"
 SIGNOZ_AUTH_PROXY_IMAGE="${SIGNOZ_AUTH_PROXY_IMAGE:-ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest}"
-LLAMA_CPP_HF_REPO="${LLAMA_CPP_HF_REPO:-bartowski/SmolLM2-1.7B-Instruct-GGUF}"
-LLAMA_CPP_HF_FILE="${LLAMA_CPP_HF_FILE:-SmolLM2-1.7B-Instruct-Q4_K_M.gguf}"
-LLAMA_CPP_MODEL_ALIAS="${LLAMA_CPP_MODEL_ALIAS:-local-classifier}"
-LLAMA_CPP_CTX_SIZE="${LLAMA_CPP_CTX_SIZE:-2048}"
-LITELLM_UPSTREAM_MODEL="${LITELLM_UPSTREAM_MODEL:-openai/local-classifier}"
-LITELLM_UPSTREAM_API_BASE="${LITELLM_UPSTREAM_API_BASE:-http://llama-cpp:8080/v1}"
-LITELLM_UPSTREAM_API_KEY="${LITELLM_UPSTREAM_API_KEY:-dummy}"
 CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-$(tf_default_from_variables cert_manager_chart_version)}"
 DEX_CHART_VERSION="${DEX_CHART_VERSION:-$(tf_default_from_variables dex_chart_version)}"
 GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-$(tf_default_from_variables grafana_chart_version)}"
@@ -209,178 +197,6 @@ rewrite_hardened_registry() {
     sed "s|dhi\\.io/|${HARDENED_IMAGE_REGISTRY}/|g" "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
   done < <(find "${root_dir}" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
-}
-
-is_ipv4_literal() {
-  local value="$1"
-  [[ "${value}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
-}
-
-render_llm_gateway_direct_manifest() {
-  local workload_file="$1"
-
-  if [[ -z "${LLM_GATEWAY_EXTERNAL_NAME}" ]]; then
-    return 0
-  fi
-
-  if is_ipv4_literal "${LLM_GATEWAY_EXTERNAL_NAME}"; then
-    cat > "${workload_file}" <<EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: llm-gateway
-  labels:
-    app.kubernetes.io/name: llm-gateway
-    app.kubernetes.io/component: llm
-    app: sentiment
-    project: kindlocal
-    team: dolphin
-    tier: backend
-    role: llm
-spec:
-  ports:
-    - name: http
-      port: 12434
-      protocol: TCP
-      targetPort: 12434
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: llm-gateway
-  labels:
-    app.kubernetes.io/name: llm-gateway
-    app.kubernetes.io/component: llm
-    app: sentiment
-    project: kindlocal
-    team: dolphin
-    tier: backend
-    role: llm
-subsets:
-  - addresses:
-      - ip: ${LLM_GATEWAY_EXTERNAL_NAME}
-    ports:
-      - name: http
-        port: 12434
-        protocol: TCP
-EOF
-    return 0
-  fi
-
-  cat > "${workload_file}" <<EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: llm-gateway
-  labels:
-    app.kubernetes.io/name: llm-gateway
-    app.kubernetes.io/component: llm
-    app: sentiment
-    project: kindlocal
-    team: dolphin
-    tier: backend
-    role: llm
-spec:
-  type: ExternalName
-  externalName: ${LLM_GATEWAY_EXTERNAL_NAME}
-EOF
-}
-
-resolve_ipv4_for_host() {
-  local host="$1"
-  local ip=""
-
-  if [[ -z "${host}" ]]; then
-    return 1
-  fi
-
-  if command -v dscacheutil >/dev/null 2>&1; then
-    ip="$(dscacheutil -q host -a name "${host}" 2>/dev/null | awk '/^ip_address: / && $2 ~ /^([0-9]{1,3}\\.){3}[0-9]{1,3}$/ { print $2; exit }')"
-  fi
-  if [[ -z "${ip}" ]] && command -v getent >/dev/null 2>&1; then
-    ip="$(getent ahostsv4 "${host}" 2>/dev/null | awk 'NR == 1 { print $1 }')"
-  fi
-  if [[ -z "${ip}" ]] && command -v dig >/dev/null 2>&1; then
-    ip="$(dig +short A "${host}" 2>/dev/null | awk 'NF { print; exit }')"
-  fi
-  if [[ -z "${ip}" ]] && command -v host >/dev/null 2>&1; then
-    ip="$(host -t A "${host}" 2>/dev/null | awk '/ has address / { print $NF; exit }')"
-  fi
-  if [[ -z "${ip}" ]] && command -v nslookup >/dev/null 2>&1; then
-    ip="$(nslookup "${host}" 2>/dev/null | awk '/^Address: / && $2 ~ /^([0-9]{1,3}\\.){3}[0-9]{1,3}$/ { print $2; exit }')"
-  fi
-
-  [[ -n "${ip}" ]] || return 1
-  printf '%s\n' "${ip}"
-}
-
-is_loopback_ipv4() {
-  case "$1" in
-    127.*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-resolve_ipv4_for_host_from_kind_node() {
-  local host="$1"
-  local node_name=""
-  local ip=""
-
-  [[ -n "${host}" ]] || return 1
-  command -v docker >/dev/null 2>&1 || return 1
-
-  node_name="$(
-    docker ps --format '{{.Names}}' 2>/dev/null | \
-      awk '/-control-plane$/ { print; exit }'
-  )"
-  [[ -n "${node_name}" ]] || return 1
-
-  ip="$(
-    docker exec "${node_name}" getent hosts "${host}" 2>/dev/null | \
-      awk 'NF { print $1; exit }'
-  )"
-  [[ -n "${ip}" ]] || return 1
-  printf '%s\n' "${ip}"
-}
-
-determine_llm_gateway_external_cidr() {
-  local cidr="${LLM_GATEWAY_EXTERNAL_CIDR}"
-  local ip=""
-  local use_kind_resolution="false"
-
-  if [[ -n "${cidr}" ]]; then
-    printf '%s\n' "${cidr}"
-    return 0
-  fi
-
-  ip="$(resolve_ipv4_for_host "${LLM_GATEWAY_EXTERNAL_NAME}")" || true
-
-  if [[ "${LLM_GATEWAY_EXTERNAL_NAME}" == "host.docker.internal" ]]; then
-    if [[ -z "${ip}" ]] || is_loopback_ipv4 "${ip}"; then
-      use_kind_resolution="true"
-    fi
-  fi
-
-  if [[ "${use_kind_resolution}" == "true" ]]; then
-    ip="$(resolve_ipv4_for_host_from_kind_node "${LLM_GATEWAY_EXTERNAL_NAME}")" || true
-  fi
-
-  [[ -n "${ip}" ]] || \
-    fail "could not resolve LLM_GATEWAY_EXTERNAL_NAME=${LLM_GATEWAY_EXTERNAL_NAME}; set LLM_GATEWAY_EXTERNAL_CIDR explicitly"
-
-  printf '%s/32\n' "${ip}"
-}
-
-rewrite_llm_gateway_policy_cidr() {
-  local policy_file="$1"
-  local cidr="$2"
-
-  [[ -f "${policy_file}" ]] || return 0
-
-  local out
-  out="$(mktemp)"
-  sed "s|__LLM_GATEWAY_EXTERNAL_CIDR__|${cidr}|g" "${policy_file}" > "${out}"
-  mv "${out}" "${policy_file}"
 }
 
 replace_literal() {
@@ -613,99 +429,6 @@ vendor_direct_tf_only_charts() {
   patch_vendored_headlamp_chart "${vendor_root}"
 }
 
-rewrite_llm_gateway_mode_value() {
-  local workload_file="$1"
-  local mode="$2"
-
-  [[ -f "${workload_file}" ]] || return 0
-
-  local out
-  out="$(mktemp)"
-  awk -v mode="${mode}" '
-    /name:[[:space:]]*LLM_GATEWAY_MODE/ { in_env=1; print; next }
-    in_env && /value:/ {
-      sub(/".*"/, "\"" mode "\"")
-      in_env=0
-      print
-      next
-    }
-    { print }
-  ' "${workload_file}" > "${out}"
-  mv "${out}" "${workload_file}"
-}
-
-render_llm_gateway_manifests() {
-  local workloads_dir="$1"
-  local kustomization_file="${workloads_dir}/kustomization.yaml"
-  local shared_workloads="${workloads_dir}/all.yaml"
-  local direct_manifest="${workloads_dir}/llm-direct.yaml"
-  local litellm_manifest="${workloads_dir}/llm-litellm.yaml"
-
-  case "${LLM_GATEWAY_MODE}" in
-    disabled)
-      rewrite_llm_gateway_mode_value "${shared_workloads}" "disabled"
-      remove_if_present "${direct_manifest}"
-      remove_kustomization_entry "${kustomization_file}" "llm-direct.yaml"
-      remove_if_present "${litellm_manifest}"
-      remove_kustomization_entry "${kustomization_file}" "llm-litellm.yaml"
-      ;;
-    litellm)
-      rewrite_llm_gateway_mode_value "${shared_workloads}" "litellm"
-      remove_if_present "${direct_manifest}"
-      remove_kustomization_entry "${kustomization_file}" "llm-direct.yaml"
-      add_kustomization_entry "${kustomization_file}" "llm-litellm.yaml"
-      replace_literal "${litellm_manifest}" "__LLAMA_CPP_IMAGE__" "${LLAMA_CPP_IMAGE}"
-      replace_literal "${litellm_manifest}" "__LLAMA_CPP_HF_REPO__" "${LLAMA_CPP_HF_REPO}"
-      replace_literal "${litellm_manifest}" "__LLAMA_CPP_HF_FILE__" "${LLAMA_CPP_HF_FILE}"
-      replace_literal "${litellm_manifest}" "__LLAMA_CPP_MODEL_ALIAS__" "${LLAMA_CPP_MODEL_ALIAS}"
-      replace_literal "${litellm_manifest}" "__LLAMA_CPP_CTX_SIZE__" "${LLAMA_CPP_CTX_SIZE}"
-      replace_literal "${litellm_manifest}" "__LITELLM_UPSTREAM_MODEL__" "${LITELLM_UPSTREAM_MODEL}"
-      replace_literal "${litellm_manifest}" "__LITELLM_UPSTREAM_API_BASE__" "${LITELLM_UPSTREAM_API_BASE}"
-      replace_literal "${litellm_manifest}" "__LITELLM_UPSTREAM_API_KEY__" "${LITELLM_UPSTREAM_API_KEY}"
-      ;;
-    direct)
-      rewrite_llm_gateway_mode_value "${shared_workloads}" "direct"
-      remove_if_present "${litellm_manifest}"
-      remove_kustomization_entry "${kustomization_file}" "llm-litellm.yaml"
-      add_kustomization_entry "${kustomization_file}" "llm-direct.yaml"
-      render_llm_gateway_direct_manifest "${direct_manifest}"
-      ;;
-    *)
-      fail "unsupported LLM_GATEWAY_MODE=${LLM_GATEWAY_MODE}"
-      ;;
-  esac
-}
-
-render_llm_gateway_policies() {
-  local shared_dir="$1"
-  local kustomization_file="${shared_dir}/kustomization.yaml"
-
-  case "${LLM_GATEWAY_MODE}" in
-    disabled)
-      remove_if_present "${shared_dir}/sentiment-api-llm-egress.yaml"
-      remove_kustomization_entry "${kustomization_file}" "sentiment-api-llm-egress.yaml"
-      remove_if_present "${shared_dir}/sentiment-llama-cpp-world-egress.yaml"
-      remove_kustomization_entry "${kustomization_file}" "sentiment-llama-cpp-world-egress.yaml"
-      ;;
-    litellm)
-      remove_if_present "${shared_dir}/sentiment-api-llm-egress.yaml"
-      remove_kustomization_entry "${kustomization_file}" "sentiment-api-llm-egress.yaml"
-      add_kustomization_entry "${kustomization_file}" "sentiment-llama-cpp-world-egress.yaml"
-      ;;
-    direct)
-      local llm_gateway_cidr
-      llm_gateway_cidr="$(determine_llm_gateway_external_cidr)"
-      remove_if_present "${shared_dir}/sentiment-llama-cpp-world-egress.yaml"
-      remove_kustomization_entry "${kustomization_file}" "sentiment-llama-cpp-world-egress.yaml"
-      add_kustomization_entry "${kustomization_file}" "sentiment-api-llm-egress.yaml"
-      rewrite_llm_gateway_policy_cidr "${shared_dir}/sentiment-api-llm-egress.yaml" "${llm_gateway_cidr}"
-      ;;
-    *)
-      fail "unsupported LLM_GATEWAY_MODE=${LLM_GATEWAY_MODE}"
-      ;;
-  esac
-}
-
 apply_external_workload_images() {
   local workload_file="$1"
 
@@ -723,15 +446,10 @@ apply_external_workload_images() {
 
 apply_external_platform_images() {
   local root_dir="$1"
-  local litellm_manifest="${root_dir}/apps/workloads/base/llm-litellm.yaml"
   local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
 
   if ! is_true "${PREFER_EXTERNAL_PLATFORM_IMAGES}"; then
     return 0
-  fi
-
-  if [[ -n "${EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP}" ]]; then
-    LLAMA_CPP_IMAGE="${EXTERNAL_PLATFORM_IMAGE_LLAMA_CPP}"
   fi
 
   if [[ -n "${EXTERNAL_PLATFORM_IMAGE_GRAFANA}" ]]; then
@@ -744,10 +462,6 @@ apply_external_platform_images() {
   fi
 
   replace_image_ref "${signoz_manifest}" "signoz-auth-proxy" "${SIGNOZ_AUTH_PROXY_IMAGE}"
-
-  if [[ -f "${litellm_manifest}" && -n "${LLAMA_CPP_IMAGE}" ]]; then
-    replace_literal "${litellm_manifest}" "__LLAMA_CPP_IMAGE__" "${LLAMA_CPP_IMAGE}"
-  fi
 }
 
 render_grafana_application_manifest() {
@@ -1508,8 +1222,6 @@ render_repo() {
   apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
   apply_external_platform_images "${repo_dir}"
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
-  render_llm_gateway_manifests "${repo_dir}/apps/workloads/base"
-  render_llm_gateway_policies "${repo_dir}/cluster-policies/cilium/shared"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"

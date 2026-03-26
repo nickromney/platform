@@ -617,7 +617,7 @@ This view answers three related questions:
 Important notes:
 
 - this is a source-tree composition view, not a shipped stage-default view
-- optional sentiment legacy LLM policies still appear here because they are checked in under \`cluster-policies/\`; the shipped kind, lima, and slicer stages default to in-process SST with \`llm_gateway_mode = "disabled"\`
+- the checked-in sentiment policy set now models only the shipped SST path
 
 Active filters:
 

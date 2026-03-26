@@ -1,11 +1,11 @@
 %%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
 C4Dynamic
-    title Sentiment legacy in-cluster LLM path
+    title Sentiment in-pod SST inference path
 
-    Container(api, "sentiment-api", "API service", "Calls the configured LLM backend and emits traces")
-    Container(litellm, "litellm", "LiteLLM", "Optional in-cluster LLM gateway")
-    Container(llama, "llama.cpp", "llama.cpp server", "Optional in-cluster model runtime")
+    Container(router, "sentiment-router", "NGINX", "Routes /api/* traffic to the API")
+    Container(api, "sentiment-api", "API service", "Runs SST inference and emits traces")
+    Container(sst, "SST classifier", "Transformers.js pipeline", "Loaded inside sentiment-api")
 
-    RelIndex(1, api, litellm, "Call model alias on 4000")
-    RelIndex(2, litellm, llama, "Forward to llama.cpp on 8080")
+    RelIndex(1, router, api, "Forward /api/* to 8080")
+    RelIndex(2, api, sst, "Classify sentiment in-process")
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

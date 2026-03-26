@@ -11,14 +11,7 @@ C4Container
         Container(router, "sentiment-router", "NGINX", "Routes browser traffic between UI and API")
         Container(ui, "sentiment-auth-ui", "SPA", "Browser user interface")
         Container(api, "sentiment-api", "API service", "Runs the shipped in-process SST classifier and emits traces")
-    }
-
-    Container_Ext(llm_gateway, "llm-gateway", "ExternalName Service", "Legacy direct-mode bridge to a host-backed endpoint")
-    Container_Ext(host_llm, "Host-side LLM endpoint", "OpenAI-compatible API", "Optional legacy direct-mode backend")
-
-    Container_Boundary(sentiment_alt, "Legacy optional in-cluster LLM mode") {
-        Container(litellm, "litellm", "LiteLLM", "Optional in-cluster LLM gateway")
-        Container(llama, "llama.cpp", "llama.cpp server", "Optional in-cluster model runtime")
+        Container(sst, "SST classifier", "Transformers.js pipeline", "Loaded in-process by sentiment-api")
     }
 
     Rel(browser, gateway, "Uses over HTTPS")
@@ -26,9 +19,6 @@ C4Container
     Rel(oauth, router, "Forwards authenticated traffic to")
     Rel(router, ui, "Serves UI routes from")
     Rel(router, api, "Forwards /api/* to")
-    Rel(api, llm_gateway, "legacy direct mode: calls")
-    Rel(llm_gateway, host_llm, "Resolves and connects to")
-    Rel(api, litellm, "legacy in-cluster mode: calls")
-    Rel(litellm, llama, "Forwards model requests to")
+    Rel(api, sst, "Classifies sentiment with")
     Rel(api, otel, "Exports traces to")
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")

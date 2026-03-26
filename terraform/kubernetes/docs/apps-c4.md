@@ -127,17 +127,6 @@ Control points:
 - the shipped default keeps inference inside `sentiment-api`; the only steady
   state network egress from the request path is trace export.
 
-### Sentiment Legacy LLM Path
-
-[![Sentiment legacy LLM path dynamic diagram](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.svg)](./diagrams/apps-c4/09-dynamic-sentiment-alternative-llm-path.mmd)
-
-Control points:
-
-- `allow-sentiment-api-llm-egress` constrains the legacy direct host-backed
-  path when that mode is selected.
-- `sentiment-api-egress`, `sentiment-litellm-ingress-egress`, and
-  `sentiment-llama-ingress` constrain the legacy in-cluster LLM path.
-
 ## Journey Views
 
 ### Subnetcalc Request Journey
@@ -169,9 +158,7 @@ Control points:
 | `oauth2-proxy -> sentiment-router` | Authenticated reverse proxy | `sso-hardened` plus `sentiment-router-ingress` | Mirrors the subnetcalc entry path. |
 | `sentiment-router -> sentiment-auth-ui` | Router UI path | `sentiment-frontend-ingress` | Frontend is isolated behind the router. |
 | `sentiment-router -> sentiment-api` | Router API path | `sentiment-router-http-routes` plus `sentiment-backend-ingress` | UI and API stay separate. |
-| `sentiment-api -> in-process SST classifier` | Default sentiment inference | `SENTIMENT_BACKEND_MODE=sst` in the workload config | No inference network hop in the shipped default. |
-| `sentiment-api -> llm-gateway -> host LLM` | Legacy direct mode LLM call | `allow-sentiment-api-llm-egress` | The Service is `ExternalName`; this is no longer the checked-in default kind mode. |
-| `sentiment-api -> litellm -> llama.cpp` | Legacy in-cluster LLM mode | `sentiment-api-egress`, `sentiment-litellm-ingress-egress`, and `sentiment-llama-ingress` | Present in repo, but not the checked-in default kind mode. |
+| `sentiment-api -> in-process SST classifier` | Sentiment inference | `sentiment-api` application code and workload config | No inference network hop in the shipped runtime. |
 | `sentiment-api -> otel-collector` | Trace export | `sentiment-api-egress` | Observability remains part of the application path even when inference stays local to the pod. |
 | `subnetcalc-api -> otel-collector` | Trace export | `subnetcalc-api-http-routes` | Observability is part of the application path, not an afterthought. |
 
