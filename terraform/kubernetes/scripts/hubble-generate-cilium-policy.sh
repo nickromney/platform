@@ -16,6 +16,7 @@ The script is intentionally conservative:
 - it writes draft `CiliumNetworkPolicy` source manifests into
   `cilium-module/sources/<category>/`
 - it renders the matching `cilium-module/categories/<category>/` file
+- it skips pod-like or otherwise unresolvable workload rows with a warning
 - it refuses to overwrite an existing source manifest unless `--force` is set
 
 For local work in this repo, if `~/.kube/kind-kind-local.yaml` exists and
@@ -43,7 +44,8 @@ Options:
 
   --policy-name NAME
       Override the generated metadata.name and filename stem.
-      Only valid when the input produces a single policy.
+      Only valid when the input produces a single destination
+      workload+protocol+port policy group.
 
   --force
       Overwrite an existing source manifest.
@@ -85,8 +87,35 @@ fail() {
   exit 1
 }
 
+warn() {
+  echo "hubble-generate-cilium-policy.sh: $*" >&2
+}
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+}
+
+explain_multiple_policy_groups() {
+  local groups_file="$1"
+  local group_count="$2"
+  local dst_ns=""
+  local dst=""
+  local protocol=""
+  local dst_port=""
+
+  printf 'hubble-generate-cilium-policy.sh: --policy-name only supports a single generated policy; this input expands to %s groups:\n' "${group_count}" >&2
+  while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
+    [[ -n "${dst_ns}" ]] || continue
+    printf 'hubble-generate-cilium-policy.sh:   - %s/%s %s/%s\n' \
+      "${dst_ns}" \
+      "${dst}" \
+      "$(printf '%s' "${protocol}" | tr '[:lower:]' '[:upper:]')" \
+      "${dst_port}" >&2
+  done < "${groups_file}"
+
+  cat >&2 <<'EOF'
+hubble-generate-cilium-policy.sh: rerun without --policy-name to let the script auto-name each output, or narrow the capture/summary until only one destination workload+protocol+port group remains.
+EOF
 }
 
 sanitize_filename() {
@@ -142,7 +171,10 @@ resolve_selector() {
     json=""
   done
 
-  [[ -n "${json}" ]] || fail "could not resolve workload ${namespace}/${workload} via deployment, daemonset, or statefulset"
+  if [[ -z "${json}" ]]; then
+    RESOLVE_ERROR_MSG="could not resolve workload ${namespace}/${workload} via deployment, daemonset, or statefulset"
+    return 1
+  fi
 
   for label_key in app.kubernetes.io/name k8s-app app; do
     label_value="$(printf '%s\n' "${json}" | jq -r --arg key "${label_key}" '.metadata.labels[$key] // empty')"
@@ -153,7 +185,8 @@ resolve_selector() {
     fi
   done
 
-  fail "could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
+  RESOLVE_ERROR_MSG="could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
+  return 1
 }
 
 write_source_manifest() {
@@ -317,6 +350,13 @@ while IFS=$'\t' read -r count direction verdict protocol src_ns src dst_class ds
   [[ "${dst_class}" == "workload" ]] || continue
   [[ -n "${src_ns}" && -n "${src}" && -n "${dst_ns}" && -n "${dst}" && -n "${protocol}" && -n "${dst_port}" ]] || continue
 
+  case "${protocol}" in
+    tcp|udp|sctp) ;;
+    *)
+      continue
+      ;;
+  esac
+
   if is_ip_like "${src_ns}" || is_ip_like "${dst_ns}"; then
     continue
   fi
@@ -354,7 +394,8 @@ fi
 
 group_count="$(wc -l < "${tmp_groups}" | tr -d ' ')"
 if [[ -n "${policy_name_override}" && "${group_count}" != "1" ]]; then
-  fail "--policy-name only supports a single generated policy"
+  explain_multiple_policy_groups "${tmp_groups}" "${group_count}"
+  exit 1
 fi
 
 sources_dir="${module_root}/sources/${category}"
@@ -362,6 +403,8 @@ categories_dir="${module_root}/categories/${category}"
 mkdir -p "${sources_dir}" "${categories_dir}"
 
 generated_count=0
+skipped_group_count=0
+skipped_source_count=0
 while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
   [[ -n "${dst_ns}" ]] || continue
 
@@ -375,14 +418,27 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
     }
   ' "${tmp_rows}" | sort -u > "${tmp_sources_raw}"
 
-  resolve_selector "${dst_ns}" "${dst}"
+  protocol_lower="$(printf '%s' "${protocol}" | tr '[:upper:]' '[:lower:]')"
+  protocol_upper="$(printf '%s' "${protocol}" | tr '[:lower:]' '[:upper:]')"
+
+  if ! resolve_selector "${dst_ns}" "${dst}"; then
+    warn "skipping ${dst_ns}/${dst} ${protocol_upper}/${dst_port}: ${RESOLVE_ERROR_MSG}"
+    skipped_group_count=$((skipped_group_count + 1))
+    rm -f "${tmp_sources_raw}" "${tmp_sources_resolved}"
+    trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}"' EXIT
+    continue
+  fi
   dst_selector_key="${RESOLVED_SELECTOR_KEY}"
   dst_selector_value="${RESOLVED_SELECTOR_VALUE}"
 
   source_desc=""
   while IFS=$'\t' read -r src_ns src_workload; do
     [[ -n "${src_ns}" ]] || continue
-    resolve_selector "${src_ns}" "${src_workload}"
+    if ! resolve_selector "${src_ns}" "${src_workload}"; then
+      warn "skipping source ${src_ns}/${src_workload} for ${dst_ns}/${dst} ${protocol_upper}/${dst_port}: ${RESOLVE_ERROR_MSG}"
+      skipped_source_count=$((skipped_source_count + 1))
+      continue
+    fi
     printf '%s\t%s\t%s\t%s\n' \
       "${src_ns}" "${src_workload}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}" >> "${tmp_sources_resolved}"
 
@@ -392,8 +448,13 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
     source_desc="${source_desc}${src_ns}/${src_workload}"
   done < "${tmp_sources_raw}"
 
-  protocol_lower="$(printf '%s' "${protocol}" | tr '[:upper:]' '[:lower:]')"
-  protocol_upper="$(printf '%s' "${protocol}" | tr '[:lower:]' '[:upper:]')"
+  if [[ ! -s "${tmp_sources_resolved}" ]]; then
+    warn "skipping ${dst_ns}/${dst} ${protocol_upper}/${dst_port}: no resolvable source workloads remained after filtering"
+    skipped_group_count=$((skipped_group_count + 1))
+    rm -f "${tmp_sources_raw}" "${tmp_sources_resolved}"
+    trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}"' EXIT
+    continue
+  fi
 
   if [[ -n "${policy_name_override}" ]]; then
     policy_name="${policy_name_override}"
@@ -435,3 +496,7 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
 done < "${tmp_groups}"
 
 [[ "${generated_count}" -gt 0 ]] || fail "no policies were generated"
+
+if [[ "${skipped_group_count}" -gt 0 || "${skipped_source_count}" -gt 0 ]]; then
+  warn "generated ${generated_count} policies; skipped ${skipped_group_count} groups and ${skipped_source_count} source entries that could not be resolved to stable workload selectors"
+fi

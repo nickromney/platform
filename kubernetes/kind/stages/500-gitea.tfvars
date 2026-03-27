@@ -14,6 +14,7 @@ enable_hubble              = true
 enable_argocd              = true
 enable_gitea               = true
 enable_policies            = false
+enable_cilium_policy_audit_mode = false
 enable_signoz              = false
 enable_observability_agent = false
 enable_headlamp            = false

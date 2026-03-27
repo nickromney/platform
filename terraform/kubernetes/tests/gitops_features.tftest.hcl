@@ -96,6 +96,46 @@ run "policies_enabled" {
   }
 }
 
+run "policies_enabled_with_cilium_policies_disabled" {
+  command = plan
+
+  variables {
+    cni_provider            = "cilium"
+    enable_hubble           = false
+    enable_argocd           = true
+    enable_gitea            = true
+    enable_signoz           = false
+    enable_sso              = false
+    enable_policies         = true
+    enable_cilium_policies  = false
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_kyverno) == 1
+    error_message = "Expected kubectl_manifest.argocd_app_kyverno to exist when enable_policies=true"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_kyverno_policies) == 1
+    error_message = "Expected kubectl_manifest.argocd_app_kyverno_policies to exist when enable_policies=true"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_cilium_policies) == 0
+    error_message = "Did not expect kubectl_manifest.argocd_app_cilium_policies when enable_cilium_policies=false"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_policy_reporter) == 1
+    error_message = "Expected kubectl_manifest.argocd_app_policy_reporter to exist when enable_policies=true"
+  }
+
+  assert {
+    condition     = !contains(local.argocd_gitops_repo_app_names, "cilium-policies")
+    error_message = "Did not expect cilium-policies in the Git-backed Argo refresh list when enable_cilium_policies=false"
+  }
+}
+
 run "gateway_tls_enabled" {
   command = plan
 

@@ -134,7 +134,7 @@ EOF
   run "${CAPTURE_SCRIPT}" --help
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"works without a pre-existing localhost port-forward"* ]]
+  [[ "${output}" == *"defaults to Hubble CLI port-forward"* ]]
   [[ "${output}" == *"./hubble-capture-flows.sh -P --kubeconfig ~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"kubectl -n kube-system port-forward service/hubble-relay 4245:4245"* ]]
 }
@@ -240,4 +240,50 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'count\tdirection\tverdict\tsrc_ns\tsrc\tdns_server\tquery\tqtypes\trcode'* ]]
   [[ "${output}" == *$'\n1\tEGRESS\tFORWARDED\tsandbox\tdatadog-agent\tkube-system/coredns\tapi.datadoghq.com.\tA\tNOERROR'* ]]
+}
+
+@test "hubble-summarise-flows preserves blank namespace cells in TSV and marks them in text output" {
+  input_file="${BATS_TEST_TMPDIR}/external-to-datadog.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","traffic_direction":"INGRESS","source":{"pod_name":"","workloads":[]},"destination":{"namespace":"datadog","pod_name":"cluster-agent-abc","workloads":[{"name":"cluster-agent","kind":"Deployment"}]},"IP":{"source":"10.0.0.25"},"l4":{"TCP":{"destination_port":5005}}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --format tsv
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'\n1\tINGRESS\tFORWARDED\ttcp\t\t10.0.0.25\tworkload\tdatadog\tcluster-agent\t5005'* ]]
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --format text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ tcp[[:space:]]+-[[:space:]]+10\.0\.0\.25[[:space:]]+workload[[:space:]]+datadog[[:space:]]+cluster-agent[[:space:]]+5005 ]]
+}
+
+@test "hubble-summarise-flows supports table output as an explicit alias" {
+  input_file="${BATS_TEST_TMPDIR}/table-alias.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","traffic_direction":"INGRESS","source":{"pod_name":"","workloads":[]},"destination":{"namespace":"datadog","pod_name":"cluster-agent-abc","workloads":[{"name":"cluster-agent","kind":"Deployment"}]},"IP":{"source":"10.0.0.25"},"l4":{"TCP":{"destination_port":5005}}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --table
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ protocol[[:space:]]+src_ns[[:space:]]+src[[:space:]]+dst_class ]]
+  [[ "${output}" =~ tcp[[:space:]]+-[[:space:]]+10\.0\.0\.25[[:space:]]+workload[[:space:]]+datadog[[:space:]]+cluster-agent[[:space:]]+5005 ]]
+}
+
+@test "hubble-summarise-flows supports csv output and quotes comma-containing fields" {
+  input_file="${BATS_TEST_TMPDIR}/world-csv.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","traffic_direction":"EGRESS","source":{"namespace":"sandbox","pod_name":"datadog-agent-123","workloads":[{"name":"datadog-agent","kind":"DaemonSet"}]},"destination":{"labels":["reserved:world"]},"destination_names":["api.datadoghq.com","trace.agent.datadoghq.com"],"IP":{"destination":"104.16.0.1"},"l4":{"TCP":{"destination_port":443}}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report world --aggregate-by workload --direction egress --csv
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'count,direction,verdict,protocol,world_side,peer_ns,peer,world_names,world_ip,port'* ]]
+  [[ "${output}" == *$'\n1,EGRESS,FORWARDED,tcp,destination,sandbox,datadog-agent,"api.datadoghq.com,trace.agent.datadoghq.com",104.16.0.1,443'* ]]
 }

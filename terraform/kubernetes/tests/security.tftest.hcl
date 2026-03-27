@@ -48,6 +48,29 @@ run "wireguard_disabled_by_default" {
   }
 }
 
+run "policy_audit_mode_enabled" {
+  command = plan
+
+  variables {
+    cni_provider                     = "cilium"
+    enable_hubble                    = false
+    enable_argocd                    = false
+    enable_gitea                     = false
+    enable_signoz                    = false
+    enable_cilium_policy_audit_mode  = true
+  }
+
+  assert {
+    condition     = length(helm_release.cilium) == 1
+    error_message = "Expected helm_release.cilium to exist when enable_cilium_policy_audit_mode=true"
+  }
+
+  assert {
+    condition     = length(regexall("\"policyAuditMode\":true", jsonencode(yamldecode(helm_release.cilium[0].values[0])))) > 0
+    error_message = "Expected Cilium Helm values to contain policyAuditMode=true"
+  }
+}
+
 run "wireguard_requires_cilium" {
   command = plan
 

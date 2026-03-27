@@ -39,6 +39,19 @@ run "policies_requires_argocd_gitea_cilium" {
   expect_failures = [check.enable_policies_requires_argocd_gitea_cilium]
 }
 
+run "cilium_policy_audit_mode_requires_cilium" {
+  command = plan
+
+  variables {
+    cni_provider                     = "none"
+    enable_hubble                    = false
+    enable_argocd                    = false
+    enable_cilium_policy_audit_mode  = true
+  }
+
+  expect_failures = [check.enable_cilium_policy_audit_mode_requires_cilium_provider]
+}
+
 run "observability_agent_requires_signoz_and_argocd" {
   command = plan
 

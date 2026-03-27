@@ -299,6 +299,7 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
 
   triggers = {
     health_script_sha      = filesha256(abspath("${path.module}/scripts/check-cluster-health.sh"))
+    health_resource_sha    = filesha256(abspath("${path.module}/sso.tf"))
     stage_tfvars_sha       = filesha256(abspath("${path.module}/../../kubernetes/kind/stages/900-sso.tfvars"))
     target_tfvars_sha      = filesha256(abspath("${path.module}/../../kubernetes/kind/targets/kind.tfvars"))
     operator_overrides_sha = try(filesha256(abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")), "absent")
@@ -310,16 +311,18 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
 set -euo pipefail
 export KUBECONFIG="${local.kubeconfig_path_expanded}"
 KIND_OPERATOR_OVERRIDES_FILE="${abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")}"
-if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
-  "${path.module}/scripts/check-cluster-health.sh" \
-    --var-file "${path.module}/../../kubernetes/kind/stages/900-sso.tfvars" \
-    --var-file "${path.module}/../../kubernetes/kind/targets/kind.tfvars" \
-    --var-file "$${KIND_OPERATOR_OVERRIDES_FILE}"
-else
-  "${path.module}/scripts/check-cluster-health.sh" \
-    --var-file "${path.module}/../../kubernetes/kind/stages/900-sso.tfvars" \
-    --var-file "${path.module}/../../kubernetes/kind/targets/kind.tfvars"
+PLATFORM_TFVARS_FILE="$${PLATFORM_TFVARS:-}"
+check_args=(
+  --var-file "${path.module}/../../kubernetes/kind/stages/900-sso.tfvars"
+  --var-file "${path.module}/../../kubernetes/kind/targets/kind.tfvars"
+)
+if [[ -n "$${PLATFORM_TFVARS_FILE}" && -f "$${PLATFORM_TFVARS_FILE}" ]]; then
+  check_args+=(--var-file "$${PLATFORM_TFVARS_FILE}")
 fi
+if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
+  check_args+=(--var-file "$${KIND_OPERATOR_OVERRIDES_FILE}")
+fi
+"${path.module}/scripts/check-cluster-health.sh" "$${check_args[@]}"
 __EOT__
     interpreter = ["/bin/bash", "-c"]
   }

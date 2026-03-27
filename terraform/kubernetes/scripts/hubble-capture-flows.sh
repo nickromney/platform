@@ -44,6 +44,9 @@ Options:
 
   --to-namespace NS
       Repeatable destination namespace filter.
+      This filters only the destination side of the flow. It is normal to pair
+      this with `hubble-summarise-flows.sh --direction egress` when you want
+      to study workloads sending traffic into NS.
 
   --pod POD
       Repeatable filter for flows related to POD.

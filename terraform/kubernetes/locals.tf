@@ -216,7 +216,8 @@ locals {
   enable_gitops_repo = var.enable_gitea && var.enable_argocd && local.enable_gitops_repo_requested
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
-    var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno", "kyverno-policies", "cilium-policies"] : [],
+    var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno", "kyverno-policies"] : [],
+    var.enable_policies && var.enable_cilium_policies && var.enable_argocd && !var.enable_app_of_apps ? ["cilium-policies"] : [],
     var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["policy-reporter"] : [],
     var.enable_cert_manager && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager"] : [],
     var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
@@ -420,6 +421,9 @@ locals {
           allowRemoteNodeIdentities = true
         }
       }
+    } : {},
+    var.enable_cilium_policy_audit_mode ? {
+      policyAuditMode = true
     } : {},
     var.enable_hubble ? {
       hubble = {

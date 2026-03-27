@@ -353,7 +353,7 @@ __YAML__
 }
 
 resource "kubectl_manifest" "argocd_app_cilium_policies" {
-  count = var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+  count = var.enable_policies && var.enable_cilium_policies && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1
