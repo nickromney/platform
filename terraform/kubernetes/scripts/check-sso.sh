@@ -72,6 +72,19 @@ tfvar_get() {
   echo "${value}"
 }
 
+admin_host() {
+  local app="$1"
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    printf '%s.%s\n' "${app}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
+  fi
+}
+
+dex_host() {
+  printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+}
+
 expect_deploy_arg() {
   local ns="$1"
   local deploy="$2"
@@ -148,11 +161,23 @@ if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT="443"
 fi
 
+PLATFORM_BASE_DOMAIN=$(tfvar_get "" platform_base_domain)
+if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
+  PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
+fi
+PLATFORM_ADMIN_BASE_DOMAIN=$(tfvar_get "" platform_admin_base_domain)
+SEPARATE_ADMIN_DOMAIN=0
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+else
+  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+fi
+
 port_suffix=""
 if [[ "${HOST_PORT}" != "443" ]]; then
   port_suffix=":${HOST_PORT}"
 fi
-EXPECTED_DEX_ISSUER_URL="https://dex.127.0.0.1.sslip.io${port_suffix}/dex"
+EXPECTED_DEX_ISSUER_URL="https://$(dex_host)${port_suffix}/dex"
 
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
@@ -263,10 +288,10 @@ if have_cmd curl; then
   echo ""
   echo "External HTTPS checks (host port ${HOST_PORT}):"
 
-  print_http_head "https://dex.127.0.0.1.sslip.io${port_suffix}/dex/.well-known/openid-configuration" 5
-  print_http_head "https://dex.127.0.0.1.sslip.io${port_suffix}/dex/keys" 5
-  print_http_head "https://gitea.admin.127.0.0.1.sslip.io${port_suffix}/" 5
-  print_http_head "https://headlamp.admin.127.0.0.1.sslip.io${port_suffix}/" 5
+  print_http_head "https://$(dex_host)${port_suffix}/dex/.well-known/openid-configuration" 5
+  print_http_head "https://$(dex_host)${port_suffix}/dex/keys" 5
+  print_http_head "https://$(admin_host gitea)${port_suffix}/" 5
+  print_http_head "https://$(admin_host headlamp)${port_suffix}/" 5
 
   if [[ "${EXTENDED}" -eq 1 ]]; then
     echo ""

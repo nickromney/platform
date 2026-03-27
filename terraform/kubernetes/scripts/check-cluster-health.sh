@@ -377,6 +377,92 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+HTTP_STATUS_LAST_MODE="direct"
+KIND_GATEWAY_FALLBACK_WARNED=0
+
+kind_gateway_url_probe_eligible() {
+  local url="$1"
+  local rest hostport host port
+
+  [[ "${EXPECT_KIND_PROVISIONING}" == "true" ]] || return 1
+  [[ "${url}" == https://* ]] || return 1
+
+  rest="${url#https://}"
+  hostport="${rest%%/*}"
+  host="${hostport%%:*}"
+  if [[ "${hostport}" == *:* ]]; then
+    port="${hostport##*:}"
+  else
+    port="443"
+  fi
+
+  [[ "${port}" == "${GATEWAY_HTTPS_HOST_PORT}" ]] || return 1
+
+  case "${host}" in
+    "${PLATFORM_BASE_DOMAIN}"|*.${PLATFORM_BASE_DOMAIN}|"${PLATFORM_ADMIN_BASE_DOMAIN}"|*.${PLATFORM_ADMIN_BASE_DOMAIN})
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+kind_gateway_portforward_http_status_code() {
+  local url="$1"
+  local insecure="${2:-false}"
+  local rest hostport path host local_port logfile pid code
+  local -a port_candidates=(18443 19443 20443 21443)
+
+  kind_gateway_url_probe_eligible "${url}" || return 1
+
+  rest="${url#https://}"
+  hostport="${rest%%/*}"
+  if [[ "${rest}" == "${hostport}" ]]; then
+    path="/"
+  else
+    path="/${rest#*/}"
+  fi
+  host="${hostport%%:*}"
+
+  for local_port in "${port_candidates[@]}"; do
+    logfile="$(mktemp)"
+    kubectl -n platform-gateway port-forward svc/platform-gateway-nginx "${local_port}:443" >"${logfile}" 2>&1 &
+    pid=$!
+
+    for _ in $(seq 1 25); do
+      if grep -q "Forwarding from" "${logfile}" 2>/dev/null; then
+        break
+      fi
+      if ! kill -0 "${pid}" 2>/dev/null; then
+        break
+      fi
+      sleep 0.2
+    done
+
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      rm -f "${logfile}"
+      continue
+    fi
+
+    if [[ "${insecure}" == "true" ]]; then
+      code=$(curl -skI --max-time 5 -o /dev/null -w "%{http_code}" "https://${host}:${local_port}${path}" 2>/dev/null || true)
+    else
+      code=$(curl -sSI --max-time 5 -o /dev/null -w "%{http_code}" "https://${host}:${local_port}${path}" 2>/dev/null || true)
+    fi
+    [[ -n "${code}" ]] || code="000"
+
+    kill "${pid}" >/dev/null 2>&1 || true
+    wait "${pid}" >/dev/null 2>&1 || true
+    rm -f "${logfile}"
+
+    printf '%s\n' "${code}"
+    return 0
+  done
+
+  return 1
+}
+
 require_cmd kubectl
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -452,6 +538,28 @@ tfvar_or_default() {
   else
     echo "$default"
   fi
+}
+
+tfvar_list_entries() {
+  local key="$1"
+  local raw=""
+  local file
+  local -a values=()
+
+  for file in "${TFVARS_FILES[@]}"; do
+    [[ -n "${file}" && -f "${file}" ]] || continue
+    raw="$(
+      awk -v key="${key}" '
+        !capture && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { capture=1 }
+        capture { print }
+        capture && /\]/ { exit }
+      ' "${file}" 2>/dev/null || true
+    )"
+    [[ -n "${raw}" ]] || continue
+    mapfile -t values < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
+  done
+
+  printf '%s\n' "${values[@]}"
 }
 
 detect_stage_from_tfvars() {
@@ -550,6 +658,36 @@ GITEA_SSH_USERNAME=$(tfvar_or_default gitea_ssh_username git)
 GITEA_ADMIN_USERNAME=$(tfvar_or_default gitea_admin_username gitea-admin)
 GITEA_REPO_OWNER=$(tfvar_or_default gitea_repo_owner "${GITEA_ADMIN_USERNAME}")
 EXPECTED_CLUSTER_NAME=$(tfvar_or_default cluster_name kind-local)
+PLATFORM_BASE_DOMAIN=$(tfvar_or_default platform_base_domain 127.0.0.1.sslip.io)
+EXPOSE_ADMIN_NODEPORTS=$(tfvar_or_default expose_admin_nodeports true)
+PLATFORM_ADMIN_BASE_DOMAIN=$(tfvar_get platform_admin_base_domain)
+SEPARATE_ADMIN_DOMAIN=0
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+else
+  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+fi
+ADMIN_ROUTE_ALLOWLIST_ENABLED=0
+if [[ -n "$(tfvar_list_entries admin_route_allowlist_cidrs)" ]]; then
+  ADMIN_ROUTE_ALLOWLIST_ENABLED=1
+fi
+ADMIN_GATEWAY_EXPECTED_CODES="200 302 303"
+if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
+  ADMIN_GATEWAY_EXPECTED_CODES="${ADMIN_GATEWAY_EXPECTED_CODES} 403"
+fi
+
+admin_host() {
+  local app="$1"
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    printf '%s.%s\n' "${app}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
+  fi
+}
+
+dex_host() {
+  printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+}
 
 GITEA_ADMIN_PWD_EFFECTIVE="${GITEA_ADMIN_PWD:-}"
 if [[ -z "${GITEA_ADMIN_PWD_EFFECTIVE}" ]]; then
@@ -582,6 +720,10 @@ fi
 print_nodeport_urls() {
   local show_all="${1:-false}"
   echo "Port URLs (NodePort/host port):"
+  if [[ "${EXPOSE_ADMIN_NODEPORTS}" != "true" ]]; then
+    echo "  • Direct admin NodePorts disabled (expose_admin_nodeports=${EXPOSE_ADMIN_NODEPORTS})"
+    return 0
+  fi
   if [[ "${EXPECT_ARGOCD}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Argo CD:  http://127.0.0.1:${ARGOCD_SERVER_NODE_PORT}/"
   fi
@@ -606,31 +748,38 @@ print_gateway_urls() {
   if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
     port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
   fi
-  echo "HTTPS URLs (via NGINX Gateway Fabric + *.127.0.0.1.sslip.io):"
-  echo "  • Argo CD:  https://argocd.admin.127.0.0.1.sslip.io${port_suffix}/"
-  echo "  • Gitea:    https://gitea.admin.127.0.0.1.sslip.io${port_suffix}/"
+  echo "HTTPS URLs (via NGINX Gateway Fabric):"
+  echo "  • Public app zone: *.${PLATFORM_BASE_DOMAIN}"
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    echo "  • Admin zone: *.${PLATFORM_ADMIN_BASE_DOMAIN}"
+  fi
+  echo "  • Argo CD:  https://$(admin_host argocd)${port_suffix}/"
+  echo "  • Gitea:    https://$(admin_host gitea)${port_suffix}/"
   if [[ "${EXPECT_HUBBLE}" == "true" || ( "${show_all}" == "true" && "${EXPECT_HUBBLE}" != "false" ) ]]; then
-    echo "  • Hubble:   https://hubble.admin.127.0.0.1.sslip.io${port_suffix}/"
+    echo "  • Hubble:   https://$(admin_host hubble)${port_suffix}/"
   fi
   if [[ "${EXPECT_HEADLAMP}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • Headlamp: https://headlamp.admin.127.0.0.1.sslip.io${port_suffix}/"
+    echo "  • Headlamp: https://$(admin_host headlamp)${port_suffix}/"
   fi
   if [[ "${EXPECT_SIGNOZ}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • SigNoz:   https://signoz.admin.127.0.0.1.sslip.io${port_suffix}/"
+    echo "  • SigNoz:   https://$(admin_host signoz)${port_suffix}/"
   fi
   if [[ "${EXPECT_GRAFANA}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • Grafana:  https://grafana.admin.127.0.0.1.sslip.io${port_suffix}/"
+    echo "  • Grafana:  https://$(admin_host grafana)${port_suffix}/"
   fi
   if [[ "${EXPECT_POLICIES}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • Kyverno:  https://kyverno.admin.127.0.0.1.sslip.io${port_suffix}/"
+    echo "  • Kyverno:  https://$(admin_host kyverno)${port_suffix}/"
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
     echo ""
     echo "SSO (Dex + oauth2-proxy):"
-    echo "  • Dex:      https://dex.127.0.0.1.sslip.io${port_suffix}/dex"
+    echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
     echo "  • Users:    demo@admin.test, demo@dev.test, demo@uat.test"
     echo "  • Password: set via PLATFORM_DEMO_PASSWORD in .env"
+  fi
+  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
+    echo "  • Admin source allowlist active: non-allowlisted probes may receive HTTP 403"
   fi
 }
 
@@ -654,14 +803,14 @@ check_http_surface() {
   fi
 
   while :; do
-    if [[ "${insecure}" == "true" ]]; then
-      code=$(curl -skI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000)
-    else
-      code=$(curl -sSI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000)
-    fi
+    code="$(http_status_code "${url}" "${insecure}")"
 
     case " ${accepted_codes} " in
       *" ${code} "*)
+        if [[ "${HTTP_STATUS_LAST_MODE}" == "kind-port-forward" && "${KIND_GATEWAY_FALLBACK_WARNED}" -eq 0 ]]; then
+          warn "Direct kind HTTPS host publish on 127.0.0.1:${GATEWAY_HTTPS_HOST_PORT} did not respond; validating gateway URLs via kubectl port-forward fallback"
+          KIND_GATEWAY_FALLBACK_WARNED=1
+        fi
         ok "${label} reachable: ${url} (HTTP ${code})"
         return 0
         ;;
@@ -683,12 +832,26 @@ first_node_internal_ip() {
 http_status_code() {
   local url="$1"
   local insecure="${2:-false}"
+  local code=""
+
+  HTTP_STATUS_LAST_MODE="direct"
 
   if [[ "${insecure}" == "true" ]]; then
-    curl -skI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000
+    code=$(curl -skI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || true)
   else
-    curl -sSI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || echo 000
+    code=$(curl -sSI --max-time 5 -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null || true)
   fi
+  [[ -n "${code}" ]] || code="000"
+
+  if [[ "${code}" == "000" ]]; then
+    if code="$(kind_gateway_portforward_http_status_code "${url}" "${insecure}" 2>/dev/null)"; then
+      HTTP_STATUS_LAST_MODE="kind-port-forward"
+    else
+      code="000"
+    fi
+  fi
+
+  printf '%s\n' "${code}"
 }
 
 http_status_code_basic_auth() {
@@ -782,7 +945,7 @@ print_success_dashboard_hint() {
     return 0
   fi
 
-  grafana_url="https://grafana.admin.127.0.0.1.sslip.io"
+  grafana_url="https://$(admin_host grafana)"
   if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
     grafana_url="${grafana_url}:${GATEWAY_HTTPS_HOST_PORT}"
   fi
@@ -932,7 +1095,7 @@ else
       if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
         gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
       fi
-      check_http_surface "Hubble admin gateway URL" "https://hubble.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true 30 5
+      check_http_surface "Hubble admin gateway URL" "https://$(admin_host hubble)${gateway_port_suffix}/" "${ADMIN_GATEWAY_EXPECTED_CODES}" true 30 5
     fi
   else
     if [[ "${EXPECT_HUBBLE}" == "true" ]]; then
@@ -953,13 +1116,17 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   if kubectl -n "${ARGOCD_NS}" get svc argocd-server >/dev/null 2>&1; then
     kubectl -n "${ARGOCD_NS}" get svc argocd-server
   fi
-  check_nodeport_http_surface "Argo CD direct URL" "${ARGOCD_SERVER_NODE_PORT}" "/" "200"
+  if [[ "${EXPOSE_ADMIN_NODEPORTS}" == "true" ]]; then
+    check_nodeport_http_surface "Argo CD direct URL" "${ARGOCD_SERVER_NODE_PORT}" "/" "200"
+  else
+    ok "Argo CD direct NodePort disabled (expose_admin_nodeports=${EXPOSE_ADMIN_NODEPORTS})"
+  fi
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     gateway_port_suffix=""
     if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
       gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
     fi
-    check_http_surface "Argo CD admin gateway URL" "https://argocd.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true 30 5
+    check_http_surface "Argo CD admin gateway URL" "https://$(admin_host argocd)${gateway_port_suffix}/" "${ADMIN_GATEWAY_EXPECTED_CODES}" true 30 5
   fi
 
   argocd_settle_timeout=60
@@ -1108,10 +1275,14 @@ elif kubectl get ns gitea >/dev/null 2>&1; then
     if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
       gateway_port_suffix=""
       [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]] && gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
-      check_http_surface "Gitea HTTPS gateway" "https://gitea.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true 30 5
+      check_http_surface "Gitea HTTPS gateway" "https://$(admin_host gitea)${gateway_port_suffix}/" "${ADMIN_GATEWAY_EXPECTED_CODES}" true 30 5
     fi
 
-    check_gitea_api_surface "${GITEA_HTTP_NODE_PORT}" "/api/v1/version"
+    if [[ "${EXPOSE_ADMIN_NODEPORTS}" == "true" ]]; then
+      check_gitea_api_surface "${GITEA_HTTP_NODE_PORT}" "/api/v1/version"
+    else
+      ok "Gitea direct NodePort disabled (expose_admin_nodeports=${EXPOSE_ADMIN_NODEPORTS})"
+    fi
   else
     warn "curl not found; skipping Gitea gateway and API reachability checks"
   fi
@@ -1266,7 +1437,7 @@ elif kubectl get ns observability >/dev/null 2>&1; then
       if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
         gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
       fi
-      check_http_surface "Grafana admin gateway URL" "https://grafana.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true 30 5
+      check_http_surface "Grafana admin gateway URL" "https://$(admin_host grafana)${gateway_port_suffix}/" "${ADMIN_GATEWAY_EXPECTED_CODES}" true 30 5
     fi
   else
     if [[ "${EXPECT_GRAFANA}" == "true" ]]; then
@@ -1357,7 +1528,7 @@ elif kubectl get ns headlamp >/dev/null 2>&1; then
       if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
         gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
       fi
-      check_http_surface "Headlamp admin gateway URL" "https://headlamp.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true 30 5
+      check_http_surface "Headlamp admin gateway URL" "https://$(admin_host headlamp)${gateway_port_suffix}/" "${ADMIN_GATEWAY_EXPECTED_CODES}" true 30 5
     fi
   fi
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" && "${EXPECT_POLICIES}" == "true" ]]; then
@@ -1365,7 +1536,7 @@ elif kubectl get ns headlamp >/dev/null 2>&1; then
     if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
       gateway_port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
     fi
-    check_http_surface "Kyverno admin gateway URL" "https://kyverno.admin.127.0.0.1.sslip.io${gateway_port_suffix}/" "200 302 303" true 30 5
+    check_http_surface "Kyverno admin gateway URL" "https://$(admin_host kyverno)${gateway_port_suffix}/" "${ADMIN_GATEWAY_EXPECTED_CODES}" true 30 5
   fi
 else
   if [[ "${EXPECT_HEADLAMP}" == "true" ]]; then

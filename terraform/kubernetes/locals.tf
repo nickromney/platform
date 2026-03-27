@@ -20,42 +20,60 @@ locals {
     local.gitea_registry_port != "" ? "${local.kind_control_plane_container_name}:${local.gitea_registry_port}" : local.kind_control_plane_container_name
   ) : var.gitea_registry_host
 
-  gitea_ssh_host_cluster         = "gitea-ssh.gitea.svc.cluster.local"
-  gitea_ssh_port_cluster         = 22
-  gitea_repo_owner               = var.gitea_repo_owner != "" ? var.gitea_repo_owner : var.gitea_admin_username
-  gitea_repo_owner_is_org        = var.gitea_repo_owner_is_org
-  gitea_repo_owner_fallback      = var.gitea_repo_owner_is_org ? var.gitea_admin_username : ""
-  argocd_oidc_enabled            = var.enable_sso && var.enable_argocd_oidc
-  cni_provider_effective         = lower(var.cni_provider)
-  enable_cilium_effective        = local.cni_provider_effective == "cilium"
-  admin_cookie_domain            = ".127.0.0.1.sslip.io"
-  admin_whitelist_domains        = var.gateway_https_host_port == 443 ? local.admin_cookie_domain : "${local.admin_cookie_domain},${local.admin_cookie_domain}:${var.gateway_https_host_port}"
-  dev_cookie_domain              = ".dev.127.0.0.1.sslip.io"
-  dev_whitelist_domains          = var.gateway_https_host_port == 443 ? local.dev_cookie_domain : "${local.dev_cookie_domain},${local.dev_cookie_domain}:${var.gateway_https_host_port}"
-  uat_cookie_domain              = ".uat.127.0.0.1.sslip.io"
-  uat_whitelist_domains          = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
-  gateway_https_host_port_suffix = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
-  argocd_public_url              = "https://argocd.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  dex_public_host                = "dex.127.0.0.1.sslip.io"
-  dex_public_url                 = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
-  gitea_public_url               = "https://gitea.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  grafana_public_url             = "https://grafana.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  headlamp_public_url            = "https://headlamp.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  hubble_public_url              = "https://hubble.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  kyverno_public_url             = "https://kyverno.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  signoz_public_url              = "https://signoz.admin.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  sentiment_dev_public_url       = "https://sentiment.dev.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  sentiment_uat_public_url       = "https://sentiment.uat.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  subnetcalc_dev_public_url      = "https://subnetcalc.dev.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  subnetcalc_uat_public_url      = "https://subnetcalc.uat.127.0.0.1.sslip.io${local.gateway_https_host_port_suffix}"
-  kind_disable_default_cni       = var.kind_disable_default_cni != null ? var.kind_disable_default_cni : local.enable_cilium_effective
-  enable_prometheus_effective    = var.enable_prometheus
-  enable_grafana_effective       = var.enable_grafana
-  enable_loki_effective          = var.enable_loki
-  enable_victoria_logs_effective = var.enable_victoria_logs
-  enable_tempo_effective         = var.enable_tempo
-  enable_otel_gateway_effective  = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_victoria_logs_effective || local.enable_tempo_effective || var.enable_signoz
-  enable_observability_effective = local.enable_otel_gateway_effective || var.enable_observability_agent
+  gitea_ssh_host_cluster                = "gitea-ssh.gitea.svc.cluster.local"
+  gitea_ssh_port_cluster                = 22
+  gitea_repo_owner                      = var.gitea_repo_owner != "" ? var.gitea_repo_owner : var.gitea_admin_username
+  gitea_repo_owner_is_org               = var.gitea_repo_owner_is_org
+  gitea_repo_owner_fallback             = var.gitea_repo_owner_is_org ? var.gitea_admin_username : ""
+  argocd_oidc_enabled                   = var.enable_sso && var.enable_argocd_oidc
+  cni_provider_effective                = lower(var.cni_provider)
+  enable_cilium_effective               = local.cni_provider_effective == "cilium"
+  platform_base_domain_effective        = lower(trimspace(var.platform_base_domain))
+  platform_admin_base_domain_effective  = trimspace(var.platform_admin_base_domain) != "" ? lower(trimspace(var.platform_admin_base_domain)) : local.platform_base_domain_effective
+  separate_admin_domain_enabled         = trimspace(var.platform_admin_base_domain) != ""
+  admin_cookie_domain                   = ".${local.platform_admin_base_domain_effective}"
+  admin_whitelist_domains               = var.gateway_https_host_port == 443 ? local.admin_cookie_domain : "${local.admin_cookie_domain},${local.admin_cookie_domain}:${var.gateway_https_host_port}"
+  dev_cookie_domain                     = ".dev.${local.platform_base_domain_effective}"
+  dev_whitelist_domains                 = var.gateway_https_host_port == 443 ? local.dev_cookie_domain : "${local.dev_cookie_domain},${local.dev_cookie_domain}:${var.gateway_https_host_port}"
+  uat_cookie_domain                     = ".uat.${local.platform_base_domain_effective}"
+  uat_whitelist_domains                 = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
+  gateway_https_host_port_suffix        = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
+  argocd_public_host                    = local.separate_admin_domain_enabled ? "argocd.${local.platform_admin_base_domain_effective}" : "argocd.admin.${local.platform_base_domain_effective}"
+  argocd_public_url                     = "https://${local.argocd_public_host}${local.gateway_https_host_port_suffix}"
+  dex_public_host                       = "dex.${local.platform_admin_base_domain_effective}"
+  dex_public_url                        = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
+  gitea_public_host                     = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
+  gitea_public_url                      = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"
+  grafana_public_host                   = local.separate_admin_domain_enabled ? "grafana.${local.platform_admin_base_domain_effective}" : "grafana.admin.${local.platform_base_domain_effective}"
+  grafana_public_url                    = "https://${local.grafana_public_host}${local.gateway_https_host_port_suffix}"
+  headlamp_public_host                  = local.separate_admin_domain_enabled ? "headlamp.${local.platform_admin_base_domain_effective}" : "headlamp.admin.${local.platform_base_domain_effective}"
+  headlamp_public_url                   = "https://${local.headlamp_public_host}${local.gateway_https_host_port_suffix}"
+  hubble_public_host                    = local.separate_admin_domain_enabled ? "hubble.${local.platform_admin_base_domain_effective}" : "hubble.admin.${local.platform_base_domain_effective}"
+  hubble_public_url                     = "https://${local.hubble_public_host}${local.gateway_https_host_port_suffix}"
+  kyverno_public_host                   = local.separate_admin_domain_enabled ? "kyverno.${local.platform_admin_base_domain_effective}" : "kyverno.admin.${local.platform_base_domain_effective}"
+  kyverno_public_url                    = "https://${local.kyverno_public_host}${local.gateway_https_host_port_suffix}"
+  signoz_public_host                    = local.separate_admin_domain_enabled ? "signoz.${local.platform_admin_base_domain_effective}" : "signoz.admin.${local.platform_base_domain_effective}"
+  signoz_public_url                     = "https://${local.signoz_public_host}${local.gateway_https_host_port_suffix}"
+  sentiment_dev_public_host             = "sentiment.dev.${local.platform_base_domain_effective}"
+  sentiment_dev_public_url              = "https://${local.sentiment_dev_public_host}${local.gateway_https_host_port_suffix}"
+  sentiment_uat_public_host             = "sentiment.uat.${local.platform_base_domain_effective}"
+  sentiment_uat_public_url              = "https://${local.sentiment_uat_public_host}${local.gateway_https_host_port_suffix}"
+  subnetcalc_dev_public_host            = "subnetcalc.dev.${local.platform_base_domain_effective}"
+  subnetcalc_dev_public_url             = "https://${local.subnetcalc_dev_public_host}${local.gateway_https_host_port_suffix}"
+  subnetcalc_uat_public_host            = "subnetcalc.uat.${local.platform_base_domain_effective}"
+  subnetcalc_uat_public_url             = "https://${local.subnetcalc_uat_public_host}${local.gateway_https_host_port_suffix}"
+  admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
+  admin_route_allowlist_enabled         = length(local.admin_route_allowlist_cidrs_effective) > 0
+  gateway_trusted_proxy_cidrs_effective = [for cidr in var.gateway_trusted_proxy_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
+  admin_service_type                    = var.expose_admin_nodeports ? "NodePort" : "ClusterIP"
+  kind_disable_default_cni              = var.kind_disable_default_cni != null ? var.kind_disable_default_cni : local.enable_cilium_effective
+  enable_prometheus_effective           = var.enable_prometheus
+  enable_grafana_effective              = var.enable_grafana
+  enable_loki_effective                 = var.enable_loki
+  enable_victoria_logs_effective        = var.enable_victoria_logs
+  enable_tempo_effective                = var.enable_tempo
+  enable_otel_gateway_effective         = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_victoria_logs_effective || local.enable_tempo_effective || var.enable_signoz
+  enable_observability_effective        = local.enable_otel_gateway_effective || var.enable_observability_agent
   gitea_admin_promote_users_effective = var.enable_gitea ? distinct(compact(concat(
     [var.gitea_admin_username],
     var.gitea_admin_promote_users,
@@ -235,10 +253,14 @@ locals {
     content_hash                           = local.policies_repo_content_hash
     repo_owner                             = local.gitea_repo_owner
     repo_is_org                            = local.gitea_repo_owner_is_org
+    platform_base_domain                   = local.platform_base_domain_effective
+    platform_admin_base_domain             = local.platform_admin_base_domain_effective
     enable_hubble                          = var.enable_hubble
     enable_policies                        = var.enable_policies
     enable_gateway_tls                     = var.enable_gateway_tls
     gateway_https_host_port                = var.gateway_https_host_port
+    admin_route_allowlist_cidrs            = local.admin_route_allowlist_cidrs_effective
+    gateway_trusted_proxy_cidrs            = local.gateway_trusted_proxy_cidrs_effective
     enable_cert_manager                    = var.enable_cert_manager
     enable_actions_runner                  = var.enable_actions_runner
     enable_app_repo_sentiment              = var.enable_app_repo_sentiment
@@ -304,50 +326,54 @@ locals {
     contains(local.kubeconfig_context_names_for_providers, trimspace(var.kubeconfig_context))
   ) ? trimspace(var.kubeconfig_context) : null
 
-  extra_port_mappings = [
-    {
-      name           = "gateway-https"
-      container_port = var.gateway_https_node_port
-      host_port      = var.gateway_https_host_port
-      listen_address = "127.0.0.1"
-      protocol       = "TCP"
-    },
-    {
-      name           = "argocd"
-      container_port = var.argocd_server_node_port
-      host_port      = var.argocd_server_node_port
-      listen_address = "127.0.0.1"
-      protocol       = "TCP"
-    },
-    {
-      name           = "hubble-ui"
-      container_port = var.hubble_ui_node_port
-      host_port      = var.hubble_ui_node_port
-      listen_address = "127.0.0.1"
-      protocol       = "TCP"
-    },
-    {
-      name           = "gitea-http"
-      container_port = var.gitea_http_node_port
-      host_port      = var.gitea_http_node_port
-      listen_address = "127.0.0.1"
-      protocol       = "TCP"
-    },
-    {
-      name           = "gitea-ssh"
-      container_port = var.gitea_ssh_node_port
-      host_port      = var.gitea_ssh_node_port
-      listen_address = "127.0.0.1"
-      protocol       = "TCP"
-    },
-    {
-      name           = "grafana-ui"
-      container_port = var.grafana_ui_node_port
-      host_port      = var.grafana_ui_host_port
-      listen_address = "127.0.0.1"
-      protocol       = "TCP"
-    },
-  ]
+  extra_port_mappings = concat(
+    [
+      {
+        name           = "gateway-https"
+        container_port = var.gateway_https_node_port
+        host_port      = var.gateway_https_host_port
+        listen_address = trimspace(var.gateway_https_listen_address)
+        protocol       = "TCP"
+      }
+    ],
+    var.expose_admin_nodeports ? [
+      {
+        name           = "argocd"
+        container_port = var.argocd_server_node_port
+        host_port      = var.argocd_server_node_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      },
+      {
+        name           = "hubble-ui"
+        container_port = var.hubble_ui_node_port
+        host_port      = var.hubble_ui_node_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      },
+      {
+        name           = "gitea-http"
+        container_port = var.gitea_http_node_port
+        host_port      = var.gitea_http_node_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      },
+      {
+        name           = "gitea-ssh"
+        container_port = var.gitea_ssh_node_port
+        host_port      = var.gitea_ssh_node_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      },
+      {
+        name           = "grafana-ui"
+        container_port = var.grafana_ui_node_port
+        host_port      = var.grafana_ui_host_port
+        listen_address = "127.0.0.1"
+        protocol       = "TCP"
+      },
+    ] : []
+  )
 
   cilium_values = merge(
     {
@@ -426,10 +452,14 @@ locals {
             limits   = { cpu = "100m", memory = "128Mi" }
             requests = { cpu = "50m", memory = "64Mi" }
           }
-          service = {
-            type     = "NodePort"
-            nodePort = var.hubble_ui_node_port
-          }
+          service = merge(
+            {
+              type = local.admin_service_type
+            },
+            var.expose_admin_nodeports ? {
+              nodePort = var.hubble_ui_node_port
+            } : {}
+          )
         }
       }
     } : {}
@@ -573,7 +603,7 @@ locals {
       hostAliases = var.enable_sso ? [
         {
           ip        = kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip
-          hostnames = ["dex.127.0.0.1.sslip.io"]
+          hostnames = [local.dex_public_host]
         }
       ] : []
 
@@ -594,12 +624,16 @@ locals {
         requests = { cpu = "25m", memory = "64Mi" }
       }
 
-      service = {
-        type             = "NodePort"
-        nodePort         = var.argocd_server_node_port
-        servicePortHttp  = 8080
-        servicePortHttps = 8443
-      }
+      service = merge(
+        {
+          type             = local.admin_service_type
+          servicePortHttp  = 8080
+          servicePortHttps = 8443
+        },
+        var.expose_admin_nodeports ? {
+          nodePort = var.argocd_server_node_port
+        } : {}
+      )
     }
   }
 
@@ -617,9 +651,13 @@ locals {
         callbackURL  = "${local.headlamp_public_url}/oidc-callback"
       }
     } : {},
-    # Pass -oidc-ca-file to trust the mkcert CA for OIDC connections to Dex
-    # Also add -oidc-skip-tls-verify temporarily to debug TLS issues
-    var.enable_sso ? { extraArgs = ["-oidc-ca-file=/headlamp-ca/ca.crt", "-oidc-skip-tls-verify"] } : {}
+    # Pass -oidc-ca-file to trust the mkcert CA for OIDC connections to Dex.
+    var.enable_sso ? {
+      extraArgs = compact([
+        "-oidc-ca-file=/headlamp-ca/ca.crt",
+        var.headlamp_oidc_skip_tls_verify ? "-oidc-skip-tls-verify" : "",
+      ])
+    } : {}
   )
 
   headlamp_values = {
@@ -627,7 +665,7 @@ locals {
       port = 4466
     }
     clusterRoleBinding = {
-      create = true
+      create = var.headlamp_cluster_role_binding_create
     }
     config = local.headlamp_config
     env = var.enable_sso ? [

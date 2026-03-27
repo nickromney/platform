@@ -22,7 +22,7 @@ Required:
 
 Common options:
   --host HOST                    FQDN to probe (default: "${app}${host_suffix}")
-  --host-suffix SUFFIX           Default: ".admin.127.0.0.1.sslip.io"
+  --host-suffix SUFFIX           Default: derived from platform_base_domain or platform_admin_base_domain in tfvars
   --path PATH                    Default: "/"
   --host-port PORT               Default: from tfvars gateway_https_host_port, else 443
   --resolve-ip IP                Default: 127.0.0.1 (curl --resolve target)
@@ -45,7 +45,7 @@ Naming convention overrides:
 Examples:
   check-app.sh --app signoz --path /metrics-explorer/summary -x
   check-app.sh --app gitea --path / -x
-  check-app.sh --app headlamp --host headlamp.admin.127.0.0.1.sslip.io --path /
+  check-app.sh --app headlamp --host headlamp.admin.example.test --path /
 EOF
 }
 
@@ -58,7 +58,7 @@ STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 TFVARS_FILE=""
 APP=""
 HOST=""
-HOST_SUFFIX=".admin.127.0.0.1.sslip.io"
+HOST_SUFFIX=""
 PATH_TO_CHECK="/"
 HOST_PORT=""
 RESOLVE_IP="127.0.0.1"
@@ -131,15 +131,37 @@ if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT="443"
 fi
 
+PLATFORM_BASE_DOMAIN="$(tfvar_get "${TFVARS_FILE}" platform_base_domain)"
+if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
+  PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
+fi
+PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get "${TFVARS_FILE}" platform_admin_base_domain)"
+SEPARATE_ADMIN_DOMAIN=0
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+else
+  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+fi
+
+if [[ -z "${HOST_SUFFIX}" ]]; then
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    HOST_SUFFIX=".${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    HOST_SUFFIX=".admin.${PLATFORM_BASE_DOMAIN}"
+  fi
+fi
+
 if [[ -z "${HOST}" ]]; then
   # Heuristic: many workloads use env subdomains (sentiment.dev, subnetcalc.uat, etc) while their
   # Argo app names use "-dev"/"-uat". Default HOST should "just work" for these too.
-  if [[ "${HOST_SUFFIX}" == ".admin.127.0.0.1.sslip.io" && "${APP}" =~ -dev$ ]]; then
+  if [[ "${APP}" == "dex" ]]; then
+    HOST="dex.${PLATFORM_ADMIN_BASE_DOMAIN}"
+  elif [[ "${APP}" =~ -dev$ ]]; then
     base="${APP%-dev}"
-    HOST="${base}.dev.127.0.0.1.sslip.io"
-  elif [[ "${HOST_SUFFIX}" == ".admin.127.0.0.1.sslip.io" && "${APP}" =~ -uat$ ]]; then
+    HOST="${base}.dev.${PLATFORM_BASE_DOMAIN}"
+  elif [[ "${APP}" =~ -uat$ ]]; then
     base="${APP%-uat}"
-    HOST="${base}.uat.127.0.0.1.sslip.io"
+    HOST="${base}.uat.${PLATFORM_BASE_DOMAIN}"
   else
     HOST="${APP}${HOST_SUFFIX}"
   fi

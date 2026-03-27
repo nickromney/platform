@@ -81,11 +81,11 @@ spec:
       values: |
         service:
           http:
-            type: NodePort
-            nodePort: ${var.gitea_http_node_port}
+            type: ${var.expose_admin_nodeports ? "NodePort" : "ClusterIP"}
+${var.expose_admin_nodeports ? "            nodePort: ${var.gitea_http_node_port}" : ""}
           ssh:
-            type: NodePort
-            nodePort: ${var.gitea_ssh_node_port}
+            type: ${var.expose_admin_nodeports ? "NodePort" : "ClusterIP"}
+${var.expose_admin_nodeports ? "            nodePort: ${var.gitea_ssh_node_port}" : ""}
         ingress:
           enabled: false
         image:
@@ -148,7 +148,7 @@ spec:
             server:
               DISABLE_SSH: false
               SSH_PORT: ${var.gitea_ssh_node_port}
-              DOMAIN: "${var.enable_gateway_tls ? "gitea.admin.127.0.0.1.sslip.io" : "127.0.0.1"}"
+              DOMAIN: "${var.enable_gateway_tls ? local.gitea_public_host : "127.0.0.1"}"
               ROOT_URL: "${var.enable_gateway_tls ? "${local.gitea_public_url}/" : "http://127.0.0.1:${var.gitea_http_node_port}/"}"
               PUBLIC_URL_DETECTION: auto
             packages:

@@ -2026,7 +2026,7 @@ metadata:
   labels:
     app.kubernetes.io/name: signoz-ui
 spec:
-  type: NodePort
+  type: ${local.admin_service_type}
   selector:
     app.kubernetes.io/component: signoz
     app.kubernetes.io/instance: signoz
@@ -2035,7 +2035,7 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-      nodePort: ${var.signoz_ui_node_port}
+${var.expose_admin_nodeports ? "      nodePort: ${var.signoz_ui_node_port}" : ""}
 __YAML__
 
   wait              = false
@@ -2060,7 +2060,7 @@ metadata:
   labels:
     app.kubernetes.io/name: grafana-ui
 spec:
-  type: NodePort
+  type: ${local.admin_service_type}
   selector:
     app.kubernetes.io/name: grafana
     app.kubernetes.io/instance: grafana
@@ -2068,7 +2068,7 @@ spec:
     - name: http
       port: 3000
       targetPort: 3000
-      nodePort: ${var.grafana_ui_node_port}
+${var.expose_admin_nodeports ? "      nodePort: ${var.grafana_ui_node_port}" : ""}
 __YAML__
 
   wait              = false

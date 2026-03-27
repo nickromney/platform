@@ -10,6 +10,10 @@ For a subscription-free Docker-backed host on macOS or Linux, use
 current on-device `slicer-mac` image, including the `cilium` profile through
 stage `900`.
 
+If you intend to expose any Kubernetes target off-host, read the shared
+[OWASP analysis and public-demo checklist](../../docs/OWASP-analysis.md)
+before you apply a public-facing profile.
+
 As of March 14, 2026, the validated shape is:
 
 - host config from

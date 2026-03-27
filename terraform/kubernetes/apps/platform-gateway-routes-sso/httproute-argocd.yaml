@@ -17,6 +17,12 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: admin-allowlist
       backendRefs:
         - group: ""
           kind: Service

@@ -256,7 +256,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     script_sha          = filesha256(abspath("${path.module}/scripts/configure-kind-apiserver-oidc.sh"))
     gateway_service_uid = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
     cluster_name        = var.cluster_name
-    dex_host            = "dex.127.0.0.1.sslip.io"
+    dex_host            = local.dex_public_host
     oidc_client_id      = "headlamp"
     oidc_issuer_url     = local.dex_public_url
     mkcert_ca_dest      = "/etc/kubernetes/pki/mkcert-rootCA.pem"
@@ -268,7 +268,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     environment = {
       KUBECONFIG                  = local.kubeconfig_path_expanded
       CLUSTER_NAME                = var.cluster_name
-      DEX_HOST                    = "dex.127.0.0.1.sslip.io"
+      DEX_HOST                    = local.dex_public_host
       DEX_NAMESPACE               = "sso"
       OIDC_ISSUER_URL             = local.dex_public_url
       OIDC_CLIENT_ID              = "headlamp"
@@ -330,7 +330,7 @@ __EOT__
 }
 
 resource "kubectl_manifest" "clusterrolebinding_oidc_demo_admin_cluster_admin" {
-  count = var.enable_sso && var.enable_gateway_tls ? 1 : 0
+  count = var.enable_sso && var.enable_gateway_tls && var.enable_demo_cluster_admin_binding ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: rbac.authorization.k8s.io/v1

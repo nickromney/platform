@@ -212,6 +212,114 @@ variable "enable_app_of_apps" {
 }
 
 # -----------------------------------------------------------------------------
+# Public hostnames and exposure guardrails
+# -----------------------------------------------------------------------------
+
+variable "platform_base_domain" {
+  description = "Base DNS suffix used for gateway-facing platform URLs (for example 127.0.0.1.sslip.io or a real public domain)."
+  type        = string
+  default     = "127.0.0.1.sslip.io"
+
+  validation {
+    condition     = trimspace(var.platform_base_domain) != ""
+    error_message = "platform_base_domain must not be empty."
+  }
+}
+
+variable "platform_admin_base_domain" {
+  description = "Optional alternate DNS suffix for admin/control-plane UI hosts. Leave empty to keep admin hosts under *.admin.<platform_base_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "gateway_https_listen_address" {
+  description = "Listen address used for the kind HTTPS gateway extraPortMapping. Keep 127.0.0.1 for local-only stacks; use a public bind or reverse proxy for remote access."
+  type        = string
+  default     = "127.0.0.1"
+
+  validation {
+    condition     = trimspace(var.gateway_https_listen_address) != ""
+    error_message = "gateway_https_listen_address must not be empty."
+  }
+}
+
+variable "expose_admin_nodeports" {
+  description = "Expose direct admin NodePort surfaces (Argo CD, Hubble, Gitea, Grafana, SigNoz) in addition to the HTTPS gateway path."
+  type        = bool
+  default     = true
+}
+
+variable "admin_route_allowlist_cidrs" {
+  description = "Optional list of source CIDRs allowed to reach admin/control-plane HTTPS routes at the gateway. Leave empty to allow the routes from any source IP."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) != ""])
+    error_message = "admin_route_allowlist_cidrs entries must not be empty."
+  }
+}
+
+variable "gateway_trusted_proxy_cidrs" {
+  description = "Optional list of trusted proxy or WAF CIDRs whose X-Forwarded-For headers the platform gateway should trust when rewriting the client IP."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for cidr in var.gateway_trusted_proxy_cidrs : trimspace(cidr) != ""])
+    error_message = "gateway_trusted_proxy_cidrs entries must not be empty."
+  }
+}
+
+variable "public_demo_mode" {
+  description = "Operator acknowledgement that this stack is being adapted for a non-local/publicly reachable demo environment and should enforce extra guardrails."
+  type        = bool
+  default     = false
+}
+
+variable "public_demo_acknowledged" {
+  description = "Explicit acknowledgement of the shared-responsibility and hardening checklist for a public demo deployment."
+  type        = bool
+  default     = false
+}
+
+variable "enable_demo_cluster_admin_binding" {
+  description = "Bind the demo@admin.test Dex identity to cluster-admin for learning-cluster convenience."
+  type        = bool
+  default     = true
+}
+
+variable "headlamp_cluster_role_binding_create" {
+  description = "Let the Headlamp chart create its cluster-wide role binding."
+  type        = bool
+  default     = true
+}
+
+variable "headlamp_oidc_skip_tls_verify" {
+  description = "Pass -oidc-skip-tls-verify to Headlamp when talking to Dex."
+  type        = bool
+  default     = true
+}
+
+variable "public_demo_allow_demo_cluster_admin" {
+  description = "Explicitly allow the demo Dex admin identity to remain cluster-admin when public_demo_mode=true."
+  type        = bool
+  default     = false
+}
+
+variable "public_demo_allow_headlamp_cluster_admin" {
+  description = "Explicitly allow Headlamp to retain a cluster-admin role binding when public_demo_mode=true."
+  type        = bool
+  default     = false
+}
+
+variable "public_demo_allow_actions_runner_host_mounts" {
+  description = "Explicitly allow the Actions runner to retain Docker socket or host apps mounts when public_demo_mode=true."
+  type        = bool
+  default     = false
+}
+
+# -----------------------------------------------------------------------------
 # Versions
 # -----------------------------------------------------------------------------
 
@@ -784,6 +892,65 @@ check "enable_actions_runner_requires_gitea_and_argocd" {
   assert {
     condition     = !var.enable_actions_runner || (var.enable_gitea && var.enable_argocd)
     error_message = "enable_actions_runner requires enable_gitea=true and enable_argocd=true."
+  }
+}
+
+check "public_demo_mode_requires_acknowledgement" {
+  assert {
+    condition     = !var.public_demo_mode || var.public_demo_acknowledged
+    error_message = "public_demo_mode=true requires public_demo_acknowledged=true."
+  }
+}
+
+check "public_demo_mode_requires_non_loopback_base_domain" {
+  assert {
+    condition     = !var.public_demo_mode || lower(trimspace(var.platform_base_domain)) != "127.0.0.1.sslip.io"
+    error_message = "public_demo_mode=true requires platform_base_domain to move off 127.0.0.1.sslip.io."
+  }
+}
+
+check "public_demo_mode_disables_direct_admin_nodeports" {
+  assert {
+    condition     = !var.public_demo_mode || !var.expose_admin_nodeports
+    error_message = "public_demo_mode=true requires expose_admin_nodeports=false so admin UIs stay behind the gateway/auth path."
+  }
+}
+
+check "private_admin_nodeports_require_gitea_port_forward" {
+  assert {
+    condition     = var.expose_admin_nodeports || lower(var.gitea_local_access_mode) == "port-forward"
+    error_message = "expose_admin_nodeports=false requires gitea_local_access_mode=port-forward."
+  }
+}
+
+check "public_demo_mode_requires_demo_cluster_admin_ack" {
+  assert {
+    condition     = !var.public_demo_mode || !var.enable_demo_cluster_admin_binding || var.public_demo_allow_demo_cluster_admin
+    error_message = "public_demo_mode=true requires public_demo_allow_demo_cluster_admin=true before the demo Dex admin user can stay cluster-admin."
+  }
+}
+
+check "public_demo_mode_requires_headlamp_cluster_admin_ack" {
+  assert {
+    condition     = !var.public_demo_mode || !var.enable_headlamp || !var.headlamp_cluster_role_binding_create || var.public_demo_allow_headlamp_cluster_admin
+    error_message = "public_demo_mode=true requires public_demo_allow_headlamp_cluster_admin=true before Headlamp can keep a cluster-wide role binding."
+  }
+}
+
+check "public_demo_mode_requires_headlamp_tls_verification" {
+  assert {
+    condition     = !var.public_demo_mode || !var.enable_headlamp || !var.enable_sso || !var.headlamp_oidc_skip_tls_verify
+    error_message = "public_demo_mode=true requires headlamp_oidc_skip_tls_verify=false."
+  }
+}
+
+check "public_demo_mode_requires_runner_host_mount_ack" {
+  assert {
+    condition = !var.public_demo_mode || !(
+      var.enable_actions_runner &&
+      (var.enable_docker_socket_mount || var.enable_apps_dir_mount)
+    ) || var.public_demo_allow_actions_runner_host_mounts
+    error_message = "public_demo_mode=true requires public_demo_allow_actions_runner_host_mounts=true before retaining runner Docker socket or apps-dir mounts."
   }
 }
 
