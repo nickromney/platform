@@ -70,6 +70,9 @@ PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
 PLATFORM_ADMIN_PASSWORD ?=
 PLATFORM_DEMO_PASSWORD ?=
 PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+DISPLAY_DEFAULT_KUBECONFIG_PATH := $(patsubst $(HOME)/%,~/%,$(DEFAULT_KUBECONFIG_PATH))
+DISPLAY_KUBECONFIG_PATH := $(patsubst $(HOME)/%,~/%,$(KUBECONFIG_PATH))
+DISPLAY_PLATFORM_PROFILE_DIR := $(patsubst $(HOME)/%,~/%,$(patsubst $(REPO_ROOT)/%,<repo>/%,$(PLATFORM_PROFILE_DIR)))
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
@@ -202,18 +205,18 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"
-	@echo "  lima -> $(KUBECONFIG_PATH) (split by default; merge explicitly into $(DEFAULT_KUBECONFIG_PATH) if needed)"
+	@echo "  lima -> $(DISPLAY_KUBECONFIG_PATH) (split by default; merge explicitly into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) if needed)"
 	@echo ""
 	@echo "Aliases:"
 	@echo "  make start                                   Alias for lima-vms-up"
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)"
-	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(KUBECONFIG_PATH) into $(DEFAULT_KUBECONFIG_PATH) (default: 0)"
+	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
-	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(REPO_ROOT)/.run/profiles"
+	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(DISPLAY_PLATFORM_PROFILE_DIR)"
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:

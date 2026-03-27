@@ -15,6 +15,10 @@ setup() {
   [[ "${output}" == *"Docker-only hosts       -> use ../kind"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]
   [[ "${output}" == *"split by default"* ]]
+  [[ "${output}" == *"~/.kube/slicer-k3s.yaml"* ]]
+  [[ "${output}" == *"~/slicer-mac/slicer.sock"* ]]
+  [[ "${output}" == *"<repo>/.run/profiles"* ]]
+  [[ "${output}" != *"${HOME}"* ]]
 }
 
 @test "slicer stage without action shows guidance" {

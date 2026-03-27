@@ -88,7 +88,7 @@ already in use. The most reliable local pattern was an explicit port-forward:
 ```bash
 export KUBECONFIG="$HOME/.kube/kind-kind-local.yaml"
 
-kubectl -n kube-system port-forward service/hubble-relay 4246:80
+kubectl -n kube-system port-forward service/hubble-relay 4246:4245
 ```
 
 Then use:

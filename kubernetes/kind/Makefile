@@ -68,6 +68,9 @@ PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
 PLATFORM_ADMIN_PASSWORD ?=
 PLATFORM_DEMO_PASSWORD ?=
 PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+DISPLAY_DEFAULT_KUBECONFIG_PATH := $(patsubst $(HOME)/%,~/%,$(DEFAULT_KUBECONFIG_PATH))
+DISPLAY_KIND_KUBECONFIG_PATH := $(patsubst $(HOME)/%,~/%,$(KIND_KUBECONFIG_PATH))
+DISPLAY_PLATFORM_PROFILE_DIR := $(patsubst $(HOME)/%,~/%,$(patsubst $(REPO_ROOT)/%,<repo>/%,$(PLATFORM_PROFILE_DIR)))
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
@@ -206,7 +209,7 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"
-	@echo "  kind -> $(KIND_KUBECONFIG_PATH) (split by default; merge explicitly into $(DEFAULT_KUBECONFIG_PATH) if needed)"
+	@echo "  kind -> $(DISPLAY_KIND_KUBECONFIG_PATH) (split by default; merge explicitly into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) if needed)"
 	@echo ""
 	@echo "Host runtime:"
 	@echo "  macOS -> Docker Desktop"
@@ -214,11 +217,11 @@ help:
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
-	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(KIND_KUBECONFIG_PATH) into $(DEFAULT_KUBECONFIG_PATH) (default: 0)"
+	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KIND_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
-	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(REPO_ROOT)/.run/profiles"
+	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(DISPLAY_PLATFORM_PROFILE_DIR)"
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:

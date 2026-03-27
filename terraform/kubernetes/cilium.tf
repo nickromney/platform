@@ -6,7 +6,7 @@ resource "null_resource" "hubble_ui_service_legacy_cleanup" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
+    command     = <<-EOT
       set -euo pipefail
       if ! kubectl get service hubble-ui -n kube-system >/dev/null 2>&1; then
         exit 0
@@ -48,6 +48,38 @@ resource "helm_release" "cilium" {
   ]
 }
 
+resource "null_resource" "hubble_ui_backend_relay_port_patch" {
+  count = local.enable_cilium_effective && var.enable_hubble ? 1 : 0
+
+  triggers = {
+    chart_version      = var.cilium_version
+    relay_service_port = tostring(try(local.cilium_values.hubble.relay.servicePort, 4245))
+  }
+
+  provisioner "local-exec" {
+    command     = <<-EOT
+      set -euo pipefail
+      if ! kubectl get deployment hubble-ui -n kube-system >/dev/null 2>&1; then
+        exit 0
+      fi
+      # The Cilium chart exposes the relay Service port, but it hardcodes the
+      # UI backend's FLOWS_API_ADDR to hubble-relay:80. Patch the deployment so
+      # the shipped UI follows the relay Service we expose locally.
+      kubectl patch deployment hubble-ui -n kube-system --type=strategic \
+        -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","env":[{"name":"FLOWS_API_ADDR","value":"hubble-relay:${try(local.cilium_values.hubble.relay.servicePort, 4245)}"}]}]}}}}'
+      kubectl -n kube-system rollout status deployment/hubble-ui --timeout=300s
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = local.kubeconfig_path_expanded
+    }
+  }
+
+  depends_on = [
+    helm_release.cilium,
+  ]
+}
+
 resource "null_resource" "cilium_restart_on_config_change" {
   count = local.enable_cilium_effective ? 1 : 0
 
@@ -57,7 +89,7 @@ resource "null_resource" "cilium_restart_on_config_change" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
+    command     = <<-EOT
       set -euo pipefail
       # Several Cilium features, including WireGuard encryption, are sourced from
       # the rendered ConfigMap but do not take effect until the agent DaemonSet restarts.
@@ -73,5 +105,6 @@ resource "null_resource" "cilium_restart_on_config_change" {
 
   depends_on = [
     helm_release.cilium,
+    null_resource.hubble_ui_backend_relay_port_patch,
   ]
 }
