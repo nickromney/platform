@@ -1,0 +1,13 @@
+metadata:
+  name: ccnp-sandbox-allow-kube-apiserver-entity
+  annotations:
+    policies.cilium.io/title: Sandbox allow kube-apiserver entity
+    platform.publiccloudexperiments.net/source-kind: CiliumClusterwideNetworkPolicy
+specs:
+  - description: Baseline Kubernetes API allowance for sandbox. Lets sandbox workloads reach the Kubernetes API through Cilium's kube-apiserver entity.
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sandbox
+    egress:
+      - toEntities:
+          - kube-apiserver

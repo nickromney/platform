@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../../../.." && pwd)"
 RENDER_SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/render-cilium-policy-values.sh"
-OUTPUT_DIR="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module/categories/aks-sensible"
+OUTPUT_DIR="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module/categories/sandbox"
 
 mkdir -p "${OUTPUT_DIR}"
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.yaml' -delete

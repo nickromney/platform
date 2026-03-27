@@ -1,0 +1,20 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: ccnp-sandbox-default-deny
+  annotations:
+    "policies.cilium.io/title": "Sandbox default deny"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumClusterwideNetworkPolicy"
+spec:
+  description: >-
+    Starter-pack default-deny policy for the sandbox namespace. Selects every
+    Cilium-managed endpoint in sandbox and enables both ingress and egress
+    enforcement with no allow rules, so later allow policies can be layered on
+    top from a known baseline.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": sandbox
+  ingress:
+    - {}
+  egress:
+    - {}
