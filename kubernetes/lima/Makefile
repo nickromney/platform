@@ -514,8 +514,16 @@ proxy-status:
 
 .PHONY: configure-k3s-apiserver-oidc
 configure-k3s-apiserver-oidc:
-	@KUBECONFIG="$(KUBECONFIG_PATH)" \
+	@set -euo pipefail; \
+	tfvar_files=(); \
+	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
+	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
+	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
+	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	LIMA_NODE_NAME="$(LIMA_INSTANCE_PREFIX)-1" \
+	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
+	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
 	"$(CONFIGURE_K3S_APISERVER_OIDC)"
 
 .PHONY: init

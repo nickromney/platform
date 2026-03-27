@@ -75,7 +75,7 @@ app.MapGet("/test", async (HttpClient httpClient, ILogger<Program> logger) =>
     try
     {
         var functionUrl = $"{functionAppUrl}/api/test";
-        var request = new HttpRequestMessage(HttpMethod.Get, functionUrl);
+        using var request = new HttpRequestMessage(HttpMethod.Get, functionUrl);
 
         // If Managed Identity is configured, get a token
         if (useManagedIdentity)
@@ -100,7 +100,7 @@ app.MapGet("/test", async (HttpClient httpClient, ILogger<Program> logger) =>
         }
 
         logger.LogInformation("Calling Function App at: {Url}", functionUrl);
-        var response = await httpClient.SendAsync(request);
+        using var response = await httpClient.SendAsync(request);
         var content = await response.Content.ReadAsStringAsync();
 
         logger.LogInformation("Response Status: {Status}", response.StatusCode);

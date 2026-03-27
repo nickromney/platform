@@ -70,6 +70,77 @@ tfvar_bool() {
   case "$v" in true|false) echo "$v" ;; *) echo "" ;; esac
 }
 
+admin_host() {
+  local app="$1"
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    printf '%s.%s\n' "${app}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
+  fi
+}
+
+KIND_GATEWAY_PROBE_PORT=""
+KIND_GATEWAY_PROBE_PID=""
+KIND_GATEWAY_PROBE_LOG=""
+KIND_GATEWAY_PROBE_WARNED=0
+
+cleanup_kind_gateway_probe() {
+  if [[ -n "${KIND_GATEWAY_PROBE_PID}" ]]; then
+    kill "${KIND_GATEWAY_PROBE_PID}" >/dev/null 2>&1 || true
+    wait "${KIND_GATEWAY_PROBE_PID}" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${KIND_GATEWAY_PROBE_LOG}" ]]; then
+    rm -f "${KIND_GATEWAY_PROBE_LOG}" >/dev/null 2>&1 || true
+  fi
+}
+
+ensure_kind_gateway_probe() {
+  local local_port
+  local -a port_candidates=(18443 19443 20443 21443)
+
+  [[ "${EXPECT_KIND_PROVISIONING}" == "true" ]] || return 1
+
+  if [[ -n "${KIND_GATEWAY_PROBE_PID}" ]] && kill -0 "${KIND_GATEWAY_PROBE_PID}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  cleanup_kind_gateway_probe
+
+  for local_port in "${port_candidates[@]}"; do
+    KIND_GATEWAY_PROBE_LOG="$(mktemp)"
+    kubectl -n platform-gateway port-forward svc/platform-gateway-nginx "${local_port}:443" >"${KIND_GATEWAY_PROBE_LOG}" 2>&1 &
+    KIND_GATEWAY_PROBE_PID=$!
+    KIND_GATEWAY_PROBE_PORT="${local_port}"
+
+    for _ in $(seq 1 25); do
+      if grep -q "Forwarding from" "${KIND_GATEWAY_PROBE_LOG}" 2>/dev/null; then
+        if [[ "${KIND_GATEWAY_PROBE_WARNED}" -eq 0 ]]; then
+          warn "Using kubectl port-forward fallback for kind gateway TLS checks"
+          KIND_GATEWAY_PROBE_WARNED=1
+        fi
+        return 0
+      fi
+      if ! kill -0 "${KIND_GATEWAY_PROBE_PID}" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.2
+    done
+
+    cleanup_kind_gateway_probe
+    KIND_GATEWAY_PROBE_PORT=""
+  done
+
+  return 1
+}
+
+gateway_https_probe_port() {
+  if ensure_kind_gateway_probe; then
+    printf '%s\n' "${KIND_GATEWAY_PROBE_PORT}"
+  else
+    printf '%s\n' "${GATEWAY_HTTPS_HOST_PORT}"
+  fi
+}
+
 cleanup_policy_probe() {
   kubectl -n "${POLICY_PROBE_NAMESPACE}" delete pod "${POLICY_PROBE_POD}" --ignore-not-found >/dev/null 2>&1 || true
 }
@@ -106,7 +177,7 @@ probe_must_block_url() {
   fi
 }
 
-trap cleanup_policy_probe EXIT
+trap 'cleanup_policy_probe; cleanup_kind_gateway_probe' EXIT
 
 approved_image_prefixes_from_policy() {
   awk '
@@ -155,9 +226,10 @@ live_platform_gateway_nginx_conf() {
 }
 
 platform_gateway_headers() {
-  local port_suffix=""
-  [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]] && port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
-  curl -skI "https://argocd.admin.127.0.0.1.sslip.io${port_suffix}/" 2>/dev/null || true
+  local probe_port port_suffix=""
+  probe_port="$(gateway_https_probe_port)"
+  [[ "${probe_port}" != "443" ]] && port_suffix=":${probe_port}"
+  curl -skI "https://$(admin_host argocd)${port_suffix}/" 2>/dev/null || true
 }
 
 platform_gateway_headers_ready() {
@@ -206,8 +278,19 @@ wait_for_platform_gateway_hardening() {
 EXPECT_WIREGUARD=$(tfvar_bool enable_cilium_wireguard)
 EXPECT_GATEWAY_TLS=$(tfvar_bool enable_gateway_tls)
 EXPECT_POLICIES=$(tfvar_bool enable_policies)
+EXPECT_KIND_PROVISIONING=$(tfvar_bool provision_kind_cluster)
 GATEWAY_HTTPS_HOST_PORT=$(tfvar_get gateway_https_host_port)
+PLATFORM_BASE_DOMAIN=$(tfvar_get platform_base_domain)
+PLATFORM_ADMIN_BASE_DOMAIN=$(tfvar_get platform_admin_base_domain)
 [[ -z "${GATEWAY_HTTPS_HOST_PORT}" ]] && GATEWAY_HTTPS_HOST_PORT=443
+[[ -z "${EXPECT_KIND_PROVISIONING}" ]] && EXPECT_KIND_PROVISIONING=false
+[[ -z "${PLATFORM_BASE_DOMAIN}" ]] && PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
+SEPARATE_ADMIN_DOMAIN=0
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+else
+  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+fi
 
 echo "=== Security checks ==="
 echo ""
@@ -244,13 +327,14 @@ echo ""
 # -------------------------------------------------------------------------
 echo "--- TLS 1.3 enforcement on platform gateway ---"
 if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+  probe_port="$(gateway_https_probe_port)"
   port_suffix=""
-  [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]] && port_suffix=":${GATEWAY_HTTPS_HOST_PORT}"
+  [[ "${probe_port}" != "443" ]] && port_suffix=":${probe_port}"
 
   if have_cmd openssl; then
     tls_info=$(echo | openssl s_client \
-      -connect "127.0.0.1:${GATEWAY_HTTPS_HOST_PORT}" \
-      -servername "argocd.admin.127.0.0.1.sslip.io" \
+      -connect "127.0.0.1:${probe_port}" \
+      -servername "$(admin_host argocd)" \
       -tls1_3 2>&1 || true)
 
     if echo "${tls_info}" | grep -q "TLSv1.3"; then
@@ -261,8 +345,8 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
 
     # Prove the negative: TLS 1.2 should be rejected
     tls12_info=$(echo | openssl s_client \
-      -connect "127.0.0.1:${GATEWAY_HTTPS_HOST_PORT}" \
-      -servername "argocd.admin.127.0.0.1.sslip.io" \
+      -connect "127.0.0.1:${probe_port}" \
+      -servername "$(admin_host argocd)" \
       -tls1_2 2>&1 || true)
 
     if echo "${tls12_info}" | grep -qE "alert protocol version|no protocols available|handshake failure|wrong version"; then
@@ -281,7 +365,7 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
   # Check HTTP/2 ALPN
   if have_cmd curl; then
     h2_check=$(curl -sk --http2 -o /dev/null -w '%{http_version}' \
-      "https://argocd.admin.127.0.0.1.sslip.io${port_suffix}/" 2>/dev/null || true)
+      "https://$(admin_host argocd)${port_suffix}/" 2>/dev/null || true)
     if [[ "${h2_check}" == "2" ]]; then
       ok "HTTP/2 negotiated via ALPN"
     else

@@ -12,7 +12,7 @@ usage() {
   cat <<'EOF'
 Usage: check-gateway-urls.sh [--var-file PATH] [--host-port PORT] [--extended]
 
-Checks the NGINX Gateway Fabric + TLS path for sslip.io URLs.
+Checks the NGINX Gateway Fabric + TLS path for public and admin gateway URLs.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.
 EOF
 }
@@ -71,6 +71,40 @@ tfvar_get() {
     [[ -n "${value}" ]] || continue
   done
   echo "${value}"
+}
+
+tfvar_list_entries() {
+  local key="$2"
+  local file raw=""
+  local -a values=()
+
+  for file in "${TFVARS_FILES[@]}"; do
+    [[ -n "${file}" && -f "${file}" ]] || continue
+    raw="$(
+      awk -v key="${key}" '
+        !capture && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { capture=1 }
+        capture { print }
+        capture && /\]/ { exit }
+      ' "${file}" 2>/dev/null || true
+    )"
+    [[ -n "${raw}" ]] || continue
+    mapfile -t values < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
+  done
+
+  printf '%s\n' "${values[@]}"
+}
+
+admin_host() {
+  local app="$1"
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    printf '%s.%s\n' "${app}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
+  fi
+}
+
+dex_host() {
+  printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
 }
 
 debug_gateway_pods() {
@@ -144,6 +178,22 @@ if [[ -z "${HOST_PORT}" ]]; then
 fi
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT="443"
+fi
+
+PLATFORM_BASE_DOMAIN="$(tfvar_get "" platform_base_domain)"
+if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
+  PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
+fi
+PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get "" platform_admin_base_domain)"
+SEPARATE_ADMIN_DOMAIN=0
+if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+else
+  PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
+fi
+ADMIN_ROUTE_ALLOWLIST_ENABLED=0
+if [[ -n "$(tfvar_list_entries "" admin_route_allowlist_cidrs)" ]]; then
+  ADMIN_ROUTE_ALLOWLIST_ENABLED=1
 fi
 
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
@@ -293,13 +343,13 @@ fi
 
 if have_cmd curl; then
   declare -a hosts=(
-    "argocd.admin.127.0.0.1.sslip.io:/"
-    "gitea.admin.127.0.0.1.sslip.io:/"
-    "hubble.admin.127.0.0.1.sslip.io:/"
-    "headlamp.admin.127.0.0.1.sslip.io:/"
-    "signoz.admin.127.0.0.1.sslip.io:/"
-    "kyverno.admin.127.0.0.1.sslip.io:/"
-    "dex.127.0.0.1.sslip.io:/dex"
+    "$(admin_host argocd):/"
+    "$(admin_host gitea):/"
+    "$(admin_host hubble):/"
+    "$(admin_host headlamp):/"
+    "$(admin_host signoz):/"
+    "$(admin_host kyverno):/"
+    "$(dex_host):/dex"
   )
   for entry in "${hosts[@]}"; do
     host="${entry%%:*}"
@@ -308,6 +358,8 @@ if have_cmd curl; then
     code=$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 3 "${url}" 2>/dev/null || true)
     if [[ "${code}" =~ ^[23] ]]; then
       ok "HTTPS ${url} -> ${code}"
+    elif [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" && "${code}" == "403" ]]; then
+      ok "HTTPS ${url} -> ${code} (blocked by admin allowlist from this source)"
     else
       warn "HTTPS ${url} -> ${code:-error}"
     fi

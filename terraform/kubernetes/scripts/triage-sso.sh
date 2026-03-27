@@ -17,6 +17,22 @@ require() {
 
 require kubectl
 
+PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
+PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
+SEPARATE_ADMIN_DOMAIN=0
+if [[ "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]; then
+  SEPARATE_ADMIN_DOMAIN=1
+fi
+
+admin_host() {
+  local app="$1"
+  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
+    printf '%s.%s\n' "${app}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
+  fi
+}
+
 oauth2_proxy_arg_of_interest() {
   case "$1" in
     --cookie-name*|--cookie-domain*|--email-domain*|--redirect-url*|--upstream*|--skip-auth-regex*|--set-authorization-header*|--pass-access-token*|--set-xauthrequest*|--pass-user-headers*|--login-url*|--oidc-issuer-url*)
@@ -116,11 +132,11 @@ done
 section "Local HTTPS smoke checks (optional; uses 127.0.0.1:443)"
 if have curl; then
   for host in \
-    gitea.admin.127.0.0.1.sslip.io \
-    argocd.admin.127.0.0.1.sslip.io \
-    signoz.admin.127.0.0.1.sslip.io \
-    kyverno.admin.127.0.0.1.sslip.io \
-    subnetcalc.uat.127.0.0.1.sslip.io \
+    "$(admin_host gitea)" \
+    "$(admin_host argocd)" \
+    "$(admin_host signoz)" \
+    "$(admin_host kyverno)" \
+    "subnetcalc.uat.${PLATFORM_BASE_DOMAIN}" \
   ; do
     echo "-- ${host} / (expect 302 to dex when unauthenticated)"
     curl -skI --max-time 5 --resolve "${host}:443:127.0.0.1" "https://${host}/" | sed -n '1,12p' || true

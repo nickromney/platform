@@ -26,6 +26,22 @@ ENABLE_HUBBLE="${ENABLE_HUBBLE:-true}"
 ENABLE_POLICIES="${ENABLE_POLICIES:-true}"
 ENABLE_GATEWAY_TLS="${ENABLE_GATEWAY_TLS:-true}"
 GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
+PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
+PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
+ARGOCD_PUBLIC_HOST="${ARGOCD_PUBLIC_HOST:-argocd.admin.${PLATFORM_BASE_DOMAIN}}"
+DEX_PUBLIC_HOST="${DEX_PUBLIC_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+GITEA_PUBLIC_HOST="${GITEA_PUBLIC_HOST:-gitea.admin.${PLATFORM_BASE_DOMAIN}}"
+GRAFANA_PUBLIC_HOST="${GRAFANA_PUBLIC_HOST:-grafana.admin.${PLATFORM_BASE_DOMAIN}}"
+HEADLAMP_PUBLIC_HOST="${HEADLAMP_PUBLIC_HOST:-headlamp.admin.${PLATFORM_BASE_DOMAIN}}"
+HUBBLE_PUBLIC_HOST="${HUBBLE_PUBLIC_HOST:-hubble.admin.${PLATFORM_BASE_DOMAIN}}"
+KYVERNO_PUBLIC_HOST="${KYVERNO_PUBLIC_HOST:-kyverno.admin.${PLATFORM_BASE_DOMAIN}}"
+SIGNOZ_PUBLIC_HOST="${SIGNOZ_PUBLIC_HOST:-signoz.admin.${PLATFORM_BASE_DOMAIN}}"
+SENTIMENT_DEV_PUBLIC_HOST="${SENTIMENT_DEV_PUBLIC_HOST:-sentiment.dev.${PLATFORM_BASE_DOMAIN}}"
+SENTIMENT_UAT_PUBLIC_HOST="${SENTIMENT_UAT_PUBLIC_HOST:-sentiment.uat.${PLATFORM_BASE_DOMAIN}}"
+SUBNETCALC_DEV_PUBLIC_HOST="${SUBNETCALC_DEV_PUBLIC_HOST:-subnetcalc.dev.${PLATFORM_BASE_DOMAIN}}"
+SUBNETCALC_UAT_PUBLIC_HOST="${SUBNETCALC_UAT_PUBLIC_HOST:-subnetcalc.uat.${PLATFORM_BASE_DOMAIN}}"
+ADMIN_ROUTE_ALLOWLIST_CIDRS="${ADMIN_ROUTE_ALLOWLIST_CIDRS:-}"
+GATEWAY_TRUSTED_PROXY_CIDRS="${GATEWAY_TRUSTED_PROXY_CIDRS:-}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
@@ -197,6 +213,82 @@ rewrite_hardened_registry() {
     sed "s|dhi\\.io/|${HARDENED_IMAGE_REGISTRY}/|g" "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
   done < <(find "${root_dir}" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
+}
+
+rewrite_public_hostnames() {
+  local root_dir="$1"
+  local file tmp_file
+
+  if [[ ! -d "${root_dir}" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r -d '' file; do
+    tmp_file="$(mktemp)"
+    sed \
+      -e "s|argocd\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${ARGOCD_PUBLIC_HOST}|g" \
+      -e "s|dex\\.127\\.0\\.0\\.1\\.sslip\\.io|${DEX_PUBLIC_HOST}|g" \
+      -e "s|gitea\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${GITEA_PUBLIC_HOST}|g" \
+      -e "s|grafana\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${GRAFANA_PUBLIC_HOST}|g" \
+      -e "s|headlamp\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${HEADLAMP_PUBLIC_HOST}|g" \
+      -e "s|hubble\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${HUBBLE_PUBLIC_HOST}|g" \
+      -e "s|kyverno\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${KYVERNO_PUBLIC_HOST}|g" \
+      -e "s|signoz\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${SIGNOZ_PUBLIC_HOST}|g" \
+      -e "s|sentiment\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SENTIMENT_DEV_PUBLIC_HOST}|g" \
+      -e "s|sentiment\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SENTIMENT_UAT_PUBLIC_HOST}|g" \
+      -e "s|subnetcalc\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_DEV_PUBLIC_HOST}|g" \
+      -e "s|subnetcalc\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_UAT_PUBLIC_HOST}|g" \
+      -e "s|127\\.0\\.0\\.1\\.sslip\\.io|${PLATFORM_BASE_DOMAIN}|g" \
+      "${file}" > "${tmp_file}"
+    mv "${tmp_file}" "${file}"
+  done < <(find "${root_dir}" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) -print0)
+}
+
+render_platform_gateway_proxy_config() {
+  local root_dir="$1"
+  local nginxproxy_file="${root_dir}/apps/platform-gateway/nginxproxy.yaml"
+  local trusted_proxy_block=""
+  local cidr
+
+  [[ -d "${root_dir}/apps/platform-gateway" ]] || return 0
+
+  if [[ -n "${GATEWAY_TRUSTED_PROXY_CIDRS}" ]]; then
+    trusted_proxy_block="  rewriteClientIP:"$'\n'
+    trusted_proxy_block="${trusted_proxy_block}    mode: XForwardedFor"$'\n'
+    trusted_proxy_block="${trusted_proxy_block}    setIPRecursively: true"$'\n'
+    trusted_proxy_block="${trusted_proxy_block}    trustedAddresses:"$'\n'
+    IFS=',' read -r -a cidrs <<< "${GATEWAY_TRUSTED_PROXY_CIDRS}"
+    for cidr in "${cidrs[@]}"; do
+      cidr="$(printf '%s' "${cidr}" | xargs)"
+      [[ -n "${cidr}" ]] || continue
+      trusted_proxy_block="${trusted_proxy_block}      - type: CIDR"$'\n'
+      trusted_proxy_block="${trusted_proxy_block}        value: ${cidr}"$'\n'
+    done
+  fi
+
+  cat > "${nginxproxy_file}" <<EOF
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: platform-gateway-proxy-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: platform-gateway-proxy-config
+spec:
+  kubernetes:
+    service:
+      type: NodePort
+      # Map the Gateway listener port 443 to a fixed NodePort so Kind can expose it on a host port via extraPortMappings.
+      nodePorts:
+        - listenerPort: 443
+          port: 30070
+      # IMPORTANT for Kind: traffic enters on the control-plane node (extraPortMappings),
+      # but the gateway Pod may schedule onto a worker node.
+      # With externalTrafficPolicy=Local, the control-plane NodePort will blackhole connections.
+      externalTrafficPolicy: Cluster
+${trusted_proxy_block}
+EOF
 }
 
 replace_literal() {
@@ -1041,6 +1133,40 @@ route_primary_hostname() {
   ' "${route_file}"
 }
 
+render_gateway_route_admin_allowlist() {
+  local routes_dir="$1"
+  local filter_file="${routes_dir}/snippetsfilter-admin-allowlist.yaml"
+  local allowlist_snippet=""
+  local cidr
+
+  [[ -d "${routes_dir}" ]] || return 0
+
+  if [[ -n "${ADMIN_ROUTE_ALLOWLIST_CIDRS}" ]]; then
+    IFS=',' read -r -a cidrs <<< "${ADMIN_ROUTE_ALLOWLIST_CIDRS}"
+    for cidr in "${cidrs[@]}"; do
+      cidr="$(printf '%s' "${cidr}" | xargs)"
+      [[ -n "${cidr}" ]] || continue
+      allowlist_snippet="${allowlist_snippet}        allow ${cidr};"$'\n'
+    done
+    allowlist_snippet="${allowlist_snippet}        deny all;"
+  else
+    allowlist_snippet="        allow all;"
+  fi
+
+  cat > "${filter_file}" <<EOF
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: admin-allowlist
+  namespace: gateway-routes
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+${allowlist_snippet}
+EOF
+}
+
 render_gateway_route_forwarded_headers() {
   local routes_dir="$1"
   local route_file host tmp_file
@@ -1055,6 +1181,20 @@ render_gateway_route_forwarded_headers() {
 
     tmp_file="$(mktemp)"
     awk -v host="${host}" -v port="${GATEWAY_HTTPS_HOST_PORT}" '
+      /^[[:space:]]*filters:[[:space:]]*$/ && !injected {
+        print
+        print "        - type: RequestHeaderModifier"
+        print "          requestHeaderModifier:"
+        print "            set:"
+        print "              - name: X-Forwarded-Host"
+        print "                value: " host ":" port
+        print "              - name: X-Forwarded-Port"
+        print "                value: \"" port "\""
+        print "              - name: X-Forwarded-Proto"
+        print "                value: https"
+        injected=1
+        next
+      }
       /^[[:space:]]*backendRefs:[[:space:]]*$/ && !injected {
         print "      filters:"
         print "        - type: RequestHeaderModifier"
@@ -1216,6 +1356,8 @@ render_repo() {
   mkdir -p "${repo_dir}"
   cp -R "${STACK_DIR}/apps" "${repo_dir}/apps"
   cp -R "${STACK_DIR}/cluster-policies" "${repo_dir}/cluster-policies"
+  rewrite_public_hostnames "${repo_dir}"
+  render_platform_gateway_proxy_config "${repo_dir}"
   apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/workloads/base/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
@@ -1232,10 +1374,12 @@ render_repo() {
   vendor_direct_tf_only_charts "${vendor_root}"
   if [[ -d "${repo_dir}/apps/platform-gateway-routes" ]]; then
     prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes"
+    render_gateway_route_admin_allowlist "${repo_dir}/apps/platform-gateway-routes"
     render_gateway_route_forwarded_headers "${repo_dir}/apps/platform-gateway-routes"
   fi
   if [[ -d "${repo_dir}/apps/platform-gateway-routes-sso" ]]; then
     prune_gateway_routes_manifests "${repo_dir}/apps/platform-gateway-routes-sso"
+    render_gateway_route_admin_allowlist "${repo_dir}/apps/platform-gateway-routes-sso"
     render_gateway_route_forwarded_headers "${repo_dir}/apps/platform-gateway-routes-sso"
   fi
   rewrite_hardened_registry "${repo_dir}"

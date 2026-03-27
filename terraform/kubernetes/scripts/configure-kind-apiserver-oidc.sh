@@ -26,9 +26,11 @@ require_cmd() {
 }
 
 CLUSTER_NAME="${CLUSTER_NAME:-kind-local}"
-DEX_HOST="${DEX_HOST:-dex.127.0.0.1.sslip.io}"
+PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
+PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
+DEX_HOST="${DEX_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
 DEX_NAMESPACE="${DEX_NAMESPACE:-sso}"
-OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://dex.127.0.0.1.sslip.io/dex}"
+OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${DEX_HOST}/dex}"
 OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-headlamp}"
 MKCERT_CA_DEST="${MKCERT_CA_DEST:-/etc/kubernetes/pki/mkcert-rootCA.pem}"
 PLATFORM_GATEWAY_NAMESPACE="${PLATFORM_GATEWAY_NAMESPACE:-platform-gateway}"
@@ -137,6 +139,13 @@ wait_for_kube_apiserver_ready() {
   return 1
 }
 
+is_transient_kubectl_api_error() {
+  local output="${1:-}"
+
+  printf '%s' "${output}" | grep -qiE \
+    'connection refused|context deadline exceeded|i/o timeout|timed out|tls handshake timeout|EOF|connection reset by peer|transport is closing|service unavailable|server is currently unable to handle the request|dial tcp|no route to host|client rate limiter Wait returned an error'
+}
+
 retry_webhook_fail() {
   local max_attempts="${1}"
   shift
@@ -179,15 +188,70 @@ retry_webhook_fail() {
   done
 }
 
+lookup_deployment_state() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local timeout_seconds="${3:-60}"
+  local description="${4:-deployment ${namespace}/${deploy_name}}"
+  local end=$((SECONDS + timeout_seconds))
+  local output=""
+  local status=0
+  local last_error=""
+
+  while (( SECONDS < end )); do
+    set +e
+    output="$(kubectl -n "${namespace}" get deploy "${deploy_name}" -o name 2>&1)"
+    status=$?
+    set -e
+
+    if [[ "${status}" -eq 0 ]]; then
+      return 0
+    fi
+
+    if printf '%s' "${output}" | grep -qiE '(not found|NotFound)'; then
+      return 1
+    fi
+
+    if is_transient_kubectl_api_error "${output}"; then
+      last_error="${output}"
+      sleep 2
+      continue
+    fi
+
+    warn "unexpected kubectl error while checking ${description}: ${output}"
+    return 2
+  done
+
+  if [[ -n "${last_error}" ]]; then
+    warn "timed out waiting for kube-apiserver to answer deployment lookup for ${description}: ${last_error}"
+  else
+    warn "timed out waiting for kube-apiserver to answer deployment lookup for ${description}"
+  fi
+  return 2
+}
+
 restart_deployment() {
   local namespace="${1}"
   local deploy_name="${2}"
   local description="${3:-deployment ${namespace}/${deploy_name}}"
+  local lookup_status=0
 
-  if ! kubectl -n "${namespace}" get deploy "${deploy_name}" >/dev/null 2>&1; then
-    warn "${description} not found; skipping controlled restart"
-    return 0
-  fi
+  set +e
+  lookup_deployment_state "${namespace}" "${deploy_name}" 60 "${description}"
+  lookup_status=$?
+  set -e
+
+  case "${lookup_status}" in
+    0)
+      ;;
+    1)
+      warn "${description} not found; skipping controlled restart"
+      return 0
+      ;;
+    *)
+      fail "could not verify ${description} after kube-apiserver restart"
+      ;;
+  esac
 
   ok "restarting ${description}"
   retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}" >/dev/null

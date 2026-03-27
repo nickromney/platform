@@ -711,6 +711,8 @@ configure-k3s-apiserver-oidc:
 	SLICER_URL="$$socket" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
 	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )" \
+	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
+	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	"$(CONFIGURE_K3S_APISERVER_OIDC)"
 

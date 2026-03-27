@@ -12,6 +12,10 @@ This path is intentionally separate from the SD-WAN lab in
 The current Kind stage ladder and `terraform/kubernetes` inputs are the
 canonical shape; the earlier Lima path was used only as bootstrap reference.
 
+If you intend to expose any Kubernetes target off-host, read the shared
+[OWASP analysis and public-demo checklist](../../docs/OWASP-analysis.md)
+before you apply a public-facing profile.
+
 ## Quick start
 
 From the project root:
