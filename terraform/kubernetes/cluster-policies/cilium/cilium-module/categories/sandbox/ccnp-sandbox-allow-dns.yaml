@@ -1,0 +1,27 @@
+metadata:
+  name: ccnp-sandbox-allow-dns
+  annotations:
+    policies.cilium.io/title: Sandbox allow DNS
+    platform.publiccloudexperiments.net/source-kind: CiliumClusterwideNetworkPolicy
+specs:
+  - description: Baseline DNS allowance for sandbox. Lets sandbox workloads resolve names through kube-dns or CoreDNS in kube-system and enables the DNS proxy path needed by later FQDN rules.
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sandbox
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:app.kubernetes.io/name: coredns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP
+              - port: "53"
+                protocol: TCP
+            rules:
+              dns:
+                - matchPattern: '*'
