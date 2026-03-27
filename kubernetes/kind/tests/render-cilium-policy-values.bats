@@ -65,3 +65,22 @@ teardown() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *'--set-namespace cannot be used with CiliumClusterwideNetworkPolicy input'* ]]
 }
+
+@test "observability source manifest renders to the checked-in category output" {
+  local source_file
+  local rendered_file
+  local rendered_output
+
+  source_file="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module/sources/observability/cnp-observability-otel-collector-allow-otlp-from-app-workloads.yaml"
+  rendered_file="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module/categories/observability/cnp-observability-otel-collector-allow-otlp-from-app-workloads.yaml"
+  rendered_output="${TMPDIR_RENDER_CILIUM}/observability-rendered.yaml"
+
+  run "${SCRIPT}" "${source_file}"
+
+  [ "${status}" -eq 0 ]
+  printf '%s\n' "${output}" > "${rendered_output}"
+
+  run diff -u "${rendered_file}" "${rendered_output}"
+
+  [ "${status}" -eq 0 ]
+}

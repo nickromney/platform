@@ -15,6 +15,9 @@ setup() {
   [[ "${output}" == *"make start"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]
   [[ "${output}" == *"split by default"* ]]
+  [[ "${output}" == *"~/.kube/limavm-k3s.yaml"* ]]
+  [[ "${output}" == *"<repo>/.run/profiles"* ]]
+  [[ "${output}" != *"${HOME}"* ]]
 }
 
 @test "lima run_step helper preserves shell arguments instead of invoking macOS apply" {

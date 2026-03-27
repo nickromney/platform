@@ -22,6 +22,9 @@ setup() {
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
+  [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
+  [[ "${output}" == *"<repo>/.run/profiles"* ]]
+  [[ "${output}" != *"${HOME}"* ]]
 }
 
 @test "kind run_step helper preserves shell arguments instead of invoking macOS apply" {

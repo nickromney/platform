@@ -440,7 +440,8 @@ locals {
           }
         }
         relay = {
-          enabled = true
+          enabled     = true
+          servicePort = 4245
           resources = {
             limits   = { cpu = "100m", memory = "128Mi" }
             requests = { cpu = "50m", memory = "64Mi" }

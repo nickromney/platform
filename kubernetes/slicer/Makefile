@@ -99,6 +99,10 @@ PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
 PLATFORM_ADMIN_PASSWORD ?=
 PLATFORM_DEMO_PASSWORD ?=
 PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
+DISPLAY_DEFAULT_KUBECONFIG_PATH := $(patsubst $(HOME)/%,~/%,$(DEFAULT_KUBECONFIG_PATH))
+DISPLAY_KUBECONFIG_PATH := $(patsubst $(HOME)/%,~/%,$(KUBECONFIG_PATH))
+DISPLAY_SLICER_SYSTEM_SOCKET := $(patsubst $(HOME)/%,~/%,$(SLICER_SYSTEM_SOCKET))
+DISPLAY_PLATFORM_PROFILE_DIR := $(patsubst $(HOME)/%,~/%,$(patsubst $(REPO_ROOT)/%,<repo>/%,$(PLATFORM_PROFILE_DIR)))
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
@@ -244,7 +248,7 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"
-	@echo "  slicer -> $(KUBECONFIG_PATH) (split by default; merge explicitly into $(DEFAULT_KUBECONFIG_PATH) if needed)"
+	@echo "  slicer -> $(DISPLAY_KUBECONFIG_PATH) (split by default; merge explicitly into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) if needed)"
 	@echo ""
 	@echo "Networking profiles:"
 	@echo "  SLICER_NETWORK_PROFILE=cilium  -> k3s with flannel disabled, then stages 200/300 add Cilium/Hubble"
@@ -252,18 +256,18 @@ help:
 	@echo "  Switching profiles requires a fresh VM reset; bootstrap refuses in-place flannel/Cilium flips."
 	@echo ""
 	@echo "Slicer endpoint:"
-	@echo "  default (macOS)         -> $(SLICER_SYSTEM_SOCKET)"
+	@echo "  default (macOS)         -> $(DISPLAY_SLICER_SYSTEM_SOCKET)"
 	@echo "  override                -> SLICER_URL=<socket|http://...> or SLICER_SOCKET=/path/to.sock"
 	@echo "  Docker-only hosts       -> use ../kind (Slicer is optional, not the teaching path)"
 	@echo ""
 	@echo "Local helper modes:"
-	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(KUBECONFIG_PATH) into $(DEFAULT_KUBECONFIG_PATH) (default: 0)"
+	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
 	@echo "  SLICER_ALLOW_EXISTING_K3S=1                          -> let stage 100 reuse an existing k3s install and only refresh kubeconfig"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
-	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(REPO_ROOT)/.run/profiles"
+	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(DISPLAY_PLATFORM_PROFILE_DIR)"
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:

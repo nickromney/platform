@@ -1,0 +1,30 @@
+metadata:
+  name: cnp-observability-otel-collector-allow-otlp-from-app-workloads
+  namespace: observability
+  annotations:
+    policies.cilium.io/title: Observability allow OTLP from app workloads
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+specs:
+  - description: Observed via Hubble as OTLP/HTTP ingress into observability/otel-collector on 4318/TCP from sentiment-api and subnetcalc-api in dev and uat.
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: observability
+        k8s:app.kubernetes.io/name: otel-collector
+    ingress:
+      - fromEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: dev
+              k8s:app.kubernetes.io/name: sentiment-api
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: dev
+              k8s:app.kubernetes.io/name: subnetcalc-api
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: uat
+              k8s:app.kubernetes.io/name: sentiment-api
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: uat
+              k8s:app.kubernetes.io/name: subnetcalc-api
+        toPorts:
+          - ports:
+              - port: "4318"
+                protocol: TCP
