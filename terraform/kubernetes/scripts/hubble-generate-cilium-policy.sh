@@ -24,6 +24,10 @@ For local work in this repo, if `~/.kube/kind-kind-local.yaml` exists and
 label resolution so the generator follows the same local-cluster default as the
 other Hubble helpers.
 
+Kubernetes API access:
+  selector resolution needs `get` on deployments, daemonsets, and statefulsets
+  in every source and destination namespace referenced by the TSV input.
+
 Input:
   Read TSV from stdin by default, or use --input FILE.
 
@@ -95,6 +99,80 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
 }
 
+kubectl_can_i() {
+  local verb="$1"
+  local resource="$2"
+  local namespace="${3:-}"
+  local args=(auth can-i "${verb}" "${resource}")
+  local output=""
+
+  if [[ -n "${namespace}" ]]; then
+    args+=(-n "${namespace}")
+  fi
+
+  if ! output="$("${KUBECTL_BASE[@]}" "${args[@]}" 2>/dev/null)"; then
+    CAN_I_ERROR_MSG="failed to query Kubernetes access with: kubectl ${args[*]}"
+    return 2
+  fi
+
+  output="${output##*$'\n'}"
+  output="${output//[[:space:]]/}"
+
+  case "${output}" in
+    yes)
+      return 0
+      ;;
+    no)
+      return 1
+      ;;
+    *)
+      CAN_I_ERROR_MSG="unexpected output from kubectl ${args[*]}: ${output}"
+      return 2
+      ;;
+  esac
+}
+
+require_kubectl_permission() {
+  local verb="$1"
+  local resource="$2"
+  local namespace="$3"
+  local reason="$4"
+  local scope_msg=""
+  local scope_cmd=""
+  local status=0
+
+  if [[ -n "${namespace}" ]]; then
+    scope_msg=" in namespace ${namespace}"
+    scope_cmd=" -n ${namespace}"
+  fi
+
+  if kubectl_can_i "${verb}" "${resource}" "${namespace}"; then
+    return 0
+  fi
+  status=$?
+
+  if [[ "${status}" -eq 2 ]]; then
+    fail "${CAN_I_ERROR_MSG}"
+  fi
+
+  fail "missing required Kubernetes permission to ${reason}: cannot ${verb} ${resource}${scope_msg}. Check: kubectl auth can-i ${verb} ${resource}${scope_cmd}"
+}
+
+ensure_selector_resolution_access() {
+  local namespace="$1"
+  local resource=""
+
+  if [[ -n "${SELECTOR_ACCESS_CHECKED[${namespace}]+x}" ]]; then
+    return 0
+  fi
+
+  for resource in deployments daemonsets statefulsets; do
+    require_kubectl_permission "get" "${resource}" "${namespace}" "resolve stable workload selectors"
+  done
+
+  SELECTOR_ACCESS_CHECKED["${namespace}"]=1
+}
+
 explain_multiple_policy_groups() {
   local groups_file="$1"
   local group_count="$2"
@@ -163,6 +241,8 @@ resolve_selector() {
   local label_value=""
   local label_key=""
   local kind=""
+
+  ensure_selector_resolution_access "${namespace}"
 
   for kind in deployment daemonset statefulset; do
     if json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get "${kind}" "${workload}" -o json 2>/dev/null)"; then
@@ -252,6 +332,7 @@ force=0
 kubeconfig=""
 kube_context=""
 DEFAULT_KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
+declare -A SELECTOR_ACCESS_CHECKED=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -384,6 +465,8 @@ fi
 sort -u "${tmp_rows}" -o "${tmp_rows}"
 cut -f1-4 "${tmp_rows}" | sort -u > "${tmp_groups}"
 cut -f1 "${tmp_rows}" | sort -u > "${tmp_namespaces}"
+cut -f5 "${tmp_rows}" | sort -u >> "${tmp_namespaces}"
+sort -u "${tmp_namespaces}" -o "${tmp_namespaces}"
 
 if [[ -z "${category}" ]]; then
   if [[ "$(wc -l < "${tmp_namespaces}" | tr -d ' ')" != "1" ]]; then
@@ -391,6 +474,11 @@ if [[ -z "${category}" ]]; then
   fi
   category="$(head -n 1 "${tmp_namespaces}")"
 fi
+
+while IFS= read -r selector_namespace; do
+  [[ -n "${selector_namespace}" ]] || continue
+  ensure_selector_resolution_access "${selector_namespace}"
+done < "${tmp_namespaces}"
 
 group_count="$(wc -l < "${tmp_groups}" | tr -d ' ')"
 if [[ -n "${policy_name_override}" && "${group_count}" != "1" ]]; then

@@ -28,6 +28,15 @@ if [[ -n "${KUBECTL_LOG:-}" ]]; then
 fi
 
 case "$*" in
+  *"auth can-i get deployments -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get daemonsets -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get statefulsets -n "*)
+    printf '%s\n' "yes"
+    ;;
   *"-n observability get deployment otel-collector -o json"*)
     cat <<'JSON'
 {"metadata":{"labels":{"app.kubernetes.io/name":"otel-collector"}}}
@@ -255,4 +264,44 @@ EOF
   [ -f "${source_file}" ]
   [[ "${output}" != *"37306"* ]]
   [[ "${output}" != *"protocol: DNS"* ]]
+}
+
+@test "hubble-generate-cilium-policy fails early when selector-resolution RBAC is missing" {
+  local input_file
+
+  input_file="${BATS_TEST_TMPDIR}/edges.tsv"
+
+  cat > "${input_file}" <<'EOF'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+20	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
+EOF
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${KUBECTL_LOG:-}" ]]; then
+  printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+fi
+
+case "$*" in
+  *"auth can-i get deployments -n observability")
+    printf '%s\n' "no"
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run "${SCRIPT}" \
+    --input "${input_file}" \
+    --category observability \
+    --module-root "${MODULE_ROOT}"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required Kubernetes permission to resolve stable workload selectors"* ]]
+  [[ "${output}" == *"kubectl auth can-i get deployments -n "* ]]
 }
