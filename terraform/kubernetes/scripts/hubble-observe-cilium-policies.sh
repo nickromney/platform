@@ -34,14 +34,38 @@ Output:
   - a run-report.md summary
 
 Options:
+  --capture-strategy since|last|adaptive
+      Use time-window capture, bounded recent sampling, or recent-sample-first
+      observation with a fallback to the current since/iterations flow.
+      Default: adaptive
+
   --since DURATION
       Capture horizon for each iteration. Default: 5m
+      The default run asks Hubble for 3 separate 5m windows per namespace.
+
+  --sample-target N
+      Target recent-sample size used by `--capture-strategy last|adaptive`.
+      Default: 1000
+
+  --sample-min N
+      Minimum non-reply usable flow count required for adaptive sampling to
+      stop escalating before it falls back to `--since`.
+      Default: 200
 
   --iterations N
       Number of capture rounds per namespace. Default: 3
 
+  --namespace-workers N
+      Number of namespaces to capture/summarise in parallel.
+      Policy generation still runs serially for deterministic output.
+      Default: 1
+
   --sleep-between SECONDS
       Sleep this many seconds between iterations. Default: 0
+
+  --progress-every SECONDS
+      Emit a heartbeat while helper commands are still running.
+      Use 0 to disable. Default: 10
 
   --row-threshold N
       Workload-summary row threshold before falling back to namespace/entity
@@ -105,6 +129,22 @@ Notes:
   - selector resolution needs `get` on deployments, daemonsets, statefulsets,
     pods, and replicasets in any namespace whose workloads appear in the
     generated policy candidates
+
+Examples:
+  terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh \
+    --capture-strategy adaptive \
+    --sample-target 1000 \
+    --sample-min 200 \
+    --since 30s \
+    --iterations 1 \
+    --exclude-namespace argocd
+
+  terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh \
+    --namespace argocd \
+    --capture-strategy last \
+    --sample-target 1000 \
+    --since 30s \
+    --iterations 1
 EOF
 }
 
@@ -119,6 +159,54 @@ warn() {
 
 info() {
   echo "hubble-observe-cilium-policies.sh: $*" >&2
+}
+
+run_command_with_progress() {
+  local label="$1"
+  local stdout_file="$2"
+  local stderr_file="$3"
+  shift 3
+
+  local cmd_pid=""
+  local progress_pid=""
+  local status=0
+  local started_at=$SECONDS
+  local elapsed=0
+
+  if [[ "${progress_every}" -eq 0 ]]; then
+    if "$@" > "${stdout_file}" 2> "${stderr_file}"; then
+      return 0
+    fi
+    return $?
+  fi
+
+  "$@" > "${stdout_file}" 2> "${stderr_file}" &
+  cmd_pid=$!
+
+  (
+    while true; do
+      sleep "${progress_every}"
+      if ! kill -0 "${cmd_pid}" 2>/dev/null; then
+        exit 0
+      fi
+      elapsed=$((SECONDS - started_at))
+      info "${label}: still running after ${elapsed}s"
+    done
+  ) &
+  progress_pid=$!
+
+  if wait "${cmd_pid}"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  if [[ -n "${progress_pid}" ]]; then
+    kill "${progress_pid}" 2>/dev/null || true
+    wait "${progress_pid}" 2>/dev/null || true
+  fi
+
+  return "${status}"
 }
 
 require_cmd() {
@@ -308,6 +396,7 @@ is_host_peer_ip() {
 resolve_selector() {
   local namespace="$1"
   local workload="$2"
+  local cache_key="${namespace}/${workload}"
   local json=""
   local label_value=""
   local label_key=""
@@ -316,6 +405,17 @@ resolve_selector() {
   local owner_kind=""
   local owner_name=""
   local rs_json=""
+
+  if [[ -n "${SELECTOR_CACHE_STATUS[${cache_key}]+x}" ]]; then
+    if [[ "${SELECTOR_CACHE_STATUS[${cache_key}]}" == "ok" ]]; then
+      RESOLVED_SELECTOR_KEY="${SELECTOR_CACHE_KEY[${cache_key}]}"
+      RESOLVED_SELECTOR_VALUE="${SELECTOR_CACHE_VALUE[${cache_key}]}"
+      return 0
+    fi
+
+    RESOLVE_ERROR_MSG="${SELECTOR_CACHE_ERROR[${cache_key}]}"
+    return 1
+  fi
 
   ensure_selector_resolution_access "${namespace}"
 
@@ -347,6 +447,8 @@ resolve_selector() {
 
   if [[ -z "${json}" ]]; then
     RESOLVE_ERROR_MSG="could not resolve workload ${namespace}/${workload} via deployment, daemonset, statefulset, or pod owner"
+    SELECTOR_CACHE_STATUS["${cache_key}"]="error"
+    SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
     return 1
   fi
 
@@ -355,11 +457,16 @@ resolve_selector() {
     if [[ -n "${label_value}" ]]; then
       RESOLVED_SELECTOR_KEY="${label_key}"
       RESOLVED_SELECTOR_VALUE="${label_value}"
+      SELECTOR_CACHE_STATUS["${cache_key}"]="ok"
+      SELECTOR_CACHE_KEY["${cache_key}"]="${label_key}"
+      SELECTOR_CACHE_VALUE["${cache_key}"]="${label_value}"
       return 0
     fi
   done
 
   RESOLVE_ERROR_MSG="could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
+  SELECTOR_CACHE_STATUS["${cache_key}"]="error"
+  SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
   return 1
 }
 
@@ -383,15 +490,45 @@ append_report_row() {
   local mode="$5"
   local policy_file="$6"
   local aggregate_file="$7"
+  local capture_strategy_requested="$8"
+  local capture_strategy_used="$9"
+  local capture_sample_target="${10}"
+  local filtered_flow_count="${11}"
+  local capture_fallback_used="${12}"
+  local capture_seconds="${13}"
+  local summary_seconds="${14}"
+  local generation_seconds="${15}"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' \
     "${namespace}" \
+    "${REPORT_ROW_DELIM}" \
     "${direction}" \
+    "${REPORT_ROW_DELIM}" \
     "${raw_row_count}" \
+    "${REPORT_ROW_DELIM}" \
     "${usable_row_count}" \
+    "${REPORT_ROW_DELIM}" \
     "${mode}" \
+    "${REPORT_ROW_DELIM}" \
     "${policy_file}" \
-    "${aggregate_file}" >> "${REPORT_ROWS_FILE}"
+    "${REPORT_ROW_DELIM}" \
+    "${aggregate_file}" \
+    "${REPORT_ROW_DELIM}" \
+    "${capture_strategy_requested}" \
+    "${REPORT_ROW_DELIM}" \
+    "${capture_strategy_used}" \
+    "${REPORT_ROW_DELIM}" \
+    "${capture_sample_target}" \
+    "${REPORT_ROW_DELIM}" \
+    "${filtered_flow_count}" \
+    "${REPORT_ROW_DELIM}" \
+    "${capture_fallback_used}" \
+    "${REPORT_ROW_DELIM}" \
+    "${capture_seconds}" \
+    "${REPORT_ROW_DELIM}" \
+    "${summary_seconds}" \
+    "${REPORT_ROW_DELIM}" \
+    "${generation_seconds}" >> "${REPORT_ROWS_FILE}"
 }
 
 discover_namespaces() {
@@ -401,7 +538,6 @@ discover_namespaces() {
   local candidate_file
 
   candidate_file="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-namespaces.XXXXXX")"
-  trap 'rm -f "${candidate_file}"' RETURN
 
   if [[ "${#namespaces[@]}" -gt 0 ]]; then
     for namespace in "${namespaces[@]}"; do
@@ -421,8 +557,8 @@ discover_namespaces() {
       printf '%s\n' "${namespace}" >> "${candidate_file}"
     done
 
-    sort -u "${candidate_file}" -o "${candidate_file}"
-    cat "${candidate_file}" > "${discovered_file}"
+    awk '!seen[$0]++' "${candidate_file}" > "${discovered_file}"
+    rm -f "${candidate_file}"
     return 0
   fi
 
@@ -448,6 +584,8 @@ discover_namespaces() {
 
     printf '%s\n' "${namespace}" >> "${discovered_file}"
   done < "${candidate_file}"
+
+  rm -f "${candidate_file}"
 }
 
 filter_capture_non_reply() {
@@ -509,53 +647,234 @@ tsv_rows() {
   tr '\t' '\037' < "${input_file}"
 }
 
-capture_namespace_iteration() {
+adaptive_last_steps() {
+  local target="$1"
+
+  if [[ "${target}" -le 100 ]]; then
+    printf '%s\n' "${target}"
+  elif [[ "${target}" -le 300 ]]; then
+    printf '100\n%s\n' "${target}"
+  else
+    printf '100\n300\n%s\n' "${target}"
+  fi | awk '!seen[$0]++'
+}
+
+ensure_hubble_port_forward_access() {
+  require_kubectl_permission "get" "services" "kube-system" "look up the Hubble relay Service for a shared port-forward"
+  require_kubectl_permission "get" "pods" "kube-system" "locate the Hubble relay pod for a shared port-forward"
+  require_kubectl_permission "create" "pods/portforward" "kube-system" "open a shared Hubble relay port-forward"
+}
+
+stop_shared_hubble_relay() {
+  if [[ -n "${SHARED_HUBBLE_RELAY_PID:-}" ]]; then
+    kill "${SHARED_HUBBLE_RELAY_PID}" 2>/dev/null || true
+    wait "${SHARED_HUBBLE_RELAY_PID}" 2>/dev/null || true
+    SHARED_HUBBLE_RELAY_PID=""
+  fi
+}
+
+start_shared_hubble_relay() {
+  local port_spec=""
+  local local_port=""
+  local deadline=0
+
+  [[ "${dry_run}" -eq 0 ]] || return 0
+  [[ -z "${SHARED_HUBBLE_SERVER:-}" ]] || return 0
+
+  ensure_hubble_port_forward_access
+
+  SHARED_HUBBLE_RELAY_LOG="$(mktemp "${TMPDIR:-/tmp}/hubble-observe-port-forward.XXXXXX")"
+  if [[ "${port_forward_port}" == "0" ]]; then
+    port_spec=":4245"
+  else
+    port_spec="${port_forward_port}:4245"
+  fi
+
+  (
+    "${KUBECTL_BASE[@]}" -n kube-system port-forward --address 127.0.0.1 service/hubble-relay "${port_spec}"
+  ) > "${SHARED_HUBBLE_RELAY_LOG}" 2>&1 &
+  SHARED_HUBBLE_RELAY_PID=$!
+
+  deadline=$((SECONDS + 15))
+  while [[ "${SECONDS}" -lt "${deadline}" ]]; do
+    if [[ -s "${SHARED_HUBBLE_RELAY_LOG}" ]]; then
+      local_port="$(sed -nE 's/.*127\.0\.0\.1:([0-9]+).*/\1/p' "${SHARED_HUBBLE_RELAY_LOG}" | tail -n 1)"
+      if [[ -z "${local_port}" ]]; then
+        local_port="$(sed -nE 's/.*\[::1\]:([0-9]+).*/\1/p' "${SHARED_HUBBLE_RELAY_LOG}" | tail -n 1)"
+      fi
+      if [[ -n "${local_port}" ]]; then
+        SHARED_HUBBLE_SERVER="127.0.0.1:${local_port}"
+        info "shared Hubble relay ready on ${SHARED_HUBBLE_SERVER}"
+        return 0
+      fi
+    fi
+
+    if ! kill -0 "${SHARED_HUBBLE_RELAY_PID}" 2>/dev/null; then
+      [[ -s "${SHARED_HUBBLE_RELAY_LOG}" ]] && cat "${SHARED_HUBBLE_RELAY_LOG}" >&2
+      fail "shared Hubble relay port-forward exited before becoming ready"
+    fi
+
+    sleep 1
+  done
+
+  [[ -s "${SHARED_HUBBLE_RELAY_LOG}" ]] && cat "${SHARED_HUBBLE_RELAY_LOG}" >&2
+  fail "timed out waiting for shared Hubble relay port-forward to become ready"
+}
+
+build_capture_command() {
   local namespace="$1"
-  local iteration="$2"
-  local output_file="$3"
-  local capture_cmd=("${CAPTURE_SCRIPT}")
+  local mode="$2"
+  local since_override="$3"
+  local sample_target_override="$4"
+
+  CAPTURE_CMD=("${CAPTURE_SCRIPT}")
+  CAPTURE_CMD+=(--namespace "${namespace}")
+  CAPTURE_CMD+=(--field-mask-profile policy-observe)
+
+  case "${mode}" in
+    since)
+      CAPTURE_CMD+=(--capture-strategy since)
+      CAPTURE_CMD+=(--since "${since_override}")
+      ;;
+    last)
+      CAPTURE_CMD+=(--capture-strategy last)
+      CAPTURE_CMD+=(--sample-target "${sample_target_override}")
+      ;;
+    *)
+      fail "unsupported observe capture mode: ${mode}"
+      ;;
+  esac
+
+  if [[ "${capture_mode}" == "policy-verdict" ]]; then
+    CAPTURE_CMD+=(--type policy-verdict)
+  else
+    CAPTURE_CMD+=(--verdict FORWARDED)
+  fi
+
+  if [[ -n "${SHARED_HUBBLE_SERVER:-}" ]]; then
+    CAPTURE_CMD+=(--server "${SHARED_HUBBLE_SERVER}")
+  else
+    CAPTURE_CMD+=(--port-forward-port "${port_forward_port}")
+    if [[ -n "${kubeconfig}" ]]; then
+      CAPTURE_CMD+=(--kubeconfig "${kubeconfig}")
+    fi
+    if [[ -n "${kube_context}" ]]; then
+      CAPTURE_CMD+=(--kube-context "${kube_context}")
+    fi
+  fi
+
+  if [[ "${print_command}" -eq 1 ]]; then
+    CAPTURE_CMD+=(--print-command)
+  fi
+}
+
+run_capture_command() {
+  local label="$1"
+  local output_file="$2"
+  shift 2
   local capture_err=""
 
-  capture_cmd+=(--since "${since_value}")
-  capture_cmd+=(--namespace "${namespace}")
-  if [[ "${capture_mode}" == "policy-verdict" ]]; then
-    capture_cmd+=(--type policy-verdict)
-  fi
-  capture_cmd+=(--port-forward-port "${port_forward_port}")
-
-  if [[ -n "${kubeconfig}" ]]; then
-    capture_cmd+=(--kubeconfig "${kubeconfig}")
-  fi
-  if [[ -n "${kube_context}" ]]; then
-    capture_cmd+=(--kube-context "${kube_context}")
-  fi
-  if [[ "${print_command}" -eq 1 ]]; then
-    capture_cmd+=(--print-command)
-  fi
-
   if [[ "${dry_run}" -eq 1 ]]; then
-    printf '%s\n' "capture ${namespace} iteration ${iteration}: ${capture_cmd[*]}"
+    printf '%s\n' "${label}: $*"
     return 0
   fi
 
   capture_err="$(mktemp "${TMPDIR:-/tmp}/hubble-observe-capture.XXXXXX")"
-  trap 'rm -f "${capture_err}"' RETURN
 
-  if ! "${capture_cmd[@]}" > "${output_file}" 2> "${capture_err}"; then
+  if ! run_command_with_progress "${label}" "${output_file}" "${capture_err}" "$@"; then
     if [[ -s "${capture_err}" ]]; then
       cat "${capture_err}" >&2
     fi
+    rm -f "${capture_err}"
     return 1
   fi
 
   if [[ -s "${capture_err}" ]]; then
     emit_capture_stderr "${capture_err}"
   fi
+
+  rm -f "${capture_err}"
 }
 
-summarise_direction() {
-  local input_file="$1"
-  local direction="$2"
+capture_namespace_since_iterations() {
+  local namespace="$1"
+  local combined_raw="$2"
+  local iteration_index=1
+  local iteration_capture=""
+
+  if [[ "${dry_run}" -eq 0 ]]; then
+    : > "${combined_raw}"
+  fi
+  while [[ "${iteration_index}" -le "${iterations}" ]]; do
+    iteration_capture="${namespace_dir}/capture-${iteration_index}.jsonl"
+    build_capture_command "${namespace}" "since" "${since_value}" ""
+    info "${namespace}: capture iteration ${iteration_index}/${iterations} (since=${since_value}, mode=${capture_mode})"
+    run_capture_command \
+      "capture ${namespace} iteration ${iteration_index}/${iterations}" \
+      "${iteration_capture}" \
+      "${CAPTURE_CMD[@]}"
+
+    [[ "${dry_run}" -eq 1 ]] || cat "${iteration_capture}" >> "${combined_raw}"
+
+    if [[ "${sleep_between}" -gt 0 && "${iteration_index}" -lt "${iterations}" ]]; then
+      sleep "${sleep_between}"
+    fi
+    iteration_index=$((iteration_index + 1))
+  done
+}
+
+capture_namespace_last_sample() {
+  local namespace="$1"
+  local combined_raw="$2"
+  local sample_size="$3"
+  local sample_capture="${namespace_dir}/capture-last-${sample_size}.jsonl"
+
+  build_capture_command "${namespace}" "last" "" "${sample_size}"
+  info "${namespace}: capture recent sample (last=${sample_size}, mode=${capture_mode})"
+  run_capture_command "capture ${namespace} last ${sample_size}" "${sample_capture}" "${CAPTURE_CMD[@]}"
+  [[ "${dry_run}" -eq 1 ]] || cat "${sample_capture}" > "${combined_raw}"
+}
+
+capture_namespace_adaptive() {
+  local namespace="$1"
+  local combined_raw="$2"
+  local sample_size=""
+  local usable_file=""
+  local usable_count=0
+  local sample_capture=""
+
+  CAPTURE_STRATEGY_USED="last"
+  CAPTURE_FALLBACK_USED="0"
+
+  while IFS= read -r sample_size; do
+    [[ -n "${sample_size}" ]] || continue
+    sample_capture="${namespace_dir}/capture-last-${sample_size}.jsonl"
+    capture_namespace_last_sample "${namespace}" "${combined_raw}" "${sample_size}"
+
+    if [[ "${dry_run}" -eq 1 ]]; then
+      continue
+    fi
+
+    usable_file="$(mktemp "${TMPDIR:-/tmp}/hubble-observe-sample.XXXXXX")"
+    filter_capture_non_reply "${sample_capture}" "${usable_file}"
+    usable_count="$(count_lines "${usable_file}")"
+    rm -f "${usable_file}"
+
+    info "${namespace}: adaptive sample last=${sample_size} yielded ${usable_count} non-reply flows"
+    if [[ "${usable_count}" -ge "${sample_min}" ]]; then
+      return 0
+    fi
+  done < <(adaptive_last_steps "${sample_target}")
+
+  CAPTURE_STRATEGY_USED="since"
+  CAPTURE_FALLBACK_USED="1"
+  info "${namespace}: adaptive sampling was too sparse; falling back to since ${since_value} across ${iterations} iteration(s)"
+  capture_namespace_since_iterations "${namespace}" "${combined_raw}"
+}
+
+summarise_report() {
+  local namespace="$1"
+  local input_file="$2"
   local report="$3"
   local output_file="$4"
   local summary_cmd=("${SUMMARIZE_SCRIPT}")
@@ -564,24 +883,46 @@ summarise_direction() {
   summary_cmd+=(--input "${input_file}")
   summary_cmd+=(--report "${report}")
   summary_cmd+=(--aggregate-by workload)
-  summary_cmd+=(--direction "${direction}")
+  summary_cmd+=(--direction all)
   summary_cmd+=(--format tsv)
   summary_cmd+=(--top 0)
   summary_cmd+=(--verdict FORWARDED)
 
   summary_err="$(mktemp "${TMPDIR:-/tmp}/hubble-observe-summary.XXXXXX")"
-  trap 'rm -f "${summary_err}"' RETURN
 
-  if ! "${summary_cmd[@]}" > "${output_file}" 2> "${summary_err}"; then
+  if ! run_command_with_progress \
+    "summarise ${namespace} ${report}" \
+    "${output_file}" \
+    "${summary_err}" \
+    "${summary_cmd[@]}"; then
     if [[ -s "${summary_err}" ]]; then
       cat "${summary_err}" >&2
     fi
+    rm -f "${summary_err}"
     return 1
   fi
 
   if [[ -s "${summary_err}" ]]; then
     emit_summary_stderr "${summary_err}"
   fi
+
+  rm -f "${summary_err}"
+}
+
+split_summary_by_direction() {
+  local input_file="$1"
+  local ingress_output="$2"
+  local egress_output="$3"
+
+  awk -F'\t' -v ingress="${ingress_output}" -v egress="${egress_output}" '
+    NR == 1 {
+      print > ingress
+      print > egress
+      next
+    }
+    toupper($2) == "INGRESS" { print > ingress }
+    toupper($2) == "EGRESS" { print > egress }
+  ' "${input_file}"
 }
 
 emit_capture_stderr() {
@@ -610,6 +951,106 @@ emit_summary_stderr() {
   done < "${err_file}"
 }
 
+write_namespace_metadata() {
+  local meta_file="$1"
+  local capture_strategy_requested="$2"
+  local capture_strategy_used="$3"
+  local capture_sample_target="$4"
+  local filtered_flow_count="$5"
+  local capture_fallback_used="$6"
+  local capture_seconds="$7"
+  local summary_seconds="$8"
+
+  {
+    printf 'CAPTURE_STRATEGY_REQUESTED=%q\n' "${capture_strategy_requested}"
+    printf 'CAPTURE_STRATEGY_USED=%q\n' "${capture_strategy_used}"
+    printf 'CAPTURE_SAMPLE_TARGET=%q\n' "${capture_sample_target}"
+    printf 'FILTERED_FLOW_COUNT=%q\n' "${filtered_flow_count}"
+    printf 'CAPTURE_FALLBACK_USED=%q\n' "${capture_fallback_used}"
+    printf 'CAPTURE_SECONDS=%q\n' "${capture_seconds}"
+    printf 'SUMMARY_SECONDS=%q\n' "${summary_seconds}"
+  } > "${meta_file}"
+}
+
+collect_namespace_data() {
+  local namespace="$1"
+  local namespace_index="$2"
+  local namespace_dir="${output_dir}/namespaces/${namespace}"
+  local combined_raw="${namespace_dir}/combined.jsonl"
+  local filtered_raw="${namespace_dir}/combined.non-reply.jsonl"
+  local metadata_file="${namespace_dir}/observe-metadata.env"
+  local edges_all="${namespace_dir}/edges.all.tsv"
+  local world_all="${namespace_dir}/world.all.tsv"
+  local capture_started=0
+  local capture_seconds=0
+  local summary_started=0
+  local summary_seconds=0
+  local filtered_flow_count=0
+  local capture_sample_target="0"
+
+  NAMESPACE_DIR="${namespace_dir}"
+  info "observing namespace ${namespace} (${namespace_index}/${TOTAL_NAMESPACES})"
+
+  if [[ "${dry_run}" -eq 0 ]]; then
+    mkdir -p "${namespace_dir}"
+  fi
+
+  CAPTURE_STRATEGY_USED="${capture_strategy}"
+  CAPTURE_FALLBACK_USED="0"
+  if [[ "${capture_strategy}" == "last" || "${capture_strategy}" == "adaptive" ]]; then
+    capture_sample_target="${sample_target}"
+  fi
+
+  capture_started=$SECONDS
+  case "${capture_strategy}" in
+    since)
+      CAPTURE_STRATEGY_USED="since"
+      capture_namespace_since_iterations "${namespace}" "${combined_raw}"
+      ;;
+    last)
+      CAPTURE_STRATEGY_USED="last"
+      capture_namespace_last_sample "${namespace}" "${combined_raw}" "${sample_target}"
+      ;;
+    adaptive)
+      capture_namespace_adaptive "${namespace}" "${combined_raw}"
+      ;;
+  esac
+  capture_seconds=$((SECONDS - capture_started))
+
+  if [[ "${dry_run}" -eq 1 ]]; then
+    return 0
+  fi
+
+  info "${namespace}: filtering reply traffic and building summaries"
+  filter_capture_non_reply "${combined_raw}" "${filtered_raw}"
+  filtered_flow_count="$(count_lines "${filtered_raw}")"
+
+  summary_started=$SECONDS
+  summarise_report "${namespace}" "${filtered_raw}" "edges" "${edges_all}"
+  summarise_report "${namespace}" "${filtered_raw}" "world" "${world_all}"
+  split_summary_by_direction "${edges_all}" "${namespace_dir}/ingress.edges.workload.tsv" "${namespace_dir}/egress.edges.workload.tsv"
+  split_summary_by_direction "${world_all}" "${namespace_dir}/ingress.world.tsv" "${namespace_dir}/egress.world.tsv"
+  summary_seconds=$((SECONDS - summary_started))
+
+  write_namespace_metadata \
+    "${metadata_file}" \
+    "${capture_strategy}" \
+    "${CAPTURE_STRATEGY_USED}" \
+    "${capture_sample_target}" \
+    "${filtered_flow_count}" \
+    "${CAPTURE_FALLBACK_USED}" \
+    "${capture_seconds}" \
+    "${summary_seconds}"
+}
+
+wait_for_pid_batch() {
+  local pid=""
+
+  for pid in "$@"; do
+    wait "${pid}" || return 1
+  done
+}
+
 build_namespace_aggregate_report() {
   local namespace="$1"
   local direction="$2"
@@ -619,7 +1060,6 @@ build_namespace_aggregate_report() {
   local tmp_rows
 
   tmp_rows="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-aggregate.XXXXXX")"
-  trap 'rm -f "${tmp_rows}"' RETURN
 
   while IFS=$'\037' read -r count row_direction verdict protocol src_ns src dst_class dst_ns dst dst_port; do
     if [[ "${count}" == "count" && "${row_direction}" == "direction" ]]; then
@@ -684,6 +1124,8 @@ build_namespace_aggregate_report() {
       ' "${tmp_rows}" | LC_ALL=C sort -t $'\t' -k1,1nr -k2,2 -k3,3 -k4,4 -k5,5
     fi
   } > "${output_file}"
+
+  rm -f "${tmp_rows}"
 }
 
 emit_selector_block() {
@@ -868,7 +1310,6 @@ generate_ingress_policy() {
   tmp_rules="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-ingress-rules.XXXXXX")"
   tmp_group="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-ingress-group.XXXXXX")"
   tmp_used_entries="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-ingress-used.XXXXXX")"
-  trap 'rm -f "${tmp_entries}" "${tmp_rules}" "${tmp_group}" "${tmp_used_entries}"' RETURN
   LAST_POLICY_USABLE_ROWS=0
 
   if [[ "${mode}" == "workload" ]]; then
@@ -1048,10 +1489,12 @@ generate_ingress_policy() {
   if [[ "${spec_count}" -eq 0 ]]; then
     LAST_POLICY_USABLE_ROWS=0
     rm -f "${policy_file}"
+    rm -f "${tmp_entries}" "${tmp_rules}" "${tmp_group}" "${tmp_used_entries}"
     return 1
   fi
 
   LAST_POLICY_USABLE_ROWS="${usable_row_count}"
+  rm -f "${tmp_entries}" "${tmp_rules}" "${tmp_group}" "${tmp_used_entries}"
   return 0
 }
 
@@ -1082,7 +1525,6 @@ generate_egress_policy() {
   tmp_rules="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-egress-rules.XXXXXX")"
   tmp_group="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-egress-group.XXXXXX")"
   tmp_used_entries="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-egress-used.XXXXXX")"
-  trap 'rm -f "${tmp_entries}" "${tmp_rules}" "${tmp_group}" "${tmp_used_entries}"' RETURN
   LAST_POLICY_USABLE_ROWS=0
 
   if [[ "${mode}" == "workload" ]]; then
@@ -1261,10 +1703,12 @@ generate_egress_policy() {
   if [[ "${spec_count}" -eq 0 ]]; then
     LAST_POLICY_USABLE_ROWS=0
     rm -f "${policy_file}"
+    rm -f "${tmp_entries}" "${tmp_rules}" "${tmp_group}" "${tmp_used_entries}"
     return 1
   fi
 
   LAST_POLICY_USABLE_ROWS="${usable_row_count}"
+  rm -f "${tmp_entries}" "${tmp_rules}" "${tmp_group}" "${tmp_used_entries}"
   return 0
 }
 
@@ -1277,12 +1721,25 @@ write_report_markdown() {
   local mode=""
   local policy_file=""
   local aggregate_file=""
+  local capture_strategy_requested=""
+  local capture_strategy_used=""
+  local capture_sample_target=""
+  local filtered_flow_count=""
+  local capture_fallback_used=""
+  local capture_seconds=""
+  local summary_seconds=""
+  local generation_seconds=""
 
   {
     printf '# Hubble Policy Observation\n\n'
+    printf -- "- Capture strategy: \`%s\`\n" "${capture_strategy}"
     printf -- "- Since: \`%s\`\n" "${since_value}"
+    printf -- "- Sample target: \`%s\`\n" "${sample_target}"
+    printf -- "- Sample minimum: \`%s\`\n" "${sample_min}"
     printf -- "- Iterations: \`%s\`\n" "${iterations}"
+    printf -- "- Namespace workers: \`%s\`\n" "${namespace_workers}"
     printf -- "- Sleep between: \`%s\` seconds\n" "${sleep_between}"
+    printf -- "- Progress heartbeat: \`%s\` seconds\n" "${progress_every}"
     printf -- "- Row threshold: \`%s\`\n" "${row_threshold}"
     printf -- "- Capture mode: \`%s\`, reply traffic removed\n" "${capture_mode}"
     printf -- "- Output root: \`%s\`\n\n" "${output_dir}"
@@ -1290,12 +1747,20 @@ write_report_markdown() {
       printf -- "- Module promotion: enabled -> \`%s\`\n\n" "${module_root}"
     fi
 
-    while IFS=$'\t' read -r namespace direction raw_row_count usable_row_count mode policy_file aggregate_file; do
+    while IFS="${REPORT_ROW_DELIM}" read -r namespace direction raw_row_count usable_row_count mode policy_file aggregate_file capture_strategy_requested capture_strategy_used capture_sample_target filtered_flow_count capture_fallback_used capture_seconds summary_seconds generation_seconds; do
       [[ -n "${namespace}" ]] || continue
       printf '## %s %s\n\n' "${namespace}" "${direction}"
       printf -- "- Raw summary rows: \`%s\`\n" "${raw_row_count}"
       printf -- "- Policy-usable rows: \`%s\`\n" "${usable_row_count}"
       printf -- "- Generation mode: \`%s\`\n" "${mode}"
+      printf -- "- Requested capture strategy: \`%s\`\n" "${capture_strategy_requested}"
+      printf -- "- Effective capture strategy: \`%s\`\n" "${capture_strategy_used}"
+      printf -- "- Sample target: \`%s\`\n" "${capture_sample_target}"
+      printf -- "- Non-reply usable flows: \`%s\`\n" "${filtered_flow_count}"
+      printf -- "- Fell back to since: \`%s\`\n" "${capture_fallback_used}"
+      printf -- "- Capture elapsed: \`%ss\`\n" "${capture_seconds}"
+      printf -- "- Summary elapsed: \`%ss\`\n" "${summary_seconds}"
+      printf -- "- Generation elapsed: \`%ss\`\n" "${generation_seconds}"
       if [[ -n "${policy_file}" ]]; then
         printf -- "- Candidate policy: \`%s\`\n" "${policy_file}"
       else
@@ -1342,9 +1807,14 @@ promote_policy_to_module() {
   PROMOTED_CANDIDATE_POLICIES=$((PROMOTED_CANDIDATE_POLICIES + 1))
 }
 
+capture_strategy="adaptive"
 since_value="5m"
+sample_target="1000"
+sample_min="200"
 iterations="3"
+namespace_workers="1"
 sleep_between="0"
+progress_every="10"
 row_threshold="100"
 capture_mode="flows"
 output_dir=""
@@ -1367,23 +1837,53 @@ DEFAULT_MODULE_ROOT="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/c
 declare -a namespaces=()
 declare -a excluded_namespaces=()
 declare -A SELECTOR_ACCESS_CHECKED=()
+declare -A SELECTOR_CACHE_STATUS=()
+declare -A SELECTOR_CACHE_KEY=()
+declare -A SELECTOR_CACHE_VALUE=()
+declare -A SELECTOR_CACHE_ERROR=()
 LAST_POLICY_USABLE_ROWS=0
 NAMESPACES_SCANNED=0
 TOTAL_CANDIDATE_POLICIES=0
 PROMOTED_CANDIDATE_POLICIES=0
+TOTAL_NAMESPACES=0
+SHARED_HUBBLE_SERVER=""
+SHARED_HUBBLE_RELAY_PID=""
+SHARED_HUBBLE_RELAY_LOG=""
+CAPTURE_STRATEGY_USED=""
+CAPTURE_FALLBACK_USED="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --capture-strategy)
+      capture_strategy="${2:-}"
+      shift 2
+      ;;
     --since)
       since_value="${2:-}"
+      shift 2
+      ;;
+    --sample-target)
+      sample_target="${2:-}"
+      shift 2
+      ;;
+    --sample-min)
+      sample_min="${2:-}"
       shift 2
       ;;
     --iterations)
       iterations="${2:-}"
       shift 2
       ;;
+    --namespace-workers)
+      namespace_workers="${2:-}"
+      shift 2
+      ;;
     --sleep-between)
       sleep_between="${2:-}"
+      shift 2
+      ;;
+    --progress-every)
+      progress_every="${2:-}"
       shift 2
       ;;
     --row-threshold)
@@ -1448,9 +1948,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "${capture_strategy}" in
+  since|last|adaptive) ;;
+  *)
+    fail "--capture-strategy must be one of: since, last, adaptive"
+    ;;
+esac
+
+[[ "${sample_target}" =~ ^[0-9]+$ ]] || fail "--sample-target must be a non-negative integer"
+[[ "${sample_min}" =~ ^[0-9]+$ ]] || fail "--sample-min must be a non-negative integer"
 [[ "${iterations}" =~ ^[0-9]+$ ]] || fail "--iterations must be a non-negative integer"
+[[ "${namespace_workers}" =~ ^[0-9]+$ ]] || fail "--namespace-workers must be a non-negative integer"
 [[ "${sleep_between}" =~ ^[0-9]+$ ]] || fail "--sleep-between must be a non-negative integer"
+[[ "${progress_every}" =~ ^[0-9]+$ ]] || fail "--progress-every must be a non-negative integer"
 [[ "${row_threshold}" =~ ^[0-9]+$ ]] || fail "--row-threshold must be a non-negative integer"
+[[ "${sample_target}" -gt 0 ]] || fail "--sample-target must be greater than zero"
+[[ "${namespace_workers}" -gt 0 ]] || fail "--namespace-workers must be greater than zero"
 case "${capture_mode}" in
   flows|policy-verdict) ;;
   *)
@@ -1502,7 +2015,8 @@ fi
 REPORT_ROWS_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-report-rows.XXXXXX")"
 NAMESPACE_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-namespaces.XXXXXX")"
 HOST_IP_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-host-ips.XXXXXX")"
-trap 'rm -f "${REPORT_ROWS_FILE}" "${NAMESPACE_FILE}" "${HOST_IP_FILE}"' EXIT
+REPORT_ROW_DELIM=$'\037'
+trap 'stop_shared_hubble_relay; rm -f "${REPORT_ROWS_FILE}" "${NAMESPACE_FILE}" "${HOST_IP_FILE}" "${SHARED_HUBBLE_RELAY_LOG:-}"' EXIT
 
 if [[ "${dry_run}" -eq 0 ]]; then
   mkdir -p "${output_dir}"
@@ -1511,57 +2025,57 @@ fi
 discover_namespaces "${NAMESPACE_FILE}"
 discover_host_peer_ips
 [[ -s "${NAMESPACE_FILE}" ]] || fail "no namespaces matched the requested filters"
+TOTAL_NAMESPACES="$(count_lines "${NAMESPACE_FILE}")"
+
+if [[ "${dry_run}" -eq 0 ]]; then
+  start_shared_hubble_relay
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  namespace_index=0
+  while IFS= read -r namespace; do
+    [[ -n "${namespace}" ]] || continue
+    namespace_index=$((namespace_index + 1))
+    collect_namespace_data "${namespace}" "${namespace_index}"
+  done < "${NAMESPACE_FILE}"
+  exit 0
+fi
+
+declare -a batch_pids=()
+namespace_index=0
+while IFS= read -r namespace; do
+  [[ -n "${namespace}" ]] || continue
+  namespace_index=$((namespace_index + 1))
+  collect_namespace_data "${namespace}" "${namespace_index}" &
+  batch_pids+=("$!")
+
+  if [[ "${#batch_pids[@]}" -ge "${namespace_workers}" ]]; then
+    wait_for_pid_batch "${batch_pids[@]}" || fail "namespace capture/summarise phase failed"
+    batch_pids=()
+  fi
+done < "${NAMESPACE_FILE}"
+
+if [[ "${#batch_pids[@]}" -gt 0 ]]; then
+  wait_for_pid_batch "${batch_pids[@]}" || fail "namespace capture/summarise phase failed"
+fi
 
 while IFS= read -r namespace; do
   [[ -n "${namespace}" ]] || continue
   NAMESPACES_SCANNED=$((NAMESPACES_SCANNED + 1))
-  if [[ "${dry_run}" -eq 0 ]]; then
-    info "observing namespace ${namespace}"
-  fi
 
   namespace_dir="${output_dir}/namespaces/${namespace}"
   policy_dir="${output_dir}/policies/${namespace}"
-  combined_raw="${namespace_dir}/combined.jsonl"
-  filtered_raw="${namespace_dir}/combined.non-reply.jsonl"
-  report_file="${output_dir}/run-report.md"
-
-  if [[ "${dry_run}" -eq 0 ]]; then
-    mkdir -p "${namespace_dir}" "${policy_dir}"
-    : > "${combined_raw}"
-  fi
-
-  iteration_index=1
-  while [[ "${iteration_index}" -le "${iterations}" ]]; do
-    iteration_capture="${namespace_dir}/capture-${iteration_index}.jsonl"
-    capture_namespace_iteration "${namespace}" "${iteration_index}" "${iteration_capture}"
-
-    if [[ "${dry_run}" -eq 0 ]]; then
-      cat "${iteration_capture}" >> "${combined_raw}"
-    fi
-
-    if [[ "${sleep_between}" -gt 0 && "${iteration_index}" -lt "${iterations}" ]]; then
-      sleep "${sleep_between}"
-    fi
-    iteration_index=$((iteration_index + 1))
-  done
-
-  if [[ "${dry_run}" -eq 1 ]]; then
-    append_report_row "${namespace}" "ingress" "0" "0" "dry-run" "" ""
-    append_report_row "${namespace}" "egress" "0" "0" "dry-run" "" ""
-    continue
-  fi
-
-  filter_capture_non_reply "${combined_raw}" "${filtered_raw}"
-
+  metadata_file="${namespace_dir}/observe-metadata.env"
   ingress_edges="${namespace_dir}/ingress.edges.workload.tsv"
   egress_edges="${namespace_dir}/egress.edges.workload.tsv"
   ingress_world="${namespace_dir}/ingress.world.tsv"
   egress_world="${namespace_dir}/egress.world.tsv"
+  generation_started=$SECONDS
 
-  summarise_direction "${filtered_raw}" "ingress" "edges" "${ingress_edges}"
-  summarise_direction "${filtered_raw}" "egress" "edges" "${egress_edges}"
-  summarise_direction "${filtered_raw}" "ingress" "world" "${ingress_world}"
-  summarise_direction "${filtered_raw}" "egress" "world" "${egress_world}"
+  # shellcheck disable=SC1090
+  source "${metadata_file}"
+
+  mkdir -p "${policy_dir}"
 
   ingress_raw_rows="$(count_data_rows "${ingress_edges}")"
   egress_raw_rows="$(count_data_rows "${egress_edges}")"
@@ -1587,6 +2101,7 @@ while IFS= read -r namespace; do
     build_namespace_aggregate_report "${namespace}" "egress" "${egress_edges}" "${egress_world}" "${egress_aggregate}"
   fi
 
+  info "${namespace}: generating ingress candidate (mode=${ingress_mode}, raw rows=${ingress_raw_rows})"
   ingress_policy_path="${policy_dir}/cnp-${namespace}-observed-ingress-candidate.yaml"
   if generate_ingress_policy "${namespace}" "${ingress_mode}" "${ingress_edges}" "${ingress_world}" "${ingress_policy_path}" "${ingress_raw_rows}"; then
     ingress_policy="${ingress_policy_path}"
@@ -1597,6 +2112,7 @@ while IFS= read -r namespace; do
   fi
   ingress_usable_rows="${LAST_POLICY_USABLE_ROWS}"
 
+  info "${namespace}: generating egress candidate (mode=${egress_mode}, raw rows=${egress_raw_rows})"
   egress_policy_path="${policy_dir}/cnp-${namespace}-observed-egress-candidate.yaml"
   if generate_egress_policy "${namespace}" "${egress_mode}" "${egress_edges}" "${egress_world}" "${egress_policy_path}" "${egress_raw_rows}"; then
     egress_policy="${egress_policy_path}"
@@ -1607,13 +2123,44 @@ while IFS= read -r namespace; do
   fi
   egress_usable_rows="${LAST_POLICY_USABLE_ROWS}"
 
+  generation_seconds=$((SECONDS - generation_started))
   rmdir "${policy_dir}" 2>/dev/null || true
-  append_report_row "${namespace}" "ingress" "${ingress_raw_rows}" "${ingress_usable_rows}" "${ingress_mode}" "${ingress_policy}" "${ingress_aggregate}"
-  append_report_row "${namespace}" "egress" "${egress_raw_rows}" "${egress_usable_rows}" "${egress_mode}" "${egress_policy}" "${egress_aggregate}"
 
-  if [[ "${dry_run}" -eq 0 ]]; then
-    info "${namespace}: ingress raw=${ingress_raw_rows} usable=${ingress_usable_rows} candidate=$([[ -n "${ingress_policy}" ]] && printf present || printf omitted), egress raw=${egress_raw_rows} usable=${egress_usable_rows} candidate=$([[ -n "${egress_policy}" ]] && printf present || printf omitted)"
-  fi
+  append_report_row \
+    "${namespace}" \
+    "ingress" \
+    "${ingress_raw_rows}" \
+    "${ingress_usable_rows}" \
+    "${ingress_mode}" \
+    "${ingress_policy}" \
+    "${ingress_aggregate}" \
+    "${CAPTURE_STRATEGY_REQUESTED}" \
+    "${CAPTURE_STRATEGY_USED}" \
+    "${CAPTURE_SAMPLE_TARGET}" \
+    "${FILTERED_FLOW_COUNT}" \
+    "${CAPTURE_FALLBACK_USED}" \
+    "${CAPTURE_SECONDS}" \
+    "${SUMMARY_SECONDS}" \
+    "${generation_seconds}"
+
+  append_report_row \
+    "${namespace}" \
+    "egress" \
+    "${egress_raw_rows}" \
+    "${egress_usable_rows}" \
+    "${egress_mode}" \
+    "${egress_policy}" \
+    "${egress_aggregate}" \
+    "${CAPTURE_STRATEGY_REQUESTED}" \
+    "${CAPTURE_STRATEGY_USED}" \
+    "${CAPTURE_SAMPLE_TARGET}" \
+    "${FILTERED_FLOW_COUNT}" \
+    "${CAPTURE_FALLBACK_USED}" \
+    "${CAPTURE_SECONDS}" \
+    "${SUMMARY_SECONDS}" \
+    "${generation_seconds}"
+
+  info "${namespace}: ingress raw=${ingress_raw_rows} usable=${ingress_usable_rows} candidate=$([[ -n "${ingress_policy}" ]] && printf present || printf omitted), egress raw=${egress_raw_rows} usable=${egress_usable_rows} candidate=$([[ -n "${egress_policy}" ]] && printf present || printf omitted)"
 done < "${NAMESPACE_FILE}"
 
 if [[ "${dry_run}" -eq 0 ]]; then

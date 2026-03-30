@@ -242,6 +242,35 @@ EOF
   [[ "${output}" != *'coredns-7d764666f9-vdll5'* ]]
 }
 
+@test "hubble-generate-cilium-policy caches repeated selector resolutions" {
+  local input_file
+
+  input_file="${BATS_TEST_TMPDIR}/edges.tsv"
+
+  cat > "${input_file}" <<'EOF'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+20	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
+7	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4319
+EOF
+
+  run "${SCRIPT}" \
+    --input "${input_file}" \
+    --category observability \
+    --module-root "${MODULE_ROOT}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -c -- "-n observability get deployment otel-collector -o json" "${KUBECTL_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1" ]
+
+  run grep -c -- "-n dev get deployment sentiment-api -o json" "${KUBECTL_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1" ]
+}
+
 @test "hubble-generate-cilium-policy ignores unsupported summary protocols" {
   local input_file
   local source_file

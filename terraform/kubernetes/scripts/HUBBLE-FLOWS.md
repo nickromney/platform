@@ -42,6 +42,32 @@ That wrapper is for namespace-by-namespace observation bootstrap:
 It chains `./hubble-capture-flows.sh` and `./hubble-summarise-flows.sh` for the
 capture and summary stages.
 
+On busy namespaces, the first knob to turn is `--since`. The default wrapper
+run asks Hubble for three separate 5-minute windows per namespace, so start
+smaller when a namespace is noisy:
+
+```bash
+./hubble-observe-cilium-policies.sh \
+  --since 30s \
+  --iterations 1 \
+  --exclude-namespace argocd
+```
+
+Then rerun the noisy namespace on its own once you know you want it:
+
+```bash
+./hubble-observe-cilium-policies.sh \
+  --namespace argocd \
+  --since 30s \
+  --iterations 1
+```
+
+The wrapper now also emits a heartbeat every 10 seconds while a capture or
+summary helper is still running. Use `--progress-every 0` to disable that.
+Each run report also records capture, summary, and generation elapsed seconds
+per namespace so you can compare a baseline `--capture-strategy since` run
+against an adaptive run on the same namespace and cluster.
+
 It does not call `./hubble-generate-cilium-policy.sh` for the final step.
 That generator is still aimed at "take this one stable TSV summary and turn it
 into a checked-in module example". The observe wrapper needs different behavior:

@@ -237,10 +237,22 @@ is_ip_like() {
 resolve_selector() {
   local namespace="$1"
   local workload="$2"
+  local cache_key="${namespace}/${workload}"
   local json=""
   local label_value=""
   local label_key=""
   local kind=""
+
+  if [[ -n "${SELECTOR_CACHE_STATUS[${cache_key}]+x}" ]]; then
+    if [[ "${SELECTOR_CACHE_STATUS[${cache_key}]}" == "ok" ]]; then
+      RESOLVED_SELECTOR_KEY="${SELECTOR_CACHE_KEY[${cache_key}]}"
+      RESOLVED_SELECTOR_VALUE="${SELECTOR_CACHE_VALUE[${cache_key}]}"
+      return 0
+    fi
+
+    RESOLVE_ERROR_MSG="${SELECTOR_CACHE_ERROR[${cache_key}]}"
+    return 1
+  fi
 
   ensure_selector_resolution_access "${namespace}"
 
@@ -253,6 +265,8 @@ resolve_selector() {
 
   if [[ -z "${json}" ]]; then
     RESOLVE_ERROR_MSG="could not resolve workload ${namespace}/${workload} via deployment, daemonset, or statefulset"
+    SELECTOR_CACHE_STATUS["${cache_key}"]="error"
+    SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
     return 1
   fi
 
@@ -261,11 +275,16 @@ resolve_selector() {
     if [[ -n "${label_value}" ]]; then
       RESOLVED_SELECTOR_KEY="${label_key}"
       RESOLVED_SELECTOR_VALUE="${label_value}"
+      SELECTOR_CACHE_STATUS["${cache_key}"]="ok"
+      SELECTOR_CACHE_KEY["${cache_key}"]="${label_key}"
+      SELECTOR_CACHE_VALUE["${cache_key}"]="${label_value}"
       return 0
     fi
   done
 
   RESOLVE_ERROR_MSG="could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
+  SELECTOR_CACHE_STATUS["${cache_key}"]="error"
+  SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
   return 1
 }
 
@@ -333,6 +352,10 @@ kubeconfig=""
 kube_context=""
 DEFAULT_KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
 declare -A SELECTOR_ACCESS_CHECKED=()
+declare -A SELECTOR_CACHE_STATUS=()
+declare -A SELECTOR_CACHE_KEY=()
+declare -A SELECTOR_CACHE_VALUE=()
+declare -A SELECTOR_CACHE_ERROR=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
