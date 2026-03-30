@@ -29,11 +29,26 @@ Options:
   -o, --output FILE
       Write flow JSON lines to FILE instead of stdout.
 
+  --capture-strategy since|last|adaptive
+      Capture using a time window, a bounded last-N sample, or an adaptive
+      recent-sample-first strategy. Default: since
+
   --since DURATION
       Capture flows since DURATION. Default: 10m
 
   --last N
       Request the last N flows instead of using --since.
+
+  --sample-target N
+      Target sample size used by `--capture-strategy last|adaptive`.
+      Default: 1000
+
+  --sample-min N
+      Minimum non-reply usable flow count for adaptive capture before it stops
+      escalating. Default: 200
+
+  --field-mask-profile full|policy-observe
+      Request a reduced Hubble field set when supported. Default: full
 
   -f, --follow
       Follow flows.
@@ -170,8 +185,354 @@ fail() {
   exit 1
 }
 
+info() {
+  echo "hubble-capture-flows.sh: $*" >&2
+}
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+}
+
+filter_non_reply_capture() {
+  local input_file="$1"
+  local output_file="$2"
+
+  jq -c 'select((((.flow // .).is_reply) // false) != true)' "${input_file}" > "${output_file}"
+}
+
+count_capture_lines() {
+  local input_file="$1"
+
+  awk 'END { print NR + 0 }' "${input_file}"
+}
+
+adaptive_last_steps() {
+  local target="$1"
+  local -a steps=()
+  local step=""
+
+  if [[ "${target}" -le 100 ]]; then
+    steps=("${target}")
+  elif [[ "${target}" -le 300 ]]; then
+    steps=(100 "${target}")
+  else
+    steps=(100 300 "${target}")
+  fi
+
+  for step in "${steps[@]}"; do
+    [[ -n "${step}" ]] || continue
+    [[ "${step}" -gt 0 ]] || continue
+    printf '%s\n' "${step}"
+  done | awk '!seen[$0]++'
+}
+
+supports_experimental_field_mask() {
+  if [[ -n "${SUPPORTS_EXPERIMENTAL_FIELD_MASK:-}" ]]; then
+    [[ "${SUPPORTS_EXPERIMENTAL_FIELD_MASK}" == "1" ]]
+    return $?
+  fi
+
+  if hubble observe --help 2>/dev/null | grep -q -- "--experimental-field-mask"; then
+    SUPPORTS_EXPERIMENTAL_FIELD_MASK="1"
+    return 0
+  fi
+
+  SUPPORTS_EXPERIMENTAL_FIELD_MASK="0"
+  return 1
+}
+
+policy_observe_field_mask() {
+  printf '%s\n' \
+    "verdict,traffic_direction,is_reply,source,destination,source_names,destination_names,IP,l4,l7.dns"
+}
+
+has_experimental_field_mask_arg() {
+  local arg=""
+
+  for arg in "$@"; do
+    if [[ "${arg}" == "--experimental-field-mask" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+strip_experimental_field_mask_args() {
+  local skip_next=0
+  local arg=""
+
+  STRIPPED_OBSERVE_ARGS=()
+  for arg in "$@"; do
+    if [[ "${skip_next}" -eq 1 ]]; then
+      skip_next=0
+      continue
+    fi
+    if [[ "${arg}" == "--experimental-field-mask" ]]; then
+      skip_next=1
+      continue
+    fi
+    STRIPPED_OBSERVE_ARGS+=("${arg}")
+  done
+}
+
+append_field_mask_args() {
+  case "${field_mask_profile}" in
+    full)
+      ;;
+    policy-observe)
+      if [[ "${DISABLE_EXPERIMENTAL_FIELD_MASK:-0}" -ne 1 ]] && supports_experimental_field_mask; then
+        observe_args+=(--experimental-field-mask "$(policy_observe_field_mask)")
+      fi
+      ;;
+  esac
+}
+
+build_common_observe_args() {
+  observe_args=(observe --output jsonpb)
+
+  append_field_mask_args
+
+  if [[ "${follow}" -eq 1 ]]; then
+    observe_args+=(--follow)
+  fi
+
+  if [[ -n "${server}" ]]; then
+    observe_args+=(--server "${server}")
+  fi
+
+  if [[ "${tls_enabled}" -eq 1 ]]; then
+    observe_args+=(--tls)
+  fi
+
+  if [[ -n "${tls_server_name}" ]]; then
+    observe_args+=(--tls-server-name "${tls_server_name}")
+  fi
+
+  if [[ "${#tls_ca_cert_files[@]}" -gt 0 ]]; then
+    for value in "${tls_ca_cert_files[@]}"; do
+      observe_args+=(--tls-ca-cert-files "${value}")
+    done
+  fi
+
+  if [[ -n "${tls_client_cert_file}" ]]; then
+    observe_args+=(--tls-client-cert-file "${tls_client_cert_file}")
+  fi
+
+  if [[ -n "${tls_client_key_file}" ]]; then
+    observe_args+=(--tls-client-key-file "${tls_client_key_file}")
+  fi
+
+  if [[ "${tls_allow_insecure}" -eq 1 ]]; then
+    observe_args+=(--tls-allow-insecure)
+  fi
+
+  if [[ "${port_forward}" -eq 1 ]]; then
+    observe_args+=(--port-forward)
+    if [[ -n "${port_forward_port}" ]]; then
+      observe_args+=(--port-forward-port "${port_forward_port}")
+    fi
+    if [[ -n "${kubeconfig}" ]]; then
+      observe_args+=(--kubeconfig "${kubeconfig}")
+    fi
+    if [[ -n "${kube_context}" ]]; then
+      observe_args+=(--kube-context "${kube_context}")
+    fi
+    observe_args+=(--kube-namespace "${kube_namespace}")
+  fi
+
+  if [[ "${#namespaces[@]}" -gt 0 ]]; then
+    for value in "${namespaces[@]}"; do
+      observe_args+=(--namespace "${value}")
+    done
+  fi
+
+  if [[ "${#from_namespaces[@]}" -gt 0 ]]; then
+    for value in "${from_namespaces[@]}"; do
+      observe_args+=(--from-namespace "${value}")
+    done
+  fi
+
+  if [[ "${#to_namespaces[@]}" -gt 0 ]]; then
+    for value in "${to_namespaces[@]}"; do
+      observe_args+=(--to-namespace "${value}")
+    done
+  fi
+
+  if [[ "${#pods[@]}" -gt 0 ]]; then
+    for value in "${pods[@]}"; do
+      observe_args+=(--pod "${value}")
+    done
+  fi
+
+  if [[ "${#from_pods[@]}" -gt 0 ]]; then
+    for value in "${from_pods[@]}"; do
+      observe_args+=(--from-pod "${value}")
+    done
+  fi
+
+  if [[ "${#to_pods[@]}" -gt 0 ]]; then
+    for value in "${to_pods[@]}"; do
+      observe_args+=(--to-pod "${value}")
+    done
+  fi
+
+  if [[ "${#protocols[@]}" -gt 0 ]]; then
+    for value in "${protocols[@]}"; do
+      observe_args+=(--protocol "${value}")
+    done
+  fi
+
+  if [[ "${#verdicts[@]}" -gt 0 ]]; then
+    for value in "${verdicts[@]}"; do
+      observe_args+=(--verdict "${value}")
+    done
+  fi
+
+  if [[ "${#types[@]}" -gt 0 ]]; then
+    for value in "${types[@]}"; do
+      observe_args+=(--type "${value}")
+    done
+  fi
+
+  if [[ "${world_only}" -eq 1 ]]; then
+    observe_args+=(--label reserved:world)
+  fi
+
+  if [[ "${#passthrough[@]}" -gt 0 ]]; then
+    observe_args+=("${passthrough[@]}")
+  fi
+}
+
+run_hubble_with_args() {
+  local output_file="$1"
+  shift
+
+  local hubble_status=0
+  local retry_status=0
+
+  if [[ "${print_command}" -eq 1 ]]; then
+    {
+      printf 'hubble'
+      printf ' %q' "$@"
+      printf '\n'
+    } >&2
+  fi
+
+  if [[ "${dry_run}" -eq 1 ]]; then
+    return 0
+  fi
+
+  hubble "$@" > "${output_file}" 2> "${tmp_hubble_err}" || hubble_status=$?
+
+  if [[ "${hubble_status}" -ne 0 ]]; then
+    hubble_error="$(cat "${tmp_hubble_err}")"
+    if [[ "${hubble_error}" == *"failed to construct field mask"* ]] && has_experimental_field_mask_arg "$@"; then
+      DISABLE_EXPERIMENTAL_FIELD_MASK=1
+      strip_experimental_field_mask_args "$@"
+      info "experimental field mask was rejected by this Hubble version; retrying without it"
+      : > "${tmp_hubble_err}"
+      retry_status=0
+      hubble "${STRIPPED_OBSERVE_ARGS[@]}" > "${output_file}" 2> "${tmp_hubble_err}" || retry_status=$?
+      if [[ "${retry_status}" -eq 0 ]]; then
+        if [[ -s "${tmp_hubble_err}" ]]; then
+          cat "${tmp_hubble_err}" >&2
+          : > "${tmp_hubble_err}"
+        fi
+        return 0
+      fi
+      hubble_status="${retry_status}"
+      hubble_error="$(cat "${tmp_hubble_err}")"
+    fi
+
+    if [[ -n "${hubble_error}" ]]; then
+      explain_probable_ui_route_error "${hubble_error}"
+      explain_probable_local_port_forward_error "${hubble_error}" "${server}"
+      printf '%s\n' "${hubble_error}" >&2
+    fi
+    return "${hubble_status}"
+  fi
+
+  if [[ -s "${tmp_hubble_err}" ]]; then
+    cat "${tmp_hubble_err}" >&2
+    : > "${tmp_hubble_err}"
+  fi
+}
+
+run_single_capture() {
+  local query_kind="$1"
+  local query_value="$2"
+  local output_file="$3"
+
+  build_common_observe_args
+  case "${query_kind}" in
+    last)
+      observe_args+=(--last "${query_value}")
+      ;;
+    since)
+      observe_args+=(--since "${query_value}")
+      ;;
+    *)
+      fail "unsupported capture query kind: ${query_kind}"
+      ;;
+  esac
+
+  run_hubble_with_args "${output_file}" "${observe_args[@]}"
+}
+
+run_adaptive_capture() {
+  local final_output="$1"
+  local attempt=""
+  local capture_file=""
+  local usable_file=""
+  local usable_count=0
+  local selected_file=""
+  local fallback_file=""
+  local -a attempt_files=()
+
+  while IFS= read -r attempt; do
+    [[ -n "${attempt}" ]] || continue
+    capture_file="$(mktemp "${TMPDIR:-/tmp}/hubble-capture.last.${attempt}.XXXXXX")"
+    usable_file="$(mktemp "${TMPDIR:-/tmp}/hubble-capture.last-usable.${attempt}.XXXXXX")"
+    attempt_files+=("${capture_file}" "${usable_file}")
+
+    info "adaptive capture: trying last ${attempt}"
+    if ! run_single_capture "last" "${attempt}" "${capture_file}"; then
+      rm -f "${attempt_files[@]}"
+      return 1
+    fi
+
+    if [[ "${dry_run}" -eq 1 ]]; then
+      continue
+    fi
+
+    filter_non_reply_capture "${capture_file}" "${usable_file}"
+    usable_count="$(count_capture_lines "${usable_file}")"
+    info "adaptive capture: last ${attempt} produced ${usable_count} non-reply flows"
+
+    if [[ "${usable_count}" -ge "${sample_min}" ]]; then
+      selected_file="${capture_file}"
+      break
+    fi
+  done < <(adaptive_last_steps "${sample_target}")
+
+  if [[ "${dry_run}" -eq 1 ]]; then
+    return 0
+  fi
+
+  if [[ -z "${selected_file}" ]]; then
+    fallback_file="$(mktemp "${TMPDIR:-/tmp}/hubble-capture.since.XXXXXX")"
+    attempt_files+=("${fallback_file}")
+    info "adaptive capture: recent sample too sparse; falling back to since ${since_value}"
+    if ! run_single_capture "since" "${since_value}" "${fallback_file}"; then
+      rm -f "${attempt_files[@]}"
+      return 1
+    fi
+    selected_file="${fallback_file}"
+  fi
+
+  cat "${selected_file}" > "${final_output}"
+  rm -f "${attempt_files[@]}"
 }
 
 kubectl_can_i() {
@@ -358,10 +719,14 @@ normalise_server_input() {
 }
 
 output_path=""
+capture_strategy="since"
 since_value="10m"
 last_value=""
 since_set=0
 last_set=0
+sample_target="1000"
+sample_min="200"
+field_mask_profile="full"
 follow=0
 server=""
 port_forward=0
@@ -403,6 +768,10 @@ while [[ $# -gt 0 ]]; do
       output_path="${2:-}"
       shift 2
       ;;
+    --capture-strategy)
+      capture_strategy="${2:-}"
+      shift 2
+      ;;
     --since)
       since_value="${2:-}"
       since_set=1
@@ -411,6 +780,18 @@ while [[ $# -gt 0 ]]; do
     --last)
       last_value="${2:-}"
       last_set=1
+      shift 2
+      ;;
+    --sample-target)
+      sample_target="${2:-}"
+      shift 2
+      ;;
+    --sample-min)
+      sample_min="${2:-}"
+      shift 2
+      ;;
+    --field-mask-profile)
+      field_mask_profile="${2:-}"
       shift 2
       ;;
     -f|--follow)
@@ -539,9 +920,46 @@ if [[ "${since_set}" -eq 1 && "${last_set}" -eq 1 ]]; then
   fail "--since and --last cannot be combined"
 fi
 
+case "${capture_strategy}" in
+  since|last|adaptive) ;;
+  *)
+    fail "--capture-strategy must be one of: since, last, adaptive"
+    ;;
+esac
+
+case "${field_mask_profile}" in
+  full|policy-observe) ;;
+  *)
+    fail "--field-mask-profile must be one of: full, policy-observe"
+    ;;
+esac
+
+[[ "${sample_target}" =~ ^[0-9]+$ ]] || fail "--sample-target must be a non-negative integer"
+[[ "${sample_min}" =~ ^[0-9]+$ ]] || fail "--sample-min must be a non-negative integer"
+[[ "${sample_target}" -gt 0 ]] || fail "--sample-target must be greater than zero"
+
+if [[ "${capture_strategy}" == "adaptive" ]]; then
+  require_cmd jq
+fi
+
 if [[ "${since_set}" -eq 0 && "${last_set}" -eq 0 ]]; then
-  since_value="10m"
+  case "${capture_strategy}" in
+    since)
+      since_value="10m"
+      ;;
+    last)
+      last_value="${sample_target}"
+      last_set=1
+      since_value=""
+      ;;
+    adaptive)
+      :
+      ;;
+  esac
 elif [[ "${last_set}" -eq 1 ]]; then
+  if [[ "${capture_strategy}" == "adaptive" ]]; then
+    sample_target="${last_value}"
+  fi
   since_value=""
 fi
 
@@ -592,157 +1010,37 @@ if [[ "${port_forward}" -eq 1 ]]; then
   fi
 fi
 
-observe_args=(observe --output jsonpb)
+tmp_hubble_err="$(mktemp "${TMPDIR:-/tmp}/hubble-capture.err.XXXXXX")"
+trap 'rm -f "${tmp_hubble_err}"' EXIT
 
-if [[ -n "${last_value}" ]]; then
-  observe_args+=(--last "${last_value}")
-else
-  observe_args+=(--since "${since_value}")
-fi
+tmp_capture_out="$(mktemp "${TMPDIR:-/tmp}/hubble-capture.out.XXXXXX")"
+trap 'rm -f "${tmp_hubble_err}" "${tmp_capture_out}"' EXIT
 
-if [[ "${follow}" -eq 1 ]]; then
-  observe_args+=(--follow)
-fi
-
-if [[ -n "${server}" ]]; then
-  observe_args+=(--server "${server}")
-fi
-
-if [[ "${tls_enabled}" -eq 1 ]]; then
-  observe_args+=(--tls)
-fi
-
-if [[ -n "${tls_server_name}" ]]; then
-  observe_args+=(--tls-server-name "${tls_server_name}")
-fi
-
-if [[ "${#tls_ca_cert_files[@]}" -gt 0 ]]; then
-  for value in "${tls_ca_cert_files[@]}"; do
-    observe_args+=(--tls-ca-cert-files "${value}")
-  done
-fi
-
-if [[ -n "${tls_client_cert_file}" ]]; then
-  observe_args+=(--tls-client-cert-file "${tls_client_cert_file}")
-fi
-
-if [[ -n "${tls_client_key_file}" ]]; then
-  observe_args+=(--tls-client-key-file "${tls_client_key_file}")
-fi
-
-if [[ "${tls_allow_insecure}" -eq 1 ]]; then
-  observe_args+=(--tls-allow-insecure)
-fi
-
-if [[ "${port_forward}" -eq 1 ]]; then
-  observe_args+=(--port-forward)
-  if [[ -n "${port_forward_port}" ]]; then
-    observe_args+=(--port-forward-port "${port_forward_port}")
-  fi
-  if [[ -n "${kubeconfig}" ]]; then
-    observe_args+=(--kubeconfig "${kubeconfig}")
-  fi
-  if [[ -n "${kube_context}" ]]; then
-    observe_args+=(--kube-context "${kube_context}")
-  fi
-  observe_args+=(--kube-namespace "${kube_namespace}")
-fi
-
-if [[ "${#namespaces[@]}" -gt 0 ]]; then
-  for value in "${namespaces[@]}"; do
-    observe_args+=(--namespace "${value}")
-  done
-fi
-
-if [[ "${#from_namespaces[@]}" -gt 0 ]]; then
-  for value in "${from_namespaces[@]}"; do
-    observe_args+=(--from-namespace "${value}")
-  done
-fi
-
-if [[ "${#to_namespaces[@]}" -gt 0 ]]; then
-  for value in "${to_namespaces[@]}"; do
-    observe_args+=(--to-namespace "${value}")
-  done
-fi
-
-if [[ "${#pods[@]}" -gt 0 ]]; then
-  for value in "${pods[@]}"; do
-    observe_args+=(--pod "${value}")
-  done
-fi
-
-if [[ "${#from_pods[@]}" -gt 0 ]]; then
-  for value in "${from_pods[@]}"; do
-    observe_args+=(--from-pod "${value}")
-  done
-fi
-
-if [[ "${#to_pods[@]}" -gt 0 ]]; then
-  for value in "${to_pods[@]}"; do
-    observe_args+=(--to-pod "${value}")
-  done
-fi
-
-if [[ "${#protocols[@]}" -gt 0 ]]; then
-  for value in "${protocols[@]}"; do
-    observe_args+=(--protocol "${value}")
-  done
-fi
-
-if [[ "${#verdicts[@]}" -gt 0 ]]; then
-  for value in "${verdicts[@]}"; do
-    observe_args+=(--verdict "${value}")
-  done
-fi
-
-if [[ "${#types[@]}" -gt 0 ]]; then
-  for value in "${types[@]}"; do
-    observe_args+=(--type "${value}")
-  done
-fi
-
-if [[ "${world_only}" -eq 1 ]]; then
-  observe_args+=(--label reserved:world)
-fi
-
-if [[ "${#passthrough[@]}" -gt 0 ]]; then
-  observe_args+=("${passthrough[@]}")
-fi
-
-if [[ "${print_command}" -eq 1 ]]; then
-  {
-    printf 'hubble'
-    printf ' %q' "${observe_args[@]}"
-    printf '\n'
-  } >&2
-fi
+case "${capture_strategy}" in
+  since)
+    query_kind="since"
+    query_value="${since_value}"
+    if [[ -n "${last_value}" ]]; then
+      query_kind="last"
+      query_value="${last_value}"
+    fi
+    run_single_capture "${query_kind}" "${query_value}" "${tmp_capture_out}" || exit $?
+    ;;
+  last)
+    run_single_capture "last" "${last_value}" "${tmp_capture_out}" || exit $?
+    ;;
+  adaptive)
+    run_adaptive_capture "${tmp_capture_out}" || exit $?
+    ;;
+esac
 
 if [[ "${dry_run}" -eq 1 ]]; then
   exit 0
 fi
 
-tmp_hubble_err="$(mktemp "${TMPDIR:-/tmp}/hubble-capture.err.XXXXXX")"
-trap 'rm -f "${tmp_hubble_err}"' EXIT
-
-hubble_status=0
 if [[ -n "${output_path}" ]]; then
   mkdir -p "$(dirname "${output_path}")"
-  hubble "${observe_args[@]}" > "${output_path}" 2> "${tmp_hubble_err}" || hubble_status=$?
+  cat "${tmp_capture_out}" > "${output_path}"
 else
-  hubble "${observe_args[@]}" 2> "${tmp_hubble_err}" || hubble_status=$?
-fi
-
-if [[ "${hubble_status}" -ne 0 ]]; then
-  hubble_error="$(cat "${tmp_hubble_err}")"
-  if [[ -n "${hubble_error}" ]]; then
-    explain_probable_ui_route_error "${hubble_error}"
-    explain_probable_local_port_forward_error "${hubble_error}" "${server}"
-    printf '%s\n' "${hubble_error}" >&2
-  fi
-  exit "${hubble_status}"
-fi
-
-if [[ -s "${tmp_hubble_err}" ]]; then
-  cat "${tmp_hubble_err}" >&2
+  cat "${tmp_capture_out}"
 fi

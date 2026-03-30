@@ -34,6 +34,15 @@ case "$*" in
   *"auth can-i get nodes")
     printf '%s\n' "yes"
     ;;
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n kube-system")
+    printf '%s\n' "yes"
+    ;;
   *"auth can-i get deployments -n "*)
     printf '%s\n' "yes"
     ;;
@@ -67,6 +76,20 @@ JSON
 {"items":[]}
 JSON
     ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
+    printf '%s\n' "Forwarding from 127.0.0.1:49000 -> 4245"
+    while true; do
+      sleep 1
+    done
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay "*":4245")
+    local_port="${*: -1}"
+    local_port="${local_port%%:4245}"
+    printf 'Forwarding from 127.0.0.1:%s -> 4245\n' "${local_port}"
+    while true; do
+      sleep 1
+    done
+    ;;
   *)
     echo "unexpected kubectl invocation: $*" >&2
     exit 1
@@ -91,14 +114,15 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --dry-run \
+    --capture-strategy since \
     --iterations 2 \
     --since 1m \
     --namespace observability \
     --exclude-namespace datadog
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"capture observability iteration 1: ${SCRIPT_DIR}/hubble-capture-flows.sh --since 1m --namespace observability --port-forward-port 0"* ]]
-  [[ "${output}" == *"capture observability iteration 2: ${SCRIPT_DIR}/hubble-capture-flows.sh --since 1m --namespace observability --port-forward-port 0"* ]]
+  [[ "${output}" == *"capture observability iteration 1/2: ${SCRIPT_DIR}/hubble-capture-flows.sh --namespace observability --field-mask-profile policy-observe --capture-strategy since --since 1m --verdict FORWARDED --port-forward-port 0"* ]]
+  [[ "${output}" == *"capture observability iteration 2/2: ${SCRIPT_DIR}/hubble-capture-flows.sh --namespace observability --field-mask-profile policy-observe --capture-strategy since --since 1m --verdict FORWARDED --port-forward-port 0"* ]]
   [[ "${output}" != *"capture datadog iteration"* ]]
 
   run cat "${KUBECTL_LOG}"
@@ -187,14 +211,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${report}" == "edges" && "${direction}" == "ingress" ]]; then
-  cat <<'TSV'
-count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
-TSV
-  exit 0
-fi
-
-if [[ "${report}" == "edges" && "${direction}" == "egress" ]]; then
+if [[ "${report}" == "edges" ]]; then
   cat <<'TSV'
 count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 5	EGRESS	FORWARDED	tcp		10.244.1.252	workload	observability	prometheus-server	9090
@@ -210,6 +227,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace observability \
+    --capture-strategy since \
     --iterations 1 \
     --output-dir "${output_dir}"
 
@@ -265,6 +283,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace observability \
+    --capture-strategy since \
     --iterations 1
 
   [ "${status}" -eq 0 ]
@@ -287,6 +306,15 @@ set -euo pipefail
 printf '%s\n' "$*" >> "${KUBECTL_LOG}"
 
 case "$*" in
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n kube-system")
+    printf '%s\n' "yes"
+    ;;
   *"auth can-i get ciliumnodes.cilium.io")
     printf '%s\n' "yes"
     ;;
@@ -322,6 +350,20 @@ JSON
     cat <<'JSON'
 {"items":[]}
 JSON
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
+    printf '%s\n' "Forwarding from 127.0.0.1:49000 -> 4245"
+    while true; do
+      sleep 1
+    done
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay "*":4245")
+    local_port="${*: -1}"
+    local_port="${local_port%%:4245}"
+    printf 'Forwarding from 127.0.0.1:%s -> 4245\n' "${local_port}"
+    while true; do
+      sleep 1
+    done
     ;;
   "-n sso get deployment oauth2-proxy-argocd -o json"|"-n sso get deployment oauth2-proxy-gitea -o json")
     cat <<'JSON'
@@ -373,18 +415,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${report}" == "edges" && "${direction}" == "ingress" ]]; then
+if [[ "${report}" == "edges" ]]; then
   cat <<'TSV'
 count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 30	INGRESS	FORWARDED	tcp		10.244.1.252	workload	sso	oauth2-proxy-argocd	4180
 24	INGRESS	FORWARDED	tcp		10.244.1.252	workload	sso	oauth2-proxy-gitea	4180
-TSV
-  exit 0
-fi
-
-if [[ "${report}" == "edges" && "${direction}" == "egress" ]]; then
-  cat <<'TSV'
-count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 12	EGRESS	FORWARDED	tcp	sso	oauth2-proxy-argocd	workload	argocd	argocd-server	443
 8	EGRESS	FORWARDED	tcp	sso	oauth2-proxy-gitea	workload	argocd	argocd-server	443
 TSV
@@ -399,6 +434,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace sso \
+    --capture-strategy since \
     --iterations 1 \
     --output-dir "${output_dir}"
 
@@ -430,6 +466,11 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'Observed egress traffic from sso/oauth2-proxy'* ]]
   [[ "${output}" == *'"k8s:app.kubernetes.io/name": "argocd-server"'* ]]
+
+  run grep -c -- "-n argocd get deployment argocd-server -o json" "${KUBECTL_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1" ]
 }
 
 @test "hubble-observe-cilium-policies can promote generated candidates into cilium-module sources and categories" {
@@ -477,7 +518,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${report}" == "edges" && "${direction}" == "ingress" ]]; then
+if [[ "${report}" == "edges" ]]; then
   cat <<'TSV'
 count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 4	INGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
@@ -522,6 +563,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace observability \
+    --capture-strategy since \
     --iterations 1 \
     --row-threshold 0 \
     --output-dir "${output_dir}" \
@@ -554,6 +596,72 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"- Module promotion: enabled -> \`${module_root}\`"* ]]
+}
+
+@test "hubble-observe-cilium-policies supports batched namespace capture workers with deterministic report order" {
+  local output_dir
+  local report_file
+
+  output_dir="${BATS_TEST_TMPDIR}/workers-run"
+  report_file="${output_dir}/run-report.md"
+
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${CAPTURE_LOG}"
+cat <<'JSON'
+{"flow":{"verdict":"FORWARDED"}}
+JSON
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${SUMMARIZE_LOG}"
+
+report=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --report)
+      report="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ "${report}" == "edges" ]]; then
+  cat <<'TSV'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+TSV
+else
+  cat <<'TSV'
+count	direction	verdict	protocol	world_side	peer_ns	peer	world_names	world_ip	port
+TSV
+fi
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --namespace observability \
+    --namespace datadog \
+    --capture-strategy since \
+    --iterations 1 \
+    --namespace-workers 2 \
+    --output-dir "${output_dir}"
+
+  [ "${status}" -eq 0 ]
+  [ -f "${report_file}" ]
+
+  run awk '/^## / { print $2, $3 }' "${report_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == $'observability ingress\nobservability egress\ndatadog ingress\ndatadog egress' ]]
 }
 
 @test "hubble-observe-cilium-policies chains capture and summarise helpers and falls back to namespace mode" {
@@ -602,18 +710,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${report}" == "edges" && "${direction}" == "ingress" ]]; then
+if [[ "${report}" == "edges" ]]; then
   cat <<'TSV'
 count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 7	INGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
 3	INGRESS	FORWARDED	tcp	uat	subnetcalc-api	workload	observability	victoria-logs-single	9428
-TSV
-  exit 0
-fi
-
-if [[ "${report}" == "edges" && "${direction}" == "egress" ]]; then
-  cat <<'TSV'
-count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 9	EGRESS	FORWARDED	tcp	observability	otel-collector	workload	dev	sentiment-api	8080
 4	EGRESS	FORWARDED	tcp	observability	victoria-logs-single	workload	argocd	argocd-server	443
 TSV
@@ -634,6 +735,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace observability \
+    --capture-strategy since \
     --iterations 1 \
     --since 1m \
     --row-threshold 1 \
@@ -650,15 +752,20 @@ EOF
   run cat "${CAPTURE_LOG}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--since 1m --namespace observability --port-forward-port 0"* ]]
+  [[ "${output}" == *"--capture-strategy since --since 1m"* ]]
+  [[ "${output}" == *"--verdict FORWARDED"* ]]
+  [[ "${output}" == *"--server 127.0.0.1:49000"* ]]
 
   run cat "${SUMMARIZE_LOG}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--report edges --aggregate-by workload --direction ingress --format tsv --top 0 --verdict FORWARDED"* ]]
-  [[ "${output}" == *"--report edges --aggregate-by workload --direction egress --format tsv --top 0 --verdict FORWARDED"* ]]
-  [[ "${output}" == *"--report world --aggregate-by workload --direction ingress --format tsv --top 0 --verdict FORWARDED"* ]]
-  [[ "${output}" == *"--report world --aggregate-by workload --direction egress --format tsv --top 0 --verdict FORWARDED"* ]]
+  [[ "${output}" == *"--report edges --aggregate-by workload --direction all --format tsv --top 0 --verdict FORWARDED"* ]]
+  [[ "${output}" == *"--report world --aggregate-by workload --direction all --format tsv --top 0 --verdict FORWARDED"* ]]
+
+  run grep -c -- "port-forward --address 127.0.0.1 service/hubble-relay :4245" "${KUBECTL_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1" ]
 
   run sed -n '1,220p' "${ingress_policy}"
 
@@ -699,6 +806,15 @@ set -euo pipefail
 printf '%s\n' "$*" >> "${KUBECTL_LOG}"
 
 case "$*" in
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n kube-system")
+    printf '%s\n' "yes"
+    ;;
   *"auth can-i get ciliumnodes.cilium.io")
     printf '%s\n' "yes"
     ;;
@@ -719,6 +835,20 @@ JSON
     cat <<'JSON'
 {"items":[]}
 JSON
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
+    printf '%s\n' "Forwarding from 127.0.0.1:49000 -> 4245"
+    while true; do
+      sleep 1
+    done
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay "*":4245")
+    local_port="${*: -1}"
+    local_port="${local_port%%:4245}"
+    printf 'Forwarding from 127.0.0.1:%s -> 4245\n' "${local_port}"
+    while true; do
+      sleep 1
+    done
     ;;
   *)
     echo "unexpected kubectl invocation: $*" >&2
@@ -763,33 +893,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${report}" == "edges" && "${direction}" == "ingress" ]]; then
+if [[ "${report}" == "edges" ]]; then
   cat <<'TSV'
 count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 5	INGRESS	FORWARDED	tcp		10.0.0.10	workload	observability	otel-collector	4244
-TSV
-  exit 0
-fi
-
-if [[ "${report}" == "edges" && "${direction}" == "egress" ]]; then
-  cat <<'TSV'
-count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 4	EGRESS	FORWARDED	tcp	observability	otel-collector	workload	argocd	argocd-server	443
 TSV
   exit 0
 fi
 
-if [[ "${report}" == "world" && "${direction}" == "ingress" ]]; then
+if [[ "${report}" == "world" ]]; then
   cat <<'TSV'
 count	direction	verdict	protocol	world_side	peer_ns	peer	world_names	world_ip	port
 2	INGRESS	FORWARDED	tcp	source	observability	otel-collector	external.example.com	203.0.113.10	4244
-TSV
-  exit 0
-fi
-
-if [[ "${report}" == "world" && "${direction}" == "egress" ]]; then
-  cat <<'TSV'
-count	direction	verdict	protocol	world_side	peer_ns	peer	world_names	world_ip	port
 3	EGRESS	FORWARDED	tcp	destination	observability	otel-collector	api.example.com	104.16.0.1	443
 TSV
   exit 0
@@ -802,6 +918,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace observability \
+    --capture-strategy since \
     --iterations 1 \
     --row-threshold 0 \
     --output-dir "${output_dir}"
@@ -843,12 +960,70 @@ EOF
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --dry-run \
     --namespace observability \
+    --capture-strategy since \
     --capture-mode policy-verdict \
     --print-command
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"--type policy-verdict"* ]]
   [[ "${output}" == *"--print-command"* ]]
+}
+
+@test "hubble-observe-cilium-policies emits progress heartbeats for long-running helpers" {
+  local output_dir
+
+  output_dir="${BATS_TEST_TMPDIR}/progress-run"
+
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+sleep 2
+cat <<'JSON'
+{"flow":{"verdict":"FORWARDED"}}
+JSON
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+report=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --report)
+      report="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ "${report}" == "edges" ]]; then
+  cat <<'TSV'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+TSV
+else
+  cat <<'TSV'
+count	direction	verdict	protocol	world_side	peer_ns	peer	world_names	world_ip	port
+TSV
+fi
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --namespace observability \
+    --capture-strategy since \
+    --iterations 1 \
+    --progress-every 1 \
+    --output-dir "${output_dir}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"observing namespace observability (1/1)"* ]]
+  [[ "${output}" =~ capture\ observability\ iteration\ 1/1:\ still\ running\ after\ [12]s ]]
 }
 
 @test "hubble-observe-cilium-policies quiets empty summaries and reports zero-candidate runs clearly" {
@@ -910,6 +1085,7 @@ EOF
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --namespace observability \
+    --capture-strategy since \
     --iterations 2 \
     --output-dir "${output_dir}"
 
