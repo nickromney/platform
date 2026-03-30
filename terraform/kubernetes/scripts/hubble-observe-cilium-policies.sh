@@ -665,6 +665,28 @@ ensure_hubble_port_forward_access() {
   require_kubectl_permission "create" "pods/portforward" "kube-system" "open a shared Hubble relay port-forward"
 }
 
+discover_hubble_relay_service_port() {
+  local service_json=""
+  local service_port=""
+
+  if ! service_json="$("${KUBECTL_BASE[@]}" -n kube-system get service hubble-relay -o json 2>/dev/null)"; then
+    fail "failed to read Service kube-system/hubble-relay while preparing the shared Hubble relay port-forward"
+  fi
+
+  service_port="$(printf '%s\n' "${service_json}" | jq -r '
+    (
+      [.spec.ports[]? | select((.protocol // "TCP") == "TCP" and (.name // "") == "grpc") | .port][0]
+      // [.spec.ports[]? | select((.protocol // "TCP") == "TCP" and (.name // "") == "hubble-relay") | .port][0]
+      // [.spec.ports[]? | select((.protocol // "TCP") == "TCP" and (.name // "") == "relay") | .port][0]
+      // [.spec.ports[]? | select((.protocol // "TCP") == "TCP") | .port][0]
+      // empty
+    )
+  ')"
+
+  [[ "${service_port}" =~ ^[0-9]+$ ]] || fail "could not determine a TCP Service port for kube-system/hubble-relay"
+  SHARED_HUBBLE_SERVICE_PORT="${service_port}"
+}
+
 stop_shared_hubble_relay() {
   if [[ -n "${SHARED_HUBBLE_RELAY_PID:-}" ]]; then
     kill "${SHARED_HUBBLE_RELAY_PID}" 2>/dev/null || true
@@ -682,12 +704,13 @@ start_shared_hubble_relay() {
   [[ -z "${SHARED_HUBBLE_SERVER:-}" ]] || return 0
 
   ensure_hubble_port_forward_access
+  discover_hubble_relay_service_port
 
   SHARED_HUBBLE_RELAY_LOG="$(mktemp "${TMPDIR:-/tmp}/hubble-observe-port-forward.XXXXXX")"
   if [[ "${port_forward_port}" == "0" ]]; then
-    port_spec=":4245"
+    port_spec=":${SHARED_HUBBLE_SERVICE_PORT}"
   else
-    port_spec="${port_forward_port}:4245"
+    port_spec="${port_forward_port}:${SHARED_HUBBLE_SERVICE_PORT}"
   fi
 
   (
@@ -1849,6 +1872,7 @@ TOTAL_NAMESPACES=0
 SHARED_HUBBLE_SERVER=""
 SHARED_HUBBLE_RELAY_PID=""
 SHARED_HUBBLE_RELAY_LOG=""
+SHARED_HUBBLE_SERVICE_PORT=""
 CAPTURE_STRATEGY_USED=""
 CAPTURE_FALLBACK_USED="0"
 
