@@ -38,8 +38,16 @@ Options:
   --verdict VERDICT
       Repeatable verdict filter.
 
-  --format text|tsv
+  --format text|table|tsv|csv
       Output format. Default: text
+      `text` is a back-compat alias for `table`.
+      `table` renders an aligned terminal table and shows empty cells as `-`.
+
+  --table
+      Convenience alias for `--format table`.
+
+  --csv
+      Convenience alias for `--format csv`.
 
   --top N
       Limit output rows after aggregation. Default: 50
@@ -66,6 +74,70 @@ fail() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+}
+
+render_output() {
+  local input_file="$1"
+
+  case "${format}" in
+    text|table)
+      if command -v column >/dev/null 2>&1; then
+        awk '
+          BEGIN { OFS = "\t" }
+          {
+            field_count = split($0, fields, "\t")
+            for (i = 1; i <= field_count; i++) {
+              if (fields[i] == "") {
+                fields[i] = "-"
+              }
+            }
+
+            for (i = 1; i <= field_count; i++) {
+              printf "%s%s", fields[i], (i < field_count ? OFS : ORS)
+            }
+          }
+        ' "${input_file}" | column -ts $'\t'
+      else
+        awk '
+          BEGIN { OFS = "\t" }
+          {
+            field_count = split($0, fields, "\t")
+            for (i = 1; i <= field_count; i++) {
+              if (fields[i] == "") {
+                fields[i] = "-"
+              }
+            }
+
+            for (i = 1; i <= field_count; i++) {
+              printf "%s%s", fields[i], (i < field_count ? OFS : ORS)
+            }
+          }
+        ' "${input_file}"
+      fi
+      ;;
+    csv)
+      awk '
+        function csv_escape(value,    escaped) {
+          escaped = value
+          gsub(/"/, "\"\"", escaped)
+          if (escaped ~ /[",\r\n]/ || escaped ~ /^[[:space:]]/ || escaped ~ /[[:space:]]$/) {
+            return "\"" escaped "\""
+          }
+          return escaped
+        }
+
+        {
+          field_count = split($0, fields, "\t")
+          for (i = 1; i <= field_count; i++) {
+            printf "%s%s", csv_escape(fields[i]), (i < field_count ? "," : ORS)
+          }
+        }
+      ' "${input_file}"
+      ;;
+    tsv)
+      cat "${input_file}"
+      ;;
+  esac
 }
 
 input_path="-"
@@ -108,6 +180,14 @@ while [[ $# -gt 0 ]]; do
       format="${2:-}"
       shift 2
       ;;
+    --table)
+      format="table"
+      shift
+      ;;
+    --csv)
+      format="csv"
+      shift
+      ;;
     --top)
       top_n="${2:-}"
       shift 2
@@ -144,7 +224,7 @@ case "${direction}" in
 esac
 
 case "${format}" in
-  text|tsv) ;;
+  text|table|tsv|csv) ;;
   *)
     fail "unsupported --format value: ${format}"
     ;;
@@ -548,11 +628,7 @@ fi
 
 if [[ ! -s "${tmp_rows}" ]]; then
   printf '%s\n' "${header}" > "${tmp_output}"
-  if [[ "${format}" == "text" ]] && command -v column >/dev/null 2>&1; then
-    column -ts $'\t' "${tmp_output}"
-  else
-    cat "${tmp_output}"
-  fi
+  render_output "${tmp_output}"
   echo "hubble-summarise-flows.sh: no matching flows" >&2
   exit 0
 fi
@@ -578,8 +654,4 @@ fi
 printf '%s\n' "${header}" > "${tmp_output}"
 cat "${tmp_agg}" >> "${tmp_output}"
 
-if [[ "${format}" == "text" ]] && command -v column >/dev/null 2>&1; then
-  column -ts $'\t' "${tmp_output}"
-else
-  cat "${tmp_output}"
-fi
+render_output "${tmp_output}"

@@ -666,6 +666,9 @@ check-health:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
+		vf="$$vf --var-file $${PLATFORM_TFVARS}"; \
+	fi; \
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
@@ -681,6 +684,9 @@ check-security:
 	fi; \
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
+	fi; \
+	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
+		vf="$$vf --var-file $${PLATFORM_TFVARS}"; \
 	fi; \
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \

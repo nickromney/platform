@@ -66,6 +66,25 @@ setup() {
   [[ "${output}" == *"check-security.sh"* ]]
 }
 
+@test "kind check-health forwards PLATFORM_TFVARS to the health script" {
+  run grep -Fn 'if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'vf="$$vf --var-file $${PLATFORM_TFVARS}"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind check-security forwards PLATFORM_TFVARS to the security script" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" 900 check-security PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'if [ -n "${PLATFORM_TFVARS:-}" ] && [ -f "${PLATFORM_TFVARS}" ]; then '* ]]
+  [[ "${output}" == *'vf="$vf --var-file ${PLATFORM_TFVARS}"; '* ]]
+}
+
 @test "kind apply refreshes kubeconfig after a successful apply" {
   run grep -Fn 'if [ $$rc -eq 0 ]; then \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 

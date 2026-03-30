@@ -28,6 +28,15 @@ if [[ -n "${KUBECTL_LOG:-}" ]]; then
 fi
 
 case "$*" in
+  *"auth can-i get deployments -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get daemonsets -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get statefulsets -n "*)
+    printf '%s\n' "yes"
+    ;;
   *"-n observability get deployment otel-collector -o json"*)
     cat <<'JSON'
 {"metadata":{"labels":{"app.kubernetes.io/name":"otel-collector"}}}
@@ -176,4 +185,123 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ -f "${source_file}" ]
+}
+
+@test "hubble-generate-cilium-policy explains multi-group input when policy-name is forced" {
+  local input_file
+
+  input_file="${BATS_TEST_TMPDIR}/edges.tsv"
+
+  cat > "${input_file}" <<'EOF'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+20	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
+7	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	8888
+EOF
+
+  run "${SCRIPT}" \
+    --input "${input_file}" \
+    --category observability \
+    --module-root "${MODULE_ROOT}" \
+    --policy-name cnp-observability-custom
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"--policy-name only supports a single generated policy; this input expands to 2 groups"* ]]
+  [[ "${output}" == *"observability/otel-collector TCP/4318"* ]]
+  [[ "${output}" == *"observability/otel-collector TCP/8888"* ]]
+}
+
+@test "hubble-generate-cilium-policy skips unresolved sources and still generates supported groups" {
+  local input_file
+  local source_file
+
+  input_file="${BATS_TEST_TMPDIR}/edges.tsv"
+  source_file="${MODULE_ROOT}/sources/observability/cnp-observability-otel-collector-allow-tcp-4318-from-observed-workloads.yaml"
+
+  cat > "${input_file}" <<'EOF'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+20	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
+1	EGRESS	FORWARDED	tcp	kube-system	coredns-7d764666f9-vdll5	workload	observability	otel-collector	4318
+1	EGRESS	FORWARDED	tcp	kube-system	coredns-7d764666f9-vdll5	workload	observability	otel-collector	9150
+EOF
+
+  run "${SCRIPT}" \
+    --input "${input_file}" \
+    --category observability \
+    --module-root "${MODULE_ROOT}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"skipping source kube-system/coredns-7d764666f9-vdll5 for observability/otel-collector TCP/4318"* ]]
+  [[ "${output}" == *"skipping observability/otel-collector TCP/9150: no resolvable source workloads remained after filtering"* ]]
+  [[ "${output}" == *"generated 1 policies; skipped 1 groups and 2 source entries"* ]]
+  [ -f "${source_file}" ]
+
+  run sed -n '1,220p' "${source_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'"k8s:io.kubernetes.pod.namespace": "dev"'* ]]
+  [[ "${output}" != *'coredns-7d764666f9-vdll5'* ]]
+}
+
+@test "hubble-generate-cilium-policy ignores unsupported summary protocols" {
+  local input_file
+  local source_file
+
+  input_file="${BATS_TEST_TMPDIR}/edges.tsv"
+  source_file="${MODULE_ROOT}/sources/observability/cnp-observability-otel-collector-allow-tcp-4318-from-observed-workloads.yaml"
+
+  cat > "${input_file}" <<'EOF'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+20	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
+3	EGRESS	FORWARDED	dns	kube-system	coredns	workload	observability	otel-collector	37306
+EOF
+
+  run "${SCRIPT}" \
+    --input "${input_file}" \
+    --category observability \
+    --module-root "${MODULE_ROOT}"
+
+  [ "${status}" -eq 0 ]
+  [ -f "${source_file}" ]
+  [[ "${output}" != *"37306"* ]]
+  [[ "${output}" != *"protocol: DNS"* ]]
+}
+
+@test "hubble-generate-cilium-policy fails early when selector-resolution RBAC is missing" {
+  local input_file
+
+  input_file="${BATS_TEST_TMPDIR}/edges.tsv"
+
+  cat > "${input_file}" <<'EOF'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+20	EGRESS	FORWARDED	tcp	dev	sentiment-api	workload	observability	otel-collector	4318
+EOF
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${KUBECTL_LOG:-}" ]]; then
+  printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+fi
+
+case "$*" in
+  *"auth can-i get deployments -n observability")
+    printf '%s\n' "no"
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run "${SCRIPT}" \
+    --input "${input_file}" \
+    --category observability \
+    --module-root "${MODULE_ROOT}"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required Kubernetes permission to resolve stable workload selectors"* ]]
+  [[ "${output}" == *"kubectl auth can-i get deployments -n "* ]]
 }

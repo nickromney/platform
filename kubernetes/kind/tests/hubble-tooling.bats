@@ -9,6 +9,7 @@ setup() {
   export SUMMARIZE_SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/hubble-summarise-flows.sh"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   export HUBBLE_LOG="${BATS_TEST_TMPDIR}/hubble.log"
+  export KUBECTL_LOG="${BATS_TEST_TMPDIR}/kubectl.log"
   export PATH="${TEST_BIN}:${PATH}"
 
   mkdir -p "${TEST_BIN}" "${HOME}/.kube"
@@ -26,6 +27,30 @@ elif [[ "${1:-}" == "status" ]]; then
 fi
 EOF
   chmod +x "${TEST_BIN}/hubble"
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+
+case "$*" in
+  *"auth can-i get services -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
 }
 
 @test "hubble-capture-flows normalises HTTPS server input to TLS relay flags" {
@@ -87,6 +112,27 @@ EOF
   [[ "${output}" == *"--namespace observability"* ]]
 }
 
+@test "hubble-capture-flows print-command writes the command to stderr without polluting stdout" {
+  local stderr_file
+
+  stderr_file="${BATS_TEST_TMPDIR}/capture.stderr"
+
+  run env CAPTURE_SCRIPT="${CAPTURE_SCRIPT}" STDERR_FILE="${stderr_file}" bash -c '
+    printf "%s\n" "{\"flow\":1}" \
+      | "${CAPTURE_SCRIPT}" --server https://relay.example.com --print-command 2>"${STDERR_FILE}"
+  '
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'{"flow":1}'* ]]
+  [[ "${output}" != *"hubble observe"* ]]
+
+  run cat "${stderr_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"hubble observe --output jsonpb"* ]]
+  [[ "${output}" == *"--server tls://relay.example.com:443"* ]]
+}
+
 @test "hubble-capture-flows explains when a UI route is used instead of the relay" {
   cat > "${TEST_BIN}/hubble" <<'EOF'
 #!/usr/bin/env bash
@@ -134,9 +180,43 @@ EOF
   run "${CAPTURE_SCRIPT}" --help
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"works without a pre-existing localhost port-forward"* ]]
+  [[ "${output}" == *"defaults to Hubble CLI port-forward"* ]]
   [[ "${output}" == *"./hubble-capture-flows.sh -P --kubeconfig ~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"kubectl -n kube-system port-forward service/hubble-relay 4245:4245"* ]]
+}
+
+@test "hubble-capture-flows fails early when port-forward RBAC is missing" {
+  touch "${HOME}/.kube/kind-kind-local.yaml"
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+
+case "$*" in
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n kube-system")
+    printf '%s\n' "no"
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run "${CAPTURE_SCRIPT}" --last 10 --namespace observability </dev/null
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required Kubernetes permission to open a Hubble relay port-forward"* ]]
+  [[ "${output}" == *"kubectl auth can-i create pods/portforward -n kube-system"* ]]
 }
 
 @test "hubble-check-connection.sh normalises HTTPS server input to TLS relay flags" {
@@ -167,6 +247,37 @@ EOF
   [[ "${output}" == *"status --port-forward"* ]]
   [[ "${output}" == *"--kubeconfig ${HOME}/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"--kube-namespace kube-system"* ]]
+}
+
+@test "hubble-check-connection.sh fails early when port-forward RBAC is missing" {
+  touch "${HOME}/.kube/kind-kind-local.yaml"
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+
+case "$*" in
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "no"
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run "${CHECK_SCRIPT}"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"missing required Kubernetes permission to locate the Hubble relay pod for port-forward mode"* ]]
+  [[ "${output}" == *"kubectl auth can-i get pods -n kube-system"* ]]
 }
 
 @test "hubble-check-connection.sh explains when localhost 4245 is not listening" {
@@ -240,4 +351,50 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'count\tdirection\tverdict\tsrc_ns\tsrc\tdns_server\tquery\tqtypes\trcode'* ]]
   [[ "${output}" == *$'\n1\tEGRESS\tFORWARDED\tsandbox\tdatadog-agent\tkube-system/coredns\tapi.datadoghq.com.\tA\tNOERROR'* ]]
+}
+
+@test "hubble-summarise-flows preserves blank namespace cells in TSV and marks them in text output" {
+  input_file="${BATS_TEST_TMPDIR}/external-to-datadog.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","traffic_direction":"INGRESS","source":{"pod_name":"","workloads":[]},"destination":{"namespace":"datadog","pod_name":"cluster-agent-abc","workloads":[{"name":"cluster-agent","kind":"Deployment"}]},"IP":{"source":"10.0.0.25"},"l4":{"TCP":{"destination_port":5005}}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --format tsv
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'\n1\tINGRESS\tFORWARDED\ttcp\t\t10.0.0.25\tworkload\tdatadog\tcluster-agent\t5005'* ]]
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --format text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ tcp[[:space:]]+-[[:space:]]+10\.0\.0\.25[[:space:]]+workload[[:space:]]+datadog[[:space:]]+cluster-agent[[:space:]]+5005 ]]
+}
+
+@test "hubble-summarise-flows supports table output as an explicit alias" {
+  input_file="${BATS_TEST_TMPDIR}/table-alias.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","traffic_direction":"INGRESS","source":{"pod_name":"","workloads":[]},"destination":{"namespace":"datadog","pod_name":"cluster-agent-abc","workloads":[{"name":"cluster-agent","kind":"Deployment"}]},"IP":{"source":"10.0.0.25"},"l4":{"TCP":{"destination_port":5005}}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --table
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ protocol[[:space:]]+src_ns[[:space:]]+src[[:space:]]+dst_class ]]
+  [[ "${output}" =~ tcp[[:space:]]+-[[:space:]]+10\.0\.0\.25[[:space:]]+workload[[:space:]]+datadog[[:space:]]+cluster-agent[[:space:]]+5005 ]]
+}
+
+@test "hubble-summarise-flows supports csv output and quotes comma-containing fields" {
+  input_file="${BATS_TEST_TMPDIR}/world-csv.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","traffic_direction":"EGRESS","source":{"namespace":"sandbox","pod_name":"datadog-agent-123","workloads":[{"name":"datadog-agent","kind":"DaemonSet"}]},"destination":{"labels":["reserved:world"]},"destination_names":["api.datadoghq.com","trace.agent.datadoghq.com"],"IP":{"destination":"104.16.0.1"},"l4":{"TCP":{"destination_port":443}}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report world --aggregate-by workload --direction egress --csv
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'count,direction,verdict,protocol,world_side,peer_ns,peer,world_names,world_ip,port'* ]]
+  [[ "${output}" == *$'\n1,EGRESS,FORWARDED,tcp,destination,sandbox,datadog-agent,"api.datadoghq.com,trace.agent.datadoghq.com",104.16.0.1,443'* ]]
 }

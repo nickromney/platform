@@ -278,12 +278,16 @@ wait_for_platform_gateway_hardening() {
 EXPECT_WIREGUARD=$(tfvar_bool enable_cilium_wireguard)
 EXPECT_GATEWAY_TLS=$(tfvar_bool enable_gateway_tls)
 EXPECT_POLICIES=$(tfvar_bool enable_policies)
+EXPECT_CILIUM_POLICIES=$(tfvar_bool enable_cilium_policies)
+EXPECT_CILIUM_POLICY_AUDIT_MODE=$(tfvar_bool enable_cilium_policy_audit_mode)
 EXPECT_KIND_PROVISIONING=$(tfvar_bool provision_kind_cluster)
 GATEWAY_HTTPS_HOST_PORT=$(tfvar_get gateway_https_host_port)
 PLATFORM_BASE_DOMAIN=$(tfvar_get platform_base_domain)
 PLATFORM_ADMIN_BASE_DOMAIN=$(tfvar_get platform_admin_base_domain)
 [[ -z "${GATEWAY_HTTPS_HOST_PORT}" ]] && GATEWAY_HTTPS_HOST_PORT=443
 [[ -z "${EXPECT_KIND_PROVISIONING}" ]] && EXPECT_KIND_PROVISIONING=false
+[[ -n "${EXPECT_CILIUM_POLICIES}" ]] || EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
+[[ -n "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" ]] || EXPECT_CILIUM_POLICY_AUDIT_MODE=false
 [[ -z "${PLATFORM_BASE_DOMAIN}" ]] && PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
 SEPARATE_ADMIN_DOMAIN=0
 if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
@@ -439,6 +443,26 @@ fi
 echo ""
 
 # -------------------------------------------------------------------------
+# 1b. Policy audit mode
+# -------------------------------------------------------------------------
+echo "--- Cilium policy audit mode ---"
+audit_mode=$(kubectl -n kube-system get configmap cilium-config -o jsonpath='{.data.policy-audit-mode}' 2>/dev/null || true)
+if [[ "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" == "true" ]]; then
+  if [[ "${audit_mode}" == "true" ]]; then
+    ok "Cilium policy audit mode is enabled"
+  else
+    fail_soft "Cilium policy audit mode not detected (enable_cilium_policy_audit_mode=true)"
+  fi
+else
+  if [[ "${audit_mode}" == "true" ]]; then
+    warn "Detected Cilium policy audit mode while enable_cilium_policy_audit_mode=${EXPECT_CILIUM_POLICY_AUDIT_MODE}"
+  else
+    ok "Cilium policy audit mode disabled"
+  fi
+fi
+echo ""
+
+# -------------------------------------------------------------------------
 # 3. Kyverno default-deny NetworkPolicies
 # -------------------------------------------------------------------------
 echo "--- Kyverno default-deny NetworkPolicies ---"
@@ -475,7 +499,7 @@ echo ""
 # 4. Cilium network policy enforcement - prove the negative
 # -------------------------------------------------------------------------
 echo "--- Cilium policy enforcement (negative tests) ---"
-if [[ "${EXPECT_POLICIES}" == "true" ]]; then
+if [[ "${EXPECT_CILIUM_POLICIES}" == "true" && "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" != "true" ]]; then
   if kubectl get ns "${POLICY_PROBE_NAMESPACE}" >/dev/null 2>&1; then
     probe_must_block_url \
       "Cross-project traffic from sentiment to subnetcalc in uat" \
@@ -490,7 +514,7 @@ if [[ "${EXPECT_POLICIES}" == "true" ]]; then
     skip "Cilium negative tests skipped (namespace ${POLICY_PROBE_NAMESPACE} not found)"
   fi
 else
-  skip "Cilium policy enforcement tests skipped (enable_policies=${EXPECT_POLICIES:-unset})"
+  skip "Cilium policy enforcement tests skipped (enable_cilium_policies=${EXPECT_CILIUM_POLICIES:-unset}, enable_cilium_policy_audit_mode=${EXPECT_CILIUM_POLICY_AUDIT_MODE:-unset})"
 fi
 echo ""
 

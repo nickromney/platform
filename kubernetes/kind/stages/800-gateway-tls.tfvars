@@ -16,6 +16,7 @@ enable_hubble                 = true
 enable_argocd                 = true
 enable_gitea                  = true
 enable_policies               = true
+enable_cilium_policy_audit_mode = false
 enable_prometheus             = true
 enable_grafana                = true
 enable_loki                   = false

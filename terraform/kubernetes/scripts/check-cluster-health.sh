@@ -632,6 +632,8 @@ EXPECT_HUBBLE=$(expected_from_tfvars enable_hubble)
 EXPECT_ARGOCD=$(expected_from_tfvars enable_argocd)
 EXPECT_GITEA=$(expected_from_tfvars enable_gitea)
 EXPECT_POLICIES=$(expected_from_tfvars enable_policies)
+EXPECT_CILIUM_POLICIES=$(expected_from_tfvars enable_cilium_policies)
+EXPECT_CILIUM_POLICY_AUDIT_MODE=$(expected_from_tfvars enable_cilium_policy_audit_mode)
 EXPECT_SIGNOZ=$(expected_from_tfvars enable_signoz)
 EXPECT_LOKI=$(expected_from_tfvars enable_loki)
 EXPECT_VICTORIA_LOGS=$(expected_from_tfvars enable_victoria_logs)
@@ -645,6 +647,8 @@ EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnet_calculator)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
+[[ -n "${EXPECT_CILIUM_POLICIES}" ]] || EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
+[[ -n "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" ]] || EXPECT_CILIUM_POLICY_AUDIT_MODE="false"
 CURRENT_STAGE=$(detect_stage_from_tfvars)
 
 ARGOCD_SERVER_NODE_PORT=$(tfvar_or_default argocd_server_node_port 30080)
@@ -1066,6 +1070,26 @@ else
 fi
 
 echo ""
+echo "Cilium policy audit mode (if enabled):"
+if ! section_active 200 "${EXPECT_CILIUM}"; then
+  ok "Skipped until stage 200"
+elif [[ "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" == "true" ]]; then
+  audit_mode=$(kubectl -n kube-system get configmap cilium-config -o jsonpath='{.data.policy-audit-mode}' 2>/dev/null || true)
+  if [[ "${audit_mode}" == "true" ]]; then
+    ok "Cilium policy audit mode enabled"
+  else
+    fail_soft "Cilium policy audit mode not detected (enable_cilium_policy_audit_mode=true${tfvars_hint})"
+  fi
+else
+  audit_mode=$(kubectl -n kube-system get configmap cilium-config -o jsonpath='{.data.policy-audit-mode}' 2>/dev/null || true)
+  if [[ "${audit_mode}" == "true" ]]; then
+    warn "Detected Cilium policy audit mode while enable_cilium_policy_audit_mode=${EXPECT_CILIUM_POLICY_AUDIT_MODE}${tfvars_hint}"
+  else
+    ok "Cilium policy audit mode disabled"
+  fi
+fi
+
+echo ""
 echo "Hubble (if installed):"
 if ! section_active 300 "${EXPECT_HUBBLE}"; then
   ok "Skipped until stage 300"
@@ -1167,7 +1191,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_POLICIES}" == "true" ]]; then
-    for app in kyverno kyverno-policies cilium-policies policy-reporter; do
+    for app in kyverno kyverno-policies policy-reporter; do
       if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
         msg=$(kubectl -n "${ARGOCD_NS}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
         if [[ -n "${msg}" ]]; then
@@ -1177,6 +1201,19 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
         fail_soft "Argo CD app ${app} missing (enable_policies=true${tfvars_hint})"
       fi
     done
+
+    if [[ "${EXPECT_CILIUM_POLICIES}" == "true" ]]; then
+      if kubectl -n "${ARGOCD_NS}" get app cilium-policies >/dev/null 2>&1; then
+        msg=$(kubectl -n "${ARGOCD_NS}" get app cilium-policies -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)
+        if [[ -n "${msg}" ]]; then
+          warn "Argo CD app cilium-policies comparison error: ${msg}"
+        fi
+      else
+        fail_soft "Argo CD app cilium-policies missing (enable_cilium_policies=true${tfvars_hint})"
+      fi
+    else
+      ok "Argo CD app cilium-policies intentionally disabled (enable_cilium_policies=${EXPECT_CILIUM_POLICIES}${tfvars_hint})"
+    fi
   fi
 
   if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then

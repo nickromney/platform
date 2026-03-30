@@ -187,6 +187,18 @@ variable "enable_policies" {
   default     = false
 }
 
+variable "enable_cilium_policies" {
+  description = "Enable the GitOps-managed Cilium policy Application sourced from the in-cluster Gitea repo. This is a sub-toggle of enable_policies."
+  type        = bool
+  default     = true
+}
+
+variable "enable_cilium_policy_audit_mode" {
+  description = "Enable Cilium Policy Audit Mode at the daemon level so loaded Cilium policies emit AUDITED verdicts instead of enforcing drops."
+  type        = bool
+  default     = false
+}
+
 variable "enable_gateway_tls" {
   description = "Enable HTTPS host routing via NGINX Gateway Fabric + cert-manager (sourced from the in-cluster Gitea repo)."
   type        = bool
@@ -871,6 +883,13 @@ check "enable_policies_requires_argocd_gitea_cilium" {
   assert {
     condition     = !var.enable_policies || (var.enable_argocd && var.enable_gitea && lower(var.cni_provider) == "cilium")
     error_message = "enable_policies requires enable_argocd=true, enable_gitea=true, and cni_provider=cilium."
+  }
+}
+
+check "enable_cilium_policy_audit_mode_requires_cilium_provider" {
+  assert {
+    condition     = !var.enable_cilium_policy_audit_mode || lower(var.cni_provider) == "cilium"
+    error_message = "enable_cilium_policy_audit_mode requires cni_provider=cilium."
   }
 }
 

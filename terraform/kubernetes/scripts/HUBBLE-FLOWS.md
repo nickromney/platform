@@ -15,7 +15,60 @@ The scripts involved are:
 - `./hubble-capture-flows.sh`
 - `./hubble-summarise-flows.sh`
 - `./hubble-generate-cilium-policy.sh`
+- `./hubble-observe-cilium-policies.sh`
 - `./render-cilium-policy-values.sh`
+
+## Observe Bootstrap Wrapper
+
+If you want the broad "super-script" flow rather than hand-piping each step,
+use:
+
+```bash
+./hubble-observe-cilium-policies.sh \
+  --since 5m \
+  --iterations 3 \
+  --row-threshold 100
+```
+
+That wrapper is for namespace-by-namespace observation bootstrap:
+
+1. discover namespaces
+2. capture short Hubble windows for each namespace
+3. summarise ingress and egress traffic
+4. fall back to namespace/entity aggregation when the workload edge set is too
+   noisy
+5. write candidate ingress and egress manifests under `.run/`
+
+It chains `./hubble-capture-flows.sh` and `./hubble-summarise-flows.sh` for the
+capture and summary stages.
+
+It does not call `./hubble-generate-cilium-policy.sh` for the final step.
+That generator is still aimed at "take this one stable TSV summary and turn it
+into a checked-in module example". The observe wrapper needs different behavior:
+one candidate ingress policy and one candidate egress policy per namespace,
+plus namespace/entity fallback when a short capture window is too noisy.
+
+If you want one command that also promotes the generated candidates into the
+module workflow, use:
+
+```bash
+./hubble-observe-cilium-policies.sh \
+  --since 5m \
+  --iterations 1 \
+  --promote-to-module
+```
+
+That still keeps the full capture/summarise evidence under `.run/`, but it also
+copies each generated candidate manifest into:
+
+- `terraform/kubernetes/cluster-policies/cilium/cilium-module/sources/<namespace>/`
+
+and renders the matching Helm-style values file into:
+
+- `terraform/kubernetes/cluster-policies/cilium/cilium-module/categories/<namespace>/`
+
+Use `--module-root DIR` to promote into a different module checkout, and
+`--force-module-overwrite` when rerunning the same observed candidate names.
 
 ## Two Outputs
 
@@ -90,6 +143,17 @@ General pattern:
       --aggregate-by workload \
       --direction egress
 ```
+
+`--to-namespace` on the capture side and `--direction egress` on the
+summariser side are complementary, not contradictory:
+
+- `--to-namespace datadog` means "only keep flows whose destination endpoint is
+  in `datadog`"
+- `--direction egress` means "only keep Hubble rows where traffic is leaving
+  the source side"
+
+So that combination is the normal way to ask "which workloads are sending
+traffic into `datadog`?"
 
 For busy namespaces, do not run several auto-port-forwarding captures in
 parallel unless you also give them distinct `--port-forward-port` values.

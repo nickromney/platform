@@ -11,6 +11,8 @@ If you do not pass `--server`, the script defaults to Hubble CLI port-forward
 mode. In this repo, if `~/.kube/kind-kind-local.yaml` exists and `KUBECONFIG`
 is not already set, that kubeconfig is used automatically so the local kind
 cluster works out of the box.
+Port-forward mode requires Kubernetes API access to `get services`, `get pods`,
+and `create pods/portforward` in the relay namespace.
 
 Options:
   --server HOST:PORT
@@ -94,6 +96,71 @@ fail() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+}
+
+kubectl_can_i() {
+  local verb="$1"
+  local resource="$2"
+  local namespace="${3:-}"
+  local args=(auth can-i "${verb}" "${resource}")
+  local output=""
+
+  if [[ -n "${namespace}" ]]; then
+    args+=(-n "${namespace}")
+  fi
+
+  if ! output="$("${KUBECTL_BASE[@]}" "${args[@]}" 2>/dev/null)"; then
+    CAN_I_ERROR_MSG="failed to query Kubernetes access with: kubectl ${args[*]}"
+    return 2
+  fi
+
+  output="${output##*$'\n'}"
+  output="${output//[[:space:]]/}"
+
+  case "${output}" in
+    yes)
+      return 0
+      ;;
+    no)
+      return 1
+      ;;
+    *)
+      CAN_I_ERROR_MSG="unexpected output from kubectl ${args[*]}: ${output}"
+      return 2
+      ;;
+  esac
+}
+
+require_kubectl_permission() {
+  local verb="$1"
+  local resource="$2"
+  local namespace="$3"
+  local reason="$4"
+  local scope_msg=""
+  local scope_cmd=""
+  local status=0
+
+  if [[ -n "${namespace}" ]]; then
+    scope_msg=" in namespace ${namespace}"
+    scope_cmd=" -n ${namespace}"
+  fi
+
+  if kubectl_can_i "${verb}" "${resource}" "${namespace}"; then
+    return 0
+  fi
+  status=$?
+
+  if [[ "${status}" -eq 2 ]]; then
+    fail "${CAN_I_ERROR_MSG}"
+  fi
+
+  fail "missing required Kubernetes permission to ${reason}: cannot ${verb} ${resource}${scope_msg}. Check: kubectl auth can-i ${verb} ${resource}${scope_cmd}"
+}
+
+preflight_port_forward_permissions() {
+  require_kubectl_permission "get" "services" "${kube_namespace}" "look up the Hubble relay Service for port-forward mode"
+  require_kubectl_permission "get" "pods" "${kube_namespace}" "locate the Hubble relay pod for port-forward mode"
+  require_kubectl_permission "create" "pods/portforward" "${kube_namespace}" "open a Hubble relay port-forward"
 }
 
 extract_host_and_port() {
@@ -361,6 +428,21 @@ if [[ -n "${server}" ]]; then
   fi
   if [[ "${SERVER_SCHEME}" == "https" || "${SERVER_SCHEME}" == "tls" ]]; then
     tls_enabled=1
+  fi
+fi
+
+if [[ "${port_forward}" -eq 1 ]]; then
+  require_cmd kubectl
+  KUBECTL_BASE=(kubectl)
+  if [[ -n "${kubeconfig}" ]]; then
+    KUBECTL_BASE+=(--kubeconfig "${kubeconfig}")
+  fi
+  if [[ -n "${kube_context}" ]]; then
+    KUBECTL_BASE+=(--context "${kube_context}")
+  fi
+
+  if [[ "${dry_run}" -eq 0 ]]; then
+    preflight_port_forward_permissions
   fi
 fi
 
