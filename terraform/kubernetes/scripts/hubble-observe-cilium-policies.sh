@@ -74,9 +74,14 @@ Options:
   --capture-mode flows|policy-verdict
       Capture ordinary traffic flows (default) or only policy-verdict events.
 
+  --world-egress-mode observed|entity
+      For egress flows that Hubble classifies as `world`, either prefer exact
+      observed FQDN/CIDR targets and skip unresolved broad world rules
+      (`observed`), or preserve legacy `toEntities: world` generation
+      (`entity`). Default: observed
+
   --namespace NS
-      Repeatable namespace allowlist. By default, all namespaces except
-      kube-system are scanned. Include `--namespace kube-system` to opt it in.
+      Repeatable namespace allowlist. By default, all namespaces are scanned.
 
   --exclude-namespace NS
       Repeatable namespace exclusion applied after discovery.
@@ -130,8 +135,10 @@ Notes:
   - selector resolution needs `get` on deployments, daemonsets, statefulsets,
     pods, and replicasets in any namespace whose workloads appear in the
     generated policy candidates
-  - kube-system is excluded from discovery and peer-derived candidates by
-    default; pass `--namespace kube-system` to opt it in
+  - all namespaces are included by default; use `--exclude-namespace` when you
+    want to trim bootstrap noise
+  - `--world-egress-mode observed` prefers exact external destinations from
+    Hubble (`toFQDNs` or `toCIDRSet`) over broad `toEntities: world`
 
 Examples:
   terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh \
@@ -374,6 +381,100 @@ is_ip_like() {
   fi
 
   return 1
+}
+
+is_ipv4_address() {
+  [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+}
+
+is_ipv6_address() {
+  [[ "$1" == *:* ]]
+}
+
+cidr_for_ip() {
+  local ip="$1"
+
+  if is_ipv4_address "${ip}"; then
+    printf '%s/32\n' "${ip}"
+    return 0
+  fi
+
+  if is_ipv6_address "${ip}"; then
+    printf '%s/128\n' "${ip}"
+    return 0
+  fi
+
+  return 1
+}
+
+normalize_dns_name() {
+  local value="$1"
+
+  value="$(printf '%s' "${value}" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\.$//')"
+
+  [[ -n "${value}" ]] || return 1
+  is_ip_like "${value}" && return 1
+  [[ "${value}" =~ ^[a-z0-9.-]+$ ]] || return 1
+  [[ "${value}" == *.* ]] || return 1
+
+  printf '%s\n' "${value}"
+}
+
+collect_world_targets() {
+  local direction="$1"
+  local world_names="$2"
+  local world_ip="$3"
+  local value=""
+  local normalized=""
+  local cidr=""
+  local -a dns_names=()
+  local -A seen_names=()
+
+  while IFS= read -r value; do
+    normalized="$(normalize_dns_name "${value}" 2>/dev/null || true)"
+    [[ -n "${normalized}" ]] || continue
+    if [[ -n "${seen_names[${normalized}]+x}" ]]; then
+      continue
+    fi
+    seen_names["${normalized}"]=1
+    dns_names+=("${normalized}")
+  done < <(printf '%s\n' "${world_names}" | tr ',' '\n')
+
+  if [[ "${direction}" == "egress" ]]; then
+    if [[ "${#dns_names[@]}" -eq 1 ]]; then
+      printf 'fqdn\t%s\n' "${dns_names[0]}"
+      return 0
+    fi
+
+    if [[ "${#dns_names[@]}" -gt 1 ]]; then
+      if cidr="$(cidr_for_ip "${world_ip}" 2>/dev/null)"; then
+        printf 'cidr\t%s\n' "${cidr}"
+        return 0
+      fi
+
+      for value in "${dns_names[@]}"; do
+        printf 'fqdn\t%s\n' "${value}"
+      done
+      return 0
+    fi
+  fi
+
+  if cidr="$(cidr_for_ip "${world_ip}" 2>/dev/null)"; then
+    printf 'cidr\t%s\n' "${cidr}"
+    return 0
+  fi
+
+  if [[ "${direction}" == "egress" ]]; then
+    if [[ "${world_egress_mode}" == "entity" ]]; then
+      printf 'world\tworld\n'
+      return 0
+    fi
+    return 1
+  fi
+
+  printf 'world\tworld\n'
 }
 
 supported_policy_protocol() {
@@ -1283,6 +1384,8 @@ build_namespace_aggregate_report() {
   local world_file="$4"
   local output_file="$5"
   local tmp_rows
+  local target_kind=""
+  local target_value=""
 
   tmp_rows="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-aggregate.XXXXXX")"
 
@@ -1298,17 +1401,17 @@ build_namespace_aggregate_report() {
       [[ "${dst_ns}" == "${namespace}" ]] || continue
       [[ "${dst_class}" == "workload" ]] || continue
       if [[ -n "${src_ns}" ]]; then
-        printf '%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "namespace" "${src_ns}:${dst_port}" >> "${tmp_rows}"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "namespace" "${src_ns}" "${dst_port}" >> "${tmp_rows}"
       elif is_host_peer_ip "${src}"; then
-        printf '%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "host" "host:${dst_port}" >> "${tmp_rows}"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "host" "host" "${dst_port}" >> "${tmp_rows}"
       fi
     else
       [[ "${src_ns}" == "${namespace}" ]] || continue
       [[ "${dst_class}" == "workload" ]] || continue
       if [[ -n "${dst_ns}" ]]; then
-        printf '%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "namespace" "${dst_ns}:${dst_port}" >> "${tmp_rows}"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "namespace" "${dst_ns}" "${dst_port}" >> "${tmp_rows}"
       elif is_host_peer_ip "${dst}"; then
-        printf '%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "host" "host:${dst_port}" >> "${tmp_rows}"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "host" "host" "${dst_port}" >> "${tmp_rows}"
       fi
     fi
   done < <(tsv_rows "${edges_file}")
@@ -1324,10 +1427,16 @@ build_namespace_aggregate_report() {
 
     if [[ "${direction}" == "ingress" ]]; then
       [[ "${world_side}" == "source" && "${peer_ns}" == "${namespace}" ]] || continue
-      printf '%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "world" "world:${port}" >> "${tmp_rows}"
+      while IFS=$'\t' read -r target_kind target_value; do
+        [[ -n "${target_kind}" && -n "${target_value}" ]] || continue
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "${target_kind}" "${target_value}" "${port}" >> "${tmp_rows}"
+      done < <({ collect_world_targets "ingress" "${world_names}" "${world_ip}" || true; })
     else
       [[ "${world_side}" == "destination" && "${peer_ns}" == "${namespace}" ]] || continue
-      printf '%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "world" "world:${port}" >> "${tmp_rows}"
+      while IFS=$'\t' read -r target_kind target_value; do
+        [[ -n "${target_kind}" && -n "${target_value}" ]] || continue
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${count}" "${direction}" "${protocol}" "${target_kind}" "${target_value}" "${port}" >> "${tmp_rows}"
+      done < <({ collect_world_targets "egress" "${world_names}" "${world_ip}" || true; })
     fi
   done < <(tsv_rows "${world_file}")
 
@@ -1336,16 +1445,15 @@ build_namespace_aggregate_report() {
     if [[ -s "${tmp_rows}" ]]; then
       awk -F'\t' '
         {
-          key = $2 FS $3 FS $4 FS $5
+          key = $2 FS $3 FS $4 FS $5 FS $6
           counts[key] += $1
         }
         END {
           for (key in counts) {
             split(key, parts, FS)
-            split(parts[4], peer_parts, ":")
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", counts[key], parts[1], parts[2], parts[3], peer_parts[1], peer_parts[2]
-      }
-    }
+            printf "%s\t%s\t%s\t%s\t%s\t%s\n", counts[key], parts[1], parts[2], parts[3], parts[4], parts[5]
+          }
+        }
       ' "${tmp_rows}" | LC_ALL=C sort -t $'\t' -k1,1nr -k2,2 -k3,3 -k4,4 -k5,5
     fi
   } > "${output_file}"
@@ -1440,6 +1548,21 @@ build_ingress_rule_block() {
   local selector_key=""
   local selector_value=""
 
+  if [[ "${kind}" == "cidr" ]]; then
+    {
+      printf '      - fromCIDRSet:\n'
+      while IFS= read -r selector_value; do
+        [[ -n "${selector_value}" ]] || continue
+        printf '          - cidr: "%s"\n' "$(yaml_escape "${selector_value}")"
+      done < "${items_file}"
+      printf '        toPorts:\n'
+      printf '          - ports:\n'
+      printf '              - port: "%s"\n' "$(yaml_escape "${port}")"
+      printf '                protocol: %s\n' "$(printf '%s' "${protocol}" | tr '[:lower:]' '[:upper:]')"
+    } > "${output_file}"
+    return 0
+  fi
+
   if [[ "${kind}" == "world" || "${kind}" == "host" ]]; then
     {
       printf '      - fromEntities:\n'
@@ -1478,6 +1601,36 @@ build_egress_rule_block() {
   local peer_ns=""
   local selector_key=""
   local selector_value=""
+
+  if [[ "${kind}" == "fqdn" ]]; then
+    {
+      printf '      - toFQDNs:\n'
+      while IFS= read -r selector_value; do
+        [[ -n "${selector_value}" ]] || continue
+        printf '          - matchName: "%s"\n' "$(yaml_escape "${selector_value}")"
+      done < "${items_file}"
+      printf '        toPorts:\n'
+      printf '          - ports:\n'
+      printf '              - port: "%s"\n' "$(yaml_escape "${port}")"
+      printf '                protocol: %s\n' "$(printf '%s' "${protocol}" | tr '[:lower:]' '[:upper:]')"
+    } > "${output_file}"
+    return 0
+  fi
+
+  if [[ "${kind}" == "cidr" ]]; then
+    {
+      printf '      - toCIDRSet:\n'
+      while IFS= read -r selector_value; do
+        [[ -n "${selector_value}" ]] || continue
+        printf '          - cidr: "%s"\n' "$(yaml_escape "${selector_value}")"
+      done < "${items_file}"
+      printf '        toPorts:\n'
+      printf '          - ports:\n'
+      printf '              - port: "%s"\n' "$(yaml_escape "${port}")"
+      printf '                protocol: %s\n' "$(printf '%s' "${protocol}" | tr '[:lower:]' '[:upper:]')"
+    } > "${output_file}"
+    return 0
+  fi
 
   if [[ "${kind}" == "world" || "${kind}" == "host" ]]; then
     {
@@ -1530,6 +1683,8 @@ generate_ingress_policy() {
   local description=""
   local policy_name=""
   local title=""
+  local target_kind=""
+  local target_value=""
 
   tmp_entries="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-ingress-entries.XXXXXX")"
   tmp_rules="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-ingress-rules.XXXXXX")"
@@ -1594,11 +1749,16 @@ generate_ingress_policy() {
         continue
       fi
 
-      printf '%s\t%s\t%s\t%s\tworld\t\t\t\n' \
-        "${RESOLVED_SELECTOR_KEY}" \
-        "${RESOLVED_SELECTOR_VALUE}" \
-        "${protocol}" \
-        "${port}" >> "${tmp_entries}"
+      while IFS=$'\t' read -r target_kind target_value; do
+        [[ -n "${target_kind}" && -n "${target_value}" ]] || continue
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t\t\n' \
+          "${RESOLVED_SELECTOR_KEY}" \
+          "${RESOLVED_SELECTOR_VALUE}" \
+          "${protocol}" \
+          "${port}" \
+          "${target_kind}" \
+          "${target_value}" >> "${tmp_entries}"
+      done < <({ collect_world_targets "ingress" "${world_names}" "${world_ip}" || true; })
     done < <(tsv_rows "${world_file}")
 
     if [[ ! -s "${tmp_entries}" ]]; then
@@ -1618,11 +1778,28 @@ generate_ingress_policy() {
       : > "${tmp_rules}"
       while IFS=$'\t' read -r protocol port kind; do
         [[ -n "${protocol}" && -n "${port}" && -n "${kind}" ]] || continue
-        awk -F'\t' -v key="${target_selector_key}" -v val="${target_selector_value}" -v p="${protocol}" -v d="${port}" -v k="${kind}" '
-          $1 == key && $2 == val && $3 == p && $4 == d && $5 == k {
-            print $6 "\t" $7 "\t" $8
-          }
-        ' "${tmp_entries}" | sort -u > "${tmp_group}"
+        case "${kind}" in
+          workload|namespace)
+            awk -F'\t' -v key="${target_selector_key}" -v val="${target_selector_value}" -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+              $1 == key && $2 == val && $3 == p && $4 == d && $5 == k {
+                print $6 "\t" $7 "\t" $8
+              }
+            ' "${tmp_entries}" | sort -u > "${tmp_group}"
+            ;;
+          cidr)
+            awk -F'\t' -v key="${target_selector_key}" -v val="${target_selector_value}" -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+              $1 == key && $2 == val && $3 == p && $4 == d && $5 == k && $6 != "" {
+                print $6
+              }
+            ' "${tmp_entries}" | sort -u > "${tmp_group}"
+            ;;
+          host|world)
+            : > "${tmp_group}"
+            ;;
+          *)
+            continue
+            ;;
+        esac
         build_ingress_rule_block "${tmp_group}" "${protocol}" "${port}" "${kind}" "${tmp_group}.rule"
         cat "${tmp_group}.rule" >> "${tmp_rules}"
         rm -f "${tmp_group}.rule"
@@ -1660,12 +1837,12 @@ generate_ingress_policy() {
       [[ "${dst_class}" == "workload" && "${dst_ns}" == "${namespace}" && -n "${dst_port}" ]] || continue
 
       if [[ -n "${src_ns}" ]]; then
-        printf '%s\t%s\tnamespace\t%s\t\t\t\n' \
+        printf '%s\t%s\tnamespace\t%s\t\t\n' \
           "${protocol}" \
           "${dst_port}" \
           "${src_ns}" >> "${tmp_entries}"
       elif is_host_peer_ip "${src}"; then
-        printf '%s\t%s\thost\t\t\t\t\n' "${protocol}" "${dst_port}" >> "${tmp_entries}"
+        printf '%s\t%s\thost\thost\t\t\n' "${protocol}" "${dst_port}" >> "${tmp_entries}"
       fi
     done < <(tsv_rows "${edges_file}")
 
@@ -1679,7 +1856,10 @@ generate_ingress_policy() {
       supported_policy_protocol "${protocol}" || continue
       [[ "${world_side}" == "source" && "${peer_ns}" == "${namespace}" && -n "${port}" ]] || continue
 
-      printf '%s\t%s\tworld\t\t\t\t\n' "${protocol}" "${port}" >> "${tmp_entries}"
+      while IFS=$'\t' read -r target_kind target_value; do
+        [[ -n "${target_kind}" && -n "${target_value}" ]] || continue
+        printf '%s\t%s\t%s\t%s\t\t\n' "${protocol}" "${port}" "${target_kind}" "${target_value}" >> "${tmp_entries}"
+      done < <({ collect_world_targets "ingress" "${world_names}" "${world_ip}" || true; })
     done < <(tsv_rows "${world_file}")
 
     if [[ ! -s "${tmp_entries}" ]]; then
@@ -1693,11 +1873,26 @@ generate_ingress_policy() {
     write_namespace_policy_header "${policy_file}" "${policy_name}" "${namespace}" "${title}" "ingress" "${mode}" "${row_count}"
 
     : > "${tmp_rules}"
-    while IFS=$'\t' read -r protocol port kind peer_ns _ _ _; do
+    while IFS=$'\t' read -r protocol port kind peer_value _ _; do
       [[ -n "${protocol}" && -n "${port}" && -n "${kind}" ]] || continue
-      awk -F'\t' -v p="${protocol}" -v d="${port}" -v k="${kind}" '
-        $1 == p && $2 == d && $3 == k { print $4 "\t" $5 "\t" $6 }
-      ' "${tmp_entries}" | sort -u > "${tmp_group}"
+      case "${kind}" in
+        namespace)
+          awk -F'\t' -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+            $1 == p && $2 == d && $3 == k { print $4 "\t" $5 "\t" $6 }
+          ' "${tmp_entries}" | sort -u > "${tmp_group}"
+          ;;
+        cidr)
+          awk -F'\t' -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+            $1 == p && $2 == d && $3 == k && $4 != "" { print $4 }
+          ' "${tmp_entries}" | sort -u > "${tmp_group}"
+          ;;
+        host|world)
+          : > "${tmp_group}"
+          ;;
+        *)
+          continue
+          ;;
+      esac
       build_ingress_rule_block "${tmp_group}" "${protocol}" "${port}" "${kind}" "${tmp_group}.rule"
       cat "${tmp_group}.rule" >> "${tmp_rules}"
       rm -f "${tmp_group}.rule"
@@ -1745,6 +1940,9 @@ generate_egress_policy() {
   local description=""
   local policy_name=""
   local title=""
+  local target_kind=""
+  local target_value=""
+  local world_targets_added=0
 
   tmp_entries="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-egress-entries.XXXXXX")"
   tmp_rules="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-egress-rules.XXXXXX")"
@@ -1809,11 +2007,21 @@ generate_egress_policy() {
         continue
       fi
 
-      printf '%s\t%s\t%s\t%s\tworld\t\t\t\n' \
-        "${RESOLVED_SELECTOR_KEY}" \
-        "${RESOLVED_SELECTOR_VALUE}" \
-        "${protocol}" \
-        "${port}" >> "${tmp_entries}"
+      world_targets_added=0
+      while IFS=$'\t' read -r target_kind target_value; do
+        [[ -n "${target_kind}" && -n "${target_value}" ]] || continue
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t\t\n' \
+          "${RESOLVED_SELECTOR_KEY}" \
+          "${RESOLVED_SELECTOR_VALUE}" \
+          "${protocol}" \
+          "${port}" \
+          "${target_kind}" \
+          "${target_value}" >> "${tmp_entries}"
+        world_targets_added=1
+      done < <({ collect_world_targets "egress" "${world_names}" "${world_ip}" || true; })
+      if [[ "${world_targets_added}" -eq 0 ]]; then
+        warn "skipping egress world destination for ${namespace}/${peer} on ${protocol}/${port}: no observed FQDN or IP"
+      fi
     done < <(tsv_rows "${world_file}")
 
     if [[ ! -s "${tmp_entries}" ]]; then
@@ -1832,11 +2040,28 @@ generate_egress_policy() {
       : > "${tmp_rules}"
       while IFS=$'\t' read -r protocol port kind; do
         [[ -n "${protocol}" && -n "${port}" && -n "${kind}" ]] || continue
-        awk -F'\t' -v key="${source_selector_key}" -v val="${source_selector_value}" -v p="${protocol}" -v d="${port}" -v k="${kind}" '
-          $1 == key && $2 == val && $3 == p && $4 == d && $5 == k {
-            print $6 "\t" $7 "\t" $8
-          }
-        ' "${tmp_entries}" | sort -u > "${tmp_group}"
+        case "${kind}" in
+          workload|namespace)
+            awk -F'\t' -v key="${source_selector_key}" -v val="${source_selector_value}" -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+              $1 == key && $2 == val && $3 == p && $4 == d && $5 == k {
+                print $6 "\t" $7 "\t" $8
+              }
+            ' "${tmp_entries}" | sort -u > "${tmp_group}"
+            ;;
+          fqdn|cidr)
+            awk -F'\t' -v key="${source_selector_key}" -v val="${source_selector_value}" -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+              $1 == key && $2 == val && $3 == p && $4 == d && $5 == k && $6 != "" {
+                print $6
+              }
+            ' "${tmp_entries}" | sort -u > "${tmp_group}"
+            ;;
+          host|world)
+            : > "${tmp_group}"
+            ;;
+          *)
+            continue
+            ;;
+        esac
         build_egress_rule_block "${tmp_group}" "${protocol}" "${port}" "${kind}" "${tmp_group}.rule"
         cat "${tmp_group}.rule" >> "${tmp_rules}"
         rm -f "${tmp_group}.rule"
@@ -1874,12 +2099,12 @@ generate_egress_policy() {
       [[ "${src_ns}" == "${namespace}" && "${dst_class}" == "workload" && -n "${dst_port}" ]] || continue
 
       if [[ -n "${dst_ns}" ]]; then
-        printf '%s\t%s\tnamespace\t%s\t\t\t\n' \
+        printf '%s\t%s\tnamespace\t%s\t\t\n' \
           "${protocol}" \
           "${dst_port}" \
           "${dst_ns}" >> "${tmp_entries}"
       elif is_host_peer_ip "${dst}"; then
-        printf '%s\t%s\thost\t\t\t\t\n' "${protocol}" "${dst_port}" >> "${tmp_entries}"
+        printf '%s\t%s\thost\thost\t\t\n' "${protocol}" "${dst_port}" >> "${tmp_entries}"
       fi
     done < <(tsv_rows "${edges_file}")
 
@@ -1893,7 +2118,15 @@ generate_egress_policy() {
       supported_policy_protocol "${protocol}" || continue
       [[ "${world_side}" == "destination" && "${peer_ns}" == "${namespace}" && -n "${port}" ]] || continue
 
-      printf '%s\t%s\tworld\t\t\t\t\n' "${protocol}" "${port}" >> "${tmp_entries}"
+      world_targets_added=0
+      while IFS=$'\t' read -r target_kind target_value; do
+        [[ -n "${target_kind}" && -n "${target_value}" ]] || continue
+        printf '%s\t%s\t%s\t%s\t\t\n' "${protocol}" "${port}" "${target_kind}" "${target_value}" >> "${tmp_entries}"
+        world_targets_added=1
+      done < <({ collect_world_targets "egress" "${world_names}" "${world_ip}" || true; })
+      if [[ "${world_targets_added}" -eq 0 ]]; then
+        warn "skipping namespace-aggregate world egress for ${namespace} on ${protocol}/${port}: no observed FQDN or IP"
+      fi
     done < <(tsv_rows "${world_file}")
 
     if [[ ! -s "${tmp_entries}" ]]; then
@@ -1907,11 +2140,26 @@ generate_egress_policy() {
     write_namespace_policy_header "${policy_file}" "${policy_name}" "${namespace}" "${title}" "egress" "${mode}" "${row_count}"
 
     : > "${tmp_rules}"
-    while IFS=$'\t' read -r protocol port kind peer_ns _ _ _; do
+    while IFS=$'\t' read -r protocol port kind peer_value _ _; do
       [[ -n "${protocol}" && -n "${port}" && -n "${kind}" ]] || continue
-      awk -F'\t' -v p="${protocol}" -v d="${port}" -v k="${kind}" '
-        $1 == p && $2 == d && $3 == k { print $4 "\t" $5 "\t" $6 }
-      ' "${tmp_entries}" | sort -u > "${tmp_group}"
+      case "${kind}" in
+        namespace)
+          awk -F'\t' -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+            $1 == p && $2 == d && $3 == k { print $4 "\t" $5 "\t" $6 }
+          ' "${tmp_entries}" | sort -u > "${tmp_group}"
+          ;;
+        fqdn|cidr)
+          awk -F'\t' -v p="${protocol}" -v d="${port}" -v k="${kind}" '
+            $1 == p && $2 == d && $3 == k && $4 != "" { print $4 }
+          ' "${tmp_entries}" | sort -u > "${tmp_group}"
+          ;;
+        host|world)
+          : > "${tmp_group}"
+          ;;
+        *)
+          continue
+          ;;
+      esac
       build_egress_rule_block "${tmp_group}" "${protocol}" "${port}" "${kind}" "${tmp_group}.rule"
       cat "${tmp_group}.rule" >> "${tmp_rules}"
       rm -f "${tmp_group}.rule"
@@ -2042,6 +2290,7 @@ sleep_between="0"
 progress_every="10"
 row_threshold="100"
 capture_mode="flows"
+world_egress_mode="observed"
 output_dir=""
 promote_to_module=0
 module_root=""
@@ -2061,7 +2310,7 @@ DEFAULT_MODULE_ROOT="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/c
 
 declare -a namespaces=()
 declare -a excluded_namespaces=()
-declare -a DEFAULT_EXCLUDED_NAMESPACES=(kube-system)
+declare -a DEFAULT_EXCLUDED_NAMESPACES=()
 declare -A SELECTOR_ACCESS_CHECKED=()
 declare -A SELECTOR_CACHE_STATUS=()
 declare -A SELECTOR_CACHE_KEY=()
@@ -2119,6 +2368,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --capture-mode)
       capture_mode="${2:-}"
+      shift 2
+      ;;
+    --world-egress-mode)
+      world_egress_mode="${2:-}"
       shift 2
       ;;
     --namespace)
@@ -2195,6 +2448,13 @@ case "${capture_mode}" in
   flows|policy-verdict) ;;
   *)
     fail "--capture-mode must be one of: flows, policy-verdict"
+    ;;
+esac
+
+case "${world_egress_mode}" in
+  observed|entity) ;;
+  *)
+    fail "--world-egress-mode must be one of: observed, entity"
     ;;
 esac
 

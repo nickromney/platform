@@ -42,6 +42,9 @@ That wrapper is for namespace-by-namespace observation bootstrap:
 It chains `./hubble-capture-flows.sh` and `./hubble-summarise-flows.sh` for the
 capture and summary stages.
 
+By default it scans all namespaces and relies on `--exclude-namespace` only
+when you want to trim noise from bootstrap runs.
+
 On busy namespaces, the first knob to turn is `--since`. The default wrapper
 run asks Hubble for three separate 5-minute windows per namespace, so start
 smaller when a namespace is noisy:
@@ -67,6 +70,15 @@ summary helper is still running. Use `--progress-every 0` to disable that.
 Each run report also records capture, summary, and generation elapsed seconds
 per namespace so you can compare a baseline `--capture-strategy since` run
 against an adaptive run on the same namespace and cluster.
+
+For egress that Hubble classifies as `world`, the wrapper now prefers exact
+observed external destinations in generated candidates:
+
+- `toFQDNs` when Hubble exposes a stable destination name
+- `toCIDRSet` when only an exact IP is available
+
+Use `--world-egress-mode entity` when you explicitly want the older
+`toEntities: world` fallback instead.
 
 It does not call `./hubble-generate-cilium-policy.sh` for the final step.
 That generator is still aimed at "take this one stable TSV summary and turn it
