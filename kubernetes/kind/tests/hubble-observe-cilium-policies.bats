@@ -76,6 +76,11 @@ JSON
 {"items":[]}
 JSON
     ;;
+  "-n kube-system get service hubble-relay -o json")
+    cat <<'JSON'
+{"spec":{"ports":[{"name":"grpc","port":4245,"protocol":"TCP"}]}}
+JSON
+    ;;
   *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
     printf '%s\n' "Forwarding from 127.0.0.1:49000 -> 4245"
     while true; do
@@ -131,6 +136,37 @@ EOF
   [[ "${output}" != *"get namespaces -o json"* ]]
   [[ "${output}" == *"get ciliumnodes -o json"* ]]
   [[ "${output}" == *"get nodes -o json"* ]]
+}
+
+@test "hubble-observe-cilium-policies excludes kube-system by default unless explicitly requested" {
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --dry-run \
+    --capture-strategy since
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"observing namespace observability"* ]]
+  [[ "${output}" == *"observing namespace datadog"* ]]
+  [[ "${output}" != *"observing namespace kube-system"* ]]
+
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --dry-run \
+    --namespace kube-system \
+    --capture-strategy since
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"observing namespace kube-system"* ]]
 }
 
 @test "hubble-observe-cilium-policies fails early when namespace discovery needs list namespaces permission" {
@@ -349,6 +385,11 @@ JSON
   "get nodes -o json")
     cat <<'JSON'
 {"items":[]}
+JSON
+    ;;
+  "-n kube-system get service hubble-relay -o json")
+    cat <<'JSON'
+{"spec":{"ports":[{"name":"grpc","port":4245,"protocol":"TCP"}]}}
 JSON
     ;;
   *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
@@ -664,6 +705,298 @@ EOF
   [[ "${output}" == $'observability ingress\nobservability egress\ndatadog ingress\ndatadog egress' ]]
 }
 
+@test "hubble-observe-cilium-policies excludes kube-system peers from candidates unless explicitly requested" {
+  local output_dir
+  local egress_policy
+  local report_file
+
+  output_dir="${BATS_TEST_TMPDIR}/exclude-system-peers-run"
+  egress_policy="${output_dir}/policies/cloudflare/cnp-cloudflare-observed-egress-candidate.yaml"
+  report_file="${output_dir}/run-report.md"
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+
+case "$*" in
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get ciliumnodes.cilium.io")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get nodes")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get deployments -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get daemonsets -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get statefulsets -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n "*)
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get replicasets -n "*)
+    printf '%s\n' "yes"
+    ;;
+  "get ciliumnodes -o json")
+    cat <<'JSON'
+{"items":[]}
+JSON
+    ;;
+  "get nodes -o json")
+    cat <<'JSON'
+{"items":[]}
+JSON
+    ;;
+  "-n kube-system get service hubble-relay -o json")
+    cat <<'JSON'
+{"spec":{"ports":[{"name":"grpc","port":4245,"protocol":"TCP"}]}}
+JSON
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
+    printf '%s\n' "Forwarding from 127.0.0.1:49000 -> 4245"
+    while true; do
+      sleep 1
+    done
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay "*":4245")
+    local_port="${*: -1}"
+    local_port="${local_port%%:4245}"
+    printf 'Forwarding from 127.0.0.1:%s -> 4245\n' "${local_port}"
+    while true; do
+      sleep 1
+    done
+    ;;
+  "-n cloudflare get deployment cloudflared -o json")
+    cat <<'JSON'
+{"metadata":{"labels":{"app.kubernetes.io/name":"cloudflared"}}}
+JSON
+    ;;
+  "-n argocd get deployment argocd-server -o json")
+    cat <<'JSON'
+{"metadata":{"labels":{"app.kubernetes.io/name":"argocd-server"}}}
+JSON
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+cat <<'JSON'
+{"flow":{"verdict":"FORWARDED"}}
+JSON
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+report=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --report)
+      report="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ "${report}" == "edges" ]]; then
+  cat <<'TSV'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+5	EGRESS	FORWARDED	tcp	cloudflare	cloudflared	workload	kube-system	ama-logs	443
+4	EGRESS	FORWARDED	tcp	cloudflare	cloudflared	workload	argocd	argocd-server	443
+TSV
+  exit 0
+fi
+
+cat <<'TSV'
+count	direction	verdict	protocol	world_side	peer_ns	peer	world_names	world_ip	port
+TSV
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --namespace cloudflare \
+    --capture-strategy since \
+    --iterations 1 \
+    --output-dir "${output_dir}"
+
+  [ "${status}" -eq 0 ]
+  [ -f "${egress_policy}" ]
+  [ -f "${report_file}" ]
+
+  run sed -n '1,220p' "${egress_policy}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'"k8s:io.kubernetes.pod.namespace": "argocd"'* ]]
+  [[ "${output}" != *'ama-logs'* ]]
+  [[ "${output}" != *'"k8s:io.kubernetes.pod.namespace": "kube-system"'* ]]
+
+  run grep -c -- "-n kube-system get deployment ama-logs -o json" "${KUBECTL_LOG}"
+
+  [ "${status}" -eq 1 ]
+
+  run sed -n '1,200p' "${report_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'## cloudflare egress'* ]]
+  [[ "${output}" == *'- Raw summary rows: `1`'* ]]
+}
+
+@test "hubble-observe-cilium-policies discovers the shared relay service port instead of assuming 4245" {
+  local output_dir
+
+  output_dir="${BATS_TEST_TMPDIR}/relay-port-run"
+
+  cat > "${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${KUBECTL_LOG}"
+
+case "$*" in
+  *"auth can-i get services -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get pods -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i create pods/portforward -n kube-system")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get ciliumnodes.cilium.io")
+    printf '%s\n' "yes"
+    ;;
+  *"auth can-i get nodes")
+    printf '%s\n' "yes"
+    ;;
+  "get namespaces -o json")
+    cat <<'JSON'
+{"items":[{"metadata":{"name":"observability"}}]}
+JSON
+    ;;
+  "get ciliumnodes -o json")
+    cat <<'JSON'
+{"items":[]}
+JSON
+    ;;
+  "get nodes -o json")
+    cat <<'JSON'
+{"items":[]}
+JSON
+    ;;
+  "-n kube-system get service hubble-relay -o json")
+    cat <<'JSON'
+{"spec":{"ports":[{"name":"grpc","port":443,"targetPort":4245,"protocol":"TCP"}]}}
+JSON
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay :443")
+    printf '%s\n' "Forwarding from 127.0.0.1:49000 -> 443"
+    while true; do
+      sleep 1
+    done
+    ;;
+  *"port-forward --address 127.0.0.1 service/hubble-relay "*":443")
+    local_port="${*: -1}"
+    local_port="${local_port%%:443}"
+    printf 'Forwarding from 127.0.0.1:%s -> 443\n' "${local_port}"
+    while true; do
+      sleep 1
+    done
+    ;;
+  *)
+    echo "unexpected kubectl invocation: $*" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "${CAPTURE_LOG}"
+cat <<'JSON'
+{"flow":{"verdict":"FORWARDED"}}
+JSON
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+report=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --report)
+      report="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ "${report}" == "edges" ]]; then
+  cat <<'TSV'
+count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
+TSV
+else
+  cat <<'TSV'
+count	direction	verdict	protocol	world_side	peer_ns	peer	world_names	world_ip	port
+TSV
+fi
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --namespace observability \
+    --capture-strategy since \
+    --iterations 1 \
+    --output-dir "${output_dir}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${KUBECTL_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"-n kube-system get service hubble-relay -o json"* ]]
+  [[ "${output}" == *"port-forward --address 127.0.0.1 service/hubble-relay :443"* ]]
+
+  run cat "${CAPTURE_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"--server 127.0.0.1:49000"* ]]
+}
+
 @test "hubble-observe-cilium-policies chains capture and summarise helpers and falls back to namespace mode" {
   local output_dir
   local ingress_policy
@@ -834,6 +1167,11 @@ JSON
   "get nodes -o json")
     cat <<'JSON'
 {"items":[]}
+JSON
+    ;;
+  "-n kube-system get service hubble-relay -o json")
+    cat <<'JSON'
+{"spec":{"ports":[{"name":"grpc","port":4245,"protocol":"TCP"}]}}
 JSON
     ;;
   *"port-forward --address 127.0.0.1 service/hubble-relay :4245")
