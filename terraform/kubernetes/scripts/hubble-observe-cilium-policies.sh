@@ -726,6 +726,15 @@ append_report_row() {
     "${generation_seconds}" >> "${REPORT_ROWS_FILE}"
 }
 
+record_promotion_error() {
+  local message="$1"
+
+  [[ -n "${message}" ]] || return 0
+  warn "${message}"
+  printf '%s\n' "${message}" >> "${PROMOTION_ERRORS_FILE}"
+  FINAL_EXIT_STATUS=1
+}
+
 namespace_is_explicitly_requested() {
   local namespace="$1"
   local value=""
@@ -2219,6 +2228,14 @@ write_report_markdown() {
     if [[ "${promote_to_module}" -eq 1 ]]; then
       printf -- "- Module promotion: enabled -> \`%s\`\n\n" "${module_root}"
     fi
+    if [[ -s "${PROMOTION_ERRORS_FILE}" ]]; then
+      printf '## Promotion Errors\n\n'
+      while IFS= read -r promotion_error; do
+        [[ -n "${promotion_error}" ]] || continue
+        printf -- '- %s\n' "${promotion_error}"
+      done < "${PROMOTION_ERRORS_FILE}"
+      printf '\n'
+    fi
 
     while IFS="${REPORT_ROW_DELIM}" read -r namespace direction raw_row_count usable_row_count mode policy_file aggregate_file capture_strategy_requested capture_strategy_used capture_sample_target filtered_flow_count capture_fallback_used capture_seconds summary_seconds generation_seconds; do
       [[ -n "${namespace}" ]] || continue
@@ -2254,6 +2271,7 @@ promote_policy_to_module() {
   local category_dir=""
   local source_file=""
   local category_file=""
+  local error_message=""
 
   [[ -n "${policy_file}" ]] || return 0
 
@@ -2261,23 +2279,41 @@ promote_policy_to_module() {
   category_dir="${module_root}/categories/${namespace}"
   source_file="${source_dir}/$(basename "${policy_file}")"
   category_file="${category_dir}/$(basename "${policy_file}")"
+  PROMOTION_ERROR_MSG=""
 
-  mkdir -p "${source_dir}" "${category_dir}"
+  if ! mkdir -p "${source_dir}" "${category_dir}"; then
+    PROMOTION_ERROR_MSG="failed to create module output directories for ${namespace} under ${module_root}"
+    return 1
+  fi
 
   if [[ -e "${source_file}" ]]; then
     if cmp -s "${policy_file}" "${source_file}"; then
       :
     elif [[ "${force_module_overwrite}" -eq 1 ]]; then
-      cp "${policy_file}" "${source_file}"
+      if ! cp "${policy_file}" "${source_file}"; then
+        PROMOTION_ERROR_MSG="failed to overwrite module source ${source_file}"
+        return 1
+      fi
     else
-      fail "module source already exists and differs: ${source_file} (rerun with --force-module-overwrite to replace it)"
+      PROMOTION_ERROR_MSG="module source already exists and differs: ${source_file} (rerun with --force-module-overwrite to replace it)"
+      return 1
     fi
   else
-    cp "${policy_file}" "${source_file}"
+    if ! cp "${policy_file}" "${source_file}"; then
+      PROMOTION_ERROR_MSG="failed to write module source ${source_file}"
+      return 1
+    fi
   fi
 
-  "${RENDER_VALUES_SCRIPT}" --output "${category_file}" "${source_file}"
+  if ! "${RENDER_VALUES_SCRIPT}" --output "${category_file}" "${source_file}"; then
+    error_message="${PROMOTION_ERROR_MSG:-failed to render module category ${category_file} from ${source_file}}"
+    PROMOTION_ERROR_MSG="${error_message}"
+    return 1
+  fi
+
   PROMOTED_CANDIDATE_POLICIES=$((PROMOTED_CANDIDATE_POLICIES + 1))
+  PROMOTION_ERROR_MSG=""
+  return 0
 }
 
 capture_strategy="adaptive"
@@ -2317,10 +2353,12 @@ declare -A SELECTOR_CACHE_KEY=()
 declare -A SELECTOR_CACHE_VALUE=()
 declare -A SELECTOR_CACHE_ERROR=()
 LAST_POLICY_USABLE_ROWS=0
+PROMOTION_ERROR_MSG=""
 NAMESPACES_SCANNED=0
 TOTAL_CANDIDATE_POLICIES=0
 PROMOTED_CANDIDATE_POLICIES=0
 TOTAL_NAMESPACES=0
+FINAL_EXIT_STATUS=0
 SHARED_HUBBLE_SERVER=""
 SHARED_HUBBLE_RELAY_PID=""
 SHARED_HUBBLE_RELAY_LOG=""
@@ -2502,8 +2540,9 @@ fi
 REPORT_ROWS_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-report-rows.XXXXXX")"
 NAMESPACE_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-namespaces.XXXXXX")"
 HOST_IP_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-host-ips.XXXXXX")"
+PROMOTION_ERRORS_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-promotion-errors.XXXXXX")"
 REPORT_ROW_DELIM=$'\037'
-trap 'stop_shared_hubble_relay; rm -f "${REPORT_ROWS_FILE}" "${NAMESPACE_FILE}" "${HOST_IP_FILE}" "${SHARED_HUBBLE_RELAY_LOG:-}"' EXIT
+trap 'stop_shared_hubble_relay; rm -f "${REPORT_ROWS_FILE}" "${NAMESPACE_FILE}" "${HOST_IP_FILE}" "${PROMOTION_ERRORS_FILE}" "${SHARED_HUBBLE_RELAY_LOG:-}"' EXIT
 
 if [[ "${dry_run}" -eq 0 ]]; then
   mkdir -p "${output_dir}"
@@ -2594,7 +2633,9 @@ while IFS= read -r namespace; do
     ingress_policy="${ingress_policy_path}"
     TOTAL_CANDIDATE_POLICIES=$((TOTAL_CANDIDATE_POLICIES + 1))
     if [[ "${promote_to_module}" -eq 1 ]]; then
-      promote_policy_to_module "${namespace}" "${ingress_policy}"
+      if ! promote_policy_to_module "${namespace}" "${ingress_policy}"; then
+        record_promotion_error "${PROMOTION_ERROR_MSG}"
+      fi
     fi
   fi
   ingress_usable_rows="${LAST_POLICY_USABLE_ROWS}"
@@ -2605,7 +2646,9 @@ while IFS= read -r namespace; do
     egress_policy="${egress_policy_path}"
     TOTAL_CANDIDATE_POLICIES=$((TOTAL_CANDIDATE_POLICIES + 1))
     if [[ "${promote_to_module}" -eq 1 ]]; then
-      promote_policy_to_module "${namespace}" "${egress_policy}"
+      if ! promote_policy_to_module "${namespace}" "${egress_policy}"; then
+        record_promotion_error "${PROMOTION_ERROR_MSG}"
+      fi
     fi
   fi
   egress_usable_rows="${LAST_POLICY_USABLE_ROWS}"
@@ -2668,3 +2711,5 @@ if [[ "${dry_run}" -eq 0 ]]; then
   printf 'output dir: %s\n' "${output_dir}"
   printf 'report: %s\n' "${output_dir}/run-report.md"
 fi
+
+exit "${FINAL_EXIT_STATUS}"
