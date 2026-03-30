@@ -75,7 +75,8 @@ Options:
       Capture ordinary traffic flows (default) or only policy-verdict events.
 
   --namespace NS
-      Repeatable namespace allowlist. By default, all namespaces are scanned.
+      Repeatable namespace allowlist. By default, all namespaces except
+      kube-system are scanned. Include `--namespace kube-system` to opt it in.
 
   --exclude-namespace NS
       Repeatable namespace exclusion applied after discovery.
@@ -129,6 +130,8 @@ Notes:
   - selector resolution needs `get` on deployments, daemonsets, statefulsets,
     pods, and replicasets in any namespace whose workloads appear in the
     generated policy candidates
+  - kube-system is excluded from discovery and peer-derived candidates by
+    default; pass `--namespace kube-system` to opt it in
 
 Examples:
   terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh \
@@ -393,6 +396,91 @@ is_host_peer_ip() {
   grep -Fqx "${value}" "${HOST_IP_FILE}"
 }
 
+cache_selector_success() {
+  local cache_key="$1"
+  local selector_key="$2"
+  local selector_value="$3"
+
+  RESOLVED_SELECTOR_KEY="${selector_key}"
+  RESOLVED_SELECTOR_VALUE="${selector_value}"
+  SELECTOR_CACHE_STATUS["${cache_key}"]="ok"
+  SELECTOR_CACHE_KEY["${cache_key}"]="${selector_key}"
+  SELECTOR_CACHE_VALUE["${cache_key}"]="${selector_value}"
+}
+
+cache_selector_error() {
+  local cache_key="$1"
+  local error_msg="$2"
+
+  RESOLVE_ERROR_MSG="${error_msg}"
+  SELECTOR_CACHE_STATUS["${cache_key}"]="error"
+  SELECTOR_CACHE_ERROR["${cache_key}"]="${error_msg}"
+}
+
+extract_selector_from_json() {
+  local json="$1"
+  local label_key=""
+  local label_value=""
+
+  for label_key in app.kubernetes.io/name k8s-app app; do
+    label_value="$(printf '%s\n' "${json}" | jq -r --arg key "${label_key}" '.metadata.labels[$key] // empty')"
+    if [[ -n "${label_value}" ]]; then
+      RESOLVED_SELECTOR_KEY="${label_key}"
+      RESOLVED_SELECTOR_VALUE="${label_value}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+looks_like_pod_name() {
+  local workload="$1"
+
+  [[ "${workload}" == *-* ]] || return 1
+  [[ "${workload}" =~ -[0-9]+$ ]] && return 0
+  [[ "${workload}" =~ -[a-z0-9]{5}$ ]] && return 0
+  [[ "${workload}" =~ -[a-z0-9]{5,10}-[a-z0-9]{5}$ ]] && return 0
+  return 1
+}
+
+controller_name_candidates_from_pod_name() {
+  local workload="$1"
+  local candidate=""
+
+  if [[ "${workload}" =~ ^(.+)-[0-9]+$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  fi
+
+  if [[ "${workload}" =~ ^(.+)-[a-z0-9]{5,10}-[a-z0-9]{5}$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  fi
+
+  if [[ "${workload}" =~ ^(.+)-[a-z0-9]{5}$ ]]; then
+    candidate="${BASH_REMATCH[1]}"
+    if [[ "${candidate}" != "${workload}" ]]; then
+      printf '%s\n' "${candidate}"
+    fi
+  fi | awk '!seen[$0]++'
+}
+
+lookup_controller_json() {
+  local namespace="$1"
+  local workload="$2"
+  local kind=""
+  local json=""
+
+  for kind in deployment daemonset statefulset; do
+    if json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get "${kind}" "${workload}" -o json 2>/dev/null)"; then
+      LOOKUP_CONTROLLER_JSON="${json}"
+      return 0
+    fi
+  done
+
+  LOOKUP_CONTROLLER_JSON=""
+  return 1
+}
+
 resolve_selector() {
   local namespace="$1"
   local workload="$2"
@@ -405,6 +493,7 @@ resolve_selector() {
   local owner_kind=""
   local owner_name=""
   local rs_json=""
+  local candidate=""
 
   if [[ -n "${SELECTOR_CACHE_STATUS[${cache_key}]+x}" ]]; then
     if [[ "${SELECTOR_CACHE_STATUS[${cache_key}]}" == "ok" ]]; then
@@ -419,20 +508,22 @@ resolve_selector() {
 
   ensure_selector_resolution_access "${namespace}"
 
-  for kind in deployment daemonset statefulset; do
-    if json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get "${kind}" "${workload}" -o json 2>/dev/null)"; then
-      break
+  if looks_like_pod_name "${workload}" && pod_json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get pod "${workload}" -o json 2>/dev/null)"; then
+    if extract_selector_from_json "${pod_json}"; then
+      cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
+      return 0
     fi
-    json=""
-  done
 
-  if [[ -z "${json}" ]] && pod_json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get pod "${workload}" -o json 2>/dev/null)"; then
     owner_kind="$(printf '%s\n' "${pod_json}" | jq -r '.metadata.ownerReferences[0].kind // empty' | tr '[:upper:]' '[:lower:]')"
     owner_name="$(printf '%s\n' "${pod_json}" | jq -r '.metadata.ownerReferences[0].name // empty')"
 
     if [[ "${owner_kind}" == "replicaset" && -n "${owner_name}" ]]; then
       rs_json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get replicaset "${owner_name}" -o json 2>/dev/null || true)"
       if [[ -n "${rs_json}" ]]; then
+        if extract_selector_from_json "${rs_json}"; then
+          cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
+          return 0
+        fi
         owner_kind="$(printf '%s\n' "${rs_json}" | jq -r '.metadata.ownerReferences[0].kind // empty' | tr '[:upper:]' '[:lower:]')"
         owner_name="$(printf '%s\n' "${rs_json}" | jq -r '.metadata.ownerReferences[0].name // empty')"
       fi
@@ -443,30 +534,33 @@ resolve_selector() {
         json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get "${owner_kind}" "${owner_name}" -o json 2>/dev/null || true)"
         ;;
     esac
+  elif looks_like_pod_name "${workload}"; then
+    while IFS= read -r candidate; do
+      [[ -n "${candidate}" ]] || continue
+      if lookup_controller_json "${namespace}" "${candidate}"; then
+        json="${LOOKUP_CONTROLLER_JSON}"
+        break
+      fi
+    done < <(controller_name_candidates_from_pod_name "${workload}")
   fi
 
   if [[ -z "${json}" ]]; then
-    RESOLVE_ERROR_MSG="could not resolve workload ${namespace}/${workload} via deployment, daemonset, statefulset, or pod owner"
-    SELECTOR_CACHE_STATUS["${cache_key}"]="error"
-    SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
+    if lookup_controller_json "${namespace}" "${workload}"; then
+      json="${LOOKUP_CONTROLLER_JSON}"
+    fi
+  fi
+
+  if [[ -z "${json}" ]]; then
+    cache_selector_error "${cache_key}" "could not resolve workload ${namespace}/${workload} via deployment, daemonset, statefulset, or pod owner"
     return 1
   fi
 
-  for label_key in app.kubernetes.io/name k8s-app app; do
-    label_value="$(printf '%s\n' "${json}" | jq -r --arg key "${label_key}" '.metadata.labels[$key] // empty')"
-    if [[ -n "${label_value}" ]]; then
-      RESOLVED_SELECTOR_KEY="${label_key}"
-      RESOLVED_SELECTOR_VALUE="${label_value}"
-      SELECTOR_CACHE_STATUS["${cache_key}"]="ok"
-      SELECTOR_CACHE_KEY["${cache_key}"]="${label_key}"
-      SELECTOR_CACHE_VALUE["${cache_key}"]="${label_value}"
-      return 0
-    fi
-  done
+  if extract_selector_from_json "${json}"; then
+    cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
+    return 0
+  fi
 
-  RESOLVE_ERROR_MSG="could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
-  SELECTOR_CACHE_STATUS["${cache_key}"]="error"
-  SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
+  cache_selector_error "${cache_key}" "could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
   return 1
 }
 
@@ -531,6 +625,72 @@ append_report_row() {
     "${generation_seconds}" >> "${REPORT_ROWS_FILE}"
 }
 
+namespace_is_explicitly_requested() {
+  local namespace="$1"
+  local value=""
+
+  for value in "${namespaces[@]}"; do
+    if [[ "${value}" == "${namespace}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+namespace_is_user_excluded() {
+  local namespace="$1"
+  local value=""
+
+  for value in "${excluded_namespaces[@]}"; do
+    if [[ "${value}" == "${namespace}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+namespace_is_default_excluded() {
+  local namespace="$1"
+  local value=""
+
+  for value in "${DEFAULT_EXCLUDED_NAMESPACES[@]}"; do
+    if [[ "${value}" == "${namespace}" ]]; then
+      if namespace_is_explicitly_requested "${namespace}"; then
+        return 1
+      fi
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+peer_namespace_should_be_excluded() {
+  local namespace="$1"
+
+  [[ -n "${namespace}" ]] || return 1
+  namespace_is_user_excluded "${namespace}" && return 0
+  namespace_is_default_excluded "${namespace}" && return 0
+  return 1
+}
+
+join_csv() {
+  local value=""
+  local joined=""
+
+  for value in "$@"; do
+    [[ -n "${value}" ]] || continue
+    if [[ -n "${joined}" ]]; then
+      joined+=","
+    fi
+    joined+="${value}"
+  done
+
+  printf '%s\n' "${joined}"
+}
+
 discover_namespaces() {
   local discovered_file="$1"
   local namespace=""
@@ -544,12 +704,7 @@ discover_namespaces() {
       [[ -n "${namespace}" ]] || continue
 
       excluded=0
-      for value in "${excluded_namespaces[@]}"; do
-        if [[ "${namespace}" == "${value}" ]]; then
-          excluded=1
-          break
-        fi
-      done
+      namespace_is_user_excluded "${namespace}" && excluded=1
       if [[ "${excluded}" -eq 1 ]]; then
         continue
       fi
@@ -572,12 +727,9 @@ discover_namespaces() {
     [[ -n "${namespace}" ]] || continue
 
     excluded=0
-    for value in "${excluded_namespaces[@]}"; do
-      if [[ "${namespace}" == "${value}" ]]; then
-        excluded=1
-        break
-      fi
-    done
+    if namespace_is_user_excluded "${namespace}" || namespace_is_default_excluded "${namespace}"; then
+      excluded=1
+    fi
     if [[ "${excluded}" -eq 1 ]]; then
       continue
     fi
@@ -586,6 +738,52 @@ discover_namespaces() {
   done < "${candidate_file}"
 
   rm -f "${candidate_file}"
+}
+
+filter_edge_summary_excluded_peers() {
+  local direction="$1"
+  local input_file="$2"
+  local output_file="$3"
+  local explicit_csv=""
+  local user_excluded_csv=""
+  local default_excluded_csv=""
+
+  explicit_csv="$(join_csv "${namespaces[@]}")"
+  user_excluded_csv="$(join_csv "${excluded_namespaces[@]}")"
+  default_excluded_csv="$(join_csv "${DEFAULT_EXCLUDED_NAMESPACES[@]}")"
+
+  awk -F'\t' \
+    -v OFS='\t' \
+    -v direction="${direction}" \
+    -v explicit_csv="${explicit_csv}" \
+    -v user_excluded_csv="${user_excluded_csv}" \
+    -v default_excluded_csv="${default_excluded_csv}" '
+      function in_csv(value, csv, n, items, i) {
+        if (value == "" || csv == "") {
+          return 0
+        }
+        n = split(csv, items, ",")
+        for (i = 1; i <= n; i++) {
+          if (items[i] == value) {
+            return 1
+          }
+        }
+        return 0
+      }
+
+      NR == 1 {
+        print
+        next
+      }
+
+      {
+        peer_ns = (direction == "ingress" ? $5 : $8)
+        if (peer_ns != "" && (in_csv(peer_ns, user_excluded_csv) || (in_csv(peer_ns, default_excluded_csv) && !in_csv(peer_ns, explicit_csv)))) {
+          next
+        }
+        print
+      }
+    ' "${input_file}" > "${output_file}"
 }
 
 filter_capture_non_reply() {
@@ -1053,6 +1251,10 @@ collect_namespace_data() {
   summarise_report "${namespace}" "${filtered_raw}" "world" "${world_all}"
   split_summary_by_direction "${edges_all}" "${namespace_dir}/ingress.edges.workload.tsv" "${namespace_dir}/egress.edges.workload.tsv"
   split_summary_by_direction "${world_all}" "${namespace_dir}/ingress.world.tsv" "${namespace_dir}/egress.world.tsv"
+  filter_edge_summary_excluded_peers "ingress" "${namespace_dir}/ingress.edges.workload.tsv" "${namespace_dir}/ingress.edges.workload.tsv.filtered"
+  mv "${namespace_dir}/ingress.edges.workload.tsv.filtered" "${namespace_dir}/ingress.edges.workload.tsv"
+  filter_edge_summary_excluded_peers "egress" "${namespace_dir}/egress.edges.workload.tsv" "${namespace_dir}/egress.edges.workload.tsv.filtered"
+  mv "${namespace_dir}/egress.edges.workload.tsv.filtered" "${namespace_dir}/egress.edges.workload.tsv"
   summary_seconds=$((SECONDS - summary_started))
 
   write_namespace_metadata \
@@ -1859,6 +2061,7 @@ DEFAULT_MODULE_ROOT="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/c
 
 declare -a namespaces=()
 declare -a excluded_namespaces=()
+declare -a DEFAULT_EXCLUDED_NAMESPACES=(kube-system)
 declare -A SELECTOR_ACCESS_CHECKED=()
 declare -A SELECTOR_CACHE_STATUS=()
 declare -A SELECTOR_CACHE_KEY=()
