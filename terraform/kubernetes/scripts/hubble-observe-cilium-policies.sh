@@ -167,6 +167,18 @@ warn() {
   echo "hubble-observe-cilium-policies.sh: $*" >&2
 }
 
+warn_once() {
+  local cache_key="$1"
+  shift
+
+  if [[ -n "${WARNED_MESSAGES[${cache_key}]+x}" ]]; then
+    return 0
+  fi
+
+  WARNED_MESSAGES["${cache_key}"]=1
+  warn "$@"
+}
+
 info() {
   echo "hubble-observe-cilium-policies.sh: $*" >&2
 }
@@ -518,19 +530,138 @@ cache_selector_error() {
   SELECTOR_CACHE_ERROR["${cache_key}"]="${error_msg}"
 }
 
-extract_selector_from_json() {
+selector_key_is_unstable() {
+  local label_key="$1"
+
+  case "${label_key}" in
+    pod-template-hash|rollouts-pod-template-hash|controller-revision-hash|controller-uid|statefulset.kubernetes.io/pod-name|apps.kubernetes.io/pod-index|batch.kubernetes.io/controller-uid|batch.kubernetes.io/job-name)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+selector_key_priority() {
+  local label_key="$1"
+
+  case "${label_key}" in
+    app.kubernetes.io/component|component)
+      printf '%s\n' 80
+      ;;
+    app.kubernetes.io/name|k8s-app|app)
+      printf '%s\n' 70
+      ;;
+    rsName|app.kubernetes.io/instance)
+      printf '%s\n' 60
+      ;;
+    app.kubernetes.io/part-of)
+      printf '%s\n' 50
+      ;;
+    *name)
+      printf '%s\n' 40
+      ;;
+    *)
+      printf '%s\n' 10
+      ;;
+  esac
+}
+
+selector_candidate_score() {
+  local source="$1"
+  local label_key="$2"
+  local label_value="$3"
+  local workload="$4"
+  local score=0
+  local workload_lc=""
+  local value_lc=""
+
+  score="$(selector_key_priority "${label_key}")"
+  if [[ "${source}" == "selector" ]]; then
+    score=$((score + 15))
+  fi
+
+  workload_lc="$(printf '%s' "${workload}" | tr '[:upper:]' '[:lower:]')"
+  value_lc="$(printf '%s' "${label_value}" | tr '[:upper:]' '[:lower:]')"
+  if [[ -n "${workload_lc}" && -n "${value_lc}" ]]; then
+    if [[ "${value_lc}" == "${workload_lc}" ]]; then
+      score=$((score + 25))
+    elif [[ "${value_lc}" == *"${workload_lc}"* || "${workload_lc}" == *"${value_lc}"* ]]; then
+      score=$((score + 15))
+    fi
+  fi
+
+  printf '%s\n' "${score}"
+}
+
+best_selector_candidate_from_json_source() {
   local json="$1"
+  local source="$2"
+  local workload="$3"
+  local line=""
   local label_key=""
   local label_value=""
+  local best_key=""
+  local best_value=""
+  local best_score="-1"
+  local score=0
 
-  for label_key in app.kubernetes.io/name k8s-app app; do
-    label_value="$(printf '%s\n' "${json}" | jq -r --arg key "${label_key}" '.metadata.labels[$key] // empty')"
-    if [[ -n "${label_value}" ]]; then
-      RESOLVED_SELECTOR_KEY="${label_key}"
-      RESOLVED_SELECTOR_VALUE="${label_value}"
-      return 0
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    IFS=$'\t' read -r label_key label_value <<< "${line}"
+    [[ -n "${label_key}" && -n "${label_value}" ]] || continue
+    if selector_key_is_unstable "${label_key}"; then
+      continue
     fi
-  done
+
+    score="$(selector_candidate_score "${source}" "${label_key}" "${label_value}" "${workload}")"
+    if (( score > best_score )); then
+      best_score="${score}"
+      best_key="${label_key}"
+      best_value="${label_value}"
+      continue
+    fi
+
+    if (( score == best_score )) && [[ -n "${best_key}" ]]; then
+      if [[ "${label_key}" < "${best_key}" || ( "${label_key}" == "${best_key}" && "${label_value}" < "${best_value}" ) ]]; then
+        best_key="${label_key}"
+        best_value="${label_value}"
+      fi
+    fi
+  done < <(
+    printf '%s\n' "${json}" | jq -r --arg source "${source}" '
+      if $source == "selector" then
+        .spec.selector.matchLabels // {}
+      else
+        .metadata.labels // {}
+      end
+      | to_entries[]
+      | [.key, (.value | tostring)]
+      | @tsv
+    '
+  )
+
+  if [[ -n "${best_key}" && -n "${best_value}" ]]; then
+    RESOLVED_SELECTOR_KEY="${best_key}"
+    RESOLVED_SELECTOR_VALUE="${best_value}"
+    return 0
+  fi
+
+  return 1
+}
+
+extract_selector_from_json() {
+  local json="$1"
+  local workload="${2:-}"
+
+  if best_selector_candidate_from_json_source "${json}" "selector" "${workload}"; then
+    return 0
+  fi
+
+  if best_selector_candidate_from_json_source "${json}" "metadata" "${workload}"; then
+    return 0
+  fi
 
   return 1
 }
@@ -571,14 +702,53 @@ lookup_controller_json() {
   local kind=""
   local json=""
 
-  for kind in deployment daemonset statefulset; do
+  for kind in deployment daemonset statefulset replicaset; do
     if json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get "${kind}" "${workload}" -o json 2>/dev/null)"; then
       LOOKUP_CONTROLLER_JSON="${json}"
+      LOOKUP_CONTROLLER_KIND="${kind}"
       return 0
     fi
   done
 
   LOOKUP_CONTROLLER_JSON=""
+  LOOKUP_CONTROLLER_KIND=""
+  return 1
+}
+
+lookup_owner_controller_json() {
+  local namespace="$1"
+  local json="$2"
+  local owner_kind=""
+  local owner_name=""
+  local owner_json=""
+
+  owner_kind="$(printf '%s\n' "${json}" | jq -r '.metadata.ownerReferences[0].kind // empty' | tr '[:upper:]' '[:lower:]')"
+  owner_name="$(printf '%s\n' "${json}" | jq -r '.metadata.ownerReferences[0].name // empty')"
+
+  case "${owner_kind}" in
+    deployment|daemonset|statefulset|replicaset)
+      ;;
+    *)
+      LOOKUP_OWNER_CONTROLLER_JSON=""
+      LOOKUP_OWNER_CONTROLLER_KIND=""
+      return 1
+      ;;
+  esac
+
+  if [[ -z "${owner_name}" ]]; then
+    LOOKUP_OWNER_CONTROLLER_JSON=""
+    LOOKUP_OWNER_CONTROLLER_KIND=""
+    return 1
+  fi
+
+  if owner_json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get "${owner_kind}" "${owner_name}" -o json 2>/dev/null)"; then
+    LOOKUP_OWNER_CONTROLLER_JSON="${owner_json}"
+    LOOKUP_OWNER_CONTROLLER_KIND="${owner_kind}"
+    return 0
+  fi
+
+  LOOKUP_OWNER_CONTROLLER_JSON=""
+  LOOKUP_OWNER_CONTROLLER_KIND=""
   return 1
 }
 
@@ -610,7 +780,7 @@ resolve_selector() {
   ensure_selector_resolution_access "${namespace}"
 
   if looks_like_pod_name "${workload}" && pod_json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get pod "${workload}" -o json 2>/dev/null)"; then
-    if extract_selector_from_json "${pod_json}"; then
+    if extract_selector_from_json "${pod_json}" "${workload}"; then
       cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
       return 0
     fi
@@ -621,7 +791,7 @@ resolve_selector() {
     if [[ "${owner_kind}" == "replicaset" && -n "${owner_name}" ]]; then
       rs_json="$("${KUBECTL_BASE[@]}" -n "${namespace}" get replicaset "${owner_name}" -o json 2>/dev/null || true)"
       if [[ -n "${rs_json}" ]]; then
-        if extract_selector_from_json "${rs_json}"; then
+        if extract_selector_from_json "${rs_json}" "${workload}"; then
           cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
           return 0
         fi
@@ -656,12 +826,17 @@ resolve_selector() {
     return 1
   fi
 
-  if extract_selector_from_json "${json}"; then
+  if extract_selector_from_json "${json}" "${workload}"; then
     cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
     return 0
   fi
 
-  cache_selector_error "${cache_key}" "could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
+  if lookup_owner_controller_json "${namespace}" "${json}" && extract_selector_from_json "${LOOKUP_OWNER_CONTROLLER_JSON}" "${workload}"; then
+    cache_selector_success "${cache_key}" "${RESOLVED_SELECTOR_KEY}" "${RESOLVED_SELECTOR_VALUE}"
+    return 0
+  fi
+
+  cache_selector_error "${cache_key}" "could not find a stable selector label for ${namespace}/${workload}; checked controller selectors and metadata labels while ignoring unstable rollout-only labels"
   return 1
 }
 
@@ -1713,7 +1888,7 @@ generate_ingress_policy() {
       [[ -n "${src}" && -n "${dst}" && -n "${dst_port}" ]] || continue
 
       if ! resolve_selector "${namespace}" "${dst}"; then
-        warn "skipping ingress target ${namespace}/${dst}: ${RESOLVE_ERROR_MSG}"
+        warn_once "selector:ingress-target:${namespace}/${dst}:${RESOLVE_ERROR_MSG}" "skipping ingress target ${namespace}/${dst}: ${RESOLVE_ERROR_MSG}"
         continue
       fi
       target_selector_key="${RESOLVED_SELECTOR_KEY}"
@@ -1722,7 +1897,7 @@ generate_ingress_policy() {
       if [[ -n "${src_ns}" ]]; then
         is_ip_like "${src_ns}" && continue
         if ! resolve_selector "${src_ns}" "${src}"; then
-          warn "skipping ingress source ${src_ns}/${src} for ${namespace}/${dst}: ${RESOLVE_ERROR_MSG}"
+          warn_once "selector:ingress-source:${src_ns}/${src}:${RESOLVE_ERROR_MSG}" "skipping ingress source ${src_ns}/${src} for ${namespace}/${dst}: ${RESOLVE_ERROR_MSG}"
           continue
         fi
 
@@ -1754,7 +1929,7 @@ generate_ingress_policy() {
       [[ "${world_side}" == "source" && "${peer_ns}" == "${namespace}" && -n "${peer}" && -n "${port}" ]] || continue
 
       if ! resolve_selector "${namespace}" "${peer}"; then
-        warn "skipping ingress target ${namespace}/${peer}: ${RESOLVE_ERROR_MSG}"
+        warn_once "selector:ingress-target:${namespace}/${peer}:${RESOLVE_ERROR_MSG}" "skipping ingress target ${namespace}/${peer}: ${RESOLVE_ERROR_MSG}"
         continue
       fi
 
@@ -1971,7 +2146,7 @@ generate_egress_policy() {
       [[ -n "${src}" && -n "${dst}" && -n "${dst_port}" ]] || continue
 
       if ! resolve_selector "${namespace}" "${src}"; then
-        warn "skipping egress source ${namespace}/${src}: ${RESOLVE_ERROR_MSG}"
+        warn_once "selector:egress-source:${namespace}/${src}:${RESOLVE_ERROR_MSG}" "skipping egress source ${namespace}/${src}: ${RESOLVE_ERROR_MSG}"
         continue
       fi
       source_selector_key="${RESOLVED_SELECTOR_KEY}"
@@ -1980,7 +2155,7 @@ generate_egress_policy() {
       if [[ -n "${dst_ns}" ]]; then
         is_ip_like "${dst_ns}" && continue
         if ! resolve_selector "${dst_ns}" "${dst}"; then
-          warn "skipping egress destination ${dst_ns}/${dst} for ${namespace}/${src}: ${RESOLVE_ERROR_MSG}"
+          warn_once "selector:egress-destination:${dst_ns}/${dst}:${RESOLVE_ERROR_MSG}" "skipping egress destination ${dst_ns}/${dst} for ${namespace}/${src}: ${RESOLVE_ERROR_MSG}"
           continue
         fi
 
@@ -2012,7 +2187,7 @@ generate_egress_policy() {
       [[ "${world_side}" == "destination" && "${peer_ns}" == "${namespace}" && -n "${peer}" && -n "${port}" ]] || continue
 
       if ! resolve_selector "${namespace}" "${peer}"; then
-        warn "skipping egress source ${namespace}/${peer}: ${RESOLVE_ERROR_MSG}"
+        warn_once "selector:egress-source:${namespace}/${peer}:${RESOLVE_ERROR_MSG}" "skipping egress source ${namespace}/${peer}: ${RESOLVE_ERROR_MSG}"
         continue
       fi
 
@@ -2352,6 +2527,7 @@ declare -A SELECTOR_CACHE_STATUS=()
 declare -A SELECTOR_CACHE_KEY=()
 declare -A SELECTOR_CACHE_VALUE=()
 declare -A SELECTOR_CACHE_ERROR=()
+declare -A WARNED_MESSAGES=()
 LAST_POLICY_USABLE_ROWS=0
 PROMOTION_ERROR_MSG=""
 NAMESPACES_SCANNED=0
