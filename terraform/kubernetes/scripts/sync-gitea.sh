@@ -219,7 +219,7 @@ main() {
   export_resolved_string SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
   export_resolved_string TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
 
-  exec "${delegate}"
+  exec "${delegate}" --execute
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

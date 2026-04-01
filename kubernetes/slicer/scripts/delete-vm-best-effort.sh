@@ -32,7 +32,41 @@ shell_cli_handle_standard_no_args usage "would best-effort delete the configured
 manual_local_cleanup_hint() {
   warn "Manual on-device cleanup:"
   warn "  ${system_bin} service stop daemon"
+  warn "  pkill -f 'slicer-mac up'"
   warn "  rm -f ${system_dir}/${vm_name}*.img"
+}
+
+local_system_daemon_pids() {
+  ps -ax -o pid=,args= 2>/dev/null | awk -v bin="${system_bin}" '
+    index($0, bin " up") || $0 ~ /(^|[[:space:]])\.\/slicer-mac up([[:space:]]|$)/ { print $1 }
+  ' || true
+}
+
+stop_local_system_daemon_processes() {
+  local pids pid stopped_any=0
+
+  pids="$(local_system_daemon_pids)"
+  [[ -n "${pids}" ]] || return 0
+
+  echo "INFO stopping foreground slicer-mac daemon process(es)"
+  while IFS= read -r pid; do
+    [[ -n "${pid}" ]] || continue
+    stopped_any=1
+    kill "${pid}" >/dev/null 2>&1 || true
+    for _ in $(seq 1 20); do
+      if ! ps -p "${pid}" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    if ps -p "${pid}" >/dev/null 2>&1; then
+      kill -9 "${pid}" >/dev/null 2>&1 || true
+    fi
+  done <<< "${pids}"
+
+  if [[ "${stopped_any}" -eq 1 ]]; then
+    ok "stopped foreground slicer-mac daemon process(es)"
+  fi
 }
 
 cleanup_local_system_vm() {
@@ -44,9 +78,9 @@ cleanup_local_system_vm() {
 
   echo "INFO stopping on-device slicer-mac daemon before pruning ${vm_name} disk images"
   if ! "${system_bin}" service stop daemon >/dev/null 2>&1; then
-    warn "failed to stop on-device slicer-mac daemon cleanly"
-    return 1
+    warn "launchd-managed slicer-mac daemon was not running or did not stop cleanly"
   fi
+  stop_local_system_daemon_processes
   ok "stopped on-device slicer-mac daemon"
 
   shopt -s nullglob

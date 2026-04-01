@@ -18,7 +18,7 @@ values+=("ok")
 printf '%s\n' "${values[@]}"
 EOF
 
-  run /bin/bash "${SCRIPT}" "${candidate}"
+  run /bin/bash "${SCRIPT}" --execute "${candidate}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   Bash 3.2 compatibility"* ]]
@@ -35,7 +35,7 @@ local -A seen=()
 mapfile -t values < <(printf '%s\n' one two)
 EOF
 
-  run /bin/bash "${SCRIPT}" "${candidate}"
+  run /bin/bash "${SCRIPT}" --execute "${candidate}"
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"FAIL Bash 3.2 compatibility"* ]]

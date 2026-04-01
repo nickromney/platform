@@ -15,7 +15,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/brew"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain k3sup-pro docker jq kubie kyverno yamllint
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain k3sup-pro docker jq kubie kyverno yamllint
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"Install hints for"* ]]
@@ -52,7 +52,7 @@ esac
 EOF
   chmod +x "${TEST_BIN}/uname"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain docker jq node npx yamllint
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain docker jq node npx yamllint
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"docker: sudo apt-get update && sudo apt-get install -y docker.io"* ]]
@@ -70,7 +70,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/arkade"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain kubie
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain kubie
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"kubie: sudo arkade get kubie --path /usr/local/bin"* ]]
@@ -84,7 +84,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/brew"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --plain bun npx
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain bun npx
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"bun: brew install bun"* ]]

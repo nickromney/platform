@@ -210,8 +210,9 @@ remove_context_from_default_kubeconfig() {
   [ -e "${default_kubeconfig_path}" ] || return 0
   [ -x "${kubeconfig_helper}" ] || return 0
 
-  "${kubeconfig_helper}" --action ensure-valid --kubeconfig "${default_kubeconfig_path}"
+  "${kubeconfig_helper}" --execute --action ensure-valid --kubeconfig "${default_kubeconfig_path}"
   "${kubeconfig_helper}" \
+    --execute \
     --action delete-context \
     --kubeconfig "${default_kubeconfig_path}" \
     --context "${k3sup_context}" \
@@ -241,6 +242,7 @@ refresh_kubeconfig() {
       mkdir -p "$(dirname "$default_kubeconfig_path")"
       if [ -x "$kubeconfig_helper" ]; then
         if ! "$kubeconfig_helper" \
+          --execute \
           --action merge \
           --source-kubeconfig "$kubeconfig_path" \
           --target-kubeconfig "$default_kubeconfig_path" \

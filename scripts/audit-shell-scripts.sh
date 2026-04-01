@@ -150,12 +150,25 @@ validate_entrypoint_interface() {
   local file="$2"
   local failures=""
 
+  if ! run_interface_probe "${file}"; then
+    failures="bare invocation (${SHELL_AUDIT_LAST_ERROR})"
+  elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
+    || ! grep -Fq -- 'INFO dry-run:' <<<"${SHELL_AUDIT_LAST_OUTPUT}"; then
+    failures="bare invocation (output did not show help plus dry-run preview)"
+  fi
+
   if ! run_interface_probe "${file}" --help; then
-    failures="--help (${SHELL_AUDIT_LAST_ERROR})"
+    if [[ -n "${failures}" ]]; then
+      failures="${failures}; "
+    fi
+    failures="${failures}--help (${SHELL_AUDIT_LAST_ERROR})"
   elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
     || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
     || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}"; then
-    failures="--help (output did not advertise the standard interface)"
+    if [[ -n "${failures}" ]]; then
+      failures="${failures}; "
+    fi
+    failures="${failures}--help (output did not advertise the standard interface)"
   fi
 
   if ! run_interface_probe "${file}" --dry-run --help; then

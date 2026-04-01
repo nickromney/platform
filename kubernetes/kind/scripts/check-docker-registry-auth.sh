@@ -186,10 +186,8 @@ if [[ "${#positional[@]}" -gt 2 ]]; then
   exit 1
 fi
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would check Docker auth for registry ${registry:-<missing>}"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would check Docker auth for registry ${registry:-<missing>}"
 
 if [[ -z "${registry}" ]]; then
   usage

@@ -105,10 +105,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would render the checked-in cluster policy composition view"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would render the checked-in cluster policy composition view"
 
 case "${TARGET}" in
   all|cilium|kyverno) ;;

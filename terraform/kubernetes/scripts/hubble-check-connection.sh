@@ -75,21 +75,21 @@ Options:
       Show this help text.
 
 Examples:
-  # This repo: bare invocation auto-port-forwards via ~/.kube/kind-kind-local.yaml
-  ./hubble-check-connection.sh
+  # This repo: explicit execution auto-port-forwards via ~/.kube/kind-kind-local.yaml
+  ./hubble-check-connection.sh --execute
 
   # This repo: explicit Hubble CLI port-forward
-  ./hubble-check-connection.sh -P --kubeconfig ~/.kube/kind-kind-local.yaml
+  ./hubble-check-connection.sh --execute -P --kubeconfig ~/.kube/kind-kind-local.yaml
 
   # This repo: manual relay port-forward already in place
   kubectl -n kube-system port-forward service/hubble-relay 4245:4245
-  ./hubble-check-connection.sh --server localhost:4245
+  ./hubble-check-connection.sh --execute --server localhost:4245
 
   # Remote relay exposed directly over TLS
-  ./hubble-check-connection.sh --server https://relay.example.com
+  ./hubble-check-connection.sh --execute --server https://relay.example.com
 
   # A Hubble UI route will be called out explicitly as the wrong endpoint
-  ./hubble-check-connection.sh --server https://hubble.admin.127.0.0.1.sslip.io
+  ./hubble-check-connection.sh --execute --server https://hubble.admin.127.0.0.1.sslip.io
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -411,6 +411,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  dry_run=1
+  print_command=1
+elif [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+  usage
   dry_run=1
   print_command=1
 fi

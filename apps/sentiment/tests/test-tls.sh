@@ -29,7 +29,7 @@ Options:
   --ca-cert PATH            local CA certificate path
   --http-redirect-port PORT HTTP port expected to redirect to HTTPS
   --dry-run                 show the selected test target and exit before network calls
-  --execute                 execute the test suite (preferred explicit form for test workflows)
+  --execute                 execute the test suite
   -h, --help                show this help
 EOF
 }
@@ -37,10 +37,15 @@ EOF
 TARGET="localhost:8443"
 CA_CERT="${SCRIPT_DIR}/../pki/root-ca.crt"
 HTTP_REDIRECT_PORT="8444"
-dry_run=0
 positionals=()
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+    if shell_cli_handle_standard_flag usage "$1"; then
+        shift
+        continue
+    fi
+
     case "$1" in
         --target)
             shift
@@ -56,15 +61,6 @@ while [[ $# -gt 0 ]]; do
             shift
             [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--http-redirect-port" >&2; exit 1; }
             HTTP_REDIRECT_PORT="$1"
-            ;;
-        --dry-run)
-            dry_run=1
-            ;;
-        --execute)
-            ;;
-        -h|--help)
-            usage
-            exit 0
             ;;
         --)
             shift
@@ -99,10 +95,9 @@ if [[ "${#positionals[@]}" -gt 3 ]]; then
     exit 2
 fi
 
-if [[ "${dry_run}" -eq 1 ]]; then
-    shell_cli_print_dry_run_summary "would run sentiment TLS tests against ${TARGET} using ${CA_CERT} and redirect port ${HTTP_REDIRECT_PORT}"
-    exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary \
+  usage \
+  "would run sentiment TLS tests against ${TARGET} using ${CA_CERT} and redirect port ${HTTP_REDIRECT_PORT}"
 
 PASS=0
 FAIL=0

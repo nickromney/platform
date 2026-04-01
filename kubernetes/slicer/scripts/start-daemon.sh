@@ -21,6 +21,8 @@ shell_cli_handle_standard_no_args usage "would wait for the configured Slicer da
 : "${RUN_DIR:?RUN_DIR is required}"
 
 mkdir -p "$RUN_DIR"
+system_dir="${SLICER_SYSTEM_DIR:-${HOME}/slicer-mac}"
+system_bin="${SLICER_SYSTEM_BIN:-${system_dir}/slicer-mac}"
 system_socket="${SLICER_SYSTEM_SOCKET:-${HOME}/slicer-mac/slicer.sock}"
 configured_url="${SLICER_URL:-${SLICER_SOCKET:-}}"
 system_wait_seconds="${SLICER_SYSTEM_SOCKET_WAIT_SECONDS:-240}"
@@ -34,6 +36,24 @@ socket_ready() {
     return 2
   fi
   return 1
+}
+
+start_local_system_daemon() {
+  local pid_file="${RUN_DIR}/slicer-mac.pid"
+  local log_file="${RUN_DIR}/slicer-mac.log"
+
+  if [ ! -x "${system_bin}" ]; then
+    echo "Missing slicer-mac socket: ${system_socket}" >&2
+    echo "Cannot auto-start the on-device daemon because ${system_bin} is not executable." >&2
+    exit 1
+  fi
+
+  echo "Starting on-device slicer-mac from ${system_dir}"
+  (
+    cd "${system_dir}"
+    nohup "${system_bin}" up >"${log_file}" 2>&1 </dev/null &
+    echo "$!" >"${pid_file}"
+  )
 }
 
 if [ -n "$configured_url" ] && [ "$configured_url" != "$system_socket" ]; then
@@ -56,9 +76,7 @@ if [ -n "$configured_url" ] && [ "$configured_url" != "$system_socket" ]; then
 fi
 
 if [ ! -S "$system_socket" ]; then
-  echo "Missing slicer-mac socket: ${system_socket}" >&2
-  echo "Start the on-device daemon from ~/slicer-mac before retrying." >&2
-  exit 1
+  start_local_system_daemon
 fi
 
 for _ in $(seq 1 "$system_wait_seconds"); do

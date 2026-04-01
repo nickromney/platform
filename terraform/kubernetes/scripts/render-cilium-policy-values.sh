@@ -157,10 +157,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would render Cilium policy values from ${input_path:-<stdin or unspecified>}"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would render Cilium policy values from ${input_path:-<stdin or unspecified>}"
 
 if [[ -z "${input_path}" ]]; then
   echo "render-cilium-policy-values.sh: missing input path" >&2

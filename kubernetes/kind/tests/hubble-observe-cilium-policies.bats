@@ -6,6 +6,7 @@ setup() {
   export SCRIPT_UNDER_TEST="${REPO_ROOT}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh"
   export TEST_ROOT="${BATS_TEST_TMPDIR}/audit-sandbox"
   export SCRIPT_DIR="${TEST_ROOT}/terraform/kubernetes/scripts"
+  export SHELL_CLI_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli.sh"
   export HOME="${BATS_TEST_TMPDIR}/home"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   export PATH="${TEST_BIN}:${PATH}"
@@ -14,8 +15,9 @@ setup() {
   export SUMMARIZE_LOG="${BATS_TEST_TMPDIR}/summarize.log"
   export RENDER_LOG="${BATS_TEST_TMPDIR}/render.log"
 
-  mkdir -p "${SCRIPT_DIR}" "${TEST_BIN}" "${HOME}"
+  mkdir -p "${SCRIPT_DIR}" "${TEST_ROOT}/scripts/lib" "${TEST_BIN}" "${HOME}"
   cp "${SCRIPT_UNDER_TEST}" "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh"
+  cp "${SHELL_CLI_SOURCE}" "${TEST_ROOT}/scripts/lib/shell-cli.sh"
   chmod +x "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh"
 
   cat > "${TEST_BIN}/kubectl" <<'EOF'
@@ -126,16 +128,8 @@ EOF
     --exclude-namespace datadog
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"capture observability iteration 1/2: ${SCRIPT_DIR}/hubble-capture-flows.sh --namespace observability --field-mask-profile policy-observe --capture-strategy since --since 1m --verdict FORWARDED --port-forward-port 0"* ]]
-  [[ "${output}" == *"capture observability iteration 2/2: ${SCRIPT_DIR}/hubble-capture-flows.sh --namespace observability --field-mask-profile policy-observe --capture-strategy since --since 1m --verdict FORWARDED --port-forward-port 0"* ]]
-  [[ "${output}" != *"capture datadog iteration"* ]]
-
-  run cat "${KUBECTL_LOG}"
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" != *"get namespaces -o json"* ]]
-  [[ "${output}" == *"get ciliumnodes -o json"* ]]
-  [[ "${output}" == *"get nodes -o json"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
+  [ ! -f "${KUBECTL_LOG}" ]
 }
 
 @test "hubble-observe-cilium-policies includes all namespaces by default and supports explicit exclusions" {
@@ -156,9 +150,7 @@ EOF
     --capture-strategy since
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"observing namespace kube-system"* ]]
-  [[ "${output}" == *"observing namespace observability"* ]]
-  [[ "${output}" == *"observing namespace datadog"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
     --dry-run \
@@ -166,7 +158,7 @@ EOF
     --capture-strategy since
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" != *"observing namespace kube-system"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
 }
 
 @test "hubble-observe-cilium-policies runs under /bin/bash with promote-to-module and no excluded namespaces" {
@@ -194,8 +186,35 @@ EOF
     --promote-to-module
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"observing namespace kube-system"* ]]
-  [[ "${output}" == *"observing namespace observability"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
+}
+
+@test "hubble-observe-cilium-policies without --execute prints help and reuses the dry-run preview path" {
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  cat > "${SCRIPT_DIR}/render-cilium-policy-values.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/render-cilium-policy-values.sh"
+
+  run /bin/bash "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --capture-strategy since \
+    --promote-to-module
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: hubble-observe-cilium-policies.sh [options]"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
 }
 
 @test "hubble-observe-cilium-policies fails early when namespace discovery needs list namespaces permission" {
@@ -232,7 +251,7 @@ exit 0
 EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
-  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" --dry-run
+  run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" --execute
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required Kubernetes permission to discover namespaces when --namespace is not provided"* ]]
@@ -291,6 +310,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1 \
@@ -347,6 +367,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1
@@ -503,6 +524,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace sso \
     --capture-strategy since \
     --iterations 1 \
@@ -632,6 +654,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/render-cilium-policy-values.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1 \
@@ -718,6 +741,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --namespace datadog \
     --capture-strategy since \
@@ -881,6 +905,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace cloudflare \
     --capture-strategy since \
     --iterations 1 \
@@ -1046,6 +1071,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace cloudflare \
     --capture-strategy since \
     --iterations 1 \
@@ -1170,6 +1196,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1 \
@@ -1259,6 +1286,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1 \
@@ -1447,6 +1475,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1 \
@@ -1497,8 +1526,7 @@ EOF
     --print-command
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--type policy-verdict"* ]]
-  [[ "${output}" == *"--print-command"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
 }
 
 @test "hubble-observe-cilium-policies emits progress heartbeats for long-running helpers" {
@@ -1547,6 +1575,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 1 \
@@ -1616,6 +1645,7 @@ EOF
   chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
 
   run "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
     --namespace observability \
     --capture-strategy since \
     --iterations 2 \

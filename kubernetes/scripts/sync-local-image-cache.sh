@@ -115,7 +115,7 @@ mirror_remote_image() {
 }
 
 image_stream() {
-  "${PRELOAD_IMAGES_SCRIPT}" --print-images --image-list "${IMAGE_LIST_FILE}"
+  "${PRELOAD_IMAGES_SCRIPT}" --execute --print-images --image-list "${IMAGE_LIST_FILE}"
 }
 
 while IFS= read -r image; do

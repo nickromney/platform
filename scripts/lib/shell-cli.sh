@@ -53,7 +53,7 @@ shell_cli_standard_options() {
   cat <<'EOF'
 Options:
   --dry-run  Show a summary and exit before side effects
-  --execute  Execute the script body (preferred explicit form for read-only/test/query scripts)
+  --execute  Execute the script body; without it the script prints help and/or preview output
   -h, --help Show this message
 EOF
 }
@@ -121,6 +121,38 @@ shell_cli_parse_standard_only() {
   SHELL_CLI_ARG_COUNT=$#
 }
 
+shell_cli_maybe_execute_or_preview() {
+  local usage_fn="$1"
+  local preview_fn="$2"
+
+  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+    "${preview_fn}"
+    exit 0
+  fi
+
+  if [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+    "${usage_fn}"
+    "${preview_fn}"
+    exit 0
+  fi
+}
+
+shell_cli_maybe_execute_or_preview_summary() {
+  local usage_fn="$1"
+  local dry_run_summary="$2"
+
+  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "${dry_run_summary}"
+    exit 0
+  fi
+
+  if [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+    "${usage_fn}"
+    shell_cli_print_dry_run_summary "${dry_run_summary}"
+    exit 0
+  fi
+}
+
 shell_cli_require_no_args() {
   local script_name
 
@@ -141,8 +173,5 @@ shell_cli_handle_standard_no_args() {
     shell_cli_require_no_args "${SHELL_CLI_ARGS[@]}" || exit 1
   fi
 
-  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-    shell_cli_print_dry_run_summary "${dry_run_summary}"
-    exit 0
-  fi
+  shell_cli_maybe_execute_or_preview_summary "${usage_fn}" "${dry_run_summary}"
 }

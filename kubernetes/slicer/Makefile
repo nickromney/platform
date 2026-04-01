@@ -295,17 +295,17 @@ prepare-state:
 check-kubeconfig:
 	@set -euo pipefail; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
-	default_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$$default_kubeconfig"); \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
+	default_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$$default_kubeconfig"); \
 	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
 	[ -n "$$default_current" ] || default_current="<none>"; \
 	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	target_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	target_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
 	target_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$target_current" ] || target_current="<none>"; \
 	echo "OK   slicer kubeconfig: $(KUBECONFIG_PATH) ($$target_count context(s), current=$$target_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --action lint || true)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --execute --action lint || true)"; \
 	if [ -n "$$kubie_lint_output" ]; then \
 		echo "WARN kubie lint:"; \
 		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
@@ -412,7 +412,7 @@ prereqs:
 		echo "Missing required tools: $${missing_required[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
 	fi; \
 	if [ $${#missing_recommended[@]} -gt 0 ]; then \
@@ -420,7 +420,7 @@ prereqs:
 		echo "Recommended browser/E2E test tools missing for stages below 900: $${missing_recommended[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
 	fi; \
 	echo ""; \
 	echo "Docker daemon verification:"; \
@@ -468,13 +468,13 @@ daemon-up:
 	SLICER_URL="$(SLICER_URL)" \
 	SLICER_SOCKET="$(SLICER_SOCKET)" \
 	SLICER_SYSTEM_SOCKET="$(SLICER_SYSTEM_SOCKET)" \
-	RUN_DIR="$(RUN_DIR)" \
-	SLICER_SYSTEM_SOCKET_WAIT_SECONDS="$(SLICER_SYSTEM_SOCKET_WAIT_SECONDS)" \
-	"$(START_DAEMON)"
+		RUN_DIR="$(RUN_DIR)" \
+		SLICER_SYSTEM_SOCKET_WAIT_SECONDS="$(SLICER_SYSTEM_SOCKET_WAIT_SECONDS)" \
+		"$(START_DAEMON)" $(READONLY_MODE_FLAG)
 
 .PHONY: daemon-down
 daemon-down:
-	@RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)"
+	@RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" $(READONLY_MODE_FLAG)
 
 .PHONY: slicer-vm-up
 slicer-vm-up:
@@ -488,9 +488,9 @@ slicer-vm-up:
 	SLICER_VM_CPUS="$(SLICER_VM_CPUS)" \
 	SLICER_VM_RAM_GB="$(SLICER_VM_RAM_GB)" \
 	SLICER_VM_MIN_DISK_GB="$(SLICER_VM_MIN_DISK_GB)" \
-	SLICER_USE_LOCAL_MAC="$(SLICER_USE_LOCAL_MAC)" \
-	SLICER_CONFIG="$(SLICER_CONFIG)" \
-	"$(ENSURE_SBOX_VM)"
+		SLICER_USE_LOCAL_MAC="$(SLICER_USE_LOCAL_MAC)" \
+		SLICER_CONFIG="$(SLICER_CONFIG)" \
+		"$(ENSURE_SBOX_VM)" $(READONLY_MODE_FLAG)
 
 .PHONY: start
 start: slicer-vm-up
@@ -511,11 +511,11 @@ bootstrap-k3s:
 	K3S_SERVER_EXTRA_ARGS="$(K3S_SERVER_EXTRA_ARGS)" \
 	KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" \
 	MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" \
-	SLICER_SWAP_SIZE="$(SLICER_SWAP_SIZE)" \
-	IMAGE_LIST_FILE="$(preload_images_file)" \
-	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
-	LOCAL_IMAGE_CACHE_SCHEME="$(LOCAL_IMAGE_CACHE_SCHEME)" \
-	"$(BOOTSTRAP_K3S)"
+		SLICER_SWAP_SIZE="$(SLICER_SWAP_SIZE)" \
+		IMAGE_LIST_FILE="$(preload_images_file)" \
+		LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
+		LOCAL_IMAGE_CACHE_SCHEME="$(LOCAL_IMAGE_CACHE_SCHEME)" \
+		"$(BOOTSTRAP_K3S)" $(READONLY_MODE_FLAG)
 
 .PHONY: ensure-host-forwards stop-host-forwards host-forward-status
 ensure-host-forwards:
@@ -528,34 +528,34 @@ ensure-host-forwards:
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
-	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
+	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
 	gateway_forward_port="$(SLICER_GATEWAY_HTTPS_FORWARD_PORT)"; \
 	SLICER_URL="$$socket" \
 	RUN_DIR="$(RUN_DIR)" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
-	ARGOCD_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" argocd_server_node_port 30080 "$${tfvar_files[@]}" )" \
-	HUBBLE_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" hubble_ui_node_port 31235 "$${tfvar_files[@]}" )" \
-	GITEA_HTTP_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gitea_http_node_port 30090 "$${tfvar_files[@]}" )" \
-	GITEA_SSH_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gitea_ssh_node_port 30022 "$${tfvar_files[@]}" )" \
-	SIGNOZ_LOCAL_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" signoz_ui_host_port 3301 "$${tfvar_files[@]}" )" \
-	SIGNOZ_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" signoz_ui_node_port 30301 "$${tfvar_files[@]}" )" \
-	GRAFANA_LOCAL_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" grafana_ui_host_port 3302 "$${tfvar_files[@]}" )" \
-	GRAFANA_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" grafana_ui_node_port 30302 "$${tfvar_files[@]}" )" \
+	ARGOCD_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute argocd_server_node_port 30080 "$${tfvar_files[@]}" )" \
+	HUBBLE_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute hubble_ui_node_port 31235 "$${tfvar_files[@]}" )" \
+	GITEA_HTTP_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gitea_http_node_port 30090 "$${tfvar_files[@]}" )" \
+	GITEA_SSH_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gitea_ssh_node_port 30022 "$${tfvar_files[@]}" )" \
+	SIGNOZ_LOCAL_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute signoz_ui_host_port 3301 "$${tfvar_files[@]}" )" \
+	SIGNOZ_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute signoz_ui_node_port 30301 "$${tfvar_files[@]}" )" \
+	GRAFANA_LOCAL_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute grafana_ui_host_port 3302 "$${tfvar_files[@]}" )" \
+	GRAFANA_NODE_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute grafana_ui_node_port 30302 "$${tfvar_files[@]}" )" \
 	GATEWAY_HTTPS_FORWARD_PORT="$$gateway_forward_port" \
-	GATEWAY_HTTPS_GUEST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_node_port $(SLICER_GATEWAY_HTTPS_GUEST_PORT) "$${tfvar_files[@]}" )" \
-	"$(HOST_FORWARDS)" ensure; \
+	GATEWAY_HTTPS_GUEST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gateway_https_node_port $(SLICER_GATEWAY_HTTPS_GUEST_PORT) "$${tfvar_files[@]}" )" \
+	"$(HOST_FORWARDS)" ensure $(READONLY_MODE_FLAG); \
 	if [ "$$gateway_public_port" != "$$gateway_forward_port" ]; then \
-		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" ensure; \
+		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" ensure $(READONLY_MODE_FLAG); \
 	else \
-		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
+		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" stop $(READONLY_MODE_FLAG) >/dev/null 2>&1 || true; \
 	fi
 
 .PHONY: merge-default-kubeconfig
 merge-default-kubeconfig:
 	@set -euo pipefail; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)"; \
 	echo "OK   merged $(KUBECONFIG_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 stop-host-forwards:
@@ -563,8 +563,8 @@ stop-host-forwards:
 	socket="$$($(RESOLVE_SOCKET))"; \
 	proxy_name="slicer-platform-gateway-443"; \
 	proxy_image="platform/slicer-gateway-proxy:dev"; \
-	CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" "$(HOST_GATEWAY_PROXY)" stop >/dev/null 2>&1 || true; \
-	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(HOST_FORWARDS)" stop
+	CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" "$(HOST_GATEWAY_PROXY)" stop $(READONLY_MODE_FLAG) >/dev/null 2>&1 || true; \
+	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(HOST_FORWARDS)" stop $(READONLY_MODE_FLAG)
 
 host-forward-status:
 	@set -euo pipefail; \
@@ -576,16 +576,16 @@ host-forward-status:
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
-	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
+	gateway_public_port="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gateway_https_host_port 443 "$${tfvar_files[@]}" )"; \
 	gateway_forward_port="$(SLICER_GATEWAY_HTTPS_FORWARD_PORT)"; \
-	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" GATEWAY_HTTPS_FORWARD_PORT="$$gateway_forward_port" "$(HOST_FORWARDS)" status; \
+	SLICER_URL="$$socket" RUN_DIR="$(RUN_DIR)" SLICER_VM_NAME="$(SLICER_VM_NAME)" GATEWAY_HTTPS_FORWARD_PORT="$$gateway_forward_port" "$(HOST_FORWARDS)" status $(READONLY_MODE_FLAG); \
 	if [ "$$gateway_public_port" != "$$gateway_forward_port" ]; then \
-		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" status; \
+		CONTAINER_NAME="$$proxy_name" IMAGE_TAG="$$proxy_image" LISTEN_PORT="$$gateway_public_port" UPSTREAM_PORT="$$gateway_forward_port" "$(HOST_GATEWAY_PROXY)" status $(READONLY_MODE_FLAG); \
 	fi
 
 .PHONY: ensure-image-cache
 ensure-image-cache:
-	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" CACHE_CONTAINER_NAME="$(LOCAL_IMAGE_CACHE_CONTAINER)" "$(ENSURE_IMAGE_CACHE)"
+	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" CACHE_CONTAINER_NAME="$(LOCAL_IMAGE_CACHE_CONTAINER)" "$(ENSURE_IMAGE_CACHE)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-docker-daemon
 check-docker-daemon:
@@ -608,28 +608,28 @@ sync-image-cache:
 	CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
-	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" enable_signoz false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_prometheus false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" enable_grafana false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" enable_loki false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_victoria_logs false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_tempo false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
-	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
+	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_signoz false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_prometheus false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_grafana false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_loki false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_tempo false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
+	"$(SCRIPTS_DIR)/sync-local-image-cache.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: build-workload-images
 build-workload-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
-	"$(SCRIPTS_DIR)/build-local-workload-images.sh"
+	"$(SCRIPTS_DIR)/build-local-workload-images.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: build-local-platform-images
 build-local-platform-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
-	"$(BUILD_LOCAL_PLATFORM_IMAGES)"
+	"$(BUILD_LOCAL_PLATFORM_IMAGES)" $(READONLY_MODE_FLAG)
 
 .PHONY: status
 status:
@@ -690,7 +690,7 @@ stop-slicer:
 		echo "OK   slicer daemon not reachable at $$socket"; \
 	fi; \
 	echo "Cleaning any stale repo-managed slicer daemon state (best-effort)..."; \
-	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
+	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" $(READONLY_MODE_FLAG) >/dev/null 2>&1 || true; \
 	echo "OK   stale repo-managed daemon state cleaned"
 
 .PHONY: stop
@@ -702,7 +702,7 @@ check-vm-health:
 	@socket="$$($(RESOLVE_SOCKET))"; \
 	SLICER_URL="$$socket" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
-	"$(SCRIPTS_DIR)/check-vm-health.sh"
+	"$(SCRIPTS_DIR)/check-vm-health.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: configure-k3s-apiserver-oidc
 configure-k3s-apiserver-oidc:
@@ -715,9 +715,9 @@ configure-k3s-apiserver-oidc:
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	SLICER_URL="$$socket" \
 	SLICER_VM_NAME="$(SLICER_VM_NAME)" \
-	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" gateway_https_host_port 443 "$${tfvar_files[@]}" )" \
-	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
-	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
+	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gateway_https_host_port 443 "$${tfvar_files[@]}" )" \
+	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
+	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	"$(CONFIGURE_K3S_APISERVER_OIDC)"
 
@@ -768,7 +768,7 @@ plan: workflow-validate
 		fi; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
-	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null; then \
+	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable. Run: make 100 apply"; \
 		exit 1; \
 	fi; \
@@ -849,10 +849,10 @@ apply: workflow-validate
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
-	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
-	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" enable_gateway_tls false "$${tfvar_files[@]}" )"; \
-	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )"; \
-	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
+	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
+	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
+	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
+	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-docker-daemon; \
@@ -870,7 +870,7 @@ apply: workflow-validate
 	fi; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	$(MAKE) check-kubeconfig >/dev/null; \
-	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null; then \
+	if ! KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \
 		$(MAKE) apply STAGE=100 AUTO_APPROVE=1 SLICER_ALLOW_EXISTING_K3S=1; \
 	fi; \
@@ -930,7 +930,7 @@ check-health:
 		*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
 	esac
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -949,7 +949,7 @@ check-health:
 .PHONY: check-security
 check-security:
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -969,7 +969,7 @@ check-security:
 check-gateway-stack:
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
@@ -977,7 +977,7 @@ check-cluster:
 	@$(MAKE) check-platform-env
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" \
 		GITEA_USER="gitea-admin" \
 		GITEA_PWD="$${GITEA_PWD:-$${PLATFORM_ADMIN_PASSWORD}}" \
@@ -994,7 +994,7 @@ check-cluster:
 check-gateway-urls:
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -1014,7 +1014,7 @@ check-gateway-urls:
 check-app:
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
 	vf=""; \
@@ -1042,7 +1042,7 @@ check-app:
 check-sso:
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -1075,10 +1075,10 @@ gitea-sync:
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	dry_flag=""; \
+	mode_flag="--execute"; \
 	sync_stage_file="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then sync_stage_file="$(stage_var_file)"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then dry_flag="--dry-run"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then mode_flag="--dry-run"; fi; \
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
@@ -1088,7 +1088,7 @@ gitea-sync:
 	STACK_DIR="$$stack_path" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$$script" $${dry_flag}
+	"$$script" "$$mode_flag"
 
 .PHONY: launchpad-render
 launchpad-render:
@@ -1096,7 +1096,7 @@ launchpad-render:
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/render-platform-launchpad.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	STACK_DIR="$$stack_path" "$$script"
+	STACK_DIR="$$stack_path" "$$script" $(READONLY_MODE_FLAG)
 
 .PHONY: show-urls
 show-urls:
@@ -1144,7 +1144,7 @@ reset:
 	fi; \
 	echo ""; \
 	echo "Stopping conflicting platform runtimes (best-effort)..."; \
-	"$(STOP_PLATFORM_RUNTIMES)" --exclude slicer; \
+	"$(STOP_PLATFORM_RUNTIMES)" --execute --exclude slicer; \
 	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Stopping host forwards (best-effort)..."; \
@@ -1158,15 +1158,15 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$ctx" ]; then \
 		if [ -e "$(KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --delete-file-if-empty; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(KUBECONFIG_PATH)"; \
+			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --delete-file-if-empty; \
 			echo "OK   cleaned $$ctx from $(KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(KUBECONFIG_PATH)"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx"; \
 			echo "OK   cleaned $$ctx from $(DEFAULT_KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \
@@ -1178,12 +1178,12 @@ reset:
 	else \
 		echo "Deleting Slicer VM (best-effort)..."; \
 	fi; \
-	if ! SLICER_URL="$$socket" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(DELETE_SLICER_VM)"; then \
+	if ! SLICER_URL="$$socket" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(DELETE_SLICER_VM)" --execute; then \
 		reset_incomplete=1; \
 	fi; \
 	echo ""; \
 	echo "Cleaning any stale repo-managed daemon state (best-effort)..."; \
-	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" >/dev/null 2>&1 || true; \
+	RUN_DIR="$(RUN_DIR)" "$(STOP_DAEMON)" --execute >/dev/null 2>&1 || true; \
 	echo "OK   stale repo-managed daemon state cleaned"; \
 	echo ""; \
 	echo "Cleaning local state/caches..."; \
@@ -1230,7 +1230,7 @@ test-unit: test-bats
 .PHONY: check-version
 check-version:
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(stage_dir_abs)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""
 	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)

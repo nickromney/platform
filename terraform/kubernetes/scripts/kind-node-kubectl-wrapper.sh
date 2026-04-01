@@ -18,7 +18,7 @@ print_standard_options() {
   cat <<'EOF'
 Options:
   --dry-run  Show a summary and exit before side effects
-  --execute  Execute the script body (preferred explicit form for read-only/test/query scripts)
+  --execute  Execute the script body; without it the wrapper prints help and preview output
   -h, --help Show this message
 EOF
 }
@@ -66,34 +66,40 @@ trap cleanup EXIT INT TERM
 
 # This wrapper is mounted into kind nodes as /usr/local/bin/kubectl, so it must
 # remain self-contained and avoid depending on repo-relative helper paths.
-if [ "$(script_name)" != "kubectl" ]; then
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      --dry-run)
-        WRAPPER_DRY_RUN=1
-        shift
-        continue
-        ;;
-      --execute)
-        shift
-        continue
-        ;;
-      --)
-        shift
-        break
-        ;;
-      *)
-        break
-        ;;
-    esac
-  done
-fi
+WRAPPER_EXECUTE=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --dry-run)
+      WRAPPER_DRY_RUN=1
+      shift
+      continue
+      ;;
+    --execute)
+      WRAPPER_EXECUTE=1
+      shift
+      continue
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 if [ "${WRAPPER_DRY_RUN}" = "1" ]; then
+  printf 'INFO dry-run: would run kubectl through the kind startup retry wrapper\n'
+  exit 0
+fi
+
+if [ "${WRAPPER_EXECUTE}" != "1" ]; then
+  usage
   printf 'INFO dry-run: would run kubectl through the kind startup retry wrapper\n'
   exit 0
 fi

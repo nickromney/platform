@@ -75,9 +75,9 @@ auto-fixes when a Markdown linter is available.
 
 Shell entrypoints follow the shared safety/interface contract documented in
 [`docs/shell-entrypoint-standards.md`](docs/shell-entrypoint-standards.md).
-Repo-owned callers now prefer explicit `--execute` or `--dry-run` when they
-invoke shell entrypoints, even where direct bare invocation remains supported
-as a compatibility shim.
+Repo-owned callers now pass explicit `--execute` or `--dry-run` when they
+invoke shell entrypoints. Bare invocation is preview-only and prints help plus
+dry-run output instead of running live.
 
 For live cluster-side validation against the current kubeconfig context:
 

@@ -67,7 +67,7 @@ resource "null_resource" "bootstrap_mkcert_ca" {
   }
 
   provisioner "local-exec" {
-    command     = "bash \"${path.module}/scripts/bootstrap-mkcert-ca.sh\""
+    command     = "bash \"${path.module}/scripts/bootstrap-mkcert-ca.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = local.kubeconfig_path_expanded

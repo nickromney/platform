@@ -24,7 +24,7 @@ Options:
   --plain      suppress the environment header
   --tool TOOL  add a requested tool (repeatable)
   --dry-run    show the requested tool set and exit before emitting hints
-  --execute    emit install hints (preferred explicit form for query workflows)
+  --execute    emit install hints
   -h, --help   show this help
 EOF
 }
@@ -291,10 +291,15 @@ hint_for_tool() {
 }
 
 plain_output=0
-dry_run=0
 requested_tools=()
 
+shell_cli_init_standard_flags
 while [[ "$#" -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --plain)
       plain_output=1
@@ -303,15 +308,6 @@ while [[ "$#" -gt 0 ]]; do
       shift
       [[ "$#" -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--tool" >&2; exit 1; }
       requested_tools+=("$1")
-      ;;
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      ;;
-    -h|--help)
-      usage
-      exit 0
       ;;
     --)
       shift
@@ -333,13 +329,12 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-if [[ "${dry_run}" == "1" ]]; then
-  if [[ "${#requested_tools[@]}" -gt 0 ]]; then
-    shell_cli_print_dry_run_summary "would print install hints for ${#requested_tools[@]} tool(s)"
-  else
-    shell_cli_print_dry_run_summary "would print install hints for the requested tool set"
-  fi
-  exit 0
+if [[ "${#requested_tools[@]}" -gt 0 ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would print install hints for ${#requested_tools[@]} tool(s)"
+else
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would print install hints for the requested tool set"
 fi
 
 if [[ "${#requested_tools[@]}" -lt 1 ]]; then

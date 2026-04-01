@@ -15,7 +15,6 @@ KYVERNO_BIN="${KYVERNO_BIN:-kyverno}"
 LIVE_VALIDATION_TMP_KUBECONFIG=""
 LIVE_VALIDATION_TMP_POLICIES=""
 mode="static"
-dry_run=0
 
 usage() {
   cat <<'EOF'
@@ -32,7 +31,7 @@ live
 Options:
   --mode MODE  Validation mode: static or live
   --dry-run    Show the selected validation mode and exit before side effects
-  --execute    Execute the validation (preferred explicit form for query workflows)
+  --execute    Execute the validation
   -h, --help   Show this message
 EOF
 }
@@ -66,7 +65,7 @@ require_cmd() {
   if [[ -x "${INSTALL_HINTS_SCRIPT}" ]]; then
     echo "" >&2
     echo "Install hints:" >&2
-    "${INSTALL_HINTS_SCRIPT}" --plain "${tool_label}" | sed 's/^/  /' >&2 || true
+    "${INSTALL_HINTS_SCRIPT}" --execute --plain "${tool_label}" | sed 's/^/  /' >&2 || true
   fi
   exit 1
 }
@@ -144,21 +143,18 @@ run_live_validation() {
   trap - EXIT
 }
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --mode)
       shift
       [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--mode" >&2; exit 1; }
       mode="$1"
-      ;;
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      ;;
-    -h|--help|help)
-      usage
-      exit 0
       ;;
     --)
       shift
@@ -175,10 +171,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "${dry_run}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would run Kyverno policy validation in ${mode} mode"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would run Kyverno policy validation in ${mode} mode"
 
 case "${mode}" in
   static)

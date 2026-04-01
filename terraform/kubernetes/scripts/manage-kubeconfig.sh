@@ -432,6 +432,46 @@ $(shell_cli_standard_options)
 EOF
 }
 
+print_dry_run_preview() {
+  local preview_command="${command:-}"
+  local preview_kubeconfig=""
+  local preview_source=""
+  local preview_target=""
+  local preview_context=""
+
+  case "${preview_command}" in
+    ensure-valid)
+      preview_kubeconfig="${kubeconfig_path:-${positional[0]:-<unspecified>}}"
+      shell_cli_print_dry_run_summary "would ensure kubeconfig ${preview_kubeconfig} is valid"
+      ;;
+    prepare-for-reset)
+      preview_kubeconfig="${kubeconfig_path:-${positional[0]:-<unspecified>}}"
+      shell_cli_print_dry_run_summary "would prepare kubeconfig ${preview_kubeconfig} for reset"
+      ;;
+    count-contexts)
+      preview_kubeconfig="${kubeconfig_path:-${positional[0]:-<unspecified>}}"
+      shell_cli_print_dry_run_summary "would count contexts in kubeconfig ${preview_kubeconfig}"
+      ;;
+    lint)
+      shell_cli_print_dry_run_summary "would lint kubeconfig tooling state with kubie if available"
+      ;;
+    merge)
+      preview_source="${source_kubeconfig:-${positional[0]:-<unspecified>}}"
+      preview_target="${target_kubeconfig:-${positional[1]:-<unspecified>}}"
+      preview_context="${context_name:-${positional[2]:-}}"
+      shell_cli_print_dry_run_summary "would merge ${preview_source} into ${preview_target}${preview_context:+ for context ${preview_context}}"
+      ;;
+    delete-context)
+      preview_kubeconfig="${kubeconfig_path:-${positional[0]:-<unspecified>}}"
+      preview_context="${context_name:-${positional[1]:-<unspecified>}}"
+      shell_cli_print_dry_run_summary "would delete context ${preview_context} from ${preview_kubeconfig}"
+      ;;
+    *)
+      shell_cli_print_dry_run_summary "would manage kubeconfig state"
+      ;;
+  esac
+}
+
 lint_with_kubie() {
   if ! command -v kubie >/dev/null 2>&1; then
     return 0
@@ -546,6 +586,8 @@ main() {
     positional=("${positional[@]:1}")
   fi
 
+  shell_cli_maybe_execute_or_preview usage print_dry_run_preview
+
   case "${command}" in
     ensure-valid)
       if [[ -z "${kubeconfig_path}" ]]; then
@@ -554,10 +596,6 @@ main() {
       elif [[ "${#positional[@]}" -ne 0 ]]; then
         usage >&2
         exit 1
-      fi
-      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-        shell_cli_print_dry_run_summary "would ensure kubeconfig ${kubeconfig_path} is valid"
-        exit 0
       fi
       ensure_valid_kubeconfig "${kubeconfig_path}" 1
       ;;
@@ -569,10 +607,6 @@ main() {
         usage >&2
         exit 1
       fi
-      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-        shell_cli_print_dry_run_summary "would prepare kubeconfig ${kubeconfig_path} for reset"
-        exit 0
-      fi
       prepare_reset_kubeconfig "${kubeconfig_path}"
       ;;
     count-contexts)
@@ -583,18 +617,10 @@ main() {
         usage >&2
         exit 1
       fi
-      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-        shell_cli_print_dry_run_summary "would count contexts in kubeconfig ${kubeconfig_path}"
-        exit 0
-      fi
       count_contexts "${kubeconfig_path}"
       ;;
     lint)
       [[ "${#positional[@]}" -eq 0 ]] || { usage >&2; exit 1; }
-      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-        shell_cli_print_dry_run_summary "would lint kubeconfig tooling state with kubie if available"
-        exit 0
-      fi
       lint_with_kubie
       ;;
     merge)
@@ -605,10 +631,6 @@ main() {
         context_name="${positional[2]:-}"
       else
         [[ -n "${target_kubeconfig}" && "${#positional[@]}" -eq 0 ]] || { usage >&2; exit 1; }
-      fi
-      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-        shell_cli_print_dry_run_summary "would merge ${source_kubeconfig} into ${target_kubeconfig}${context_name:+ for context ${context_name}}"
-        exit 0
       fi
       merge_kubeconfig "${source_kubeconfig}" "${target_kubeconfig}" "${context_name}"
       ;;
@@ -624,10 +646,6 @@ main() {
         [[ -n "${context_name}" && "${#positional[@]}" -eq 0 ]] || { usage >&2; exit 1; }
         cluster_name="${cluster_name:-${context_name}}"
         user_name="${user_name:-${context_name}}"
-      fi
-      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-        shell_cli_print_dry_run_summary "would delete context ${context_name} from ${kubeconfig_path}"
-        exit 0
       fi
       delete_context "${kubeconfig_path}" "${context_name}" "${cluster_name}" "${user_name}" "${delete_file_if_empty}"
       ;;

@@ -107,17 +107,19 @@ run_with_lock_retry \
 rewrite_for_devcontainer_host_socket "${KUBECONFIG_PATH}"
 
 if [[ -x "${KUBECONFIG_HELPER}" ]]; then
-  "${KUBECONFIG_HELPER}" --action ensure-valid --kubeconfig "${KUBECONFIG_PATH}"
+  "${KUBECONFIG_HELPER}" --execute --action ensure-valid --kubeconfig "${KUBECONFIG_PATH}"
   if [[ "${MERGE_KUBECONFIG_TO_DEFAULT}" == "1" ]]; then
-    "${KUBECONFIG_HELPER}" --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
+    "${KUBECONFIG_HELPER}" --execute --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
     "${KUBECONFIG_HELPER}" \
+      --execute \
       --action merge \
       --source-kubeconfig "${KUBECONFIG_PATH}" \
       --target-kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
       --context "${TARGET_CONTEXT}"
   elif [[ -e "${GLOBAL_KUBECONFIG_PATH}" ]]; then
-    "${KUBECONFIG_HELPER}" --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
+    "${KUBECONFIG_HELPER}" --execute --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
     "${KUBECONFIG_HELPER}" \
+      --execute \
       --action delete-context \
       --kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
       --context "${TARGET_CONTEXT}" \

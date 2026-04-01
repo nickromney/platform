@@ -231,14 +231,14 @@ check-stage-monotonicity:
 .PHONY: build-local-platform-images
 build-local-platform-images:
 	@CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
-	"$(BUILD_LOCAL_PLATFORM_IMAGES)"
+	"$(BUILD_LOCAL_PLATFORM_IMAGES)" $(READONLY_MODE_FLAG)
 
 .PHONY: build-local-workload-images
 build-local-workload-images:
 	@CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
-	"$(BUILD_LOCAL_WORKLOAD_IMAGES)"
+	"$(BUILD_LOCAL_WORKLOAD_IMAGES)" $(READONLY_MODE_FLAG)
 
 .PHONY: render-operator-overrides
 render-operator-overrides:
@@ -247,13 +247,13 @@ render-operator-overrides:
 	KIND_WORKER_COUNT="$(KIND_WORKER_COUNT)" \
 	KIND_LOCAL_IMAGE_CACHE_HOST="$(KIND_LOCAL_IMAGE_CACHE_HOST)" \
 	KIND_BAKED_NODE_IMAGE="$(KIND_BAKED_NODE_IMAGE)" \
-	"$(RENDER_OPERATOR_OVERRIDES)" >/dev/null
+	"$(RENDER_OPERATOR_OVERRIDES)" $(READONLY_MODE_FLAG) >/dev/null
 
 .PHONY: ensure-image-cache
 ensure-image-cache:
 	@CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	CACHE_CONTAINER_NAME="platform-local-image-cache" \
-	"$(ENSURE_LOCAL_IMAGE_CACHE)"
+	"$(ENSURE_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)
 
 .PHONY: sync-image-cache
 sync-image-cache:
@@ -269,16 +269,16 @@ sync-image-cache:
 	CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(KIND_LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	PRELOAD_IMAGES_SCRIPT="$(STACK_DIR)/scripts/preload-images.sh" \
-	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" enable_signoz false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_prometheus false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" enable_grafana false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" enable_loki false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_victoria_logs false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_tempo false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
-	"$(SYNC_LOCAL_IMAGE_CACHE)"
+	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_signoz false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_prometheus false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_grafana false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_loki false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_tempo false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
+	"$(SYNC_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-docker-daemon
 check-docker-daemon:
@@ -326,17 +326,17 @@ check-kubeconfig:
 	@set -euo pipefail; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
-	default_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$$default_kubeconfig"); \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
+	default_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$$default_kubeconfig"); \
 	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
 	[ -n "$$default_current" ] || default_current="<none>"; \
 	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	kind_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	kind_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
 	kind_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$kind_current" ] || kind_current="<none>"; \
 	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --action lint || true)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --execute --action lint || true)"; \
 	if [ -n "$$kubie_lint_output" ]; then \
 		echo "WARN kubie lint:"; \
 		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
@@ -566,10 +566,10 @@ apply: workflow-validate
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then tfvar_files+=("$(KIND_OPERATOR_OVERRIDES_FILE)"); fi; \
-	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
-	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" enable_gateway_tls false "$${tfvar_files[@]}" )"; \
-	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )"; \
-	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
+	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
+	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
+	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
+	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	cache_ensured=0; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 200 ]; then \
 		run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
@@ -626,7 +626,7 @@ apply: workflow-validate
 	fi; \
 	if [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tg_apply_log"; then \
 		echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
 		if [ "$$profile_enabled" = "1" ]; then \
 			set +e; \
 			profile_run_step "terragrunt-apply-retry" tg_apply; \
@@ -641,7 +641,7 @@ apply: workflow-validate
 		fi; \
 	fi; \
 		if [ $$rc -eq 0 ]; then \
-			KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \
+			KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
 			if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
 				run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
 				if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
@@ -782,10 +782,10 @@ gitea-sync:
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	dry_flag=""; \
+	mode_flag="--execute"; \
 	sync_stage_file="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then sync_stage_file="$(stage_var_file)"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then dry_flag="--dry-run"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then mode_flag="--dry-run"; fi; \
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
@@ -795,7 +795,7 @@ gitea-sync:
 	STACK_DIR="$$stack_path" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$$script" $${dry_flag}
+	"$$script" "$$mode_flag"
 
 .PHONY: launchpad-render
 launchpad-render:
@@ -803,7 +803,7 @@ launchpad-render:
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/render-platform-launchpad.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	STACK_DIR="$$stack_path" "$$script"
+	STACK_DIR="$$stack_path" "$$script" $(READONLY_MODE_FLAG)
 
 .PHONY: show-urls
 show-urls:
@@ -900,7 +900,7 @@ start-kind:
 	fi; \
 	echo "Starting kind-local node containers..."; \
 	docker start $$nodes >/dev/null; \
-	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" || true; \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute || true; \
 	echo "Started: $$nodes"; \
 	kubectl --kubeconfig "$(KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)" get nodes -o wide || true
 
@@ -911,9 +911,9 @@ start:
 .PHONY: merge-default-kubeconfig
 merge-default-kubeconfig:
 	@set -euo pipefail; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)"; \
 	echo "OK   merged $(KUBECONFIG_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 .PHONY: prereqs
@@ -978,7 +978,7 @@ prereqs:
 		echo "Missing required tools: $${missing_required[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
 	fi; \
 	if [ $${#missing_recommended[@]} -gt 0 ]; then \
@@ -986,7 +986,7 @@ prereqs:
 		echo "Recommended browser/E2E test tools missing for stages below 900: $${missing_recommended[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
 	fi; \
 	if command -v mkcert >/dev/null 2>&1; then \
 		echo ""; \
@@ -1021,8 +1021,8 @@ prereqs:
 	echo "OK   Docker context: $$(docker context show)"; \
 	echo ""; \
 	echo "Docker registry auth:"; \
-	"$(CHECK_DOCKER_REGISTRY_AUTH)" dhi.io "Docker Hardened Images (dhi.io)" || true; \
-	"$(CHECK_DOCKER_REGISTRY_AUTH)" index.docker.io "Docker Hub" || true; \
+	"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)" || true; \
+	"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \
 	echo ""; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \
@@ -1046,7 +1046,7 @@ preload-images:
 	if [ -f "$(stage_file)" ]; then \
 		args+=(--tfvars "$(abspath $(stage_file))"); \
 	fi; \
-	"$(STACK_DIR)/scripts/preload-images.sh" "$${args[@]}"
+	"$(STACK_DIR)/scripts/preload-images.sh" $(READONLY_MODE_FLAG) "$${args[@]}"
 
 .PHONY: preload-images-pull-only
 preload-images-pull-only:
@@ -1055,11 +1055,11 @@ preload-images-pull-only:
 	if [ -f "$(stage_file)" ]; then \
 		args+=(--tfvars "$(abspath $(stage_file))"); \
 	fi; \
-	"$(STACK_DIR)/scripts/preload-images.sh" "$${args[@]}"
+	"$(STACK_DIR)/scripts/preload-images.sh" $(READONLY_MODE_FLAG) "$${args[@]}"
 
 .PHONY: discover-images
 discover-images:
-	@"$(STACK_DIR)/scripts/preload-images.sh" --discover
+	@"$(STACK_DIR)/scripts/preload-images.sh" --discover $(READONLY_MODE_FLAG)
 
 .PHONY: reset
 reset:
@@ -1112,19 +1112,19 @@ reset:
 	fi; \
 	echo ""; \
 	echo "Stopping conflicting platform runtimes (best-effort)..."; \
-	"$(STOP_PLATFORM_RUNTIMES)" --exclude kind; \
+	"$(STOP_PLATFORM_RUNTIMES)" --execute --exclude kind; \
 	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
 		if [ -e "$$KUBECONFIG_PATH" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$$KUBECONFIG_PATH"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$$KUBECONFIG_PATH"; \
 			if KUBECONFIG="$$KUBECONFIG_PATH" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
 				local_ctx_found=1; \
 			else \
 				local_ctx_found=0; \
 			fi; \
-			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --delete-file-if-empty; \
+			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --delete-file-if-empty; \
 			if [ "$$local_ctx_found" = "1" ]; then \
 				echo "OK   Removed $$CTX from $$KUBECONFIG_PATH"; \
 			else \
@@ -1134,13 +1134,13 @@ reset:
 			echo "OK   No kubeconfig file at $$KUBECONFIG_PATH"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
 			if KUBECONFIG="$(DEFAULT_KUBECONFIG_PATH)" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
 				global_ctx_found=1; \
 			else \
 				global_ctx_found=0; \
 			fi; \
-			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX"; \
+			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX"; \
 			if [ "$$global_ctx_found" = "1" ]; then \
 				echo "OK   Removed $$CTX from $(DEFAULT_KUBECONFIG_PATH)"; \
 			else \
@@ -1210,7 +1210,7 @@ check-provider-version:
 
 .PHONY: ensure-kind-kubeconfig
 ensure-kind-kubeconfig:
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute
 
 .PHONY: audit-bootstrap
 audit-bootstrap:

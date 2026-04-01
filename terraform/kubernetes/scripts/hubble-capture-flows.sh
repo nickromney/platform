@@ -154,17 +154,17 @@ Options:
 
 Examples:
   # Examples below assume you are already in terraform/kubernetes/scripts/.
-  # This cluster: bare invocation auto-port-forwards via ~/.kube/kind-kind-local.yaml
-  ./hubble-capture-flows.sh \
+  # This cluster: explicit execution auto-port-forwards via ~/.kube/kind-kind-local.yaml
+  ./hubble-capture-flows.sh --execute \
     --since 15m --namespace observability
 
   # This cluster: explicit port-forward mode also works
-  ./hubble-capture-flows.sh -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  ./hubble-capture-flows.sh --execute -P --kubeconfig ~/.kube/kind-kind-local.yaml \
     --since 15m --namespace observability
 
   # This cluster: manual relay port-forward on the host first
   kubectl -n kube-system port-forward service/hubble-relay 4245:4245
-  ./hubble-capture-flows.sh --server localhost:4245 --since 15m \
+  ./hubble-capture-flows.sh --execute --server localhost:4245 --since 15m \
     --namespace dev --namespace observability
 
   # Generic remote relay examples for work systems
@@ -918,6 +918,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  dry_run=1
+  print_command=1
+elif [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+  usage
   dry_run=1
   print_command=1
 fi

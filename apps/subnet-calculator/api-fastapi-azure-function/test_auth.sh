@@ -48,24 +48,20 @@ NC='\033[0m' # No Color
 
 # Default to local Azure Functions
 BASE_URL="http://localhost:7071"
-dry_run=0
 positionals=()
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+    if shell_cli_handle_standard_flag usage "$1"; then
+        shift
+        continue
+    fi
+
     case "$1" in
         --base-url)
             shift
             [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--base-url" >&2; exit 1; }
             BASE_URL="$1"
-            ;;
-        --dry-run)
-            dry_run=1
-            ;;
-        --execute)
-            ;;
-        --help|-h)
-            usage
-            exit 0
             ;;
         --)
             shift
@@ -94,10 +90,9 @@ if [[ "${#positionals[@]}" -gt 1 ]]; then
     exit 2
 fi
 
-if [[ "${dry_run}" -eq 1 ]]; then
-    shell_cli_print_dry_run_summary "would run authentication integration tests against ${BASE_URL}"
-    exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary \
+  usage \
+  "would run authentication integration tests against ${BASE_URL}"
 
 HEALTH_URL="${BASE_URL}/api/v1/health"
 

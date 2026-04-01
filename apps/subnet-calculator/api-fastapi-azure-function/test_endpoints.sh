@@ -44,15 +44,16 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # Parse arguments
 DETAILED=false
 BASE_URL=""
-dry_run=0
 positionals=()
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+    if shell_cli_handle_standard_flag show_help "$1"; then
+        shift
+        continue
+    fi
+
     case $1 in
-        --help|-h)
-            show_help
-            exit 0
-            ;;
         --base-url)
             shift
             [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--base-url" >&2; exit 1; }
@@ -63,11 +64,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --container)
             BASE_URL="http://localhost:8080/api"
-            ;;
-        --dry-run)
-            dry_run=1
-            ;;
-        --execute)
             ;;
         --)
             shift
@@ -101,13 +97,14 @@ if [ -z "$BASE_URL" ]; then
     BASE_URL="http://localhost:7071/api"
 fi
 
-if [[ "${dry_run}" -eq 1 ]]; then
-    if [ "$DETAILED" = true ]; then
-        shell_cli_print_dry_run_summary "would run detailed Azure Function endpoint tests against ${BASE_URL}"
-    else
-        shell_cli_print_dry_run_summary "would run smoke Azure Function endpoint tests against ${BASE_URL}"
-    fi
-    exit 0
+if [ "$DETAILED" = true ]; then
+    shell_cli_maybe_execute_or_preview_summary \
+      show_help \
+      "would run detailed Azure Function endpoint tests against ${BASE_URL}"
+else
+    shell_cli_maybe_execute_or_preview_summary \
+      show_help \
+      "would run smoke Azure Function endpoint tests against ${BASE_URL}"
 fi
 
 # Detect which HTTP client to use

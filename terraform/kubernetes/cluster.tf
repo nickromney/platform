@@ -194,7 +194,7 @@ resource "null_resource" "preload_images" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/preload-images.sh --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
+    command = "${path.module}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
     environment = {
       PRELOAD_IMAGE_LIST            = local.preload_image_list_path_effective
       PRELOAD_ENABLE_SIGNOZ         = tostring(var.enable_signoz)

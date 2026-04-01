@@ -145,20 +145,21 @@ evidence, and then you decide whether the result belongs in:
 
 ## Relay First
 
-For this repo's local kind cluster, bare invocation defaults to Hubble CLI
-port-forward mode and uses `~/.kube/kind-kind-local.yaml` when it exists.
+For this repo's local kind cluster, the live execution path uses `--execute`,
+defaults to Hubble CLI port-forward mode, and uses
+`~/.kube/kind-kind-local.yaml` when it exists.
 
 ```bash
 cd terraform/kubernetes/scripts
 
-./hubble-check-connection.sh
+./hubble-check-connection.sh --execute
 ```
 
 If you are using a manually-created localhost tunnel instead:
 
 ```bash
 kubectl -n kube-system port-forward service/hubble-relay 4245:4245
-./hubble-check-connection.sh --server localhost:4245
+./hubble-check-connection.sh --execute --server localhost:4245
 ```
 
 If you point `--server` at a browser URL such as

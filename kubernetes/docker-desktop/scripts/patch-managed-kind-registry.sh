@@ -65,10 +65,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would patch Docker Desktop managed kind nodes for direct local registry pulls"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would patch Docker Desktop managed kind nodes for direct local registry pulls"
 
 nodes=()
 while IFS= read -r node; do

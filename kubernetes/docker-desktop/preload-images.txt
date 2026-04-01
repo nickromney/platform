@@ -16,8 +16,8 @@ quay.io/cilium/hubble-ui:v0.13.3
 ghcr.io/nginx/nginx-gateway-fabric:2.4.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.1
 
-# --- ArgoCD (chart 9.4.16) ---
-quay.io/argoproj/argocd:v3.3.5
+# --- ArgoCD (chart 9.4.17) ---
+quay.io/argoproj/argocd:v3.3.6
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine
 
 # --- Gitea (chart 12.5.0) ---

@@ -7,7 +7,6 @@ TRIVY_RUNNER="${SCRIPT_DIR}/trivy-run.sh"
 REPORT_ROOT="${TRIVY_REPORT_ROOT:-${REPO_ROOT}/.run/apps-security/trivy}"
 CLONE_ROOT="${REPORT_ROOT}/gitea-clones"
 mode="all"
-dry_run=0
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
@@ -763,7 +762,7 @@ Environment:
 Options:
   --mode MODE  Select the Trivy scan mode
   --dry-run    Show the selected scan mode and exit before side effects
-  --execute    Execute the scan (preferred explicit form for query workflows)
+  --execute    Execute the scan
   -h, --help   Show this message
 EOF
 }
@@ -826,21 +825,18 @@ main() {
   esac
 }
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --mode)
       shift
       [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--mode" >&2; exit 1; }
       mode="$1"
-      ;;
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      ;;
-    -h|--help|help)
-      usage
-      exit 0
       ;;
     --)
       shift
@@ -857,9 +853,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "${dry_run}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would run Trivy app scan in ${mode} mode"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would run Trivy app scan in ${mode} mode"
 
 main

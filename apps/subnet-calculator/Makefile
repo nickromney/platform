@@ -38,7 +38,7 @@ check-prerequisites: ## Check that podman/docker tooling is available and runnin
 	else \
 		echo "✗ Neither podman-compose nor compose found"; \
 		echo "  Install hints:"; \
-		"$(abspath ../../scripts/install-tool-hints.sh)" --plain podman-compose | sed 's/^/    /'; \
+		"$(abspath ../../scripts/install-tool-hints.sh)" --execute --plain podman-compose | sed 's/^/    /'; \
 		exit 1; \
 	fi
 	@echo ""
@@ -62,7 +62,7 @@ check-prerequisites: ## Check that podman/docker tooling is available and runnin
 	else \
 		echo "✗ Neither podman nor docker found"; \
 		echo "  Install hints:"; \
-		"$(abspath ../../scripts/install-tool-hints.sh)" --plain podman docker | sed 's/^/    /'; \
+		"$(abspath ../../scripts/install-tool-hints.sh)" --execute --plain podman docker | sed 's/^/    /'; \
 		exit 1; \
 	fi
 	@echo ""

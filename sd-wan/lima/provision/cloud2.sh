@@ -40,19 +40,19 @@ ip addr add 172.16.11.2/24 dev br1  # external VIP
 ip link set br1 up
 
 # --- Setup DNS ---
-bash "$PROJECT_DIR/provision/setup-dns.sh"
+bash "$PROJECT_DIR/provision/setup-dns.sh" --execute
 
 # --- Setup PKI ---
-bash "$PROJECT_DIR/provision/setup-pki.sh"
+bash "$PROJECT_DIR/provision/setup-pki.sh" --execute
 
 # --- Setup WireGuard ---
-bash "$PROJECT_DIR/provision/setup-wireguard.sh"
+bash "$PROJECT_DIR/provision/setup-wireguard.sh" --execute
 
 # --- Setup nginx inbound gateway ---
-bash "$PROJECT_DIR/provision/setup-nginx.sh"
+bash "$PROJECT_DIR/provision/setup-nginx.sh" --execute
 
 # --- Setup iptables outbound gateway ---
-bash "$PROJECT_DIR/provision/setup-iptables.sh"
+bash "$PROJECT_DIR/provision/setup-iptables.sh" --execute
 
 # --- Deploy subnet-calculator API ---
 # Find the repo root (PROJECT_DIR is sd-wan/lima)

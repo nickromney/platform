@@ -176,6 +176,22 @@ tfvar_get_any_stage_or_default() {
   fi
 }
 
+tfvar_get_any_stage_bool_or_default() {
+  local key="$1"
+  local fallback="$2"
+  local value
+
+  value="$(tfvar_get_any_stage "$key")"
+  case "${value}" in
+    true|false)
+      printf '%s\n' "${value}"
+      ;;
+    *)
+      printf '%s\n' "${fallback}"
+      ;;
+  esac
+}
+
 ensure_helm_repo_ready() {
   local repo_name="$1"
   local repo_url="$2"
@@ -380,7 +396,7 @@ image_ref_availability() {
 
 docker_manifest_inspect_safe() {
   local image_ref="$1"
-  local timeout="${CHECK_VERSION_DOCKER_MANIFEST_TIMEOUT_SECONDS:-5}"
+  local timeout="${CHECK_VERSION_DOCKER_MANIFEST_TIMEOUT_SECONDS:-10}"
   local tmp pid start elapsed rc
 
   tmp="$(mktemp)"
@@ -1016,7 +1032,8 @@ main() {
     CODE_ARGOCD_IMAGE_REF="${CODE_ARGOCD_IMAGE_REPO}:${CODE_ARGOCD_IMAGE_TAG}"
   fi
 
-  EXPECTED_CLUSTER_NAME=$(tfvar_get "${STAGES_DIR}/100-cluster.tfvars" "cluster_name")
+  EXPECT_KIND_PROVISIONING="$(tfvar_get_any_stage_bool_or_default "provision_kind_cluster" "true")"
+  EXPECTED_CLUSTER_NAME="$(tfvar_get_any_stage_or_default "cluster_name" "kind-local")"
   if [ -z "${EXPECTED_CLUSTER_NAME}" ]; then EXPECTED_CLUSTER_NAME="kind-local"; fi
 
   progress "Resolving latest upstream chart versions"
@@ -1100,7 +1117,7 @@ main() {
   fi
 
   CLUSTER_OK=0
-  if command -v kind >/dev/null 2>&1; then
+  if [ "${EXPECT_KIND_PROVISIONING}" = "true" ] && command -v kind >/dev/null 2>&1; then
     progress "Checking kind cluster presence"
     if ! kind_get_clusters_safe | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
       warn "Cluster '${EXPECTED_CLUSTER_NAME}' not found; Deployed=Unavailable"
@@ -1115,7 +1132,11 @@ main() {
     if cluster_reachable; then
       CLUSTER_OK=1
     else
-      warn "Cluster API unreachable (and 'kind' not found); Deployed=Unavailable"
+      if [ "${EXPECT_KIND_PROVISIONING}" = "true" ]; then
+        warn "Cluster API unreachable (and 'kind' not found); Deployed=Unavailable"
+      else
+        warn "Cluster API unreachable for existing-cluster target; Deployed=Unavailable"
+      fi
     fi
   fi
 

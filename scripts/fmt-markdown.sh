@@ -120,4 +120,4 @@ fi
 
 echo "INFO formatting ${#markdown_files[@]} tracked Markdown file(s) with ${MARKDOWNLINT_CONFIG_FILE}"
 run_markdownlint_fix "${markdownlint_bin}" "${markdown_files[@]}"
-"${SCRIPT_DIR}/lint-markdown.sh"
+"${SCRIPT_DIR}/lint-markdown.sh" --execute
