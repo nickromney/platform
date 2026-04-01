@@ -47,7 +47,7 @@ workflow-validate:
 	fi; \
 	if [ -n "$(UNKNOWN_WORKFLOW_GOALS)" ]; then \
 		echo "Unknown workflow goal '$(firstword $(UNKNOWN_WORKFLOW_GOALS))'." >&2; \
-		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" "$(firstword $(UNKNOWN_WORKFLOW_GOALS))" $(STAGE_WORKFLOW_SUGGEST_GOALS) )"; \
+		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" --execute "$(firstword $(UNKNOWN_WORKFLOW_GOALS))" $(STAGE_WORKFLOW_SUGGEST_GOALS) )"; \
 		if [ -n "$$suggestion" ]; then \
 			echo "$$suggestion" >&2; \
 		fi; \

@@ -210,10 +210,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would summarise Hubble flows from ${input_path} with report=${report}, aggregate-by=${aggregate_by}, format=${format}"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would summarise Hubble flows from ${input_path} with report=${report}, aggregate-by=${aggregate_by}, format=${format}"
 
 case "${report}" in
   edges|world|dns|drops) ;;

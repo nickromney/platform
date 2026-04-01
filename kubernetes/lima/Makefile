@@ -231,17 +231,17 @@ prepare-state:
 check-kubeconfig:
 	@set -euo pipefail; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
-	default_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$$default_kubeconfig"); \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
+	default_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$$default_kubeconfig"); \
 	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
 	[ -n "$$default_current" ] || default_current="<none>"; \
 	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	lima_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	lima_count=$$("$(KUBECONFIG_HELPER)" --execute --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
 	lima_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$lima_current" ] || lima_current="<none>"; \
 	echo "OK   lima kubeconfig: $(KUBECONFIG_PATH) ($$lima_count context(s), current=$$lima_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --action lint || true)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --execute --action lint || true)"; \
 	if [ -n "$$kubie_lint_output" ]; then \
 		echo "WARN kubie lint:"; \
 		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
@@ -324,7 +324,7 @@ prereqs:
 		echo "Missing required tools: $${missing_required[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_required[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_required[@]}" | sed 's/^/  /'; \
 		exit 1; \
 	fi; \
 	if [ $${#missing_recommended[@]} -gt 0 ]; then \
@@ -332,7 +332,7 @@ prereqs:
 		echo "Recommended browser/E2E test tools missing for stages below 900: $${missing_recommended[*]}"; \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
 	fi; \
 	echo ""; \
 	echo "Docker daemon verification:"; \
@@ -367,7 +367,7 @@ lima-vms-up:
 	@LIMA_INSTANCE_PREFIX="$(LIMA_INSTANCE_PREFIX)" \
 	DESIRED_NODES="$(DESIRED_NODES)" \
 	LIMA_CONFIG="$(LIMA_CONFIG)" \
-	"$(SCRIPTS_DIR)/ensure-k3s-lima-vms.sh"
+	"$(SCRIPTS_DIR)/ensure-k3s-lima-vms.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: bootstrap-k3s
 bootstrap-k3s:
@@ -388,14 +388,14 @@ bootstrap-k3s:
 	LOCAL_IMAGE_CACHE_SCHEME="$(LOCAL_IMAGE_CACHE_SCHEME)" \
 	GITEA_REGISTRY_HOST="$(GITEA_REGISTRY_HOST)" \
 	GITEA_REGISTRY_SCHEME="$(GITEA_REGISTRY_SCHEME)" \
-	"$(SCRIPTS_DIR)/bootstrap-k3s-lima.sh"
+	"$(SCRIPTS_DIR)/bootstrap-k3s-lima.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: merge-default-kubeconfig
 merge-default-kubeconfig:
 	@set -euo pipefail; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(K3SUP_CONTEXT)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --execute --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(K3SUP_CONTEXT)"; \
 	echo "OK   merged $(K3SUP_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 .PHONY: sync-image-cache
@@ -410,16 +410,16 @@ sync-image-cache:
 	CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
-	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" enable_signoz false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_prometheus false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" enable_grafana false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" enable_loki false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" enable_victoria_logs false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_tempo false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" enable_actions_runner false "$${tfvar_files[@]}" )" \
-	"$(SCRIPTS_DIR)/sync-local-image-cache.sh"
+	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_signoz false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_prometheus false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_grafana false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_loki false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_tempo false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
+	"$(SCRIPTS_DIR)/sync-local-image-cache.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-docker-daemon
 check-docker-daemon:
@@ -435,12 +435,12 @@ build-workload-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
-	"$(SCRIPTS_DIR)/build-local-workload-images.sh"
+	"$(SCRIPTS_DIR)/build-local-workload-images.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: build-local-platform-images
 build-local-platform-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
-	"$(BUILD_LOCAL_PLATFORM_IMAGES)"
+	"$(BUILD_LOCAL_PLATFORM_IMAGES)" $(READONLY_MODE_FLAG)
 
 .PHONY: status
 status:
@@ -459,7 +459,7 @@ status:
 	if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
 		echo ""; \
 		echo "=== Host gateway proxies ==="; \
-		"$(HOST_GATEWAY_PROXY)" status || true; \
+		"$(HOST_GATEWAY_PROXY)" status $(READONLY_MODE_FLAG) || true; \
 	fi
 	@echo ""
 	@echo "=== Helper modes ==="
@@ -508,13 +508,13 @@ start:
 .PHONY: ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status
 ensure-host-gateway-proxy:
 	@$(MAKE) check-conflicting-clusters-stopped
-	@"$(HOST_GATEWAY_PROXY)" ensure
+	@"$(HOST_GATEWAY_PROXY)" ensure $(READONLY_MODE_FLAG)
 
 stop-host-gateway-proxy:
-	@"$(HOST_GATEWAY_PROXY)" stop
+	@"$(HOST_GATEWAY_PROXY)" stop $(READONLY_MODE_FLAG)
 
 proxy-status:
-	@"$(HOST_GATEWAY_PROXY)" status
+	@"$(HOST_GATEWAY_PROXY)" status $(READONLY_MODE_FLAG)
 
 .PHONY: configure-k3s-apiserver-oidc
 configure-k3s-apiserver-oidc:
@@ -526,9 +526,9 @@ configure-k3s-apiserver-oidc:
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	LIMA_NODE_NAME="$(LIMA_INSTANCE_PREFIX)-1" \
-	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
-	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
-	"$(CONFIGURE_K3S_APISERVER_OIDC)"
+	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
+	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
+	"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
 
 .PHONY: init
 init:
@@ -635,10 +635,10 @@ apply: workflow-validate
 	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
-	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
-	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" enable_gateway_tls false "$${tfvar_files[@]}" )"; \
-	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" enable_headlamp false "$${tfvar_files[@]}" )"; \
-	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" enable_sso false "$${tfvar_files[@]}" )"; \
+	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
+	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
+	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
+	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-docker-daemon; \
@@ -836,10 +836,10 @@ gitea-sync:
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	dry_flag=""; \
+	mode_flag="--execute"; \
 	sync_stage_file="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then sync_stage_file="$(stage_var_file)"; fi; \
-	if [ "$(DRY_RUN)" = "1" ]; then dry_flag="--dry-run"; fi; \
+	if [ "$(DRY_RUN)" = "1" ]; then mode_flag="--dry-run"; fi; \
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
 	GITEA_BRANCH="$${GITEA_BRANCH:-main}" \
 	GITEA_USER="$${GITEA_USER:-gitea-admin}" \
@@ -849,7 +849,7 @@ gitea-sync:
 	STACK_DIR="$$stack_path" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$$script" $${dry_flag}
+	"$$script" "$$mode_flag"
 
 .PHONY: launchpad-render
 launchpad-render:
@@ -857,7 +857,7 @@ launchpad-render:
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/render-platform-launchpad.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	STACK_DIR="$$stack_path" "$$script"
+	STACK_DIR="$$stack_path" "$$script" $(READONLY_MODE_FLAG)
 
 .PHONY: show-urls
 show-urls:
@@ -898,7 +898,7 @@ reset:
 	fi; \
 	echo ""; \
 	echo "Stopping conflicting platform runtimes (best-effort)..."; \
-	"$(STOP_PLATFORM_RUNTIMES)" --exclude lima; \
+	"$(STOP_PLATFORM_RUNTIMES)" --execute --exclude lima; \
 	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Stopping host gateway proxy containers (best-effort)..."; \
@@ -908,15 +908,15 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$ctx" ]; then \
 		if [ -e "$(KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --delete-file-if-empty; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(KUBECONFIG_PATH)"; \
+			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --delete-file-if-empty; \
 			echo "OK   cleaned $$ctx from $(KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(KUBECONFIG_PATH)"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx"; \
 			echo "OK   cleaned $$ctx from $(DEFAULT_KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \

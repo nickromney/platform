@@ -82,7 +82,7 @@ EOF
   run env \
     SLICER_URL="${SLICER_HOME}/slicer.sock" \
     SLICER_VM_NAME="slicer-1" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"stopped on-device slicer-mac daemon"* ]]
@@ -102,7 +102,7 @@ EOF
   run env \
     SLICER_URL="${BATS_TEST_TMPDIR}/remote.sock" \
     SLICER_VM_NAME="slicer-1" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"slicer vm delete slicer-1 failed"* ]]

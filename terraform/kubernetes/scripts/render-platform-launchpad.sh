@@ -223,10 +223,8 @@ replace_marked_section() {
 main() {
   parse_args "$@"
 
-  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-    shell_cli_print_dry_run_summary "would render the Platform Launchpad dashboard into ${#TARGETS[@]} target file(s)"
-    exit 0
-  fi
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would render the Platform Launchpad dashboard into ${#TARGETS[@]} target file(s)"
 
   if [[ ! -f "${INVENTORY_FILE}" ]]; then
     echo "inventory file not found: ${INVENTORY_FILE}" >&2

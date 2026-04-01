@@ -62,10 +62,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would check public and admin gateway URLs"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage "would check public and admin gateway URLs"
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then

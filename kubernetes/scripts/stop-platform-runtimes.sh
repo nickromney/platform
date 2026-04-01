@@ -68,10 +68,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would stop local platform runtimes best-effort"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage "would stop local platform runtimes best-effort"
 
 run_stop() {
   local platform="$1"

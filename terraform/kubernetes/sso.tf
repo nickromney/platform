@@ -263,7 +263,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   }
 
   provisioner "local-exec" {
-    command     = "bash \"${path.module}/scripts/configure-kind-apiserver-oidc.sh\""
+    command     = "bash \"${path.module}/scripts/configure-kind-apiserver-oidc.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG                  = local.kubeconfig_path_expanded
@@ -322,7 +322,7 @@ fi
 if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
   check_args+=(--var-file "$${KIND_OPERATOR_OVERRIDES_FILE}")
 fi
-"${path.module}/scripts/check-cluster-health.sh" "$${check_args[@]}"
+"${path.module}/scripts/check-cluster-health.sh" --execute "$${check_args[@]}"
 __EOT__
     interpreter = ["/bin/bash", "-c"]
   }

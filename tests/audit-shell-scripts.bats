@@ -38,7 +38,7 @@ set -euo pipefail
 echo "hello"
 EOF
 
-  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh"
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"executable shell entrypoints must support --help, --dry-run, and --execute"* ]]
@@ -67,10 +67,16 @@ shell_cli_handle_standard_no_args usage "would do the safe thing" "$@"
 echo "ok"
 EOF
 
-  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh"
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   shell audit"* ]]
+
+  run env PATH="/usr/bin:/bin" "${TEST_REPO}/scripts/good.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: good.sh"* ]]
+  [[ "${output}" == *"INFO dry-run: would do the safe thing"* ]]
 }
 
 @test "shell audit ignores printed Python install hints" {
@@ -80,7 +86,7 @@ set -euo pipefail
 printf '%s\n' 'python3 -m pip install --user yamllint'
 EOF
 
-  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh"
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   shell audit"* ]]
@@ -95,7 +101,7 @@ print("bad")
 PY
 EOF
 
-  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh"
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"unexpected Python execution found"* ]]
@@ -109,7 +115,7 @@ set -euo pipefail
 python3 "${SCRIPT_DIR}/rewrite-devcontainer-kubeconfig.py" config host tls
 EOF
 
-  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh"
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   shell audit"* ]]
@@ -131,7 +137,7 @@ EOF
   chmod +x "${real_kubectl}"
 
   run env PATH="/usr/bin:/bin" KIND_REAL_KUBECTL="${real_kubectl}" \
-    "${mounted_dir}/kubectl" --kubeconfig=/etc/kubernetes/admin.conf apply -f - <<<"apiVersion: v1"
+    "${mounted_dir}/kubectl" --execute --kubeconfig=/etc/kubernetes/admin.conf apply -f - <<<"apiVersion: v1"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"ARGS:--kubeconfig=/etc/kubernetes/admin.conf apply -f -"* ]]
@@ -157,4 +163,23 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
+}
+
+@test "hubble observe without --execute prints help plus the dry-run preview" {
+  run "${REPO_ROOT}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh" \
+    --promote-to-module
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: hubble-observe-cilium-policies.sh [options]"* ]]
+  [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
+}
+
+@test "resolve tfvar accepts an explicit empty default with --execute" {
+  run "${REPO_ROOT}/kubernetes/scripts/resolve-tfvar-value.sh" \
+    --execute \
+    --key platform_admin_base_domain \
+    --default ""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "" ]
 }

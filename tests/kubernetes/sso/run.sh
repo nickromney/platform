@@ -63,7 +63,7 @@ require_tool() {
   echo "${tool} not found in PATH" >&2
   if [ -x "${INSTALL_HINTS}" ]; then
     echo "Install hints:" >&2
-    "${INSTALL_HINTS}" --plain "${tool}" | sed 's/^/  /' >&2
+    "${INSTALL_HINTS}" --execute --plain "${tool}" | sed 's/^/  /' >&2
   fi
   exit 1
 }
@@ -78,7 +78,7 @@ warn_optional_tool() {
 
   echo "WARN ${tool} not found in PATH (${reason})" >&2
   if [ -x "${INSTALL_HINTS}" ]; then
-    "${INSTALL_HINTS}" --plain "${tool}" | sed 's/^/  /' >&2
+    "${INSTALL_HINTS}" --execute --plain "${tool}" | sed 's/^/  /' >&2
   fi
 }
 

@@ -6,7 +6,6 @@ set -e
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/../../.." && pwd)
 playwright_args=
-dry_run=0
 
 . "${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"
 
@@ -22,17 +21,14 @@ $(shell_cli_standard_options)
 EOF
 }
 
+shell_cli_init_standard_flags
 while [ "$#" -gt 0 ]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     --)
       shift
       playwright_args="$*"
@@ -49,10 +45,9 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-if [ "${dry_run}" = "1" ]; then
-  shell_cli_print_dry_run_summary "would run the SD-WAN Playwright E2E suite"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary \
+  usage \
+  "would run the SD-WAN Playwright E2E suite"
 
 cd "$(dirname "$0")"
 

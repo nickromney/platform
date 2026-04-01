@@ -25,7 +25,7 @@ scanned. Positional paths remain supported as compatibility shims.
 Options:
   --path PATH  Scan a specific file or directory instead of all tracked scripts
   --dry-run    Show the scan target set and exit before reading files
-  --execute    Execute the scan (explicit form; default behavior remains compatible)
+  --execute    Execute the scan
   -h, --help   Show this message
 EOF
 }
@@ -43,7 +43,6 @@ declare -a bash32_incompatible_patterns=(
 
 count=0
 declare -a issues=()
-dry_run=0
 declare -a scan_paths=()
 
 display_path() {
@@ -100,21 +99,18 @@ build_tracked_shell_script_list() {
     -o -type f -name '*.sh' -print > "${FILES_TO_SCAN}"
 }
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      ;;
     --path)
       shift
       [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--path" >&2; exit 1; }
       scan_paths+=("$1")
-      ;;
-    -h|--help)
-      usage
-      exit 0
       ;;
     --)
       shift
@@ -131,13 +127,12 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "${dry_run}" -eq 1 ]]; then
-  if [[ "${#scan_paths[@]}" -gt 0 ]]; then
-    shell_cli_print_dry_run_summary "would scan ${#scan_paths[@]} explicit path(s) for Bash 3.2 compatibility"
-  else
-    shell_cli_print_dry_run_summary "would scan all tracked *.sh files for Bash 3.2 compatibility"
-  fi
-  exit 0
+if [[ "${#scan_paths[@]}" -gt 0 ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would scan ${#scan_paths[@]} explicit path(s) for Bash 3.2 compatibility"
+else
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would scan all tracked *.sh files for Bash 3.2 compatibility"
 fi
 
 if [[ "${#scan_paths[@]}" -gt 0 ]]; then

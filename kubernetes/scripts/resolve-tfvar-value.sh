@@ -24,6 +24,8 @@ key=""
 default_value=""
 files=()
 positional=()
+key_provided=0
+default_provided=0
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
@@ -38,6 +40,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       }
       key="$2"
+      key_provided=1
       shift 2
       ;;
     --default)
@@ -46,6 +49,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       }
       default_value="$2"
+      default_provided=1
       shift 2
       ;;
     --tfvars-file)
@@ -74,11 +78,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${key}" ]]; then
+if [[ "${key_provided}" -eq 0 && "${#positional[@]}" -ge 1 ]]; then
   key="${positional[0]:-}"
+  key_provided=1
 fi
-if [[ -z "${default_value}" ]]; then
+if [[ "${default_provided}" -eq 0 && "${#positional[@]}" -ge 2 ]]; then
   default_value="${positional[1]:-}"
+  default_provided=1
 fi
 if [[ "${#files[@]}" -eq 0 && "${#positional[@]}" -gt 2 ]]; then
   files=("${positional[@]:2}")
@@ -87,27 +93,27 @@ elif [[ "${#positional[@]}" -gt 2 ]]; then
   exit 1
 fi
 
-if [[ -z "${key}" || -z "${default_value}" ]]; then
+if [[ "${key_provided}" -eq 0 || "${default_provided}" -eq 0 || -z "${key}" ]]; then
   usage
   exit 1
 fi
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would resolve tfvar ${key} from ${#files[@]} file(s) with fallback ${default_value}"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would resolve tfvar ${key} from ${#files[@]} file(s) with fallback ${default_value}"
 
 value=""
-for file in "${files[@]}"; do
-  [[ -n "${file}" && -f "${file}" ]] || continue
-  current="$(
-    grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-      sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
-  )"
-  if [[ -n "${current}" ]]; then
-    value="${current}"
-  fi
-done
+if [[ "${#files[@]}" -gt 0 ]]; then
+  for file in "${files[@]}"; do
+    [[ -n "${file}" && -f "${file}" ]] || continue
+    current="$(
+      grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
+        sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
+    )"
+    if [[ -n "${current}" ]]; then
+      value="${current}"
+    fi
+  done
+fi
 
 if [[ -n "${value}" ]]; then
   printf '%s\n' "${value}"

@@ -572,7 +572,10 @@ load_selector_cache() {
   )"
   [[ -n "${cache_line}" ]] || return 1
 
-  IFS=$'\t' read -r SELECTOR_CACHE_STATUS_VALUE SELECTOR_CACHE_KEY_VALUE SELECTOR_CACHE_VALUE_VALUE SELECTOR_CACHE_ERROR_VALUE <<< "${cache_line}"
+  SELECTOR_CACHE_STATUS_VALUE="$(printf '%s\n' "${cache_line}" | cut -f1)"
+  SELECTOR_CACHE_KEY_VALUE="$(printf '%s\n' "${cache_line}" | cut -f2)"
+  SELECTOR_CACHE_VALUE_VALUE="$(printf '%s\n' "${cache_line}" | cut -f3)"
+  SELECTOR_CACHE_ERROR_VALUE="$(printf '%s\n' "${cache_line}" | cut -f4-)"
   return 0
 }
 
@@ -1291,7 +1294,7 @@ build_capture_command() {
   local since_override="$3"
   local sample_target_override="$4"
 
-  CAPTURE_CMD=("${CAPTURE_SCRIPT}")
+  CAPTURE_CMD=("${CAPTURE_SCRIPT}" --execute)
   CAPTURE_CMD+=(--namespace "${namespace}")
   CAPTURE_CMD+=(--field-mask-profile policy-observe)
 
@@ -1441,7 +1444,7 @@ summarise_report() {
   local input_file="$2"
   local report="$3"
   local output_file="$4"
-  local summary_cmd=("${SUMMARIZE_SCRIPT}")
+  local summary_cmd=("${SUMMARIZE_SCRIPT}" --execute)
   local summary_err=""
 
   summary_cmd+=(--input "${input_file}")
@@ -2538,7 +2541,7 @@ promote_policy_to_module() {
     fi
   fi
 
-  if ! "${RENDER_VALUES_SCRIPT}" --output "${category_file}" "${source_file}"; then
+  if ! "${RENDER_VALUES_SCRIPT}" --execute --output "${category_file}" "${source_file}"; then
     error_message="${PROMOTION_ERROR_MSG:-failed to render module category ${category_file} from ${source_file}}"
     PROMOTION_ERROR_MSG="${error_message}"
     return 1
@@ -2701,6 +2704,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  dry_run=1
+elif [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+  usage
   dry_run=1
 fi
 

@@ -78,10 +78,8 @@ if [[ "${#positional[@]}" -gt 1 ]]; then
   exit 1
 fi
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would ${COMMAND} the Slicer host-forward process"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would ${COMMAND} the Slicer host-forward process"
 
 : "${RUN_DIR:?RUN_DIR is required}"
 : "${SLICER_URL:?SLICER_URL is required}"

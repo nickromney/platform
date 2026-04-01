@@ -79,7 +79,7 @@ EOF
     CILIUM_POLICY_ROOT="${policy_root}" \
     RENDER_CILIUM_POLICY_VALUES_SCRIPT="${render_stub}" \
     KUBECTL_BIN=kubectl \
-    /bin/bash "${SCRIPT}" static
+    /bin/bash "${SCRIPT}" --execute static
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated 1 Cilium policy manifest file(s)"* ]]
@@ -149,7 +149,7 @@ EOF
     KUBECTL_BIN=kubectl \
     CILIUM_IMAGE_VERSION_FILE="${variables_file}" \
     KUBECONFIG="${BATS_TEST_TMPDIR}/config" \
-    /bin/bash "${SCRIPT}" live
+    /bin/bash "${SCRIPT}" --execute live
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"quay.io/cilium/cilium:v1.19.2"* ]]
@@ -216,7 +216,7 @@ EOF
     PATH="${TEST_BIN}:/usr/bin:/bin" \
     KUBECTL_BIN=kubectl \
     KUBECONFIG="${BATS_TEST_TMPDIR}/config" \
-    /bin/bash "${SCRIPT}" live
+    /bin/bash "${SCRIPT}" --execute live
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"INFO using in-cluster cilium-abc123"* ]]

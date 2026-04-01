@@ -247,7 +247,7 @@ resource "null_resource" "gitea_org" {
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/ensure-gitea-org.sh\""
+    command = "bash \"${path.module}/scripts/ensure-gitea-org.sh\" --execute"
     environment = {
       GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)

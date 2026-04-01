@@ -98,7 +98,7 @@ INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 print_install_hint() {
   local tool="$1"
   if [ -x "${INSTALL_HINTS}" ]; then
-    "${INSTALL_HINTS}" --plain "${tool}" 2>/dev/null | while IFS= read -r line; do
+    "${INSTALL_HINTS}" --execute --plain "${tool}" 2>/dev/null | while IFS= read -r line; do
       print_warning "${line}"
     done
   fi

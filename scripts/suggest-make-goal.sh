@@ -17,16 +17,21 @@ Options:
   --goal GOAL        unknown goal to compare
   --candidate GOAL   candidate make goal (repeatable)
   --dry-run          show the comparison set and exit before scoring
-  --execute          run the comparison (preferred explicit form for query workflows)
+  --execute          run the comparison
   -h, --help         show this help
 EOF
 }
 
 unknown_goal=""
-dry_run=0
 candidate_goals=()
 
+shell_cli_init_standard_flags
 while [[ "$#" -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --goal)
       shift
@@ -37,15 +42,6 @@ while [[ "$#" -gt 0 ]]; do
       shift
       [[ "$#" -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--candidate" >&2; exit 1; }
       candidate_goals+=("$1")
-      ;;
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      ;;
-    -h|--help)
-      usage
-      exit 0
       ;;
     --)
       shift
@@ -70,10 +66,8 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-if [[ "${dry_run}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would score '${unknown_goal:-<none>}' against ${#candidate_goals[@]} candidate goal(s)"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would score '${unknown_goal:-<none>}' against ${#candidate_goals[@]} candidate goal(s)"
 
 if [[ -z "${unknown_goal}" ]]; then
   exit 0

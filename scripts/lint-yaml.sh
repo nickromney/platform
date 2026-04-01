@@ -44,7 +44,7 @@ if ! command -v "${YAMLLINT_BIN}" >/dev/null 2>&1; then
   if [[ -x "${INSTALL_HINTS_SCRIPT}" ]]; then
     echo "" >&2
     echo "Install hints:" >&2
-    "${INSTALL_HINTS_SCRIPT}" --plain yamllint | sed 's/^/  /' >&2
+    "${INSTALL_HINTS_SCRIPT}" --execute --plain yamllint | sed 's/^/  /' >&2
   fi
   exit 1
 fi

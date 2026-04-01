@@ -344,7 +344,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.4.16"
+  default     = "9.4.17"
 }
 
 variable "argocd_image_repository" {
@@ -356,7 +356,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.3.5-debian13"
+  default     = "3.3.6-debian13"
 }
 
 variable "provision_argocd" {

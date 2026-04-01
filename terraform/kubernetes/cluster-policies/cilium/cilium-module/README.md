@@ -84,15 +84,15 @@ hubble observe --server localhost:4245 --since 15m \
 Check the relay path before capturing:
 
 ```bash
-# This repo: bare invocation auto-port-forwards via ~/.kube/kind-kind-local.yaml
-./hubble-check-connection.sh
+# This repo: explicit execution auto-port-forwards via ~/.kube/kind-kind-local.yaml
+./hubble-check-connection.sh --execute
 
 # This repo: manual relay port-forward already in place
 kubectl -n kube-system port-forward service/hubble-relay 4245:4245
-./hubble-check-connection.sh --server localhost:4245
+./hubble-check-connection.sh --execute --server localhost:4245
 
 # Remote relay over Cloudflare/Tailscale
-./hubble-check-connection.sh --server https://relay.example.com
+./hubble-check-connection.sh --execute --server https://relay.example.com
 ```
 
 Examples of supported access patterns with the wrapper:

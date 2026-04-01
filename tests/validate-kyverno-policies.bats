@@ -65,7 +65,7 @@ EOF
     KYVERNO_TEST_ROOT="${policy_root}" \
     KUBECTL_BIN=kubectl \
     KYVERNO_BIN=kyverno \
-    /bin/bash "${SCRIPT}" static
+    /bin/bash "${SCRIPT}" --execute static
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"rendered 2 Kyverno kustomize overlay(s)"* ]]
@@ -139,7 +139,7 @@ EOF
     KUBECTL_BIN=kubectl \
     KYVERNO_BIN=kyverno \
     KUBECONFIG="${BATS_TEST_TMPDIR}/config" \
-    /bin/bash "${SCRIPT}" live
+    /bin/bash "${SCRIPT}" --execute live
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   kyverno live policy validation"* ]]

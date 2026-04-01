@@ -26,7 +26,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/sync-gitea-policies.sh\""
+    command = "bash \"${path.module}/scripts/sync-gitea-policies.sh\" --execute"
     environment = {
       STACK_DIR                                     = abspath(path.module)
       GITEA_LOCAL_ACCESS_MODE                       = local.gitea_local_access_mode_effective
@@ -1018,7 +1018,7 @@ resource "kubernetes_secret_v1" "gitea_runner" {
 
 data "external" "gitea_ssh_public_keys_cluster" {
   count   = local.enable_gitops_repo ? 1 : 0
-  program = ["/bin/bash", "${path.module}/scripts/fetch-gitea-ssh-public-keys.sh"]
+  program = ["/bin/bash", "${path.module}/scripts/fetch-gitea-ssh-public-keys.sh", "--execute"]
 
   query = {
     gitea_namespace    = kubernetes_namespace_v1.gitea[0].metadata[0].name

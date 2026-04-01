@@ -9,7 +9,7 @@ resource "null_resource" "kind_storage" {
   }
 
   provisioner "local-exec" {
-    command     = "bash \"${path.module}/scripts/ensure-kind-storage.sh\""
+    command     = "bash \"${path.module}/scripts/ensure-kind-storage.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG                         = local.kubeconfig_path_expanded

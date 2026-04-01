@@ -14,7 +14,7 @@ print_install_hint() {
   local tool="$1"
   if [ -x "${INSTALL_HINTS}" ]; then
     echo "Install hint:" >&2
-    "${INSTALL_HINTS}" --plain "${tool}" >&2 || true
+    "${INSTALL_HINTS}" --execute --plain "${tool}" >&2 || true
   fi
 }
 

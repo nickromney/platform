@@ -93,7 +93,7 @@ prereqs: ## Check macOS host prerequisites for Lima + networking
 	if [ $$missing -ne 0 ]; then \
 		echo ""; \
 		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --plain "$${missing_tools[@]}" | sed 's/^/  /'; \
+		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_tools[@]}" | sed 's/^/  /'; \
 		echo ""; \
 		echo "Fix missing prerequisites and run: make prereqs"; \
 		exit 1; \
@@ -187,7 +187,7 @@ sync-wireguard: fix-guest-hostnames ## Rebuild WireGuard peers after all VMs are
 			cloud3) cloud_num=3; tunnel_ip=192.168.1.3 ;; \
 		esac; \
 		echo "  Reconfiguring $$cloud..."; \
-		limactl shell $$cloud -- sudo env CLOUD_NUM=$$cloud_num CLOUD_NAME=$$cloud TUNNEL_IP=$$tunnel_ip bash $(PROJECT_DIR)/provision/setup-wireguard.sh; \
+		limactl shell $$cloud -- sudo env CLOUD_NUM=$$cloud_num CLOUD_NAME=$$cloud TUNNEL_IP=$$tunnel_ip bash $(PROJECT_DIR)/provision/setup-wireguard.sh --execute; \
 	done
 
 sync-frontend: fix-guest-hostnames ## Sync frontend build artifacts to cloud1 and restart nginx

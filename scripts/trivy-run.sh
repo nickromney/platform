@@ -4,8 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TRIVY_CACHE_DIR="${TRIVY_CACHE_DIR:-${REPO_ROOT}/.run/trivy-cache}"
-dry_run=0
-execute_flag=0
 trivy_args=()
 
 # shellcheck source=/dev/null
@@ -30,18 +28,18 @@ Options:
 EOF
 }
 
+print_dry_run() {
+  shell_cli_print_dry_run_command trivy --cache-dir "${TRIVY_CACHE_DIR}" "${trivy_args[@]}"
+}
+
+shell_cli_init_standard_flags
 while [[ "$#" -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
-    --dry-run)
-      dry_run=1
-      ;;
-    --execute)
-      execute_flag=1
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     --)
       shift
       break
@@ -58,10 +56,7 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-if [[ "${dry_run}" -eq 1 ]]; then
-  shell_cli_print_dry_run_command trivy --cache-dir "${TRIVY_CACHE_DIR}" "${trivy_args[@]}"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview usage print_dry_run
 
 mkdir -p "${TRIVY_CACHE_DIR}"
 

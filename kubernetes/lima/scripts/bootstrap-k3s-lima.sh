@@ -260,6 +260,7 @@ merge_kubeconfig_into_default() {
 
   if [ -x "$kubeconfig_helper" ]; then
     "$kubeconfig_helper" \
+      --execute \
       --action merge \
       --source-kubeconfig "$source_kubeconfig" \
       --target-kubeconfig "$target_kubeconfig" \
@@ -287,8 +288,9 @@ remove_kubeconfig_from_default() {
   [ -e "$target_kubeconfig" ] || return 0
   [ -x "$kubeconfig_helper" ] || return 0
 
-  "$kubeconfig_helper" --action ensure-valid --kubeconfig "$target_kubeconfig"
+  "$kubeconfig_helper" --execute --action ensure-valid --kubeconfig "$target_kubeconfig"
   "$kubeconfig_helper" \
+    --execute \
     --action delete-context \
     --kubeconfig "$target_kubeconfig" \
     --context "$k3sup_context" \
