@@ -2,6 +2,25 @@
 # Setup WireGuard SD-WAN tunnels
 # With the lima:user-v2 underlay, VMs can reach each other directly.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Configure WireGuard for the current SD-WAN Lima guest.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would configure WireGuard for the current SD-WAN Lima guest" "$@"
+
 # Parent provisioners may run with xtrace enabled; turn it off here so
 # WireGuard private keys and generated config do not end up in logs.
 set +x

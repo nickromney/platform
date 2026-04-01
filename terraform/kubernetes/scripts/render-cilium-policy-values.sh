@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: render-cilium-policy-values.sh [options] <input-file|->
@@ -67,6 +70,7 @@ Examples:
   render-cilium-policy-values.sh --set-namespace karpenter \
     path/to/karpenter-cnp.yaml
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 fail() {
@@ -95,7 +99,13 @@ set_namespace=""
 split_dir=""
 input_path=""
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     -o|--output)
       output_path="${2:-}"
@@ -120,10 +130,6 @@ while [[ $# -gt 0 ]]; do
     --split-dir)
       split_dir="${2:-}"
       shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
       ;;
     --)
       shift
@@ -150,6 +156,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would render Cilium policy values from ${input_path:-<stdin or unspecified>}"
+  exit 0
+fi
 
 if [[ -z "${input_path}" ]]; then
   echo "render-cilium-policy-values.sh: missing input path" >&2

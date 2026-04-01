@@ -1,6 +1,22 @@
 #!/bin/sh
 set -eu
 
+# shellcheck source=/dev/null
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "${SCRIPT_DIR}/../../../scripts/lib/shell-cli-posix.sh"
+
+usage() {
+  cat <<EOF
+Usage: render-runtime-config.sh [--dry-run] [--execute]
+
+Renders the frontend runtime-config.js file from the current environment.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would render runtime-config.js from the current environment variables" "$@"
+
 OUT_FILE="${RUNTIME_CONFIG_OUT:-/usr/share/nginx/html/runtime-config.js}"
 
 mkdir -p "$(dirname "$OUT_FILE")"

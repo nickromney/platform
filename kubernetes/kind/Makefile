@@ -30,6 +30,7 @@ RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
+READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
@@ -225,7 +226,7 @@ help:
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
-	@"$(CHECK_STAGE_MONOTONICITY)"
+	@"$(CHECK_STAGE_MONOTONICITY)" $(READONLY_MODE_FLAG)
 
 .PHONY: build-local-platform-images
 build-local-platform-images:
@@ -325,17 +326,17 @@ check-kubeconfig:
 	@set -euo pipefail; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$$default_kubeconfig"; \
-	default_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$$default_kubeconfig"); \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
+	default_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$$default_kubeconfig"); \
 	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
 	[ -n "$$default_current" ] || default_current="<none>"; \
 	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
-	kind_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	kind_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
 	kind_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$kind_current" ] || kind_current="<none>"; \
 	echo "OK   kind kubeconfig: $(KUBECONFIG_PATH) ($$kind_count context(s), current=$$kind_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" lint || true)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --action lint || true)"; \
 	if [ -n "$$kubie_lint_output" ]; then \
 		echo "WARN kubie lint:"; \
 		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
@@ -391,15 +392,15 @@ check-kind-host-ports:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		args+=(--var-file "$(KIND_OPERATOR_OVERRIDES_FILE)"); \
 	fi; \
-	"$(CHECK_KIND_HOST_PORTS)" "$${args[@]}"
+	"$(CHECK_KIND_HOST_PORTS)" $(READONLY_MODE_FLAG) "$${args[@]}"
 
 .PHONY: check-lima-stopped
 check-lima-stopped:
-	@LIMA_INSTANCE_PREFIX="$(KIND_CHECK_LIMA_INSTANCE_PREFIX)" "$(CHECK_LIMA_STOPPED)"
+	@LIMA_INSTANCE_PREFIX="$(KIND_CHECK_LIMA_INSTANCE_PREFIX)" "$(CHECK_LIMA_STOPPED)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-slicer-stopped
 check-slicer-stopped:
-	@SLICER_URL="$(KIND_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(KIND_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(KIND_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)"
+	@SLICER_URL="$(KIND_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(KIND_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(KIND_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-conflicting-clusters-stopped
 check-conflicting-clusters-stopped:
@@ -672,7 +673,7 @@ check-health:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-security
 check-security:
@@ -691,17 +692,17 @@ check-security:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@"$(STACK_DIR)/scripts/check-gateway-stack.sh"
+	@"$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
 check-cluster:
 	@$(MAKE) check-platform-env
-	"$(STACK_DIR)/scripts/check-cluster.sh"
+	"$(STACK_DIR)/scripts/check-cluster.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-gateway-urls
 check-gateway-urls:
@@ -717,7 +718,7 @@ check-gateway-urls:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	"$(STACK_DIR)/scripts/check-gateway-urls.sh" $$vf
+	"$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-app
 check-app:
@@ -741,7 +742,7 @@ check-app:
 	if [ -n "$${HOST:-}" ]; then host_flag="--host $${HOST}"; fi; \
 	ext_flag=""; \
 	if [ "$${EXTENDED:-0}" = "1" ]; then ext_flag="--extended"; fi; \
-	"$(STACK_DIR)/scripts/check-app.sh" $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
+	"$(STACK_DIR)/scripts/check-app.sh" $(READONLY_MODE_FLAG) $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
 
 .PHONY: check-sso
 check-sso:
@@ -757,7 +758,7 @@ check-sso:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $$vf
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-sso-e2e
 check-sso-e2e:
@@ -772,7 +773,7 @@ check-sso-e2e:
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
-	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh"
+	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: gitea-sync
 gitea-sync:
@@ -817,7 +818,7 @@ show-urls:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	"$(STACK_DIR)/scripts/check-cluster-health.sh" --show-urls $$vf
+	"$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) --show-urls $$vf
 
 .PHONY: docker-health
 docker-health:
@@ -910,9 +911,9 @@ start:
 .PHONY: merge-default-kubeconfig
 merge-default-kubeconfig:
 	@set -euo pipefail; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" merge "$(KUBECONFIG_PATH)" "$(DEFAULT_KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)"; \
 	echo "OK   merged $(KUBECONFIG_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 .PHONY: prereqs
@@ -1117,13 +1118,13 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
 		if [ -e "$$KUBECONFIG_PATH" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$$KUBECONFIG_PATH"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$$KUBECONFIG_PATH"; \
 			if KUBECONFIG="$$KUBECONFIG_PATH" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
 				local_ctx_found=1; \
 			else \
 				local_ctx_found=0; \
 			fi; \
-			"$(KUBECONFIG_HELPER)" delete-context "$$KUBECONFIG_PATH" "$$CTX" "$$CTX" "$$CTX" 1; \
+			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --delete-file-if-empty; \
 			if [ "$$local_ctx_found" = "1" ]; then \
 				echo "OK   Removed $$CTX from $$KUBECONFIG_PATH"; \
 			else \
@@ -1133,13 +1134,13 @@ reset:
 			echo "OK   No kubeconfig file at $$KUBECONFIG_PATH"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$(DEFAULT_KUBECONFIG_PATH)"; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
 			if KUBECONFIG="$(DEFAULT_KUBECONFIG_PATH)" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
 				global_ctx_found=1; \
 			else \
 				global_ctx_found=0; \
 			fi; \
-			"$(KUBECONFIG_HELPER)" delete-context "$(DEFAULT_KUBECONFIG_PATH)" "$$CTX" "$$CTX" "$$CTX" 0; \
+			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX"; \
 			if [ "$$global_ctx_found" = "1" ]; then \
 				echo "OK   Removed $$CTX from $(DEFAULT_KUBECONFIG_PATH)"; \
 			else \
@@ -1183,8 +1184,8 @@ test:
 
 .PHONY: test-shell
 test-shell:
-	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh"
-	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
+	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh" --execute
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh" --execute
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
@@ -1198,14 +1199,14 @@ test-bats:
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@echo "Running component and chart version audit..."
-	@KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh"
+	@KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""
 	@echo "Running Terraform provider version audit..."
-	@"$(STACK_DIR)/scripts/check-provider-version.sh"
+	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-provider-version
 check-provider-version:
-	@"$(STACK_DIR)/scripts/check-provider-version.sh"
+	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: ensure-kind-kubeconfig
 ensure-kind-kubeconfig:
@@ -1214,4 +1215,4 @@ ensure-kind-kubeconfig:
 .PHONY: audit-bootstrap
 audit-bootstrap:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@"$(MAKEFILE_DIR)scripts/audit-bootstrap.sh"
+	@"$(MAKEFILE_DIR)scripts/audit-bootstrap.sh" $(READONLY_MODE_FLAG)

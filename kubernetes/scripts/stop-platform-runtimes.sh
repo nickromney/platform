@@ -3,16 +3,31 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 k8s_dir="$(cd "${script_dir}/.." && pwd)"
+# shellcheck source=/dev/null
+source "${script_dir}/../../scripts/lib/shell-cli.sh"
 
 exclude_kind=0
 exclude_lima=0
 exclude_slicer=0
 
 usage() {
-  echo "Usage: $0 [--exclude kind|lima|slicer]..." >&2
+  cat <<EOF >&2
+Usage: stop-platform-runtimes.sh [--exclude kind|lima|slicer]... [--dry-run] [--execute]
+
+Stops local kind, Lima, and Slicer runtimes best-effort, optionally excluding
+selected runtimes.
+
+$(shell_cli_standard_options)
+EOF
 }
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --exclude)
       shift
@@ -37,13 +52,26 @@ while [[ $# -gt 0 ]]; do
           ;;
       esac
       ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
     *)
-      usage
+      shell_cli_unexpected_arg "$(shell_cli_script_name)" "$1"
       exit 1
       ;;
   esac
   shift
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would stop local platform runtimes best-effort"
+  exit 0
+fi
 
 run_stop() {
   local platform="$1"

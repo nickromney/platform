@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT="${SCRIPT_DIR}/rewrite-devcontainer-kubeconfig.py"
 CLUSTER_NAME="${CLUSTER_NAME:-kind-local}"
 TARGET_CONTEXT="kind-${CLUSTER_NAME}"
@@ -13,6 +15,19 @@ MERGE_KUBECONFIG_TO_DEFAULT="${MERGE_KUBECONFIG_TO_DEFAULT:-0}"
 WAIT_SECONDS="${KIND_KUBECONFIG_LOCK_WAIT_SECONDS:-15}"
 DEVCONTAINER_HOST_ALIAS="${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}"
 DEVCONTAINER_TLS_SERVER_NAME="${KIND_DEVCONTAINER_TLS_SERVER_NAME:-localhost}"
+
+usage() {
+  cat <<EOF
+Usage: ensure-kind-kubeconfig.sh [--dry-run] [--execute]
+
+Exports the current kind kubeconfig, optionally rewrites it for devcontainer
+host access, and reconciles the managed default kubeconfig.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would export the current kind kubeconfig and reconcile the managed kubeconfig files" "$@"
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
@@ -92,13 +107,22 @@ run_with_lock_retry \
 rewrite_for_devcontainer_host_socket "${KUBECONFIG_PATH}"
 
 if [[ -x "${KUBECONFIG_HELPER}" ]]; then
-  "${KUBECONFIG_HELPER}" ensure-valid "${KUBECONFIG_PATH}"
+  "${KUBECONFIG_HELPER}" --action ensure-valid --kubeconfig "${KUBECONFIG_PATH}"
   if [[ "${MERGE_KUBECONFIG_TO_DEFAULT}" == "1" ]]; then
-    "${KUBECONFIG_HELPER}" ensure-valid "${GLOBAL_KUBECONFIG_PATH}"
-    "${KUBECONFIG_HELPER}" merge "${KUBECONFIG_PATH}" "${GLOBAL_KUBECONFIG_PATH}" "${TARGET_CONTEXT}"
+    "${KUBECONFIG_HELPER}" --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
+    "${KUBECONFIG_HELPER}" \
+      --action merge \
+      --source-kubeconfig "${KUBECONFIG_PATH}" \
+      --target-kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
+      --context "${TARGET_CONTEXT}"
   elif [[ -e "${GLOBAL_KUBECONFIG_PATH}" ]]; then
-    "${KUBECONFIG_HELPER}" ensure-valid "${GLOBAL_KUBECONFIG_PATH}"
-    "${KUBECONFIG_HELPER}" delete-context "${GLOBAL_KUBECONFIG_PATH}" "${TARGET_CONTEXT}" "${TARGET_CONTEXT}" "${TARGET_CONTEXT}" 0
+    "${KUBECONFIG_HELPER}" --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
+    "${KUBECONFIG_HELPER}" \
+      --action delete-context \
+      --kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
+      --context "${TARGET_CONTEXT}" \
+      --cluster "${TARGET_CONTEXT}" \
+      --user "${TARGET_CONTEXT}"
   fi
 fi
 

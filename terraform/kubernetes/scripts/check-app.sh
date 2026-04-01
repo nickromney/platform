@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 FAILURES=0
 
 fail() { echo "FAIL $*" >&2; exit 1; }
@@ -47,6 +50,7 @@ Examples:
   check-app.sh --app gitea --path / -x
   check-app.sh --app headlamp --host headlamp.admin.example.test --path /
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -73,7 +77,13 @@ HTTPROUTE_NAME=""
 SSO_NS="sso"
 OAUTH2_PROXY_NAME=""
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --var-file) TFVARS_FILE="${2:-}"; shift 2 ;;
     --app) APP="${2:-}"; shift 2 ;;
@@ -92,10 +102,14 @@ while [[ $# -gt 0 ]]; do
     --httproute) HTTPROUTE_NAME="${2:-}"; shift 2 ;;
     --sso-ns) SSO_NS="${2:-}"; shift 2 ;;
     --oauth2-proxy) OAUTH2_PROXY_NAME="${2:-}"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
     *) fail "Unknown argument: $1" ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would run gateway diagnostics for app ${APP:-<unspecified>}"
+  exit 0
+fi
 
 [[ -n "${APP}" ]] || { usage; fail "--app is required"; }
 

@@ -1,0 +1,29 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-platform-gateway-observed-ingress-candidate
+  namespace: platform-gateway
+  annotations:
+    "policies.cilium.io/title": "Platform Gateway observed ingress candidate"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"
+    "platform.publiccloudexperiments.net/hubble-policy-direction": "ingress"
+    "platform.publiccloudexperiments.net/hubble-policy-mode": "workload"
+    "platform.publiccloudexperiments.net/hubble-policy-row-count": "1"
+    "platform.publiccloudexperiments.net/hubble-policy-since": "5m"
+    "platform.publiccloudexperiments.net/hubble-policy-iterations": "3"
+    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "flows"
+specs:
+  - description: >-
+      Observed ingress traffic from platform-gateway/platform-gateway-nginx
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "platform-gateway"
+        "k8s:app.kubernetes.io/name": "platform-gateway-nginx"
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "8081"
+                protocol: TCP

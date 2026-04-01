@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: ensure-k3s-lima-vms.sh [--dry-run] [--execute]
+
+Ensures the expected set of Lima VMs exist and are running for the Lima k3s
+workflow.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would ensure the configured Lima VM set exists and is running" "$@"
+
 : "${LIMA_INSTANCE_PREFIX:?LIMA_INSTANCE_PREFIX is required}"
 : "${DESIRED_NODES:?DESIRED_NODES is required}"
 : "${LIMA_CONFIG:?LIMA_CONFIG is required}"
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 
 print_install_hint() {

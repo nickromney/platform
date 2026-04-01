@@ -73,6 +73,12 @@ suites.
 `make fmt` is the mutating path. Today it applies tracked-file Markdown
 auto-fixes when a Markdown linter is available.
 
+Shell entrypoints follow the shared safety/interface contract documented in
+[`docs/shell-entrypoint-standards.md`](docs/shell-entrypoint-standards.md).
+Repo-owned callers now prefer explicit `--execute` or `--dry-run` when they
+invoke shell entrypoints, even where direct bare invocation remains supported
+as a compatibility shim.
+
 For live cluster-side validation against the current kubeconfig context:
 
 ```shell
@@ -101,12 +107,18 @@ From the project root:
 make -C kubernetes/kind prereqs
 make -C kubernetes/kind 900 plan
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
-make -C kubernetes/kind check-health
+make -C kubernetes/kind 900 check-health
+make -C kubernetes/kind 900 check-health DRY_RUN=1
 ```
 
 Stages are cumulative: `100` creates the cluster, `900` brings up the full
 local platform stack, but you could apply `500` if you "only" wanted Cilium,
 Hubble, ArgoCD, and Gitea running in-cluster.
+
+The stage-first positional Make syntax remains supported, for example
+`make -C kubernetes/kind 100 apply`. Under the hood, the Makefile now forwards
+named flags such as `--execute`, `--dry-run`, and repeated `--var-file`
+arguments to the underlying scripts.
 
 At stage `900`, the Make-based `apply` path now also runs the repo health check
 and browser SSO E2E verification before it returns success. A raw
@@ -125,7 +137,8 @@ make -C kubernetes/lima prereqs
 make -C kubernetes/lima 100 apply
 make -C kubernetes/lima 900 plan
 make -C kubernetes/lima 900 apply AUTO_APPROVE=1
-make -C kubernetes/lima check-health
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/lima 900 check-health DRY_RUN=1
 ```
 
 This keeps the same cumulative stage ladder as `kubernetes/kind`, but stage
@@ -155,7 +168,8 @@ make -C kubernetes/slicer prereqs
 make -C kubernetes/slicer 100 apply
 make -C kubernetes/slicer 900 plan
 make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
-make -C kubernetes/slicer check-health
+make -C kubernetes/slicer 900 check-health
+make -C kubernetes/slicer 900 check-health DRY_RUN=1
 ```
 
 At stage `900`, the Make-based `apply` path also runs the repo health check and

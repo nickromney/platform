@@ -2,6 +2,23 @@
 # Tunnel Connectivity Test Script
 # Demonstrates SD-WAN connectivity scenarios
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/../../.." && pwd)
+
+. "${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Run the SD-WAN tunnel connectivity demonstration.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the SD-WAN tunnel connectivity demonstration" "$@"
+
 apk add --no-cache bind-tools iproute2 curl >/dev/null 2>&1
 
 echo "=============================================="

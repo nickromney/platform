@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 warn() { echo "WARN $*" >&2; }
 
-: "${RUN_DIR:?RUN_DIR is required}"
-: "${SLICER_URL:?SLICER_URL is required}"
-
-COMMAND="${1:-ensure}"
+COMMAND=""
 SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
-FORWARD_PID_FILE="${FORWARD_PID_FILE:-${RUN_DIR}/slicer-host-forwards.pid}"
-FORWARD_LOG_FILE="${FORWARD_LOG_FILE:-${RUN_DIR}/slicer-host-forwards.log}"
 ARGOCD_NODE_PORT="${ARGOCD_NODE_PORT:-30080}"
 HUBBLE_NODE_PORT="${HUBBLE_NODE_PORT:-31235}"
 GITEA_HTTP_NODE_PORT="${GITEA_HTTP_NODE_PORT:-30090}"
@@ -22,6 +20,74 @@ GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3302}"
 GRAFANA_NODE_PORT="${GRAFANA_NODE_PORT:-30302}"
 GATEWAY_HTTPS_FORWARD_PORT="${GATEWAY_HTTPS_FORWARD_PORT:-${GATEWAY_HTTPS_HOST_PORT:-8443}}"
 GATEWAY_HTTPS_GUEST_PORT="${GATEWAY_HTTPS_GUEST_PORT:-443}"
+
+usage() {
+  cat <<EOF
+Usage: ensure-host-forwards.sh [--action ensure|stop|status] [--dry-run] [--execute]
+
+Manages the long-lived Slicer host-forward process that maps local ports into
+the VM.
+
+Positional compatibility:
+  ensure-host-forwards.sh [ensure|stop|status]
+
+$(shell_cli_standard_options)
+EOF
+}
+
+positional=()
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --action)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--action"
+        exit 1
+      }
+      COMMAND="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        positional+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${COMMAND}" ]]; then
+  COMMAND="${positional[0]:-ensure}"
+fi
+if [[ "${#positional[@]}" -gt 1 ]]; then
+  shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positional[1]}"
+  exit 1
+fi
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would ${COMMAND} the Slicer host-forward process"
+  exit 0
+fi
+
+: "${RUN_DIR:?RUN_DIR is required}"
+: "${SLICER_URL:?SLICER_URL is required}"
+
+FORWARD_PID_FILE="${FORWARD_PID_FILE:-${RUN_DIR}/slicer-host-forwards.pid}"
+FORWARD_LOG_FILE="${FORWARD_LOG_FILE:-${RUN_DIR}/slicer-host-forwards.log}"
 
 LOCAL_PORTS=(
   "${ARGOCD_NODE_PORT}"
@@ -251,6 +317,7 @@ case "${COMMAND}" in
     print_status
     ;;
   *)
-    fail "usage: $0 [ensure|stop|status]"
+    usage
+    exit 1
     ;;
 esac

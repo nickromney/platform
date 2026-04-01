@@ -5,21 +5,24 @@
 # Show help message
 show_help() {
     cat << EOF
-Usage: $0 [OPTIONS] [URL]
+Usage: $0 [OPTIONS]
 
 Test the subnet calculator API endpoints.
 
 OPTIONS:
+    --base-url URL  Override the API base URL
     --detailed      Run all endpoints with full command output
     --container     Test containerized API (http://localhost:8080/api)
+    --dry-run       Show the selected API target and exit before HTTP calls
+    --execute       Execute the endpoint test suite
     --help, -h      Show this help message
 
 EXAMPLES:
-    $0                      # Smoke test on local API (port 7071)
-    $0 --detailed           # All endpoints on local API (port 7071)
-    $0 --container          # Smoke test on containerized API (port 8080)
-    $0 --detailed --container  # All endpoints on container
-    $0 --detailed https://your-api.azurewebsites.net/api   # All endpoints on Azure
+    $0 --execute                      # Smoke test on local API (port 7071)
+    $0 --detailed --execute           # All endpoints on local API (port 7071)
+    $0 --container --execute          # Smoke test on containerized API (port 8080)
+    $0 --detailed --container --execute  # All endpoints on container
+    $0 --detailed --base-url https://your-api.azurewebsites.net/api --execute
 
 REQUIREMENTS:
     - API must be running before executing tests
@@ -32,9 +35,17 @@ Start the local API with:
 EOF
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 # Parse arguments
 DETAILED=false
 BASE_URL=""
+dry_run=0
+positionals=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -42,24 +53,61 @@ while [[ $# -gt 0 ]]; do
             show_help
             exit 0
             ;;
+        --base-url)
+            shift
+            [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--base-url" >&2; exit 1; }
+            BASE_URL="$1"
+            ;;
         --detailed)
             DETAILED=true
-            shift
             ;;
         --container)
             BASE_URL="http://localhost:8080/api"
+            ;;
+        --dry-run)
+            dry_run=1
+            ;;
+        --execute)
+            ;;
+        --)
             shift
+            while [[ $# -gt 0 ]]; do
+                positionals+=("$1")
+                shift
+            done
+            break
+            ;;
+        -*)
+            shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+            exit 2
             ;;
         *)
-            BASE_URL="$1"
-            shift
+            positionals+=("$1")
             ;;
     esac
+    shift
 done
+
+if [[ "${#positionals[@]}" -ge 1 ]]; then
+    BASE_URL="${positionals[0]}"
+fi
+if [[ "${#positionals[@]}" -gt 1 ]]; then
+    shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positionals[1]}"
+    exit 2
+fi
 
 # Set default if not specified
 if [ -z "$BASE_URL" ]; then
     BASE_URL="http://localhost:7071/api"
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+    if [ "$DETAILED" = true ]; then
+        shell_cli_print_dry_run_summary "would run detailed Azure Function endpoint tests against ${BASE_URL}"
+    else
+        shell_cli_print_dry_run_summary "would run smoke Azure Function endpoint tests against ${BASE_URL}"
+    fi
+    exit 0
 fi
 
 # Detect which HTTP client to use

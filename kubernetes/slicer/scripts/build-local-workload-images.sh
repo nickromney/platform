@@ -3,12 +3,27 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck source=kubernetes/scripts/docker-local-registry-lib.sh
 source "${SCRIPT_DIR}/../../scripts/docker-local-registry-lib.sh"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-platform}"
 TAG="${TAG:-latest}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
+
+usage() {
+  cat <<EOF
+Usage: build-local-workload-images.sh [--dry-run] [--execute]
+
+Builds and pushes workload images into the local registry cache for Slicer-based
+workflows.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would build and push Slicer workload images into ${CACHE_PUSH_HOST} with tag ${TAG}" "$@"
 
 command -v curl >/dev/null 2>&1 || { echo "build-local-workload-images: curl not found" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo "build-local-workload-images: docker not found" >&2; exit 1; }

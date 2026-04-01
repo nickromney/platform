@@ -100,6 +100,14 @@ By default the repo keeps its own kubeconfigs split, for example
 that only reads `~/.kube/config`, use `make merge-default-kubeconfig`
 explicitly rather than relying on the repo to auto-merge.
 
+Read-only operator targets now invoke their backing scripts with explicit
+`--execute` flags. To preview the same checks without running them, keep the
+same Make target shape and add `DRY_RUN=1`, for example:
+
+```bash
+make 900 check-health DRY_RUN=1
+```
+
 Run it from this directory with:
 
 ```bash

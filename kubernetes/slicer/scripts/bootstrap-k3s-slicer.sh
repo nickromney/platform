@@ -4,6 +4,21 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
 run_dir="${RUN_DIR:-$(cd "${script_dir}/.." && pwd)/.run}"
+# shellcheck source=/dev/null
+source "${repo_root}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: bootstrap-k3s-slicer.sh [--dry-run] [--execute]
+
+Bootstraps or reconciles the Slicer-backed k3s cluster and refreshes the
+managed kubeconfig output.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would bootstrap or reconcile the Slicer k3s cluster and refresh kubeconfig" "$@"
 
 slicer_socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
 [ -n "${slicer_socket}" ] || { echo "ERROR: SLICER_URL or SLICER_SOCKET must be set" >&2; exit 1; }
@@ -195,8 +210,13 @@ remove_context_from_default_kubeconfig() {
   [ -e "${default_kubeconfig_path}" ] || return 0
   [ -x "${kubeconfig_helper}" ] || return 0
 
-  "${kubeconfig_helper}" ensure-valid "${default_kubeconfig_path}"
-  "${kubeconfig_helper}" delete-context "${default_kubeconfig_path}" "${k3sup_context}" "${k3sup_context}" "${k3sup_context}" 0
+  "${kubeconfig_helper}" --action ensure-valid --kubeconfig "${default_kubeconfig_path}"
+  "${kubeconfig_helper}" \
+    --action delete-context \
+    --kubeconfig "${default_kubeconfig_path}" \
+    --context "${k3sup_context}" \
+    --cluster "${k3sup_context}" \
+    --user "${k3sup_context}"
 }
 
 refresh_kubeconfig() {
@@ -220,7 +240,11 @@ refresh_kubeconfig() {
     if [ "$merge_kubeconfig_to_default" = "1" ]; then
       mkdir -p "$(dirname "$default_kubeconfig_path")"
       if [ -x "$kubeconfig_helper" ]; then
-        if ! "$kubeconfig_helper" merge "$kubeconfig_path" "$default_kubeconfig_path" "$k3sup_context"; then
+        if ! "$kubeconfig_helper" \
+          --action merge \
+          --source-kubeconfig "$kubeconfig_path" \
+          --target-kubeconfig "$default_kubeconfig_path" \
+          --context "$k3sup_context"; then
           echo "WARN: failed to merge ${kubeconfig_path} into ${default_kubeconfig_path}" >&2
         fi
       else

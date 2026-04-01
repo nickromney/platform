@@ -25,17 +25,23 @@ make -C kubernetes/lima prereqs
 make -C kubernetes/lima 100 apply
 make -C kubernetes/lima 900 plan
 make -C kubernetes/lima 900 apply AUTO_APPROVE=1
-make -C kubernetes/lima show-urls
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/lima 900 show-urls
 ```
 
 Useful follow-ups:
 
 ```bash
-make -C kubernetes/lima check-health
+make -C kubernetes/lima 900 check-health DRY_RUN=1
 make -C kubernetes/lima check-sso-e2e
 make -C kubernetes/lima status
 make -C kubernetes/lima reset AUTO_APPROVE=1
 ```
+
+The stage-first positional Make syntax remains supported, for example
+`make -C kubernetes/lima 100 apply`. Read-only Make targets now pass
+`--execute` to the underlying scripts explicitly; set `DRY_RUN=1` to preview
+them with `--dry-run`.
 
 Helper toggles are explicit now:
 

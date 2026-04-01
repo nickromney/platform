@@ -1,0 +1,62 @@
+metadata:
+  name: cnp-uat-observed-ingress-candidate
+  namespace: uat
+  annotations:
+    policies.cilium.io/title: Uat observed ingress candidate
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+    platform.publiccloudexperiments.net/hubble-policy-candidate: "true"
+    platform.publiccloudexperiments.net/hubble-policy-direction: ingress
+    platform.publiccloudexperiments.net/hubble-policy-mode: workload
+    platform.publiccloudexperiments.net/hubble-policy-row-count: "4"
+    platform.publiccloudexperiments.net/hubble-policy-since: 5m
+    platform.publiccloudexperiments.net/hubble-policy-iterations: "3"
+    platform.publiccloudexperiments.net/hubble-policy-capture-mode: flows
+specs:
+  - description: Observed ingress traffic from uat/frontend
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: uat
+        k8s:app.kubernetes.io/component: frontend
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "8080"
+                protocol: TCP
+  - description: Observed ingress traffic from uat/sentiment-api
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: uat
+        k8s:app.kubernetes.io/name: sentiment-api
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "8080"
+                protocol: TCP
+  - description: Observed ingress traffic from uat/sentiment-auth-ui
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: uat
+        k8s:app.kubernetes.io/name: sentiment-auth-ui
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "8080"
+                protocol: TCP
+  - description: Observed ingress traffic from uat/subnetcalc-api
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: uat
+        k8s:app.kubernetes.io/name: subnetcalc-api
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "8000"
+                protocol: TCP

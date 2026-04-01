@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 context="docker-desktop"
 node_pattern='^desktop-'
 restart_workloads="false"
@@ -23,11 +26,17 @@ Options:
                            (default: ^desktop-)
   --registry HOST:PORT     add another plain-http registry override
   --restart-workloads      rollout-restart app deployments in dev/uat/apim
-  -h, --help               show this help
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --context)
       [[ $# -ge 2 ]] || { echo "--context requires a value" >&2; exit 1; }
@@ -48,10 +57,6 @@ while [[ $# -gt 0 ]]; do
       restart_workloads="true"
       shift
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       echo "Unknown argument: $1" >&2
       usage >&2
@@ -59,6 +64,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would patch Docker Desktop managed kind nodes for direct local registry pulls"
+  exit 0
+fi
 
 nodes=()
 while IFS= read -r node; do

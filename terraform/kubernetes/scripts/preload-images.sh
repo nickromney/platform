@@ -19,6 +19,31 @@
 
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<'EOF'
+Pre-pull container images to Docker Desktop and load them into a kind cluster.
+
+Usage:
+  preload-images.sh [OPTIONS]
+
+Options:
+  --pull-only       Pull images into Docker cache only (no kind cluster required)
+  --print-images    Print the final filtered image list and exit
+  --discover        Dump all images from the running cluster (excludes localhost:30090/*)
+  --image-list FILE Path to image list file (default: kubernetes/kind/preload-images.txt)
+  --tfvars FILE     Optional tfvars file for feature-gated image filtering
+  --cluster NAME    Kind cluster name (default: kind-local)
+  --platform PLAT   Target platform for pulls (default: auto)
+  --lock-file FILE  Digest lock file (default: scripts/preload-images.<platform>.lock)
+  --refresh-lock    Refresh the lock file from registries
+  --parallelism N   Number of parallel docker pulls (default: 4)
+EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
+}
+
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -49,7 +74,13 @@ WORKFLOW_DOCKERFILES=(
   "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile"
 )
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --pull-only)    MODE="pull-only"; shift ;;
     --discover)     MODE="discover"; shift ;;
@@ -61,17 +92,14 @@ while [[ $# -gt 0 ]]; do
     --lock-file)    LOCK_FILE="$2"; shift 2 ;;
     --refresh-lock) REFRESH_LOCK=1; shift ;;
     --parallelism)  PARALLELISM="$2"; shift 2 ;;
-    -h|--help)
-      awk '
-        NR == 1 { next }
-        /^#/   { sub(/^# ?/, ""); print; next }
-        { exit }
-      ' "$0"
-      exit 0
-      ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would ${MODE} preload image workflow using ${IMAGE_LIST}"
+  exit 0
+fi
 
 is_true() {
   case "${1:-}" in

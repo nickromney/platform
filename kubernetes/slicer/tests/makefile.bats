@@ -41,7 +41,20 @@ setup() {
   run make -n -C "${REPO_ROOT}/kubernetes/slicer" 900 check-security
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-security.sh" --execute '* ]]
   [[ "${output}" == *"check-security.sh"* ]]
+}
+
+@test "slicer check-health forwards explicit read-only mode flags" {
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" check-health STAGE=900
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-cluster-health.sh" --execute '* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" check-health STAGE=900 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
 @test "slicer stage 900 apply wires k3s apiserver OIDC for Headlamp" {
@@ -80,7 +93,7 @@ setup() {
 }
 
 @test "slicer reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
-  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset' \
+  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]

@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: start-daemon.sh [--dry-run] [--execute]
+
+Waits for the configured Slicer endpoint or on-device slicer-mac socket to be
+ready for use.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would wait for the configured Slicer daemon endpoint to become ready" "$@"
+
 : "${RUN_DIR:?RUN_DIR is required}"
 
 mkdir -p "$RUN_DIR"

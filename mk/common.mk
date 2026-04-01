@@ -88,7 +88,7 @@ check-platform-env: check-platform-env-file
 	@set -euo pipefail; \
 	echo "Unknown make goal '$@'." >&2; \
 	if [ -n "$(strip $(MAKE_SUGGEST_SCRIPT))" ] && [ -x "$(MAKE_SUGGEST_SCRIPT)" ] && [ -n "$(strip $(MAKE_KNOWN_GOALS))" ]; then \
-		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" "$@" $(MAKE_KNOWN_GOALS) )"; \
+		suggestion="$$( "$(MAKE_SUGGEST_SCRIPT)" --goal "$@" $(foreach goal,$(MAKE_KNOWN_GOALS),--candidate "$(goal)") --execute )"; \
 		if [ -n "$$suggestion" ]; then \
 			echo "$$suggestion" >&2; \
 		fi; \

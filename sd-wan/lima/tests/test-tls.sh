@@ -6,6 +6,24 @@
 # Usage: ./test-tls.sh
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Run the SD-WAN Lima TLS protocol and cipher verification suite.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the SD-WAN TLS verification suite" "$@"
+
 PASS=0
 FAIL=0
 

@@ -1,12 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "FAIL $*" >&2; exit 1; }
 
 kubeconfig_path="${KUBECONFIG_PATH:-${KUBECONFIG:-}}"
 kubeconfig_context="${KUBECONFIG_CONTEXT:-}"
 attempts="${KUBECTL_REACHABILITY_ATTEMPTS:-10}"
 delay_seconds="${KUBECTL_REACHABILITY_DELAY_SECONDS:-3}"
+
+usage() {
+  cat <<EOF
+Usage: wait-for-kubectl.sh [--dry-run] [--execute]
+
+Waits for kubectl to reach the configured cluster using KUBECONFIG_PATH or
+KUBECONFIG and an optional KUBECONFIG_CONTEXT.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would wait for kubectl to reach the configured cluster" "$@"
 
 [[ -n "${kubeconfig_path}" ]] || fail "KUBECONFIG_PATH or KUBECONFIG must be set"
 command -v kubectl >/dev/null 2>&1 || fail "kubectl not found in PATH"

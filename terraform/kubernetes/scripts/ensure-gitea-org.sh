@@ -5,12 +5,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
-platform_load_env
 
 fail() { echo "ensure-gitea-org: $*" >&2; exit 1; }
 warn() { echo "ensure-gitea-org: $*" >&2; }
 ok() { echo "ensure-gitea-org: $*"; }
+
+usage() {
+  cat <<EOF
+Usage: ensure-gitea-org.sh [--dry-run] [--execute]
+
+Ensures the configured Gitea organization and member accounts exist.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would ensure the configured Gitea organization and members exist" "$@"
+
+platform_load_env
 
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"

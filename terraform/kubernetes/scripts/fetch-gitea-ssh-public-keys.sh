@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 fail() {
   jq -n --arg error "$1" '{error:$error}'
   exit 1
@@ -14,6 +17,62 @@ require_cmd jq
 require_cmd kubectl
 require_cmd base64
 require_cmd shasum
+
+wait_for_gitea_ssh() {
+  local namespace="$1"
+  local timeout_seconds="${2:-300}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local pod_name=""
+  local ssh_target_port=""
+
+  if ! kubectl "${kubectl_args[@]}" -n "${namespace}" get deployment gitea >/dev/null 2>&1; then
+    fail "Gitea deployment not found in namespace ${namespace}"
+  fi
+
+  kubectl "${kubectl_args[@]}" -n "${namespace}" rollout status deployment/gitea --timeout="${timeout_seconds}s" >/dev/null 2>&1 || true
+
+  while (( SECONDS < deadline )); do
+    pod_name="$(
+      kubectl "${kubectl_args[@]}" -n "${namespace}" get pods \
+        -l app.kubernetes.io/name=gitea \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
+    )"
+    ssh_target_port="$(
+      kubectl "${kubectl_args[@]}" -n "${namespace}" get endpoints gitea-ssh \
+        -o jsonpath='{.subsets[0].ports[0].port}' 2>/dev/null || true
+    )"
+
+    if [[ -n "${pod_name}" && -n "${ssh_target_port}" ]] && kubectl "${kubectl_args[@]}" -n "${namespace}" exec "${pod_name}" -- sh -c '
+      ssh_target_port="$1"
+      if command -v ss >/dev/null 2>&1; then
+        ss -ltn | grep -qE "[[:space:]]:${ssh_target_port}[[:space:]]"
+      elif command -v netstat >/dev/null 2>&1; then
+        netstat -ltn 2>/dev/null | grep -qE "[.:]${ssh_target_port}[[:space:]]"
+      else
+        exit 1
+      fi
+    ' sh "${ssh_target_port}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    sleep 5
+  done
+
+  fail "Timed out waiting for Gitea SSH listener to become ready"
+}
+
+usage() {
+  cat <<EOF
+Usage: fetch-gitea-ssh-public-keys.sh [--dry-run] [--execute]
+
+Reads a JSON request from stdin and returns the Gitea SSH public keys and
+service metadata as JSON.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would fetch Gitea SSH public keys from the current cluster using JSON request data from stdin" "$@"
 
 payload="$(cat)"
 
@@ -31,7 +90,9 @@ if [[ -n "${kubeconfig_context}" ]]; then
   kubectl_args+=(--context "${kubeconfig_context}")
 fi
 
-for attempt in $(seq 1 30); do
+wait_for_gitea_ssh "${gitea_namespace}" 300
+
+for attempt in $(seq 1 60); do
   raw="$(
     # shellcheck disable=SC2016
     kubectl "${kubectl_args[@]}" -n "${gitea_namespace}" exec deploy/gitea -- sh -c '
@@ -62,8 +123,8 @@ for attempt in $(seq 1 30); do
       '{cluster_ip:$cluster_ip,keys_b64:$keys_b64,keys_sha1:$keys_sha1}'
     exit 0
   fi
-  if [[ "${attempt}" -lt 30 ]]; then
-    sleep 4
+  if [[ "${attempt}" -lt 60 ]]; then
+    sleep 5
   fi
 done
 

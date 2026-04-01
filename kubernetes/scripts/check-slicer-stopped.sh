@@ -1,11 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+
 slicer_socket="${SLICER_SOCKET:-${SLICER_URL:-${SLICER_SYSTEM_SOCKET:-${HOME}/slicer-mac/slicer.sock}}}"
 slicer_vm_name="${SLICER_VM_NAME:-slicer-1}"
 running_slicer_vm=""
 running_slicer_forwards=""
 running_slicer_proxies=""
+
+usage() {
+  cat <<EOF
+Usage: check-slicer-stopped.sh [--dry-run] [--execute]
+
+Checks whether Slicer VMs, host-forward processes, or proxy containers are
+still running and exits non-zero when they would conflict with another runtime.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would check whether Slicer VMs or proxy processes are still running" "$@"
 
 if command -v slicer >/dev/null 2>&1; then
   if command -v jq >/dev/null 2>&1; then

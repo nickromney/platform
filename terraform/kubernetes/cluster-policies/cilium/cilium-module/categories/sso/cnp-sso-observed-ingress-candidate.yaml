@@ -1,0 +1,110 @@
+metadata:
+  name: cnp-sso-observed-ingress-candidate
+  namespace: sso
+  annotations:
+    policies.cilium.io/title: Sso observed ingress candidate
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+    platform.publiccloudexperiments.net/hubble-policy-candidate: "true"
+    platform.publiccloudexperiments.net/hubble-policy-direction: ingress
+    platform.publiccloudexperiments.net/hubble-policy-mode: workload
+    platform.publiccloudexperiments.net/hubble-policy-row-count: "8"
+    platform.publiccloudexperiments.net/hubble-policy-since: 5m
+    platform.publiccloudexperiments.net/hubble-policy-iterations: "3"
+    platform.publiccloudexperiments.net/hubble-policy-capture-mode: flows
+specs:
+  - description: Observed ingress traffic from sso/oauth2-proxy-argocd
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-argocd
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-gitea
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-gitea
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-grafana
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-grafana
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-hubble
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-hubble
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-sentiment-dev
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-sentiment-dev
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-sentiment-uat
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-sentiment-uat
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-subnetcalc-dev
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-subnetcalc-dev
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP
+  - description: Observed ingress traffic from sso/oauth2-proxy-subnetcalc-uat
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: sso
+        k8s:app.kubernetes.io/instance: oauth2-proxy-subnetcalc-uat
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4180"
+                protocol: TCP

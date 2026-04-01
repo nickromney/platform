@@ -46,7 +46,20 @@ setup() {
   run make -n -C "${REPO_ROOT}/kubernetes/lima" 900 check-security
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-security.sh" --execute '* ]]
   [[ "${output}" == *"check-security.sh"* ]]
+}
+
+@test "lima check-health forwards explicit read-only mode flags" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-cluster-health.sh" --execute '* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
 @test "lima stage 900 apply wires k3s apiserver OIDC for Headlamp" {
@@ -78,7 +91,7 @@ setup() {
 }
 
 @test "lima reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
-  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset' \
+  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]

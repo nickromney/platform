@@ -2,6 +2,25 @@
 # Setup CoreDNS for each cloud
 # Reads CLOUD_NUM, DNS_IP, PROJECT_DIR from environment
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Configure CoreDNS for the current SD-WAN Lima guest.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would configure CoreDNS for the current SD-WAN Lima guest" "$@"
+
 if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
     set -x
 fi

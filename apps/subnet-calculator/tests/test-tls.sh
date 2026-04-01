@@ -9,9 +9,100 @@
 # Prerequisites: openssl, curl
 set -euo pipefail
 
-TARGET="${1:-localhost:8443}"
-CA_CERT="${2:-$(dirname "$0")/../pki/root-ca.crt}"
-HTTP_REDIRECT_PORT="${3:-8444}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: test-tls.sh [--target HOST:PORT] [--ca-cert PATH] [--http-redirect-port PORT] [--dry-run] [--execute]
+
+TLS cipher, protocol, and transport security tests for the subnet-calculator compose TLS stack.
+
+Positional compatibility:
+  test-tls.sh [host:port] [ca-cert-path] [http-redirect-port]
+
+Options:
+  --target HOST:PORT         TLS endpoint to test
+  --ca-cert PATH            local CA certificate path
+  --http-redirect-port PORT HTTP port expected to redirect to HTTPS
+  --dry-run                 show the selected test target and exit before network calls
+  --execute                 execute the test suite (preferred explicit form for test workflows)
+  -h, --help                show this help
+EOF
+}
+
+TARGET="localhost:8443"
+CA_CERT="${SCRIPT_DIR}/../pki/root-ca.crt"
+HTTP_REDIRECT_PORT="8444"
+dry_run=0
+positionals=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --target)
+            shift
+            [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--target" >&2; exit 1; }
+            TARGET="$1"
+            ;;
+        --ca-cert)
+            shift
+            [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--ca-cert" >&2; exit 1; }
+            CA_CERT="$1"
+            ;;
+        --http-redirect-port)
+            shift
+            [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--http-redirect-port" >&2; exit 1; }
+            HTTP_REDIRECT_PORT="$1"
+            ;;
+        --dry-run)
+            dry_run=1
+            ;;
+        --execute)
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                positionals+=("$1")
+                shift
+            done
+            break
+            ;;
+        -*)
+            shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+            exit 2
+            ;;
+        *)
+            positionals+=("$1")
+            ;;
+    esac
+    shift
+done
+
+if [[ "${#positionals[@]}" -ge 1 ]]; then
+    TARGET="${positionals[0]}"
+fi
+if [[ "${#positionals[@]}" -ge 2 ]]; then
+    CA_CERT="${positionals[1]}"
+fi
+if [[ "${#positionals[@]}" -ge 3 ]]; then
+    HTTP_REDIRECT_PORT="${positionals[2]}"
+fi
+if [[ "${#positionals[@]}" -gt 3 ]]; then
+    shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positionals[3]}"
+    exit 2
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would run subnet-calculator TLS tests against ${TARGET} using ${CA_CERT} and redirect port ${HTTP_REDIRECT_PORT}"
+    exit 0
+fi
 
 PASS=0
 FAIL=0

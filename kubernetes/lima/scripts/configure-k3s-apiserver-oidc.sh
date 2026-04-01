@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
@@ -111,18 +113,17 @@ ensure_remote_ca() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: configure-k3s-apiserver-oidc.sh
+  cat <<EOF
+Usage: configure-k3s-apiserver-oidc.sh [--dry-run] [--execute]
 
 Configures the Lima k3s server so Dex-issued Headlamp OIDC tokens are accepted
 by the Kubernetes API. This is Lima-only and mutates the guest VM.
+
+$(shell_cli_standard_options)
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+shell_cli_handle_standard_no_args usage "would configure the Lima k3s API server for Dex-issued OIDC tokens" "$@"
 
 require_cmd limactl
 require_cmd kubectl

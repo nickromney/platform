@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "ensure-kind-storage: $*" >&2; exit 1; }
 ok() { echo "ensure-kind-storage: $*"; }
+
+usage() {
+  cat <<EOF
+Usage: ensure-kind-storage.sh [--dry-run] [--execute]
+
+Ensures the local-path provisioner and standard storage class exist on the
+current kind cluster.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would ensure kind storage provisioner resources exist" "$@"
 
 require() {
   command -v "$1" >/dev/null 2>&1 || fail "missing required binary: $1"

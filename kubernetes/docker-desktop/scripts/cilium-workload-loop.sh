@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 RUN_ROOT_DEFAULT="${SCRIPT_DIR}/../.run"
 RUN_ID_DEFAULT="cilium-loop-$(date +%Y%m%d-%H%M%S)"
 
@@ -19,6 +21,19 @@ WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-600}"
 RUN_ROOT="${RUN_ROOT:-${RUN_ROOT_DEFAULT}}"
 RUN_ID="${RUN_ID:-${RUN_ID_DEFAULT}}"
 RUN_DIR="${RUN_ROOT}/${RUN_ID}"
+
+usage() {
+  cat <<EOF
+Usage: cilium-workload-loop.sh [--dry-run] [--execute]
+
+Exercises the Docker Desktop managed kind + Cilium workload reset loop and
+captures status snapshots in the run directory.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the Docker Desktop Cilium workload loop and capture diagnostics" "$@"
 
 mkdir -p "${RUN_DIR}"
 

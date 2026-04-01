@@ -3,9 +3,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=/dev/null
+source "${MODULE_DIR}/../../scripts/lib/shell-cli.sh"
 
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
+
+usage() {
+  cat <<EOF
+Usage: check-lima-host-ports.sh [--cloud-file PATH]... [--dry-run] [--execute]
+
+Checks the host ports claimed by the SD-WAN Lima cloud definitions and fails on
+planned overlaps or existing conflicting listeners.
+
+Positional cloud definition paths are still accepted for compatibility.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
@@ -260,8 +275,42 @@ print_docker_publishers() {
 }
 
 cloud_files=()
-if [[ $# -gt 0 ]]; then
-  cloud_files=("$@")
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --cloud-file)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--cloud-file"
+        exit 1
+      }
+      cloud_files+=("$2")
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        cloud_files+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      cloud_files+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "${#cloud_files[@]}" -gt 0 ]]; then
+  :
 elif [[ -n "${LIMA_CLOUD_FILES:-}" ]]; then
   read -r -a cloud_files <<<"${LIMA_CLOUD_FILES}"
 else
@@ -270,6 +319,11 @@ else
     "${MODULE_DIR}/cloud2.yaml"
     "${MODULE_DIR}/cloud3.yaml"
   )
+fi
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would check Lima host port availability for ${#cloud_files[@]} cloud definition file(s)"
+  exit 0
 fi
 
 checks=()

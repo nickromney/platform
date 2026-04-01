@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: hubble-capture-flows.sh [options] [-- <extra hubble observe args>]
@@ -178,6 +182,7 @@ Examples:
   ./hubble-capture-flows.sh -P --kubeconfig ~/.kube/kind-kind-local.yaml \
     --from-namespace dev --to-namespace observability --last 100
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 fail() {
@@ -762,7 +767,14 @@ declare -a types=()
 declare -a passthrough=()
 declare -a tls_ca_cert_files=()
 
+shell_cli_init_standard_flags
+
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     -o|--output)
       output_path="${2:-}"
@@ -894,15 +906,6 @@ while [[ $# -gt 0 ]]; do
       print_command=1
       shift
       ;;
-    --dry-run)
-      dry_run=1
-      print_command=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     --)
       shift
       passthrough+=("$@")
@@ -914,7 +917,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-require_cmd hubble
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  dry_run=1
+  print_command=1
+fi
+
+if [[ "${dry_run}" -eq 0 ]]; then
+  require_cmd hubble
+fi
 
 if [[ "${since_set}" -eq 1 && "${last_set}" -eq 1 ]]; then
   fail "--since and --last cannot be combined"
@@ -938,7 +948,7 @@ esac
 [[ "${sample_min}" =~ ^[0-9]+$ ]] || fail "--sample-min must be a non-negative integer"
 [[ "${sample_target}" -gt 0 ]] || fail "--sample-target must be greater than zero"
 
-if [[ "${capture_strategy}" == "adaptive" ]]; then
+if [[ "${capture_strategy}" == "adaptive" && "${dry_run}" -eq 0 ]]; then
   require_cmd jq
 fi
 
@@ -993,6 +1003,11 @@ if [[ "${use_default_namespaces}" -eq 1 \
    && "${#from_pods[@]}" -eq 0 \
    && "${#to_pods[@]}" -eq 0 ]]; then
   namespaces=(argocd dev kyverno nginx-gateway observability)
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would capture Hubble flows using strategy=${capture_strategy}"
+  exit 0
 fi
 
 if [[ "${port_forward}" -eq 1 ]]; then

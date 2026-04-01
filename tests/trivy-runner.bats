@@ -39,25 +39,37 @@ write_fake_docker() {
 @test "trivy-run uses the local binary when it is available" {
   write_fake_trivy "0.70.0"
 
-  run "${REPO_ROOT}/scripts/trivy-run.sh" fs apps/sentiment
+  run "${REPO_ROOT}/scripts/trivy-run.sh" --execute -- fs apps/sentiment
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"local:--cache-dir ${TRIVY_CACHE_DIR} fs apps/sentiment"* ]]
 }
 
 @test "trivy-run fails cleanly when local trivy is missing" {
-  run "${REPO_ROOT}/scripts/trivy-run.sh" fs apps/sentiment
+  run "${REPO_ROOT}/scripts/trivy-run.sh" --execute -- fs apps/sentiment
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"local trivy is not available"* ]]
 }
 
 @test "trivy-scan-apps prereqs reports unavailable mode when local trivy is missing" {
-  run "${REPO_ROOT}/scripts/trivy-scan-apps.sh" prereqs
+  run "${REPO_ROOT}/scripts/trivy-scan-apps.sh" --mode prereqs --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Runner mode: unavailable"* ]]
   [[ "${output}" == *"Scanning is optional."* ]]
+}
+
+@test "trivy wrappers support dry-run summaries" {
+  run "${REPO_ROOT}/scripts/trivy-run.sh" --dry-run -- fs apps/sentiment
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"INFO dry-run: trivy --cache-dir ${TRIVY_CACHE_DIR} fs apps/sentiment"* ]]
+
+  run "${REPO_ROOT}/scripts/trivy-scan-apps.sh" --mode images --dry-run
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"INFO dry-run: would run Trivy app scan in images mode"* ]]
 }
 
 @test "devcontainer assets do not install or reference trivy" {

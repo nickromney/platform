@@ -3,9 +3,23 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
 YAMLLINT_BIN="${YAMLLINT_BIN:-yamllint}"
 YAMLLINT_CONFIG_FILE="${YAMLLINT_CONFIG_FILE:-${REPO_ROOT}/.yamllint}"
 INSTALL_HINTS_SCRIPT="${INSTALL_HINTS_SCRIPT:-${REPO_ROOT}/scripts/install-tool-hints.sh}"
+
+usage() {
+  cat <<EOF
+Usage: lint-yaml.sh [--dry-run] [--execute]
+
+Lint tracked YAML files using the repo yamllint configuration.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 fail() {
   echo "FAIL $*" >&2
@@ -22,6 +36,8 @@ list_yaml_files() {
     \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' \) -prune \
     -o \( -type f \( -name '*.yaml' -o -name '*.yml' -o -name '.yamllint' \) -print0 \) | sort -z
 }
+
+shell_cli_handle_standard_no_args usage "would lint tracked YAML files under ${REPO_ROOT}" "$@"
 
 if ! command -v "${YAMLLINT_BIN}" >/dev/null 2>&1; then
   echo "FAIL yamllint not found in PATH" >&2

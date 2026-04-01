@@ -33,11 +33,11 @@ podman-compose up -d
 
 # Test Azure Function API (port 8080)
 cd api-fastapi-azure-function
-USE_CURL=1 ./test_endpoints.sh --detailed http://localhost:8080/api
+USE_CURL=1 ./test_endpoints.sh --detailed --base-url http://localhost:8080/api --execute
 
 # Test Container App API (port 8090)
 cd api-fastapi-container-app
-./test_endpoints.sh --detailed
+./test_endpoints.sh --detailed --execute
 
 # Test Flask Frontend (port 8000)
 cd frontend-python-flask
@@ -65,10 +65,10 @@ uv run pytest -v
 
 ```bash
 # Smoke test (5 key endpoints)
-USE_CURL=1 ./test_endpoints.sh http://localhost:8080/api
+USE_CURL=1 ./test_endpoints.sh --base-url http://localhost:8080/api --execute
 
 # Detailed test (all 17 endpoints)
-USE_CURL=1 ./test_endpoints.sh --detailed http://localhost:8080/api
+USE_CURL=1 ./test_endpoints.sh --detailed --base-url http://localhost:8080/api --execute
 ```
 
 **What it tests:**
@@ -96,13 +96,13 @@ uv run pytest -v
 
 ```bash
 # Smoke test (6 key endpoints)
-./test_endpoints.sh
+./test_endpoints.sh --execute
 
 # Detailed test (all 18 endpoints)
-./test_endpoints.sh --detailed
+./test_endpoints.sh --detailed --execute
 
 # Test remote deployment
-./test_endpoints.sh --detailed https://your-api.example.com/api
+./test_endpoints.sh --detailed --base-url https://your-api.example.com/api --execute
 ```
 
 **Authentication:**
@@ -354,7 +354,7 @@ make test-bruno-swa-full
 ## Best Practices
 
 1. **Always run unit tests before endpoint tests** - Unit tests are faster and catch issues early
-1. **Use smoke tests for quick verification** - Run `./test_endpoints.sh` without `--detailed`
+1. **Use smoke tests for quick verification** - Run `./test_endpoints.sh --execute` without `--detailed`
 1. **Run Playwright tests in headless mode for CI** - Default behavior, faster
 1. **Use headed mode for debugging** - Add `--headed` flag to see browser
 1. **Test one stack at a time during development** - Use `podman-compose up api-fastapi-azure-function frontend-python-flask`

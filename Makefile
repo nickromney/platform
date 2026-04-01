@@ -106,28 +106,28 @@ fmt:
 	@$(MAKE) --no-print-directory fmt-markdown
 
 lint-yaml:
-	@"$(LINT_YAML_SCRIPT)"
+	@"$(LINT_YAML_SCRIPT)" --execute
 
 lint-markdown:
-	@"$(LINT_MARKDOWN_SCRIPT)"
+	@"$(LINT_MARKDOWN_SCRIPT)" --execute
 
 lint-bash32:
-	@/bin/bash "$(LINT_BASH32_SCRIPT)"
+	@/bin/bash "$(LINT_BASH32_SCRIPT)" --execute
 
 lint-shell:
-	@"$(AUDIT_SHELL_SCRIPTS_SCRIPT)"
+	@"$(AUDIT_SHELL_SCRIPTS_SCRIPT)" --execute
 
 lint-cilium:
-	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" static
+	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" --mode static --execute
 
 lint-cilium-live:
-	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" live
+	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" --mode live --execute
 
 lint-kyverno:
-	@"$(VALIDATE_KYVERNO_POLICIES_SCRIPT)" static
+	@"$(VALIDATE_KYVERNO_POLICIES_SCRIPT)" --mode static --execute
 
 lint-kyverno-live:
-	@"$(VALIDATE_KYVERNO_POLICIES_SCRIPT)" live
+	@"$(VALIDATE_KYVERNO_POLICIES_SCRIPT)" --mode live --execute
 
 fmt-markdown:
-	@"$(FMT_MARKDOWN_SCRIPT)"
+	@"$(FMT_MARKDOWN_SCRIPT)" --execute

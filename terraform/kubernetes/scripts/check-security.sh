@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
@@ -16,7 +19,14 @@ skip() { echo "${YELLOW}⊘${NC} $*"; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-require_cmd kubectl
+usage() {
+  cat <<'EOF'
+Usage: check-security.sh [--var-file PATH]... [--dry-run] [--execute]
+
+Runs read-only security posture diagnostics for the cluster and gateway.
+EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
+}
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
@@ -28,12 +38,25 @@ POLICY_PROBE_LABELS="app=sentiment,project=kindlocal,team=dolphin,tier=backend,r
 POLICY_PROBE_CREATED=0
 
 TFVARS_FILES=()
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --var-file) TFVARS_FILES+=("${2:-}"); shift 2 ;;
     *) fail "Unknown argument: $1" ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would run cluster security diagnostics"
+  exit 0
+fi
+
+require_cmd kubectl
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[$i]}" && ! -f "${TFVARS_FILES[$i]}" ]]; then

@@ -6,6 +6,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Run the SD-WAN subnet-calculator frontend, mTLS, and JWT verification suite.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the SD-WAN subnet-calculator verification suite" "$@"
+
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
 platform_load_env
 platform_require_vars PLATFORM_DEMO_PASSWORD || exit 1

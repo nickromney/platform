@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: check-kind-stopped.sh [--dry-run] [--execute]
+
+Checks whether the local kind cluster is still running and exits non-zero when
+it would conflict with Lima or Slicer startup.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would check whether kind-local is still running" "$@"
+
 if ! command -v docker >/dev/null 2>&1; then
   exit 0
 fi

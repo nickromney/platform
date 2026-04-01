@@ -9,6 +9,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: gen-certs.sh [--dry-run] [--execute]
+
+Generate or refresh the local development PKI for the sentiment compose stack.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would generate or refresh sentiment local development certificates under ${SCRIPT_DIR}" "$@"
+
 print_install_hint() {
     local tool="$1"
     if [ -x "${INSTALL_HINTS}" ]; then

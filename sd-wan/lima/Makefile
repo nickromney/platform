@@ -102,7 +102,7 @@ prereqs: ## Check macOS host prerequisites for Lima + networking
 	echo "All prerequisites look good."
 
 check-host-ports: ## Verify that planned Lima host port forwards are available
-	@"$(CHECK_HOST_PORTS)"
+	@"$(CHECK_HOST_PORTS)" --execute
 
 fix-guest-hostnames:
 	@set -euo pipefail; \
@@ -403,39 +403,39 @@ test: test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subn
 
 test-dns: ## DNS split-brain verification
 	@echo "=== DNS Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-dns.sh
+	@bash $(PROJECT_DIR)/tests/test-dns.sh --execute
 
 test-tunnel: ## WireGuard connectivity
 	@echo "=== Tunnel Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-tunnel.sh
+	@bash $(PROJECT_DIR)/tests/test-tunnel.sh --execute
 
 test-routing: ## End-to-end flow verification
 	@echo "=== Routing Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-routing.sh
+	@bash $(PROJECT_DIR)/tests/test-routing.sh --execute
 
 test-egress: ## Iptables firewall rules
 	@echo "=== Egress Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-egress.sh
+	@bash $(PROJECT_DIR)/tests/test-egress.sh --execute
 
 test-mtls: ## mTLS certificate verification
 	@echo "=== mTLS Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-mtls.sh
+	@bash $(PROJECT_DIR)/tests/test-mtls.sh --execute
 
 test-tls: ## TLS protocol and HSTS verification
 	@echo "=== TLS Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-tls.sh
+	@bash $(PROJECT_DIR)/tests/test-tls.sh --execute
 
 test-subnetcalc: ## Subnet calculator mTLS + JWT flow
 	@echo "=== Subnet Calculator Tests ==="
-	@bash $(PROJECT_DIR)/tests/test-subnetcalc.sh
+	@bash $(PROJECT_DIR)/tests/test-subnetcalc.sh --execute
 
 test-e2e: ## Browser-based SD-WAN checks with Playwright
 	@cd "$(PROJECT_DIR)/e2e" && npm install && npx playwright install chromium && npx playwright test
 
 .PHONY: test-shell quality
 test-shell: ## Run shell portability and hidden-dependency audit
-	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh"
-	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
+	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh" --execute
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh" --execute
 
 quality: test-shell ## Run static shell quality checks
 

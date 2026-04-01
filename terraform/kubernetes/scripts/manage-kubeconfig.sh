@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 write_empty_kubeconfig() {
   local kubeconfig_path="$1"
 
@@ -407,14 +411,24 @@ delete_context() {
 }
 
 usage() {
-  cat <<'EOF'
+  cat <<EOF
 Usage:
+  manage-kubeconfig.sh --action ensure-valid --kubeconfig PATH [--dry-run] [--execute]
+  manage-kubeconfig.sh --action prepare-for-reset --kubeconfig PATH [--dry-run] [--execute]
+  manage-kubeconfig.sh --action count-contexts --kubeconfig PATH [--dry-run] [--execute]
+  manage-kubeconfig.sh --action lint [--dry-run] [--execute]
+  manage-kubeconfig.sh --action merge --source-kubeconfig PATH --target-kubeconfig PATH [--context NAME] [--dry-run] [--execute]
+  manage-kubeconfig.sh --action delete-context --kubeconfig PATH --context NAME [--cluster NAME] [--user NAME] [--delete-file-if-empty] [--dry-run] [--execute]
+
+Legacy positional forms remain supported:
   manage-kubeconfig.sh ensure-valid <kubeconfig>
   manage-kubeconfig.sh prepare-for-reset <kubeconfig>
   manage-kubeconfig.sh count-contexts <kubeconfig>
   manage-kubeconfig.sh lint
   manage-kubeconfig.sh merge <source-kubeconfig> <target-kubeconfig> [context]
   manage-kubeconfig.sh delete-context <kubeconfig> <context> [cluster] [user] [delete_file_if_empty]
+
+$(shell_cli_standard_options)
 EOF
 }
 
@@ -427,33 +441,195 @@ lint_with_kubie() {
 }
 
 main() {
-  local command="${1:-}"
-  shift || true
+  local command=""
+  local kubeconfig_path=""
+  local source_kubeconfig=""
+  local target_kubeconfig=""
+  local context_name=""
+  local cluster_name=""
+  local user_name=""
+  local delete_file_if_empty="0"
+  local positional=()
+
+  shell_cli_init_standard_flags
+  while [[ $# -gt 0 ]]; do
+    if shell_cli_handle_standard_flag usage "$1"; then
+      shift
+      continue
+    fi
+
+    case "$1" in
+      --action)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--action"
+          exit 1
+        }
+        command="$2"
+        shift 2
+        ;;
+      --kubeconfig)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--kubeconfig"
+          exit 1
+        }
+        kubeconfig_path="$2"
+        shift 2
+        ;;
+      --source-kubeconfig)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--source-kubeconfig"
+          exit 1
+        }
+        source_kubeconfig="$2"
+        shift 2
+        ;;
+      --target-kubeconfig)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--target-kubeconfig"
+          exit 1
+        }
+        target_kubeconfig="$2"
+        shift 2
+        ;;
+      --context)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--context"
+          exit 1
+        }
+        context_name="$2"
+        shift 2
+        ;;
+      --cluster)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--cluster"
+          exit 1
+        }
+        cluster_name="$2"
+        shift 2
+        ;;
+      --user)
+        [[ $# -ge 2 ]] || {
+          shell_cli_missing_value "$(shell_cli_script_name)" "--user"
+          exit 1
+        }
+        user_name="$2"
+        shift 2
+        ;;
+      --delete-file-if-empty)
+        delete_file_if_empty="1"
+        shift
+        ;;
+      --keep-file-if-empty)
+        delete_file_if_empty="0"
+        shift
+        ;;
+      --)
+        shift
+        while [[ $# -gt 0 ]]; do
+          positional+=("$1")
+          shift
+        done
+        ;;
+      -*)
+        shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+        exit 1
+        ;;
+      *)
+        positional+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "${command}" && "${#positional[@]}" -gt 0 ]]; then
+    command="${positional[0]}"
+    positional=("${positional[@]:1}")
+  fi
 
   case "${command}" in
     ensure-valid)
-      [[ $# -eq 1 ]] || { usage >&2; exit 1; }
-      ensure_valid_kubeconfig "$1" 1
+      if [[ -z "${kubeconfig_path}" ]]; then
+        [[ "${#positional[@]}" -eq 1 ]] || { usage >&2; exit 1; }
+        kubeconfig_path="${positional[0]}"
+      elif [[ "${#positional[@]}" -ne 0 ]]; then
+        usage >&2
+        exit 1
+      fi
+      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+        shell_cli_print_dry_run_summary "would ensure kubeconfig ${kubeconfig_path} is valid"
+        exit 0
+      fi
+      ensure_valid_kubeconfig "${kubeconfig_path}" 1
       ;;
     prepare-for-reset)
-      [[ $# -eq 1 ]] || { usage >&2; exit 1; }
-      prepare_reset_kubeconfig "$1"
+      if [[ -z "${kubeconfig_path}" ]]; then
+        [[ "${#positional[@]}" -eq 1 ]] || { usage >&2; exit 1; }
+        kubeconfig_path="${positional[0]}"
+      elif [[ "${#positional[@]}" -ne 0 ]]; then
+        usage >&2
+        exit 1
+      fi
+      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+        shell_cli_print_dry_run_summary "would prepare kubeconfig ${kubeconfig_path} for reset"
+        exit 0
+      fi
+      prepare_reset_kubeconfig "${kubeconfig_path}"
       ;;
     count-contexts)
-      [[ $# -eq 1 ]] || { usage >&2; exit 1; }
-      count_contexts "$1"
+      if [[ -z "${kubeconfig_path}" ]]; then
+        [[ "${#positional[@]}" -eq 1 ]] || { usage >&2; exit 1; }
+        kubeconfig_path="${positional[0]}"
+      elif [[ "${#positional[@]}" -ne 0 ]]; then
+        usage >&2
+        exit 1
+      fi
+      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+        shell_cli_print_dry_run_summary "would count contexts in kubeconfig ${kubeconfig_path}"
+        exit 0
+      fi
+      count_contexts "${kubeconfig_path}"
       ;;
     lint)
-      [[ $# -eq 0 ]] || { usage >&2; exit 1; }
+      [[ "${#positional[@]}" -eq 0 ]] || { usage >&2; exit 1; }
+      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+        shell_cli_print_dry_run_summary "would lint kubeconfig tooling state with kubie if available"
+        exit 0
+      fi
       lint_with_kubie
       ;;
     merge)
-      [[ $# -ge 2 && $# -le 3 ]] || { usage >&2; exit 1; }
-      merge_kubeconfig "$1" "$2" "${3:-}"
+      if [[ -z "${source_kubeconfig}" ]]; then
+        [[ "${#positional[@]}" -ge 2 && "${#positional[@]}" -le 3 ]] || { usage >&2; exit 1; }
+        source_kubeconfig="${positional[0]}"
+        target_kubeconfig="${positional[1]}"
+        context_name="${positional[2]:-}"
+      else
+        [[ -n "${target_kubeconfig}" && "${#positional[@]}" -eq 0 ]] || { usage >&2; exit 1; }
+      fi
+      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+        shell_cli_print_dry_run_summary "would merge ${source_kubeconfig} into ${target_kubeconfig}${context_name:+ for context ${context_name}}"
+        exit 0
+      fi
+      merge_kubeconfig "${source_kubeconfig}" "${target_kubeconfig}" "${context_name}"
       ;;
     delete-context)
-      [[ $# -ge 2 && $# -le 5 ]] || { usage >&2; exit 1; }
-      delete_context "$1" "$2" "${3:-$2}" "${4:-$2}" "${5:-0}"
+      if [[ -z "${kubeconfig_path}" ]]; then
+        [[ "${#positional[@]}" -ge 2 && "${#positional[@]}" -le 5 ]] || { usage >&2; exit 1; }
+        kubeconfig_path="${positional[0]}"
+        context_name="${positional[1]}"
+        cluster_name="${positional[2]:-${context_name}}"
+        user_name="${positional[3]:-${context_name}}"
+        delete_file_if_empty="${positional[4]:-0}"
+      else
+        [[ -n "${context_name}" && "${#positional[@]}" -eq 0 ]] || { usage >&2; exit 1; }
+        cluster_name="${cluster_name:-${context_name}}"
+        user_name="${user_name:-${context_name}}"
+      fi
+      if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+        shell_cli_print_dry_run_summary "would delete context ${context_name} from ${kubeconfig_path}"
+        exit 0
+      fi
+      delete_context "${kubeconfig_path}" "${context_name}" "${cluster_name}" "${user_name}" "${delete_file_if_empty}"
       ;;
     *)
       usage >&2

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 fail() {
   echo "render-operator-overrides: $*" >&2
   exit 1
@@ -18,6 +23,19 @@ worker_count="${KIND_WORKER_COUNT:-1}"
 cache_host="${KIND_LOCAL_IMAGE_CACHE_HOST:-host.docker.internal:5002}"
 baked_node_image="${KIND_BAKED_NODE_IMAGE:-}"
 output_file="${KIND_OPERATOR_OVERRIDES_FILE:-}"
+
+usage() {
+  cat <<EOF
+Usage: render-operator-overrides.sh [--dry-run] [--execute]
+
+Renders the kind operator override tfvars fragment from the current image
+distribution environment variables.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would render kind operator overrides into the configured output file" "$@"
 
 [ -n "${output_file}" ] || fail "KIND_OPERATOR_OVERRIDES_FILE is required"
 

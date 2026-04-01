@@ -61,7 +61,7 @@ ps: check-prerequisites ## Show compose container status
 	@docker compose ps
 
 smoke: check-prerequisites ## Run the local compose smoke test
-	@./tests/compose-smoke.sh
+	@./tests/compose-smoke.sh --execute
 
 ##@ Test
 test: ## Run the local compose smoke test

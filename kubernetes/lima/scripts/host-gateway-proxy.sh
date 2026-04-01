@@ -4,13 +4,76 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLATFORM_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DOCKERFILE_PATH="${PLATFORM_DIR}/docker/host-gateway-proxy.Dockerfile"
+# shellcheck source=/dev/null
+source "${PLATFORM_DIR}/../../scripts/lib/shell-cli.sh"
 
-COMMAND="${1:-ensure}"
+COMMAND=""
 CONTAINER_NAME="${CONTAINER_NAME:-limavm-platform-gateway-443}"
 IMAGE_TAG="${IMAGE_TAG:-platform/lima-gateway-proxy:dev}"
 LISTEN_PORT="${LISTEN_PORT:-443}"
 UPSTREAM_HOST="${UPSTREAM_HOST:-host.docker.internal}"
 UPSTREAM_PORT="${UPSTREAM_PORT:-30070}"
+
+usage() {
+  cat <<EOF
+Usage: host-gateway-proxy.sh [--action ensure|stop|status] [--dry-run] [--execute]
+
+Manages the Lima host gateway proxy container.
+
+Positional compatibility:
+  host-gateway-proxy.sh [ensure|stop|status]
+
+$(shell_cli_standard_options)
+EOF
+}
+
+positional=()
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --action)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--action"
+        exit 1
+      }
+      COMMAND="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        positional+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${COMMAND}" ]]; then
+  COMMAND="${positional[0]:-ensure}"
+fi
+if [[ "${#positional[@]}" -gt 1 ]]; then
+  shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positional[1]}"
+  exit 1
+fi
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would ${COMMAND} the Lima host gateway proxy container"
+  exit 0
+fi
 
 require_docker() {
   command -v docker >/dev/null 2>&1 || {
@@ -92,7 +155,7 @@ case "${COMMAND}" in
     print_status
     ;;
   *)
-    echo "usage: $0 [ensure|stop|status]" >&2
+    usage
     exit 1
     ;;
 esac

@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: stop-daemon.sh [--dry-run] [--execute]
+
+Stops a stale project-managed slicer-mac daemon and cleans up its pid file.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would stop any project-managed slicer-mac daemon recorded in the configured RUN_DIR" "$@"
+
 : "${RUN_DIR:?RUN_DIR is required}"
 
 pid_file="$RUN_DIR/slicer-mac.pid"

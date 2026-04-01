@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/local-cache-lib.sh"
 
@@ -10,6 +12,19 @@ CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-platform}"
 TAG="${TAG:-latest}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
+
+usage() {
+  cat <<EOF
+Usage: build-local-workload-images.sh [--dry-run] [--execute]
+
+Builds and pushes workload images into the local registry cache for kind-based
+workflows.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would build and push local workload images into ${CACHE_PUSH_HOST} with tag ${TAG}" "$@"
 
 require_local_cache_tools
 assert_local_cache_reachable "${CACHE_PUSH_HOST}"

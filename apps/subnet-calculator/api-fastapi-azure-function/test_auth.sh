@@ -13,6 +13,33 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat << EOF
+Usage: $0 [--base-url URL] [--dry-run] [--execute]
+
+Integration test script for API authentication.
+
+Options:
+    --base-url URL  Override the API base URL (default: http://localhost:7071)
+    --dry-run       Show the selected API target and exit before HTTP calls
+    --execute       Execute the authentication test suite
+    --help, -h      Show this help message
+
+Positional compatibility:
+    $0 [BASE_URL]
+
+Examples:
+    $0 --execute
+    $0 --base-url http://localhost:8080 --execute
+EOF
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,7 +47,58 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Default to local Azure Functions
-BASE_URL="${1:-http://localhost:7071}"
+BASE_URL="http://localhost:7071"
+dry_run=0
+positionals=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --base-url)
+            shift
+            [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--base-url" >&2; exit 1; }
+            BASE_URL="$1"
+            ;;
+        --dry-run)
+            dry_run=1
+            ;;
+        --execute)
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                positionals+=("$1")
+                shift
+            done
+            break
+            ;;
+        -*)
+            shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+            exit 2
+            ;;
+        *)
+            positionals+=("$1")
+            ;;
+    esac
+    shift
+done
+
+if [[ "${#positionals[@]}" -ge 1 ]]; then
+    BASE_URL="${positionals[0]}"
+fi
+if [[ "${#positionals[@]}" -gt 1 ]]; then
+    shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positionals[1]}"
+    exit 2
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would run authentication integration tests against ${BASE_URL}"
+    exit 0
+fi
+
 HEALTH_URL="${BASE_URL}/api/v1/health"
 
 echo "==========================================="

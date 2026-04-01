@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 # Minimal C# Test - Prove Easy Auth + MI works
 # This script creates minimal C# Function App + Web App to test authentication patterns
+
+usage() {
+  cat <<EOF
+Usage: minimal-csharp-test.sh [--dry-run] [--execute]
+
+Creates the minimal Azure Function App and Web App resources used for the C#
+Easy Auth test flow.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would create the minimal Azure C# test environment" "$@"
 
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-subnet-calc}"
 LOCATION="${LOCATION:-uksouth}"

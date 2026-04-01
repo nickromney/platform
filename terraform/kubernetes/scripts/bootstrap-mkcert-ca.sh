@@ -1,11 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAMESPACE="${CERT_MANAGER_NAMESPACE:-cert-manager}"
-SECRET_NAME="${MKCERT_CA_SECRET_NAME:-mkcert-ca-key-pair}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+NAMESPACE="${CERT_MANAGER_NAMESPACE:-cert-manager}"
+SECRET_NAME="${MKCERT_CA_SECRET_NAME:-mkcert-ca-key-pair}"
+
+usage() {
+  cat <<EOF
+Usage: bootstrap-mkcert-ca.sh [--dry-run] [--execute]
+
+Create or update the cert-manager TLS secret from the local mkcert root CA.
+
+Environment variables:
+  CERT_MANAGER_NAMESPACE
+  MKCERT_CA_SECRET_NAME
+
+$(shell_cli_standard_options)
+EOF
+}
 
 print_install_hint() {
   local tool="$1"
@@ -14,6 +31,8 @@ print_install_hint() {
     "${INSTALL_HINTS}" --plain "${tool}" >&2 || true
   fi
 }
+
+shell_cli_handle_standard_no_args usage "would create or update the cert-manager mkcert CA secret" "$@"
 
 if ! command -v mkcert >/dev/null 2>&1; then
   echo "mkcert not found; skipping mkcert CA bootstrap." >&2
