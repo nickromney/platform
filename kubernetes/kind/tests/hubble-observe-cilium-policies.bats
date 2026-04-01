@@ -169,6 +169,35 @@ EOF
   [[ "${output}" != *"observing namespace kube-system"* ]]
 }
 
+@test "hubble-observe-cilium-policies runs under /bin/bash with promote-to-module and no excluded namespaces" {
+  cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-capture-flows.sh"
+
+  cat > "${SCRIPT_DIR}/hubble-summarise-flows.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/hubble-summarise-flows.sh"
+
+  cat > "${SCRIPT_DIR}/render-cilium-policy-values.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${SCRIPT_DIR}/render-cilium-policy-values.sh"
+
+  run /bin/bash "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --dry-run \
+    --capture-strategy since \
+    --promote-to-module
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"observing namespace kube-system"* ]]
+  [[ "${output}" == *"observing namespace observability"* ]]
+}
+
 @test "hubble-observe-cilium-policies fails early when namespace discovery needs list namespaces permission" {
   cat > "${TEST_BIN}/kubectl" <<'EOF'
 #!/usr/bin/env bash

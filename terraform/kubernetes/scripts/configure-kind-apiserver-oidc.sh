@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+RENDER_KIND_APISERVER_OIDC_MANIFEST="${SCRIPT_DIR}/render-kind-apiserver-oidc-manifest.py"
 
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
@@ -323,7 +324,6 @@ require_cmd kind
 require_cmd kubectl
 require_cmd docker
 require_cmd curl
-require_cmd python3
 
 if ! command -v mkcert >/dev/null 2>&1; then
   warn "mkcert not found; skipping apiserver OIDC configuration"
@@ -441,108 +441,22 @@ RENDERED_MANIFEST_LOCAL="$(mktemp "${TMPDIR:-/tmp}/kube-apiserver-manifest.rende
 CONTAINER_MANIFEST_BACKUP="${MANIFEST}.pre-oidc-backup"
 CONTAINER_MANIFEST_CANDIDATE="${MANIFEST}.oidc-candidate"
 
-cleanup_render_temps() {
-  rm -f "${ORIGINAL_MANIFEST_LOCAL}" "${RENDERED_MANIFEST_LOCAL}"
-  docker exec "${CONTROL_PLANE_NODE}" rm -f "${CONTAINER_MANIFEST_CANDIDATE}" >/dev/null 2>&1 || true
-}
-
-trap cleanup_render_temps EXIT
+trap 'rm -f "${ORIGINAL_MANIFEST_LOCAL}" "${RENDERED_MANIFEST_LOCAL}"; docker exec "${CONTROL_PLANE_NODE}" rm -f "${CONTAINER_MANIFEST_CANDIDATE}" >/dev/null 2>&1 || true' EXIT
 
 docker cp "${CONTROL_PLANE_NODE}:${MANIFEST}" "${ORIGINAL_MANIFEST_LOCAL}"
 
-python3 - \
+[[ -f "${RENDER_KIND_APISERVER_OIDC_MANIFEST}" ]] || fail "render helper not found at ${RENDER_KIND_APISERVER_OIDC_MANIFEST}"
+require_cmd python3
+
+python3 \
+  "${RENDER_KIND_APISERVER_OIDC_MANIFEST}" \
   "${ORIGINAL_MANIFEST_LOCAL}" \
   "${RENDERED_MANIFEST_LOCAL}" \
   "${OIDC_ISSUER_URL}" \
   "${OIDC_CLIENT_ID}" \
   "${MKCERT_CA_DEST}" \
   "${DEX_HOST}" \
-  "${GATEWAY_IP}" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-source_path = Path(sys.argv[1])
-rendered_path = Path(sys.argv[2])
-issuer = sys.argv[3]
-client_id = sys.argv[4]
-ca_path = sys.argv[5]
-dex_host = sys.argv[6]
-gateway_ip = sys.argv[7]
-
-source_lines = source_path.read_text().splitlines()
-rendered_lines: list[str] = []
-inserted_oidc = False
-inserted_host_aliases = False
-seen_host_network = False
-
-oidc_line = re.compile(r"^\s*-\s*--oidc-(issuer-url|client-id|username-claim|groups-claim|ca-file)=")
-service_cluster_ip_range = re.compile(r"^\s*-\s*--service-cluster-ip-range=")
-top_level_spec_key = re.compile(r"^  [A-Za-z0-9_-]+:")
-host_network = re.compile(r"^  hostNetwork:\s*(true|false)\s*$")
-
-i = 0
-while i < len(source_lines):
-    line = source_lines[i]
-
-    if oidc_line.match(line):
-        i += 1
-        continue
-
-    if line == "  hostAliases:":
-        block_lines = [line]
-        i += 1
-        while i < len(source_lines) and not top_level_spec_key.match(source_lines[i]):
-            block_lines.append(source_lines[i])
-            i += 1
-        if any(dex_host in block_line for block_line in block_lines):
-            continue
-        raise SystemExit(
-            f"unexpected existing kube-apiserver hostAliases block unrelated to {dex_host}; "
-            "refusing to rewrite manifest automatically"
-        )
-
-    if service_cluster_ip_range.match(line):
-        rendered_lines.append(line)
-        rendered_lines.extend([
-            f"    - --oidc-issuer-url={issuer}",
-            f"    - --oidc-client-id={client_id}",
-            "    - --oidc-username-claim=email",
-            "    - --oidc-groups-claim=groups",
-            f"    - --oidc-ca-file={ca_path}",
-        ])
-        inserted_oidc = True
-        i += 1
-        continue
-
-    if host_network.match(line):
-        if not inserted_host_aliases:
-            rendered_lines.extend([
-                "  hostAliases:",
-                f"  - ip: \"{gateway_ip}\"",
-                "    hostnames:",
-                f"    - {dex_host}",
-            ])
-            inserted_host_aliases = True
-        if seen_host_network:
-            i += 1
-            continue
-        rendered_lines.append(line)
-        seen_host_network = True
-        i += 1
-        continue
-
-    rendered_lines.append(line)
-    i += 1
-
-if not inserted_oidc:
-    raise SystemExit("failed to locate --service-cluster-ip-range= anchor while rendering kube-apiserver manifest")
-
-if not seen_host_network:
-    raise SystemExit("failed to locate hostNetwork stanza while rendering kube-apiserver manifest")
-
-rendered_path.write_text("\n".join(rendered_lines) + "\n")
-PY
+  "${GATEWAY_IP}"
 
 if ! kubectl create --dry-run=client --validate=false -f "${RENDERED_MANIFEST_LOCAL}" >/dev/null 2>&1; then
   kubectl create --dry-run=client --validate=false -f "${RENDERED_MANIFEST_LOCAL}" >/dev/null

@@ -434,6 +434,7 @@ test-e2e: ## Browser-based SD-WAN checks with Playwright
 
 .PHONY: test-shell quality
 test-shell: ## Run shell portability and hidden-dependency audit
+	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh"
 	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
 
 quality: test-shell ## Run static shell quality checks

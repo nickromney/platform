@@ -76,6 +76,7 @@ tfvar_get() {
 tfvar_list_entries() {
   local key="$2"
   local file raw=""
+  local entry=""
   local -a values=()
 
   for file in "${TFVARS_FILES[@]}"; do
@@ -88,7 +89,11 @@ tfvar_list_entries() {
       ' "${file}" 2>/dev/null || true
     )"
     [[ -n "${raw}" ]] || continue
-    mapfile -t values < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
+    values=()
+    while IFS= read -r entry; do
+      [[ -n "${entry}" ]] || continue
+      values+=("${entry}")
+    done < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
   done
 
   printf '%s\n' "${values[@]}"

@@ -302,7 +302,7 @@ tag_suffix_after_version_prefix() {
     return 0
   fi
 
-  printf "%s\n" "${tag#${prefix}}"
+  printf "%s\n" "${tag#"${prefix}"}"
 }
 
 derive_tag_with_existing_suffix() {
@@ -1317,7 +1317,10 @@ main() {
 }
 
 if [ "${CHECK_VERSION_LIB_ONLY:-0}" = "1" ]; then
-  return 0 2>/dev/null || exit 0
+  if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0
+  fi
+  exit 0
 fi
 
 main "$@"

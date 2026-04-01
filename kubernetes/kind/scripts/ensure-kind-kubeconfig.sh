@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT="${SCRIPT_DIR}/rewrite-devcontainer-kubeconfig.py"
 CLUSTER_NAME="${CLUSTER_NAME:-kind-local}"
 TARGET_CONTEXT="kind-${CLUSTER_NAME}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${KUBECONFIG:-$HOME/.kube/${TARGET_CONTEXT}.yaml}}"
@@ -58,35 +59,20 @@ rewrite_for_devcontainer_host_socket() {
 
   [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]] || return 0
   [[ -f "${kubeconfig_path}" ]] || return 0
+  [[ -f "${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" ]] || {
+    echo "Missing helper: ${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" >&2
+    return 1
+  }
+  have_cmd python3 || {
+    echo "python3 not found in PATH" >&2
+    return 1
+  }
 
-  python3 - "${kubeconfig_path}" "${DEVCONTAINER_HOST_ALIAS}" "${DEVCONTAINER_TLS_SERVER_NAME}" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-host_alias = sys.argv[2]
-tls_server_name = sys.argv[3]
-text = path.read_text()
-
-# kind exports a host-loopback endpoint such as 127.0.0.1:6443. Inside a
-# host-socket devcontainer, that loopback resolves to the container, not the
-# host, so the API server must be addressed via host.docker.internal while the
-# TLS hostname remains "localhost".
-text = re.sub(r'^\s*tls-server-name:\s+.*\n?', '', text, flags=re.MULTILINE)
-text, count = re.subn(
-    r'^(?P<indent>\s*)server:\s+https://(?:127\.0\.0\.1|localhost):(?P<port>\d+)\s*$',
-    lambda match: (
-        f"{match.group('indent')}server: https://{host_alias}:{match.group('port')}\n"
-        f"{match.group('indent')}tls-server-name: {tls_server_name}"
-    ),
-    text,
-    flags=re.MULTILINE,
-)
-
-if count:
-    path.write_text(text)
-PY
+  python3 \
+    "${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" \
+    "${kubeconfig_path}" \
+    "${DEVCONTAINER_HOST_ALIAS}" \
+    "${DEVCONTAINER_TLS_SERVER_NAME}"
 }
 
 if ! have_cmd kind || ! have_cmd kubectl; then
