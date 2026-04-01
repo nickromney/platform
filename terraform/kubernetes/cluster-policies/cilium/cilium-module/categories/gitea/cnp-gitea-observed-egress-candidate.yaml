@@ -1,0 +1,36 @@
+metadata:
+  name: cnp-gitea-observed-egress-candidate
+  namespace: gitea
+  annotations:
+    policies.cilium.io/title: Gitea observed egress candidate
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+    platform.publiccloudexperiments.net/hubble-policy-candidate: "true"
+    platform.publiccloudexperiments.net/hubble-policy-direction: egress
+    platform.publiccloudexperiments.net/hubble-policy-mode: workload
+    platform.publiccloudexperiments.net/hubble-policy-row-count: "4"
+    platform.publiccloudexperiments.net/hubble-policy-since: 5m
+    platform.publiccloudexperiments.net/hubble-policy-iterations: "3"
+    platform.publiccloudexperiments.net/hubble-policy-capture-mode: flows
+specs:
+  - description: Observed egress traffic from gitea/gitea
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: gitea
+        k8s:app.kubernetes.io/name: gitea
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: gitea
+              k8s:app.kubernetes.io/name: postgresql
+        toPorts:
+          - ports:
+              - port: "5432"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: gitea
+              k8s:app.kubernetes.io/component: primary
+        toPorts:
+          - ports:
+              - port: "6379"
+                protocol: TCP

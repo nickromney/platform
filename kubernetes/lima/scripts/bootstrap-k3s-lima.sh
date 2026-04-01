@@ -3,6 +3,22 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${repo_root}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: bootstrap-k3s-lima.sh [--dry-run] [--execute]
+
+Bootstraps or reconciles the Lima-backed k3s cluster and refreshes the managed
+kubeconfig output.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would bootstrap or reconcile the Lima k3s cluster and refresh kubeconfig" "$@"
+
 : "${LIMA_INSTANCE_PREFIX:?LIMA_INSTANCE_PREFIX is required}"
 : "${DESIRED_NODES:?DESIRED_NODES is required}"
 
@@ -243,7 +259,11 @@ merge_kubeconfig_into_default() {
   [ "$source_kubeconfig" != "$target_kubeconfig" ] || return 0
 
   if [ -x "$kubeconfig_helper" ]; then
-    "$kubeconfig_helper" merge "$source_kubeconfig" "$target_kubeconfig" "$k3sup_context"
+    "$kubeconfig_helper" \
+      --action merge \
+      --source-kubeconfig "$source_kubeconfig" \
+      --target-kubeconfig "$target_kubeconfig" \
+      --context "$k3sup_context"
     return 0
   fi
 
@@ -267,8 +287,13 @@ remove_kubeconfig_from_default() {
   [ -e "$target_kubeconfig" ] || return 0
   [ -x "$kubeconfig_helper" ] || return 0
 
-  "$kubeconfig_helper" ensure-valid "$target_kubeconfig"
-  "$kubeconfig_helper" delete-context "$target_kubeconfig" "$k3sup_context" "$k3sup_context" "$k3sup_context" 0
+  "$kubeconfig_helper" --action ensure-valid --kubeconfig "$target_kubeconfig"
+  "$kubeconfig_helper" \
+    --action delete-context \
+    --kubeconfig "$target_kubeconfig" \
+    --context "$k3sup_context" \
+    --cluster "$k3sup_context" \
+    --user "$k3sup_context"
 }
 
 reconcile_default_kubeconfig() {

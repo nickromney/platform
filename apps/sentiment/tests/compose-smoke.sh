@@ -4,6 +4,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OVERRIDE_FILE="${SCRIPT_DIR}/compose.smoke.override.yml"
+REPO_ROOT="$(cd "${APP_DIR}/../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: compose-smoke.sh [--dry-run] [--execute]
+
+Run the lightweight sentiment compose smoke test against the local stack.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
@@ -57,6 +71,8 @@ cleanup() {
   compose_cmd down --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+shell_cli_handle_standard_no_args usage "would run the sentiment compose smoke workflow" "$@"
 
 compose_cmd down --remove-orphans >/dev/null 2>&1 || true
 compose_cmd up -d --build --no-deps sentiment-api sentiment-auth-frontend edge

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 warn() { echo "WARN $*" >&2; }
@@ -14,6 +17,19 @@ use_local_mac="${SLICER_USE_LOCAL_MAC:-0}"
 slicer_config="${SLICER_CONFIG:-${HOME}/slicer-mac/slicer-mac.yaml}"
 tag_target="${SLICER_TARGET_TAG:-target=slicer}"
 tag_workspace="${SLICER_WORKSPACE_TAG:-workspace=platform}"
+
+usage() {
+  cat <<EOF
+Usage: ensure-sbox-vm.sh [--dry-run] [--execute]
+
+Ensures the configured Slicer sandbox VM exists, has adequate resources, and is
+ready.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would ensure the configured Slicer sandbox VM exists and is ready" "$@"
 
 [ -n "${slicer_url}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
 command -v slicer >/dev/null 2>&1 || fail "slicer not found in PATH"

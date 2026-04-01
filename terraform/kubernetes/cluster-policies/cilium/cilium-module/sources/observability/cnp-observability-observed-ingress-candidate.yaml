@@ -1,0 +1,74 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-observability-observed-ingress-candidate
+  namespace: observability
+  annotations:
+    "policies.cilium.io/title": "Observability observed ingress candidate"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"
+    "platform.publiccloudexperiments.net/hubble-policy-direction": "ingress"
+    "platform.publiccloudexperiments.net/hubble-policy-mode": "workload"
+    "platform.publiccloudexperiments.net/hubble-policy-row-count": "5"
+    "platform.publiccloudexperiments.net/hubble-policy-since": "5m"
+    "platform.publiccloudexperiments.net/hubble-policy-iterations": "3"
+    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "flows"
+specs:
+  - description: >-
+      Observed ingress traffic from observability/server
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "observability"
+        "k8s:app": "server"
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "9428"
+                protocol: TCP
+  - description: >-
+      Observed ingress traffic from observability/server
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "observability"
+        "k8s:app.kubernetes.io/component": "server"
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "8080"
+                protocol: TCP
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "9090"
+                protocol: TCP
+  - description: >-
+      Observed ingress traffic from observability/grafana
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "observability"
+        "k8s:app.kubernetes.io/name": "grafana"
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "3000"
+                protocol: TCP
+  - description: >-
+      Observed ingress traffic from observability/otel-collector
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "observability"
+        "k8s:app.kubernetes.io/name": "otel-collector"
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "13133"
+                protocol: TCP

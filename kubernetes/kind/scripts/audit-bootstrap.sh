@@ -1,11 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 ok() { printf 'OK   %s\n' "$*"; }
 warn() { printf 'WARN %s\n' "$*"; }
 fail() { printf 'FAIL %s\n' "$*" >&2; exit 1; }
 
 EVENT_LOOKBACK_MINUTES="${EVENT_LOOKBACK_MINUTES:-15}"
+
+usage() {
+  cat <<EOF
+Usage: audit-bootstrap.sh [--dry-run] [--execute]
+
+Runs a post-bootstrap audit for the kind stack: applications, pods, events,
+restarts, gateway status, and previous logs.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would audit the current kind bootstrap state with kubectl and jq" "$@"
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"

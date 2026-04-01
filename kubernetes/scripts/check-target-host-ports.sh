@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 
@@ -8,8 +12,8 @@ TARGET_LABEL="${TARGET_LABEL:-target}"
 PORT_CHECKS="${PORT_CHECKS:-}"
 
 usage() {
-  cat <<'EOF'
-Usage: check-target-host-ports.sh [--var-file PATH]...
+  cat <<EOF
+Usage: check-target-host-ports.sh [--var-file PATH]... [--dry-run] [--execute]
 
 Checks whether the host ports required for a target are free.
 
@@ -20,6 +24,8 @@ newline-separated list of:
 
 Use an empty host_var or target_var to treat the corresponding default as a
 literal, non-tfvars-backed port.
+
+$(shell_cli_standard_options)
 EOF
 }
 
@@ -196,22 +202,41 @@ print_docker_publishers() {
 }
 
 TFVARS_FILES=()
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --var-file)
-      [[ $# -ge 2 ]] || fail "--var-file requires a path"
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--var-file"
+        exit 1
+      }
       TFVARS_FILES+=("$2")
       shift 2
       ;;
-    -h|--help)
-      usage
-      exit 0
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
       ;;
     *)
-      fail "Unknown argument: $1"
+      shell_cli_unexpected_arg "$(shell_cli_script_name)" "$1"
+      exit 1
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would check ${TARGET_LABEL} host ports using ${#TFVARS_FILES[@]} tfvars file(s)"
+  exit 0
+fi
 
 [[ -n "${PORT_CHECKS}" ]] || fail "PORT_CHECKS is required"
 

@@ -5,8 +5,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
-platform_load_env
+
+usage() {
+  cat <<EOF
+Usage: check-cluster-health.sh [--var-file PATH]... [--show-urls] [--dry-run] [--execute]
+
+Runs the stack-aware cluster health diagnostics for the current platform
+environment.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -463,16 +475,24 @@ kind_gateway_portforward_http_status_code() {
   return 1
 }
 
-require_cmd kubectl
-
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 
 SHOW_URLS=0
 TFVARS_FILES=()
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --var-file)
+      if [[ -z "${2:-}" ]]; then
+        shell_cli_missing_value "$(shell_cli_script_name)" "$1"
+        exit 1
+      fi
       TFVARS_FILES+=("${2:-}")
       shift 2
       ;;
@@ -485,6 +505,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would run stack-aware cluster health diagnostics"
+  exit 0
+fi
+
+require_cmd kubectl
+
+platform_load_env
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
@@ -564,7 +593,9 @@ tfvar_list_entries() {
     done < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
   done
 
-  printf '%s\n' "${values[@]}"
+  if [[ "${#values[@]}" -gt 0 ]]; then
+    printf '%s\n' "${values[@]}"
+  fi
 }
 
 detect_stage_from_tfvars() {

@@ -79,7 +79,7 @@ curl -H "X-API-Key: your-key-1" http://localhost:7071/api/v1/health
 uv run pytest test_auth.py -v
 
 # Integration tests with curl
-./test_auth.sh
+./test_auth.sh --execute
 ```
 
 ### Future Authentication Methods
@@ -212,19 +212,19 @@ Use the included test script to verify endpoints are working. By default, it run
 
 ```bash
 # Smoke test on local Azure Functions API (port 7071)
-./test_endpoints.sh
+./test_endpoints.sh --execute
 
 # Smoke test on containerized API (port 8080)
-./test_endpoints.sh --container
+./test_endpoints.sh --container --execute
 
 # Detailed test of all endpoints with command output
-./test_endpoints.sh --detailed
+./test_endpoints.sh --detailed --execute
 
 # Detailed test on container
-./test_endpoints.sh --detailed --container
+./test_endpoints.sh --detailed --container --execute
 
 # Test Azure deployment (HTTPS on port 443)
-./test_endpoints.sh --detailed https://your-api.azurewebsites.net/api
+./test_endpoints.sh --detailed --base-url https://your-api.azurewebsites.net/api --execute
 ```
 
 The script automatically detects and uses `xh` (HTTPie) if available, otherwise falls back to `curl`.

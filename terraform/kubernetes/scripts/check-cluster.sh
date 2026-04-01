@@ -5,7 +5,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
+
+usage() {
+  cat <<EOF
+Usage: check-cluster.sh [--dry-run] [--execute]
+
+Runs a broad stack diagnostic covering Gitea, registry images, Argo CD, and
+workload namespaces for the current platform environment.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the broad stack cluster diagnostics" "$@"
+
 platform_load_env
 
 RED=$'\033[0;31m'

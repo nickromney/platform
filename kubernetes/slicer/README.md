@@ -58,7 +58,8 @@ make -C kubernetes/slicer 100 apply
 make -C kubernetes/slicer 500 apply SLICER_NETWORK_PROFILE=default
 make -C kubernetes/slicer 900 plan
 make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
-make -C kubernetes/slicer show-urls
+make -C kubernetes/slicer 900 check-health
+make -C kubernetes/slicer 900 show-urls
 ```
 
 For the current Slicer-backed HTTPS routes, use the bare HTTPS origin, for
@@ -71,11 +72,16 @@ example:
 Useful follow-ups while debugging:
 
 ```bash
-make -C kubernetes/slicer check-health
+make -C kubernetes/slicer 900 check-health DRY_RUN=1
 make -C kubernetes/slicer check-sso-e2e
 make -C kubernetes/slicer status
 make -C kubernetes/slicer reset AUTO_APPROVE=1
 ```
+
+The stage-first positional Make syntax remains supported, for example
+`make -C kubernetes/slicer 100 apply`. Read-only Make targets now pass
+`--execute` to the underlying scripts explicitly; set `DRY_RUN=1` to preview
+them with `--dry-run`.
 
 Helper toggles are explicit now:
 

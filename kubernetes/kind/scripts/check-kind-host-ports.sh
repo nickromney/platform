@@ -25,15 +25,17 @@ tfvar_get() {
   local fallback="$2"
   local file value="" match=""
 
-  for file in "${TFVARS_FILES[@]}"; do
-    [[ -f "${file}" ]] || continue
-    match="$(
-      grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
-        sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
-    )"
-    [[ -n "${match}" ]] || continue
-    value="${match}"
-  done
+  if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
+    for file in "${TFVARS_FILES[@]}"; do
+      [[ -f "${file}" ]] || continue
+      match="$(
+        grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | \
+          sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
+      )"
+      [[ -n "${match}" ]] || continue
+      value="${match}"
+    done
+  fi
 
   if [[ -n "${value}" ]]; then
     printf '%s\n' "${value}"

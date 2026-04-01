@@ -5,6 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SLICER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 STAGES_DIR="${STAGES_DIR:-${SLICER_DIR}/stages}"
 VARIABLES_FILE="${SLICER_DIR}/../../terraform/kubernetes/variables.tf"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: check-stage-monotonicity.sh [--dry-run] [--execute]
+
+Checks that enable_* stage toggles in the Slicer stage ladder only move
+forward and do not regress between tfvars stages.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would validate Slicer stage monotonicity across staged tfvars files" "$@"
 
 if [ ! -f "${VARIABLES_FILE}" ]; then
   echo "Missing variables file: ${VARIABLES_FILE}" >&2

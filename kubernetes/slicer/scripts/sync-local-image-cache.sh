@@ -3,12 +3,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 IMAGE_LIST_FILE="${IMAGE_LIST_FILE:-${REPO_ROOT}/kubernetes/slicer/preload-images.txt}"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 OPTIONAL="${OPTIONAL:-0}"
 PRELOAD_IMAGES_SCRIPT="${PRELOAD_IMAGES_SCRIPT:-${REPO_ROOT}/terraform/kubernetes/scripts/preload-images.sh}"
 
 warn() { echo "WARN $*" >&2; }
+
+usage() {
+  cat <<EOF
+Usage: sync-local-image-cache.sh [--dry-run] [--execute]
+
+Mirrors required Slicer preload images into the local Docker registry cache.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 skip_or_fail() {
   if [ "${OPTIONAL}" = "1" ]; then
@@ -19,6 +31,8 @@ skip_or_fail() {
   echo "sync-local-image-cache: $1" >&2
   exit 1
 }
+
+shell_cli_handle_standard_no_args usage "would sync Slicer preload images from ${IMAGE_LIST_FILE} into ${CACHE_PUSH_HOST}" "$@"
 
 command -v curl >/dev/null 2>&1 || skip_or_fail "curl not found"
 command -v docker >/dev/null 2>&1 || skip_or_fail "docker not found"

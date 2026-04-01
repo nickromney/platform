@@ -1,0 +1,108 @@
+metadata:
+  name: cnp-argocd-observed-egress-candidate
+  namespace: argocd
+  annotations:
+    policies.cilium.io/title: Argocd observed egress candidate
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+    platform.publiccloudexperiments.net/hubble-policy-candidate: "true"
+    platform.publiccloudexperiments.net/hubble-policy-direction: egress
+    platform.publiccloudexperiments.net/hubble-policy-mode: workload
+    platform.publiccloudexperiments.net/hubble-policy-row-count: "18"
+    platform.publiccloudexperiments.net/hubble-policy-since: 5m
+    platform.publiccloudexperiments.net/hubble-policy-iterations: "3"
+    platform.publiccloudexperiments.net/hubble-policy-capture-mode: flows
+specs:
+  - description: Observed egress traffic from argocd/application-controller
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: argocd
+        k8s:app.kubernetes.io/component: application-controller
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP
+  - description: Observed egress traffic from argocd/repo-server
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: argocd
+        k8s:app.kubernetes.io/component: repo-server
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP
+  - description: Observed egress traffic from argocd/argocd-application-controller
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: argocd
+        k8s:app.kubernetes.io/name: argocd-application-controller
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-redis
+        toPorts:
+          - ports:
+              - port: "6379"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-repo-server
+        toPorts:
+          - ports:
+              - port: "8081"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP
+  - description: Observed egress traffic from argocd/argocd-repo-server
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: argocd
+        k8s:app.kubernetes.io/name: argocd-repo-server
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-redis
+        toPorts:
+          - ports:
+              - port: "6379"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP
+  - description: Observed egress traffic from argocd/argocd-server
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: argocd
+        k8s:app.kubernetes.io/name: argocd-server
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-redis
+        toPorts:
+          - ports:
+              - port: "6379"
+                protocol: TCP

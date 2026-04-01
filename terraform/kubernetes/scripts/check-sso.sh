@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 FAILURES=0
 
 fail() { echo "FAIL $*" >&2; exit 1; }
@@ -15,6 +18,7 @@ Usage: check-sso.sh [--var-file PATH] [--host-port PORT] [--extended]
 Checks the Dex + oauth2-proxy SSO plumbing with an emphasis on Gitea.
 This is a read-only diagnostic script.
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 require_cmd() {
@@ -31,7 +35,13 @@ STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 TFVARS_FILES=()
 HOST_PORT=""
 EXTENDED="${EXTENDED:-0}"
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --var-file)
       TFVARS_FILES+=("${2:-}")
@@ -45,15 +55,16 @@ while [[ $# -gt 0 ]]; do
       EXTENDED=1
       shift
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       fail "Unknown argument: $1"
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would check the Dex and oauth2-proxy SSO plumbing"
+  exit 0
+fi
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then

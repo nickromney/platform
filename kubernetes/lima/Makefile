@@ -23,6 +23,7 @@ CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
+READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
@@ -220,7 +221,7 @@ help:
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
-	@"$(CHECK_STAGE_MONOTONICITY)"
+	@"$(CHECK_STAGE_MONOTONICITY)" $(READONLY_MODE_FLAG)
 
 .PHONY: prepare-state
 prepare-state:
@@ -230,17 +231,17 @@ prepare-state:
 check-kubeconfig:
 	@set -euo pipefail; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$$default_kubeconfig"; \
-	default_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$$default_kubeconfig"); \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
+	default_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$$default_kubeconfig"); \
 	default_current=$$(kubectl --kubeconfig "$$default_kubeconfig" config current-context 2>/dev/null || true); \
 	[ -n "$$default_current" ] || default_current="<none>"; \
 	echo "OK   default kubeconfig: $$default_kubeconfig ($$default_count context(s), current=$$default_current)"; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
-	lima_count=$$("$(KUBECONFIG_HELPER)" count-contexts "$(KUBECONFIG_PATH)"); \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	lima_count=$$("$(KUBECONFIG_HELPER)" --action count-contexts --kubeconfig "$(KUBECONFIG_PATH)"); \
 	lima_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$lima_current" ] || lima_current="<none>"; \
 	echo "OK   lima kubeconfig: $(KUBECONFIG_PATH) ($$lima_count context(s), current=$$lima_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" lint || true)"; \
+	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --action lint || true)"; \
 	if [ -n "$$kubie_lint_output" ]; then \
 		echo "WARN kubie lint:"; \
 		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
@@ -250,11 +251,11 @@ check-kubeconfig:
 
 .PHONY: check-kind-stopped
 check-kind-stopped:
-	@"$(CHECK_KIND_STOPPED)"
+	@"$(CHECK_KIND_STOPPED)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-slicer-stopped
 check-slicer-stopped:
-	@SLICER_URL="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(LIMA_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)"
+	@SLICER_URL="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(LIMA_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-conflicting-clusters-stopped
 check-conflicting-clusters-stopped:
@@ -392,9 +393,9 @@ bootstrap-k3s:
 .PHONY: merge-default-kubeconfig
 merge-default-kubeconfig:
 	@set -euo pipefail; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$(KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" ensure-valid "$(DEFAULT_KUBECONFIG_PATH)"; \
-	"$(KUBECONFIG_HELPER)" merge "$(KUBECONFIG_PATH)" "$(DEFAULT_KUBECONFIG_PATH)" "$(K3SUP_CONTEXT)"; \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --action ensure-valid --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+	"$(KUBECONFIG_HELPER)" --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(K3SUP_CONTEXT)"; \
 	echo "OK   merged $(K3SUP_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
 .PHONY: sync-image-cache
@@ -720,7 +721,7 @@ check-health:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-security
 check-security:
@@ -732,12 +733,12 @@ check-security:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"
+	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
 check-cluster:
@@ -752,7 +753,7 @@ check-cluster:
 		EXPECT_NAMESPACE_SSO="$(EXPECT_NAMESPACE_SSO)" \
 		EXPECT_NAMESPACE_OBSERVABILITY="$(EXPECT_NAMESPACE_OBSERVABILITY)" \
 		EXPECT_NAMESPACE_PLATFORM_GATEWAY="$(EXPECT_NAMESPACE_PLATFORM_GATEWAY)" \
-		"$(STACK_DIR)/scripts/check-cluster.sh"
+		"$(STACK_DIR)/scripts/check-cluster.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-gateway-urls
 check-gateway-urls:
@@ -769,7 +770,7 @@ check-gateway-urls:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-app
 check-app:
@@ -794,7 +795,7 @@ check-app:
 	if [ -n "$${HOST:-}" ]; then host_flag="--host $${HOST}"; fi; \
 	ext_flag=""; \
 	if [ "$${EXTENDED:-0}" = "1" ]; then ext_flag="--extended"; fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-app.sh" $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-app.sh" $(READONLY_MODE_FLAG) $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
 
 .PHONY: check-sso
 check-sso:
@@ -811,7 +812,7 @@ check-sso:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-sso-e2e
 check-sso-e2e:
@@ -826,7 +827,7 @@ check-sso-e2e:
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
-	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh"
+	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: gitea-sync
 gitea-sync:
@@ -872,7 +873,7 @@ show-urls:
 	if [ -f "$(target_var_file)" ]; then \
 		vf="$$vf --var-file $(target_var_file)"; \
 	fi; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" --show-urls $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) --show-urls $$vf
 
 .PHONY: reset
 reset:
@@ -907,15 +908,15 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$ctx" ]; then \
 		if [ -e "$(KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$(KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" delete-context "$(KUBECONFIG_PATH)" "$$ctx" "$$ctx" "$$ctx" 1; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(KUBECONFIG_PATH)"; \
+			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --delete-file-if-empty; \
 			echo "OK   cleaned $$ctx from $(KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(KUBECONFIG_PATH)"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset "$(DEFAULT_KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" delete-context "$(DEFAULT_KUBECONFIG_PATH)" "$$ctx" "$$ctx" "$$ctx" 0; \
+			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
+			"$(KUBECONFIG_HELPER)" --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx"; \
 			echo "OK   cleaned $$ctx from $(DEFAULT_KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \
@@ -951,8 +952,8 @@ test:
 
 .PHONY: test-shell
 test-shell:
-	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh"
-	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
+	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh" --execute
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh" --execute
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
@@ -967,10 +968,10 @@ test-unit: test-bats
 .PHONY: check-version
 check-version:
 	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(abspath $(MAKEFILE_DIR)stages)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh"
+	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(abspath $(MAKEFILE_DIR)stages)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""
-	@"$(STACK_DIR)/scripts/check-provider-version.sh"
+	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-provider-version
 check-provider-version:
-	@"$(STACK_DIR)/scripts/check-provider-version.sh"
+	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)

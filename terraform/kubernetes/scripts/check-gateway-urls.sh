@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 FAILURES=0
 
 fail() { echo "FAIL $*" >&2; exit 1; }
@@ -15,6 +18,7 @@ Usage: check-gateway-urls.sh [--var-file PATH] [--host-port PORT] [--extended]
 Checks the NGINX Gateway Fabric + TLS path for public and admin gateway URLs.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 require_cmd() {
@@ -32,7 +36,13 @@ TFVARS_FILES=()
 HOST_PORT=""
 EXTENDED="${EXTENDED:-0}"
 DEBUG_PRINTED=0
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --var-file)
       TFVARS_FILES+=("${2:-}")
@@ -46,15 +56,16 @@ while [[ $# -gt 0 ]]; do
       EXTENDED=1
       shift
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       fail "Unknown argument: $1"
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would check public and admin gateway URLs"
+  exit 0
+fi
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then

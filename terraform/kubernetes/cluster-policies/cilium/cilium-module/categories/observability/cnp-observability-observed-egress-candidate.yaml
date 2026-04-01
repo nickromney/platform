@@ -1,0 +1,131 @@
+metadata:
+  name: cnp-observability-observed-egress-candidate
+  namespace: observability
+  annotations:
+    policies.cilium.io/title: Observability observed egress candidate
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+    platform.publiccloudexperiments.net/hubble-policy-candidate: "true"
+    platform.publiccloudexperiments.net/hubble-policy-direction: egress
+    platform.publiccloudexperiments.net/hubble-policy-mode: workload
+    platform.publiccloudexperiments.net/hubble-policy-row-count: "40"
+    platform.publiccloudexperiments.net/hubble-policy-since: 5m
+    platform.publiccloudexperiments.net/hubble-policy-iterations: "3"
+    platform.publiccloudexperiments.net/hubble-policy-capture-mode: flows
+specs:
+  - description: Observed egress traffic from observability/server
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: observability
+        k8s:app.kubernetes.io/component: server
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-dex-server
+        toPorts:
+          - ports:
+              - port: "5558"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-applicationset-controller
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: observability
+              k8s:app.kubernetes.io/name: kube-state-metrics
+        toPorts:
+          - ports:
+              - port: "8080"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: observability
+              k8s:app.kubernetes.io/name: kube-state-metrics
+        toPorts:
+          - ports:
+              - port: "8081"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-application-controller
+        toPorts:
+          - ports:
+              - port: "8082"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-server
+        toPorts:
+          - ports:
+              - port: "8083"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-repo-server
+        toPorts:
+          - ports:
+              - port: "8084"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: argocd
+              k8s:app.kubernetes.io/name: argocd-notifications-controller
+        toPorts:
+          - ports:
+              - port: "9001"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: nginx-gateway
+              k8s:app.kubernetes.io/name: nginx-gateway
+        toPorts:
+          - ports:
+              - port: "9113"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "9153"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: cert-manager
+              k8s:app.kubernetes.io/component: cainjector
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: cert-manager
+              k8s:app.kubernetes.io/component: webhook
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: cert-manager
+              k8s:app.kubernetes.io/name: cert-manager
+        toPorts:
+          - ports:
+              - port: "9402"
+                protocol: TCP
+  - description: Observed egress traffic from observability/otel-collector
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: observability
+        k8s:app.kubernetes.io/name: otel-collector
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: observability
+              k8s:app: server
+        toPorts:
+          - ports:
+              - port: "9428"
+                protocol: TCP
+      - toEndpoints:
+          - matchLabels:
+              k8s:io.kubernetes.pod.namespace: kube-system
+              k8s:k8s-app: kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP

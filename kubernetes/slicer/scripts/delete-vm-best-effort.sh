@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
 vm_name="${SLICER_VM_NAME:-slicer-1}"
 delete_timeout="${SLICER_RESET_DELETE_TIMEOUT_SECONDS:-20}"
@@ -10,6 +13,19 @@ system_bin="${SLICER_SYSTEM_BIN:-${system_dir}/slicer-mac}"
 
 warn() { echo "WARN $*" >&2; }
 ok() { echo "OK   $*"; }
+
+usage() {
+  cat <<EOF
+Usage: delete-vm-best-effort.sh [--dry-run] [--execute]
+
+Best-effort cleanup for the managed Slicer VM, including local slicer-mac disk
+artifacts when applicable.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would best-effort delete the configured Slicer VM and related local artifacts" "$@"
 
 [ -n "${socket}" ] || { warn "SLICER_URL or SLICER_SOCKET must be set"; exit 1; }
 

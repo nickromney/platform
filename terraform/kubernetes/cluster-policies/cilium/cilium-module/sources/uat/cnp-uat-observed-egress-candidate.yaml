@@ -1,0 +1,61 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-uat-observed-egress-candidate
+  namespace: uat
+  annotations:
+    "policies.cilium.io/title": "Uat observed egress candidate"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"
+    "platform.publiccloudexperiments.net/hubble-policy-direction": "egress"
+    "platform.publiccloudexperiments.net/hubble-policy-mode": "workload"
+    "platform.publiccloudexperiments.net/hubble-policy-row-count": "9"
+    "platform.publiccloudexperiments.net/hubble-policy-since": "5m"
+    "platform.publiccloudexperiments.net/hubble-policy-iterations": "3"
+    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "flows"
+specs:
+  - description: >-
+      Observed egress traffic from uat/sentiment-api
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "uat"
+        "k8s:app.kubernetes.io/name": "sentiment-api"
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": "observability"
+              "k8s:app.kubernetes.io/name": "otel-collector"
+        toPorts:
+          - ports:
+              - port: "4318"
+                protocol: TCP
+  - description: >-
+      Observed egress traffic from uat/sentiment-router
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "uat"
+        "k8s:app.kubernetes.io/name": "sentiment-router"
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": "uat"
+              "k8s:app.kubernetes.io/name": "sentiment-auth-ui"
+        toPorts:
+          - ports:
+              - port: "8080"
+                protocol: TCP
+  - description: >-
+      Observed egress traffic from uat/subnetcalc-api
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "uat"
+        "k8s:app.kubernetes.io/name": "subnetcalc-api"
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": "observability"
+              "k8s:app.kubernetes.io/name": "otel-collector"
+        toPorts:
+          - ports:
+              - port: "4318"
+                protocol: TCP

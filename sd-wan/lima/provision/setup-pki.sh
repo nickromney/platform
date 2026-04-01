@@ -2,6 +2,25 @@
 # Setup PKI with step-ca for mTLS
 # Reads CLOUD_NUM, CLOUD_NAME, PROJECT_DIR from environment
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Configure PKI assets for the current SD-WAN Lima guest.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would configure PKI assets for the current SD-WAN Lima guest" "$@"
+
 # Parent provisioners may run with xtrace enabled; turn it off here so
 # private keys, CA material, and leaf cert generation do not end up in logs.
 set +x

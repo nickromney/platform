@@ -3,9 +3,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
 MARKDOWNLINT_CONFIG_FILE="${MARKDOWNLINT_CONFIG_FILE:-${REPO_ROOT}/.markdownlint}"
 MARKDOWNLINT_BIN="${MARKDOWNLINT_BIN:-}"
 GIT_BIN="${GIT_BIN:-git}"
+
+usage() {
+  cat <<EOF
+Usage: fmt-markdown.sh [--dry-run] [--execute]
+
+Format tracked Markdown files using the repo markdownlint configuration when a
+supported markdownlint binary is available.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 tool_exists() {
   local tool="$1"
@@ -83,6 +98,8 @@ run_markdownlint_fix() {
       ;;
   esac
 }
+
+shell_cli_handle_standard_no_args usage "would format tracked Markdown files under ${REPO_ROOT}" "$@"
 
 markdown_files=()
 while IFS= read -r -d '' file; do

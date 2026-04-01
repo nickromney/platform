@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 section() {
   echo
   echo "==> $*"
@@ -14,6 +17,19 @@ require() {
     exit 1
   fi
 }
+
+usage() {
+  cat <<EOF
+Usage: triage-sso.sh [--dry-run] [--execute]
+
+Prints a read-only SSO triage bundle for gateway routes, oauth2-proxy
+deployments, Argo CD applications, and in-cluster curl probes.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would print the SSO triage diagnostics bundle" "$@"
 
 require kubectl
 

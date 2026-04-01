@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: hubble-check-connection.sh [options]
@@ -87,6 +91,7 @@ Examples:
   # A Hubble UI route will be called out explicitly as the wrong endpoint
   ./hubble-check-connection.sh --server https://hubble.admin.127.0.0.1.sslip.io
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 fail() {
@@ -338,7 +343,14 @@ DEFAULT_KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
 
 declare -a tls_ca_cert_files=()
 
+shell_cli_init_standard_flags
+
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --server)
       server="${2:-}"
@@ -392,22 +404,20 @@ while [[ $# -gt 0 ]]; do
       print_command=1
       shift
       ;;
-    --dry-run)
-      dry_run=1
-      print_command=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       fail "unknown argument: $1"
       ;;
   esac
 done
 
-require_cmd hubble
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  dry_run=1
+  print_command=1
+fi
+
+if [[ "${dry_run}" -eq 0 ]]; then
+  require_cmd hubble
+fi
 
 if [[ -n "${server}" && "${port_forward}" -eq 1 ]]; then
   fail "--server and --port-forward cannot be combined"
@@ -429,6 +439,11 @@ if [[ -n "${server}" ]]; then
   if [[ "${SERVER_SCHEME}" == "https" || "${SERVER_SCHEME}" == "tls" ]]; then
     tls_enabled=1
   fi
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would check Hubble relay connectivity"
+  exit 0
 fi
 
 if [[ "${port_forward}" -eq 1 ]]; then

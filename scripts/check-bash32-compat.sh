@@ -3,19 +3,30 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
 FILES_TO_SCAN="$(mktemp "${TMPDIR:-/tmp}/bash32-compat-files.XXXXXX")"
 MATCH_FILE="$(mktemp "${TMPDIR:-/tmp}/bash32-compat-matches.XXXXXX")"
 trap 'rm -f "${FILES_TO_SCAN}" "${MATCH_FILE}"' EXIT
 
 usage() {
   cat <<'EOF'
-Usage: check-bash32-compat.sh [path ...]
+Usage: check-bash32-compat.sh [--dry-run] [--path PATH]...
 
 Scan tracked shell scripts for Bash 4+ constructs that are incompatible with
 macOS's stock Bash 3.2.
 
 Without arguments, the scan covers every tracked `*.sh` file in the repo.
-When one or more paths are supplied, only those files/directories are scanned.
+When one or more `--path` values are supplied, only those files/directories are
+scanned. Positional paths remain supported as compatibility shims.
+
+Options:
+  --path PATH  Scan a specific file or directory instead of all tracked scripts
+  --dry-run    Show the scan target set and exit before reading files
+  --execute    Execute the scan (explicit form; default behavior remains compatible)
+  -h, --help   Show this message
 EOF
 }
 
@@ -32,6 +43,8 @@ declare -a bash32_incompatible_patterns=(
 
 count=0
 declare -a issues=()
+dry_run=0
+declare -a scan_paths=()
 
 display_path() {
   local file="$1"
@@ -89,6 +102,16 @@ build_tracked_shell_script_list() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --dry-run)
+      dry_run=1
+      ;;
+    --execute)
+      ;;
+    --path)
+      shift
+      [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--path" >&2; exit 1; }
+      scan_paths+=("$1")
+      ;;
     -h|--help)
       usage
       exit 0
@@ -98,18 +121,28 @@ while [[ $# -gt 0 ]]; do
       break
       ;;
     -*)
-      printf 'check-bash32-compat.sh: unknown argument: %s\n' "$1" >&2
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
       exit 1
       ;;
     *)
-      break
+      scan_paths+=("$1")
       ;;
   esac
+  shift
 done
 
-if [[ $# -gt 0 ]]; then
+if [[ "${dry_run}" -eq 1 ]]; then
+  if [[ "${#scan_paths[@]}" -gt 0 ]]; then
+    shell_cli_print_dry_run_summary "would scan ${#scan_paths[@]} explicit path(s) for Bash 3.2 compatibility"
+  else
+    shell_cli_print_dry_run_summary "would scan all tracked *.sh files for Bash 3.2 compatibility"
+  fi
+  exit 0
+fi
+
+if [[ "${#scan_paths[@]}" -gt 0 ]]; then
   : > "${FILES_TO_SCAN}"
-  for candidate in "$@"; do
+  for candidate in "${scan_paths[@]}"; do
     append_scan_path "${candidate}"
   done
 else

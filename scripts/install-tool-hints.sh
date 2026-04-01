@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
 usage() {
   cat <<'EOF'
-Usage: install-tool-hints.sh [--plain] <tool> [tool...]
+Usage: install-tool-hints.sh [--plain] [--tool TOOL]... [--dry-run] [--execute]
 
 Print install commands for missing tools using this preference order:
   1. arkade
@@ -16,7 +21,11 @@ Print install commands for missing tools using this preference order:
   4. curl
 
 Options:
-  --plain   suppress the environment header
+  --plain      suppress the environment header
+  --tool TOOL  add a requested tool (repeatable)
+  --dry-run    show the requested tool set and exit before emitting hints
+  --execute    emit install hints (preferred explicit form for query workflows)
+  -h, --help   show this help
 EOF
 }
 
@@ -282,12 +291,23 @@ hint_for_tool() {
 }
 
 plain_output=0
+dry_run=0
+requested_tools=()
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --plain)
       plain_output=1
+      ;;
+    --tool)
       shift
+      [[ "$#" -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--tool" >&2; exit 1; }
+      requested_tools+=("$1")
+      ;;
+    --dry-run)
+      dry_run=1
+      ;;
+    --execute)
       ;;
     -h|--help)
       usage
@@ -298,16 +318,31 @@ while [[ "$#" -gt 0 ]]; do
       break
       ;;
     -*)
-      usage >&2
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
       exit 2
       ;;
     *)
-      break
+      requested_tools+=("$1")
       ;;
   esac
+  shift
 done
 
-if [[ "$#" -lt 1 ]]; then
+while [[ "$#" -gt 0 ]]; do
+  requested_tools+=("$1")
+  shift
+done
+
+if [[ "${dry_run}" == "1" ]]; then
+  if [[ "${#requested_tools[@]}" -gt 0 ]]; then
+    shell_cli_print_dry_run_summary "would print install hints for ${#requested_tools[@]} tool(s)"
+  else
+    shell_cli_print_dry_run_summary "would print install hints for the requested tool set"
+  fi
+  exit 0
+fi
+
+if [[ "${#requested_tools[@]}" -lt 1 ]]; then
   usage >&2
   exit 2
 fi
@@ -339,7 +374,7 @@ if [[ "${plain_output}" != "1" ]]; then
     "${have_curl}"
 fi
 
-for requested_tool in "$@"; do
+for requested_tool in "${requested_tools[@]}"; do
   tool="$(normalize_tool "${requested_tool}")"
   if hint="$(hint_for_tool "${tool}" "${os_name}" 2>/dev/null)"; then
     if [[ "${plain_output}" == "1" ]]; then

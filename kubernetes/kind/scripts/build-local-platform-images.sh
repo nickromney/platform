@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/local-cache-lib.sh"
 
@@ -17,6 +19,19 @@ GRAFANA_BASE_IMAGE_SOURCE="${GRAFANA_BASE_IMAGE_SOURCE:-docker.io/grafana/grafan
 PLUGIN_FETCH_IMAGE_SOURCE="${PLUGIN_FETCH_IMAGE_SOURCE:-docker.io/library/alpine:3.22}"
 VICTORIA_LOGS_PLUGIN_VERSION="${VICTORIA_LOGS_PLUGIN_VERSION:-0.26.3}"
 VICTORIA_LOGS_PLUGIN_URL="${VICTORIA_LOGS_PLUGIN_URL:-https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v${VICTORIA_LOGS_PLUGIN_VERSION}/victoriametrics-logs-datasource-v${VICTORIA_LOGS_PLUGIN_VERSION}.zip}"
+
+usage() {
+  cat <<EOF
+Usage: build-local-platform-images.sh [--dry-run] [--execute]
+
+Builds and pushes host-side platform images into the local registry cache for
+kind-based workflows.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would build and push local platform images into ${CACHE_PUSH_HOST} with tag ${TAG}" "$@"
 
 require_local_cache_tools
 assert_local_cache_reachable "${CACHE_PUSH_HOST}"

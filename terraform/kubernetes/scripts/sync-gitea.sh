@@ -9,22 +9,21 @@ DEFAULT_GITEA_SYNC_TFVARS_FILE="${REPO_ROOT}/kubernetes/kind/stages/900-sso.tfva
 GITEA_SYNC_TFVARS_FILE="${GITEA_SYNC_TFVARS_FILE:-${DEFAULT_GITEA_SYNC_TFVARS_FILE}}"
 
 # shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
-platform_load_env
 
 usage() {
-  cat <<'EOF'
-Usage: sync-gitea.sh [--dry-run]
+  cat <<EOF
+Usage: sync-gitea.sh [--dry-run] [--execute]
 
 Compatibility wrapper for manual policies syncs. This script resolves the
 expected environment from stage tfvars, then delegates to sync-gitea-policies.sh
 so manual syncs and Terraform-driven syncs render the same repository state.
 
-Options:
-  --dry-run   Show what would change without pushing
-  -h, --help  Show this message
+$(shell_cli_standard_options)
 EOF
 }
 
@@ -118,24 +117,8 @@ export_resolved_string() {
 }
 
 main() {
-  local dry_run=0
-
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --dry-run)
-        dry_run=1
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        echo "sync-gitea.sh: unknown flag: $1" >&2
-        exit 1
-        ;;
-    esac
-    shift
-  done
+  shell_cli_handle_standard_no_args usage "would resolve Gitea sync inputs and delegate to sync-gitea-policies.sh" "$@"
+  platform_load_env
 
   local delegate="${SCRIPT_DIR}/sync-gitea-policies.sh"
   [[ -x "${delegate}" ]] || { echo "sync-gitea.sh: missing ${delegate}" >&2; exit 1; }
@@ -235,10 +218,6 @@ main() {
   export_resolved_string PROMETHEUS_CHART_VERSION prometheus_chart_version "$(tf_default_from_variables prometheus_chart_version)"
   export_resolved_string SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
   export_resolved_string TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
-
-  if [[ "${dry_run}" -eq 1 ]]; then
-    exec "${delegate}" --dry-run
-  fi
 
   exec "${delegate}"
 }

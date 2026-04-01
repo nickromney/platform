@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-registry="${1:-}"
-display_name="${2:-${registry}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+registry=""
+display_name=""
+positional=()
 
 usage() {
-  echo "usage: $0 <registry> [display-name]" >&2
+  cat <<EOF >&2
+Usage: check-docker-registry-auth.sh --registry HOST [--display-name NAME] [--dry-run] [--execute]
+
+Checks whether Docker credentials exist for a registry.
+
+Positional compatibility:
+  check-docker-registry-auth.sh <registry> [display-name]
+
+$(shell_cli_standard_options)
+EOF
 }
 
 warn() {
@@ -117,6 +132,64 @@ login_hint() {
       ;;
   esac
 }
+
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --registry)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--registry"
+        exit 1
+      }
+      registry="$2"
+      shift 2
+      ;;
+    --display-name)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--display-name"
+        exit 1
+      }
+      display_name="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        positional+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${registry}" ]]; then
+  registry="${positional[0]:-}"
+fi
+if [[ -z "${display_name}" ]]; then
+  display_name="${positional[1]:-${registry}}"
+fi
+if [[ "${#positional[@]}" -gt 2 ]]; then
+  shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positional[2]}"
+  exit 1
+fi
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would check Docker auth for registry ${registry:-<missing>}"
+  exit 0
+fi
 
 if [[ -z "${registry}" ]]; then
   usage

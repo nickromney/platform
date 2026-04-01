@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
@@ -47,8 +49,6 @@ PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
 PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
 GATEWAY_DEPLOY_WAIT_SECONDS="${GATEWAY_DEPLOY_WAIT_SECONDS:-900}"
 OIDC_DISCOVERY_WAIT_SECONDS="${OIDC_DISCOVERY_WAIT_SECONDS:-900}"
-
-[ -n "${SLICER_URL}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
 
 slicer_exec() {
   local name="$1"
@@ -119,18 +119,19 @@ ensure_remote_ca() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: configure-k3s-apiserver-oidc.sh
+  cat <<EOF
+Usage: configure-k3s-apiserver-oidc.sh [--dry-run] [--execute]
 
 Configures the Slicer-backed k3s server so Dex-issued Headlamp OIDC tokens are
 accepted by the Kubernetes API. This mutates the guest VM.
+
+$(shell_cli_standard_options)
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+shell_cli_handle_standard_no_args usage "would configure the Slicer k3s API server for Dex-issued OIDC tokens" "$@"
+
+[ -n "${SLICER_URL}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
 
 require_cmd slicer
 require_cmd kubectl

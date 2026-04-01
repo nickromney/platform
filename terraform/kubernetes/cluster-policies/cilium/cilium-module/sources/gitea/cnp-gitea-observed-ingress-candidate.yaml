@@ -1,0 +1,37 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-gitea-observed-ingress-candidate
+  namespace: gitea
+  annotations:
+    "policies.cilium.io/title": "Gitea observed ingress candidate"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"
+    "platform.publiccloudexperiments.net/hubble-policy-direction": "ingress"
+    "platform.publiccloudexperiments.net/hubble-policy-mode": "workload"
+    "platform.publiccloudexperiments.net/hubble-policy-row-count": "2"
+    "platform.publiccloudexperiments.net/hubble-policy-since": "5m"
+    "platform.publiccloudexperiments.net/hubble-policy-iterations": "3"
+    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "flows"
+specs:
+  - description: >-
+      Observed ingress traffic from gitea/gitea
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "gitea"
+        "k8s:app.kubernetes.io/name": "gitea"
+    ingress:
+      - fromEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": "argocd"
+              "k8s:app.kubernetes.io/name": "argocd-repo-server"
+        toPorts:
+          - ports:
+              - port: "2222"
+                protocol: TCP
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "3000"
+                protocol: TCP

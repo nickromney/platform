@@ -1,8 +1,86 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-username="${1:-vscode}"
-brewfile_path="${2:-/tmp/devcontainer/Brewfile}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: install-toolchain.sh [--username NAME] [--brewfile-path PATH] [--dry-run] [--execute]
+
+Installs the devcontainer host toolchain, Homebrew bundle, arkade tools, Lima,
+and Node/Bun shims.
+
+Positional compatibility:
+  install-toolchain.sh [username] [brewfile_path]
+
+$(shell_cli_standard_options)
+EOF
+}
+
+username=""
+brewfile_path=""
+positional=()
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --username)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--username"
+        exit 1
+      }
+      username="$2"
+      shift 2
+      ;;
+    --brewfile-path)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--brewfile-path"
+        exit 1
+      }
+      brewfile_path="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        positional+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${username}" ]]; then
+  username="${positional[0]:-vscode}"
+fi
+if [[ -z "${brewfile_path}" ]]; then
+  brewfile_path="${positional[1]:-/tmp/devcontainer/Brewfile}"
+fi
+if [[ "${#positional[@]}" -gt 2 ]]; then
+  shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positional[2]}"
+  exit 1
+fi
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would install the devcontainer toolchain for ${username} using ${brewfile_path}"
+  exit 0
+fi
+
 brew_prefix="${HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
 brew_bin="${brew_prefix}/bin/brew"
 

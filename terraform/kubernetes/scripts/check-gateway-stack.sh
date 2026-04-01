@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 # Repeatable diagnostics for "gateway stack is broken" situations:
 # - No pods in platform-gateway
 # - HTTPRoutes missing
@@ -26,6 +29,7 @@ Options:
   --no-strict         Always exit 0 (for ad-hoc debugging)
 
 EOF
+  printf '%s\n' "$(shell_cli_standard_options)"
 }
 
 require() { command -v "$1" >/dev/null 2>&1 || { echo "FAIL $1 not found in PATH" >&2; exit 1; }; }
@@ -34,16 +38,26 @@ SINCE="20m"
 TAIL="200"
 STRICT=1
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --since) SINCE="${2:-}"; shift 2 ;;
     --tail) TAIL="${2:-}"; shift 2 ;;
     --strict) STRICT=1; shift ;;
     --no-strict) STRICT=0; shift ;;
-    -h|--help) usage; exit 0 ;;
     *) echo "FAIL Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would run gateway stack diagnostics"
+  exit 0
+fi
 
 require kubectl
 

@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 RENDER_KIND_APISERVER_OIDC_MANIFEST="${SCRIPT_DIR}/render-kind-apiserver-oidc-manifest.py"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
@@ -42,6 +44,10 @@ PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls
 NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
 NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
 NGINX_GATEWAY_SERVICE="${NGINX_GATEWAY_SERVICE:-nginx-gateway}"
+KYVERNO_NAMESPACE="${KYVERNO_NAMESPACE:-kyverno}"
+KYVERNO_ADMISSION_DEPLOY_NAME="${KYVERNO_ADMISSION_DEPLOY_NAME:-kyverno-admission-controller}"
+KYVERNO_ADMISSION_SERVICE="${KYVERNO_ADMISSION_SERVICE:-kyverno-svc}"
+KYVERNO_CLEANUP_DEPLOY_NAME="${KYVERNO_CLEANUP_DEPLOY_NAME:-kyverno-cleanup-controller}"
 GATEWAY_DEPLOY_WAIT_SECONDS="${GATEWAY_DEPLOY_WAIT_SECONDS:-900}"
 OIDC_DISCOVERY_WAIT_SECONDS="${OIDC_DISCOVERY_WAIT_SECONDS:-900}"
 GATEWAY_RECONCILE_WAIT_SECONDS="${GATEWAY_RECONCILE_WAIT_SECONDS:-300}"
@@ -144,7 +150,7 @@ is_transient_kubectl_api_error() {
   local output="${1:-}"
 
   printf '%s' "${output}" | grep -qiE \
-    'connection refused|context deadline exceeded|i/o timeout|timed out|tls handshake timeout|EOF|connection reset by peer|transport is closing|service unavailable|server is currently unable to handle the request|dial tcp|no route to host|client rate limiter Wait returned an error'
+    'connection refused|context deadline exceeded|i/o timeout|timed out|tls handshake timeout|EOF|connection reset by peer|transport is closing|service unavailable|server is currently unable to handle the request|dial tcp|no route to host|client rate limiter Wait returned an error|Error from server \(Forbidden\): .*User "kubernetes-admin"|forbidden: User "kubernetes-admin"'
 }
 
 retry_webhook_fail() {
@@ -284,9 +290,173 @@ recycle_gateway_data_plane() {
     "gateway data plane (${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME})"
 }
 
+deployment_selector() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local selector
+
+  selector="$(
+    kubectl -n "${namespace}" get deploy "${deploy_name}" \
+      -o go-template='{{ range $k,$v := .spec.selector.matchLabels }}{{ printf "%s=%s\n" $k $v }}{{ end }}' 2>/dev/null \
+      | paste -sd, -
+  )"
+
+  printf '%s' "${selector}"
+}
+
+recycle_deployment_pods() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local timeout_seconds="${3}"
+  local description="${4:-deployment ${namespace}/${deploy_name}}"
+  local selector
+  local pod_names
+
+  selector="$(deployment_selector "${namespace}" "${deploy_name}")"
+  if [[ -z "${selector}" ]]; then
+    warn "no selector found for ${description}; waiting for deployment rollout instead"
+    wait_for_deployment_rollout "${namespace}" "${deploy_name}" "${timeout_seconds}" "${description}"
+    return $?
+  fi
+
+  pod_names="$(
+    kubectl -n "${namespace}" get pods \
+      -l "${selector}" \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
+  )"
+
+  if [[ -z "${pod_names}" ]]; then
+    warn "no pods found for ${description}; waiting for deployment rollout instead"
+  else
+    while IFS= read -r pod_name; do
+      [[ -n "${pod_name}" ]] || continue
+      warn "recycling ${description} pod: ${namespace}/${pod_name}"
+      kubectl -n "${namespace}" delete pod "${pod_name}" --wait=false >/dev/null 2>&1 || true
+    done <<< "${pod_names}"
+  fi
+
+  wait_for_deployment_rollout "${namespace}" "${deploy_name}" "${timeout_seconds}" "${description}"
+}
+
+deployment_pods_need_early_recycle() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local selector
+  local pod_names
+  local pod_name
+  local waiting_reasons
+  local terminated_reasons
+  local pod_logs
+
+  selector="$(deployment_selector "${namespace}" "${deploy_name}")"
+  if [[ -z "${selector}" ]]; then
+    return 1
+  fi
+
+  pod_names="$(
+    kubectl -n "${namespace}" get pods \
+      -l "${selector}" \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
+  )"
+
+  if [[ -z "${pod_names}" ]]; then
+    return 1
+  fi
+
+  while IFS= read -r pod_name; do
+    [[ -n "${pod_name}" ]] || continue
+
+    waiting_reasons="$(
+      kubectl -n "${namespace}" get pod "${pod_name}" \
+        -o jsonpath='{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}' 2>/dev/null || true
+    )"
+    terminated_reasons="$(
+      kubectl -n "${namespace}" get pod "${pod_name}" \
+        -o jsonpath='{range .status.containerStatuses[*]}{.lastState.terminated.reason}{" "}{end}' 2>/dev/null || true
+    )"
+
+    if [[ "${waiting_reasons}" != *"CrashLoopBackOff"* && "${terminated_reasons}" != *"Error"* ]]; then
+      continue
+    fi
+
+    pod_logs="$(kubectl -n "${namespace}" logs "${pod_name}" --tail=40 2>/dev/null || true)"
+    if printf '%s' "${pod_logs}" | grep -qiE \
+      'failed to get server groups|connect: connection refused|dial tcp .*:443'; then
+      warn "detected transient API connectivity crash in ${namespace}/${pod_name}; recycling controller pods early"
+      return 0
+    fi
+  done <<< "${pod_names}"
+
+  return 1
+}
+
+wait_for_deployment_rollout_with_early_recycle() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local timeout_seconds="${3}"
+  local description="${4:-deployment ${namespace}/${deploy_name}}"
+  local end=$((SECONDS + timeout_seconds))
+  local recycled=0
+
+  while (( SECONDS < end )); do
+    if kubectl -n "${namespace}" rollout status "deploy/${deploy_name}" --timeout=10s >/dev/null 2>&1; then
+      ok "${description} ready"
+      return 0
+    fi
+
+    if [[ "${recycled}" -eq 0 ]] && deployment_pods_need_early_recycle "${namespace}" "${deploy_name}"; then
+      recycled=1
+      recycle_deployment_pods "${namespace}" "${deploy_name}" "${timeout_seconds}" "${description}" || return 1
+      return 0
+    fi
+
+    sleep 5
+  done
+
+  warn "${description} not ready after ${timeout_seconds}s"
+  kubectl -n "${namespace}" get deploy "${deploy_name}" -o wide 2>/dev/null || true
+  selector="$(deployment_selector "${namespace}" "${deploy_name}")"
+  if [[ -n "${selector}" ]]; then
+    kubectl -n "${namespace}" get pods -l "${selector}" -o wide 2>/dev/null || true
+  fi
+  return 1
+}
+
+wait_for_deployment_recovery_after_apiserver_restart() {
+  local namespace="${1}"
+  local deploy_name="${2}"
+  local timeout_seconds="${3}"
+  local description="${4:-deployment ${namespace}/${deploy_name}}"
+  local lookup_status=0
+
+  set +e
+  lookup_deployment_state "${namespace}" "${deploy_name}" 60 "${description}"
+  lookup_status=$?
+  set -e
+
+  case "${lookup_status}" in
+    0)
+      ;;
+    1)
+      warn "${description} not found; skipping post-restart recovery wait"
+      return 0
+      ;;
+    *)
+      fail "could not verify ${description} after kube-apiserver restart"
+      ;;
+  esac
+
+  ok "waiting for ${description} after kube-apiserver restart"
+  if ! wait_for_deployment_rollout_with_early_recycle "${namespace}" "${deploy_name}" "${timeout_seconds}" "${description}"; then
+    warn "${description} did not recover after initial wait; recycling controller pods once"
+    recycle_deployment_pods "${namespace}" "${deploy_name}" "${timeout_seconds}" "${description}" \
+      || fail "${description} did not recover after kube-apiserver restart"
+  fi
+}
+
 usage() {
   cat <<'EOF'
-Usage: configure-kind-apiserver-oidc.sh
+Usage: configure-kind-apiserver-oidc.sh [--dry-run] [--execute]
 
 Configures the kind control-plane kube-apiserver static manifest for OIDC auth
 against the local Dex instance (so Headlamp OIDC tokens work against the K8s API).
@@ -306,6 +476,10 @@ Environment variables:
   NGINX_GATEWAY_NAMESPACE
   NGINX_GATEWAY_DEPLOY_NAME
   NGINX_GATEWAY_SERVICE
+  KYVERNO_NAMESPACE
+  KYVERNO_ADMISSION_DEPLOY_NAME
+  KYVERNO_ADMISSION_SERVICE
+  KYVERNO_CLEANUP_DEPLOY_NAME
   GATEWAY_DEPLOY_WAIT_SECONDS
   OIDC_DISCOVERY_WAIT_SECONDS
   GATEWAY_RECONCILE_WAIT_SECONDS
@@ -313,12 +487,10 @@ Environment variables:
 This is a local-dev helper; it mutates the kind node container and will restart
 the kube-apiserver.
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+shell_cli_handle_standard_no_args usage "would configure the kind kube-apiserver OIDC settings" "$@"
 
 require_cmd kind
 require_cmd kubectl
@@ -485,11 +657,37 @@ fi
 
 docker exec "${CONTROL_PLANE_NODE}" rm -f "${CONTAINER_MANIFEST_BACKUP}" >/dev/null 2>&1 || true
 
+wait_for_deployment_recovery_after_apiserver_restart \
+  "${KYVERNO_NAMESPACE}" \
+  "${KYVERNO_ADMISSION_DEPLOY_NAME}" \
+  "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+  "Kyverno admission controller (${KYVERNO_NAMESPACE}/${KYVERNO_ADMISSION_DEPLOY_NAME})"
+
+wait_for_service_endpoints "${KYVERNO_NAMESPACE}" "${KYVERNO_ADMISSION_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+  || fail "Kyverno admission service has no endpoints after kube-apiserver restart"
+
+wait_for_deployment_recovery_after_apiserver_restart \
+  "${KYVERNO_NAMESPACE}" \
+  "${KYVERNO_CLEANUP_DEPLOY_NAME}" \
+  "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+  "Kyverno cleanup controller (${KYVERNO_NAMESPACE}/${KYVERNO_CLEANUP_DEPLOY_NAME})"
+
 restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"
 
 ok "waiting for nginx gateway control plane after kube-apiserver restart"
-wait_for_deployment_rollout "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})" \
-  || fail "nginx gateway control plane did not recover after kube-apiserver restart"
+if ! wait_for_deployment_rollout_with_early_recycle \
+  "${NGINX_GATEWAY_NAMESPACE}" \
+  "${NGINX_GATEWAY_DEPLOY_NAME}" \
+  "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+  "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"; then
+  warn "nginx gateway control plane did not recover after initial restart; recycling controller pods once"
+  recycle_deployment_pods \
+    "${NGINX_GATEWAY_NAMESPACE}" \
+    "${NGINX_GATEWAY_DEPLOY_NAME}" \
+    "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
+    "nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})" \
+    || fail "nginx gateway control plane did not recover after kube-apiserver restart"
+fi
 
 wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}" \
   || fail "nginx gateway control plane service has no endpoints after kube-apiserver restart"

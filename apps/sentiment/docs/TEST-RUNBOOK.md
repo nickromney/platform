@@ -10,7 +10,7 @@ flowchart TD
   B --> E["make -C apps compose-smoke-sentiment"]
   A --> F["Need TLS or ingress-specific coverage?"]
   F --> G["Run opt-in checks"]
-  G --> H["tests/test-tls.sh"]
+  G --> H["tests/test-tls.sh --execute"]
   G --> I["Manual compose overlays and browser flows"]
 ```
 
@@ -24,7 +24,7 @@ Use this path for normal application changes. It covers the API, the authenticat
 
 ## Opt-In Checks
 
-- `cd apps/sentiment && ./tests/test-tls.sh`
+- `cd apps/sentiment && ./tests/test-tls.sh --execute`
 - `cd apps/sentiment && docker compose -f compose.yml -f compose.tls.yml up`
 
 Use the opt-in path when you change TLS, reverse-proxy behavior, or browser entry routing.

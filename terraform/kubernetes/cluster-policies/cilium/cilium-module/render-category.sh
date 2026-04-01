@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 usage() {
-  cat <<'EOF'
-Usage: render-category.sh <category-name|sources-dir>
+  cat <<EOF
+Usage: render-category.sh --input CATEGORY_OR_SOURCE_DIR [--dry-run] [--execute]
 
 Render one Cilium module category from `sources/` into the equivalent
 `categories/` directory using `render-cilium-policy-values.sh`.
 
 Examples:
+  render-category.sh --input observability
+  render-category.sh --input ./sources/observability
+
+Positional compatibility:
   render-category.sh observability
   render-category.sh ./sources/observability
+
+$(shell_cli_standard_options)
 EOF
 }
 
@@ -19,15 +30,59 @@ fail() {
   exit 1
 }
 
-if [[ $# -ne 1 ]]; then
+input=""
+positional=()
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --input)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--input"
+        exit 1
+      }
+      input="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        positional+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${input}" ]]; then
+  if [[ "${#positional[@]}" -ne 1 ]]; then
+    usage >&2
+    exit 2
+  fi
+  input="${positional[0]}"
+elif [[ "${#positional[@]}" -ne 0 ]]; then
   usage >&2
   exit 2
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../.." && pwd)"
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would render Cilium category ${input}"
+  exit 0
+fi
+
 RENDER_SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/render-cilium-policy-values.sh"
-input="${1}"
 
 if [[ -d "${input}" ]]; then
   SOURCE_DIR="$(cd "${input}" && pwd)"

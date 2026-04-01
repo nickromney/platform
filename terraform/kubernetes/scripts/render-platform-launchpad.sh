@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STACK_DIR="${STACK_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 INVENTORY_FILE="${INVENTORY_FILE:-${STACK_DIR}/config/platform-launchpad.apps.json}"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 
 MARKER_START="codex:platform-launchpad:start"
 MARKER_END="codex:platform-launchpad:end"
@@ -30,6 +32,7 @@ Environment variables:
   ENABLE_APP_REPO_SENTIMENT
   ENABLE_APP_REPO_SUBNETCALC
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 is_true() {
@@ -40,16 +43,18 @@ is_true() {
 }
 
 parse_args() {
+  shell_cli_init_standard_flags
   while [[ $# -gt 0 ]]; do
+    if shell_cli_handle_standard_flag usage "$1"; then
+      shift
+      continue
+    fi
+
     case "$1" in
       --target)
         [[ $# -ge 2 ]] || { echo "missing value for --target" >&2; exit 1; }
         TARGETS+=("$2")
         shift 2
-        ;;
-      -h|--help)
-        usage
-        exit 0
         ;;
       *)
         echo "unknown flag: $1" >&2
@@ -217,6 +222,11 @@ replace_marked_section() {
 
 main() {
   parse_args "$@"
+
+  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would render the Platform Launchpad dashboard into ${#TARGETS[@]} target file(s)"
+    exit 0
+  fi
 
   if [[ ! -f "${INVENTORY_FILE}" ]]; then
     echo "inventory file not found: ${INVENTORY_FILE}" >&2

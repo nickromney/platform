@@ -25,28 +25,28 @@ test: ## Run the default app smoke checks
 trivy: trivy-scan ## Alias for trivy-scan
 
 trivy-prereqs: ## Check Trivy runner and local prerequisites
-	@"$(TRIVY_SCAN_SCRIPT)" prereqs
+	@"$(TRIVY_SCAN_SCRIPT)" --mode prereqs --execute
 
 trivy-scan-fs: ## Scan local apps/ source trees for vulnerabilities, misconfigurations, and secrets
-	@"$(TRIVY_SCAN_SCRIPT)" fs
+	@"$(TRIVY_SCAN_SCRIPT)" --mode fs --execute
 
 trivy-scan-images: ## Build and scan the canonical workload images used by the Kubernetes demos
-	@"$(TRIVY_SCAN_SCRIPT)" images
+	@"$(TRIVY_SCAN_SCRIPT)" --mode images --execute
 
 trivy-scan-gitea: ## Scan the seeded Gitea app repos instead of only local apps/
-	@SCAN_GITEA=1 "$(TRIVY_SCAN_SCRIPT)" gitea
+	@SCAN_GITEA=1 "$(TRIVY_SCAN_SCRIPT)" --mode gitea --execute
 
 trivy-scan: ## Scan local apps/ source trees and the canonical workload images
-	@"$(TRIVY_SCAN_SCRIPT)" all
+	@"$(TRIVY_SCAN_SCRIPT)" --mode all --execute
 
 trivy-scan-all: ## Scan local apps/, workload images, and the optional in-cluster Gitea mirrors
-	@SCAN_GITEA=1 "$(TRIVY_SCAN_SCRIPT)" all
+	@SCAN_GITEA=1 "$(TRIVY_SCAN_SCRIPT)" --mode all --execute
 
 ##@ Smoke
 compose-smoke: compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for both apps
 
 compose-smoke-sentiment: ## Run the lightweight sentiment compose smoke check
-	@./sentiment/tests/compose-smoke.sh
+	@./sentiment/tests/compose-smoke.sh --execute
 
 compose-smoke-subnetcalc: ## Run the lightweight subnet-calculator compose smoke check
-	@./subnet-calculator/tests/compose-smoke.sh
+	@./subnet-calculator/tests/compose-smoke.sh --execute

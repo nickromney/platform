@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: hubble-observe-cilium-policies.sh [options]
@@ -156,6 +160,7 @@ Examples:
     --since 30s \
     --iterations 1
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 fail() {
@@ -2596,7 +2601,14 @@ SELECTOR_CACHE_KEY_VALUE=""
 SELECTOR_CACHE_VALUE_VALUE=""
 SELECTOR_CACHE_ERROR_VALUE=""
 
+shell_cli_init_standard_flags
+
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --capture-strategy)
       capture_strategy="${2:-}"
@@ -2682,19 +2694,15 @@ while [[ $# -gt 0 ]]; do
       print_command=1
       shift
       ;;
-    --dry-run)
-      dry_run=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       fail "unknown argument: $1"
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  dry_run=1
+fi
 
 case "${capture_strategy}" in
   since|last|adaptive) ;;
@@ -2736,6 +2744,11 @@ fi
 
 if [[ "${promote_to_module}" -eq 1 && -z "${module_root}" ]]; then
   module_root="${DEFAULT_MODULE_ROOT}"
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would observe Hubble flows and generate candidate Cilium policies"
+  exit 0
 fi
 
 require_cmd jq

@@ -1029,6 +1029,7 @@ data "external" "gitea_ssh_public_keys_cluster" {
   depends_on = [
     kubectl_manifest.argocd_app_gitea,
     local_sensitive_file.kubeconfig,
+    null_resource.sync_gitea_policies_repo,
   ]
 }
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
@@ -10,6 +13,19 @@ ok() { echo "${GREEN}✔${NC} $*"; }
 warn() { echo "${YELLOW}⚠${NC} $*"; }
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
 progress() { printf '... %s\n' "$*" >&2; }
+
+usage() {
+  cat <<EOF
+Usage: check-provider-version.sh [--dry-run] [--execute]
+
+Checks the locked Terraform provider versions against the latest upstream
+registry releases.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would compare locked Terraform providers against the latest upstream releases" "$@"
 
 require() {
   local bin="$1"

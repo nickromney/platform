@@ -26,6 +26,11 @@ This README covers the Docker-backed teaching path for the repo.
 - `make reset` is destructive local cleanup. Without `AUTO_APPROVE=1`, it should prompt before removing cluster, kubeconfig, or local state.
 - The repo-owned kubeconfig stays at `~/.kube/kind-kind-local.yaml` by default. Use `kubie` to work across split kubeconfigs, and only run `make merge-default-kubeconfig` if you intentionally want this context copied into `~/.kube/config`.
 - Stage `900` is the confidence path when you drive it through `make`. On the host, a successful `make kind apply 900` also runs `check-health` and `check-sso-e2e` before returning success. In the devcontainer, the stage-900 apply path stops at `check-health`; browser E2E remains host-oriented. Raw Terragrunt/OpenTofu applies remain apply-only.
+- Stage-first positional Make syntax remains supported, for example
+  `make 100 apply` and `make kind 100 apply`.
+- Read-only Make targets now pass `--execute` to the underlying scripts
+  explicitly. Set `DRY_RUN=1` on those targets to flip the underlying script
+  call to `--dry-run` without changing the Make target shape.
 
 ## Prerequisites
 
@@ -71,13 +76,16 @@ Why these tools exist, what `make prereqs` checks, and the extra host-side LLM r
 Run from `platform/kubernetes/kind`:
 
 ```bash
-make kind plan 100
-make kind apply 100 AUTO_APPROVE=1
-make kind apply 900 AUTO_APPROVE=1
+make 100 plan
+make 100 apply AUTO_APPROVE=1
+make 900 apply AUTO_APPROVE=1
+make 900 check-health
+make 900 check-health DRY_RUN=1
 make reset AUTO_APPROVE=1
 ```
 
-If you prefer to stay at repo root, use `make -C kubernetes/kind ...`.
+If you prefer to stay at repo root, use `make -C kubernetes/kind ...`. The old
+target-prefixed compatibility form, such as `make kind 100 apply`, still works.
 
 This wrapper drives the Terraform stack in `../../terraform/kubernetes` using the kind target profile in `targets/kind.tfvars`.
 

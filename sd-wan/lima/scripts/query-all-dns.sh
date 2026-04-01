@@ -2,6 +2,23 @@
 # Run DNS queries from host machine against all DNS servers
 # Uses the exposed ports on localhost
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/../../.." && pwd)
+
+. "${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Run host-side DNS queries against every exposed SD-WAN DNS port.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run host-side DNS queries against the SD-WAN lab" "$@"
+
 echo "=============================================="
 echo "  DNS Query from Host Machine"
 echo "=============================================="

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: hubble-summarise-flows.sh [options]
@@ -65,6 +69,7 @@ Examples:
     --from-namespace dev --to-namespace kube-system \
     | ./hubble-summarise-flows.sh --report dns --aggregate-by pod
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 fail() {
@@ -150,7 +155,14 @@ top_n="50"
 declare -a namespaces=()
 declare -a verdicts=()
 
+shell_cli_init_standard_flags
+
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     -i|--input)
       input_path="${2:-}"
@@ -192,15 +204,16 @@ while [[ $# -gt 0 ]]; do
       top_n="${2:-}"
       shift 2
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       fail "unknown argument: $1"
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would summarise Hubble flows from ${input_path} with report=${report}, aggregate-by=${aggregate_by}, format=${format}"
+  exit 0
+fi
 
 case "${report}" in
   edges|world|dns|drops) ;;

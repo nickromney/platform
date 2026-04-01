@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 
 cache_push_host="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 container_name="${CACHE_CONTAINER_NAME:-slicer-image-cache}"
 port="${cache_push_host##*:}"
+
+usage() {
+  cat <<EOF
+Usage: ensure-image-cache.sh [--dry-run] [--execute]
+
+Ensures the Slicer-local image cache container exists and is reachable.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would ensure the Slicer image cache ${container_name} is reachable on ${cache_push_host}" "$@"
 
 command -v curl >/dev/null 2>&1 || fail "curl not found in PATH"
 command -v docker >/dev/null 2>&1 || fail "docker not found in PATH"

@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
 
-DRY_RUN=0
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+usage() {
+  cat <<EOF
+Usage: sync-gitea-policies.sh [--dry-run] [--execute]
+
+Render the policies repository content for the current stack inputs and push it
+to the configured Gitea repository.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would render and sync the policies repository into Gitea" "$@"
 
 : "${STACK_DIR:?STACK_DIR is required}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
@@ -117,17 +131,7 @@ cleanup_tmp() {
 }
 
 parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --dry-run)
-        DRY_RUN=1
-        ;;
-      *)
-        fail "unknown flag: $1"
-        ;;
-    esac
-    shift
-  done
+  :
 }
 
 wait_for_gitea() {
@@ -1496,11 +1500,6 @@ main() {
   cleanup_tmp || true
   tmp="$(mktemp -d)"
   rendered_dir="$(render_repo "${tmp}")"
-
-  if [[ "${DRY_RUN}" -eq 1 ]]; then
-    show_dry_run_diff "${rendered_dir}"
-    return 0
-  fi
 
   if ! push_rendered_repo "${rendered_dir}"; then
     fail "git push failed"

@@ -2,6 +2,25 @@
 # Common provisioning for all Lima VMs
 # Installs shared packages and sets up base networking
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Run the shared guest provisioning steps for every SD-WAN Lima VM.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run shared SD-WAN Lima guest provisioning steps" "$@"
+
 if [ "${TRACE_PROVISIONING:-0}" = "1" ]; then
     set -x
 fi

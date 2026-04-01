@@ -57,42 +57,42 @@ setup() {
   cat >"${lint_yaml_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'yaml\n' >>"${log_file}"
+printf 'yaml %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_yaml_stub}"
 
   cat >"${lint_cilium_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'cilium %s\n' "\${1:-}" >>"${log_file}"
+printf 'cilium %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_cilium_stub}"
 
   cat >"${lint_markdown_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'markdown\n' >>"${log_file}"
+printf 'markdown %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_markdown_stub}"
 
   cat >"${lint_bash32_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'bash32\n' >>"${log_file}"
+printf 'bash32 %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_bash32_stub}"
 
   cat >"${lint_shell_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'shell-audit\n' >>"${log_file}"
+printf 'shell-audit %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_shell_stub}"
 
   cat >"${lint_kyverno_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'kyverno %s\n' "\${1:-}" >>"${log_file}"
+printf 'kyverno %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${lint_kyverno_stub}"
 
@@ -109,7 +109,7 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'yaml\nmarkdown\nbash32\nshell-audit\ncilium static\nkyverno static' ]
+  [ "${output}" = $'yaml --execute\nmarkdown --execute\nbash32 --execute\nshell-audit --execute\ncilium --mode static --execute\nkyverno --mode static --execute' ]
 }
 
 @test "root fmt delegates to the repo formatter scripts" {
@@ -119,7 +119,7 @@ EOF
   cat >"${fmt_markdown_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'fmt-markdown\n' >>"${log_file}"
+printf 'fmt-markdown %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${fmt_markdown_stub}"
 
@@ -131,5 +131,5 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'fmt-markdown' ]
+  [ "${output}" = $'fmt-markdown --execute' ]
 }

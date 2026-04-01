@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: show-policy-composition.sh [options]
@@ -37,6 +40,7 @@ Examples:
   show-policy-composition.sh --target cilium --namespace uat --label deny --ingress
   show-policy-composition.sh --target kyverno --format text
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 TARGET="all"
@@ -57,7 +61,13 @@ set_direction() {
   DIRECTION="${requested}"
 }
 
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --target)
       TARGET="${2:-}"
@@ -87,10 +97,6 @@ while [[ $# -gt 0 ]]; do
       set_direction "egress"
       shift
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       echo "show-policy-composition: unknown argument: $1" >&2
       usage >&2
@@ -98,6 +104,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would render the checked-in cluster policy composition view"
+  exit 0
+fi
 
 case "${TARGET}" in
   all|cilium|kyverno) ;;

@@ -3,6 +3,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${APP_DIR}/../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: compose-smoke.sh [--dry-run] [--execute]
+
+Run the lightweight subnet-calculator compose smoke test against the local stack.
+
+$(shell_cli_standard_options)
+EOF
+}
 
 compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
@@ -38,6 +52,8 @@ cleanup() {
   compose_cmd down --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+shell_cli_handle_standard_no_args usage "would run the subnet-calculator compose smoke workflow" "$@"
 
 compose_cmd down --remove-orphans >/dev/null 2>&1 || true
 compose_cmd up -d --build api-fastapi-container-app frontend-typescript-vite

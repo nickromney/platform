@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: update-subnetcalc-image-tags.sh [--dry-run] [--execute]
+
+Clones the policies repo, rewrites subnet calculator workload image tags, and
+pushes the updated manifests back to the configured branch.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would update subnet calculator manifest image tags in the configured policies repository" "$@"
+
 : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required (e.g. http://gitea-http.gitea.svc.cluster.local:3000)}"
 : "${GITEA_REPO_OWNER:?GITEA_REPO_OWNER is required}"
 : "${REGISTRY_HOST:?REGISTRY_HOST is required}"

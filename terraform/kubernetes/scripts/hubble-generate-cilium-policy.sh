@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'EOF'
 Usage: hubble-generate-cilium-policy.sh [options]
@@ -84,6 +88,7 @@ Examples:
     | ./hubble-summarise-flows.sh --report edges --aggregate-by workload --direction egress --format tsv \
     | ./hubble-generate-cilium-policy.sh --category observability
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 fail() {
@@ -390,7 +395,14 @@ SELECTOR_CACHE_KEY_VALUE=""
 SELECTOR_CACHE_VALUE_VALUE=""
 SELECTOR_CACHE_ERROR_VALUE=""
 
+shell_cli_init_standard_flags
+
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     -i|--input)
       input_path="${2:-}"
@@ -420,15 +432,16 @@ while [[ $# -gt 0 ]]; do
       kube_context="${2:-}"
       shift 2
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       fail "unknown argument: $1"
       ;;
   esac
 done
+
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would generate draft Cilium module policy manifests from ${input_path}"
+  exit 0
+fi
 
 require_cmd jq
 require_cmd kubectl
@@ -436,7 +449,6 @@ require_cmd sort
 require_cmd cut
 require_cmd sed
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 RENDER_SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/render-cilium-policy-values.sh"
 MODULE_ROOT_DEFAULT="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module"

@@ -66,6 +66,13 @@ setup() {
   [[ "${output}" == *"check-security.sh"* ]]
 }
 
+@test "kind keeps the target-prefixed positional workflow syntax" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" kind 100 apply
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'make plan STAGE="100"'* ]]
+}
+
 @test "kind check-health forwards PLATFORM_TFVARS to the health script" {
   run grep -Fn 'if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
@@ -77,10 +84,39 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "kind check-health forwards explicit read-only mode flags" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-cluster-health.sh" --execute '* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
+}
+
+@test "check-cluster-health accepts repeated --var-file flags in dry-run mode" {
+  override_tfvars="${BATS_TEST_TMPDIR}/override.tfvars"
+  missing_env="${BATS_TEST_TMPDIR}/missing.env"
+  : >"${override_tfvars}"
+
+  run env PATH="/usr/bin:/bin" PLATFORM_ENV_FILE="${missing_env}" \
+    "${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh" \
+    --dry-run \
+    --show-urls \
+    --var-file "${override_tfvars}" \
+    --var-file "${REPO_ROOT}/kubernetes/kind/targets/kind.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"INFO dry-run: would run stack-aware cluster health diagnostics"* ]]
+}
+
 @test "kind check-security forwards PLATFORM_TFVARS to the security script" {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" 900 check-security PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-security.sh" --execute '* ]]
   [[ "${output}" == *'if [ -n "${PLATFORM_TFVARS:-}" ] && [ -f "${PLATFORM_TFVARS}" ]; then '* ]]
   [[ "${output}" == *'vf="$vf --var-file ${PLATFORM_TFVARS}"; '* ]]
 }
@@ -295,7 +331,7 @@ EOF
 }
 
 @test "kind reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
-  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" prepare-for-reset' \
+  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

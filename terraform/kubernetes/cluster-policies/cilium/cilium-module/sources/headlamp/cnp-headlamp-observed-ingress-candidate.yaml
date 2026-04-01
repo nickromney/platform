@@ -1,0 +1,29 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-headlamp-observed-ingress-candidate
+  namespace: headlamp
+  annotations:
+    "policies.cilium.io/title": "Headlamp observed ingress candidate"
+    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
+    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"
+    "platform.publiccloudexperiments.net/hubble-policy-direction": "ingress"
+    "platform.publiccloudexperiments.net/hubble-policy-mode": "workload"
+    "platform.publiccloudexperiments.net/hubble-policy-row-count": "1"
+    "platform.publiccloudexperiments.net/hubble-policy-since": "5m"
+    "platform.publiccloudexperiments.net/hubble-policy-iterations": "3"
+    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "flows"
+specs:
+  - description: >-
+      Observed ingress traffic from headlamp/headlamp
+    endpointSelector:
+      matchLabels:
+        "k8s:io.kubernetes.pod.namespace": "headlamp"
+        "k8s:app.kubernetes.io/name": "headlamp"
+    ingress:
+      - fromEntities:
+          - host
+        toPorts:
+          - ports:
+              - port: "4466"
+                protocol: TCP

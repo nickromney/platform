@@ -73,10 +73,10 @@ uv run pytest -v
 ```bash
 # Start Azure Function in foreground or use compose
 # Smoke test (5 key endpoints, runs in ~5 sec)
-USE_CURL=1 ./test_endpoints.sh http://localhost:8080/api
+USE_CURL=1 ./test_endpoints.sh --base-url http://localhost:8080/api --execute
 
 # Detailed test (all 17 endpoints, runs in ~10 sec)
-USE_CURL=1 ./test_endpoints.sh --detailed http://localhost:8080/api
+USE_CURL=1 ./test_endpoints.sh --detailed --base-url http://localhost:8080/api --execute
 ```
 
 **What is tested:**
@@ -104,13 +104,13 @@ uv run pytest -v
 
 ```bash
 # Smoke test (6 key endpoints)
-./test_endpoints.sh
+./test_endpoints.sh --execute
 
 # Detailed test (all 18 endpoints)
-./test_endpoints.sh --detailed
+./test_endpoints.sh --detailed --execute
 
 # Test remote deployment
-./test_endpoints.sh --detailed https://your-api.example.com/api
+./test_endpoints.sh --detailed --base-url https://your-api.example.com/api --execute
 ```
 
 **Authentication:** Automatically obtains JWT token using `demo:demo-password`
@@ -571,7 +571,7 @@ podman-compose restart
 
 1. **Run smoke tests frequently**
 
-- `./test_endpoints.sh` (5 endpoints, ~5 sec)
+- `./test_endpoints.sh --execute` (5 endpoints, ~5 sec)
 - Quick verification before detailed tests
 
 1. **Use make targets for consistency**

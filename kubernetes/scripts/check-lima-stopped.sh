@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+
 lima_instance_prefix="${LIMA_INSTANCE_PREFIX:-k3s-node}"
 running_lima_vms=""
 running_lima_proxies=""
+
+usage() {
+  cat <<EOF
+Usage: check-lima-stopped.sh [--dry-run] [--execute]
+
+Checks whether Lima VMs or host proxy containers are still running and exits
+non-zero when they would conflict with another local runtime.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would check whether Lima VMs or proxies are still running" "$@"
 
 if command -v limactl >/dev/null 2>&1; then
   running_lima_vms="$(

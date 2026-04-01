@@ -6,6 +6,11 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TRIVY_RUNNER="${SCRIPT_DIR}/trivy-run.sh"
 REPORT_ROOT="${TRIVY_REPORT_ROOT:-${REPO_ROOT}/.run/apps-security/trivy}"
 CLONE_ROOT="${REPORT_ROOT}/gitea-clones"
+mode="all"
+dry_run=0
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"
@@ -29,8 +34,6 @@ TRIVY_SKIP_DIRS=(
   test-results
   playwright-report
 )
-
-mode="${1:-all}"
 
 SOURCE_TARGETS=(
   "apps/sentiment"
@@ -750,12 +753,18 @@ print_final_status() {
 
 usage() {
   cat <<'EOF'
-Usage: trivy-scan-apps.sh [prereqs|fs|images|gitea|all]
+Usage: trivy-scan-apps.sh [--mode prereqs|fs|images|gitea|all] [--dry-run] [--execute]
 
 Environment:
   SCAN_GITEA=1            Also clone and scan the seeded private app repos from Gitea.
   TRIVY_SEVERITY=...      Severity filter passed to Trivy (default: HIGH,CRITICAL).
   TRIVY_IGNORE_UNFIXED=1  Ignore unfixed vulnerabilities (default: enabled).
+
+Options:
+  --mode MODE  Select the Trivy scan mode
+  --dry-run    Show the selected scan mode and exit before side effects
+  --execute    Execute the scan (preferred explicit form for query workflows)
+  -h, --help   Show this message
 EOF
 }
 
@@ -817,4 +826,40 @@ main() {
   esac
 }
 
-main "$@"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      shift
+      [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--mode" >&2; exit 1; }
+      mode="$1"
+      ;;
+    --dry-run)
+      dry_run=1
+      ;;
+    --execute)
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 2
+      ;;
+    *)
+      mode="$1"
+      ;;
+  esac
+  shift
+done
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would run Trivy app scan in ${mode} mode"
+  exit 0
+fi
+
+main

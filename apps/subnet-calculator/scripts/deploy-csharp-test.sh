@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: deploy-csharp-test.sh [--dry-run] [--execute]
+
+Builds and deploys the experimental C# Function App and Web App test payloads.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would build and deploy the experimental C# test apps" "$@"
+
 FUNC_NAME="${FUNC_NAME:-func-csharp-test-f6fe93}"
 WEB_NAME="${WEB_NAME:-web-csharp-test-f6fe93}"
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-subnet-calc}"

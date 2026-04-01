@@ -4,8 +4,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 DEFAULT_STAGE_TFVARS="${REPO_ROOT}/kubernetes/kind/stages/900-sso.tfvars"
 STAGE_TFVARS="${STAGE_TFVARS:-}"
+
+usage() {
+  cat <<EOF
+Usage: run.sh [--dry-run] [--execute]
+
+Runs the Kubernetes SSO Playwright end-to-end test suite with stage-derived
+feature toggles.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the Kubernetes SSO end-to-end test suite" "$@"
 
 if [ -z "${STAGE_TFVARS}" ] && [ -f "${DEFAULT_STAGE_TFVARS}" ]; then
   STAGE_TFVARS="${DEFAULT_STAGE_TFVARS}"

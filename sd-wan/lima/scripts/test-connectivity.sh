@@ -2,6 +2,23 @@
 # Connectivity Test - Works within Docker networking constraints
 # Demonstrates DNS-based SD-WAN simulation
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/../../.." && pwd)
+
+. "${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--dry-run] [--execute]
+
+Run the container-side SD-WAN DNS/connectivity demonstration.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would run the container-side SD-WAN connectivity demonstration" "$@"
+
 apk add --no-cache bind-tools >/dev/null 2>&1
 
 echo "=============================================="

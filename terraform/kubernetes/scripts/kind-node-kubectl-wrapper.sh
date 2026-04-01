@@ -8,11 +8,41 @@ RETRY_DELAY_SECONDS="${KIND_KUBECTL_RETRY_DELAY_SECONDS:-2}"
 stdin_file=""
 stdout_file=""
 stderr_file=""
+WRAPPER_DRY_RUN=0
+
+script_name() {
+  basename "$0"
+}
+
+print_standard_options() {
+  cat <<'EOF'
+Options:
+  --dry-run  Show a summary and exit before side effects
+  --execute  Execute the script body (preferred explicit form for read-only/test/query scripts)
+  -h, --help Show this message
+EOF
+}
+
+usage() {
+  cat <<EOF
+Usage: $(script_name) [--dry-run] [--execute] [--] [kubectl args...]
+
+Retry kubectl calls during kind API startup races.
+
+Environment variables:
+  KIND_REAL_KUBECTL
+  KIND_KUBECTL_RETRY_ATTEMPTS
+  KIND_KUBECTL_RETRY_DELAY_SECONDS
+
+$(print_standard_options)
+EOF
+}
 
 cleanup() {
   [ -n "${stdin_file}" ] && [ -f "${stdin_file}" ] && rm -f "${stdin_file}"
   [ -n "${stdout_file}" ] && [ -f "${stdout_file}" ] && rm -f "${stdout_file}"
   [ -n "${stderr_file}" ] && [ -f "${stderr_file}" ] && rm -f "${stderr_file}"
+  return 0
 }
 
 is_retryable_error() {
@@ -33,6 +63,40 @@ run_kubectl() {
 }
 
 trap cleanup EXIT INT TERM
+
+# This wrapper is mounted into kind nodes as /usr/local/bin/kubectl, so it must
+# remain self-contained and avoid depending on repo-relative helper paths.
+if [ "$(script_name)" != "kubectl" ]; then
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --dry-run)
+        WRAPPER_DRY_RUN=1
+        shift
+        continue
+        ;;
+      --execute)
+        shift
+        continue
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+fi
+
+if [ "${WRAPPER_DRY_RUN}" = "1" ]; then
+  printf 'INFO dry-run: would run kubectl through the kind startup retry wrapper\n'
+  exit 0
+fi
 
 if [ ! -x "${REAL_KUBECTL}" ]; then
   echo "kind node kubectl wrapper: real kubectl not found at ${REAL_KUBECTL}" >&2

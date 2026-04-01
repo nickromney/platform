@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
 POLICY_ROOT="${KYVERNO_POLICY_ROOT:-${REPO_ROOT}/terraform/kubernetes/cluster-policies/kyverno}"
 TEST_ROOT="${KYVERNO_TEST_ROOT:-${POLICY_ROOT}}"
 INSTALL_HINTS_SCRIPT="${INSTALL_HINTS_SCRIPT:-${REPO_ROOT}/scripts/install-tool-hints.sh}"
@@ -10,11 +14,12 @@ KUBECTL_BIN="${KUBECTL_BIN:-kubectl}"
 KYVERNO_BIN="${KYVERNO_BIN:-kyverno}"
 LIVE_VALIDATION_TMP_KUBECONFIG=""
 LIVE_VALIDATION_TMP_POLICIES=""
-mode="${1:-static}"
+mode="static"
+dry_run=0
 
 usage() {
   cat <<'EOF'
-Usage: validate-kyverno-policies.sh [static|live]
+Usage: validate-kyverno-policies.sh [--mode static|live] [--dry-run] [--execute]
 
 static
     Render the repo's checked-in Kyverno kustomize overlays and execute the
@@ -23,6 +28,12 @@ static
 live
     Render the repo's checked-in Kyverno policies and evaluate them against the
     current kubeconfig context with kyverno apply --cluster --policy-report.
+
+Options:
+  --mode MODE  Validation mode: static or live
+  --dry-run    Show the selected validation mode and exit before side effects
+  --execute    Execute the validation (preferred explicit form for query workflows)
+  -h, --help   Show this message
 EOF
 }
 
@@ -132,6 +143,42 @@ run_live_validation() {
   cleanup_live_validation
   trap - EXIT
 }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      shift
+      [[ $# -gt 0 ]] || { shell_cli_missing_value "$(shell_cli_script_name)" "--mode" >&2; exit 1; }
+      mode="$1"
+      ;;
+    --dry-run)
+      dry_run=1
+      ;;
+    --execute)
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+    *)
+      mode="$1"
+      ;;
+  esac
+  shift
+done
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  shell_cli_print_dry_run_summary "would run Kyverno policy validation in ${mode} mode"
+  exit 0
+fi
 
 case "${mode}" in
   static)

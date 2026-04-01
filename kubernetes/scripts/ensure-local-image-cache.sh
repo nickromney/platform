@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+
 fail() {
   echo "ensure-local-image-cache: $*" >&2
   exit 1
@@ -14,6 +18,18 @@ cache_push_host="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 cache_container_name="${CACHE_CONTAINER_NAME:-platform-local-image-cache}"
 cache_container_image="${CACHE_CONTAINER_IMAGE:-registry:2}"
 port="${cache_push_host##*:}"
+
+usage() {
+  cat <<EOF
+Usage: ensure-local-image-cache.sh [--dry-run] [--execute]
+
+Ensures the local Docker registry cache container exists and is reachable.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would ensure the local image cache ${cache_container_name} is reachable on ${cache_push_host}" "$@"
 
 command -v curl >/dev/null 2>&1 || fail "curl not found in PATH"
 command -v docker >/dev/null 2>&1 || fail "docker not found in PATH"

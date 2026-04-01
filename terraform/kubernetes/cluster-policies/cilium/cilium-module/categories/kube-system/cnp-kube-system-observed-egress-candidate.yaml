@@ -1,0 +1,26 @@
+metadata:
+  name: cnp-kube-system-observed-egress-candidate
+  namespace: kube-system
+  annotations:
+    policies.cilium.io/title: Kube System observed egress candidate
+    platform.publiccloudexperiments.net/source-kind: CiliumNetworkPolicy
+    platform.publiccloudexperiments.net/hubble-policy-candidate: "true"
+    platform.publiccloudexperiments.net/hubble-policy-direction: egress
+    platform.publiccloudexperiments.net/hubble-policy-mode: workload
+    platform.publiccloudexperiments.net/hubble-policy-row-count: "16"
+    platform.publiccloudexperiments.net/hubble-policy-since: 5m
+    platform.publiccloudexperiments.net/hubble-policy-iterations: "3"
+    platform.publiccloudexperiments.net/hubble-policy-capture-mode: flows
+specs:
+  - description: Observed egress traffic from kube-system/kube-dns
+    endpointSelector:
+      matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s:k8s-app: kube-dns
+    egress:
+      - toCIDRSet:
+          - cidr: 192.168.65.254/32
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: UDP

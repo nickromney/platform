@@ -2,4 +2,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "${SCRIPT_DIR}/../../render-category.sh" "${SCRIPT_DIR}"
+exec "${SCRIPT_DIR}/../../render-category.sh" --input "${SCRIPT_DIR}" "$@"
