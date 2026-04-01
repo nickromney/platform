@@ -11,6 +11,8 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"This root Makefile is primarily informational."* ]]
   [[ "${output}" == *"make lint"* ]]
+  [[ "${output}" == *"make lint-bash32"* ]]
+  [[ "${output}" == *"make lint-shell"* ]]
   [[ "${output}" == *"make fmt"* ]]
   [[ "${output}" == *"make lint-cilium-live"* ]]
   [[ "${output}" == *"make lint-kyverno-live"* ]]
@@ -46,6 +48,8 @@ setup() {
 @test "root lint delegates to the repo validation scripts" {
   lint_yaml_stub="${BATS_TEST_TMPDIR}/lint-yaml.sh"
   lint_markdown_stub="${BATS_TEST_TMPDIR}/lint-markdown.sh"
+  lint_bash32_stub="${BATS_TEST_TMPDIR}/lint-bash32.sh"
+  lint_shell_stub="${BATS_TEST_TMPDIR}/lint-shell.sh"
   lint_cilium_stub="${BATS_TEST_TMPDIR}/lint-cilium.sh"
   lint_kyverno_stub="${BATS_TEST_TMPDIR}/lint-kyverno.sh"
   log_file="${BATS_TEST_TMPDIR}/lint.log"
@@ -71,6 +75,20 @@ printf 'markdown\n' >>"${log_file}"
 EOF
   chmod +x "${lint_markdown_stub}"
 
+  cat >"${lint_bash32_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'bash32\n' >>"${log_file}"
+EOF
+  chmod +x "${lint_bash32_stub}"
+
+  cat >"${lint_shell_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shell-audit\n' >>"${log_file}"
+EOF
+  chmod +x "${lint_shell_stub}"
+
   cat >"${lint_kyverno_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -81,6 +99,8 @@ EOF
   run make -C "${REPO_ROOT}" lint \
     LINT_YAML_SCRIPT="${lint_yaml_stub}" \
     LINT_MARKDOWN_SCRIPT="${lint_markdown_stub}" \
+    LINT_BASH32_SCRIPT="${lint_bash32_stub}" \
+    AUDIT_SHELL_SCRIPTS_SCRIPT="${lint_shell_stub}" \
     VALIDATE_CILIUM_POLICIES_SCRIPT="${lint_cilium_stub}" \
     VALIDATE_KYVERNO_POLICIES_SCRIPT="${lint_kyverno_stub}"
 
@@ -89,7 +109,7 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'yaml\nmarkdown\ncilium static\nkyverno static' ]
+  [ "${output}" = $'yaml\nmarkdown\nbash32\nshell-audit\ncilium static\nkyverno static' ]
 }
 
 @test "root fmt delegates to the repo formatter scripts" {

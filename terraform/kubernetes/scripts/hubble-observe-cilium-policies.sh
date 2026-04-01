@@ -171,11 +171,11 @@ warn_once() {
   local cache_key="$1"
   shift
 
-  if [[ -n "${WARNED_MESSAGES[${cache_key}]+x}" ]]; then
+  if [[ -n "${WARNED_MESSAGES_FILE}" ]] && grep -Fqx -- "${cache_key}" "${WARNED_MESSAGES_FILE}" 2>/dev/null; then
     return 0
   fi
 
-  WARNED_MESSAGES["${cache_key}"]=1
+  printf '%s\n' "${cache_key}" >> "${WARNED_MESSAGES_FILE}"
   warn "$@"
 }
 
@@ -298,7 +298,7 @@ ensure_selector_resolution_access() {
   local namespace="$1"
   local resource=""
 
-  if [[ -n "${SELECTOR_ACCESS_CHECKED[${namespace}]+x}" ]]; then
+  if [[ -n "${SELECTOR_ACCESS_CHECKED_FILE}" ]] && grep -Fqx -- "${namespace}" "${SELECTOR_ACCESS_CHECKED_FILE}" 2>/dev/null; then
     return 0
   fi
 
@@ -306,7 +306,7 @@ ensure_selector_resolution_access() {
     require_kubectl_permission "get" "${resource}" "${namespace}" "resolve stable workload selectors"
   done
 
-  SELECTOR_ACCESS_CHECKED["${namespace}"]=1
+  printf '%s\n' "${namespace}" >> "${SELECTOR_ACCESS_CHECKED_FILE}"
 }
 
 sanitize_filename() {
@@ -441,16 +441,27 @@ collect_world_targets() {
   local value=""
   local normalized=""
   local cidr=""
+  local seen=0
+  local existing=""
   local -a dns_names=()
-  local -A seen_names=()
 
   while IFS= read -r value; do
     normalized="$(normalize_dns_name "${value}" 2>/dev/null || true)"
     [[ -n "${normalized}" ]] || continue
-    if [[ -n "${seen_names[${normalized}]+x}" ]]; then
-      continue
+
+    seen=0
+    if [[ "${#dns_names[@]}" -gt 0 ]]; then
+      for existing in "${dns_names[@]}"; do
+        if [[ "${existing}" == "${normalized}" ]]; then
+          seen=1
+          break
+        fi
+      done
+      if [[ "${seen}" -eq 1 ]]; then
+        continue
+      fi
     fi
-    seen_names["${normalized}"]=1
+
     dns_names+=("${normalized}")
   done < <(printf '%s\n' "${world_names}" | tr ',' '\n')
 
@@ -516,9 +527,11 @@ cache_selector_success() {
 
   RESOLVED_SELECTOR_KEY="${selector_key}"
   RESOLVED_SELECTOR_VALUE="${selector_value}"
-  SELECTOR_CACHE_STATUS["${cache_key}"]="ok"
-  SELECTOR_CACHE_KEY["${cache_key}"]="${selector_key}"
-  SELECTOR_CACHE_VALUE["${cache_key}"]="${selector_value}"
+  printf '%s\t%s\t%s\t%s\t\n' \
+    "${cache_key}" \
+    "ok" \
+    "${selector_key}" \
+    "${selector_value}" >> "${SELECTOR_CACHE_FILE}"
 }
 
 cache_selector_error() {
@@ -526,8 +539,36 @@ cache_selector_error() {
   local error_msg="$2"
 
   RESOLVE_ERROR_MSG="${error_msg}"
-  SELECTOR_CACHE_STATUS["${cache_key}"]="error"
-  SELECTOR_CACHE_ERROR["${cache_key}"]="${error_msg}"
+  printf '%s\t%s\t\t\t%s\n' \
+    "${cache_key}" \
+    "error" \
+    "${error_msg}" >> "${SELECTOR_CACHE_FILE}"
+}
+
+load_selector_cache() {
+  local cache_key="$1"
+  local cache_line=""
+
+  cache_line="$(
+    awk -F'\t' -v key="${cache_key}" '
+      $1 == key {
+        status = $2
+        selector_key = $3
+        selector_value = $4
+        error_msg = $5
+        found = 1
+      }
+      END {
+        if (found) {
+          printf "%s\t%s\t%s\t%s\n", status, selector_key, selector_value, error_msg
+        }
+      }
+    ' "${SELECTOR_CACHE_FILE}"
+  )"
+  [[ -n "${cache_line}" ]] || return 1
+
+  IFS=$'\t' read -r SELECTOR_CACHE_STATUS_VALUE SELECTOR_CACHE_KEY_VALUE SELECTOR_CACHE_VALUE_VALUE SELECTOR_CACHE_ERROR_VALUE <<< "${cache_line}"
+  return 0
 }
 
 selector_key_is_unstable() {
@@ -766,14 +807,14 @@ resolve_selector() {
   local rs_json=""
   local candidate=""
 
-  if [[ -n "${SELECTOR_CACHE_STATUS[${cache_key}]+x}" ]]; then
-    if [[ "${SELECTOR_CACHE_STATUS[${cache_key}]}" == "ok" ]]; then
-      RESOLVED_SELECTOR_KEY="${SELECTOR_CACHE_KEY[${cache_key}]}"
-      RESOLVED_SELECTOR_VALUE="${SELECTOR_CACHE_VALUE[${cache_key}]}"
+  if load_selector_cache "${cache_key}"; then
+    if [[ "${SELECTOR_CACHE_STATUS_VALUE}" == "ok" ]]; then
+      RESOLVED_SELECTOR_KEY="${SELECTOR_CACHE_KEY_VALUE}"
+      RESOLVED_SELECTOR_VALUE="${SELECTOR_CACHE_VALUE_VALUE}"
       return 0
     fi
 
-    RESOLVE_ERROR_MSG="${SELECTOR_CACHE_ERROR[${cache_key}]}"
+    RESOLVE_ERROR_MSG="${SELECTOR_CACHE_ERROR_VALUE}"
     return 1
   fi
 
@@ -914,11 +955,13 @@ namespace_is_explicitly_requested() {
   local namespace="$1"
   local value=""
 
-  for value in "${namespaces[@]}"; do
-    if [[ "${value}" == "${namespace}" ]]; then
-      return 0
-    fi
-  done
+  if [[ "${#namespaces[@]}" -gt 0 ]]; then
+    for value in "${namespaces[@]}"; do
+      if [[ "${value}" == "${namespace}" ]]; then
+        return 0
+      fi
+    done
+  fi
 
   return 1
 }
@@ -927,11 +970,13 @@ namespace_is_user_excluded() {
   local namespace="$1"
   local value=""
 
-  for value in "${excluded_namespaces[@]}"; do
-    if [[ "${value}" == "${namespace}" ]]; then
-      return 0
-    fi
-  done
+  if [[ "${#excluded_namespaces[@]}" -gt 0 ]]; then
+    for value in "${excluded_namespaces[@]}"; do
+      if [[ "${value}" == "${namespace}" ]]; then
+        return 0
+      fi
+    done
+  fi
 
   return 1
 }
@@ -940,14 +985,16 @@ namespace_is_default_excluded() {
   local namespace="$1"
   local value=""
 
-  for value in "${DEFAULT_EXCLUDED_NAMESPACES[@]}"; do
-    if [[ "${value}" == "${namespace}" ]]; then
-      if namespace_is_explicitly_requested "${namespace}"; then
-        return 1
+  if [[ "${#DEFAULT_EXCLUDED_NAMESPACES[@]}" -gt 0 ]]; then
+    for value in "${DEFAULT_EXCLUDED_NAMESPACES[@]}"; do
+      if [[ "${value}" == "${namespace}" ]]; then
+        if namespace_is_explicitly_requested "${namespace}"; then
+          return 1
+        fi
+        return 0
       fi
-      return 0
-    fi
-  done
+    done
+  fi
 
   return 1
 }
@@ -1033,9 +1080,15 @@ filter_edge_summary_excluded_peers() {
   local user_excluded_csv=""
   local default_excluded_csv=""
 
-  explicit_csv="$(join_csv "${namespaces[@]}")"
-  user_excluded_csv="$(join_csv "${excluded_namespaces[@]}")"
-  default_excluded_csv="$(join_csv "${DEFAULT_EXCLUDED_NAMESPACES[@]}")"
+  if [[ "${#namespaces[@]}" -gt 0 ]]; then
+    explicit_csv="$(join_csv "${namespaces[@]}")"
+  fi
+  if [[ "${#excluded_namespaces[@]}" -gt 0 ]]; then
+    user_excluded_csv="$(join_csv "${excluded_namespaces[@]}")"
+  fi
+  if [[ "${#DEFAULT_EXCLUDED_NAMESPACES[@]}" -gt 0 ]]; then
+    default_excluded_csv="$(join_csv "${DEFAULT_EXCLUDED_NAMESPACES[@]}")"
+  fi
 
   awk -F'\t' \
     -v OFS='\t' \
@@ -2522,12 +2575,6 @@ DEFAULT_MODULE_ROOT="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/c
 declare -a namespaces=()
 declare -a excluded_namespaces=()
 declare -a DEFAULT_EXCLUDED_NAMESPACES=()
-declare -A SELECTOR_ACCESS_CHECKED=()
-declare -A SELECTOR_CACHE_STATUS=()
-declare -A SELECTOR_CACHE_KEY=()
-declare -A SELECTOR_CACHE_VALUE=()
-declare -A SELECTOR_CACHE_ERROR=()
-declare -A WARNED_MESSAGES=()
 LAST_POLICY_USABLE_ROWS=0
 PROMOTION_ERROR_MSG=""
 NAMESPACES_SCANNED=0
@@ -2541,6 +2588,13 @@ SHARED_HUBBLE_RELAY_LOG=""
 SHARED_HUBBLE_SERVICE_PORT=""
 CAPTURE_STRATEGY_USED=""
 CAPTURE_FALLBACK_USED="0"
+SELECTOR_ACCESS_CHECKED_FILE=""
+SELECTOR_CACHE_FILE=""
+WARNED_MESSAGES_FILE=""
+SELECTOR_CACHE_STATUS_VALUE=""
+SELECTOR_CACHE_KEY_VALUE=""
+SELECTOR_CACHE_VALUE_VALUE=""
+SELECTOR_CACHE_ERROR_VALUE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -2717,8 +2771,11 @@ REPORT_ROWS_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-report-rows.XXXXXX")"
 NAMESPACE_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-namespaces.XXXXXX")"
 HOST_IP_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-host-ips.XXXXXX")"
 PROMOTION_ERRORS_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-promotion-errors.XXXXXX")"
+SELECTOR_ACCESS_CHECKED_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-selector-access.XXXXXX")"
+SELECTOR_CACHE_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-selector-cache.XXXXXX")"
+WARNED_MESSAGES_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-audit-warned-messages.XXXXXX")"
 REPORT_ROW_DELIM=$'\037'
-trap 'stop_shared_hubble_relay; rm -f "${REPORT_ROWS_FILE}" "${NAMESPACE_FILE}" "${HOST_IP_FILE}" "${PROMOTION_ERRORS_FILE}" "${SHARED_HUBBLE_RELAY_LOG:-}"' EXIT
+trap 'stop_shared_hubble_relay; rm -f "${REPORT_ROWS_FILE}" "${NAMESPACE_FILE}" "${HOST_IP_FILE}" "${PROMOTION_ERRORS_FILE}" "${SELECTOR_ACCESS_CHECKED_FILE}" "${SELECTOR_CACHE_FILE}" "${WARNED_MESSAGES_FILE}" "${SHARED_HUBBLE_RELAY_LOG:-}"' EXIT
 
 if [[ "${dry_run}" -eq 0 ]]; then
   mkdir -p "${output_dir}"

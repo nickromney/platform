@@ -162,7 +162,7 @@ ensure_selector_resolution_access() {
   local namespace="$1"
   local resource=""
 
-  if [[ -n "${SELECTOR_ACCESS_CHECKED[${namespace}]+x}" ]]; then
+  if [[ -n "${SELECTOR_ACCESS_CHECKED_FILE}" ]] && grep -Fqx -- "${namespace}" "${SELECTOR_ACCESS_CHECKED_FILE}" 2>/dev/null; then
     return 0
   fi
 
@@ -170,7 +170,7 @@ ensure_selector_resolution_access() {
     require_kubectl_permission "get" "${resource}" "${namespace}" "resolve stable workload selectors"
   done
 
-  SELECTOR_ACCESS_CHECKED["${namespace}"]=1
+  printf '%s\n' "${namespace}" >> "${SELECTOR_ACCESS_CHECKED_FILE}"
 }
 
 explain_multiple_policy_groups() {
@@ -243,14 +243,14 @@ resolve_selector() {
   local label_key=""
   local kind=""
 
-  if [[ -n "${SELECTOR_CACHE_STATUS[${cache_key}]+x}" ]]; then
-    if [[ "${SELECTOR_CACHE_STATUS[${cache_key}]}" == "ok" ]]; then
-      RESOLVED_SELECTOR_KEY="${SELECTOR_CACHE_KEY[${cache_key}]}"
-      RESOLVED_SELECTOR_VALUE="${SELECTOR_CACHE_VALUE[${cache_key}]}"
+  if load_selector_cache "${cache_key}"; then
+    if [[ "${SELECTOR_CACHE_STATUS_VALUE}" == "ok" ]]; then
+      RESOLVED_SELECTOR_KEY="${SELECTOR_CACHE_KEY_VALUE}"
+      RESOLVED_SELECTOR_VALUE="${SELECTOR_CACHE_VALUE_VALUE}"
       return 0
     fi
 
-    RESOLVE_ERROR_MSG="${SELECTOR_CACHE_ERROR[${cache_key}]}"
+    RESOLVE_ERROR_MSG="${SELECTOR_CACHE_ERROR_VALUE}"
     return 1
   fi
 
@@ -265,8 +265,10 @@ resolve_selector() {
 
   if [[ -z "${json}" ]]; then
     RESOLVE_ERROR_MSG="could not resolve workload ${namespace}/${workload} via deployment, daemonset, or statefulset"
-    SELECTOR_CACHE_STATUS["${cache_key}"]="error"
-    SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
+    printf '%s\t%s\t\t\t%s\n' \
+      "${cache_key}" \
+      "error" \
+      "${RESOLVE_ERROR_MSG}" >> "${SELECTOR_CACHE_FILE}"
     return 1
   fi
 
@@ -275,17 +277,47 @@ resolve_selector() {
     if [[ -n "${label_value}" ]]; then
       RESOLVED_SELECTOR_KEY="${label_key}"
       RESOLVED_SELECTOR_VALUE="${label_value}"
-      SELECTOR_CACHE_STATUS["${cache_key}"]="ok"
-      SELECTOR_CACHE_KEY["${cache_key}"]="${label_key}"
-      SELECTOR_CACHE_VALUE["${cache_key}"]="${label_value}"
+      printf '%s\t%s\t%s\t%s\t\n' \
+        "${cache_key}" \
+        "ok" \
+        "${label_key}" \
+        "${label_value}" >> "${SELECTOR_CACHE_FILE}"
       return 0
     fi
   done
 
   RESOLVE_ERROR_MSG="could not find a stable selector label for ${namespace}/${workload}; tried app.kubernetes.io/name, k8s-app, and app"
-  SELECTOR_CACHE_STATUS["${cache_key}"]="error"
-  SELECTOR_CACHE_ERROR["${cache_key}"]="${RESOLVE_ERROR_MSG}"
+  printf '%s\t%s\t\t\t%s\n' \
+    "${cache_key}" \
+    "error" \
+    "${RESOLVE_ERROR_MSG}" >> "${SELECTOR_CACHE_FILE}"
   return 1
+}
+
+load_selector_cache() {
+  local cache_key="$1"
+  local cache_line=""
+
+  cache_line="$(
+    awk -F'\t' -v key="${cache_key}" '
+      $1 == key {
+        status = $2
+        selector_key = $3
+        selector_value = $4
+        error_msg = $5
+        found = 1
+      }
+      END {
+        if (found) {
+          printf "%s\t%s\t%s\t%s\n", status, selector_key, selector_value, error_msg
+        }
+      }
+    ' "${SELECTOR_CACHE_FILE}"
+  )"
+  [[ -n "${cache_line}" ]] || return 1
+
+  IFS=$'\t' read -r SELECTOR_CACHE_STATUS_VALUE SELECTOR_CACHE_KEY_VALUE SELECTOR_CACHE_VALUE_VALUE SELECTOR_CACHE_ERROR_VALUE <<< "${cache_line}"
+  return 0
 }
 
 write_source_manifest() {
@@ -351,11 +383,12 @@ force=0
 kubeconfig=""
 kube_context=""
 DEFAULT_KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
-declare -A SELECTOR_ACCESS_CHECKED=()
-declare -A SELECTOR_CACHE_STATUS=()
-declare -A SELECTOR_CACHE_KEY=()
-declare -A SELECTOR_CACHE_VALUE=()
-declare -A SELECTOR_CACHE_ERROR=()
+SELECTOR_ACCESS_CHECKED_FILE=""
+SELECTOR_CACHE_FILE=""
+SELECTOR_CACHE_STATUS_VALUE=""
+SELECTOR_CACHE_KEY_VALUE=""
+SELECTOR_CACHE_VALUE_VALUE=""
+SELECTOR_CACHE_ERROR_VALUE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -432,7 +465,9 @@ tmp_input="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.input.XXXXXX")"
 tmp_rows="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.rows.XXXXXX")"
 tmp_groups="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.groups.XXXXXX")"
 tmp_namespaces="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.namespaces.XXXXXX")"
-trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}"' EXIT
+SELECTOR_ACCESS_CHECKED_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.selector-access.XXXXXX")"
+SELECTOR_CACHE_FILE="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.selector-cache.XXXXXX")"
+trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}" "${SELECTOR_ACCESS_CHECKED_FILE}" "${SELECTOR_CACHE_FILE}"' EXIT
 
 if [[ "${input_path}" == "-" ]]; then
   cat > "${tmp_input}"
@@ -521,7 +556,7 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
 
   tmp_sources_raw="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.sources.XXXXXX")"
   tmp_sources_resolved="$(mktemp "${TMPDIR:-/tmp}/hubble-generate-policy.sources-resolved.XXXXXX")"
-  trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}" "${tmp_sources_raw}" "${tmp_sources_resolved}"' EXIT
+  trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}" "${tmp_sources_raw}" "${tmp_sources_resolved}" "${SELECTOR_ACCESS_CHECKED_FILE}" "${SELECTOR_CACHE_FILE}"' EXIT
 
   awk -F'\t' -v target_ns="${dst_ns}" -v target_dst="${dst}" -v target_proto="${protocol}" -v target_port="${dst_port}" '
     $1 == target_ns && $2 == target_dst && $3 == target_proto && $4 == target_port {
@@ -536,7 +571,7 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
     warn "skipping ${dst_ns}/${dst} ${protocol_upper}/${dst_port}: ${RESOLVE_ERROR_MSG}"
     skipped_group_count=$((skipped_group_count + 1))
     rm -f "${tmp_sources_raw}" "${tmp_sources_resolved}"
-    trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}"' EXIT
+    trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}" "${SELECTOR_ACCESS_CHECKED_FILE}" "${SELECTOR_CACHE_FILE}"' EXIT
     continue
   fi
   dst_selector_key="${RESOLVED_SELECTOR_KEY}"
@@ -563,7 +598,7 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
     warn "skipping ${dst_ns}/${dst} ${protocol_upper}/${dst_port}: no resolvable source workloads remained after filtering"
     skipped_group_count=$((skipped_group_count + 1))
     rm -f "${tmp_sources_raw}" "${tmp_sources_resolved}"
-    trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}"' EXIT
+    trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}" "${SELECTOR_ACCESS_CHECKED_FILE}" "${SELECTOR_CACHE_FILE}"' EXIT
     continue
   fi
 
@@ -603,7 +638,7 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
   generated_count=$((generated_count + 1))
 
   rm -f "${tmp_sources_raw}" "${tmp_sources_resolved}"
-  trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}"' EXIT
+  trap 'rm -f "${tmp_input}" "${tmp_rows}" "${tmp_groups}" "${tmp_namespaces}" "${SELECTOR_ACCESS_CHECKED_FILE}" "${SELECTOR_CACHE_FILE}"' EXIT
 done < "${tmp_groups}"
 
 [[ "${generated_count}" -gt 0 ]] || fail "no policies were generated"

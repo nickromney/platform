@@ -4,9 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-allowed_inline_python=(
+allowed_python_execution=(
   "sd-wan/lima/provision/common.sh"
   "sd-wan/lima/provision/cloud2.sh"
+  "kubernetes/kind/scripts/ensure-kind-kubeconfig.sh"
+  "terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
 )
 
 bash4_feature_patterns=(
@@ -23,7 +25,7 @@ is_allowed_python_script() {
   local candidate="$1"
   local allowed
 
-  for allowed in "${allowed_inline_python[@]}"; do
+  for allowed in "${allowed_python_execution[@]}"; do
     if [[ "${candidate}" == "${allowed}" ]]; then
       return 0
     fi
@@ -36,6 +38,35 @@ count=0
 unexpected_python=()
 yaml_module_usage=()
 bash4_feature_usage=()
+
+python_execution_matches() {
+  local file="$1"
+
+  awk '
+    /^[[:space:]]*#/ {
+      next
+    }
+
+    /^[[:space:]]*$/ {
+      next
+    }
+
+    /^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*(if[[:space:]]+|!+[[:space:]]+)?(command[[:space:]]+|exec[[:space:]]+|env[[:space:]]+)?python3?([[:space:]]|$)/ {
+      print
+      found = 1
+      next
+    }
+
+    /(\$\(|&&|\|\||;)[[:space:]]*(command[[:space:]]+|exec[[:space:]]+|env[[:space:]]+)?python3?([[:space:]]|$)/ {
+      print
+      found = 1
+    }
+
+    END {
+      exit found ? 0 : 1
+    }
+  ' "${file}"
+}
 
 list_shell_scripts() {
   if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -57,7 +88,7 @@ while IFS= read -r -d '' rel; do
   fi
   count=$((count + 1))
 
-  if grep -Eq '(^|[^[:alnum:]_])(python3|python)([[:space:]]|$)' "${file}"; then
+  if python_matches="$(python_execution_matches "${file}" 2>/dev/null)" && [[ -n "${python_matches}" ]]; then
     if ! is_allowed_python_script "${rel}"; then
       unexpected_python+=("${rel}")
     fi
@@ -82,9 +113,9 @@ if [[ "${#yaml_module_usage[@]}" -gt 0 ]]; then
 fi
 
 if [[ "${#unexpected_python[@]}" -gt 0 ]]; then
-  printf 'FAIL shell audit: unexpected inline Python found in:\n' >&2
+  printf 'FAIL shell audit: unexpected Python execution found in:\n' >&2
   printf '  %s\n' "${unexpected_python[@]}" >&2
-  printf 'Allowlist only scripts that intentionally provision or run Python.\n' >&2
+  printf 'Allowlist only approved shell wrappers or provision scripts that intentionally execute Python.\n' >&2
   exit 1
 fi
 
@@ -95,4 +126,4 @@ if [[ "${#bash4_feature_usage[@]}" -gt 0 ]]; then
   exit 1
 fi
 
-echo "OK   shell audit (${count} script(s) scanned; inline Python limited to provision scripts)"
+echo "OK   shell audit (${count} script(s) scanned; Python execution limited to approved shell wrappers and provision scripts)"

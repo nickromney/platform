@@ -1,8 +1,11 @@
-MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
+SHELL := /bin/bash
+MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
 LINT_MARKDOWN_SCRIPT ?= scripts/lint-markdown.sh
+LINT_BASH32_SCRIPT ?= scripts/check-bash32-compat.sh
+AUDIT_SHELL_SCRIPTS_SCRIPT ?= scripts/audit-shell-scripts.sh
 VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
@@ -11,7 +14,7 @@ FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 
 include mk/common.mk
 
-.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
+.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
 
 help:
 	@echo "Platform workspace Makefile guide"
@@ -24,6 +27,8 @@ help:
 	@echo ""
 	@echo "Root shortcuts:"
 	@echo "  make lint         Run repo-level reporting checks"
+	@echo "  make lint-bash32  Run Bash 3.2 shell compatibility checks"
+	@echo "  make lint-shell   Run repo shell audit checks"
 	@echo "  make fmt          Apply repo-level auto-formatters"
 	@echo "  make lint-cilium-live  Validate deployed Cilium policies via the current kubeconfig"
 	@echo "  make lint-kyverno-live  Validate deployed Kyverno policy matches via the current kubeconfig"
@@ -92,6 +97,8 @@ test:
 lint:
 	@$(MAKE) --no-print-directory lint-yaml
 	@$(MAKE) --no-print-directory lint-markdown
+	@$(MAKE) --no-print-directory lint-bash32
+	@$(MAKE) --no-print-directory lint-shell
 	@$(MAKE) --no-print-directory lint-cilium
 	@$(MAKE) --no-print-directory lint-kyverno
 
@@ -103,6 +110,12 @@ lint-yaml:
 
 lint-markdown:
 	@"$(LINT_MARKDOWN_SCRIPT)"
+
+lint-bash32:
+	@/bin/bash "$(LINT_BASH32_SCRIPT)"
+
+lint-shell:
+	@"$(AUDIT_SHELL_SCRIPTS_SCRIPT)"
 
 lint-cilium:
 	@"$(VALIDATE_CILIUM_POLICIES_SCRIPT)" static

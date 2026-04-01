@@ -951,6 +951,7 @@ test:
 
 .PHONY: test-shell
 test-shell:
+	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh"
 	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh"
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
