@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Build shared-frontend (required for file:../shared-frontend dependency)
 WORKDIR /shared-frontend
-COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./
+COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./shared-frontend/bunfig.toml ./
 RUN bun install --frozen-lockfile
 COPY ./shared-frontend ./
 RUN bun run build
@@ -16,7 +16,7 @@ RUN bun run build
 WORKDIR /app
 
 # Copy package files for dependency installation
-COPY ./frontend-typescript-vite/package.json ./frontend-typescript-vite/bun.lock ./
+COPY ./frontend-typescript-vite/package.json ./frontend-typescript-vite/bun.lock ./frontend-typescript-vite/bunfig.toml ./
 
 # Install dependencies (uses lock file for reproducible builds)
 RUN bun install --frozen-lockfile

@@ -2,19 +2,17 @@
 
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
+COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
+
 ARG USERNAME=vscode
 ENV DEBIAN_FRONTEND=noninteractive
-ENV HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
-ENV HOMEBREW_NO_AUTO_UPDATE=1
-ENV HOMEBREW_NO_ENV_HINTS=1
-ENV HOMEBREW_NO_INSTALL_CLEANUP=1
-ENV PATH=${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:${PATH}
+ENV PATH=/usr/local/bin:${PATH}
 
-COPY Brewfile /tmp/devcontainer/Brewfile
 COPY install-toolchain.sh /tmp/devcontainer/install-toolchain.sh
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        bats \
         bash-completion \
         build-essential \
         ca-certificates \
@@ -28,20 +26,21 @@ RUN apt-get update \
         locales \
         make \
         netcat-openbsd \
+        neovim \
         openssh-client \
         procps \
         python3 \
         python3-venv \
         rsync \
+        shellcheck \
         sudo \
         unzip \
         xz-utils \
+        yamllint \
         zip \
     && locale-gen en_GB.UTF-8 \
     && chmod +x /tmp/devcontainer/install-toolchain.sh \
-    && sudo -Hiu ${USERNAME} env NONINTERACTIVE=1 bash -lc 'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash' \
-    && printf 'eval "$(%s/bin/brew shellenv)"\n' "${HOMEBREW_PREFIX}" >/etc/profile.d/homebrew.sh \
-    && /tmp/devcontainer/install-toolchain.sh "${USERNAME}" /tmp/devcontainer/Brewfile \
+    && /tmp/devcontainer/install-toolchain.sh "${USERNAME}" \
     && rm -rf /var/lib/apt/lists/* /tmp/devcontainer
 
 ENV LANG=en_GB.UTF-8

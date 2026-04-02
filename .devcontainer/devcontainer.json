@@ -1,5 +1,6 @@
 {
   "name": "platform",
+  "initializeCommand": "/bin/sh -lc 'mkdir -p \"$HOME/.kube\" \"$HOME/.config/platform-devcontainer/mkcert\"'",
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
   "workspaceFolder": "${localWorkspaceFolder}",
   "build": {
@@ -11,6 +12,9 @@
       "version": "latest",
       "moby": true,
       "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "24"
     }
   },
   "remoteUser": "vscode",
@@ -19,12 +23,9 @@
   "mounts": [
     "source=${localEnv:HOME}/.kube,target=${localEnv:HOME}/.kube,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.kube,target=/home/vscode/.kube,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/Library/Application Support/mkcert,target=/home/vscode/.mkcert,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.config/platform-devcontainer/mkcert,target=/home/vscode/.mkcert,type=bind,consistency=cached"
   ],
   "containerEnv": {
-    "HOMEBREW_NO_AUTO_UPDATE": "1",
-    "HOMEBREW_NO_ENV_HINTS": "1",
-    "HOMEBREW_NO_INSTALL_CLEANUP": "1",
     "PLATFORM_DEVCONTAINER": "1",
     "CAROOT": "/home/vscode/.mkcert",
     "DEFAULT_KUBECONFIG_PATH": "${localEnv:HOME}/.kube/config",

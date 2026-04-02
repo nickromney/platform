@@ -53,6 +53,7 @@ make -C apps trivy-scan-all
 The canonical JavaScript package manager in this repo is `bun`.
 
 - Use `bun install` and `bun run ...` in app directories.
+- JavaScript package roots ship local `bunfig.toml` and `.npmrc` cooldown defaults, and Python app roots set `[tool.uv].exclude-newer = "7 days"`, so copied app directories and compose/Docker builds keep the same dependency age gate.
 - Use `bun x ...` for one-shot CLI tools such as Playwright or Bruno.
 - Default frontend Playwright suites are kept runnable in isolation; SWA-specific and other environment-coupled suites remain explicit opt-in commands rather than being folded into the default `test` target.
 - Use `make -C apps compose-smoke` for the light compose wiring checks.

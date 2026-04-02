@@ -74,6 +74,7 @@ prereqs:
 	@echo "Root prereqs is informational."
 	@echo ""
 	@echo "Run one of:"
+	@echo "  make -C .devcontainer prereqs"
 	@echo "  make -C apps prereqs"
 	@echo "  make -C apps/sentiment prereqs"
 	@echo "  make -C apps/subnet-calculator prereqs"

@@ -20,6 +20,9 @@ dev = [
     "ruff>=0.8.0",
 ]
 
+[tool.uv]
+exclude-newer = "7 days"
+
 [tool.ruff]
 line-length = 120
 target-version = "py313"
