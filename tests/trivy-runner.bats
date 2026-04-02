@@ -74,7 +74,6 @@ write_fake_docker() {
 
 @test "devcontainer assets do not install or reference trivy" {
   for file in \
-    "${REPO_ROOT}/.devcontainer/Brewfile" \
     "${REPO_ROOT}/.devcontainer/install-toolchain.sh" \
     "${REPO_ROOT}/.devcontainer/Dockerfile"; do
     run grep -in "trivy" "${file}"

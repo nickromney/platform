@@ -3,25 +3,93 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=/dev/null
-source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+SHELL_CLI_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+if [[ -f "${SHELL_CLI_SOURCE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${SHELL_CLI_SOURCE}"
+else
+  shell_cli_script_name() {
+    basename "$0"
+  }
+
+  shell_cli_unknown_flag() {
+    local script_name="$1"
+    local flag="$2"
+
+    printf '%s: unknown flag: %s\n' "${script_name}" "${flag}" >&2
+  }
+
+  shell_cli_unexpected_arg() {
+    local script_name="$1"
+    local arg="$2"
+
+    printf '%s: unexpected argument: %s\n' "${script_name}" "${arg}" >&2
+  }
+
+  shell_cli_missing_value() {
+    local script_name="$1"
+    local flag="$2"
+
+    printf '%s: missing value for %s\n' "${script_name}" "${flag}" >&2
+  }
+
+  shell_cli_print_dry_run_summary() {
+    printf 'INFO dry-run: %s\n' "$*"
+  }
+
+  shell_cli_standard_options() {
+    cat <<'EOF'
+Options:
+  --dry-run  Show a summary and exit before side effects
+  --execute  Execute the script body; without it the script prints help and/or preview output
+  -h, --help Show this message
+EOF
+  }
+
+  shell_cli_init_standard_flags() {
+    SHELL_CLI_DRY_RUN=0
+    SHELL_CLI_EXECUTE=0
+  }
+
+  shell_cli_handle_standard_flag() {
+    local usage_fn="$1"
+    local arg="$2"
+
+    case "${arg}" in
+      -h|--help)
+        "${usage_fn}"
+        exit 0
+        ;;
+      --dry-run)
+        SHELL_CLI_DRY_RUN=1
+        return 0
+        ;;
+      --execute)
+        SHELL_CLI_EXECUTE=1
+        return 0
+        ;;
+    esac
+
+    return 1
+  }
+fi
 
 usage() {
   cat <<EOF
-Usage: install-toolchain.sh [--username NAME] [--brewfile-path PATH] [--dry-run] [--execute]
+Usage: install-toolchain.sh [--username NAME] [--dry-run] [--execute]
 
-Installs the devcontainer host toolchain, Homebrew bundle, arkade tools, Lima,
-and Node/Bun shims.
+Installs the devcontainer toolchain using Linux-native package sources plus
+upstream installers for the tools not carried by apt.
 
 Positional compatibility:
-  install-toolchain.sh [username] [brewfile_path]
+  install-toolchain.sh [username]
 
 $(shell_cli_standard_options)
 EOF
 }
 
 username=""
-brewfile_path=""
 positional=()
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
@@ -37,14 +105,6 @@ while [[ $# -gt 0 ]]; do
         exit 1
       }
       username="$2"
-      shift 2
-      ;;
-    --brewfile-path)
-      [[ $# -ge 2 ]] || {
-        shell_cli_missing_value "$(shell_cli_script_name)" "--brewfile-path"
-        exit 1
-      }
-      brewfile_path="$2"
       shift 2
       ;;
     --)
@@ -68,35 +128,54 @@ done
 if [[ -z "${username}" ]]; then
   username="${positional[0]:-vscode}"
 fi
-if [[ -z "${brewfile_path}" ]]; then
-  brewfile_path="${positional[1]:-/tmp/devcontainer/Brewfile}"
-fi
-if [[ "${#positional[@]}" -gt 2 ]]; then
-  shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positional[2]}"
+if [[ "${#positional[@]}" -gt 1 ]]; then
+  shell_cli_unexpected_arg "$(shell_cli_script_name)" "${positional[1]}"
   exit 1
 fi
 
 if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would install the devcontainer toolchain for ${username} using ${brewfile_path}"
+  shell_cli_print_dry_run_summary "would install the devcontainer toolchain for ${username}"
   exit 0
 fi
 
-brew_prefix="${HOMEBREW_PREFIX:-/home/linuxbrew/.linuxbrew}"
-brew_bin="${brew_prefix}/bin/brew"
-
 run_as_user() {
   local command="$1"
-  sudo -Hiu "${username}" env \
-    HOMEBREW_NO_AUTO_UPDATE="${HOMEBREW_NO_AUTO_UPDATE:-1}" \
-    HOMEBREW_NO_ENV_HINTS="${HOMEBREW_NO_ENV_HINTS:-1}" \
-    HOMEBREW_NO_INSTALL_CLEANUP="${HOMEBREW_NO_INSTALL_CLEANUP:-1}" \
-    PATH="${brew_prefix}/bin:${brew_prefix}/sbin:/usr/local/bin:/usr/bin:/bin" \
-    bash -lc "${command}"
+  sudo -Hiu "${username}" env PATH="/usr/local/bin:/usr/bin:/bin" bash -lc "${command}"
 }
 
 install_arkade_tool() {
   local tool="$1"
   arkade get "${tool}" --path /usr/local/bin
+}
+
+arch_for_go_tools() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'amd64\n'
+      ;;
+    aarch64|arm64)
+      printf 'arm64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+arch_for_kyverno() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'x86_64\n'
+      ;;
+    aarch64|arm64)
+      printf 'arm64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
 }
 
 install_lima() {
@@ -113,18 +192,46 @@ install_lima() {
   curl -fsSL "https://github.com/lima-vm/lima/releases/download/${version}/lima-additional-guestagents-${version#v}-$(uname -s)-$(uname -m).tar.gz" | tar -C /usr/local -xz
 }
 
-if [[ ! -x "${brew_bin}" ]]; then
-  echo "brew not found at ${brew_bin}" >&2
-  exit 1
-fi
+install_starship() {
+  if command -v starship >/dev/null 2>&1; then
+    return 0
+  fi
 
-run_as_user "\"${brew_bin}\" bundle install --file \"${brewfile_path}\" --no-upgrade"
-install_lima
+  curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /usr/local/bin
+}
+
+install_step() {
+  local os_name arch_name tmp_dir
+
+  os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch_name="$(arch_for_go_tools)"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://dl.smallstep.com/cli/docs-cli-install/latest/step_${os_name}_${arch_name}.tar.gz" | tar -xz -C "${tmp_dir}"
+  install "${tmp_dir}"/*/bin/step /usr/local/bin/step
+  rm -rf "${tmp_dir}"
+}
+
+install_kyverno() {
+  local os_name arch_name version archive tmp_dir
+
+  os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch_name="$(arch_for_kyverno)"
+  version="$(curl -fsSL https://api.github.com/repos/kyverno/kyverno/releases/latest | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+  archive="kyverno-cli_${version}_${os_name}_${arch_name}.tar.gz"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/kyverno/kyverno/releases/download/${version}/${archive}" | tar -xz -C "${tmp_dir}" kyverno
+  install "${tmp_dir}/kyverno" /usr/local/bin/kyverno
+  rm -rf "${tmp_dir}"
+}
 
 if ! command -v arkade >/dev/null 2>&1; then
   curl -fsSL https://get.arkade.dev | sh
 fi
 
+install_starship
+install_step
+install_kyverno
+install_lima
 run_as_user "curl -fsSL https://bun.sh/install | bash"
 
 arkade_tools=(
@@ -154,15 +261,6 @@ cat >/usr/local/bin/compose <<'EOF'
 exec docker compose "$@"
 EOF
 chmod +x /usr/local/bin/compose
-
-if [[ -x "${brew_prefix}/opt/node@24/bin/node" ]]; then
-  ln -sf "${brew_prefix}/opt/node@24/bin/node" /usr/local/bin/node
-  ln -sf "${brew_prefix}/opt/node@24/bin/npm" /usr/local/bin/npm
-  ln -sf "${brew_prefix}/opt/node@24/bin/npx" /usr/local/bin/npx
-  if [[ -x "${brew_prefix}/opt/node@24/bin/corepack" ]]; then
-    ln -sf "${brew_prefix}/opt/node@24/bin/corepack" /usr/local/bin/corepack
-  fi
-fi
 
 if [[ -x "/home/${username}/.bun/bin/bun" ]]; then
   ln -sf "/home/${username}/.bun/bin/bun" /usr/local/bin/bun

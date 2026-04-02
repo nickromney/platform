@@ -36,6 +36,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Root prereqs is informational."* ]]
+  [[ "${output}" == *"make -C .devcontainer prereqs"* ]]
   [[ "${output}" == *"make -C kubernetes/kind prereqs"* ]]
 
   run make -C "${REPO_ROOT}" test

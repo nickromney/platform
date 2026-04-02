@@ -2,7 +2,7 @@ FROM --platform=$BUILDPLATFORM oven/bun:1.3.10-alpine AS build
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
+COPY package.json bun.lock bunfig.toml ./
 RUN bun install --frozen-lockfile
 
 # Guardrail: this UI must remain a static SPA (no React Server Components / Flight protocol).

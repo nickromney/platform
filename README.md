@@ -3,15 +3,47 @@
 Infrastructure and platform-engineering experiments, grouped by outcome first
 and implementation second.
 
+## Dependency cooldown policy
+
+This repository intentionally carries project-local dependency age gates rather
+than relying only on operator-level dotfiles such as `~/.npmrc`,
+`~/.bunfig.toml`, or `~/.config/uv/uv.toml`.
+
+That is deliberate for two reasons:
+
+- container builds do not automatically inherit the host user's home-directory
+  package-manager config
+- people may copy an individual app subtree out of [`./apps`](apps) and still
+  expect the same dependency hardening defaults
+
+The current repo policy is a seven-day cooldown for newly published packages:
+
+- JavaScript package roots ship local `bunfig.toml` with
+  `minimumReleaseAge = 604800`
+- JavaScript package roots also ship local `.npmrc` with
+  `min-release-age=7`
+- Python app roots that resolve with `uv` set
+  `[tool.uv].exclude-newer = "7 days"` in `pyproject.toml`
+- Bun-based Dockerfiles copy `bunfig.toml` into the image before `bun install`,
+  so `docker compose` and standalone image builds keep the same cooldown
+
+The Python dependency path in this repo is `uv`, not `pip`, so the repo bakes
+the age gate into `pyproject.toml` for `uv`-managed apps.
+
+Practical consequence: if you run a local install or image build in this repo,
+or copy one of the app directories and build it elsewhere, dependency
+resolution should still reject packages published within the last seven days
+unless you intentionally override that policy.
+
 ## Devcontainer
 
 There is an Ubuntu 24.04 devcontainer in
 [`./.devcontainer`](.devcontainer) for the Linux-friendly repo workflows.
 
 It uses the official devcontainers base image, shares the host Docker socket,
-and installs the repo toolchain using the same preference order reflected
-elsewhere in the repo: Homebrew for the general CLI/runtime layer and
-`arkade` for the Kubernetes tooling.
+and installs the repo toolchain with a Linux-first split: `apt` for distro
+packages, devcontainer features for Docker/Node integration, upstream
+installers for a few standalone CLIs, and `arkade` for the Kubernetes tooling.
 
 The container now also includes `kubie` for split-kubeconfig context work and
 `starship`, seeded from
@@ -31,7 +63,21 @@ duplicating those contexts into `~/.kube/config`. If you want the older merged
 shape for a specific workflow, each cluster Makefile exposes an explicit
 `merge-default-kubeconfig` target.
 
-Once you reopen the workspace in the container, the main entrypoints are:
+From the host, the main devcontainer entrypoints are:
+
+```shell
+make -C .devcontainer prereqs
+make -C .devcontainer build
+make -C .devcontainer run
+make -C .devcontainer exec
+```
+
+`build` removes the existing workspace container before rebuilding the image.
+`run` starts the container without attaching a shell. `exec` and `up` ensure
+the container is running and then attach a shell. None of them force another
+rebuild.
+
+After the container starts, the main in-container verification entrypoints are:
 
 ```shell
 make lint

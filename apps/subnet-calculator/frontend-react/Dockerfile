@@ -9,7 +9,7 @@ ENV NODE_OPTIONS=--max-old-space-size=1024
 
 # Build shared-frontend (required for file:../shared-frontend dependency)
 WORKDIR /shared-frontend
-COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./
+COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./shared-frontend/bunfig.toml ./
 RUN bun install --frozen-lockfile
 COPY ./shared-frontend ./
 RUN bun run build
@@ -17,7 +17,7 @@ RUN bun run build
 WORKDIR /app
 
 # Copy package files for dependency installation
-COPY ./frontend-react/package.json ./frontend-react/bun.lock ./
+COPY ./frontend-react/package.json ./frontend-react/bun.lock ./frontend-react/bunfig.toml ./
 
 # Install dependencies (uses lock file for reproducible builds)
 RUN bun install --frozen-lockfile

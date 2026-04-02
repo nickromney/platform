@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Build shared-frontend (required for file:../shared-frontend dependency)
 WORKDIR /shared-frontend
-COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./
+COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./shared-frontend/bunfig.toml ./
 RUN bun install --frozen-lockfile
 COPY ./shared-frontend ./
 RUN bun run build
@@ -17,7 +17,7 @@ RUN bun run build
 WORKDIR /app
 
 # Copy package files for dependency installation
-COPY ./frontend-react/package.json ./frontend-react/bun.lock ./
+COPY ./frontend-react/package.json ./frontend-react/bun.lock ./frontend-react/bunfig.toml ./
 
 # Install ALL dependencies (need devDependencies for build: typescript, vite, etc.)
 RUN bun install --frozen-lockfile
@@ -30,7 +30,7 @@ FROM --platform=$BUILDPLATFORM oven/bun:1.3.10-alpine AS deps
 
 WORKDIR /app
 
-COPY ./frontend-react/package.json ./frontend-react/bun.lock ./
+COPY ./frontend-react/package.json ./frontend-react/bun.lock ./frontend-react/bunfig.toml ./
 RUN bun install --frozen-lockfile --production
 
 # Stage 3: runtime (target platform)

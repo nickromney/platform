@@ -5,6 +5,7 @@
 add_newline = true
 
 format = """
+$custom.devcontainer\
 $kubernetes\
 $directory\
 $git_branch\
@@ -25,7 +26,6 @@ $aws\
 $azure\
 $direnv\
 $env_var\
-$custom\
 $sudo\
 $cmd_duration\
 $line_break\
@@ -54,6 +54,13 @@ format = '[$symbol($subscription)]($style) '
 symbol = "az "
 style = 'blue bold'
 disabled = false
+
+[custom.devcontainer]
+command = 'printf devcontainer'
+when = 'test "${PLATFORM_DEVCONTAINER:-}" = "1" && test -f /.dockerenv'
+format = '[$output]($style) '
+style = 'bold black bg:yellow'
+shell = ['sh']
 
 [character]
 success_symbol = "[>](bold green)"
@@ -170,6 +177,9 @@ show_milliseconds = false
 disabled = false
 style = "bold italic red"
 format = " [$duration]($style)"
+
+[container]
+disabled = true
 
 [nodejs]
 format = 'running [$symbol($version )]($style)'
