@@ -1,0 +1,215 @@
+services:
+  edge:
+    image: dhi.io/nginx:1.29.5-debian13
+    ports:
+      - "8088:80"
+      - "8443:443"
+    volumes:
+      - ./gateway/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./pki/compose-platform.pem:/etc/nginx/certs/compose-platform.pem:ro
+      - ./pki/compose-platform-key.pem:/etc/nginx/certs/compose-platform-key.pem:ro
+
+  dex:
+    image: dhi.io/dex:2.44.0-debian13
+    ports:
+      - "8300:5556"
+    command:
+      - dex
+      - serve
+      - /etc/dex/config.docker.yaml
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.docker.yaml:ro
+
+  apim-simulator:
+    build:
+      context: ../../apps/subnet-calculator/apim-simulator
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: platform-subnetcalc-apim-simulator:compose
+    ports:
+      - "8302:8000"
+    environment:
+      - APIM_CONFIG_PATH=/config/config.json
+    volumes:
+      - ./subnetcalc/apim/config.json:/config/config.json:ro
+    depends_on:
+      dex:
+        condition: service_started
+
+  subnetcalc-api-dev:
+    profiles: ["dev"]
+    build:
+      context: ../../apps/subnet-calculator/api-fastapi-container-app
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: platform-subnetcalc-api:compose
+    environment:
+      - AUTH_METHOD=none
+      - CORS_ORIGINS=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443,https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  subnetcalc-api-uat:
+    profiles: ["uat"]
+    build:
+      context: ../../apps/subnet-calculator/api-fastapi-container-app
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: platform-subnetcalc-api:compose
+    environment:
+      - AUTH_METHOD=none
+      - CORS_ORIGINS=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443,https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  subnetcalc-frontend-dev:
+    profiles: ["dev"]
+    build:
+      context: ../../apps/subnet-calculator
+      dockerfile: ./frontend-react/Dockerfile
+    platform: linux/amd64
+    image: platform-subnetcalc-frontend-react:compose
+    environment:
+      - AUTH_METHOD=easyauth
+      - API_BASE_URL=
+      - API_PROXY_ENABLED=false
+
+  subnetcalc-frontend-uat:
+    profiles: ["uat"]
+    build:
+      context: ../../apps/subnet-calculator
+      dockerfile: ./frontend-react/Dockerfile
+    platform: linux/amd64
+    image: platform-subnetcalc-frontend-react:compose
+    environment:
+      - AUTH_METHOD=easyauth
+      - API_BASE_URL=
+      - API_PROXY_ENABLED=false
+
+  subnetcalc-router-dev:
+    profiles: ["dev"]
+    image: dhi.io/nginx:1.29.5-debian13
+    volumes:
+      - ./subnetcalc/router-dev.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      apim-simulator:
+        condition: service_started
+      subnetcalc-frontend-dev:
+        condition: service_started
+
+  subnetcalc-router-uat:
+    profiles: ["uat"]
+    image: dhi.io/nginx:1.29.5-debian13
+    volumes:
+      - ./subnetcalc/router-uat.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      apim-simulator:
+        condition: service_started
+      subnetcalc-frontend-uat:
+        condition: service_started
+
+  oauth2-proxy-subnetcalc-dev:
+    profiles: ["dev"]
+    image: dhi.io/oauth2-proxy:7.15.0-debian13
+    platform: linux/amd64
+    command:
+      - --provider=oidc
+      - --oidc-issuer-url=https://dex.compose.127.0.0.1.sslip.io:8443/dex
+      - --client-id=oauth2-proxy
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-compose-oauth2-proxy-secret}
+      - --redirect-url=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443/oauth2/callback
+      - --code-challenge-method=S256
+      - --skip-oidc-discovery=true
+      - --login-url=https://dex.compose.127.0.0.1.sslip.io:8443/dex/auth
+      - --redeem-url=http://dex:5556/dex/token
+      - --oidc-jwks-url=http://dex:5556/dex/keys
+      - --profile-url=http://dex:5556/dex/userinfo
+      - --oidc-email-claim=email
+      - --user-id-claim=email
+      - --insecure-oidc-allow-unverified-email=true
+      - --upstream=http://subnetcalc-router-dev:8080
+      - --http-address=0.0.0.0:4180
+      - --cookie-name=compose-sso-dev
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-00000000000000000000000000000000}
+      - --cookie-secure=true
+      - --cookie-httponly=true
+      - --cookie-expire=4h
+      - --cookie-refresh=1h
+      - --email-domain=dev.test
+      - --scope=openid email profile
+      - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+      - --pass-access-token=true
+      - --pass-user-headers=true
+      - --set-xauthrequest=true
+      - --set-authorization-header=true
+      - --reverse-proxy=true
+      - --skip-provider-button=true
+      - --show-debug-on-error=true
+    depends_on:
+      dex:
+        condition: service_started
+      subnetcalc-router-dev:
+        condition: service_started
+
+  oauth2-proxy-subnetcalc-uat:
+    profiles: ["uat"]
+    image: dhi.io/oauth2-proxy:7.15.0-debian13
+    platform: linux/amd64
+    command:
+      - --provider=oidc
+      - --oidc-issuer-url=https://dex.compose.127.0.0.1.sslip.io:8443/dex
+      - --client-id=oauth2-proxy
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-compose-oauth2-proxy-secret}
+      - --redirect-url=https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443/oauth2/callback
+      - --code-challenge-method=S256
+      - --skip-oidc-discovery=true
+      - --login-url=https://dex.compose.127.0.0.1.sslip.io:8443/dex/auth?prompt=login
+      - --redeem-url=http://dex:5556/dex/token
+      - --oidc-jwks-url=http://dex:5556/dex/keys
+      - --profile-url=http://dex:5556/dex/userinfo
+      - --oidc-email-claim=email
+      - --user-id-claim=email
+      - --insecure-oidc-allow-unverified-email=true
+      - --upstream=http://subnetcalc-router-uat:8080
+      - --http-address=0.0.0.0:4180
+      - --cookie-name=compose-sso-uat
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-00000000000000000000000000000000}
+      - --cookie-secure=true
+      - --cookie-httponly=true
+      - --cookie-expire=4h
+      - --cookie-refresh=1h
+      - --email-domain=uat.test
+      - --scope=openid email profile
+      - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+      - --pass-access-token=true
+      - --pass-user-headers=true
+      - --set-xauthrequest=true
+      - --set-authorization-header=true
+      - --reverse-proxy=true
+      - --skip-provider-button=true
+      - --show-debug-on-error=true
+    depends_on:
+      dex:
+        condition: service_started
+      subnetcalc-router-uat:
+        condition: service_started

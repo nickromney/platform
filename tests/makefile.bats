@@ -19,6 +19,7 @@ setup() {
   [[ "${output}" == *"make prereqs"* ]]
   [[ "${output}" == *"make test"* ]]
   [[ "${output}" == *"make kubernetes"* ]]
+  [[ "${output}" == *"make docker"* ]]
   [[ "${output}" == *"make apps"* ]]
   [[ "${output}" == *"make sdwan"* ]]
 }
@@ -37,12 +38,14 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Root prereqs is informational."* ]]
   [[ "${output}" == *"make -C .devcontainer prereqs"* ]]
+  [[ "${output}" == *"make -C docker/compose prereqs"* ]]
   [[ "${output}" == *"make -C kubernetes/kind prereqs"* ]]
 
   run make -C "${REPO_ROOT}" test
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Root test is informational."* ]]
+  [[ "${output}" == *"make -C docker/compose test"* ]]
   [[ "${output}" == *"make -C sd-wan/lima test"* ]]
 }
 

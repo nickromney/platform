@@ -1,0 +1,41 @@
+{
+  "allowed_origins": [
+    "https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443",
+    "https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443"
+  ],
+  "allow_anonymous": false,
+  "oidc": {
+    "issuer": "https://dex.compose.127.0.0.1.sslip.io:8443/dex",
+    "audience": "oauth2-proxy",
+    "jwks_uri": "http://dex:5556/dex/keys"
+  },
+  "subscription": {
+    "required": false,
+    "bypass": [
+      {
+        "header": "X-Subnetcalc-Bypass-Subscription",
+        "equals": "true"
+      }
+    ]
+  },
+  "routes": [
+    {
+      "name": "subnetcalc-api-dev",
+      "host_match": [
+        "subnetcalc.dev.compose.127.0.0.1.sslip.io"
+      ],
+      "path_prefix": "/api",
+      "upstream_base_url": "http://subnetcalc-api-dev:8000",
+      "upstream_path_prefix": "/api"
+    },
+    {
+      "name": "subnetcalc-api-uat",
+      "host_match": [
+        "subnetcalc.uat.compose.127.0.0.1.sslip.io"
+      ],
+      "path_prefix": "/api",
+      "upstream_base_url": "http://subnetcalc-api-uat:8000",
+      "upstream_path_prefix": "/api"
+    }
+  ]
+}
