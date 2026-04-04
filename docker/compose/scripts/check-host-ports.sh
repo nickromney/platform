@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 fail() {
   echo "FAIL $*" >&2
   exit 1
@@ -10,22 +15,50 @@ ok() {
   echo "OK   $*"
 }
 
+usage() {
+  cat <<EOF
+Usage: check-host-ports.sh [--mode MODE] [--dry-run] [--execute]
+
+Checks whether the published docker/compose host ports are available.
+
+Modes:
+  current    Check the default compose port bindings.
+  https-443  Check whether host port 443 is free for direct HTTPS binding.
+
+$(shell_cli_standard_options)
+EOF
+}
+
 MODE="current"
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --mode)
-      [[ $# -ge 2 ]] || fail "missing value for --mode"
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--mode"
+        exit 1
+      }
       MODE="$2"
       shift 2
       ;;
     -*)
-      fail "unknown flag: $1"
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
       ;;
     *)
-      fail "unexpected argument: $1"
+      shell_cli_unexpected_arg "$(shell_cli_script_name)" "$1"
+      exit 1
       ;;
   esac
 done
+
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would check docker/compose host port availability in ${MODE} mode"
 
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-compose}"
 COMPOSE_EDGE_HTTP_PORT="${COMPOSE_EDGE_HTTP_PORT:-8088}"

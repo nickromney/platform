@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 CERT_FILE="${SCRIPT_DIR}/compose-platform.pem"
 KEY_FILE="${SCRIPT_DIR}/compose-platform-key.pem"
+
+usage() {
+  cat <<EOF
+Usage: gen-certs.sh [--dry-run] [--execute]
+
+Generate or refresh the mkcert-backed TLS certificate for the docker/compose edge.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would generate compose TLS certs under ${SCRIPT_DIR}" \
+  "$@"
 
 if ! command -v mkcert >/dev/null 2>&1; then
   echo "mkcert is required but was not found in PATH." >&2

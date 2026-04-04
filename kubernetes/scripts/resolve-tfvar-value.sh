@@ -93,6 +93,11 @@ elif [[ "${#positional[@]}" -gt 2 ]]; then
   exit 1
 fi
 
+if [[ "${key_provided}" -eq 0 && "${default_provided}" -eq 0 && "${#files[@]}" -eq 0 && "${#positional[@]}" -eq 0 ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would resolve a tfvar value after --key and --default are provided"
+fi
+
 if [[ "${key_provided}" -eq 0 || "${default_provided}" -eq 0 || -z "${key}" ]]; then
   usage
   exit 1

@@ -43,13 +43,13 @@ check-mkcert-prerequisites: ## Check that mkcert is installed and its local CA e
 	fi
 
 check-host-ports: check-docker-prerequisites ## Check that the compose host ports are free before startup
-	@COMPOSE_PROJECT_NAME=compose $(CHECK_HOST_PORTS) --mode current
+	@COMPOSE_PROJECT_NAME=compose $(CHECK_HOST_PORTS) --execute --mode current
 
 check-https-443-available: check-docker-prerequisites ## Check whether host port 443 is free for direct HTTPS binding
-	@COMPOSE_PROJECT_NAME=compose $(CHECK_HOST_PORTS) --mode https-443
+	@COMPOSE_PROJECT_NAME=compose $(CHECK_HOST_PORTS) --execute --mode https-443
 
 certs: check-mkcert-prerequisites ## Generate or refresh the mkcert TLS certs for the compose edge
-	@./pki/gen-certs.sh
+	@./pki/gen-certs.sh --execute
 
 ##@ Compose
 config: check-docker-prerequisites ## Validate the full compose graph

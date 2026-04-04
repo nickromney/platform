@@ -321,10 +321,8 @@ else
   )
 fi
 
-if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would check Lima host port availability for ${#cloud_files[@]} cloud definition file(s)"
-  exit 0
-fi
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would check Lima host port availability for ${#cloud_files[@]} cloud definition file(s)"
 
 checks=()
 for file in "${cloud_files[@]}"; do

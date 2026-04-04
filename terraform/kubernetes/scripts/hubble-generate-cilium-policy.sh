@@ -641,7 +641,7 @@ while IFS=$'\t' read -r dst_ns dst protocol dst_port; do
     "${dst_port}" \
     "${tmp_sources_resolved}"
 
-  "${RENDER_SCRIPT}" --output "${rendered_file}" "${source_file}"
+  "${RENDER_SCRIPT}" --execute --output "${rendered_file}" "${source_file}"
 
   printf 'generated source: %s\n' "${source_file}"
   printf 'rendered category: %s\n' "${rendered_file}"

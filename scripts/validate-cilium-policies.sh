@@ -119,7 +119,7 @@ run_static_validation() {
     kind="$(yq eval 'select(documentIndex == 0) | .kind // ""' "${file}" 2>/dev/null || true)"
     case "${kind}" in
       CiliumNetworkPolicy|CiliumClusterwideNetworkPolicy)
-        "${RENDER_SCRIPT}" "${file}" >/dev/null
+        "${RENDER_SCRIPT}" --execute "${file}" >/dev/null
         validated_files=$((validated_files + 1))
         ;;
     esac

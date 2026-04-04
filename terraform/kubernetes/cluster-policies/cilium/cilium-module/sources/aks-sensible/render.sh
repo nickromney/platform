@@ -2,4 +2,22 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "${SCRIPT_DIR}/../../render-category.sh" --input "${SCRIPT_DIR}" "$@"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: render.sh [--dry-run] [--execute]
+
+Render the aks-sensible Cilium module source directory into its checked-in category output.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would render the aks-sensible Cilium module category" \
+  "$@"
+
+exec "${SCRIPT_DIR}/../../render-category.sh" --execute --input "${SCRIPT_DIR}"

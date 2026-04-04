@@ -66,6 +66,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "${input}" && "${#positional[@]}" -eq 0 ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would render a Cilium module category after --input is provided"
+fi
+
 if [[ -z "${input}" ]]; then
   if [[ "${#positional[@]}" -ne 1 ]]; then
     usage >&2
@@ -98,5 +103,5 @@ find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.yaml' -delete
 
 while IFS= read -r -d '' source_file; do
   output_file="${OUTPUT_DIR}/$(basename "${source_file}")"
-  "${RENDER_SCRIPT}" --output "${output_file}" "${source_file}"
+  "${RENDER_SCRIPT}" --execute --output "${output_file}" "${source_file}"
 done < <(find "${SOURCE_DIR}" -maxdepth 1 -type f -name '*.yaml' -print0 | LC_ALL=C sort -z)
