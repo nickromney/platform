@@ -13,7 +13,7 @@ teardown() {
 }
 
 @test "render-cilium-policy-values rewrites a single spec into a specs list" {
-  run "${SCRIPT}" "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/shared-baseline.yaml"
+  run "${SCRIPT}" --execute "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/shared-baseline.yaml"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'metadata:\n  name: shared-baseline'* ]]
@@ -24,7 +24,7 @@ teardown() {
 }
 
 @test "render-cilium-policy-values supports list and wrap keys for multi-document input" {
-  run "${SCRIPT}" --list-key policies --wrap-key networkPolicy \
+  run "${SCRIPT}" --execute --list-key policies --wrap-key networkPolicy \
     "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml"
 
   [ "${status}" -eq 0 ]
@@ -35,7 +35,7 @@ teardown() {
 }
 
 @test "render-cilium-policy-values writes one file per document with split-dir" {
-  run "${SCRIPT}" --split-dir "${TMPDIR_RENDER_CILIUM}" \
+  run "${SCRIPT}" --execute --split-dir "${TMPDIR_RENDER_CILIUM}" \
     "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-runtime.yaml"
 
   [ "${status}" -eq 0 ]
@@ -50,7 +50,7 @@ teardown() {
 }
 
 @test "render-cilium-policy-values can inject a namespace for namespaced policy input" {
-  run "${SCRIPT}" --set-namespace karpenter \
+  run "${SCRIPT}" --execute --set-namespace karpenter \
     "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/dev/overrides/subnetcalc-cloudflare-live-fetch.yaml"
 
   [ "${status}" -eq 0 ]
@@ -59,7 +59,7 @@ teardown() {
 }
 
 @test "render-cilium-policy-values rejects namespace injection for clusterwide input" {
-  run "${SCRIPT}" --set-namespace karpenter \
+  run "${SCRIPT}" --execute --set-namespace karpenter \
     "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/shared-baseline.yaml"
 
   [ "${status}" -ne 0 ]
@@ -75,7 +75,7 @@ teardown() {
   rendered_file="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module/categories/observability/cnp-observability-otel-collector-allow-otlp-from-app-workloads.yaml"
   rendered_output="${TMPDIR_RENDER_CILIUM}/observability-rendered.yaml"
 
-  run "${SCRIPT}" "${source_file}"
+  run "${SCRIPT}" --execute "${source_file}"
 
   [ "${status}" -eq 0 ]
   printf '%s\n' "${output}" > "${rendered_output}"

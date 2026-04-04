@@ -22,11 +22,11 @@ teardown() {
   rendered_file="${MODULE_ROOT}/categories/observability/cnp-observability-otel-collector-allow-otlp-from-app-workloads.yaml"
   rendered_output="${TMPDIR_CILIUM_MODULE_RENDERERS}/helper-rendered.yaml"
 
-  run "${MODULE_ROOT}/render-category.sh" observability
+  run "${MODULE_ROOT}/render-category.sh" --execute observability
 
   [ "${status}" -eq 0 ]
 
-  run "${RENDER_SCRIPT}" "${source_file}"
+  run "${RENDER_SCRIPT}" --execute "${source_file}"
 
   [ "${status}" -eq 0 ]
   printf '%s\n' "${output}" > "${rendered_output}"
@@ -45,11 +45,11 @@ teardown() {
   rendered_file="${MODULE_ROOT}/categories/observability/cnp-observability-otel-collector-allow-otlp-from-app-workloads.yaml"
   rendered_output="${TMPDIR_CILIUM_MODULE_RENDERERS}/wrapper-rendered.yaml"
 
-  run "${MODULE_ROOT}/sources/observability/render.sh"
+  run "${MODULE_ROOT}/sources/observability/render.sh" --execute
 
   [ "${status}" -eq 0 ]
 
-  run "${RENDER_SCRIPT}" "${source_file}"
+  run "${RENDER_SCRIPT}" --execute "${source_file}"
 
   [ "${status}" -eq 0 ]
   printf '%s\n' "${output}" > "${rendered_output}"
