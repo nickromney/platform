@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
+MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes docker sdwan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -14,7 +14,7 @@ FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 
 include mk/common.mk
 
-.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes sdwan
+.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown makefiles apps kubernetes docker sdwan
 
 help:
 	@echo "Platform workspace Makefile guide"
@@ -36,6 +36,7 @@ help:
 	@echo "  make test         Show the focused test entrypoints"
 	@echo "  make apps         Show the app/frontend Makefiles"
 	@echo "  make kubernetes   Show the staged Kubernetes Makefiles"
+	@echo "  make docker       Show the Docker/Compose Makefiles"
 	@echo "  make makefiles    List every Makefile in the repo"
 	@echo "  make sdwan        Show the SD-WAN Makefiles"
 
@@ -60,6 +61,16 @@ kubernetes:
 	@echo "  make -C kubernetes/<stack> 100 apply"
 	@echo "  make -C kubernetes/<stack> 900 apply AUTO_APPROVE=1"
 
+docker:
+	@echo "Docker/Compose workflows:"
+	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  docker\//!d'
+	@echo ""
+	@echo "Common workflow:"
+	@echo "  make -C docker/compose prereqs"
+	@echo "  make -C docker/compose up"
+	@echo "  make -C docker/compose urls"
+	@echo "  make -C docker/compose test"
+
 sdwan:
 	@echo "SD-WAN Makefiles:"
 	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  sd-wan\//!d'
@@ -78,6 +89,7 @@ prereqs:
 	@echo "  make -C apps prereqs"
 	@echo "  make -C apps/sentiment prereqs"
 	@echo "  make -C apps/subnet-calculator prereqs"
+	@echo "  make -C docker/compose prereqs"
 	@echo "  make -C kubernetes/kind prereqs"
 	@echo "  make -C kubernetes/lima prereqs"
 	@echo "  make -C kubernetes/slicer prereqs"
@@ -90,6 +102,7 @@ test:
 	@echo "  make -C apps test"
 	@echo "  make -C apps/sentiment test"
 	@echo "  make -C apps/subnet-calculator test"
+	@echo "  make -C docker/compose test"
 	@echo "  make -C kubernetes/kind test"
 	@echo "  make -C kubernetes/lima test"
 	@echo "  make -C kubernetes/slicer test"

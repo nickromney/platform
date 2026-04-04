@@ -1,0 +1,37 @@
+issuer: https://dex.compose.127.0.0.1.sslip.io:8443/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: demo@admin.test
+    emailVerified: true
+    hash: "$2y$10$wTxj3xbx.QTnAKPEjYbzseyLcYPwTjrSzKb8VrZ3MXEpTNJ4ESfku"
+    username: demo-admin
+    userID: 0a1f0e7f-75fa-40cc-90bc-9e876c0919dc
+  - email: demo@dev.test
+    emailVerified: true
+    hash: "$2y$10$wTxj3xbx.QTnAKPEjYbzseyLcYPwTjrSzKb8VrZ3MXEpTNJ4ESfku"
+    username: demo@dev.test
+    userID: cfe2f539-3972-4310-bc7e-8579af6c4b20
+  - email: demo@uat.test
+    emailVerified: true
+    hash: "$2y$10$wTxj3xbx.QTnAKPEjYbzseyLcYPwTjrSzKb8VrZ3MXEpTNJ4ESfku"
+    username: demo@uat.test
+    userID: e3bbece5-a293-47d9-9d7d-3d8cb218fc23
+
+staticClients:
+  - id: oauth2-proxy
+    name: oauth2-proxy
+    secret: compose-oauth2-proxy-secret
+    redirectURIs:
+      - https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443/oauth2/callback
+      - https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443/oauth2/callback
