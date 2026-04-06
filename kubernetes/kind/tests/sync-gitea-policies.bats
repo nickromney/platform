@@ -141,7 +141,7 @@ spec:
   source:
     repoURL: https://charts.jetstack.io
     chart: cert-manager
-    targetRevision: v1.20.0
+    targetRevision: v1.20.1
     helm:
       releaseName: cert-manager
 EOF

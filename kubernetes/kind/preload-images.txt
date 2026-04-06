@@ -31,14 +31,14 @@ dhi.io/kyverno-cleanup-controller:1.17.1-debian13
 dhi.io/kyverno-reports-controller:1.17.1-debian13
 ghcr.io/kyverno/readiness-checker:v0.1.0
 
-# --- cert-manager (chart v1.20.0) ---
-quay.io/jetstack/cert-manager-controller:v1.20.0
-quay.io/jetstack/cert-manager-webhook:v1.20.0
-quay.io/jetstack/cert-manager-cainjector:v1.20.0
-quay.io/jetstack/cert-manager-startupapicheck:v1.20.0
+# --- cert-manager (chart v1.20.1) ---
+quay.io/jetstack/cert-manager-controller:v1.20.1
+quay.io/jetstack/cert-manager-webhook:v1.20.1
+quay.io/jetstack/cert-manager-cainjector:v1.20.1
+quay.io/jetstack/cert-manager-startupapicheck:v1.20.1
 
-# --- SigNoz (chart 0.117.0) ---
-docker.io/signoz/signoz:v0.117.0
+# --- SigNoz (chart 0.117.1) ---
+docker.io/signoz/signoz:v0.117.1
 docker.io/signoz/signoz-otel-collector:v0.144.2
 docker.io/signoz/signoz-schema-migrator:v0.144.2
 docker.io/clickhouse/clickhouse-server:25.5.6
@@ -47,9 +47,9 @@ docker.io/altinity/metrics-exporter:0.21.2
 signoz/zookeeper:3.7.1
 docker.io/groundnuty/k8s-wait-for:v2.0
 
-# --- Prometheus (chart 28.14.1) ---
-quay.io/prometheus/prometheus:v3.10.0
-dhi.io/prometheus:3.10.0-debian13
+# --- Prometheus (chart 28.16.0) ---
+quay.io/prometheus/prometheus:v3.11.0
+dhi.io/prometheus:3.11.0-debian13
 dhi.io/prometheus-config-reloader:0.89.0-debian13
 dhi.io/alertmanager:0.31.1-debian13
 dhi.io/kube-state-metrics:2.18.0-debian13
@@ -59,8 +59,8 @@ dhi.io/node-exporter:1.10.2-debian13
 docker.io/grafana/loki:3.6.7
 dhi.io/loki:3.6.7-debian13
 
-# --- VictoriaLogs (chart 0.11.30) ---
-docker.io/victoriametrics/victoria-logs:v1.48.0
+# --- VictoriaLogs (chart 0.11.31) ---
+docker.io/victoriametrics/victoria-logs:v1.49.0
 
 # --- Tempo (chart 1.24.4) ---
 docker.io/grafana/tempo:2.9.0
@@ -78,8 +78,8 @@ node:lts-alpine
 # --- Dex (chart 0.24.0) ---
 dhi.io/dex:2.44.0-debian13
 
-# --- oauth2-proxy (chart 10.3.0) ---
-dhi.io/oauth2-proxy:7.15.0-debian13
+# --- oauth2-proxy (chart 10.4.2) ---
+dhi.io/oauth2-proxy:7.15.1-debian13
 
 # --- OpenTelemetry Collector (chart 0.147.1) ---
 otel/opentelemetry-collector-contrib:0.147.0

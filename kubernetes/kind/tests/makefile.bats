@@ -22,6 +22,7 @@ setup() {
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
+  [[ "${output}" == *"make docker-prune-estimate"* ]]
   [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
   [[ "${output}" != *"${HOME}"* ]]
@@ -133,6 +134,20 @@ setup() {
 
 @test "kind stage 900 apply waits for cluster health before browser SSO E2E verification" {
   run grep -Fn 'run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind gateway stages verify HTTPS entrypoints after cluster health" {
+  run grep -Fn 'run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind check-gateway-urls uses the split kind kubeconfig" {
+  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

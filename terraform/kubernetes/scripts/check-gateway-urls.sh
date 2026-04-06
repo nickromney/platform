@@ -13,7 +13,7 @@ ok() { echo "OK   $*"; }
 
 usage() {
   cat <<'EOF'
-Usage: check-gateway-urls.sh [--var-file PATH] [--host-port PORT] [--extended]
+Usage: check-gateway-urls.sh [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
 
 Checks the NGINX Gateway Fabric + TLS path for public and admin gateway URLs.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.
@@ -36,6 +36,9 @@ TFVARS_FILES=()
 HOST_PORT=""
 EXTENDED="${EXTENDED:-0}"
 DEBUG_PRINTED=0
+WAIT_SECONDS="${WAIT_SECONDS:-30}"
+RETRY_INTERVAL_SECONDS="${RETRY_INTERVAL_SECONDS:-3}"
+ROUTE_ENTRIES=()
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
@@ -52,6 +55,14 @@ while [[ $# -gt 0 ]]; do
       HOST_PORT="${2:-}"
       shift 2
       ;;
+    --wait-seconds)
+      WAIT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --retry-interval-seconds)
+      RETRY_INTERVAL_SECONDS="${2:-}"
+      shift 2
+      ;;
     -x|--extended|--debug)
       EXTENDED=1
       shift
@@ -63,6 +74,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 shell_cli_maybe_execute_or_preview_summary usage "would check public and admin gateway URLs"
+
+[[ "${WAIT_SECONDS}" =~ ^[0-9]+$ ]] || fail "--wait-seconds must be an integer >= 0"
+[[ "${RETRY_INTERVAL_SECONDS}" =~ ^[0-9]+$ ]] || fail "--retry-interval-seconds must be an integer >= 0"
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
@@ -107,17 +121,18 @@ tfvar_list_entries() {
   printf '%s\n' "${values[@]}"
 }
 
-admin_host() {
-  local app="$1"
-  if [[ "${SEPARATE_ADMIN_DOMAIN}" == "1" ]]; then
-    printf '%s.%s\n' "${app}" "${PLATFORM_ADMIN_BASE_DOMAIN}"
-  else
-    printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
-  fi
-}
+array_contains() {
+  local needle="$1"
+  shift || true
 
-dex_host() {
-  printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  local entry
+  for entry in "$@"; do
+    if [[ "${entry}" == "${needle}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 debug_gateway_pods() {
@@ -185,6 +200,7 @@ print_debug_context() {
 }
 
 require_cmd kubectl
+require_cmd curl
 
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT=$(tfvar_get "" gateway_https_host_port)
@@ -198,10 +214,7 @@ if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
   PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
 fi
 PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get "" platform_admin_base_domain)"
-SEPARATE_ADMIN_DOMAIN=0
-if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
-  SEPARATE_ADMIN_DOMAIN=1
-else
+if [[ -z "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
   PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN}"
 fi
 ADMIN_ROUTE_ALLOWLIST_ENABLED=0
@@ -213,6 +226,78 @@ EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
 [ -n "${EXPECTED_CLUSTER_NAME}" ] || EXPECTED_CLUSTER_NAME="kind-local"
 [ -n "${EXPECT_KIND_PROVISIONING}" ] || EXPECT_KIND_PROVISIONING="true"
+
+normalize_route_path() {
+  local path="${1:-/}"
+
+  if [[ -z "${path}" ]]; then
+    path="/"
+  fi
+
+  if [[ "${path}" != /* ]]; then
+    path="/${path}"
+  fi
+
+  printf '%s\n' "${path}"
+}
+
+probe_https_url() {
+  local url="$1"
+  local tmp_err curl_rc code err
+
+  PROBE_OK=0
+  PROBE_DETAIL=""
+
+  tmp_err="$(mktemp)"
+  set +e
+  code="$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 5 "${url}" 2>"${tmp_err}")"
+  curl_rc=$?
+  set -e
+  err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  rm -f "${tmp_err}"
+
+  if [[ "${code}" =~ ^[23] ]]; then
+    PROBE_OK=1
+    PROBE_DETAIL="${code}"
+    return 0
+  fi
+
+  if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" && "${code}" == "403" ]]; then
+    PROBE_OK=1
+    PROBE_DETAIL="${code} (blocked by admin allowlist from this source)"
+    return 0
+  fi
+
+  if [[ -n "${code}" && "${code}" != "000" ]]; then
+    PROBE_DETAIL="${code}"
+    return 0
+  fi
+
+  PROBE_DETAIL="000"
+  if [[ "${curl_rc}" -ne 0 ]]; then
+    PROBE_DETAIL="${PROBE_DETAIL} (curl exit ${curl_rc}${err:+: ${err}})"
+  fi
+}
+
+probe_route_urls() {
+  HTTPS_FAILURE_COUNT=0
+  HTTPS_RESULTS=()
+
+  local entry host path url
+  for entry in "${ROUTE_ENTRIES[@]}"; do
+    host="${entry%%|*}"
+    path="${entry#*|}"
+    url="https://${host}${port_suffix}${path}"
+
+    probe_https_url "${url}"
+    if [[ "${PROBE_OK}" == "1" ]]; then
+      HTTPS_RESULTS+=("OK|${url}|${PROBE_DETAIL}")
+    else
+      HTTPS_RESULTS+=("FAIL|${url}|${PROBE_DETAIL}")
+      HTTPS_FAILURE_COUNT=$((HTTPS_FAILURE_COUNT + 1))
+    fi
+  done
+}
 
 if [[ "${EXPECT_KIND_PROVISIONING}" == "true" ]]; then
   require_cmd kind
@@ -302,7 +387,7 @@ if kubectl -n platform-gateway get certificate platform-gateway-tls >/dev/null 2
   if [[ "${cert_ready}" == "True" ]]; then
     ok "Certificate Ready=True"
   else
-    warn "Certificate Ready=${cert_ready:-unknown}"
+    fail_soft "Certificate Ready=${cert_ready:-unknown}"
   fi
   if kubectl -n platform-gateway get secret platform-gateway-tls >/dev/null 2>&1; then
     ok "TLS secret exists: platform-gateway-tls"
@@ -310,7 +395,7 @@ if kubectl -n platform-gateway get certificate platform-gateway-tls >/dev/null 2
     fail_soft "TLS secret missing: platform-gateway-tls"
   fi
 else
-  warn "Certificate platform-gateway-tls not found"
+  fail_soft "Certificate platform-gateway-tls not found"
 fi
 
 echo ""
@@ -318,11 +403,14 @@ echo "HTTPRoutes (gateway-routes):"
 if kubectl -n gateway-routes get httproute >/dev/null 2>&1; then
   routes=$(kubectl -n gateway-routes get httproute -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
   if [[ -z "${routes}" ]]; then
-    warn "No HTTPRoutes found in namespace gateway-routes"
+    fail_soft "No HTTPRoutes found in namespace gateway-routes"
   else
     while IFS= read -r route; do
       [[ -z "${route}" ]] && continue
-      hostnames=$(kubectl -n gateway-routes get httproute "${route}" -o jsonpath='{range .spec.hostnames[*]}{.}{" "}{end}' 2>/dev/null || true)
+      route_path_lines=$(kubectl -n gateway-routes get httproute "${route}" -o jsonpath='{range .spec.rules[*].matches[*]}{.path.value}{"\n"}{end}' 2>/dev/null || true)
+      route_path="$(printf '%s\n' "${route_path_lines}" | awk 'length > 0 { print; exit }')"
+      route_path="$(normalize_route_path "${route_path}")"
+      hostnames=$(kubectl -n gateway-routes get httproute "${route}" -o jsonpath='{.spec.hostnames[*]}' 2>/dev/null || true)
       accepted=$(kubectl -n gateway-routes get httproute "${route}" -o jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
       resolved=$(kubectl -n gateway-routes get httproute "${route}" -o jsonpath='{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}' 2>/dev/null || true)
       if [[ "${accepted}" == "True" ]]; then
@@ -333,10 +421,19 @@ if kubectl -n gateway-routes get httproute >/dev/null 2>&1; then
       if [[ -n "${resolved}" && "${resolved}" != "True" ]]; then
         warn "HTTPRoute ${route} ResolvedRefs=${resolved}"
       fi
+
+      hostnames_lines="$(printf '%s\n' "${hostnames}" | tr ' ' '\n' | awk 'NF > 0')"
+      while IFS= read -r hostname; do
+        [[ -n "${hostname}" ]] || continue
+        route_entry="${hostname}|${route_path}"
+        if ! array_contains "${route_entry}" "${ROUTE_ENTRIES[@]}"; then
+          ROUTE_ENTRIES+=("${route_entry}")
+        fi
+      done <<<"${hostnames_lines}"
     done <<<"${routes}"
   fi
 else
-  warn "Namespace gateway-routes missing or no HTTPRoute support"
+  fail_soft "Namespace gateway-routes missing or no HTTPRoute support"
 fi
 
 echo ""
@@ -350,35 +447,32 @@ if have_cmd nc; then
   if nc -z -w 2 127.0.0.1 "${HOST_PORT}" >/dev/null 2>&1; then
     ok "Host port open: 127.0.0.1:${HOST_PORT}"
   else
-    warn "Host port not reachable: 127.0.0.1:${HOST_PORT}"
+    fail_soft "Host port not reachable: 127.0.0.1:${HOST_PORT}"
   fi
 fi
 
-if have_cmd curl; then
-  declare -a hosts=(
-    "$(admin_host argocd):/"
-    "$(admin_host gitea):/"
-    "$(admin_host hubble):/"
-    "$(admin_host headlamp):/"
-    "$(admin_host signoz):/"
-    "$(admin_host kyverno):/"
-    "$(dex_host):/dex"
-  )
-  for entry in "${hosts[@]}"; do
-    host="${entry%%:*}"
-    path="${entry#*:}"
-    url="https://${host}${port_suffix}${path}"
-    code=$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 3 "${url}" 2>/dev/null || true)
-    if [[ "${code}" =~ ^[23] ]]; then
-      ok "HTTPS ${url} -> ${code}"
-    elif [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" && "${code}" == "403" ]]; then
-      ok "HTTPS ${url} -> ${code} (blocked by admin allowlist from this source)"
+if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]]; then
+  fail_soft "No gateway route hostnames available to probe"
+else
+  deadline=$((SECONDS + WAIT_SECONDS))
+  probe_route_urls
+  while [[ "${HTTPS_FAILURE_COUNT}" -gt 0 && "${SECONDS}" -lt "${deadline}" ]]; do
+    warn "HTTPS routes not ready yet (${HTTPS_FAILURE_COUNT} failing); retrying in ${RETRY_INTERVAL_SECONDS}s"
+    sleep "${RETRY_INTERVAL_SECONDS}"
+    probe_route_urls
+  done
+
+  for result in "${HTTPS_RESULTS[@]}"; do
+    status="${result%%|*}"
+    rest="${result#*|}"
+    url="${rest%%|*}"
+    detail="${rest#*|}"
+    if [[ "${status}" == "OK" ]]; then
+      ok "HTTPS ${url} -> ${detail}"
     else
-      warn "HTTPS ${url} -> ${code:-error}"
+      fail_soft "HTTPS ${url} -> ${detail}"
     fi
   done
-else
-  warn "curl not found; skipping HTTPS checks"
 fi
 
 if [[ "${FAILURES}" -gt 0 ]]; then
