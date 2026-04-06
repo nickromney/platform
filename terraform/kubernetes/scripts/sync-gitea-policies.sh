@@ -18,7 +18,11 @@ $(shell_cli_standard_options)
 EOF
 }
 
-shell_cli_handle_standard_no_args usage "would render and sync the policies repository into Gitea" "$@"
+# Allow the script to be sourced by tests and helper shells without immediately
+# triggering the CLI preview/exit path.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  shell_cli_handle_standard_no_args usage "would render and sync the policies repository into Gitea" "$@"
+fi
 
 : "${STACK_DIR:?STACK_DIR is required}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"

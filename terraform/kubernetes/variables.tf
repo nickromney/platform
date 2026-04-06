@@ -386,13 +386,13 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "28.14.1"
+  default     = "28.16.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus hardened container image tag."
   type        = string
-  default     = "3.10.0-debian13"
+  default     = "3.11.0-debian13"
 }
 
 variable "grafana_chart_version" {
@@ -464,7 +464,7 @@ variable "loki_image_tag" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.11.30"
+  default     = "0.11.31"
 }
 
 variable "tempo_chart_version" {
@@ -476,7 +476,7 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.117.0"
+  default     = "0.117.1"
 }
 
 variable "headlamp_chart_version" {
@@ -500,7 +500,7 @@ variable "policy_reporter_chart_version" {
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.20.0"
+  default     = "v1.20.1"
 }
 
 variable "hardened_image_registry" {
@@ -518,7 +518,7 @@ variable "dex_chart_version" {
 variable "oauth2_proxy_chart_version" {
   description = "oauth2-proxy chart version (oauth2-proxy.github.io/manifests)."
   type        = string
-  default     = "10.3.0"
+  default     = "10.4.2"
 }
 
 variable "opentelemetry_collector_chart_version" {

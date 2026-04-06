@@ -22,10 +22,12 @@ STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
+DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
 ENSURE_KIND_KUBECONFIG := $(SCRIPTS_DIR)/ensure-kind-kubeconfig.sh
 ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
 SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
+DELETE_KIND_CLUSTER := $(SCRIPTS_DIR)/delete-kind-cluster.sh
 RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
@@ -84,7 +86,7 @@ VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -173,6 +175,7 @@ help:
 	@echo "  make check-version"
 	@echo "  make discover-images                          Dump images from running cluster"
 	@echo "  make docker-health"
+	@echo "  make docker-prune-estimate                   Estimate reclaimable space for docker builder prune -af and docker system prune -af"
 	@echo "  make env                                     Show local tool versions + Docker daemon status"
 	@echo "  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
@@ -639,18 +642,21 @@ apply: workflow-validate
 			rc=$${PIPESTATUS[0]}; \
 			set -e; \
 		fi; \
-	fi; \
-		if [ $$rc -eq 0 ]; then \
-			KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
-			if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-				run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-				if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
-					echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
-				else \
-					run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
+		fi; \
+			if [ $$rc -eq 0 ]; then \
+				KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
+				if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
+					run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+					run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
+					if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+						if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
+							echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
+						else \
+							run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
+						fi; \
+					fi; \
 				fi; \
 			fi; \
-		fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
 	fi; \
@@ -718,7 +724,7 @@ check-gateway-urls:
 	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
 		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
 	fi; \
-	"$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-app
 check-app:
@@ -827,6 +833,10 @@ docker-health:
 	@echo "" && echo "Docker version:" && docker version
 	@echo "" && echo "Kind containers (if any):" && (docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' | grep -E '(^NAMES|kind-local|kindest/node)' || true)
 	@echo "" && echo "Kind networks (if any):" && (docker network ls --format 'table {{.Name}}\t{{.Driver}}' | grep -E '(^NAME|kind)' || true)
+
+.PHONY: docker-prune-estimate
+docker-prune-estimate:
+	@"$(DOCKER_PRUNE_ESTIMATE)"
 
 .PHONY: status
 status:
@@ -1157,7 +1167,7 @@ reset:
 	echo ""; \
 	echo "Deleting kind cluster (best-effort)..."; \
 	if [ "$$CLUSTER_EXISTS" = "1" ]; then \
-		kind delete cluster --name "$$CLUSTER_NAME"; \
+		"$(DELETE_KIND_CLUSTER)" --name "$$CLUSTER_NAME"; \
 		echo "OK   Deleted $$CLUSTER_NAME"; \
 	else \
 		echo "OK   Cluster $$CLUSTER_NAME was already absent"; \
