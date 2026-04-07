@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 import os
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ApiVersioningScheme(str, Enum):
+class ApiVersioningScheme(StrEnum):
     Header = "Header"
     Query = "Query"
     Segment = "Segment"
@@ -29,6 +29,21 @@ class ApiVersionSetConfig(BaseModel):
             raise ValueError("version_header_name is required when versioning_scheme=Header")
         if self.versioning_scheme == ApiVersioningScheme.Query and not self.version_query_name:
             raise ValueError("version_query_name is required when versioning_scheme=Query")
+
+
+class ServiceMetadataConfig(BaseModel):
+    name: str = "apim-simulator"
+    display_name: str = "Local APIM Simulator"
+    public_network_access_enabled: bool | None = None
+    virtual_network_type: str | None = None
+    hostname_configurations: list[ServiceHostnameConfiguration] = Field(default_factory=list)
+
+
+class ServiceHostnameConfiguration(BaseModel):
+    type: str
+    host_name: str
+    negotiate_client_certificate: bool = False
+    default_ssl_binding: bool = False
 
 
 class HeaderCondition(BaseModel):
@@ -57,7 +72,7 @@ class SubscriptionKeyPair(BaseModel):
     secondary: str
 
 
-class SubscriptionState(str, Enum):
+class SubscriptionState(StrEnum):
     Active = "active"
     Suspended = "suspended"
     Cancelled = "cancelled"
@@ -114,7 +129,7 @@ class TenantAccessConfig(BaseModel):
     secondary_key: str | None = None
 
 
-class ClientCertificateMode(str, Enum):
+class ClientCertificateMode(StrEnum):
     """Maps to Azure APIM client certificate settings.
 
     - disabled: No client cert required (default)
@@ -168,27 +183,163 @@ class RouteAuthzConfig(BaseModel):
     required_claims: dict[str, str] = Field(default_factory=dict)
 
 
+class OperationExampleConfig(BaseModel):
+    name: str
+    summary: str | None = None
+    description: str | None = None
+    value: Any | None = None
+    external_value: str | None = None
+
+
+class OperationParameterConfig(BaseModel):
+    name: str
+    required: bool
+    type: str
+    description: str | None = None
+    default_value: str | None = None
+    values: list[str] = Field(default_factory=list)
+    examples: list[OperationExampleConfig] = Field(default_factory=list)
+    schema_id: str | None = None
+    type_name: str | None = None
+
+
+class OperationRepresentationConfig(BaseModel):
+    content_type: str
+    form_parameters: list[OperationParameterConfig] = Field(default_factory=list)
+    examples: list[OperationExampleConfig] = Field(default_factory=list)
+    schema_id: str | None = None
+    type_name: str | None = None
+
+
+class OperationRequestMetadataConfig(BaseModel):
+    description: str | None = None
+    headers: list[OperationParameterConfig] = Field(default_factory=list)
+    query_parameters: list[OperationParameterConfig] = Field(default_factory=list)
+    representations: list[OperationRepresentationConfig] = Field(default_factory=list)
+
+
+class OperationResponseMetadataConfig(BaseModel):
+    status_code: int
+    description: str | None = None
+    headers: list[OperationParameterConfig] = Field(default_factory=list)
+    representations: list[OperationRepresentationConfig] = Field(default_factory=list)
+
+
+class ApiSchemaConfig(BaseModel):
+    content_type: str
+    value: str | None = None
+    definitions: dict[str, Any] = Field(default_factory=dict)
+    components: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApiRevisionConfig(BaseModel):
+    revision: str
+    description: str | None = None
+    is_current: bool | None = None
+    is_online: bool | None = None
+    source_api_id: str | None = None
+
+
+class ApiReleaseConfig(BaseModel):
+    name: str
+    api_id: str | None = None
+    notes: str | None = None
+    revision: str | None = None
+
+
+class KeyVaultNamedValueConfig(BaseModel):
+    secret_id: str
+    identity_client_id: str | None = None
+
+
 class NamedValueConfig(BaseModel):
-    value: str
+    value: str | None = None
     secret: bool = False
+    value_from_key_vault: KeyVaultNamedValueConfig | None = None
+
+
+class LoggerApplicationInsightsConfig(BaseModel):
+    connection_string: str | None = None
+    instrumentation_key: str | None = None
+
+
+class LoggerEventHubConfig(BaseModel):
+    name: str
+    connection_string: str | None = None
+    endpoint_uri: str | None = None
+    user_assigned_identity_client_id: str | None = None
+
+
+class LoggerConfig(BaseModel):
+    logger_type: str = "custom"
+    description: str | None = None
+    buffered: bool = True
+    resource_id: str | None = None
+    application_insights: LoggerApplicationInsightsConfig | None = None
+    eventhub: LoggerEventHubConfig | None = None
+
+
+class DiagnosticMaskingRuleConfig(BaseModel):
+    mode: str
+    value: str
+
+
+class DiagnosticDataMaskingConfig(BaseModel):
+    query_params: list[DiagnosticMaskingRuleConfig] = Field(default_factory=list)
+    headers: list[DiagnosticMaskingRuleConfig] = Field(default_factory=list)
+
+
+class DiagnosticHttpMessageConfig(BaseModel):
+    body_bytes: int | None = None
+    headers_to_log: list[str] = Field(default_factory=list)
+    data_masking: DiagnosticDataMaskingConfig | None = None
+
+
+class DiagnosticConfig(BaseModel):
+    identifier: str
+    logger_id: str | None = None
+    always_log_errors: bool | None = None
+    backend_request: DiagnosticHttpMessageConfig | None = None
+    backend_response: DiagnosticHttpMessageConfig | None = None
+    frontend_request: DiagnosticHttpMessageConfig | None = None
+    frontend_response: DiagnosticHttpMessageConfig | None = None
+    http_correlation_protocol: str | None = None
+    log_client_ip: bool | None = None
+    sampling_percentage: float | None = None
+    verbosity: str | None = None
+    operation_name_format: str | None = None
 
 
 class UserConfig(BaseModel):
     id: str
     email: str | None = None
     name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    note: str | None = None
+    state: str | None = None
+    confirmation: str | None = None
 
 
 class GroupConfig(BaseModel):
     id: str
     name: str
+    description: str | None = None
+    external_id: str | None = None
+    type: str = "custom"
     users: list[str] = Field(default_factory=list)
+
+
+class TagConfig(BaseModel):
+    display_name: str
 
 
 class ProductConfig(BaseModel):
     name: str
     description: str | None = None
     require_subscription: bool = True
+    groups: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class BackendConfig(BaseModel):
@@ -198,6 +349,11 @@ class BackendConfig(BaseModel):
     basic_username: str | None = None
     basic_password: str | None = None
     managed_identity_resource: str | None = None
+    authorization_scheme: str | None = None
+    authorization_parameter: str | None = None
+    header_credentials: dict[str, str] = Field(default_factory=dict)
+    query_credentials: dict[str, str] = Field(default_factory=dict)
+    client_certificate_thumbprints: list[str] = Field(default_factory=list)
 
 
 class RouteConfig(BaseModel):
@@ -212,6 +368,8 @@ class RouteConfig(BaseModel):
     products: list[str] = Field(default_factory=list)
     api_version_set: str | None = None
     api_version: str | None = None
+    subscription_header_names: list[str] | None = None
+    subscription_query_param_names: list[str] | None = None
     authz: RouteAuthzConfig | None = None
     policies_xml: str | None = None
     policies_xml_documents: list[str] = Field(default_factory=list)
@@ -234,16 +392,19 @@ class RouteConfig(BaseModel):
         remainder = path
         if prefix and (path == prefix or path.startswith(prefix + "/")):
             remainder = path[len(prefix) :]
-        if not remainder.startswith("/"):
+        if remainder and not remainder.startswith("/"):
             remainder = "/" + remainder
         upstream_prefix = self.upstream_path_prefix.rstrip("/")
         upstream_path = (upstream_prefix + remainder) if upstream_prefix else remainder
+        if not upstream_path:
+            upstream_path = "/"
         base = (upstream_base_url or self.upstream_base_url).rstrip("/")
         return base + upstream_path
 
 
 class GatewayConfig(BaseModel):
     schema_version: int = 1
+    service: ServiceMetadataConfig = Field(default_factory=ServiceMetadataConfig)
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3007"])
     allow_anonymous: bool = False
     client_certificate: ClientCertificateConfig = Field(default_factory=ClientCertificateConfig)
@@ -251,8 +412,11 @@ class GatewayConfig(BaseModel):
     oidc_providers: dict[str, OIDCConfig] = Field(default_factory=dict)
     products: dict[str, ProductConfig] = Field(default_factory=dict)
     named_values: dict[str, NamedValueConfig] = Field(default_factory=dict)
+    loggers: dict[str, LoggerConfig] = Field(default_factory=dict)
+    diagnostics: dict[str, DiagnosticConfig] = Field(default_factory=dict)
     users: dict[str, UserConfig] = Field(default_factory=dict)
     groups: dict[str, GroupConfig] = Field(default_factory=dict)
+    tags: dict[str, TagConfig] = Field(default_factory=dict)
     subscription: SubscriptionConfig = Field(default_factory=SubscriptionConfig)
     admin_token: str | None = None
     tenant_access: TenantAccessConfig = Field(default_factory=TenantAccessConfig)
@@ -266,6 +430,7 @@ class GatewayConfig(BaseModel):
     cache_max_entries: int = 1024
     trace_enabled: bool = False
     api_version_sets: dict[str, ApiVersionSetConfig] = Field(default_factory=dict)
+    policy_fragments: dict[str, str] = Field(default_factory=dict)
     policies_xml: str | None = None
     policies_xml_documents: list[str] = Field(default_factory=list)
     backends: dict[str, BackendConfig] = Field(default_factory=dict)
@@ -305,6 +470,8 @@ class GatewayConfig(BaseModel):
                         products=list(api.products),
                         api_version_set=api.api_version_set,
                         api_version=api.api_version,
+                        subscription_header_names=api.subscription_header_names,
+                        subscription_query_param_names=api.subscription_query_param_names,
                         policies_xml_documents=api_policy_docs,
                     )
                 )
@@ -345,6 +512,9 @@ class GatewayConfig(BaseModel):
                         products=list(op_products or []),
                         api_version_set=op.api_version_set or api.api_version_set,
                         api_version=op.api_version or api.api_version,
+                        subscription_header_names=op.subscription_header_names or api.subscription_header_names,
+                        subscription_query_param_names=op.subscription_query_param_names
+                        or api.subscription_query_param_names,
                         authz=op.authz,
                         policies_xml_documents=policies,
                     )
@@ -357,14 +527,21 @@ class OperationConfig(BaseModel):
     name: str
     method: str = "GET"
     url_template: str
+    description: str | None = None
     upstream_base_url: str | None = None
     upstream_path_prefix: str | None = None
     backend: str | None = None
     products: list[str] | None = None
     api_version_set: str | None = None
     api_version: str | None = None
+    subscription_header_names: list[str] | None = None
+    subscription_query_param_names: list[str] | None = None
     authz: RouteAuthzConfig | None = None
     policies_xml: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    template_parameters: list[OperationParameterConfig] = Field(default_factory=list)
+    request: OperationRequestMetadataConfig | None = None
+    responses: list[OperationResponseMetadataConfig] = Field(default_factory=list)
 
 
 class ApiConfig(BaseModel):
@@ -376,21 +553,36 @@ class ApiConfig(BaseModel):
     products: list[str] = Field(default_factory=list)
     api_version_set: str | None = None
     api_version: str | None = None
+    revision: str | None = None
+    revision_description: str | None = None
+    version_description: str | None = None
+    source_api_id: str | None = None
+    is_current: bool | None = None
+    is_online: bool | None = None
+    subscription_header_names: list[str] | None = None
+    subscription_query_param_names: list[str] | None = None
     policies_xml: str | None = None
+    tags: list[str] = Field(default_factory=list)
     operations: dict[str, OperationConfig] = Field(default_factory=dict)
+    schemas: dict[str, ApiSchemaConfig] = Field(default_factory=dict)
+    revisions: dict[str, ApiRevisionConfig] = Field(default_factory=dict)
+    releases: dict[str, ApiReleaseConfig] = Field(default_factory=dict)
 
 
 def _default_config_from_env() -> GatewayConfig:
-    backend_base_url = os.getenv("BACKEND_BASE_URL", "http://api-fastapi-keycloak:8080")
-    oidc_issuer = os.getenv("OIDC_ISSUER", "http://localhost:8300/realms/subnet-calculator")
+    backend_base_url = os.getenv("BACKEND_BASE_URL", "http://mock-backend:8080")
+    backend_path_prefix = os.getenv("BACKEND_PATH_PREFIX", "/api")
+    oidc_issuer = os.getenv("OIDC_ISSUER", "http://localhost:8180/realms/subnet-calculator")
     oidc_audience = os.getenv("OIDC_AUDIENCE", "api-app")
     oidc_jwks_uri = os.getenv(
         "OIDC_JWKS_URI", "http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs"
     )
     allowed_origins = [
-        origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3007").split(",") if origin.strip()
+        origin.strip()
+        for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+        if origin.strip()
     ]
-    allow_anonymous = os.getenv("ALLOW_ANONYMOUS", "false").lower() == "true"
+    allow_anonymous = os.getenv("ALLOW_ANONYMOUS", "true").lower() == "true"
 
     subscription_key = os.getenv("APIM_SUBSCRIPTION_KEY", "")
     keys: dict[str, SubscriptionIdentity] = {}
@@ -407,7 +599,7 @@ def _default_config_from_env() -> GatewayConfig:
         allowed_origins=allowed_origins or ["*"],
         allow_anonymous=allow_anonymous,
         oidc=OIDCConfig(issuer=oidc_issuer, audience=oidc_audience, jwks_uri=oidc_jwks_uri),
-        products={"default": ProductConfig(name="Default")},
+        products={"default": ProductConfig(name="Default", require_subscription=bool(subscription_key))},
         subscription=SubscriptionConfig(required=bool(subscription_key), keys=keys),
         admin_token=admin_token,
         tenant_access=TenantAccessConfig(
@@ -420,7 +612,7 @@ def _default_config_from_env() -> GatewayConfig:
                 name="default",
                 path_prefix="/api",
                 upstream_base_url=backend_base_url,
-                upstream_path_prefix="/api",
+                upstream_path_prefix=backend_path_prefix,
                 product="default",
             )
         ],

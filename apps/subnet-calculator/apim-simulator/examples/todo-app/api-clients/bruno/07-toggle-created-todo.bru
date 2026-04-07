@@ -1,0 +1,39 @@
+meta {
+  name: 07 Toggle Created Todo
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{apimBaseUrl}}/api/todos/{{createdTodoId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  Ocp-Apim-Subscription-Key: {{subscriptionKey}}
+}
+
+body:json {
+  {
+    "completed": true
+  }
+}
+
+tests {
+  test("toggle returns 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("toggle completes the created todo", function () {
+    const body = res.getBody();
+    expect(body.id).to.equal(bru.getVar("createdTodoId"));
+    expect(body.completed).to.equal(true);
+  });
+
+  test("toggle carries policy header", function () {
+    expect(res.getHeader("x-todo-demo-policy")).to.equal("applied");
+  });
+}

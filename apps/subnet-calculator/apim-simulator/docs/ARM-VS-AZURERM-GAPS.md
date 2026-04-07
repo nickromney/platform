@@ -1,135 +1,95 @@
-# Azure ARM vs AzureRM Provider Gaps for APIM
+# Azure ARM vs AzureRM Gaps for APIM
 
-This document tracks Azure APIM features available in ARM templates or AzAPI but missing/lagging in the AzureRM Terraform provider. These gaps may affect simulator parity decisions.
+This document is a simulator-design note, not a changelog for the latest
+Terraform provider behavior.
 
-## Overview
+Use it when you need to decide whether a specific Azure API Management feature
+should be modeled through:
 
-The AzureRM provider abstracts Azure Resource Manager (ARM) APIs into Terraform resources. However, new ARM features often lag behind in the provider, requiring:
+- the AzureRM provider
+- the AzAPI provider or raw ARM resources
+- the simulator's local config only
 
-1. **AzAPI provider** - Direct ARM API access via `azapi_resource`
-2. **ARM templates** - Nested ARM deployment
-3. **Wait for provider update** - Track GitHub issues
+For the latest provider support, check the current AzureRM and AzAPI docs
+directly before relying on a specific resource or property.
 
-## Current Gaps (as of January 2026)
+## Why This Matters Here
 
-### High Priority (affects simulator design)
+The simulator imports APIM state from `tofu show -json` and maps it into a local
+gateway model. That means provider shape matters even when the simulator is not
+trying to reproduce the full Azure control plane.
 
-| ARM Property | AzureRM Status | Workaround | Simulator Impact |
-|--------------|----------------|------------|------------------|
-| `properties.natGatewayState` | Not exposed | AzAPI | None - k8s networking |
-| `properties.publicNetworkAccess` | Available (v3.x+) | - | None |
-| Workspace APIs | Partial | AzAPI for workspaces | None - single workspace |
-| GraphQL resolver policies | Not in provider | AzAPI | Not implementing GraphQL |
+In practice, provider gaps affect three things:
 
-### Medium Priority (nice to have)
+- what metadata is easy to import from Terraform
+- which APIM concepts teams are likely to author in AzureRM versus policy XML
+- where the simulator should be explicit that behavior is local, adapted, or out of scope
 
-| ARM Property | AzureRM Status | Workaround | Simulator Impact |
-|--------------|----------------|------------|------------------|
-| `properties.developerPortalUrl` customization | Read-only | - | N/A - no portal |
-| API revision descriptions | Not granular | - | Not tracking revisions |
-| Subscription scope (all APIs) | Supported | - | Implemented |
-| `properties.customProperties` | Available | - | Could add to config |
+## Practical Rules
 
-### Low Priority (edge cases)
+### Prefer AzureRM When The Resource Shape Is Stable
 
-| ARM Property | AzureRM Status | Workaround | Simulator Impact |
-|--------------|----------------|------------|------------------|
-| Outbound public IP addresses | Read-only output | - | N/A |
-| Private endpoint connections | Separate resource | - | N/A - k8s networking |
-| Platform version | Read-only | - | N/A |
+Use AzureRM-backed resources as the default source of truth for the common APIM
+objects the simulator already models well:
 
-## AzureRM Resources vs ARM Resources
+- service metadata
+- APIs and operations
+- products and subscriptions
+- backends
+- named values
+- users and groups
+- API version sets
 
-### Fully Covered
+Those are the resources most likely to show up in imported local workflows.
 
-These ARM resources have complete AzureRM coverage:
+### Use AzAPI Or ARM For Provider Lag
 
-| ARM Resource Type | AzureRM Resource |
-|-------------------|------------------|
-| `Microsoft.ApiManagement/service` | `azurerm_api_management` |
-| `Microsoft.ApiManagement/service/apis` | `azurerm_api_management_api` |
-| `Microsoft.ApiManagement/service/apis/operations` | `azurerm_api_management_api_operation` |
-| `Microsoft.ApiManagement/service/apis/policies` | `azurerm_api_management_api_policy` |
-| `Microsoft.ApiManagement/service/products` | `azurerm_api_management_product` |
-| `Microsoft.ApiManagement/service/subscriptions` | `azurerm_api_management_subscription` |
-| `Microsoft.ApiManagement/service/backends` | `azurerm_api_management_backend` |
-| `Microsoft.ApiManagement/service/namedValues` | `azurerm_api_management_named_value` |
-| `Microsoft.ApiManagement/service/certificates` | `azurerm_api_management_certificate` |
-| `Microsoft.ApiManagement/service/groups` | `azurerm_api_management_group` |
-| `Microsoft.ApiManagement/service/users` | `azurerm_api_management_user` |
-| `Microsoft.ApiManagement/service/apiVersionSets` | `azurerm_api_management_api_version_set` |
-| `Microsoft.ApiManagement/service/authorizationServers` | `azurerm_api_management_authorization_server` |
-| `Microsoft.ApiManagement/service/openidConnectProviders` | `azurerm_api_management_openid_connect_provider` |
+When Azure adds a property or child resource before AzureRM exposes it cleanly,
+teams usually bridge the gap with:
 
-### Partially Covered
+- `azapi_resource`
+- `azapi_update_resource`
+- nested ARM deployments
 
-| ARM Resource Type | AzureRM Gap | Notes |
-|-------------------|-------------|-------|
-| `Microsoft.ApiManagement/service/policies` | Global policy only | Operation-level via separate resource |
-| `Microsoft.ApiManagement/service/loggers` | Basic support | Some logger types missing |
-| `Microsoft.ApiManagement/service/diagnostics` | Available | Sampling settings limited |
+The simulator should treat those cases as import and projection questions, not
+as a reason to promise full ARM parity.
 
-### Not Covered (require AzAPI)
+### Keep Policy Behavior Separate From Resource Coverage
 
-| ARM Resource Type | Notes |
-|-------------------|-------|
-| `Microsoft.ApiManagement/service/workspaces` | Preview feature |
-| `Microsoft.ApiManagement/service/workspaces/*` | Workspace-scoped resources |
-| `Microsoft.ApiManagement/service/apis/resolvers` | GraphQL resolvers |
-| `Microsoft.ApiManagement/service/contentTypes` | Developer portal content |
-| `Microsoft.ApiManagement/service/contentItems` | Developer portal content |
+Many useful APIM features are expressed as policy XML rather than first-class
+Terraform fields.
 
-## Policy XML vs Terraform
+That means the simulator should keep distinguishing between:
 
-Some policies are easier to manage in XML than via Terraform resources:
+- control-plane metadata it can import and expose
+- runtime policy behavior it can execute locally
+- unsupported policy attributes that must stay clearly labeled
 
-| Policy | Terraform Approach | Recommendation |
-|--------|-------------------|----------------|
-| `validate-jwt` | Inline XML in `azurerm_api_management_api_policy` | XML |
-| `rate-limit-by-key` | Inline XML | XML |
-| `cache-lookup` / `cache-store` | Inline XML | XML |
-| `set-header` | Inline XML | XML (easier bulk edits) |
-| `cors` | Can use `azurerm_api_management.cors` | Either |
+## Where Gaps Usually Matter
 
-The simulator accepts policy XML directly, matching the Terraform pattern.
+These areas tend to drift faster than the simulator should:
 
-## Simulator Design Decisions
+- service-level networking and newer platform flags
+- newer APIM child resources that arrive in ARM before AzureRM
+- workspace, portal, and GraphQL-specific surfaces
+- policy attributes that remain easiest to manage as raw XML
 
-Based on these gaps, the simulator:
+Those areas are a good fit for compatibility reporting and explicit scope notes.
+They are a poor fit for broad parity claims.
 
-1. **Uses JSON config** - Maps to Terraform `tofu show -json` output
-2. **Accepts policy XML** - Same format as `azurerm_api_management_api_policy.xml_content`
-3. **Ignores ARM-only features** - Workspace APIs, GraphQL resolvers
-4. **Focuses on gateway behavior** - Not management plane CRUD
+## Simulator Implications
 
-## Tracking Provider Updates
+The simulator follows a few rules because of that split:
 
-Key GitHub issues to watch:
-
-- [hashicorp/terraform-provider-azurerm](https://github.com/hashicorp/terraform-provider-azurerm/issues?q=is%3Aissue+is%3Aopen+api_management)
-- AzureRM changelog: Check for `azurerm_api_management*` entries
-
-## Using AzAPI for Gaps
-
-Example of using AzAPI for a missing property:
-
-```hcl
-resource "azapi_update_resource" "apim_custom_property" {
-  type        = "Microsoft.ApiManagement/service@2023-05-01-preview"
-  resource_id = azurerm_api_management.this.id
-
-  body = jsonencode({
-    properties = {
-      customProperties = {
-        "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2" = "true"
-      }
-    }
-  })
-}
-```
+1. Import the resource families that are common in real Terraform workflows.
+2. Preserve descriptive metadata even when local runtime behavior is narrower.
+3. Accept policy XML directly because that is how many APIM features are
+   represented in Terraform anyway.
+4. Mark adapted and unsupported behavior explicitly instead of implying Azure
+   equivalence.
 
 ## References
 
-- [ARM template reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.apimanagement/service)
-- [AzureRM provider docs](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management)
+- [Azure APIM ARM template reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.apimanagement/service)
+- [AzureRM `api_management` resources](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management)
 - [AzAPI provider docs](https://registry.terraform.io/providers/Azure/azapi/latest/docs)

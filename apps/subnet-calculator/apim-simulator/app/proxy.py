@@ -98,7 +98,9 @@ def _route_matches_host(route: RouteConfig, request_hosts: list[str]) -> bool:
                 return True
             if expected_no_port == request_host or expected_no_port == request_no_port:
                 return True
-            if "*" in expected_norm and (fnmatch(request_host, expected_norm) or fnmatch(request_no_port, expected_norm)):
+            if "*" in expected_norm and (
+                fnmatch(request_host, expected_norm) or fnmatch(request_no_port, expected_norm)
+            ):
                 return True
             if "*" in expected_no_port and (
                 fnmatch(request_host, expected_no_port) or fnmatch(request_no_port, expected_no_port)
@@ -205,6 +207,9 @@ def build_upstream_headers(request: Request, auth: AuthContext) -> dict[str, str
     headers: dict[str, str] = {
         key: value for key, value in request.headers.items() if key.lower() not in HOP_BY_HOP_HEADERS
     }
+    incoming_host = request.headers.get("host")
+    if incoming_host:
+        headers["host"] = incoming_host
 
     claims = auth.claims
     headers["x-apim-user-object-id"] = str(claims.get("sub", ""))
@@ -225,7 +230,7 @@ def build_upstream_headers(request: Request, auth: AuthContext) -> dict[str, str
 
 def filter_response_headers(upstream_headers: dict[str, str]) -> dict[str, str]:
     headers = {key: value for key, value in upstream_headers.items() if key.lower() not in HOP_BY_HOP_HEADERS}
-    headers["x-apim-simulator"] = "apim-sim-full"
+    headers["x-apim-simulator"] = "apim-simulator"
     return headers
 
 

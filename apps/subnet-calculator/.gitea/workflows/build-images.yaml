@@ -100,4 +100,4 @@ jobs:
           cd "${WORKDIR}"
           TAG="$(git rev-parse --short=12 HEAD)"
           export TAG
-          bash scripts/update-subnetcalc-image-tags.sh
+          bash scripts/update-subnetcalc-image-tags.sh --execute

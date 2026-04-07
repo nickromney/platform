@@ -1,0 +1,20 @@
+{
+  "method": "GET",
+  "path": "/sample",
+  "headers": {
+    "Authorization": "Bearer opaque"
+  },
+  "mock_responses": [
+    {
+      "match": {
+        "url": "https://introspection.example/token"
+      },
+      "response": {
+        "status_code": 200,
+        "json": {
+          "active": false
+        }
+      }
+    }
+  ]
+}

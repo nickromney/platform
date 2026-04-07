@@ -1,0 +1,249 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "22"
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Check formatting
+        run: uv run --extra dev ruff format --check .
+
+      - name: Run Ruff
+        run: uv run --extra dev ruff check .
+
+  test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: "false"
+
+      - name: Run test suite
+        run: uv run --extra dev pytest -q
+
+  compat:
+    name: Compatibility Harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: "false"
+
+      - name: Run curated APIM compatibility harness
+        run: make compat
+
+      - name: Run Terraform/APIM compatibility report
+        run: TOFU_SHOW=tests/fixtures/tofu_show/sample.json make compat-report
+
+  ui-build:
+    name: UI Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+  compose-config:
+    name: Compose Config Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Generate dev certs for edge/TLS overlays
+        run: ./scripts/gen_dev_certs.sh
+
+      - name: Verify Docker Compose is available
+        run: docker compose version
+
+      - name: Render supported compose stacks
+        run: |
+          set -euo pipefail
+          make compose-config
+          make compose-config-mcp
+          make compose-config-oidc
+          make compose-config-edge
+          make compose-config-tls
+          make compose-config-private
+          make compose-config-ui
+
+  compose-smokes:
+    name: Compose Smoke Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: "false"
+
+      - name: Verify Docker Compose is available
+        run: docker compose version
+
+      - name: Direct public gateway smoke
+        run: |
+          set -euo pipefail
+          make up
+          i=0
+          until curl -fsS http://localhost:8000/apim/startup >/dev/null; do
+            i=$((i + 1))
+            if [ "$i" -ge 60 ]; then
+              echo "gateway did not become ready" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8000/apim/health >/dev/null
+          curl -fsS http://localhost:8000/api/echo >/dev/null
+          make down
+
+      - name: Direct public MCP smoke
+        run: |
+          set -euo pipefail
+          make up-mcp
+          make smoke-mcp
+          make down
+
+      - name: Edge HTTP smoke
+        run: |
+          set -euo pipefail
+          make up-edge
+          make smoke-edge
+          make down
+
+      - name: Edge TLS smoke
+        run: |
+          set -euo pipefail
+          make up-tls
+          make smoke-tls
+          make down
+
+      - name: Private-mode smoke
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yml -f compose.private.yml -f compose.mcp.yml up --build -d
+          make smoke-private
+          make down
+
+      - name: OIDC smoke
+        run: |
+          set -euo pipefail
+          make up-oidc
+          make smoke-oidc
+          make down
+
+      - name: Collect compose logs on failure
+        if: failure()
+        run: |
+          set +e
+          mkdir -p "${RUNNER_TEMP}/compose-logs"
+          docker ps -a > "${RUNNER_TEMP}/compose-logs/docker-ps.txt" 2>&1 || true
+          docker compose version > "${RUNNER_TEMP}/compose-logs/docker-compose-version.txt" 2>&1 || true
+          docker compose \
+            -f compose.yml \
+            -f compose.public.yml \
+            -f compose.edge.yml \
+            -f compose.tls.yml \
+            -f compose.private.yml \
+            -f compose.ui.yml \
+            -f compose.oidc.yml \
+            -f compose.mcp.yml \
+            logs --no-color > "${RUNNER_TEMP}/compose-logs/compose-all.log" 2>&1 || true
+
+      - name: Upload compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: ${{ runner.temp }}/compose-logs
+          if-no-files-found: ignore
+
+      - name: Cleanup compose state
+        if: always()
+        run: make down || true

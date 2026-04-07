@@ -1,0 +1,49 @@
+{
+  "allowed_origins": ["http://localhost:3000", "http://localhost:3007", "http://localhost:5173", "http://localhost:8000"],
+  "allow_anonymous": true,
+  "products": {
+    "hello": {
+      "name": "Hello",
+      "description": "Subscription-protected hello API",
+      "require_subscription": true
+    }
+  },
+  "subscription": {
+    "required": true,
+    "header_names": ["Ocp-Apim-Subscription-Key", "X-Ocp-Apim-Subscription-Key"],
+    "subscriptions": {
+      "hello-demo": {
+        "id": "sub-hello-demo",
+        "name": "hello-demo",
+        "keys": {
+          "primary": "hello-demo-key",
+          "secondary": "hello-demo-key-secondary"
+        },
+        "products": ["hello"],
+        "created_by": "publisher"
+      }
+    }
+  },
+  "apis": {
+    "hello-api": {
+      "name": "Hello API",
+      "path": "api",
+      "upstream_base_url": "http://hello-api:8000",
+      "upstream_path_prefix": "/api",
+      "products": ["hello"],
+      "policies_xml": "<policies><inbound /><backend /><outbound><set-header name=\"x-hello-policy\" exists-action=\"override\"><value>applied</value></set-header></outbound><on-error /></policies>",
+      "operations": {
+        "health": {
+          "name": "Health",
+          "method": "GET",
+          "url_template": "/health"
+        },
+        "hello": {
+          "name": "Hello",
+          "method": "GET",
+          "url_template": "/hello"
+        }
+      }
+    }
+  }
+}

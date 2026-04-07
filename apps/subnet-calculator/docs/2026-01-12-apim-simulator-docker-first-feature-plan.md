@@ -250,6 +250,7 @@ MVP import targets:
 ### Phase 1 (core realism)
 
 - Pick one canonical simulator implementation (avoid divergence)
+- Decision: `github.com/nickromney/apim-simulator` is canonical; `platform/apps/subnet-calculator/apim-simulator/` is the vendored mirror pinned to a release tag
 - Versioned config schema
 - Policy pipeline + validate-jwt + subscription key semantics
 

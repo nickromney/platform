@@ -1,0 +1,26 @@
+{
+  "steps": [
+    {
+      "status_code": 200,
+      "json": {
+        "call": 1
+      }
+    },
+    {
+      "status_code": 200,
+      "json": {
+        "call": 1
+      },
+      "headers": {
+        "cache-control": "public, must-revalidate"
+      }
+    },
+    {
+      "status_code": 200,
+      "json": {
+        "call": 2
+      }
+    }
+  ],
+  "upstream_call_count": 2
+}

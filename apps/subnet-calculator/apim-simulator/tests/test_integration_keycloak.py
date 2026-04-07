@@ -17,7 +17,8 @@ def test_keycloak_password_grant_token_validates_via_jwks_uri() -> None:
 
     base_url = os.getenv("APIM_SIM_KEYCLOAK_BASE_URL", "http://localhost:8180")
     realm = os.getenv("APIM_SIM_KEYCLOAK_REALM", "subnet-calculator")
-    client_id = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_ID", "api-app")
+    client_id = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_ID", "frontend-app")
+    audience = os.getenv("APIM_SIM_KEYCLOAK_AUDIENCE", "api-app")
     client_secret = os.getenv("APIM_SIM_KEYCLOAK_CLIENT_SECRET")
     username = os.getenv("APIM_SIM_KEYCLOAK_USERNAME", "demo@dev.test")
     password = os.getenv("APIM_SIM_KEYCLOAK_PASSWORD", "demo-password")
@@ -49,7 +50,7 @@ def test_keycloak_password_grant_token_validates_via_jwks_uri() -> None:
 
     config = GatewayConfig(
         allow_anonymous=False,
-        oidc=OIDCConfig(issuer=issuer, audience=client_id, jwks_uri=jwks_uri),
+        oidc=OIDCConfig(issuer=issuer, audience=audience, jwks_uri=jwks_uri),
         subscription=SubscriptionConfig(
             required=True,
             subscriptions={

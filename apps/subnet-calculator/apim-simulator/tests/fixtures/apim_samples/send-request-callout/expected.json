@@ -1,0 +1,10 @@
+{
+  "status_code": 401,
+  "headers": {
+    "www-authenticate": "Bearer error=\"invalid_token\""
+  },
+  "upstream": {
+    "url": "https://introspection.example/token",
+    "body": "token=opaque"
+  }
+}

@@ -11,6 +11,8 @@ set -euo pipefail
 
 POLICIES_REPO_NAME="${POLICIES_REPO_NAME:-policies}"
 POLICIES_BRANCH="${POLICIES_BRANCH:-main}"
+PUSH_RETRY_COUNT="${PUSH_RETRY_COUNT:-5}"
+PUSH_RETRY_SLEEP_SECONDS="${PUSH_RETRY_SLEEP_SECONDS:-2}"
 
 tmp=""
 cleanup() {
@@ -57,25 +59,43 @@ images=(
   "sentiment-auth-ui"
 )
 
-for file in "${files[@]}"; do
-  for image in "${images[@]}"; do
-    target_ref="${REGISTRY_HOST}/${GITEA_REPO_OWNER}/${image}:${TAG}"
-    out="$(mktemp)"
-    sed -E "s|(image:[[:space:]]*)([^[:space:]]*/)?${image}:[^[:space:]]+|\1${target_ref}|g" "${file}" >"${out}"
-    mv "${out}" "${file}"
+rewrite_files() {
+  local file image target_ref out
+
+  for file in "${files[@]}"; do
+    for image in "${images[@]}"; do
+      target_ref="${REGISTRY_HOST}/${GITEA_REPO_OWNER}/${image}:${TAG}"
+      out="$(mktemp)"
+      sed -E "s|(image:[[:space:]]*)([^[:space:]]*/)?${image}:[^[:space:]]+|\1${target_ref}|g" "${file}" >"${out}"
+      mv "${out}" "${file}"
+    done
   done
-done
+}
 
 git config user.name "gitea-actions"
 git config user.email "gitea-actions@local"
 
-git add "${files[@]}"
-if git diff --cached --quiet; then
-  echo "Manifest already contained ${TAG}"
-  exit 0
-fi
+for attempt in $(seq 1 "${PUSH_RETRY_COUNT}"); do
+  git fetch --quiet origin "${POLICIES_BRANCH}"
+  git checkout -B "${POLICIES_BRANCH}" "origin/${POLICIES_BRANCH}" >/dev/null
 
-git commit -m "chore: bump sentiment images to ${TAG}" >/dev/null
-git push origin "${POLICIES_BRANCH}" >/dev/null
+  rewrite_files
+  git add "${files[@]}"
 
-echo "Updated ${POLICIES_REPO_NAME} manifests to ${TAG}"
+  if git diff --cached --quiet; then
+    echo "Manifest already contained ${TAG}"
+    exit 0
+  fi
+
+  git commit -m "chore: bump sentiment images to ${TAG}" >/dev/null
+  if git push origin HEAD:"${POLICIES_BRANCH}" >/dev/null; then
+    echo "Updated ${POLICIES_REPO_NAME} manifests to ${TAG}"
+    exit 0
+  fi
+
+  git reset --hard "origin/${POLICIES_BRANCH}" >/dev/null
+  sleep "${PUSH_RETRY_SLEEP_SECONDS}"
+done
+
+echo "Failed to push ${POLICIES_REPO_NAME} manifests after ${PUSH_RETRY_COUNT} attempts" >&2
+exit 1

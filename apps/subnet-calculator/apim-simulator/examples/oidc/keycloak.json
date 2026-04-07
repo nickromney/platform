@@ -1,0 +1,83 @@
+{
+  "allowed_origins": ["http://localhost:3007", "http://localhost:5173", "http://localhost:8000"],
+  "allow_anonymous": false,
+  "tenant_access": {
+    "enabled": true,
+    "primary_key": "local-dev-tenant-key",
+    "secondary_key": "local-dev-tenant-key-secondary"
+  },
+  "oidc": {
+    "issuer": "http://localhost:8180/realms/subnet-calculator",
+    "audience": "api-app",
+    "jwks_uri": "http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs"
+  },
+  "products": {
+    "demo": {
+      "name": "Demo",
+      "description": "Default OIDC example product",
+      "require_subscription": true
+    },
+    "admin": {
+      "name": "Admin",
+      "description": "Admin-only OIDC example product",
+      "require_subscription": true
+    }
+  },
+  "subscription": {
+    "required": true,
+    "header_names": ["Ocp-Apim-Subscription-Key", "X-Ocp-Apim-Subscription-Key"],
+    "subscriptions": {
+      "oidc-demo": {
+        "id": "sub-oidc-demo",
+        "name": "oidc-demo",
+        "keys": {"primary": "oidc-demo-key", "secondary": "oidc-demo-key-secondary"},
+        "products": ["demo"],
+        "created_by": "publisher"
+      },
+      "oidc-admin": {
+        "id": "sub-oidc-admin",
+        "name": "oidc-admin",
+        "keys": {"primary": "oidc-admin-key", "secondary": "oidc-admin-key-secondary"},
+        "products": ["demo", "admin"],
+        "created_by": "publisher"
+      }
+    }
+  },
+  "apis": {
+    "demo-api": {
+      "name": "Demo API",
+      "path": "api",
+      "upstream_base_url": "http://mock-backend:8080",
+      "upstream_path_prefix": "/api",
+      "products": ["demo"],
+      "operations": {
+        "echo": {
+          "name": "Echo",
+          "method": "GET",
+          "url_template": "/echo",
+          "authz": {
+            "required_roles": ["user"]
+          }
+        }
+      }
+    },
+    "admin-api": {
+      "name": "Admin API",
+      "path": "admin/api",
+      "upstream_base_url": "http://mock-backend:8080",
+      "upstream_path_prefix": "/api",
+      "products": ["admin"],
+      "policies_xml": "<policies>\n  <inbound>\n    <rate-limit calls=\"2\" renewal-period=\"60\" scope=\"subscription\" />\n  </inbound>\n  <backend />\n  <outbound />\n  <on-error />\n</policies>",
+      "operations": {
+        "echo": {
+          "name": "Echo",
+          "method": "GET",
+          "url_template": "/echo",
+          "authz": {
+            "required_roles": ["admin"]
+          }
+        }
+      }
+    }
+  }
+}

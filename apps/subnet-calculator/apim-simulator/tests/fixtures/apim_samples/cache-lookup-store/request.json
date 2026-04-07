@@ -1,0 +1,49 @@
+{
+  "steps": [
+    {
+      "method": "GET",
+      "path": "/sample",
+      "query": {
+        "version": "v1"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sample",
+      "query": {
+        "version": "v1"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sample",
+      "query": {
+        "version": "v2"
+      }
+    }
+  ],
+  "mock_responses": [
+    {
+      "match": {
+        "url": "http://upstream/?version=v1"
+      },
+      "response": {
+        "status_code": 200,
+        "json": {
+          "call": 1
+        }
+      }
+    },
+    {
+      "match": {
+        "url": "http://upstream/?version=v2"
+      },
+      "response": {
+        "status_code": 200,
+        "json": {
+          "call": 2
+        }
+      }
+    }
+  ]
+}
