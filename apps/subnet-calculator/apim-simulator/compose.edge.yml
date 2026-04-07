@@ -1,0 +1,16 @@
+services:
+  edge-proxy:
+    image: nginx:1.27-alpine
+    depends_on:
+      apim-simulator:
+        condition: service_started
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./examples/edge/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./examples/edge/certs:/etc/nginx/certs:ro
+    networks:
+      - apim
+
+networks:
+  apim:

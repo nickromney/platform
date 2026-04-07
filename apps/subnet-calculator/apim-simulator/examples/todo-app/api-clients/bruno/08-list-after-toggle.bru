@@ -1,0 +1,30 @@
+meta {
+  name: 08 List After Toggle
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{apimBaseUrl}}/api/todos
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Ocp-Apim-Subscription-Key: {{subscriptionKey}}
+}
+
+tests {
+  test("final list returns 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("final list contains the created todo", function () {
+    const body = res.getBody();
+    const createdTodoId = bru.getVar("createdTodoId");
+    const createdTodo = body.items.find((item) => item.id === createdTodoId);
+    expect(createdTodo).to.not.equal(undefined);
+    expect(createdTodo.completed).to.equal(true);
+  });
+}

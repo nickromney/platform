@@ -1,0 +1,19 @@
+services:
+  mcp-server:
+    build:
+      context: ./examples/mcp-server
+      dockerfile: Dockerfile
+    image: apim-simulator-mcp-server:latest
+    expose:
+      - "8080"
+    networks:
+      - apim
+
+  apim-simulator:
+    environment:
+      APIM_CONFIG_PATH: /app/examples/mcp/http.json
+    depends_on:
+      mock-backend:
+        condition: service_started
+      mcp-server:
+        condition: service_started

@@ -1,0 +1,18 @@
+services:
+  smoke-runner:
+    image: python:3.13-slim
+    profiles:
+      - smoke
+    working_dir: /work
+    entrypoint:
+      - sh
+      - -lc
+    command:
+      - tail -f /dev/null
+    volumes:
+      - .:/work:ro
+    networks:
+      - apim
+
+networks:
+  apim:

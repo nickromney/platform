@@ -13,6 +13,7 @@ from app.config import (
     ClientCertificateConfig,
     ClientCertificateMode,
     GatewayConfig,
+    RouteConfig,
     SubscriptionIdentity,
     SubscriptionState,
     TrustedClientCertificateConfig,
@@ -137,12 +138,26 @@ def subscription_bypassed(request: Request, config: GatewayConfig) -> bool:
     return _subscription_bypassed(request, config)
 
 
-def _get_subscription_key_optional(request: Request, config: GatewayConfig) -> str | None:
-    for header_name in config.subscription.header_names:
+def _subscription_header_names(config: GatewayConfig, route: RouteConfig | None) -> list[str]:
+    if route is not None and route.subscription_header_names:
+        return route.subscription_header_names
+    return config.subscription.header_names
+
+
+def _subscription_query_param_names(config: GatewayConfig, route: RouteConfig | None) -> list[str]:
+    if route is not None and route.subscription_query_param_names:
+        return route.subscription_query_param_names
+    return config.subscription.query_param_names
+
+
+def _get_subscription_key_optional(
+    request: Request, config: GatewayConfig, route: RouteConfig | None = None
+) -> str | None:
+    for header_name in _subscription_header_names(config, route):
         provided = request.headers.get(header_name)
         if provided:
             return provided
-    for query_name in config.subscription.query_param_names:
+    for query_name in _subscription_query_param_names(config, route):
         provided = request.query_params.get(query_name)
         if provided:
             return provided
@@ -157,13 +172,15 @@ def _require_active_subscription(config: GatewayConfig, provided_key: str) -> No
         raise HTTPException(status_code=403, detail="Subscription is not active")
 
 
-def validate_subscription_key(request: Request, config: GatewayConfig) -> SubscriptionIdentity | None:
+def validate_subscription_key(
+    request: Request, config: GatewayConfig, route: RouteConfig | None = None
+) -> SubscriptionIdentity | None:
     if not config.subscription.required:
         return None
     if _subscription_bypassed(request, config):
         return None
 
-    provided = _get_subscription_key_optional(request, config)
+    provided = _get_subscription_key_optional(request, config, route)
     if not provided:
         raise HTTPException(status_code=401, detail="Missing subscription key")
 
@@ -175,11 +192,13 @@ def validate_subscription_key(request: Request, config: GatewayConfig) -> Subscr
     return identity
 
 
-def get_subscription_identity_optional(request: Request, config: GatewayConfig) -> SubscriptionIdentity | None:
+def get_subscription_identity_optional(
+    request: Request, config: GatewayConfig, route: RouteConfig | None = None
+) -> SubscriptionIdentity | None:
     if _subscription_bypassed(request, config):
         return None
 
-    provided = _get_subscription_key_optional(request, config)
+    provided = _get_subscription_key_optional(request, config, route)
     if not provided:
         return None
 
@@ -190,10 +209,12 @@ def get_subscription_identity_optional(request: Request, config: GatewayConfig) 
     return identity
 
 
-def get_subscription_products_optional(request: Request, config: GatewayConfig) -> list[str]:
+def get_subscription_products_optional(
+    request: Request, config: GatewayConfig, route: RouteConfig | None = None
+) -> list[str]:
     if _subscription_bypassed(request, config):
         return []
-    provided = _get_subscription_key_optional(request, config)
+    provided = _get_subscription_key_optional(request, config, route)
     if not provided:
         return []
 
@@ -202,10 +223,12 @@ def get_subscription_products_optional(request: Request, config: GatewayConfig) 
     return sub.products if sub is not None else []
 
 
-def require_subscription_products(request: Request, config: GatewayConfig) -> list[str]:
+def require_subscription_products(
+    request: Request, config: GatewayConfig, route: RouteConfig | None = None
+) -> list[str]:
     if _subscription_bypassed(request, config):
         return []
-    provided = _get_subscription_key_optional(request, config)
+    provided = _get_subscription_key_optional(request, config, route)
     if not provided:
         raise HTTPException(status_code=401, detail="Missing subscription key")
 
@@ -220,11 +243,11 @@ def require_subscription_products(request: Request, config: GatewayConfig) -> li
 
 
 def authenticate_request(
-    request: Request, config: GatewayConfig, oidc_verifiers: dict[str, OIDCVerifier]
+    request: Request, config: GatewayConfig, oidc_verifiers: dict[str, OIDCVerifier], route: RouteConfig | None = None
 ) -> AuthContext:
     if config.allow_anonymous:
-        subscription = get_subscription_identity_optional(request, config)
-        products = get_subscription_products_optional(request, config)
+        subscription = get_subscription_identity_optional(request, config, route)
+        products = get_subscription_products_optional(request, config, route)
         issuer, audience = _default_issuer_audience(config)
         claims = {
             "sub": "anon-demo",
@@ -236,8 +259,11 @@ def authenticate_request(
         }
         return AuthContext(claims=claims, subscription=subscription, subscription_products=products)
 
-    subscription = validate_subscription_key(request, config)
-    products = require_subscription_products(request, config)
+    subscription = validate_subscription_key(request, config, route)
+    if config.subscription.required:
+        products = require_subscription_products(request, config, route)
+    else:
+        products = get_subscription_products_optional(request, config, route)
 
     auth_header = request.headers.get("authorization")
     if not auth_header or not auth_header.lower().startswith("bearer "):

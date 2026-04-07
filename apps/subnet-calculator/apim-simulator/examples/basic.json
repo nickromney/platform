@@ -1,0 +1,37 @@
+{
+  "allowed_origins": ["http://localhost:3000", "http://localhost:3007", "http://localhost:5173", "http://localhost:8000"],
+  "allow_anonymous": true,
+  "tenant_access": {
+    "enabled": true,
+    "primary_key": "local-dev-tenant-key",
+    "secondary_key": "local-dev-tenant-key-secondary"
+  },
+  "products": {
+    "default": {
+      "name": "Default",
+      "description": "Anonymous local development product",
+      "require_subscription": false
+    }
+  },
+  "apis": {
+    "default": {
+      "name": "Default",
+      "path": "api",
+      "upstream_base_url": "http://mock-backend:8080",
+      "upstream_path_prefix": "/api",
+      "products": ["default"],
+      "operations": {
+        "health": {
+          "name": "Health",
+          "method": "GET",
+          "url_template": "/health"
+        },
+        "echo": {
+          "name": "Echo",
+          "method": "GET",
+          "url_template": "/echo"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+services:
+  hello-api:
+    build:
+      context: .
+      dockerfile: examples/hello-api/Dockerfile
+    image: apim-simulator-hello-api:latest
+    expose:
+      - "8000"
+    environment:
+      OTEL_SERVICE_NAME: hello-api
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - apim
+
+  apim-simulator:
+    environment:
+      APIM_CONFIG_PATH: ${HELLO_APIM_CONFIG_PATH:-/app/examples/hello-api/apim.anonymous.json}
+      OTEL_SERVICE_NAME: apim-simulator
+    depends_on:
+      hello-api:
+        condition: service_healthy
+
+networks:
+  apim:

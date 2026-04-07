@@ -1,0 +1,35 @@
+meta {
+  name: 01 Health Through APIM
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{apimBaseUrl}}/api/health
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Ocp-Apim-Subscription-Key: {{subscriptionKey}}
+}
+
+tests {
+  test("health returns 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("health payload is healthy", function () {
+    const body = res.getBody();
+    expect(body.status).to.equal("ok");
+  });
+
+  test("apim policy header is present", function () {
+    expect(res.getHeader("x-todo-demo-policy")).to.equal("applied");
+  });
+
+  test("apim gateway header is present", function () {
+    expect(res.getHeader("x-apim-simulator")).to.not.equal(undefined);
+  });
+}

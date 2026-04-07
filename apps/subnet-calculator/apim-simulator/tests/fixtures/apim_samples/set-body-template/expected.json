@@ -1,0 +1,6 @@
+{
+  "status_code": 200,
+  "upstream": {
+    "body": "{\"method\":\"POST\",\"path\":\"/sample/items\"}"
+  }
+}

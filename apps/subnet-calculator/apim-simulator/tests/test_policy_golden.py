@@ -1,6 +1,21 @@
 from __future__ import annotations
 
-from app.policy import PolicyRequest, apply_inbound, apply_on_error, apply_outbound, parse_policies_xml
+from app.config import GatewayConfig, NamedValueConfig
+from app.policy import (
+    CacheLookup,
+    CacheLookupValue,
+    CacheRemoveValue,
+    CacheStore,
+    CacheStoreValue,
+    PolicyRequest,
+    PolicyRuntime,
+    QuotaByKey,
+    RateLimitByKey,
+    apply_inbound,
+    apply_on_error,
+    apply_outbound,
+    parse_policies_xml,
+)
 
 
 def test_golden_policy_set_header_override() -> None:
@@ -220,3 +235,178 @@ def test_golden_policy_quota_enforces_429() -> None:
     early = apply_inbound([doc], req)
     assert early is not None
     assert early.status_code == 429
+
+
+def test_golden_policy_set_variable_renders_into_later_policy_values() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <set-variable name="mode" value="{query:mode}" />
+    <set-header name="x-mode" exists-action="override"><value>{var:mode}</value></set-header>
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    req = PolicyRequest(method="GET", path="/api/health", query={"mode": "debug"}, headers={}, variables={})
+    early = apply_inbound([doc], req)
+    assert early is None
+    assert req.variables["mode"] == "debug"
+    assert req.headers["x-mode"] == "debug"
+
+
+def test_golden_policy_set_query_parameter_mutates_upstream_query_only() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <set-query-parameter name="source" exists-action="override">
+      <value>{path}</value>
+    </set-query-parameter>
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    req = PolicyRequest(method="GET", path="/api/health", query={}, headers={}, variables={})
+    early = apply_inbound([doc], req)
+    assert early is None
+    assert req.query["source"] == "/api/health"
+
+
+def test_golden_policy_set_body_replaces_request_body() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <set-body>{"path":"{path}","subscription":"{subscription_id}"}</set-body>
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    req = PolicyRequest(
+        method="POST",
+        path="/api/items",
+        query={},
+        headers={},
+        variables={"subscription_id": "sub-1"},
+        body=b"original",
+    )
+    early = apply_inbound([doc], req)
+    assert early is None
+    assert req.body == b'{"path":"/api/items","subscription":"sub-1"}'
+
+
+def test_golden_policy_return_response_supports_set_body_template() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <set-variable name="mode" value="{query:mode}" />
+    <return-response>
+      <set-status code="200" reason="ok" />
+      <set-header name="content-type" exists-action="override"><value>application/json</value></set-header>
+      <set-body>{"mode":"{var:mode}"}</set-body>
+    </return-response>
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    req = PolicyRequest(method="GET", path="/api/health", query={"mode": "trace"}, headers={}, variables={})
+    early = apply_inbound([doc], req)
+    assert early is not None
+    assert early.status_code == 200
+    assert early.body == b'{"mode":"trace"}'
+
+
+def test_golden_policy_include_fragment_inserts_fragment_nodes() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <include-fragment fragment-id="common-header" />
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+""",
+        policy_fragments={
+            "common-header": """
+<fragment>
+  <set-header name="x-fragment" exists-action="override"><value>1</value></set-header>
+</fragment>
+"""
+        },
+    )
+    req = PolicyRequest(method="GET", path="/api/health", query={}, headers={}, variables={})
+    early = apply_inbound([doc], req)
+    assert early is None
+    assert req.headers["x-fragment"] == "1"
+
+
+def test_golden_policy_named_values_resolve_before_template_tokens() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <set-header name="x-backend" exists-action="override"><value>https://{{backend-host}}{path}</value></set-header>
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    req = PolicyRequest(method="GET", path="/api/health", query={}, headers={}, variables={})
+    runtime = PolicyRuntime(
+        gateway_config=GatewayConfig(named_values={"backend-host": NamedValueConfig(value="backend.example.test")})
+    )
+
+    early = apply_inbound([doc], req, runtime=runtime)
+
+    assert early is None
+    assert req.headers["x-backend"] == "https://backend.example.test/api/health"
+
+
+def test_golden_policy_parses_policy_parity_v2_nodes() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <rate-limit-by-key calls="10" renewal-period="60" counter-key="user-a" />
+    <quota-by-key calls="100" renewal-period="300" counter-key="user-a" first-period-start="2026-04-02T10:00:00Z" />
+    <cache-lookup vary-by-developer="true" vary-by-developer-groups="false" caching-type="internal">
+      <vary-by-query-parameter>version;locale</vary-by-query-parameter>
+    </cache-lookup>
+    <cache-lookup-value key="token-user-a" variable-name="tokenstate" default-value="missing" />
+    <cache-remove-value key="token-user-a" />
+  </inbound>
+  <backend />
+  <outbound>
+    <cache-store duration="60" />
+    <cache-store-value key="token-user-a" value="warm" duration="60" />
+  </outbound>
+  <on-error />
+</policies>
+"""
+    )
+
+    assert isinstance(doc.inbound[0], RateLimitByKey)
+    assert isinstance(doc.inbound[1], QuotaByKey)
+    assert isinstance(doc.inbound[2], CacheLookup)
+    assert isinstance(doc.inbound[3], CacheLookupValue)
+    assert isinstance(doc.inbound[4], CacheRemoveValue)
+    assert isinstance(doc.outbound[0], CacheStore)
+    assert isinstance(doc.outbound[1], CacheStoreValue)

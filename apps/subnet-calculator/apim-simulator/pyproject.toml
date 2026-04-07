@@ -1,12 +1,19 @@
 [project]
-name = "subnet-calculator-apim-sim-full"
+name = "apim-simulator"
 version = "0.1.0"
-description = "Config-driven APIM-like gateway simulator for local Docker/Kubernetes testing"
+description = "Config-driven Azure API Management simulator for local Docker-first testing"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.0",
     "httpx>=0.28.1",
+    "pyyaml>=6.0.2",
     "pyjwt[crypto]>=2.10.1",
+    "opentelemetry-api>=1.40.0",
+    "opentelemetry-sdk>=1.40.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.40.0",
+    "opentelemetry-instrumentation-fastapi>=0.61b0",
+    "opentelemetry-instrumentation-httpx>=0.61b0",
+    "opentelemetry-instrumentation-logging>=0.61b0",
 ]
 
 [project.optional-dependencies]
@@ -18,9 +25,6 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.uv]
-exclude-newer = "7 days"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

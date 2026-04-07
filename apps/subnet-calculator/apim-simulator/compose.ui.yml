@@ -1,0 +1,15 @@
+services:
+  ui:
+    image: node:22-alpine
+    working_dir: /ui
+    command:
+      - sh
+      - -lc
+      - npm install && npm run dev -- --host 0.0.0.0 --port 3007
+    depends_on:
+      apim-simulator:
+        condition: service_started
+    ports:
+      - "3007:3007"
+    volumes:
+      - ./ui:/ui
