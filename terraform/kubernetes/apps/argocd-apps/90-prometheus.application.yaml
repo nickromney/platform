@@ -15,7 +15,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: prometheus
-    targetRevision: 28.16.0
+    targetRevision: 29.2.0
     helm:
       releaseName: prometheus
       values: |
@@ -57,7 +57,7 @@ spec:
         server:
           image:
             repository: dhi.io/prometheus
-            tag: 3.11.0-debian13
+            tag: 3.11.1-debian13
           persistentVolume:
             enabled: false
           resources:
