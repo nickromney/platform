@@ -30,7 +30,7 @@ spec:
   source:
     repoURL: https://charts.signoz.io
     chart: signoz
-    targetRevision: 0.117.1
+    targetRevision: 0.118.0
     helm:
       values: |
         clickhouse:

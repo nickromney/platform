@@ -344,7 +344,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.4.17"
+  default     = "9.5.0"
 }
 
 variable "argocd_image_repository" {
@@ -386,13 +386,13 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "28.16.0"
+  default     = "29.2.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus hardened container image tag."
   type        = string
-  default     = "3.11.0-debian13"
+  default     = "3.11.1-debian13"
 }
 
 variable "grafana_chart_version" {
@@ -476,7 +476,7 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.117.1"
+  default     = "0.118.0"
 }
 
 variable "headlamp_chart_version" {
@@ -524,7 +524,7 @@ variable "oauth2_proxy_chart_version" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.147.1"
+  default     = "0.150.0"
 }
 
 # -----------------------------------------------------------------------------
