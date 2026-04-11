@@ -6,6 +6,10 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
+[options]
+exclude-newer = "2026-04-04T13:01:24.862941Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -38,7 +42,7 @@ wheels = [
 
 [[package]]
 name = "apim-simulator"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },

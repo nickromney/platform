@@ -82,7 +82,7 @@ For the todo demo, that becomes:
 ```text
 Browser -> Astro frontend -> apim-simulator -> FastAPI todo API
                                         \
-                                         -> Grafana LGTM stack
+                                         -> [Grafana LGTM](https://github.com/grafana/docker-otel-lgtm) stack
 ```
 
 That model covers most of the early debugging questions:
@@ -116,8 +116,8 @@ There are three useful starting points in this repository.
 Use this when you want the simplest possible APIM-shaped setup.
 
 - Stack: `make up`
-- Config: `examples/basic.json`
-- Backend: `examples/mock-backend/server.py`
+- Config: [`examples/basic.json`](../examples/basic.json)
+- Backend: [`examples/mock-backend/server.py`](../examples/mock-backend/server.py)
 
 This mode isolates:
 
@@ -130,8 +130,8 @@ This mode isolates:
 Use this when you want to isolate APIM subscriptions first.
 
 - Stack: `make up-todo-otel`
-- Config: `examples/todo-app/apim.json`
-- Backend: `examples/todo-app/api-fastapi-container-app/main.py`
+- Config: [`examples/todo-app/apim.json`](../examples/todo-app/apim.json)
+- Backend: [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
 - Browser UI: `http://localhost:3000`
 
 This path gives you:
@@ -146,8 +146,8 @@ This path gives you:
 Use this when you want to isolate identity and authorization.
 
 - Stack: `make up-oidc`
-- Config: `examples/oidc/keycloak.json`
-- Token helper: `scripts/get_keycloak_token.py`
+- Config: [`examples/oidc/keycloak.json`](../examples/oidc/keycloak.json)
+- Token helper: [`scripts/get_keycloak_token.py`](../scripts/get_keycloak_token.py)
 - End-to-end smoke: `make smoke-oidc`
 
 This mode shows:
@@ -189,11 +189,11 @@ This confirms:
 
 Where this is configured:
 
-- `compose.yml`
-- `compose.public.yml`
-- `examples/basic.json`
+- [`compose.yml`](../compose.yml)
+- [`compose.public.yml`](../compose.public.yml)
+- [`examples/basic.json`](../examples/basic.json)
 
-The important thing in `examples/basic.json` is:
+The important thing in [`examples/basic.json`](../examples/basic.json) is:
 
 - `allow_anonymous: true`
 - the default product does not require a subscription
@@ -225,7 +225,7 @@ Request flow:
 - APIM checks the subscription
 - APIM forwards to the internal FastAPI backend
 - APIM adds a proof header: `x-todo-demo-policy: applied`
-- OTEL signals are emitted to LGTM
+- OTEL signals are emitted to [LGTM](https://github.com/grafana/docker-otel-lgtm)
 
 Try the same flow with `curl`.
 
@@ -260,7 +260,7 @@ Key point:
 
 Where this is configured:
 
-- `examples/todo-app/apim.json`
+- [`examples/todo-app/apim.json`](../examples/todo-app/apim.json)
 
 The important sections are:
 
@@ -340,7 +340,7 @@ That should return `200`.
 
 Where this is configured:
 
-- `examples/oidc/keycloak.json`
+- [`examples/oidc/keycloak.json`](../examples/oidc/keycloak.json)
 
 The important pieces are:
 
@@ -472,7 +472,7 @@ Use this when:
 - you want APIM product/subscription access control
 - and you also want user or app identity from a bearer token
 
-That is the pattern used by `examples/oidc/keycloak.json`.
+That is the pattern used by [`examples/oidc/keycloak.json`](../examples/oidc/keycloak.json).
 
 In practice, the request must satisfy both checks:
 
@@ -492,13 +492,13 @@ service.
 
 For the smallest checked-in Python example, start with:
 
-- `examples/hello-api/main.py`
-- `examples/hello-api/apim.anonymous.json`
-- `compose.hello.yml`
+- [`examples/hello-api/main.py`](../examples/hello-api/main.py)
+- [`examples/hello-api/apim.anonymous.json`](../examples/hello-api/apim.anonymous.json)
+- [`compose.hello.yml`](../compose.hello.yml)
 
 For the richer browser-backed example, look at:
 
-- `examples/todo-app/api-fastapi-container-app/main.py`
+- [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
 
 Both are normal FastAPI apps. The APIM-specific work happens in front of them,
 not instead of them.
@@ -512,16 +512,16 @@ make smoke-hello
 
 Then inspect:
 
-- `examples/hello-api/main.py`
-- `examples/hello-api/apim.anonymous.json`
-- `compose.hello.yml`
+- [`examples/hello-api/main.py`](../examples/hello-api/main.py)
+- [`examples/hello-api/apim.anonymous.json`](../examples/hello-api/apim.anonymous.json)
+- [`compose.hello.yml`](../compose.hello.yml)
 
 That keeps the gateway as the public entrypoint and the backend as an internal
 service, while giving you a concrete example that already runs.
 
 ### Add Observability At The Same Time
 
-For Python backends in this repo, prefer the shared helper in `app/telemetry.py`
+For Python backends in this repo, prefer the shared helper in [`app/telemetry.py`](../app/telemetry.py)
 so logs, traces, and metrics follow the same contract as the gateway.
 
 The todo backend is the reference implementation for that:
@@ -604,8 +604,8 @@ Use Bruno or Postman when you want saved request flows rather than ad hoc
 
 The repo includes ready-made client artifacts for the todo example:
 
-- `examples/todo-app/api-clients/bruno/`
-- `examples/todo-app/api-clients/postman/`
+- [`examples/todo-app/api-clients/bruno/`](../examples/todo-app/api-clients/bruno/)
+- [`examples/todo-app/api-clients/postman/`](../examples/todo-app/api-clients/postman/)
 
 If you need Bruno itself, use the official install page:
 [Bruno installation options](https://docs.usebruno.com/get-started/bruno-basics/download#installation-options).
@@ -635,7 +635,7 @@ Use Proxyman when the browser behaves differently from manual API clients.
 
 The repo includes a HAR file:
 
-- `examples/todo-app/api-clients/proxyman/todo-through-apim.har`
+- [`examples/todo-app/api-clients/proxyman/todo-through-apim.har`](../examples/todo-app/api-clients/proxyman/todo-through-apim.har)
 
 Why it matters:
 
@@ -742,10 +742,10 @@ clearer.
 
 ## Where To Look Next
 
-- Main repo overview: `README.md`
-- Todo example: `examples/todo-app/README.md`
-- Capability coverage: `docs/CAPABILITY-MATRIX.md`
-- Scope and current boundaries: `docs/SCOPE.md`
+- Main repo overview: [`README.md`](../README.md)
+- Todo example: [`examples/todo-app/README.md`](../examples/todo-app/README.md)
+- Capability coverage: [`docs/CAPABILITY-MATRIX.md`](CAPABILITY-MATRIX.md)
+- Scope and current boundaries: [`docs/SCOPE.md`](SCOPE.md)
 
 Start with the todo demo or the hello starter before diving into the capability
 matrix.

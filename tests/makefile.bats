@@ -14,6 +14,8 @@ setup() {
   [[ "${output}" == *"make lint-bash32"* ]]
   [[ "${output}" == *"make lint-shell"* ]]
   [[ "${output}" == *"make fmt"* ]]
+  [[ "${output}" == *"make release-preview"* ]]
+  [[ "${output}" == *"make release-tag VERSION=0.1.0"* ]]
   [[ "${output}" == *"make lint-cilium-live"* ]]
   [[ "${output}" == *"make lint-kyverno-live"* ]]
   [[ "${output}" == *"make prereqs"* ]]
@@ -136,4 +138,39 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'fmt-markdown --execute' ]
+}
+
+@test "root release helpers delegate to semantic-release and the tag script" {
+  semantic_release_stub="${BATS_TEST_TMPDIR}/semantic-release.sh"
+  release_tag_stub="${BATS_TEST_TMPDIR}/release-tag.sh"
+  log_file="${BATS_TEST_TMPDIR}/release.log"
+
+  cat >"${semantic_release_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'semantic %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${semantic_release_stub}"
+
+  cat >"${release_tag_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'tag VERSION=%s DRY_RUN=%s\n' "\${1:-}" "\${DRY_RUN:-0}" >>"${log_file}"
+EOF
+  chmod +x "${release_tag_stub}"
+
+  run make -C "${REPO_ROOT}" release-preview \
+    SEMANTIC_RELEASE_CMD="${semantic_release_stub}"
+
+  [ "${status}" -eq 0 ]
+
+  run make -C "${REPO_ROOT}" release-tag-dry-run VERSION=0.1.0 \
+    RELEASE_TAG_SCRIPT="${release_tag_stub}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'semantic --dry-run\ntag VERSION=0.1.0 DRY_RUN=1' ]
 }

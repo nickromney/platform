@@ -42,6 +42,8 @@ def project_route(config: GatewayConfig, route: RouteConfig) -> dict[str, Any]:
         "path_prefix": route.path_prefix,
         "host_match": route.host_match,
         "methods": route.methods,
+        "api_id": route.api_id,
+        "operation_id": route.operation_id,
         "upstream_base_url": route.upstream_base_url,
         "upstream_path_prefix": route.upstream_path_prefix,
         "backend": route.backend,

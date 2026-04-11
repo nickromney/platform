@@ -1,7 +1,7 @@
 # Azure ARM vs AzureRM Gaps for APIM
 
 This document is a simulator-design note, not a changelog for the latest
-Terraform provider behavior.
+Terraform provider behaviour.
 
 Use it when you need to decide whether a specific Azure API Management feature
 should be modeled through:
@@ -23,7 +23,7 @@ In practice, provider gaps affect three things:
 
 - what metadata is easy to import from Terraform
 - which APIM concepts teams are likely to author in AzureRM versus policy XML
-- where the simulator should be explicit that behavior is local, adapted, or out of scope
+- where the simulator should be explicit that behaviour is local, adapted, or out of scope
 
 ## Practical Rules
 
@@ -54,7 +54,7 @@ teams usually bridge the gap with:
 The simulator should treat those cases as import and projection questions, not
 as a reason to promise full ARM parity.
 
-### Keep Policy Behavior Separate From Resource Coverage
+### Keep Policy Behaviour Separate From Resource Coverage
 
 Many useful APIM features are expressed as policy XML rather than first-class
 Terraform fields.
@@ -62,7 +62,7 @@ Terraform fields.
 That means the simulator should keep distinguishing between:
 
 - control-plane metadata it can import and expose
-- runtime policy behavior it can execute locally
+- runtime policy behaviour it can execute locally
 - unsupported policy attributes that must stay clearly labeled
 
 ## Where Gaps Usually Matter
@@ -82,10 +82,10 @@ They are a poor fit for broad parity claims.
 The simulator follows a few rules because of that split:
 
 1. Import the resource families that are common in real Terraform workflows.
-2. Preserve descriptive metadata even when local runtime behavior is narrower.
+2. Preserve descriptive metadata even when local runtime behaviour is narrower.
 3. Accept policy XML directly because that is how many APIM features are
    represented in Terraform anyway.
-4. Mark adapted and unsupported behavior explicitly instead of implying Azure
+4. Mark adapted and unsupported behaviour explicitly instead of implying Azure
    equivalence.
 
 ## References

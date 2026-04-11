@@ -2005,6 +2005,66 @@ def test_management_api_schema_endpoints_and_put_preserve_imported_metadata() ->
     assert get_operation.json()["description"] == "Get current weather"
 
 
+def test_management_operation_mock_response_flow_uses_authored_response_example() -> None:
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            tenant_access=TenantAccessConfig(enabled=True, primary_key="t1"),
+            apis={
+                "test-api": ApiConfig(
+                    name="test-api",
+                    path="test-api",
+                    upstream_base_url="http://upstream",
+                )
+            },
+        ),
+        http_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _: (_ for _ in ()).throw(AssertionError("Upstream should not be called"))
+            )
+        ),
+    )
+
+    with TestClient(app) as client:
+        headers = {"X-Apim-Tenant-Key": "t1"}
+        upsert_operation = client.put(
+            "/apim/management/apis/test-api/operations/test-call",
+            headers=headers,
+            json={
+                "name": "Test call",
+                "method": "GET",
+                "url_template": "/test",
+                "responses": [
+                    {
+                        "status_code": 200,
+                        "representations": [
+                            {
+                                "content_type": "application/json",
+                                "examples": [{"name": "ok", "value": {"sampleField": "test"}}],
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        update_policy = client.put(
+            "/apim/management/policies/operation/test-api%3Atest-call",
+            headers=headers,
+            json={
+                "xml": '<policies><inbound><mock-response status-code="200" content-type="application/json" /></inbound><backend /><outbound /><on-error /></policies>'
+            },
+        )
+        mocked = client.get("/test-api/test")
+
+    assert upsert_operation.status_code == 200
+    assert upsert_operation.json()["responses"][0]["representations"][0]["examples"][0]["value"] == {
+        "sampleField": "test"
+    }
+    assert update_policy.status_code == 200
+    assert mocked.status_code == 200
+    assert mocked.json() == {"sampleField": "test"}
+
+
 def test_management_api_revision_and_release_endpoints_and_put_preserve_metadata() -> None:
     app = create_app(
         config=GatewayConfig(
@@ -2083,6 +2143,147 @@ def test_management_api_revision_and_release_endpoints_and_put_preserve_metadata
 
     assert get_api.status_code == 200
     assert get_api.json()["releases"][0]["notes"] == "Shipped publicly"
+
+
+def test_management_api_import_openapi_endpoint_creates_routable_api() -> None:
+    upstream_urls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        upstream_urls.append(str(req.url))
+        return httpx.Response(200, json={"ok": True})
+
+    spec = json.dumps(
+        {
+            "openapi": "3.0.1",
+            "info": {"title": "Petstore", "version": "1.0.0"},
+            "servers": [{"url": "http://upstream/api"}],
+            "paths": {
+                "/pets": {
+                    "get": {
+                        "operationId": "listPets",
+                    }
+                }
+            },
+        }
+    )
+
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            tenant_access=TenantAccessConfig(enabled=True, primary_key="t1"),
+            apis={},
+        ),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    with TestClient(app) as client:
+        headers = {"X-Apim-Tenant-Key": "t1"}
+        imported = client.post(
+            "/apim/management/apis/petstore/import",
+            headers=headers,
+            json={
+                "name": "Petstore",
+                "path": "store",
+                "content_format": "openapi+json",
+                "content_value": spec,
+            },
+        )
+        routed = client.get("/store/pets")
+
+    assert imported.status_code == 200
+    assert imported.json()["import"]["operation_count"] == 1
+    assert imported.json()["api"]["operations"][0]["id"] == "listPets"
+    assert routed.status_code == 200
+    assert routed.json() == {"ok": True}
+    assert upstream_urls == ["http://upstream/api/pets"]
+
+
+def test_management_api_version_set_crud_endpoints_work_for_api_authored_configs() -> None:
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            tenant_access=TenantAccessConfig(enabled=True, primary_key="t1"),
+            apis={},
+        )
+    )
+
+    with TestClient(app) as client:
+        headers = {"X-Apim-Tenant-Key": "t1"}
+        created = client.put(
+            "/apim/management/api-version-sets/public",
+            headers=headers,
+            json={
+                "display_name": "Public",
+                "versioning_scheme": "Header",
+                "version_header_name": "x-api-version",
+                "default_version": "v1",
+            },
+        )
+        fetched = client.get("/apim/management/api-version-sets/public", headers=headers)
+        deleted = client.delete("/apim/management/api-version-sets/public", headers=headers)
+
+    assert created.status_code == 200
+    assert created.json()["versioning_scheme"] == "Header"
+    assert fetched.status_code == 200
+    assert fetched.json()["default_version"] == "v1"
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
+
+
+def test_management_api_revision_and_release_crud_endpoints_work() -> None:
+    app = create_app(
+        config=GatewayConfig(
+            service={"name": "team-sim", "display_name": "Team Simulator"},
+            allow_anonymous=True,
+            tenant_access=TenantAccessConfig(enabled=True, primary_key="t1"),
+            apis={
+                "weather": ApiConfig(
+                    name="weather",
+                    path="weather",
+                    upstream_base_url="http://weather-upstream",
+                )
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        headers = {"X-Apim-Tenant-Key": "t1"}
+        first_revision = client.put(
+            "/apim/management/apis/weather/revisions/1",
+            headers=headers,
+            json={"description": "Initial revision", "is_current": False, "is_online": False},
+        )
+        second_revision = client.put(
+            "/apim/management/apis/weather/revisions/2",
+            headers=headers,
+            json={
+                "description": "Current revision",
+                "is_current": True,
+                "is_online": True,
+                "source_api_id": "service/team-sim/apis/weather;rev=1",
+            },
+        )
+        release = client.put(
+            "/apim/management/apis/weather/releases/public",
+            headers=headers,
+            json={"notes": "Published", "revision": "2"},
+        )
+        fetched_api = client.get("/apim/management/apis/weather", headers=headers)
+        deleted_release = client.delete("/apim/management/apis/weather/releases/public", headers=headers)
+        deleted_revision = client.delete("/apim/management/apis/weather/revisions/1", headers=headers)
+
+    assert first_revision.status_code == 200
+    assert second_revision.status_code == 200
+    assert second_revision.json()["is_current"] is True
+    assert release.status_code == 200
+    assert release.json()["api_id"] == "service/team-sim/apis/weather;rev=2"
+    assert fetched_api.status_code == 200
+    assert fetched_api.json()["revision"] == "2"
+    assert fetched_api.json()["revisions"][1]["id"] == "2"
+    assert fetched_api.json()["releases"][0]["id"] == "public"
+    assert deleted_release.status_code == 200
+    assert deleted_revision.status_code == 200
+    assert deleted_revision.json()["deleted"] is True
 
 
 def test_management_tag_crud_and_links_persist_without_parent_put_wiping_assignments(
@@ -3204,6 +3405,72 @@ def test_rate_limit_by_key_supports_response_condition_and_custom_headers() -> N
     assert seen_urls == ["http://upstream/items"]
     assert first_trace.json()["policy_variable_writes"][-1]["name"] == "remaining_calls"
     assert second_trace.json()["policy_variable_writes"][-1]["name"] == "retry_after"
+
+
+def test_rate_limit_by_key_supports_context_subscription_id_expression() -> None:
+    policy = """\
+<policies>
+  <inbound>
+    <rate-limit-by-key calls="1" renewal-period="60" counter-key="@(context.Subscription.Id)" />
+    <base />
+  </inbound>
+  <backend />
+  <outbound>
+    <set-header name="Custom" exists-action="override">
+      <value>My custom value</value>
+    </set-header>
+    <base />
+  </outbound>
+  <on-error />
+</policies>
+"""
+
+    seen_urls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen_urls.append(str(req.url))
+        return httpx.Response(200, json={"status": "ok", "path": "/api/health"})
+
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            products={"tutorial-product": ProductConfig(name="Tutorial Product", require_subscription=True)},
+            subscription=SubscriptionConfig(
+                required=False,
+                subscriptions={
+                    "tutorial-sub": Subscription(
+                        id="tutorial-sub",
+                        name="tutorial-sub",
+                        keys=SubscriptionKeyPair(primary="tutorial-key", secondary="tutorial-key-secondary"),
+                        products=["tutorial-product"],
+                    )
+                },
+            ),
+            apis={
+                "tutorial-api": ApiConfig(
+                    name="Tutorial API",
+                    path="tutorial-api",
+                    upstream_base_url="http://mock-backend:8080/api",
+                    products=["tutorial-product"],
+                    policies_xml=policy,
+                    operations={
+                        "health": OperationConfig(name="health", method="GET", url_template="/health"),
+                    },
+                )
+            },
+        ),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    with TestClient(app) as client:
+        first = client.get("/tutorial-api/health", headers={"Ocp-Apim-Subscription-Key": "tutorial-key"})
+        second = client.get("/tutorial-api/health", headers={"Ocp-Apim-Subscription-Key": "tutorial-key"})
+
+    assert first.status_code == 200
+    assert first.headers["custom"] == "My custom value"
+    assert first.json() == {"status": "ok", "path": "/api/health"}
+    assert second.status_code == 429
+    assert seen_urls == ["http://mock-backend:8080/api/health"]
 
 
 def test_quota_by_key_respects_first_period_start(monkeypatch: Any) -> None:

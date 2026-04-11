@@ -336,6 +336,107 @@ class ReturnResponse(PolicyNode):
         )
 
 
+def _encode_mock_response_example(value: Any, *, content_type: str | None) -> bytes:
+    if value is None:
+        return b""
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        if content_type and "json" in content_type.lower():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return value.encode("utf-8")
+            return json.dumps(parsed).encode("utf-8")
+        return value.encode("utf-8")
+    if content_type and "json" in content_type.lower():
+        return json.dumps(value).encode("utf-8")
+    return str(value).encode("utf-8")
+
+
+def _mock_response_sample(
+    req: PolicyRequest,
+    runtime: PolicyRuntime | None,
+    *,
+    status_code: int,
+    content_type: str | None,
+) -> tuple[bytes, str | None]:
+    if runtime is None or runtime.gateway_config is None:
+        return b"", content_type
+
+    api_id = str(req.variables.get("api_id") or "")
+    operation_id = str(req.variables.get("operation_id") or "")
+    if not api_id or not operation_id:
+        return b"", content_type
+
+    api = runtime.gateway_config.apis.get(api_id)
+    if api is None:
+        return b"", content_type
+    operation = api.operations.get(operation_id)
+    if operation is None:
+        return b"", content_type
+
+    candidates = [item for item in operation.responses if item.status_code == status_code]
+    if not candidates and operation.responses:
+        candidates = [operation.responses[0]]
+    if not candidates:
+        return b"", content_type
+
+    response = candidates[0]
+    representations = list(response.representations)
+    if not representations:
+        return b"", content_type
+
+    if content_type:
+        for representation in representations:
+            if representation.content_type.lower() == content_type.lower():
+                representations = [representation]
+                break
+
+    representation = representations[0]
+    resolved_content_type = content_type or representation.content_type
+
+    for example in representation.examples:
+        if example.value is not None:
+            return _encode_mock_response_example(
+                example.value, content_type=resolved_content_type
+            ), resolved_content_type
+
+    return b"", resolved_content_type
+
+
+@dataclass(frozen=True)
+class MockResponse(PolicyNode):
+    status_code: int = 200
+    content_type: str | None = None
+
+    def apply(self, req: PolicyRequest, runtime: PolicyRuntime | None = None) -> ResponseSpec | None:
+        body, media_type = _mock_response_sample(
+            req,
+            runtime,
+            status_code=self.status_code,
+            content_type=self.content_type,
+        )
+        headers: dict[str, str] = {}
+        if media_type:
+            headers["content-type"] = media_type
+        _record_step(
+            runtime,
+            "mock-response",
+            {
+                "status_code": self.status_code,
+                "content_type": media_type,
+                "has_body": bool(body),
+            },
+        )
+        return ResponseSpec(
+            status_code=self.status_code,
+            headers=headers,
+            body=body,
+            media_type=media_type,
+        )
+
+
 @dataclass(frozen=True)
 class Choose(PolicyNode):
     branches: list[tuple[Condition, list[PolicyNode]]]
@@ -1618,6 +1719,12 @@ def _parse_return_response(el: ElementTree.Element) -> ReturnResponse:
     return ReturnResponse(status_code=code, reason=reason, headers=headers, body=body)
 
 
+def _parse_mock_response(el: ElementTree.Element) -> MockResponse:
+    status_code = int(el.attrib.get("status-code") or "200")
+    content_type = el.attrib.get("content-type")
+    return MockResponse(status_code=status_code, content_type=content_type)
+
+
 def _parse_check_header(el: ElementTree.Element) -> CheckHeader:
     name = (el.attrib.get("name") or "").strip().lower()
     if not name:
@@ -2000,6 +2107,8 @@ def _parse_node(
         return _parse_cache_remove_value(el)
     if tag == "return-response":
         return _parse_return_response(el)
+    if tag == "mock-response":
+        return _parse_mock_response(el)
     if tag == "choose":
         return _parse_choose(
             el,

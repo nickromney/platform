@@ -24,7 +24,7 @@ from app.telemetry import (
 TodoTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 TODO_SERVICE_NAME = "todo-api"
-TODO_SERVICE_VERSION = "0.1.0"
+TODO_SERVICE_VERSION = "0.2.0"
 logger = logging.getLogger(TODO_SERVICE_NAME)
 _TODO_METRICS: TodoMetrics | None = None
 

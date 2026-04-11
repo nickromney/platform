@@ -1,13 +1,20 @@
-FROM python:3.13-slim
+ARG PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13
+FROM ${PYTHON_RUNTIME_IMAGE}
+
+ARG APP_UID=65532
+ARG APP_GID=65532
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8080
+    PORT=8080 \
+    HOME=/tmp
 
 WORKDIR /app
 
-COPY server.py .
+COPY --chown=${APP_UID}:${APP_GID} server.py .
 
 EXPOSE 8080
+
+USER ${APP_UID}:${APP_GID}
 
 CMD ["python", "server.py"]

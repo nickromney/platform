@@ -126,5 +126,5 @@ observability still comes from local traces plus OTEL and Grafana.
 1. Author or import APIs and operations into config.
 2. Attach products and subscriptions.
 3. Add backends, named values, and policy fragments.
-4. Verify behavior with `/apim/management/summary`, replay, and traces.
+4. Verify behaviour with `/apim/management/summary`, replay, and traces.
 5. Use OTEL plus Grafana when you need cross-service diagnostics.

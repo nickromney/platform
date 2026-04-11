@@ -1,6 +1,7 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.7
+    init: true
     ports:
       - "8180:8080"
     environment:
@@ -15,7 +16,16 @@ services:
     command:
       - start-dev
       - --import-realm
+    # start-dev rebuilds Quarkus artifacts, so the image cannot run read-only
+    # without switching to a custom optimized image.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=1000,gid=0,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
+      - keycloak-data:/opt/keycloak/data
       - ./examples/subnet-calculator/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     healthcheck:
       test:
@@ -32,7 +42,8 @@ services:
 
   apim-simulator:
     environment:
-      APIM_CONFIG_PATH: /app/examples/oidc/keycloak.json
+      APIM_CONFIG_PATH: /tmp/oidc-apim-config.json
+      APIM_CONFIG_SOURCE_PATH: /app/examples/oidc/keycloak.json
     depends_on:
       mock-backend:
         condition: service_started
@@ -41,3 +52,6 @@ services:
 
 networks:
   apim:
+
+volumes:
+  keycloak-data:

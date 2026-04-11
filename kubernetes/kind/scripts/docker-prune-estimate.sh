@@ -1,10 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: docker-prune-estimate.sh [--dry-run] [--execute]
+
+Estimate how much space the standard Docker builder/system prune sequence would reclaim.
+$(shell_cli_standard_options)
+EOF
+}
+
 fail() {
   echo "docker-prune-estimate: $*" >&2
   exit 1
 }
+
+shell_cli_handle_standard_no_args usage \
+  "would estimate reclaimable Docker builder and system prune space" \
+  "$@"
 
 command -v docker >/dev/null 2>&1 || fail "docker not found in PATH"
 command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"

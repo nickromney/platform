@@ -1,4 +1,4 @@
-import { FormEvent, startTransition, useEffect, useState } from "react";
+import { type FormEvent, startTransition, useEffect, useState } from "react";
 
 type PolicyScope = {
   scope_type: string;
@@ -247,10 +247,13 @@ function App() {
     setPolicyMessage(`Saving ${currentScope.scope_type} policy.`);
 
     try {
-      await apiFetch(`/apim/management/policies/${currentScope.scope_type}/${encodeURIComponent(currentScope.scope_name)}`, {
-        method: "PUT",
-        body: JSON.stringify({ xml: policyXml }),
-      });
+      await apiFetch(
+        `/apim/management/policies/${currentScope.scope_type}/${encodeURIComponent(currentScope.scope_name)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ xml: policyXml }),
+        },
+      );
       setPolicyMessage(`Saved ${currentScope.scope_type} policy for ${currentScope.scope_name}.`);
     } catch (error) {
       setPolicyMessage(error instanceof Error ? error.message : "Policy update failed.");
@@ -333,11 +336,11 @@ function App() {
           }}
         >
           <label>
-            <span>Gateway base URL</span>
+            <span className="field-label">Gateway base URL</span>
             <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
           </label>
           <label>
-            <span>Tenant key</span>
+            <span className="field-label">Tenant key</span>
             <input value={tenantKey} onChange={(event) => setTenantKey(event.target.value)} />
           </label>
           <button type="submit" disabled={busy}>
@@ -442,7 +445,7 @@ function App() {
 
           <form className="policy-form" onSubmit={(event) => void savePolicy(event)}>
             <label>
-              <span>Scope</span>
+              <span className="field-label">Scope</span>
               <select
                 value={selectedScopeId}
                 onChange={(event) => {
@@ -461,7 +464,7 @@ function App() {
             </label>
 
             <label className="policy-editor">
-              <span>XML</span>
+              <span className="field-label">XML</span>
               <textarea value={policyXml} onChange={(event) => setPolicyXml(event.target.value)} rows={18} />
             </label>
 
@@ -483,7 +486,7 @@ function App() {
           <form className="replay-form" onSubmit={(event) => void runReplay(event)}>
             <div className="replay-row">
               <label>
-                <span>Method</span>
+                <span className="field-label">Method</span>
                 <select value={replayMethod} onChange={(event) => setReplayMethod(event.target.value)}>
                   {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => (
                     <option key={method} value={method}>
@@ -494,18 +497,18 @@ function App() {
               </label>
 
               <label className="path-field">
-                <span>Path</span>
+                <span className="field-label">Path</span>
                 <input value={replayPath} onChange={(event) => setReplayPath(event.target.value)} />
               </label>
             </div>
 
             <label>
-              <span>Headers (JSON)</span>
+              <span className="field-label">Headers (JSON)</span>
               <textarea value={replayHeaders} onChange={(event) => setReplayHeaders(event.target.value)} rows={7} />
             </label>
 
             <label>
-              <span>Body</span>
+              <span className="field-label">Body</span>
               <textarea value={replayBody} onChange={(event) => setReplayBody(event.target.value)} rows={7} />
             </label>
 
@@ -516,7 +519,9 @@ function App() {
 
           <div className="replay-output">
             <h3>Replay Result</h3>
-            <pre>{replayResult ? prettyJson(replayResult) : "Run a replay to inspect the response and trace metadata."}</pre>
+            <pre>
+              {replayResult ? prettyJson(replayResult) : "Run a replay to inspect the response and trace metadata."}
+            </pre>
           </div>
         </section>
 

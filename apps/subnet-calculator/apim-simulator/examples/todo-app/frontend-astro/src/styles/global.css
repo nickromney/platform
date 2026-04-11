@@ -24,8 +24,7 @@ body {
   color: var(--ink);
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.6), transparent 30%),
-    linear-gradient(135deg, rgba(255, 235, 217, 0.88), rgba(237, 219, 198, 0.86)),
-    var(--bg);
+    linear-gradient(135deg, rgba(255, 235, 217, 0.88), rgba(237, 219, 198, 0.86)), var(--bg);
 }
 
 body::before {
@@ -224,7 +223,9 @@ h2 {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
   box-shadow: 0 10px 24px rgba(110, 31, 16, 0.24);
 }
 
@@ -249,9 +250,7 @@ h2 {
   padding: 1.15rem 1.2rem;
   border: 1px solid rgba(35, 24, 21, 0.1);
   border-radius: 26px;
-  background:
-    linear-gradient(135deg, rgba(255, 247, 235, 0.92), rgba(255, 255, 255, 0.86)),
-    rgba(255, 255, 255, 0.72);
+  background: linear-gradient(135deg, rgba(255, 247, 235, 0.92), rgba(255, 255, 255, 0.86)), rgba(255, 255, 255, 0.72);
 }
 
 .observability-copy h3 {
@@ -280,7 +279,9 @@ h2 {
   text-decoration: none;
   font-weight: 700;
   box-shadow: 0 10px 24px rgba(110, 31, 16, 0.18);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .obs-link:hover {
@@ -516,7 +517,10 @@ h2 {
   padding: 1rem;
   text-align: left;
   cursor: pointer;
-  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
 }
 
 .todo-toggle:hover {

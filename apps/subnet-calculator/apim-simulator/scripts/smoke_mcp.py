@@ -16,6 +16,20 @@ DEFAULT_ATTEMPTS = int(os.getenv("SMOKE_MCP_ATTEMPTS", "20"))
 DEFAULT_DELAY_SECONDS = float(os.getenv("SMOKE_MCP_RETRY_DELAY_SECONDS", "1"))
 
 
+def make_async_client(
+    *,
+    headers: dict[str, str] | None = None,
+    timeout: httpx.Timeout | float | None = None,
+    verify: bool | str = True,
+) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        headers=headers,
+        timeout=timeout,
+        verify=verify,
+        trust_env=False,
+    )
+
+
 def resolve_tls_verify(
     *,
     default_ca: Path | None = None,
@@ -44,7 +58,7 @@ def resolve_tls_verify(
 
 
 async def run(url: str, subscription_key: str, *, verify: bool | str = True) -> None:
-    async with httpx.AsyncClient(
+    async with make_async_client(
         headers={"Ocp-Apim-Subscription-Key": subscription_key},
         timeout=httpx.Timeout(30.0, read=300.0),
         verify=verify,

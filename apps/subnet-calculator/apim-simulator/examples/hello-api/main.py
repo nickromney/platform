@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from app.telemetry import configure_observability, instrument_fastapi_app, set_current_span_attributes
 
 SERVICE_NAME = "hello-api"
-SERVICE_VERSION = "0.1.0"
+SERVICE_VERSION = "0.2.0"
 
 telemetry = configure_observability(service_name=SERVICE_NAME, service_version=SERVICE_VERSION)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import tomllib
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ OUTPUT_PATH = Path(
         "examples/todo-app/api-clients/proxyman/todo-through-apim.har",
     )
 )
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 
 @dataclass
@@ -144,6 +146,11 @@ def to_har_entry(exchange: CapturedExchange) -> dict[str, object]:
     }
 
 
+def project_version() -> str:
+    with (ROOT_DIR / "pyproject.toml").open("rb") as handle:
+        return str(tomllib.load(handle)["project"]["version"])
+
+
 def main() -> None:
     wait_for(f"{APIM_BASE_URL}/apim/startup", "APIM startup")
     wait_for(FRONTEND_BASE_URL, "todo frontend")
@@ -242,7 +249,7 @@ def main() -> None:
     har_payload = {
         "log": {
             "version": "1.2",
-            "creator": {"name": "apim-simulator", "version": "0.1.0"},
+            "creator": {"name": "apim-simulator", "version": project_version()},
             "browser": {"name": "todo-through-apim-exporter", "version": "1.0"},
             "pages": [],
             "entries": [to_har_entry(exchange) for exchange in exchanges],

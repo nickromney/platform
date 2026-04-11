@@ -29,7 +29,7 @@ make down
 The browser entrypoint is `http://localhost:3000`. The APIM gateway is
 `http://localhost:8000`.
 
-`make up-todo-otel` adds LGTM on `http://localhost:3001` and exports OTEL
+`make up-todo-otel` adds [LGTM](https://github.com/grafana/docker-otel-lgtm) on `http://localhost:3001` and exports OTEL
 telemetry from both the gateway and the toy FastAPI backend over OTLP HTTP.
 The todo UI exposes direct Grafana links so a browser user can move from a
 real task interaction into the OTEL dashboard without leaving the app.
@@ -39,9 +39,9 @@ that Prometheus, Loki, and Tempo all see the expected APIM and todo signals.
 
 ## External client artifacts
 
-- Bruno collection: `examples/todo-app/api-clients/bruno/`
-- Postman collection: `examples/todo-app/api-clients/postman/`
-- Proxyman HAR capture: `examples/todo-app/api-clients/proxyman/todo-through-apim.har`
+- Bruno collection: [`examples/todo-app/api-clients/bruno/`](api-clients/bruno/)
+- Postman collection: [`examples/todo-app/api-clients/postman/`](api-clients/postman/)
+- Proxyman HAR capture: [`examples/todo-app/api-clients/proxyman/todo-through-apim.har`](api-clients/proxyman/todo-through-apim.har)
 
 The Bruno and Postman local environment files default to localhost, but the
 base URL and subscription key are just variables, so the same collections can

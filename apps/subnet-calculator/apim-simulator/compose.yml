@@ -1,8 +1,29 @@
+x-python-build-args: &python-build-args
+  PYTHON_BUILD_IMAGE: ${PYTHON_BUILD_IMAGE:-dhi.io/python:3.13-debian13-dev}
+  PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
+  APP_UID: ${APP_UID:-65532}
+  APP_GID: ${APP_GID:-65532}
+
+x-python-service-hardening: &python-service-hardening
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
 services:
   mock-backend:
+    <<: *python-service-hardening
     build:
       context: ./examples/mock-backend
       dockerfile: Dockerfile
+      args:
+        PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
+        APP_UID: ${APP_UID:-65532}
+        APP_GID: ${APP_GID:-65532}
     image: apim-simulator-mock-backend:latest
     expose:
       - "8080"
@@ -10,14 +31,17 @@ services:
       - apim
 
   apim-simulator:
+    <<: *python-service-hardening
     build:
       context: .
       dockerfile: Dockerfile
+      args: *python-build-args
     image: apim-simulator:latest
     expose:
       - "8000"
     environment:
-      APIM_CONFIG_PATH: ${APIM_CONFIG_PATH:-/app/examples/basic.json}
+      APIM_CONFIG_PATH: ${APIM_CONFIG_PATH:-/tmp/apim-config.json}
+      APIM_CONFIG_SOURCE_PATH: ${APIM_CONFIG_SOURCE_PATH:-/app/examples/basic.json}
       OTEL_SERVICE_NAME: apim-simulator
     depends_on:
       mock-backend:

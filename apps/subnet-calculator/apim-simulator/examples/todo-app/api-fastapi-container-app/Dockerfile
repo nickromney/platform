@@ -1,4 +1,6 @@
-FROM python:3.13-slim AS builder
+ARG PYTHON_BUILD_IMAGE=dhi.io/python:3.13-debian13-dev
+ARG PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13
+FROM ${PYTHON_BUILD_IMAGE} AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -11,23 +13,25 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv sync --frozen --no-cache --no-dev --no-install-project
 
-FROM python:3.13-slim
+FROM ${PYTHON_RUNTIME_IMAGE}
+
+ARG APP_UID=65532
+ARG APP_GID=65532
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH" \
-    PORT=8000
-
-RUN addgroup --system app && adduser --system --ingroup app --home /app app
+    PATH="/app/.venv/bin:/opt/python/bin:$PATH" \
+    PORT=8000 \
+    HOME=/tmp
 
 WORKDIR /app
 
-COPY --chown=app:app --from=builder /app/.venv /app/.venv
-COPY --chown=app:app app ./app
-COPY --chown=app:app examples/todo-app/api-fastapi-container-app/main.py ./main.py
+COPY --chown=${APP_UID}:${APP_GID} --from=builder /app/.venv /app/.venv
+COPY --chown=${APP_UID}:${APP_GID} app ./app
+COPY --chown=${APP_UID}:${APP_GID} examples/todo-app/api-fastapi-container-app/main.py ./main.py
 
 EXPOSE 8000
 
-USER app
+USER ${APP_UID}:${APP_GID}
 
 CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

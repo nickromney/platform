@@ -31,5 +31,5 @@ while you test the route shape.
 
 ## Files
 
-- `apim.http-api.json`: stage-style APIM config for the hello backend
+- [`apim.http-api.json`](apim.http-api.json): stage-style APIM config for the hello backend
 - [`docs/MIGRATING-FROM-AWS-API-GATEWAY.md`](../../docs/MIGRATING-FROM-AWS-API-GATEWAY.md): concept mapping guide

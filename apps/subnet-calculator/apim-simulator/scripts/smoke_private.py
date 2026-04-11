@@ -6,7 +6,7 @@ import os
 import sys
 import traceback
 
-import httpx
+from smoke_mcp import make_async_client
 from smoke_mcp import run as run_mcp
 
 BASE_URL = os.getenv("SMOKE_PRIVATE_BASE_URL", "http://apim-simulator:8000").rstrip("/")
@@ -19,7 +19,7 @@ def require(condition: bool, message: str) -> None:
 
 
 async def main_async() -> None:
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with make_async_client(timeout=20.0) as client:
         debug = await client.get(
             f"{BASE_URL}/__edge/echo",
             headers={
