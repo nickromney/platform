@@ -34,7 +34,7 @@ For almost every APIM change, work in this order:
 1. Make the backend route work
 2. Put APIM in front of it
 3. Add auth
-4. Add policy behavior
+4. Add policy behaviour
 5. Add observability
 6. Add repeatable checks
 7. Update docs
@@ -52,19 +52,19 @@ Use this when:
 
 Touch:
 
-- backend app code under `examples/` or the appropriate service folder
+- backend app code under [`examples/`](../examples/) or the appropriate service folder
 - backend Dockerfile
 - APIM config JSON
 - a compose overlay or compose service entry
 
 Usually start from:
 
-- `examples/hello-api/main.py`
-- `examples/hello-api/Dockerfile`
-- `examples/hello-api/apim.anonymous.json`
-- `examples/todo-app/api-fastapi-container-app/main.py`
-- `examples/todo-app/api-fastapi-container-app/Dockerfile`
-- `examples/todo-app/apim.json`
+- [`examples/hello-api/main.py`](../examples/hello-api/main.py)
+- [`examples/hello-api/Dockerfile`](../examples/hello-api/Dockerfile)
+- [`examples/hello-api/apim.anonymous.json`](../examples/hello-api/apim.anonymous.json)
+- [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
+- [`examples/todo-app/api-fastapi-container-app/Dockerfile`](../examples/todo-app/api-fastapi-container-app/Dockerfile)
+- [`examples/todo-app/apim.json`](../examples/todo-app/apim.json)
 
 Validation:
 
@@ -163,7 +163,7 @@ Good proof:
 - the token shape you expected
 - the negative case you tested
 
-### Add Or Change Policy Behavior
+### Add Or Change Policy Behaviour
 
 Use this when:
 
@@ -172,7 +172,7 @@ Use this when:
 Touch:
 
 - `policies_xml`
-- policy fragments when shared behavior is intended
+- policy fragments when shared behaviour is intended
 
 Examples:
 
@@ -183,7 +183,7 @@ Examples:
 
 Required checks:
 
-- the changed behavior is visible in a response, trace, or both
+- the changed behaviour is visible in a response, trace, or both
 - a negative case exists when the policy is supposed to reject requests
 
 Good proof:
@@ -203,13 +203,13 @@ Use this when:
 
 Touch:
 
-- `app/telemetry.py` integration in the backend
+- [`app/telemetry.py`](../app/telemetry.py) integration in the backend
 - compose OTEL overlay if needed
 - dashboard or verification docs when the signal is user-facing
 
 For Python services, prefer the shared helper and copy the shape of:
 
-- `examples/todo-app/api-fastapi-container-app/main.py`
+- [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
 
 Required checks:
 

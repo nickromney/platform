@@ -10,7 +10,7 @@ This collection exercises the APIM-backed todo flow end to end:
 Install Bruno first using the official guide:
 [Bruno installation options](https://docs.usebruno.com/get-started/bruno-basics/download#installation-options).
 
-Load this folder as a Bruno collection and select `environments/local.bru`, or
+Load this folder as a Bruno collection and select [`environments/local.bru`](environments/local.bru), or
 run it from the repo root with:
 
 ```bash

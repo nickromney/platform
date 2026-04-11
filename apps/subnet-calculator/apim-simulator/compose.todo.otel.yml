@@ -1,6 +1,8 @@
 services:
   lgtm:
     image: grafana/otel-lgtm:latest
+    init: true
+    read_only: true
     ports:
       - "3001:3000"
       - "4317:4317"
@@ -14,6 +16,12 @@ services:
       - lgtm-data:/data
       - ./observability/grafana/provisioning/dashboards/apim-simulator.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/apim-simulator.yaml:ro
       - ./observability/grafana/dashboards:/otel-lgtm/custom-dashboards:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - todo
 

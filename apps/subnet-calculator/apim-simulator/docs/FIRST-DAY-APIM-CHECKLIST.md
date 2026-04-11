@@ -156,7 +156,7 @@ Best for:
 
 - "did the system see my request?"
 - "do I have logs, traces, and metrics?"
-- "can I compare gateway and backend behavior?"
+- "can I compare gateway and backend behaviour?"
 
 If you need deeper inspection after that, move to:
 
@@ -168,15 +168,15 @@ If you need deeper inspection after that, move to:
 
 If someone says "change the API", start with:
 
-- Smallest starter backend: `examples/hello-api/main.py`
-- Smallest starter APIM config: `examples/hello-api/apim.anonymous.json`
-- Smallest starter compose overlay: `compose.hello.yml`
-- Backend example: `examples/todo-app/api-fastapi-container-app/main.py`
-- Gateway config for todo: `examples/todo-app/apim.json`
-- JWT example config: `examples/oidc/keycloak.json`
-- Shared OTEL setup: `app/telemetry.py`
-- Gateway runtime: `app/main.py`
-- Todo UI: `examples/todo-app/frontend-astro/`
+- Smallest starter backend: [`examples/hello-api/main.py`](../examples/hello-api/main.py)
+- Smallest starter APIM config: [`examples/hello-api/apim.anonymous.json`](../examples/hello-api/apim.anonymous.json)
+- Smallest starter compose overlay: [`compose.hello.yml`](../compose.hello.yml)
+- Backend example: [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
+- Gateway config for todo: [`examples/todo-app/apim.json`](../examples/todo-app/apim.json)
+- JWT example config: [`examples/oidc/keycloak.json`](../examples/oidc/keycloak.json)
+- Shared OTEL setup: [`app/telemetry.py`](../app/telemetry.py)
+- Gateway runtime: [`app/main.py`](../app/main.py)
+- Todo UI: [`examples/todo-app/frontend-astro/`](../examples/todo-app/frontend-astro/)
 
 ## 8. Ask These Questions Before You Change A Route
 

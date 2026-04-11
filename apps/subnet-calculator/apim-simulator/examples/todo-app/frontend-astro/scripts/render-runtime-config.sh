@@ -6,7 +6,7 @@ APIM_SUBSCRIPTION_KEY="${APIM_SUBSCRIPTION_KEY:-todo-demo-key}"
 GRAFANA_BASE_URL="${GRAFANA_BASE_URL:-http://localhost:3001}"
 OBSERVABILITY_DASHBOARD_URL="${OBSERVABILITY_DASHBOARD_URL:-${GRAFANA_BASE_URL%/}/d/apim-simulator-overview/apim-simulator-overview}"
 TEMPLATE_PATH="${RUNTIME_CONFIG_TEMPLATE_PATH:-/opt/runtime-config.template.js}"
-OUTPUT_PATH="${RUNTIME_CONFIG_OUTPUT_PATH:-/usr/share/nginx/html/runtime-config.js}"
+OUTPUT_PATH="${RUNTIME_CONFIG_OUTPUT_PATH:-/tmp/runtime-config.js}"
 
 export API_BASE_URL
 export APIM_SUBSCRIPTION_KEY

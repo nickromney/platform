@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 
 import httpx
-from smoke_mcp import resolve_tls_verify
+from smoke_mcp import make_async_client, resolve_tls_verify
 from smoke_mcp import run_with_retry as run_mcp
 
 BASE_URL = os.getenv("SMOKE_EDGE_BASE_URL", "http://apim.localtest.me:8088").rstrip("/")
@@ -60,7 +60,7 @@ async def get_with_retry(
 
 
 async def main_async() -> None:
-    async with httpx.AsyncClient(timeout=20.0, verify=VERIFY_TLS) as client:
+    async with make_async_client(timeout=20.0, verify=VERIFY_TLS) as client:
         debug = await get_with_retry(
             client,
             f"{BASE_URL}/__edge/echo",

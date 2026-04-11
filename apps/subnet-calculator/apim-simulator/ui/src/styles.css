@@ -27,8 +27,7 @@ body {
   background:
     radial-gradient(circle at top left, rgba(190, 93, 38, 0.18), transparent 32%),
     radial-gradient(circle at bottom right, rgba(18, 112, 95, 0.16), transparent 34%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 50%),
-    var(--bg);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.42), transparent 50%), var(--bg);
 }
 
 body::before {
@@ -61,7 +60,10 @@ textarea {
 
 button {
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
 }
 
 button:hover {
@@ -408,7 +410,7 @@ label {
   gap: 0.45rem;
 }
 
-label span {
+.field-label {
   font-size: 0.85rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;

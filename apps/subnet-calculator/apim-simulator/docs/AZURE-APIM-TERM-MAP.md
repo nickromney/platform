@@ -10,17 +10,17 @@ the API" and you need a translation layer into this repo.
 
 | If someone says... | They usually mean... | In this repo, start here |
 | --- | --- | --- |
-| APIM service | The gateway runtime | `app/main.py`, `compose*.yml` |
+| APIM service | The gateway runtime | [`app/main.py`](../app/main.py), `compose*.yml` |
 | API | A published surface with a base path | `apis` in config JSON |
 | Operation | A specific path and method under an API | `apis.<id>.operations` in config JSON |
 | Product | A named access bundle | `products` in config JSON |
 | Subscription | A client key pair tied to products | `subscription.subscriptions` in config JSON |
 | Subscription key | The header clients send | `Ocp-Apim-Subscription-Key` |
-| Policy | Gateway behavior before/after backend call | `policies_xml` |
+| Policy | Gateway behaviour before/after backend call | `policies_xml` |
 | Backend | The upstream service APIM calls | `upstream_base_url`, `backends` |
 | JWT validation | Bearer token verification | `oidc`, `authz`, `validate-jwt` |
 | Trace | Per-request APIM detail | `/apim/trace/{id}` |
-| Diagnostics / observability | Logs, traces, metrics | OTEL + Grafana LGTM |
+| Diagnostics / observability | Logs, traces, metrics | OTEL + [Grafana LGTM](https://github.com/grafana/docker-otel-lgtm) |
 
 ## Azure APIM Concepts Translated
 
@@ -31,9 +31,9 @@ In Azure, this is the API Management instance itself.
 In this repo, that is primarily:
 
 - the `apim-simulator` container
-- the FastAPI gateway in `app/main.py`
+- the FastAPI gateway in [`app/main.py`](../app/main.py)
 
-If you are changing gateway behavior, auth flow, routing, or policy execution,
+If you are changing gateway behaviour, auth flow, routing, or policy execution,
 you are changing the local APIM service equivalent.
 
 ### API
@@ -43,9 +43,9 @@ In Azure APIM, an API is a published surface with operations under it.
 In this repo, the practical equivalent is an entry in the `apis` map in config
 JSON, for example:
 
-- `examples/basic.json`
-- `examples/todo-app/apim.json`
-- `examples/oidc/keycloak.json`
+- [`examples/basic.json`](../examples/basic.json)
+- [`examples/todo-app/apim.json`](../examples/todo-app/apim.json)
+- [`examples/oidc/keycloak.json`](../examples/oidc/keycloak.json)
 
 In practice, an API here means:
 
@@ -161,7 +161,7 @@ The more advanced form uses named `backends`.
 For the todo example, the backend is the internal FastAPI service:
 
 - container: `todo-api`
-- app file: `examples/todo-app/api-fastapi-container-app/main.py`
+- app file: [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
 
 ### JWT Validation
 
@@ -183,7 +183,7 @@ Operationally:
 
 ### Trace
 
-In Azure APIM, trace and diagnostic tooling help you explain gateway behavior.
+In Azure APIM, trace and diagnostic tooling help you explain gateway behaviour.
 
 In this repo, the APIM-shaped trace surface is:
 
@@ -205,7 +205,7 @@ logging, or distributed tracing.
 In this repo, the practical observability stack is:
 
 - OTEL instrumentation in the gateway and backend
-- Grafana LGTM for logs, metrics, and traces
+- [Grafana LGTM](https://github.com/grafana/docker-otel-lgtm) for logs, metrics, and traces
 - the dashboard at `http://localhost:3001/d/apim-simulator-overview/apim-simulator-overview`
 
 Use these words precisely:

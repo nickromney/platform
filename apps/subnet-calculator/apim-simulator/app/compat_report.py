@@ -48,6 +48,7 @@ SUPPORTED_POLICY_TAGS = {
     "set-variable",
     "set-query-parameter",
     "set-body",
+    "mock-response",
     "include-fragment",
     "validate-jwt",
     "openid-config",

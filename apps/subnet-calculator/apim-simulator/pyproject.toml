@@ -1,6 +1,6 @@
 [project]
 name = "apim-simulator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Config-driven Azure API Management simulator for local Docker-first testing"
 requires-python = ">=3.13"
 dependencies = [
@@ -28,6 +28,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.uv]
+exclude-newer = "7 days"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -26,6 +26,8 @@ from app.config import (
     ApiReleaseConfig,
     ApiRevisionConfig,
     ApiSchemaConfig,
+    ApiVersioningScheme,
+    ApiVersionSetConfig,
     BackendConfig,
     DiagnosticConfig,
     GatewayConfig,
@@ -34,6 +36,9 @@ from app.config import (
     LoggerConfig,
     NamedValueConfig,
     OperationConfig,
+    OperationParameterConfig,
+    OperationRequestMetadataConfig,
+    OperationResponseMetadataConfig,
     ProductConfig,
     RouteAuthzConfig,
     Subscription,
@@ -43,6 +48,7 @@ from app.config import (
     load_config,
 )
 from app.named_values import mask_secret_data
+from app.openapi_import import parse_api_import
 from app.policy import (
     PolicyRequest,
     PolicyRuntime,
@@ -102,7 +108,7 @@ from app.terraform_import import import_from_tofu_show_json
 logger = logging.getLogger("apim-simulator")
 
 APIM_SERVICE_NAME = "apim-simulator"
-APIM_SERVICE_VERSION = "0.1.0"
+APIM_SERVICE_VERSION = "0.2.0"
 EMPTY_POLICY_XML = "<policies><inbound /><backend /><outbound /><on-error /></policies>"
 POLICY_SECTION_NAMES = ("inbound", "backend", "outbound", "on-error")
 _GATEWAY_METRICS: GatewayMetrics | None = None
@@ -350,6 +356,49 @@ class OperationUpsert(BaseModel):
     subscription_query_param_names: list[str] | None = None
     authz: RouteAuthzConfig | None = None
     policies_xml: str | None = None
+    tags: list[str] | None = None
+    template_parameters: list[OperationParameterConfig] | None = None
+    request: OperationRequestMetadataConfig | None = None
+    responses: list[OperationResponseMetadataConfig] | None = None
+
+
+class ApiImportRequest(BaseModel):
+    name: str | None = None
+    path: str | None = None
+    content_format: str
+    content_value: str
+    upstream_base_url: str | None = None
+    upstream_path_prefix: str = ""
+    backend: str | None = None
+    products: list[str] | None = None
+    api_version_set: str | None = None
+    api_version: str | None = None
+    subscription_header_names: list[str] | None = None
+    subscription_query_param_names: list[str] | None = None
+    policies_xml: str | None = None
+
+
+class ApiVersionSetUpsert(BaseModel):
+    display_name: str
+    description: str | None = None
+    versioning_scheme: str
+    version_header_name: str | None = None
+    version_query_name: str | None = None
+    default_version: str | None = None
+
+
+class ApiRevisionUpsert(BaseModel):
+    description: str | None = None
+    is_current: bool | None = None
+    is_online: bool | None = None
+    source_api_id: str | None = None
+
+
+class ApiReleaseUpsert(BaseModel):
+    name: str | None = None
+    api_id: str | None = None
+    notes: str | None = None
+    revision: str
 
 
 class ProductUpsert(BaseModel):
@@ -413,6 +462,9 @@ class ReplayRequestBody(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     body_text: str | None = None
     body_base64: str | None = None
+
+
+OperationUpsert.model_rebuild()
 
 
 def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncClient | None = None) -> FastAPI:
@@ -548,7 +600,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         if created:
             await app.state.http_client.aclose()
 
-    app = FastAPI(title="Local APIM Simulator", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Local APIM Simulator", version=APIM_SERVICE_VERSION, lifespan=lifespan)
     app.state.telemetry = telemetry
     app.state.gateway_metrics = _get_gateway_metrics(telemetry)
     app.add_middleware(
@@ -927,6 +979,30 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             return
         parse_policies_xml(xml.strip() or EMPTY_POLICY_XML, policy_fragments=cfg.policy_fragments)
 
+    def _coerce_api_versioning_scheme(raw: str) -> ApiVersioningScheme:
+        normalized = (raw or "").strip().lower()
+        mapping = {
+            "header": ApiVersioningScheme.Header,
+            "query": ApiVersioningScheme.Query,
+            "segment": ApiVersioningScheme.Segment,
+        }
+        scheme = mapping.get(normalized)
+        if scheme is None:
+            raise HTTPException(status_code=400, detail="Unsupported API versioning scheme")
+        return scheme
+
+    def _default_release_api_id(cfg: GatewayConfig, api_id: str, revision_id: str) -> str:
+        return f"service/{cfg.service.name}/apis/{api_id};rev={revision_id}"
+
+    def _set_current_revision(api: ApiConfig, revision_id: str, revision: ApiRevisionConfig) -> None:
+        for candidate_id, candidate in api.revisions.items():
+            candidate.is_current = candidate_id == revision_id
+        api.revision = revision_id
+        api.revision_description = revision.description
+        api.source_api_id = revision.source_api_id
+        api.is_current = True
+        api.is_online = revision.is_online
+
     def _link_list_item(values: list[str], item_id: str) -> bool:
         if item_id in values:
             return False
@@ -978,6 +1054,109 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         cfg: GatewayConfig = request.app.state.gateway_config
         api = _get_api_or_404(cfg, api_id)
         return _masked(cfg, project_api(cfg, api_id, api))
+
+    @app.post("/apim/management/apis/{api_id}/import")
+    async def import_api(api_id: str, request: Request, body: ApiImportRequest) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        _validate_policy_xml(cfg, body.policies_xml)
+
+        try:
+            imported = parse_api_import(content_format=body.content_format, content_value=body.content_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        existing = cfg.apis.get(api_id)
+        upstream_base_url = body.upstream_base_url or imported.upstream_base_url
+        if not upstream_base_url and existing is not None:
+            upstream_base_url = existing.upstream_base_url
+        if not upstream_base_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Imported API is missing an upstream base URL; provide upstream_base_url explicitly.",
+            )
+
+        operations: dict[str, OperationConfig] = {}
+        existing_operations = existing.operations if existing is not None else {}
+        for imported_operation in imported.operations:
+            preserved = existing_operations.get(imported_operation.name)
+            operations[imported_operation.name] = OperationConfig(
+                name=preserved.name if preserved is not None else imported_operation.name,
+                method=imported_operation.method,
+                url_template=imported_operation.url_template,
+                description=preserved.description if preserved is not None else None,
+                upstream_base_url=preserved.upstream_base_url if preserved is not None else None,
+                upstream_path_prefix=preserved.upstream_path_prefix if preserved is not None else None,
+                backend=preserved.backend if preserved is not None else None,
+                products=preserved.products if preserved is not None else None,
+                api_version_set=preserved.api_version_set if preserved is not None else None,
+                api_version=preserved.api_version if preserved is not None else None,
+                subscription_header_names=preserved.subscription_header_names if preserved is not None else None,
+                subscription_query_param_names=(
+                    preserved.subscription_query_param_names if preserved is not None else None
+                ),
+                authz=preserved.authz if preserved is not None else None,
+                policies_xml=preserved.policies_xml if preserved is not None else None,
+                tags=preserved.tags if preserved is not None else [],
+                template_parameters=preserved.template_parameters if preserved is not None else [],
+                request=preserved.request if preserved is not None else None,
+                responses=preserved.responses if preserved is not None else [],
+            )
+
+        cfg.apis[api_id] = ApiConfig(
+            name=body.name or (existing.name if existing is not None else api_id),
+            path=body.path or (existing.path if existing is not None else api_id),
+            upstream_base_url=upstream_base_url,
+            upstream_path_prefix=body.upstream_path_prefix,
+            backend=body.backend if body.backend is not None else (existing.backend if existing is not None else None),
+            products=body.products
+            if body.products is not None
+            else (existing.products if existing is not None else []),
+            api_version_set=(
+                body.api_version_set
+                if body.api_version_set is not None
+                else (existing.api_version_set if existing else None)
+            ),
+            api_version=body.api_version
+            if body.api_version is not None
+            else (existing.api_version if existing else None),
+            revision=existing.revision if existing is not None else None,
+            revision_description=existing.revision_description if existing is not None else None,
+            version_description=existing.version_description if existing is not None else None,
+            source_api_id=existing.source_api_id if existing is not None else None,
+            is_current=existing.is_current if existing is not None else None,
+            is_online=existing.is_online if existing is not None else None,
+            subscription_header_names=(
+                body.subscription_header_names
+                if body.subscription_header_names is not None
+                else (existing.subscription_header_names if existing else None)
+            ),
+            subscription_query_param_names=(
+                body.subscription_query_param_names
+                if body.subscription_query_param_names is not None
+                else (existing.subscription_query_param_names if existing else None)
+            ),
+            policies_xml=body.policies_xml
+            if body.policies_xml is not None
+            else (existing.policies_xml if existing else None),
+            tags=existing.tags if existing is not None else [],
+            operations=operations,
+            schemas=existing.schemas if existing is not None else {},
+            revisions=existing.revisions if existing is not None else {},
+            releases=existing.releases if existing is not None else {},
+        )
+        updated = _persist_or_apply_config(request, cfg)
+        api = _get_api_or_404(updated, api_id)
+        return {
+            "api": _masked(updated, project_api(updated, api_id, api)),
+            "import": {
+                "format": imported.format,
+                "operation_count": len(imported.operations),
+                "upstream_base_url": imported.upstream_base_url,
+                "diagnostics": imported.diagnostics,
+            },
+        }
 
     @app.put("/apim/management/apis/{api_id}")
     async def upsert_api(api_id: str, request: Request, body: ApiUpsert) -> dict[str, Any]:
@@ -1071,6 +1250,57 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         revision = _get_api_revision_or_404(cfg, api_id, revision_id)
         return _masked(cfg, project_api_revision(cfg, api_id, revision_id, revision))
 
+    @app.put("/apim/management/apis/{api_id}/revisions/{revision_id}")
+    async def upsert_api_revision(
+        api_id: str, revision_id: str, request: Request, body: ApiRevisionUpsert
+    ) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        api = _get_api_or_404(cfg, api_id)
+        existing = api.revisions.get(revision_id)
+        revision = ApiRevisionConfig(
+            revision=revision_id,
+            description=body.description
+            if body.description is not None
+            else (existing.description if existing else None),
+            is_current=body.is_current if body.is_current is not None else (existing.is_current if existing else None),
+            is_online=body.is_online if body.is_online is not None else (existing.is_online if existing else None),
+            source_api_id=(
+                body.source_api_id if body.source_api_id is not None else (existing.source_api_id if existing else None)
+            ),
+        )
+        api.revisions[revision_id] = revision
+        if revision.is_current:
+            _set_current_revision(api, revision_id, revision)
+        updated = _persist_or_apply_config(request, cfg)
+        stored = _get_api_revision_or_404(updated, api_id, revision_id)
+        return _masked(updated, project_api_revision(updated, api_id, revision_id, stored))
+
+    @app.delete("/apim/management/apis/{api_id}/revisions/{revision_id}")
+    async def delete_api_revision(api_id: str, revision_id: str, request: Request) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        api = _get_api_or_404(cfg, api_id)
+        revision = _get_api_revision_or_404(cfg, api_id, revision_id)
+        if revision.is_current or api.revision == revision_id:
+            raise HTTPException(status_code=409, detail="Current API revision cannot be deleted")
+        for release_id, release in api.releases.items():
+            if release.revision == revision_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"API revision is still referenced by release {release_id}",
+                )
+        del api.revisions[revision_id]
+        updated = _persist_or_apply_config(request, cfg)
+        return {
+            "deleted": True,
+            "api_id": api_id,
+            "revision_id": revision_id,
+            "remaining": len(updated.apis[api_id].revisions),
+        }
+
     @app.get("/apim/management/apis/{api_id}/releases")
     async def list_api_releases(api_id: str, request: Request) -> list[dict[str, Any]]:
         _require_tenant_access(request)
@@ -1087,6 +1317,43 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         cfg: GatewayConfig = request.app.state.gateway_config
         release = _get_api_release_or_404(cfg, api_id, release_id)
         return _masked(cfg, project_api_release(cfg, api_id, release_id, release))
+
+    @app.put("/apim/management/apis/{api_id}/releases/{release_id}")
+    async def upsert_api_release(
+        api_id: str, release_id: str, request: Request, body: ApiReleaseUpsert
+    ) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        api = _get_api_or_404(cfg, api_id)
+        if body.revision not in api.revisions:
+            raise HTTPException(status_code=404, detail="API revision not found")
+        existing = api.releases.get(release_id)
+        api.releases[release_id] = ApiReleaseConfig(
+            name=body.name or (existing.name if existing is not None else release_id),
+            api_id=body.api_id or _default_release_api_id(cfg, api_id, body.revision),
+            notes=body.notes if body.notes is not None else (existing.notes if existing is not None else None),
+            revision=body.revision,
+        )
+        updated = _persist_or_apply_config(request, cfg)
+        stored = _get_api_release_or_404(updated, api_id, release_id)
+        return _masked(updated, project_api_release(updated, api_id, release_id, stored))
+
+    @app.delete("/apim/management/apis/{api_id}/releases/{release_id}")
+    async def delete_api_release(api_id: str, release_id: str, request: Request) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        api = _get_api_or_404(cfg, api_id)
+        _get_api_release_or_404(cfg, api_id, release_id)
+        del api.releases[release_id]
+        updated = _persist_or_apply_config(request, cfg)
+        return {
+            "deleted": True,
+            "api_id": api_id,
+            "release_id": release_id,
+            "remaining": len(updated.apis[api_id].releases),
+        }
 
     @app.get("/apim/management/apis/{api_id}/tags")
     async def list_api_tags(api_id: str, request: Request) -> list[dict[str, Any]]:
@@ -1212,10 +1479,16 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             subscription_query_param_names=body.subscription_query_param_names,
             authz=body.authz,
             policies_xml=body.policies_xml,
-            tags=existing.tags if existing is not None else [],
-            template_parameters=existing.template_parameters if existing is not None else [],
-            request=existing.request if existing is not None else None,
-            responses=existing.responses if existing is not None else [],
+            tags=body.tags if body.tags is not None else (existing.tags if existing is not None else []),
+            template_parameters=(
+                body.template_parameters
+                if body.template_parameters is not None
+                else (existing.template_parameters if existing is not None else [])
+            ),
+            request=body.request if body.request is not None else (existing.request if existing is not None else None),
+            responses=body.responses
+            if body.responses is not None
+            else (existing.responses if existing is not None else []),
         )
         updated = _persist_or_apply_config(request, cfg)
         operation = _get_operation_or_404(updated, api_id, operation_id)
@@ -1704,6 +1977,53 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             raise HTTPException(status_code=404, detail="API version set not found")
         return _masked(cfg, project_api_version_set(cfg, version_set_id, version_set))
 
+    @app.put("/apim/management/api-version-sets/{version_set_id}")
+    async def upsert_api_version_set(
+        version_set_id: str, request: Request, body: ApiVersionSetUpsert
+    ) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        cfg.api_version_sets[version_set_id] = ApiVersionSetConfig(
+            display_name=body.display_name,
+            description=body.description,
+            versioning_scheme=_coerce_api_versioning_scheme(body.versioning_scheme),
+            version_header_name=body.version_header_name,
+            version_query_name=body.version_query_name,
+            default_version=body.default_version,
+        )
+        updated = _persist_or_apply_config(request, cfg)
+        return _masked(
+            updated,
+            project_api_version_set(updated, version_set_id, updated.api_version_sets[version_set_id]),
+        )
+
+    @app.delete("/apim/management/api-version-sets/{version_set_id}")
+    async def delete_api_version_set(version_set_id: str, request: Request) -> dict[str, Any]:
+        _require_tenant_access(request)
+        cfg: GatewayConfig = request.app.state.gateway_config
+        _ensure_api_authoring_mode(cfg)
+        version_set = cfg.api_version_sets.get(version_set_id)
+        if version_set is None:
+            raise HTTPException(status_code=404, detail="API version set not found")
+
+        for api_id, api in cfg.apis.items():
+            if api.api_version_set == version_set_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"API version set is still in use by API {api_id}",
+                )
+            for operation_id, operation in api.operations.items():
+                if operation.api_version_set == version_set_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"API version set is still in use by operation {api_id}:{operation_id}",
+                    )
+
+        del cfg.api_version_sets[version_set_id]
+        updated = _persist_or_apply_config(request, cfg)
+        return {"deleted": True, "version_set_id": version_set_id, "remaining": len(updated.api_version_sets)}
+
     @app.get("/apim/management/policy-fragments")
     async def list_policy_fragments(request: Request) -> list[dict[str, Any]]:
         _require_tenant_access(request)
@@ -2024,6 +2344,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             headers=headers,
             variables={
                 "route": route.name,
+                "api_id": route.api_id or "",
+                "operation_id": route.operation_id or "",
                 "subscription_id": auth.subscription.id if auth.subscription else "",
                 "products": auth.subscription_products,
                 "client_ip": client_ip,

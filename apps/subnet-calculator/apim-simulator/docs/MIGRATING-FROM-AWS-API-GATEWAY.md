@@ -17,7 +17,7 @@ developer portal migration paths are still out of scope.
 | Usage plan + API key | `product` + `subscription` |
 | Authorizer | `oidc`, `oidc_providers`, `authz`, or `validate-jwt` policy |
 | Mapping template or parameter mapping | APIM policy XML |
-| CloudWatch logs / X-Ray | OTEL + Grafana LGTM + `/apim/trace/{id}` |
+| CloudWatch logs / X-Ray | OTEL + [Grafana LGTM](https://github.com/grafana/docker-otel-lgtm) + `/apim/trace/{id}` |
 
 ## Practical Translation
 
@@ -72,7 +72,7 @@ Use the local tools together:
 
 - `/apim/trace/{id}` for APIM-style per-request detail
 - `/apim/management/traces` for recent trace browsing
-- Grafana on `http://localhost:3001` when LGTM is enabled
+- Grafana on `http://localhost:3001` when [LGTM](https://github.com/grafana/docker-otel-lgtm) is enabled
 
 ## Starter Example
 

@@ -110,9 +110,15 @@ class _ExpressionResponse:
 
 
 @dataclass(frozen=True)
+class _ExpressionSubscription:
+    id: str
+
+
+@dataclass(frozen=True)
 class ExpressionContext:
     request: _ExpressionRequest
     response: _ExpressionResponse
+    subscription: _ExpressionSubscription
     variables: ExpressionMap
 
     def variables_get(self, key: str, default: Any = "") -> Any:
@@ -185,6 +191,7 @@ def build_expression_context(req: PolicyRequest) -> ExpressionContext:
             status_code=req.response_status_code or 0,
             headers=ExpressionMap(req.response_headers or req.variables.get("_response_headers") or {}),
         ),
+        subscription=_ExpressionSubscription(id=str(req.variables.get("subscription_id") or "")),
         variables=ExpressionMap(req.variables),
     )
 
@@ -246,6 +253,7 @@ def _translate_expression(expr: str) -> str:
     translated = translated.replace("context.Request.Method", "context.request.method")
     translated = translated.replace("context.Response.Headers.GetValueOrDefault", "context.response.headers_get")
     translated = translated.replace("context.Response.StatusCode", "context.response.status_code")
+    translated = translated.replace("context.Subscription.Id", "context.subscription.id")
     translated = translated.replace("context.Variables.GetValueOrDefault", "context.variables_get")
     translated = translated.replace("context.Variables[", "context.variables[")
     translated = translated.replace(".Body.As<JObject>()", ".Body.AsJObject()")

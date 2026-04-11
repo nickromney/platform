@@ -1,6 +1,7 @@
 {
   "allowed_origins": ["http://localhost:3000", "http://localhost:3007", "http://localhost:5173", "http://localhost:8000"],
   "allow_anonymous": true,
+  "trace_enabled": true,
   "tenant_access": {
     "enabled": true,
     "primary_key": "local-dev-tenant-key",

@@ -12,7 +12,7 @@ same request flow for teams that already standardize on Postman.
 - Use `curl` for one-off checks and docs snippets.
 - Use Bruno when you want request files in git and CLI-friendly execution.
 - Use Postman when your team already standardizes on Postman workspaces and collections.
-- Use Proxyman or the HAR capture when browser behavior is the question.
+- Use Proxyman or the HAR capture when browser behaviour is the question.
 
 ## Fastest Stack For Saved Request Flows
 
@@ -41,11 +41,11 @@ The request flow below assumes:
 
 The Bruno collection lives under:
 
-- `examples/todo-app/api-clients/bruno/`
+- [`examples/todo-app/api-clients/bruno/`](../examples/todo-app/api-clients/bruno/)
 
 The local environment file is:
 
-- `examples/todo-app/api-clients/bruno/environments/local.bru`
+- [`examples/todo-app/api-clients/bruno/environments/local.bru`](../examples/todo-app/api-clients/bruno/environments/local.bru)
 
 It defines:
 
@@ -60,7 +60,7 @@ Install Bruno with one of the official options before opening the collection:
 ### Open The Collection In Bruno
 
 1. Open Bruno.
-2. Load `examples/todo-app/api-clients/bruno/` as a collection.
+2. Load [`examples/todo-app/api-clients/bruno/`](../examples/todo-app/api-clients/bruno/) as a collection.
 3. Select the `local.bru` environment.
 4. Run the requests in order.
 
@@ -107,11 +107,11 @@ Typical changes:
 
 The Postman collection lives under:
 
-- `examples/todo-app/api-clients/postman/todo-through-apim.postman_collection.json`
+- [`examples/todo-app/api-clients/postman/todo-through-apim.postman_collection.json`](../examples/todo-app/api-clients/postman/todo-through-apim.postman_collection.json)
 
 The local environment file is:
 
-- `examples/todo-app/api-clients/postman/local.postman_environment.json`
+- [`examples/todo-app/api-clients/postman/local.postman_environment.json`](../examples/todo-app/api-clients/postman/local.postman_environment.json)
 
 It defines:
 
@@ -177,7 +177,7 @@ Typical changes:
 
 Use Proxyman or the HAR file when the issue is browser-specific:
 
-- `examples/todo-app/api-clients/proxyman/todo-through-apim.har`
+- [`examples/todo-app/api-clients/proxyman/todo-through-apim.har`](../examples/todo-app/api-clients/proxyman/todo-through-apim.har)
 
 Regenerate the HAR with:
 

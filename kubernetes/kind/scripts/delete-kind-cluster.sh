@@ -1,20 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
 usage() {
-  cat <<'EOF'
-Usage: delete-kind-cluster.sh --name <cluster-name> [--retries N] [--delay-seconds N]
+  cat <<EOF
+Usage: delete-kind-cluster.sh --name <cluster-name> [--retries N] [--delay-seconds N] [--dry-run] [--execute]
 
 Retries transient Docker Desktop delete failures where the daemon reports that it
 did not receive a container exit event.
+$(shell_cli_standard_options)
 EOF
 }
 
 cluster_name=""
 retries="${KIND_DELETE_RETRIES:-3}"
 delay_seconds="${KIND_DELETE_RETRY_DELAY_SECONDS:-5}"
+shell_cli_init_standard_flags
 
 while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
   case "$1" in
     --name)
       cluster_name="${2:-}"
@@ -28,10 +40,6 @@ while [[ $# -gt 0 ]]; do
       delay_seconds="${2:-}"
       shift 2
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       usage >&2
       echo "delete-kind-cluster: unknown argument '$1'" >&2
@@ -39,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+summary_name="${cluster_name:-<required --name>}"
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would delete kind cluster ${summary_name} with up to ${retries} retries and ${delay_seconds}s delay"
 
 if [[ -z "${cluster_name}" ]]; then
   usage >&2

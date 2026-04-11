@@ -361,6 +361,8 @@ class RouteConfig(BaseModel):
     path_prefix: str
     host_match: list[str] = Field(default_factory=list)
     methods: list[str] | None = None
+    api_id: str | None = None
+    operation_id: str | None = None
     upstream_base_url: str
     upstream_path_prefix: str = ""
     backend: str | None = None
@@ -452,7 +454,7 @@ class GatewayConfig(BaseModel):
             prefix = templ.split("{", 1)[0]
             return prefix.rstrip("/")
 
-        for api in self.apis.values():
+        for api_id, api in self.apis.items():
             api_base = ("/" + (api.path or "").strip("/")).rstrip("/")
             api_base = api_base or "/"
             api_policy_docs: list[str] = []
@@ -464,6 +466,7 @@ class GatewayConfig(BaseModel):
                     RouteConfig(
                         name=api.name,
                         path_prefix=api_base,
+                        api_id=api_id,
                         upstream_base_url=api.upstream_base_url,
                         upstream_path_prefix=api.upstream_path_prefix,
                         backend=api.backend,
@@ -477,7 +480,7 @@ class GatewayConfig(BaseModel):
                 )
                 continue
 
-            for op in api.operations.values():
+            for operation_id, op in api.operations.items():
                 op_prefix = _url_template_prefix(op.url_template)
                 full_prefix = api_base.rstrip("/")
                 if op_prefix and op_prefix != "/":
@@ -506,6 +509,8 @@ class GatewayConfig(BaseModel):
                         name=f"{api.name}:{op.name}",
                         path_prefix=full_prefix,
                         methods=[op.method],
+                        api_id=api_id,
+                        operation_id=operation_id,
                         upstream_base_url=upstream_base_url,
                         upstream_path_prefix=upstream_path_prefix,
                         backend=backend,

@@ -94,7 +94,7 @@ jobs:
         run: TOFU_SHOW=tests/fixtures/tofu_show/sample.json make compat-report
 
   ui-build:
-    name: UI Build
+    name: Frontend Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -107,15 +107,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: ui/package-lock.json
+          cache-dependency-path: |
+            ui/package-lock.json
+            examples/todo-app/frontend-astro/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
-      - name: Build UI
-        working-directory: ui
-        run: npm run build
+      - name: Run frontend checks
+        run: make frontend-check
 
   compose-config:
     name: Compose Config Render
@@ -125,6 +122,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+
+      - name: Resolve compose image defaults
+        run: |
+          set -euo pipefail
+          if python3 scripts/check_docker_registry_auth.py dhi.io "Docker Hardened Images (dhi.io)"; then
+            echo "Using DHI defaults for compose validation"
+          else
+            {
+              echo "PYTHON_BUILD_IMAGE=python:3.13-slim"
+              echo "PYTHON_RUNTIME_IMAGE=python:3.13-slim"
+              echo "NGINX_RUNTIME_IMAGE=nginx:1.27-alpine"
+              echo "EDGE_PROXY_IMAGE=nginx:1.27-alpine"
+              echo "SMOKE_RUNNER_IMAGE=python:3.13-slim"
+            } >> "${GITHUB_ENV}"
+            echo "Falling back to upstream images for compose validation"
+          fi
 
       - name: Generate dev certs for edge/TLS overlays
         run: ./scripts/gen_dev_certs.sh
@@ -151,6 +164,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+
+      - name: Resolve compose image defaults
+        run: |
+          set -euo pipefail
+          if python3 scripts/check_docker_registry_auth.py dhi.io "Docker Hardened Images (dhi.io)"; then
+            echo "Using DHI defaults for compose smokes"
+          else
+            {
+              echo "PYTHON_BUILD_IMAGE=python:3.13-slim"
+              echo "PYTHON_RUNTIME_IMAGE=python:3.13-slim"
+              echo "NGINX_RUNTIME_IMAGE=nginx:1.27-alpine"
+              echo "EDGE_PROXY_IMAGE=nginx:1.27-alpine"
+              echo "SMOKE_RUNNER_IMAGE=python:3.13-slim"
+            } >> "${GITHUB_ENV}"
+            echo "Falling back to upstream images for compose smokes"
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -207,6 +236,7 @@ jobs:
       - name: Private-mode smoke
         run: |
           set -euo pipefail
+          make check-private-port-clear
           docker compose -f compose.yml -f compose.private.yml -f compose.mcp.yml up --build -d
           make smoke-private
           make down
@@ -217,6 +247,11 @@ jobs:
           make up-oidc
           make smoke-oidc
           make down
+
+      - name: Tutorials live smoke
+        run: |
+          set -euo pipefail
+          make smoke-tutorials-live
 
       - name: Collect compose logs on failure
         if: failure()

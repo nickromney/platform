@@ -35,9 +35,20 @@ it.
 
 ## Commit Messages and Releases
 
-This repository is set up for manual semantic-release runs. Use conventional
-commit messages where practical so release previews and release notes stay
-useful.
+This repository is set up for manual semantic-release previews plus
+`v`-prefixed git tags.
+
+Use conventional commit messages where practical so release previews and
+release notes stay useful.
+
+Useful entrypoints:
+
+1. `make release-preview` to see what semantic-release would do from the
+   current history.
+2. `make release-tag VERSION=0.1.0` to create an annotated release tag from
+   `main` when you intentionally want to seed or cut a manual tag.
+
+The initial baseline tag for this repository should be `v0.1.0`.
 
 The release rules are intentionally simple:
 

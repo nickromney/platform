@@ -274,7 +274,7 @@ It logged:
 
 Manual Relay port-forwarding plus `hubble observe` still worked fine.
 
-2. `--post-test-sleep` sleeps after each test case, not only once at the end.
+1. `--post-test-sleep` sleeps after each test case, not only once at the end.
 
 This command:
 

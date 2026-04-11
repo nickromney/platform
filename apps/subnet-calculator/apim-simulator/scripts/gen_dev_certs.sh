@@ -3,6 +3,7 @@ set -eu
 
 DEFAULT_ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 ROOT_DIR="${APIM_SIMULATOR_ROOT_DIR:-$DEFAULT_ROOT_DIR}"
+PLATFORM_ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/../../../.." && pwd)
 CERT_DIR="$ROOT_DIR/examples/edge/certs"
 CERT_PATH="$CERT_DIR/apim.localtest.me.crt"
 KEY_PATH="$CERT_DIR/apim.localtest.me.key"
@@ -10,6 +11,22 @@ CA_CERT_PATH="$CERT_DIR/dev-root-ca.crt"
 CA_KEY_PATH="$CERT_DIR/dev-root-ca.key"
 CA_SERIAL_PATH="$CERT_DIR/dev-root-ca.srl"
 CSR_PATH="$CERT_DIR/apim.localtest.me.csr"
+
+# shellcheck source=/dev/null
+. "$PLATFORM_ROOT_DIR/scripts/lib/shell-cli-posix.sh"
+
+usage() {
+  cat <<EOF
+Usage: gen_dev_certs.sh [--dry-run] [--execute]
+
+Generate the self-signed local edge TLS development certificates.
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would generate local edge TLS development certificates under $CERT_DIR" \
+  "$@"
 
 mkdir -p "$CERT_DIR"
 
@@ -68,6 +85,9 @@ if ! has_valid_ca; then
     -out "$CA_CERT_PATH" >/dev/null 2>&1
 fi
 
+chmod 600 "$CA_KEY_PATH"
+chmod 644 "$CA_CERT_PATH"
+
 openssl req \
   -nodes \
   -newkey rsa:2048 \
@@ -90,6 +110,12 @@ openssl x509 \
   -out "$CERT_PATH" >/dev/null 2>&1
 
 rm -f "$CSR_PATH"
+
+# The edge proxy runs as a non-root numeric UID. On Linux bind mounts, a 0600
+# key owned by the host user is unreadable inside the container, so keep the
+# generated dev server cert and key world-readable. These files are ignored and
+# used only for the local self-signed edge stack, not as production secrets.
+chmod 644 "$CERT_PATH" "$KEY_PATH"
 
 printf 'Generated %s and %s\n' "$CERT_PATH" "$KEY_PATH"
 printf 'Local CA available at %s\n' "$CA_CERT_PATH"

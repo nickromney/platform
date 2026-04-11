@@ -3,7 +3,7 @@
 This guide shows the fastest way to create a brand-new API behind APIM in this
 repository.
 
-The repo ships a working scaffold under `examples/hello-api/` plus compose
+The repo ships a working scaffold under [`examples/hello-api/`](../examples/hello-api/) plus compose
 overlays and a smoke script, so the docs and the example stay aligned.
 
 Use this guide in two ways:
@@ -18,16 +18,16 @@ If you need the APIM model first, read
 
 These files already exist:
 
-- `examples/hello-api/main.py`
-- `examples/hello-api/Dockerfile`
-- `examples/hello-api/apim.anonymous.json`
-- `examples/hello-api/apim.subscription.json`
-- `examples/hello-api/apim.oidc.jwt-only.json`
-- `examples/hello-api/apim.oidc.subscription.json`
-- `examples/hello-api/README.md`
-- `compose.hello.yml`
-- `compose.hello.otel.yml`
-- `scripts/smoke_hello.py`
+- [`examples/hello-api/main.py`](../examples/hello-api/main.py)
+- [`examples/hello-api/Dockerfile`](../examples/hello-api/Dockerfile)
+- [`examples/hello-api/apim.anonymous.json`](../examples/hello-api/apim.anonymous.json)
+- [`examples/hello-api/apim.subscription.json`](../examples/hello-api/apim.subscription.json)
+- [`examples/hello-api/apim.oidc.jwt-only.json`](../examples/hello-api/apim.oidc.jwt-only.json)
+- [`examples/hello-api/apim.oidc.subscription.json`](../examples/hello-api/apim.oidc.subscription.json)
+- [`examples/hello-api/README.md`](../examples/hello-api/README.md)
+- [`compose.hello.yml`](../compose.hello.yml)
+- [`compose.hello.otel.yml`](../compose.hello.otel.yml)
+- [`scripts/smoke_hello.py`](../scripts/smoke_hello.py)
 
 That gives you four auth variants out of the box:
 
@@ -72,7 +72,7 @@ make up-hello-oidc-subscription
 SMOKE_HELLO_MODE=oidc-subscription make smoke-hello
 ```
 
-Add OTEL and LGTM:
+Add OTEL and [LGTM](https://github.com/grafana/docker-otel-lgtm):
 
 ```bash
 make up-hello-otel
@@ -88,23 +88,28 @@ Then open:
 
 ## What Each File Does
 
-### `examples/hello-api/main.py`
+### [`examples/hello-api/main.py`](../examples/hello-api/main.py)
 
 This is the smallest useful backend:
 
 - normal FastAPI routes
-- shared OTEL wiring from `app/telemetry.py`
+- shared OTEL wiring from [`app/telemetry.py`](../app/telemetry.py)
 - one health route
 - one business route
 
 If you are creating a new service, this is the first file you copy and rename.
 
-### `examples/hello-api/Dockerfile`
+### [`examples/hello-api/Dockerfile`](../examples/hello-api/Dockerfile)
 
 This matches the repo's standard Python service container pattern:
 
 - builds the virtualenv once with `uv`
-- copies the shared `app/` package so OTEL helpers are available
+- copies the shared [`app/`](../app/) package so OTEL helpers are available
+- accepts `PYTHON_BUILD_IMAGE` and `PYTHON_RUNTIME_IMAGE` build args, so the
+  same Dockerfile can stay on `python:3.13-slim` or switch to
+  `dhi.io/python:3.13-debian13*`
+- runs as a non-root UID/GID and is designed for the repo's read-only compose
+  hardening defaults
 - runs the backend internally on port `8000`
 
 If your new backend is also Python, start here before inventing a new container
@@ -121,7 +126,7 @@ These are the gateway-side variants:
 
 This isolates the auth differences because only the config changes.
 
-### `compose.hello.yml`
+### [`compose.hello.yml`](../compose.hello.yml)
 
 This overlay does two jobs:
 
@@ -136,12 +141,12 @@ APIM_CONFIG_PATH: ${HELLO_APIM_CONFIG_PATH:-/app/examples/hello-api/apim.anonymo
 
 That is what lets the `make` targets switch auth modes without editing files.
 
-### `compose.hello.otel.yml`
+### [`compose.hello.otel.yml`](../compose.hello.otel.yml)
 
 This adds OTLP exporter settings for the backend so `hello-api` emits logs,
-traces, and metrics into the same LGTM stack as the gateway.
+traces, and metrics into the same [LGTM](https://github.com/grafana/docker-otel-lgtm) stack as the gateway.
 
-### `scripts/smoke_hello.py`
+### [`scripts/smoke_hello.py`](../scripts/smoke_hello.py)
 
 This is the repeatable proof layer. It supports:
 
@@ -157,7 +162,7 @@ copy it into a new service.
 
 ### Step 1: Copy The Example
 
-Copy `examples/hello-api/` to your new service folder under `examples/`.
+Copy [`examples/hello-api/`](../examples/hello-api/) to your new service folder under [`examples/`](../examples/).
 
 Typical rename targets:
 
@@ -170,7 +175,7 @@ Typical rename targets:
 Do not start by writing brand-new files from scratch. Copy the working example
 first, then change one thing at a time.
 
-### Step 2: Change The Backend Behavior
+### Step 2: Change The Backend Behaviour
 
 Edit the backend file:
 
@@ -184,7 +189,7 @@ Keep the shape simple until routing works through APIM.
 
 ### Step 3: Update The Compose Overlay
 
-Copy `compose.hello.yml` to a new overlay and update:
+Copy [`compose.hello.yml`](../compose.hello.yml) to a new overlay and update:
 
 - backend service name
 - Dockerfile path
@@ -209,7 +214,7 @@ inventing a new config shape.
 
 ### Step 5: Keep The Verification With The Service
 
-Copy `scripts/smoke_hello.py` to a new smoke script when the service becomes
+Copy [`scripts/smoke_hello.py`](../scripts/smoke_hello.py) to a new smoke script when the service becomes
 real enough to keep.
 
 At minimum, keep:
@@ -302,8 +307,8 @@ Good result:
 
 The hello scaffold already follows the repo's OTEL standard:
 
-- backend instrumentation uses `app/telemetry.py`
-- the backend emits OTLP to LGTM with env vars
+- backend instrumentation uses [`app/telemetry.py`](../app/telemetry.py)
+- the backend emits OTLP to [LGTM](https://github.com/grafana/docker-otel-lgtm) with env vars
 - the gateway and backend share the same local OTEL contract
 
 That matters because the gateway and backend can share one local OTEL contract
@@ -318,7 +323,7 @@ When teaching or reviewing, make these checks:
 
 For a richer backend observability shape, study:
 
-- `examples/todo-app/api-fastapi-container-app/main.py`
+- [`examples/todo-app/api-fastapi-container-app/main.py`](../examples/todo-app/api-fastapi-container-app/main.py)
 
 ## Definition Of Done
 
@@ -331,11 +336,11 @@ For a new API, aim for all of these:
 - the intended auth mode is proven
 - at least one failure mode is proven
 - a smoke script exists
-- OTEL signals are visible when the service is run with LGTM
+- OTEL signals are visible when the service is run with [LGTM](https://github.com/grafana/docker-otel-lgtm)
 
 ## Read Next
 
-- Checked-in example: `examples/hello-api/README.md`
+- Checked-in example: [`examples/hello-api/README.md`](../examples/hello-api/README.md)
 - Guided onboarding: [`APIM-TRAINING-GUIDE.md`](./APIM-TRAINING-GUIDE.md)
 - Team delivery guide: [`APIM-TEAM-PLAYBOOK.md`](./APIM-TEAM-PLAYBOOK.md)
 - OTEL signals appear if the service is important enough to instrument now
@@ -348,7 +353,7 @@ Use these depending on the audience:
 - `curl` for quick route proof
 - smoke scripts for repeatable checks
 - Bruno for saved request flows
-- Proxyman or HAR when browser behavior matters
+- Proxyman or HAR when browser behaviour matters
 - `/apim/trace/{id}` for APIM-specific explanation
 - Grafana for logs, traces, and metrics
 

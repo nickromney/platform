@@ -7,8 +7,8 @@ This collection exercises the APIM-backed todo flow end to end:
 - missing and invalid subscription key cases
 - list, create, toggle, and final list verification
 
-Import `todo-through-apim.postman_collection.json` and
-`local.postman_environment.json` into Postman, select the local environment,
+Import [`todo-through-apim.postman_collection.json`](todo-through-apim.postman_collection.json) and
+[`local.postman_environment.json`](local.postman_environment.json) into Postman, select the local environment,
 and run the requests in order, or run it from the repo root with:
 
 ```bash

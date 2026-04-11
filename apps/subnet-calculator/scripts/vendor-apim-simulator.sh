@@ -66,6 +66,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+summary_source="${SOURCE_REPO:-<required --source>}"
+dry_run_summary="would vendor apim-simulator from ${summary_source} @ ${SOURCE_REF} into ${TARGET_DIR}"
+shell_cli_maybe_execute_or_preview_summary usage "${dry_run_summary}"
+
 if [[ -z "${SOURCE_REPO}" ]]; then
   echo "${script_name}: --source is required (or set APIM_SIMULATOR_SOURCE_REPO)" >&2
   exit 1
@@ -81,8 +85,6 @@ if [[ ! -d "${SOURCE_REPO}/.git" ]]; then
 fi
 
 source_commit="$(git -C "${SOURCE_REPO}" rev-parse --verify "${SOURCE_REF}^{commit}")"
-dry_run_summary="would vendor apim-simulator from ${SOURCE_REPO} @ ${SOURCE_REF} (${source_commit}) into ${TARGET_DIR}"
-shell_cli_maybe_execute_or_preview_summary usage "${dry_run_summary}"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
