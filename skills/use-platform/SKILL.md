@@ -25,6 +25,60 @@ Read the nearest subtree `README.md` only after selecting the relevant path. Pre
 
 Expect most stack workflows to require a platform env file. Run the subtree `prereqs` target before `plan` or `apply` when working under `kubernetes/*` or `sd-wan/*`. Bare root `make` should stay informational and should not fail on `PLATFORM_ENV_FILE`.
 
+For non-interactive stack runs, use `AUTO_APPROVE=1`. `AUTO_APPLY` is not a supported flag in this repo.
+
+Use these local cluster command paths when you need to prove a stack end to end instead of just reading docs:
+
+- Kind full confidence path:
+  `make -C kubernetes/kind reset AUTO_APPROVE=1`
+  `make -C kubernetes/kind 100 apply AUTO_APPROVE=1`
+  `make -C kubernetes/kind 900 apply AUTO_APPROVE=1`
+  `make -C kubernetes/kind check-health`
+- Lima conflict preflight while kind is still active:
+  `make -C kubernetes/lima 900 apply AUTO_APPROVE=1`
+  Expect this to fail fast in `check-kind-stopped` while `kind-local` is running; that is the validated guard before Lima reaches shared host-port checks.
+- Lima clean confidence path after clearing both local targets:
+  `make -C kubernetes/kind reset AUTO_APPROVE=1`
+  `make -C kubernetes/lima reset AUTO_APPROVE=1`
+  `make -C kubernetes/lima 100 apply AUTO_APPROVE=1`
+  `make -C kubernetes/lima 900 apply AUTO_APPROVE=1`
+  `make -C kubernetes/lima check-health`
+
+When a long `apply` goes quiet, the default operator behavior is to keep waiting rather than interrupt it. These stacks can sit in long stretches of Argo reconciliation, Gitea bootstrap, gateway/TLS convergence, OIDC reconfiguration, or browser verification without printing much.
+
+Do not treat “no new log lines for a while” as failure by itself. Prefer observing state from a second terminal while the original `apply` keeps running.
+
+Use these state probes while an `apply` is in flight:
+
+- Broad cluster convergence:
+  `make -C kubernetes/kind check-health`
+  `make -C kubernetes/lima check-health`
+- Gateway/TLS-specific progress:
+  `make -C kubernetes/kind check-gateway-stack`
+  `make -C kubernetes/lima check-gateway-stack`
+  `make -C kubernetes/kind check-gateway-urls`
+  `make -C kubernetes/lima check-gateway-urls`
+- SSO-specific progress:
+  `make -C kubernetes/kind check-sso`
+  `make -C kubernetes/lima check-sso`
+  `make -C kubernetes/kind check-sso-e2e`
+  `make -C kubernetes/lima check-sso-e2e`
+- App-specific progress:
+  `make -C kubernetes/kind check-app APP=<name>`
+  `make -C kubernetes/lima check-app APP=<name>`
+- Runtime/preflight state:
+  `make -C kubernetes/kind status`
+  `make -C kubernetes/lima status`
+  `make -C kubernetes/lima proxy-status`
+  `make -C kubernetes/kind audit-bootstrap`
+
+Use the preflight checks to explain immediate failure modes instead of waiting on them:
+
+- `make -C kubernetes/lima check-kind-stopped` tells you Lima is blocked because kind is still active.
+- `make -C kubernetes/kind check-lima-stopped` and `make -C kubernetes/kind check-slicer-stopped` tell you kind is blocked by another local cluster target.
+
+Rule of thumb: keep the original `apply` running until it either exits successfully or surfaces a concrete hard error. Use the `check-*` and `status` targets to understand what it is waiting for.
+
 Use these landmarks when editing repo workflow behavior:
 
 - `Makefile` for root routing/help behavior.

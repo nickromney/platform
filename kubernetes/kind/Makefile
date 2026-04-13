@@ -1167,7 +1167,7 @@ reset:
 	echo ""; \
 	echo "Deleting kind cluster (best-effort)..."; \
 	if [ "$$CLUSTER_EXISTS" = "1" ]; then \
-		"$(DELETE_KIND_CLUSTER)" --name "$$CLUSTER_NAME"; \
+		"$(DELETE_KIND_CLUSTER)" --execute --name "$$CLUSTER_NAME"; \
 		echo "OK   Deleted $$CLUSTER_NAME"; \
 	else \
 		echo "OK   Cluster $$CLUSTER_NAME was already absent"; \
