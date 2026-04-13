@@ -20,18 +20,35 @@ spec:
         app.kubernetes.io/name: signoz-auth-proxy
         app.kubernetes.io/component: auth-bridge
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: signoz-auth-proxy
           image: ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: HOME
+              value: /tmp
           envFrom:
             - secretRef:
                 name: signoz-auth-proxy-credentials
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: signoz-auth-proxy-script
               mountPath: /app/proxy.mjs
               subPath: proxy.mjs
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           ports:
             - name: http
               containerPort: 3000
@@ -54,3 +71,5 @@ spec:
         - name: signoz-auth-proxy-script
           configMap:
             name: signoz-auth-proxy
+        - name: tmp
+          emptyDir: {}

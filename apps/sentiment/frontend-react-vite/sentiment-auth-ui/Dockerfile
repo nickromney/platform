@@ -25,9 +25,9 @@ RUN bun run build
 
 FROM dhi.io/nginx:1.29.5-debian13
 
-COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
-COPY --chown=nginx:nginx --from=build /app/dist /usr/share/nginx/html
+COPY --chown=65532:65532 nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=65532:65532 --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 
-USER nginx
+USER 65532:65532

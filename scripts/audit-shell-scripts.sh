@@ -26,10 +26,13 @@ bash4_feature_patterns=(
 
 usage() {
   cat <<EOF
-Usage: audit-shell-scripts.sh [--dry-run] [--execute]
+Usage: audit-shell-scripts.sh [--path PATH]... [--dry-run] [--execute]
 
 Audit tracked shell scripts for Bash 3.2 compatibility guardrails and shell
 repo hygiene checks.
+
+Scope options:
+  --path PATH  Limit the audit to a tracked file or directory under the repo root.
 
 $(shell_cli_standard_options)
 EOF
@@ -54,8 +57,33 @@ unexpected_python=()
 yaml_module_usage=()
 bash4_feature_usage=()
 interface_failures=()
+scope_paths=()
 
-shell_cli_handle_standard_no_args usage "would audit tracked shell scripts for Python usage and Bash 3.2 compatibility" "$@"
+shell_cli_init_standard_flags
+while [[ $# -gt 0 ]]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    shift
+    continue
+  fi
+
+  case "$1" in
+    --path)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--path"
+        exit 1
+      }
+      scope_paths+=("${2:-}")
+      shift 2
+      ;;
+    *)
+      shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
+      exit 1
+      ;;
+  esac
+done
+
+shell_cli_maybe_execute_or_preview_summary usage \
+  "would audit tracked shell scripts for Python usage and Bash 3.2 compatibility"
 
 python_execution_matches() {
   local file="$1"
@@ -87,8 +115,37 @@ python_execution_matches() {
 }
 
 list_shell_scripts() {
+  local rel=""
+  local full_path=""
+
   if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ "${#scope_paths[@]}" -gt 0 ]]; then
+      while IFS= read -r -d '' rel; do
+        if [[ "${rel}" == *.sh ]]; then
+          printf '%s\0' "${rel}"
+        fi
+      done < <(git -C "${REPO_ROOT}" ls-files -z -- "${scope_paths[@]}")
+      return 0
+    fi
+
     git -C "${REPO_ROOT}" ls-files -z -- '*.sh'
+    return 0
+  fi
+
+  if [[ "${#scope_paths[@]}" -gt 0 ]]; then
+    for rel in "${scope_paths[@]}"; do
+      full_path="${rel}"
+      if [[ "${full_path}" != /* ]]; then
+        full_path="${REPO_ROOT}/${full_path}"
+      fi
+      if [[ -d "${full_path}" ]]; then
+        find "${full_path}" \
+          \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.run' -o -path '*/.terraform' -o -path '*/.venv' -o -path '*/venv' -o -path '*/dist' -o -path '*/build' \) -prune \
+          -o -type f -name '*.sh' -print0
+      elif [[ -f "${full_path}" && "${full_path}" == *.sh ]]; then
+        printf '%s\0' "${full_path}"
+      fi
+    done | sort -z
     return 0
   fi
 

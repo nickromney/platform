@@ -118,6 +118,50 @@ EOF
   [ "${output}" = $'yaml --execute\nmarkdown --execute\nbash32 --execute\nshell-audit --execute\ncilium --mode static --execute\nkyverno --mode static --execute' ]
 }
 
+@test "root lint-bash32 delegates directly to the Bash 3.2 audit script" {
+  lint_bash32_stub="${BATS_TEST_TMPDIR}/lint-bash32.sh"
+  log_file="${BATS_TEST_TMPDIR}/lint-bash32.log"
+
+  cat >"${lint_bash32_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'bash32 %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${lint_bash32_stub}"
+
+  run make -C "${REPO_ROOT}" lint-bash32 \
+    LINT_BASH32_SCRIPT="${lint_bash32_stub}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'bash32 --execute' ]
+}
+
+@test "root lint-shell delegates directly to the shell audit script" {
+  lint_shell_stub="${BATS_TEST_TMPDIR}/lint-shell.sh"
+  log_file="${BATS_TEST_TMPDIR}/lint-shell.log"
+
+  cat >"${lint_shell_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shell-audit %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${lint_shell_stub}"
+
+  run make -C "${REPO_ROOT}" lint-shell \
+    AUDIT_SHELL_SCRIPTS_SCRIPT="${lint_shell_stub}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'shell-audit --execute' ]
+}
+
 @test "root fmt delegates to the repo formatter scripts" {
   fmt_markdown_stub="${BATS_TEST_TMPDIR}/fmt-markdown.sh"
   log_file="${BATS_TEST_TMPDIR}/fmt.log"

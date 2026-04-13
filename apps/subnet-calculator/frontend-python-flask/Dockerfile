@@ -18,21 +18,22 @@ FROM dhi.io/python:3.13-debian13
 WORKDIR /app
 
 ENV PATH="/app/.venv/bin:/opt/python/bin:$PATH"
+ENV HOME=/tmp
 ENV PYTHONUNBUFFERED=1
 
 # Copy virtual environment from builder
-COPY --chown=nonroot:nonroot --from=builder /app/.venv /app/.venv
+COPY --chown=65532:65532 --from=builder /app/.venv /app/.venv
 
 # Copy application files
-COPY --chown=nonroot:nonroot app.py ./
-COPY --chown=nonroot:nonroot auth.py ./
-COPY --chown=nonroot:nonroot templates/ ./templates/
-COPY --chown=nonroot:nonroot static/ ./static/
+COPY --chown=65532:65532 app.py ./
+COPY --chown=65532:65532 auth.py ./
+COPY --chown=65532:65532 templates/ ./templates/
+COPY --chown=65532:65532 static/ ./static/
 
 # Expose port
 EXPOSE 8000
 
-USER nonroot
+USER 65532:65532
 
 # Run with Gunicorn (production WSGI server)
 CMD ["/app/.venv/bin/gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "app:app"]

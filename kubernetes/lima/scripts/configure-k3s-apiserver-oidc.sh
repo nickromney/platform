@@ -112,6 +112,7 @@ ensure_remote_ca() {
   return 0
 }
 
+# shellcheck disable=SC2329
 usage() {
   cat <<EOF
 Usage: configure-k3s-apiserver-oidc.sh [--dry-run] [--execute]

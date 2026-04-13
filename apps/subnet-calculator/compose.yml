@@ -80,6 +80,27 @@
 #     - Keycloak Admin: http://localhost:8300 (demo@admin.test / demo-password)
 #     - Auth: OAuth2 Proxy forces login upfront (simulates Azure Easy Auth)
 #     - Test users: demo@dev.test / demo-password, demo@admin.test / demo-password
+
+x-app-runtime-hardening: &app-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777
+
+x-nginx-runtime-hardening: &nginx-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777
+    - /var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+    - /var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+
 services:
   api-fastapi-azure-function:
     build:
@@ -129,6 +150,7 @@ services:
         condition: service_healthy
 
   api-fastapi-container-app:
+    <<: *app-runtime-hardening
     build:
       context: ./api-fastapi-container-app
       dockerfile: Dockerfile
@@ -144,6 +166,7 @@ services:
       # Container ports: 8001-8004 (static, flask, typescript, react)
       # Local dev ports: 3000-3002 (react/typescript dev), 5000 (flask dev), 5173-5174 (vite dev servers)
       - CORS_ORIGINS=http://localhost:8001,http://localhost:8002,http://localhost:8003,http://localhost:8004,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5000,http://localhost:5173,http://localhost:5174
+      - HOME=/tmp
     healthcheck:
       test:
         [
@@ -184,6 +207,7 @@ services:
         condition: service_healthy
 
   frontend-typescript-vite:
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
@@ -216,6 +240,7 @@ services:
         condition: service_healthy
 
   frontend-react:
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile

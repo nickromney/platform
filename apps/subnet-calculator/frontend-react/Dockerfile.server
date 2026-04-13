@@ -39,15 +39,17 @@ FROM --platform=$TARGETPLATFORM dhi.io/node:22-alpine3.22
 WORKDIR /app
 
 # Copy server + built assets
-COPY --chown=node:node --from=deps /app/node_modules ./node_modules
-COPY --chown=node:node ./frontend-react/package.json ./
-COPY --chown=node:node ./frontend-react/server.js ./server.js
-COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=1000:1000 --from=deps /app/node_modules ./node_modules
+COPY --chown=1000:1000 ./frontend-react/package.json ./
+COPY --chown=1000:1000 ./frontend-react/server.js ./server.js
+COPY --chown=1000:1000 --from=builder /app/dist ./dist
 
 # Expose port
 EXPOSE 8080
 
-USER node
+ENV HOME=/tmp
+
+USER 1000:1000
 
 # Start with node server.js (like Azure Web App)
 CMD ["node", "server.js"]

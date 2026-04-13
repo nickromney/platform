@@ -1,6 +1,28 @@
+x-app-runtime-hardening: &app-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777
+
+x-nginx-runtime-hardening: &nginx-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777
+    - /var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+    - /var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+
 services:
   edge:
+    <<: *nginx-runtime-hardening
     image: dhi.io/nginx:1.29.5-debian13
+    user: "65532:65532"
     ports:
       - "8088:80"
       - "8443:443"
@@ -38,6 +60,7 @@ services:
 
   subnetcalc-api-dev:
     profiles: ["dev"]
+    <<: *app-runtime-hardening
     build:
       context: ../../apps/subnet-calculator/api-fastapi-container-app
       dockerfile: Dockerfile
@@ -46,6 +69,7 @@ services:
     environment:
       - AUTH_METHOD=none
       - CORS_ORIGINS=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443,https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443
+      - HOME=/tmp
     healthcheck:
       test:
         [
@@ -61,6 +85,7 @@ services:
 
   subnetcalc-api-uat:
     profiles: ["uat"]
+    <<: *app-runtime-hardening
     build:
       context: ../../apps/subnet-calculator/api-fastapi-container-app
       dockerfile: Dockerfile
@@ -69,6 +94,7 @@ services:
     environment:
       - AUTH_METHOD=none
       - CORS_ORIGINS=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443,https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443
+      - HOME=/tmp
     healthcheck:
       test:
         [
@@ -84,6 +110,7 @@ services:
 
   subnetcalc-frontend-dev:
     profiles: ["dev"]
+    <<: *nginx-runtime-hardening
     build:
       context: ../../apps/subnet-calculator
       dockerfile: ./frontend-react/Dockerfile
@@ -96,6 +123,7 @@ services:
 
   subnetcalc-frontend-uat:
     profiles: ["uat"]
+    <<: *nginx-runtime-hardening
     build:
       context: ../../apps/subnet-calculator
       dockerfile: ./frontend-react/Dockerfile
@@ -108,7 +136,9 @@ services:
 
   subnetcalc-router-dev:
     profiles: ["dev"]
+    <<: *nginx-runtime-hardening
     image: dhi.io/nginx:1.29.5-debian13
+    user: "65532:65532"
     volumes:
       - ./subnetcalc/router-dev.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -119,7 +149,9 @@ services:
 
   subnetcalc-router-uat:
     profiles: ["uat"]
+    <<: *nginx-runtime-hardening
     image: dhi.io/nginx:1.29.5-debian13
+    user: "65532:65532"
     volumes:
       - ./subnetcalc/router-uat.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:

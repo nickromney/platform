@@ -20,18 +20,19 @@ FROM dhi.io/python:3.13-debian13
 WORKDIR /app
 
 ENV PATH="/app/.venv/bin:/opt/python/bin:$PATH"
+ENV HOME=/tmp
 ENV PYTHONUNBUFFERED=1
 
 # Copy virtual environment from builder
-COPY --chown=nonroot:nonroot --from=builder /app/.venv /app/.venv
+COPY --chown=65532:65532 --from=builder /app/.venv /app/.venv
 
 # Copy application code
-COPY --chown=nonroot:nonroot app ./app
+COPY --chown=65532:65532 app ./app
 
 # Expose port
 EXPOSE 8000
 
-USER nonroot
+USER 65532:65532
 
 # Run Uvicorn ASGI server
 CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

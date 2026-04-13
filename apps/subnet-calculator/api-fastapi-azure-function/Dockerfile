@@ -19,15 +19,16 @@ ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
     AzureFunctionsJobHost__Logging__Console__IsEnabled=true \
     WEBSITES_PORT=8080 \
     ASPNETCORE_URLS=http://+:8080 \
+    HOME=/tmp \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
 # Copy virtual environment from builder
-COPY --chown=app:app --from=builder /app/.venv /app/.venv
+COPY --chown=65532:65532 --from=builder /app/.venv /app/.venv
 
 # Copy application files (excludes tests, docs, etc. per .dockerignore)
-COPY --chown=app:app . /home/site/wwwroot
+COPY --chown=65532:65532 . /home/site/wwwroot
 
 EXPOSE 8080
 
-USER app
+USER 65532:65532

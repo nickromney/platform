@@ -10,11 +10,15 @@ LEGACY_STATE_FILE ?= ../../terraform/.run/platform/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
+STAGE_LADDER_MK := $(MAKEFILE_DIR)../stage-ladder.mk
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 PROFILE_LIB := $(STACK_DIR)/scripts/profile-lib.sh
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
+BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
+CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
+RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
@@ -24,6 +28,7 @@ BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
 ENSURE_KIND_KUBECONFIG := $(SCRIPTS_DIR)/ensure-kind-kubeconfig.sh
+REFRESH_KIND_KUBECONFIG := $(SCRIPTS_DIR)/refresh-kind-kubeconfig.sh
 ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
 SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
@@ -78,9 +83,10 @@ ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
 
+include $(STAGE_LADDER_MK)
+
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
-VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
@@ -127,17 +133,7 @@ ifeq ($(filter $(KIND_IMAGE_DISTRIBUTION_MODE),$(VALID_KIND_IMAGE_DISTRIBUTION_M
 $(error Invalid KIND_IMAGE_DISTRIBUTION_MODE="$(KIND_IMAGE_DISTRIBUTION_MODE)". Expected one of: $(VALID_KIND_IMAGE_DISTRIBUTION_MODES))
 endif
 
-STAGE_FILE_100 := stages/100-cluster.tfvars
-STAGE_FILE_200 := stages/200-cilium.tfvars
-STAGE_FILE_300 := stages/300-hubble.tfvars
-STAGE_FILE_400 := stages/400-argocd.tfvars
-STAGE_FILE_500 := stages/500-gitea.tfvars
-STAGE_FILE_600 := stages/600-policies.tfvars
-STAGE_FILE_700 := stages/700-app-repos.tfvars
-STAGE_FILE_800 := stages/800-gateway-tls.tfvars
-STAGE_FILE_900 := stages/900-sso.tfvars
-
-stage_file = $(STAGE_FILE_$(STAGE))
+stage_file = $(STAGE_FILE_REL_$(STAGE))
 target_profile_file = targets/kind.tfvars
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
@@ -197,15 +193,15 @@ help:
 	@echo "  make test"
 	@echo ""
 	@echo "Stages:"
-	@echo "  100 - cluster"
-	@echo "  200 - cilium"
-	@echo "  300 - hubble"
-	@echo "  400 - argocd core"
-	@echo "  500 - gitea + full argocd controllers"
-	@echo "  600 - policies"
-	@echo "  700 - app repos + actions runner"
-	@echo "  800 - observability + headlamp + gateway-tls"
-	@echo "  900 - full stack + sso"
+	@echo "  100 - $(STAGE_DESC_KIND_100)"
+	@echo "  200 - $(STAGE_DESC_KIND_200)"
+	@echo "  300 - $(STAGE_DESC_KIND_300)"
+	@echo "  400 - $(STAGE_DESC_KIND_400)"
+	@echo "  500 - $(STAGE_DESC_KIND_500)"
+	@echo "  600 - $(STAGE_DESC_KIND_600)"
+	@echo "  700 - $(STAGE_DESC_KIND_700)"
+	@echo "  800 - $(STAGE_DESC_KIND_800)"
+	@echo "  900 - $(STAGE_DESC_KIND_900)"
 	@echo ""
 	@echo "Stage examples:"
 	@echo "  make 100 plan"
@@ -259,15 +255,21 @@ ensure-image-cache:
 	"$(ENSURE_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)
 
 .PHONY: sync-image-cache
-sync-image-cache:
+sync-image-cache: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@set -euo pipefail; \
 	tfvar_files=(); \
-	if [ -f "$(stage_var_file)" ]; then tfvar_files+=("$(stage_var_file)"); fi; \
-	if [ -f "$(target_var_file)" ]; then tfvar_files+=("$(target_var_file)"); fi; \
-	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then tfvar_files+=("$(KIND_OPERATOR_OVERRIDES_FILE)"); fi; \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		tfvar_files+=("$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			--optional-file "$(stage_var_file)" \
+			--optional-file "$(target_var_file)" \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	); \
 	IMAGE_LIST_FILE="$(preload_images_file)" \
 	CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(KIND_LOCAL_IMAGE_CACHE_OPTIONAL)" \
@@ -382,19 +384,22 @@ ensure-kind-running:
 	exit 1
 
 .PHONY: check-kind-host-ports
-check-kind-host-ports:
+check-kind-host-ports: WORKFLOW_REQUIRE_STAGE_FILE=1
+check-kind-host-ports: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@set -euo pipefail; \
-	args=(--var-file "$(stage_var_file)" --var-file "$(target_var_file)"); \
-	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then \
-		args+=(--var-file "$${PLATFORM_BASE_TFVARS}"); \
-	fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
-		args+=(--var-file "$${PLATFORM_TFVARS}"); \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		args+=(--var-file "$(KIND_OPERATOR_OVERRIDES_FILE)"); \
-	fi; \
+	args=(); \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		args+=(--var-file "$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			--optional-file "$(stage_var_file)" \
+			--optional-file "$(target_var_file)" \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	); \
 	"$(CHECK_KIND_HOST_PORTS)" $(READONLY_MODE_FLAG) "$${args[@]}"
 
 .PHONY: check-lima-stopped
@@ -420,10 +425,10 @@ kind: workflow-validate
 	$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
 
 .PHONY: init
-init:
+init: WORKFLOW_REQUIRE_STAGE_FILE=1
+init: workflow-validate-stage
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
 
 .PHONY: prepare-state
@@ -444,14 +449,15 @@ prepare-state:
 
 .PHONY: plan
 ifeq ($(HAS_PLATFORM_GOAL),1)
-plan: workflow-validate
+plan: WORKFLOW_REQUIRE_STAGE_FILE=1
+plan: workflow-validate-stage
 	@:
 else
-plan: workflow-validate
+plan: WORKFLOW_REQUIRE_STAGE_FILE=1
+plan: workflow-validate-stage
 	@$(MAKE) prepare-state
 	@$(MAKE) render-operator-overrides >/dev/null
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
@@ -486,13 +492,16 @@ plan: workflow-validate
 			exit 1; \
 		fi; \
 	fi; \
-	plan_args="-var-file=$(stage_var_file) -var-file=$(target_var_file)"; \
+	plan_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
+		--optional-file "$(stage_var_file)" \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then plan_args="$$plan_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
 	if [ -n "$${KUBECONFIG_CONTEXT:-}" ]; then plan_args="$$plan_args -var kubeconfig_context=$${KUBECONFIG_CONTEXT}"; fi; \
 	if [ -n "$${TARGET_CLUSTER_NAME:-}" ]; then plan_args="$$plan_args -var cluster_name=$${TARGET_CLUSTER_NAME}"; fi; \
-	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_BASE_TFVARS}"; fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_TFVARS}"; fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then plan_args="$$plan_args -var-file=$(KIND_OPERATOR_OVERRIDES_FILE)"; fi; \
 	tg_init() { \
 		cd "$(STACK_DIR)" && \
 		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
@@ -507,14 +516,15 @@ endif
 
 .PHONY: apply
 ifeq ($(HAS_PLATFORM_GOAL),1)
-apply: workflow-validate
+apply: WORKFLOW_REQUIRE_STAGE_FILE=1
+apply: workflow-validate-stage
 	@:
 else
-apply: workflow-validate
+apply: WORKFLOW_REQUIRE_STAGE_FILE=1
+apply: workflow-validate-stage
 	@$(MAKE) prepare-state
 	@$(MAKE) render-operator-overrides >/dev/null
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@if [ -z "$(stage_file)" ] || [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@$(MAKE) check-platform-env-file
 	@$(MAKE) prereqs
@@ -565,10 +575,18 @@ apply: workflow-validate
 	if ! docker ps -a --format '{{.Names}}' | grep -qx "$$cluster_name-control-plane"; then \
 		$(MAKE) check-kind-host-ports STAGE="$(STAGE)"; \
 	fi; \
-	tfvar_files=("$(stage_var_file)" "$(target_var_file)"); \
-	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_BASE_TFVARS}"); fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then tfvar_files+=("$${PLATFORM_TFVARS}"); fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then tfvar_files+=("$(KIND_OPERATOR_OVERRIDES_FILE)"); fi; \
+	tfvar_files=(); \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		tfvar_files+=("$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			--optional-file "$(stage_var_file)" \
+			--optional-file "$(target_var_file)" \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	); \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
 	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
 	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
@@ -594,13 +612,16 @@ apply: workflow-validate
 	elif [ "$$kind_image_distribution_mode" != "load" ] && mode_enabled "$(KIND_PRELOAD_IMAGES_MODE)" 200 "$$stage_num"; then \
 		echo "Skipping KIND_PRELOAD_IMAGES_MODE because KIND_IMAGE_DISTRIBUTION_MODE=$$kind_image_distribution_mode"; \
 	fi; \
-	apply_args="-var-file=$(stage_var_file) -var-file=$(target_var_file)"; \
+	apply_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
+		--optional-file "$(stage_var_file)" \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	if [ -n "$${KUBECONFIG_PATH:-}" ]; then apply_args="$$apply_args -var kubeconfig_path=$${KUBECONFIG_PATH}"; fi; \
 	if [ -n "$${KUBECONFIG_CONTEXT:-}" ]; then apply_args="$$apply_args -var kubeconfig_context=$${KUBECONFIG_CONTEXT}"; fi; \
 	if [ -n "$${TARGET_CLUSTER_NAME:-}" ]; then apply_args="$$apply_args -var cluster_name=$${TARGET_CLUSTER_NAME}"; fi; \
-	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then apply_args="$$apply_args -var-file=$${PLATFORM_BASE_TFVARS}"; fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then apply_args="$$apply_args -var-file=$${PLATFORM_TFVARS}"; fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then apply_args="$$apply_args -var-file=$(KIND_OPERATOR_OVERRIDES_FILE)"; fi; \
 	if [ "$(AUTO_APPROVE)" = "1" ]; then \
 		apply_args="$$apply_args -auto-approve"; \
 	fi; \
@@ -629,7 +650,7 @@ apply: workflow-validate
 	fi; \
 	if [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tg_apply_log"; then \
 		echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
+		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
 		if [ "$$profile_enabled" = "1" ]; then \
 			set +e; \
 			profile_run_step "terragrunt-apply-retry" tg_apply; \
@@ -642,62 +663,50 @@ apply: workflow-validate
 			rc=$${PIPESTATUS[0]}; \
 			set -e; \
 		fi; \
-		fi; \
-			if [ $$rc -eq 0 ]; then \
-				KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
-				if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
-					run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-					run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
-					if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-						if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
-							echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
-						else \
-							run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
-						fi; \
-					fi; \
+	fi; \
+	if [ $$rc -eq 0 ]; then \
+		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
+		if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
+			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+			run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
+			if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+				if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
+					echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
+				else \
+					run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 				fi; \
 			fi; \
+		fi; \
+	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
 	fi; \
 	exit $$rc
 endif
 .PHONY: check-health
-check-health:
+check-health: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@vf=""; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
-		vf="--var-file $(stage_var_file)"; \
-	fi; \
-	if [ -f "$(target_var_file)" ]; then \
-		vf="$$vf --var-file $(target_var_file)"; \
-	fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
-		vf="$$vf --var-file $${PLATFORM_TFVARS}"; \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
-	fi; \
+	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
+		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-security
-check-security:
+check-security: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@vf=""; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
-		vf="--var-file $(stage_var_file)"; \
-	fi; \
-	if [ -f "$(target_var_file)" ]; then \
-		vf="$$vf --var-file $(target_var_file)"; \
-	fi; \
-	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \
-		vf="$$vf --var-file $${PLATFORM_TFVARS}"; \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
-	fi; \
+	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
+		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-gateway-stack
@@ -711,37 +720,31 @@ check-cluster:
 	"$(STACK_DIR)/scripts/check-cluster.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-gateway-urls
-check-gateway-urls:
+check-gateway-urls: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@vf=""; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
-		vf="--var-file $(stage_var_file)"; \
-	fi; \
-	if [ -f "$(target_var_file)" ]; then \
-		vf="$$vf --var-file $(target_var_file)"; \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
-	fi; \
+	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
+		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-app
-check-app:
+check-app: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
-	vf=""; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
-		vf="--var-file $(stage_var_file)"; \
-	fi; \
-	if [ -f "$(target_var_file)" ]; then \
-		vf="$$vf --var-file $(target_var_file)"; \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
-	fi; \
+	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
+		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	path_flag=""; \
 	if [ -n "$${APP_PATH:-}" ]; then path_flag="--path $${APP_PATH}"; fi; \
 	host_flag=""; \
@@ -751,23 +754,20 @@ check-app:
 	"$(STACK_DIR)/scripts/check-app.sh" $(READONLY_MODE_FLAG) $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
 
 .PHONY: check-sso
-check-sso:
+check-sso: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@vf=""; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
-		vf="--var-file $(stage_var_file)"; \
-	fi; \
-	if [ -f "$(target_var_file)" ]; then \
-		vf="$$vf --var-file $(target_var_file)"; \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
-	fi; \
+	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
+		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-sso-e2e
-check-sso-e2e:
+check-sso-e2e: workflow-validate-stage
 	@set -euo pipefail; \
 	if [ "$(PLATFORM_DEVCONTAINER)" = "1" ] && [ "$${ALLOW_DEVCONTAINER_BROWSER_E2E:-0}" != "1" ]; then \
 		echo "check-sso-e2e is host-oriented. The devcontainer image no longer bakes browser runtime dependencies."; \
@@ -775,21 +775,21 @@ check-sso-e2e:
 		exit 1; \
 	fi; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
-	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
+	stage_tfvars="$(abspath $(STAGE_FILE_REL_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
 	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: gitea-sync
-gitea-sync:
+gitea-sync: workflow-validate-stage
 	@set -euo pipefail; \
 	$(MAKE) check-platform-env; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
 	mode_flag="--execute"; \
-	sync_stage_file="$(abspath $(STAGE_FILE_900))"; \
+	sync_stage_file="$(abspath $(STAGE_FILE_REL_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then sync_stage_file="$(stage_var_file)"; fi; \
 	if [ "$(DRY_RUN)" = "1" ]; then mode_flag="--dry-run"; fi; \
 	GITEA_POLICIES_REMOTE="$${GITEA_POLICIES_REMOTE:-http://127.0.0.1:30090/platform/policies.git}" \
@@ -812,18 +812,15 @@ launchpad-render:
 	STACK_DIR="$$stack_path" "$$script" $(READONLY_MODE_FLAG)
 
 .PHONY: show-urls
-show-urls:
+show-urls: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
-	@vf=""; \
-	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
-		vf="--var-file $(stage_var_file)"; \
-	fi; \
-	if [ -f "$(target_var_file)" ]; then \
-		vf="$$vf --var-file $(target_var_file)"; \
-	fi; \
-	if [ -f "$(KIND_OPERATOR_OVERRIDES_FILE)" ]; then \
-		vf="$$vf --var-file $(KIND_OPERATOR_OVERRIDES_FILE)"; \
-	fi; \
+	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
+		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
 	"$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) --show-urls $$vf
 
 .PHONY: docker-health
@@ -930,74 +927,35 @@ merge-default-kubeconfig:
 prereqs:
 	@set -euo pipefail; \
 	stage_num=$$((10#$(STAGE))); \
-	required=(curl docker git jq kind kubectl ssh terragrunt tofu yq); \
-	optional=(bats bun cilium helm hubble kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \
-	recommended_test_tools=(bun node npm npx); \
-	if [ "$$stage_num" -ge 900 ]; then \
-		required+=("$${recommended_test_tools[@]}"); \
-	fi; \
-	missing_required=(); \
-	missing_recommended=(); \
-	is_required() { \
-		local target="$$1"; \
-		local req=""; \
-		for req in "$${required[@]}"; do \
-			if [ "$$req" = "$$target" ]; then \
-				return 0; \
-			fi; \
-		done; \
-		return 1; \
-	}; \
-	is_recommended() { \
-		local target="$$1"; \
-		local recommended=""; \
-		for recommended in "$${recommended_test_tools[@]}"; do \
-			if [ "$$recommended" = "$$target" ]; then \
-				return 0; \
-			fi; \
-		done; \
-		return 1; \
-	}; \
-	echo "Tool installation verification:"; \
-	check_bin() { \
-		local bin="$$1"; local required_flag="$$2"; \
-		if command -v "$$bin" >/dev/null 2>&1; then \
-			echo "OK   $$bin"; \
-			return 0; \
-		fi; \
-		if [ "$$required_flag" = "1" ]; then \
-			echo "FAIL $$bin (missing)"; \
-			missing_required+=("$$bin"); \
-		else \
-			echo "WARN $$bin (missing, optional)"; \
-			if is_recommended "$$bin"; then \
-				missing_recommended+=("$$bin"); \
-			fi; \
-		fi; \
-	}; \
-	sorted_tools=($$(printf '%s\n' "$${required[@]}" "$${optional[@]}" | LC_ALL=C sort -u)); \
-	for b in "$${sorted_tools[@]}"; do \
-		if is_required "$$b"; then \
-			check_bin "$$b" 1; \
-		else \
-			check_bin "$$b" 0; \
-		fi; \
-	done; \
-	if [ $${#missing_required[@]} -gt 0 ]; then \
-		echo ""; \
-		echo "Missing required tools: $${missing_required[*]}"; \
-		echo ""; \
-		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_required[@]}" | sed 's/^/  /'; \
-		exit 1; \
-	fi; \
-	if [ $${#missing_recommended[@]} -gt 0 ]; then \
-		echo ""; \
-		echo "Recommended browser/E2E test tools missing for stages below 900: $${missing_recommended[*]}"; \
-		echo ""; \
-		echo "Install hints:"; \
-		"$(REPO_ROOT)/scripts/install-tool-hints.sh" --execute --plain "$${missing_recommended[@]}" | sed 's/^/  /'; \
-	fi; \
+	"$(CHECK_STACK_PREREQS)" --execute --stage "$(STAGE)" \
+		--required curl \
+		--required docker \
+		--required git \
+		--required jq \
+		--required kind \
+		--required kubectl \
+		--required ssh \
+		--required terragrunt \
+		--required tofu \
+		--required yq \
+		--optional bats \
+		--optional bun \
+		--optional cilium \
+		--optional helm \
+		--optional hubble \
+		--optional kubectx \
+		--optional kubie \
+		--optional kyverno \
+		--optional mkcert \
+		--optional node \
+		--optional npm \
+		--optional npx \
+		--optional shellcheck \
+		--optional yamllint \
+		--recommended bun \
+		--recommended node \
+		--recommended npm \
+		--recommended npx; \
 	if command -v mkcert >/dev/null 2>&1; then \
 		echo ""; \
 		echo "Local certificate verification:"; \
@@ -1128,33 +1086,29 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
 		if [ -e "$$KUBECONFIG_PATH" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$$KUBECONFIG_PATH"; \
-			if KUBECONFIG="$$KUBECONFIG_PATH" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
-				local_ctx_found=1; \
-			else \
-				local_ctx_found=0; \
-			fi; \
-			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --delete-file-if-empty; \
-			if [ "$$local_ctx_found" = "1" ]; then \
+			if "$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --kubeconfig-helper "$(KUBECONFIG_HELPER)" --auto-approve "$(AUTO_APPROVE)" --delete-file-if-empty; then \
 				echo "OK   Removed $$CTX from $$KUBECONFIG_PATH"; \
 			else \
-				echo "OK   No $$CTX entry found in $$KUBECONFIG_PATH"; \
+				reset_rc=$$?; \
+				if [ "$$reset_rc" = "10" ]; then \
+					echo "OK   No $$CTX entry found in $$KUBECONFIG_PATH"; \
+				else \
+					exit "$$reset_rc"; \
+				fi; \
 			fi; \
 		else \
 			echo "OK   No kubeconfig file at $$KUBECONFIG_PATH"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-			if KUBECONFIG="$(DEFAULT_KUBECONFIG_PATH)" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
-				global_ctx_found=1; \
-			else \
-				global_ctx_found=0; \
-			fi; \
-			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX"; \
-			if [ "$$global_ctx_found" = "1" ]; then \
+			if "$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --kubeconfig-helper "$(KUBECONFIG_HELPER)" --auto-approve "$(AUTO_APPROVE)"; then \
 				echo "OK   Removed $$CTX from $(DEFAULT_KUBECONFIG_PATH)"; \
 			else \
-				echo "OK   No $$CTX entry found in $(DEFAULT_KUBECONFIG_PATH)"; \
+				reset_rc=$$?; \
+				if [ "$$reset_rc" = "10" ]; then \
+					echo "OK   No $$CTX entry found in $(DEFAULT_KUBECONFIG_PATH)"; \
+				else \
+					exit "$$reset_rc"; \
+				fi; \
 			fi; \
 		else \
 			echo "OK   No kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \
@@ -1195,7 +1149,13 @@ test:
 .PHONY: test-shell
 test-shell:
 	@/bin/bash "$(REPO_ROOT)/scripts/check-bash32-compat.sh" --execute
-	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh" --execute
+	@"$(REPO_ROOT)/scripts/audit-shell-scripts.sh" --execute \
+		--path scripts/audit-shell-scripts.sh \
+		--path scripts/lib \
+		--path scripts/suggest-make-goal.sh \
+		--path kubernetes/scripts \
+		--path kubernetes/kind/scripts \
+		--path terraform/kubernetes/scripts
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
