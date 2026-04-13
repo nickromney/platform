@@ -55,7 +55,7 @@ In practice:
 ## What This Cluster Is Doing Right Now
 
 The key local policy is
-[`application-baseline.yaml`](/Users/nickromney/Developer/personal/platform/terraform/kubernetes/cluster-policies/cilium/shared/application-baseline.yaml).
+[`application-baseline.yaml`](../../../terraform/kubernetes/cluster-policies/cilium/shared/application-baseline.yaml).
 
 It selects every pod in namespaces labeled
 `platform.publiccloudexperiments.net/namespace-role=application`, which here
@@ -119,7 +119,7 @@ then only `subnetcalc-frontend` pods are affected by that policy.
 ## Why `prometheus*` Is Probably The Wrong Path Here
 
 In this cluster, the current `observability` ingress policy is in
-[`observability-hardened.yaml`](/Users/nickromney/Developer/personal/platform/terraform/kubernetes/cluster-policies/cilium/shared/observability-hardened.yaml).
+[`observability-hardened.yaml`](../../../terraform/kubernetes/cluster-policies/cilium/shared/observability-hardened.yaml).
 
 That policy allows application namespaces into `observability` on:
 
@@ -144,7 +144,7 @@ So for this cluster:
 ## What `sentiment-api` Is Doing
 
 `sentiment-api` already has an explicit egress policy in
-[`sentiment-runtime.yaml`](/Users/nickromney/Developer/personal/platform/terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml):
+[`sentiment-runtime.yaml`](../../../terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml):
 
 - policy name: `sentiment-api-egress`
 - destination: `observability`

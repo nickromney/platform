@@ -43,9 +43,12 @@ release notes stay useful.
 
 Useful entrypoints:
 
-1. `make release-preview` to see what semantic-release would do from the
+1. `make check-version` to verify the root workflow pins and repo-local
+   dependency age gates before a release.
+2. `make release-dry-run` to see what semantic-release would do from the
    current history.
-2. `make release-tag VERSION=0.1.0` to create an annotated release tag from
+3. `make release` when you intentionally want to run semantic-release locally.
+4. `make release-tag VERSION=0.1.0` to create an annotated release tag from
    `main` when you intentionally want to seed or cut a manual tag.
 
 The initial baseline tag for this repository should be `v0.1.0`.

@@ -17,7 +17,7 @@ This file is deliberately split into:
 
 See also:
 
-- [cilium-policy-enforcement-semantics.md](/Users/nickromney/Developer/personal/platform/kubernetes/kind/docs/cilium-policy-enforcement-semantics.md)
+- [cilium-policy-enforcement-semantics.md](cilium-policy-enforcement-semantics.md)
 
 ## Local Kind Baseline
 
