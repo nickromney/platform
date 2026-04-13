@@ -2,20 +2,71 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-${VERSION:-}}"
+VERSION="${VERSION:-}"
 DRY_RUN="${DRY_RUN:-0}"
 TAG_BRANCH="${TAG_BRANCH:-main}"
 
 usage() {
   cat <<'EOF'
 Usage:
+  release_tag.sh [--dry-run] [--branch NAME] [--version X.Y.Z]
+  release_tag.sh [--dry-run] [--branch NAME] X.Y.Z
   make release-tag VERSION=X.Y.Z
 
+Options:
+  --version X.Y.Z  Release version to tag.
+  --branch NAME   Branch required for tagging. Defaults to main.
+  --dry-run       Print the tagging plan without changing git state.
+  --execute       Accepted for parity with other repo scripts.
+  -h, --help      Show this help.
+
 Environment:
+  VERSION=...      Release version to tag.
   DRY_RUN=1         Print the tagging plan without changing git state.
   TAG_BRANCH=...    Branch required for tagging. Defaults to main.
 EOF
 }
+
+script_name="$(basename "$0")"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version)
+      [[ $# -ge 2 ]] || { echo "${script_name}: missing value for $1" >&2; exit 1; }
+      VERSION="$2"
+      shift 2
+      ;;
+    --branch)
+      [[ $# -ge 2 ]] || { echo "${script_name}: missing value for $1" >&2; exit 1; }
+      TAG_BRANCH="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --execute)
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "${script_name}: unknown flag: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [[ -n "${VERSION}" ]]; then
+        echo "${script_name}: unexpected argument: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      VERSION="$1"
+      shift
+      ;;
+  esac
+done
 
 if [[ -z "${VERSION}" ]]; then
   usage >&2

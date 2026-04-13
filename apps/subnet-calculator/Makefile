@@ -1,6 +1,7 @@
 USE_COMMON_HELP := 1
 MAKE_KNOWN_GOALS := help prereqs build test check-prerequisites check-docker-prerequisites clean-ports \
   up down urls logs ps \
+  vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -12,6 +13,7 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 include ../../mk/common.mk
 
 .PHONY: help prereqs test check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
+  vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -22,6 +24,12 @@ include ../../mk/common.mk
 DEFAULT_STACK_URL := http://localhost:8003
 DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
 DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000 STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
+VENDOR_APIM_SIMULATOR_SCRIPT := ./scripts/vendor-apim-simulator.sh
+VENDOR_APIM_SIMULATOR_ARGS = \
+	$(if $(APIM_SIMULATOR_SOURCE_REPO),--source "$(APIM_SIMULATOR_SOURCE_REPO)") \
+	$(if $(APIM_SIMULATOR_SOURCE_REF),--ref "$(APIM_SIMULATOR_SOURCE_REF)") \
+	$(if $(APIM_SIMULATOR_TARGET_DIR),--target "$(APIM_SIMULATOR_TARGET_DIR)") \
+	$(if $(APIM_SIMULATOR_VENDOR_METADATA_FILE),--metadata "$(APIM_SIMULATOR_VENDOR_METADATA_FILE)")
 
 ##@ Prerequisites
 prereqs: ## Check local prerequisites
@@ -84,6 +92,10 @@ check-docker-prerequisites: ## Check that docker compose is installed and Docker
 
 build: check-docker-prerequisites ## Build the default compose images
 	@$(DEFAULT_COMPOSE_ENV) docker compose build api-fastapi-container-app frontend-typescript-vite
+
+##@ Vendoring
+vendor-apim-simulator: ## Refresh the vendored APIM simulator from a specific tag or commit SHA
+	@"$(VENDOR_APIM_SIMULATOR_SCRIPT)" --execute $(strip $(VENDOR_APIM_SIMULATOR_ARGS))
 
 ##@ Run
 up: check-docker-prerequisites ## Start the default compose stack and print the local URL

@@ -101,6 +101,24 @@ podman-compose down
 docker compose down
 ```
 
+## Vendored APIM Simulator
+
+`apps/subnet-calculator/apim-simulator/` is a vendored mirror of the standalone
+`apim-simulator` repository. Treat the standalone repo as authoritative.
+
+Refresh the vendored copy from an explicit tag or commit SHA:
+
+```bash
+make vendor-apim-simulator \
+  APIM_SIMULATOR_SOURCE_REPO=~/Developer/personal/apim-simulator \
+  APIM_SIMULATOR_SOURCE_REF=v0.2.0
+```
+
+The vendoring script also records the resolved source commit in
+`apps/subnet-calculator/apim-simulator.vendor.json`. Do not hand-edit the
+vendored subtree and assume those changes will be preserved; land source
+changes in the standalone repo first, then re-vendor here.
+
 ## Azure Infrastructure Scripts
 
 Azure deployment scripts and infrastructure docs live in the separate `azure-tui` repo:

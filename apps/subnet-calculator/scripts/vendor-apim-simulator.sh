@@ -7,19 +7,23 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 SOURCE_REPO="${APIM_SIMULATOR_SOURCE_REPO:-}"
-SOURCE_REF="${APIM_SIMULATOR_SOURCE_REF:-HEAD}"
+SOURCE_REF="${APIM_SIMULATOR_SOURCE_REF:-}"
 TARGET_DIR="${REPO_ROOT}/apps/subnet-calculator/apim-simulator"
+METADATA_FILE="${APIM_SIMULATOR_VENDOR_METADATA_FILE:-${REPO_ROOT}/apps/subnet-calculator/apim-simulator.vendor.json}"
 
 usage() {
   cat <<EOF
-Usage: vendor-apim-simulator.sh [--source PATH] [--ref GIT_REF] [--target PATH] [--dry-run] [--execute]
+Usage: vendor-apim-simulator.sh [--source PATH] [--ref TAG_OR_SHA] [--target PATH] [--metadata PATH] [--dry-run] [--execute]
 
-Sync the vendored APIM simulator tree from a local git checkout at an exact ref.
+Sync the vendored APIM simulator tree from a local git checkout pinned to a tag
+or commit SHA.
 
 Options:
-  --source PATH  Local apim-simulator git checkout (or APIM_SIMULATOR_SOURCE_REPO)
-  --ref GIT_REF  Git ref to vendor (default: HEAD or APIM_SIMULATOR_SOURCE_REF)
-  --target PATH  Target directory in this repo (default: ${TARGET_DIR})
+  --source PATH    Local apim-simulator git checkout (or APIM_SIMULATOR_SOURCE_REPO)
+  --ref TAG_OR_SHA Tag name or commit SHA to vendor (or APIM_SIMULATOR_SOURCE_REF)
+  --target PATH    Target directory in this repo (default: ${TARGET_DIR})
+  --metadata PATH  Metadata file to update with the resolved source commit
+                   (default: ${METADATA_FILE})
 $(shell_cli_standard_options)
 EOF
 }
@@ -29,6 +33,28 @@ require_cmd() {
     echo "$(shell_cli_script_name): $1 not found in PATH" >&2
     exit 1
   }
+}
+
+resolve_ref_kind() {
+  local source_repo="$1"
+  local source_ref="$2"
+
+  if [[ "${source_ref}" =~ ^[0-9a-f]{7,40}$ ]]; then
+    printf 'commit\n'
+    return 0
+  fi
+
+  if [[ "${source_ref}" == refs/tags/* ]] && git -C "${source_repo}" show-ref --verify --quiet "${source_ref}"; then
+    printf 'tag\n'
+    return 0
+  fi
+
+  if git -C "${source_repo}" show-ref --verify --quiet "refs/tags/${source_ref}"; then
+    printf 'tag\n'
+    return 0
+  fi
+
+  return 1
 }
 
 shell_cli_init_standard_flags
@@ -55,6 +81,11 @@ while [[ $# -gt 0 ]]; do
       TARGET_DIR="$2"
       shift 2
       ;;
+    --metadata)
+      [[ $# -ge 2 ]] || { shell_cli_missing_value "${script_name}" "$1"; exit 1; }
+      METADATA_FILE="$2"
+      shift 2
+      ;;
     -*)
       shell_cli_unknown_flag "${script_name}" "$1"
       exit 1
@@ -67,7 +98,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 summary_source="${SOURCE_REPO:-<required --source>}"
-dry_run_summary="would vendor apim-simulator from ${summary_source} @ ${SOURCE_REF} into ${TARGET_DIR}"
+summary_ref="${SOURCE_REF:-<required --ref tag-or-sha>}"
+dry_run_summary="would vendor apim-simulator from ${summary_source} @ ${summary_ref} into ${TARGET_DIR} and record ${METADATA_FILE}"
 shell_cli_maybe_execute_or_preview_summary usage "${dry_run_summary}"
 
 if [[ -z "${SOURCE_REPO}" ]]; then
@@ -75,16 +107,29 @@ if [[ -z "${SOURCE_REPO}" ]]; then
   exit 1
 fi
 
+if [[ -z "${SOURCE_REF}" ]]; then
+  echo "${script_name}: --ref is required (or set APIM_SIMULATOR_SOURCE_REF)" >&2
+  exit 1
+fi
+
 require_cmd git
 require_cmd rsync
 require_cmd tar
+require_cmd python3
 
 if [[ ! -d "${SOURCE_REPO}/.git" ]]; then
   echo "${script_name}: source is not a git checkout: ${SOURCE_REPO}" >&2
   exit 1
 fi
 
+source_ref_kind="$(resolve_ref_kind "${SOURCE_REPO}" "${SOURCE_REF}" || true)"
+if [[ -z "${source_ref_kind}" ]]; then
+  echo "${script_name}: --ref must be a tag or commit SHA, not a floating ref (${SOURCE_REF})" >&2
+  exit 1
+fi
+
 source_commit="$(git -C "${SOURCE_REPO}" rev-parse --verify "${SOURCE_REF}^{commit}")"
+source_origin="$(git -C "${SOURCE_REPO}" remote get-url origin 2>/dev/null || true)"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
@@ -93,5 +138,37 @@ mkdir -p "${tmp_dir}/export"
 git -C "${SOURCE_REPO}" archive "${source_commit}" | tar -x -C "${tmp_dir}/export"
 mkdir -p "${TARGET_DIR}"
 rsync -a --delete "${tmp_dir}/export"/ "${TARGET_DIR}/"
+mkdir -p "$(dirname "${METADATA_FILE}")"
+python3 - "${METADATA_FILE}" "${REPO_ROOT}" "${TARGET_DIR}" "${source_ref_kind}" "${SOURCE_REF}" "${source_commit}" "${source_origin}" <<'PY'
+import json
+import sys
+from pathlib import Path
 
-printf 'Vendored apim-simulator %s -> %s\n' "${source_commit}" "${TARGET_DIR}"
+metadata_path = Path(sys.argv[1])
+repo_root = Path(sys.argv[2])
+target_dir = Path(sys.argv[3])
+ref_kind = sys.argv[4]
+requested_ref = sys.argv[5]
+resolved_commit = sys.argv[6]
+source_origin = sys.argv[7] or None
+
+try:
+    vendored_path = str(target_dir.relative_to(repo_root))
+except ValueError:
+    vendored_path = str(target_dir)
+
+metadata = {
+    "vendored_path": vendored_path,
+    "upstream": {
+        "origin": source_origin,
+        "ref_kind": ref_kind,
+        "requested_ref": requested_ref,
+        "resolved_commit": resolved_commit,
+    },
+}
+
+metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+PY
+
+printf 'Vendored apim-simulator %s (%s %s) -> %s\n' "${source_commit}" "${source_ref_kind}" "${SOURCE_REF}" "${TARGET_DIR}"
+printf 'Recorded vendoring metadata in %s\n' "${METADATA_FILE}"
