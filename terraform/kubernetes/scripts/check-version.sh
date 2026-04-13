@@ -13,6 +13,7 @@ ok() { echo "${GREEN}✔${NC} $*"; }
 warn() { echo "${YELLOW}⚠${NC} $*"; }
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
 progress() { printf '... %s\n' "$*" >&2; }
+section() { printf '\n%s\n' "$*"; }
 
 usage() {
   cat <<EOF
@@ -25,7 +26,9 @@ $(shell_cli_standard_options)
 EOF
 }
 
-shell_cli_handle_standard_no_args usage "would compare pinned platform component versions against current upstream releases" "$@"
+if [ "${CHECK_VERSION_LIB_ONLY:-0}" != "1" ]; then
+  shell_cli_handle_standard_no_args usage "would compare pinned platform component versions against current upstream releases" "$@"
+fi
 
 CHECK_VERSION_HEARTBEAT_SECONDS="${CHECK_VERSION_HEARTBEAT_SECONDS:-10}"
 CHECK_VERSION_HEARTBEAT_PID=""
@@ -283,6 +286,28 @@ github_latest_release_tag() {
     jq -r '.tag_name // empty' | xargs || true
 }
 
+docker_hub_repo_tags() {
+  local namespace="$1"
+  local repository="$2"
+  local next_url="https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags?page_size=100"
+  local payload=""
+  local tags=""
+
+  while [ -n "${next_url}" ]; do
+    payload="$(curl -fsSL "${next_url}" 2>/dev/null)" || return 1
+    tags="${tags}$(jq -r '.results[]?.name // empty' <<<"${payload}")"$'\n'
+    next_url="$(jq -r '.next // empty' <<<"${payload}")"
+  done
+
+  printf "%s" "${tags}"
+}
+
+kindest_node_latest_tag() {
+  docker_hub_repo_tags "kindest" "node" 2>/dev/null | \
+    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | \
+    sort -V | tail -n 1
+}
+
 kind_installed_version() {
   local version=""
 
@@ -489,30 +514,69 @@ print_preferred_image_row() {
     "${NC}"
 }
 
-print_tool_row() {
-  local tool="$1"
-  local installed="$2"
+print_observed_latest_row() {
+  local item="$1"
+  local observed="$2"
   local latest="$3"
+  local observed_label="$4"
+  local latest_label="$5"
   local status=""
-  local normalized_installed=""
+  local normalized_observed=""
   local normalized_latest=""
 
-  normalized_installed="$(normalize_semver_like_tag "${installed}")"
+  normalized_observed="$(normalize_semver_like_tag "${observed}")"
   normalized_latest="$(normalize_semver_like_tag "${latest}")"
 
-  if [ -z "${installed}" ] && [ -z "${latest}" ]; then
-    status="${YELLOW}installed ?; latest ?${NC}"
-  elif [ -z "${installed}" ]; then
-    status="${YELLOW}not installed; latest == ${latest}${NC}"
+  if [ -z "${observed}" ] && [ -z "${latest}" ]; then
+    status="${YELLOW}${observed_label} ?; latest ${latest_label} ?${NC}"
+  elif [ -z "${observed}" ]; then
+    status="${YELLOW}${observed_label} ?; latest ${latest_label} == ${latest}${NC}"
   elif [ -z "${latest}" ]; then
-    status="${YELLOW}installed == ${installed}; latest ?${NC}"
-  elif [ "${normalized_installed}" = "${normalized_latest}" ]; then
-    status="${GREEN}installed == latest (${normalized_latest})${NC}"
+    status="${YELLOW}${observed_label} == ${observed}; latest ${latest_label} ?${NC}"
+  elif [ "${normalized_observed}" = "${normalized_latest}" ]; then
+    status="${GREEN}${observed_label} == latest ${latest_label} (${normalized_latest})${NC}"
   else
-    status="${YELLOW}installed != latest (${installed} vs ${latest})${NC}"
+    status="${YELLOW}${observed_label} != latest ${latest_label} (${observed} vs ${latest})${NC}"
   fi
 
-  printf "%s\t%s\t%s\t%s\n" "${tool}" "${installed:-}" "${latest:-}" "${status}"
+  printf "%s\t%s\t%s\t%s\n" "${item}" "${observed:-}" "${latest:-}" "${status}"
+}
+
+render_tsv_table() {
+  awk -F $'\t' '
+    function strip_ansi(text, cleaned) {
+      cleaned = text
+      gsub(/\033\[[0-9;]*m/, "", cleaned)
+      return cleaned
+    }
+
+    {
+      row_count++
+      field_count[row_count] = NF
+      for (i = 1; i <= NF; i++) {
+        rows[row_count, i] = $i
+        visible = strip_ansi($i)
+        if (length(visible) > width[i]) {
+          width[i] = length(visible)
+        }
+      }
+    }
+
+    END {
+      for (row = 1; row <= row_count; row++) {
+        line = ""
+        for (col = 1; col <= field_count[row]; col++) {
+          cell = rows[row, col]
+          if (col < field_count[row]) {
+            line = line sprintf("%-*s  ", width[col], cell)
+          } else {
+            line = line cell
+          }
+        }
+        print line
+      }
+    }
+  '
 }
 
 k8s_deployment_container_image() {
@@ -543,9 +607,11 @@ print_row() {
   local preferred_tag_status="${10:-}"
   local status
   local deploy_state
-  local latest_state
+  local codebase_latest_state
   local update_available=0
   local all_match=0
+  local codebase_matches_latest=0
+  local not_deployed_current=0
 
   if [ -n "$codebase" ] && [ -n "$latest" ] && [ "$codebase" != "$latest" ]; then
     if [ "${prefer_hardened}" = "1" ]; then
@@ -555,6 +621,10 @@ print_row() {
     else
       update_available=1
     fi
+  fi
+
+  if [ -n "$codebase" ] && [ -n "$latest" ] && [ "$codebase" = "$latest" ]; then
+    codebase_matches_latest=1
   fi
 
   if [ "${CLUSTER_OK}" -ne 1 ]; then
@@ -571,33 +641,42 @@ print_row() {
     fi
   fi
 
-  if [ -z "$latest" ]; then
-    latest_state="latest ?"
+  if [ -z "$codebase" ] && [ -z "$latest" ]; then
+    codebase_latest_state="codebase ?; latest ?"
+  elif [ -z "$codebase" ]; then
+    codebase_latest_state="codebase ?; latest == ${latest}"
+  elif [ -z "$latest" ]; then
+    codebase_latest_state="codebase == ${codebase}; latest ?"
+  elif [ "${codebase_matches_latest}" -eq 1 ]; then
+    codebase_latest_state="codebase == latest (${codebase})"
   elif [ "${prefer_hardened}" = "1" ] && [ -n "${dhi_tag}" ]; then
     case "${preferred_tag_status}" in
-      available) latest_state="latest preferred image available (${dhi_tag})" ;;
-      missing) latest_state="latest chart available, preferred image missing (${dhi_tag})" ;;
-      auth-required) latest_state="latest chart available, preferred image requires auth (${dhi_tag})" ;;
-      unknown) latest_state="latest chart available, preferred image unverified (${dhi_tag})" ;;
-      *) latest_state="latest chart available, preferred image candidate ${dhi_tag}" ;;
+      available) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image available (${dhi_tag})" ;;
+      missing) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image missing (${dhi_tag})" ;;
+      auth-required) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image requires auth (${dhi_tag})" ;;
+      unknown) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image unverified (${dhi_tag})" ;;
+      *) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image candidate ${dhi_tag}" ;;
     esac
   else
-    latest_state="latest == ${latest}"
+    codebase_latest_state="codebase != latest (${codebase} vs ${latest})"
   fi
 
   if [ -n "$codebase" ] && [ -n "$deployed" ] && [ -n "$latest" ] && \
     [ "$codebase" = "$deployed" ] && [ "$codebase" = "$latest" ]; then
     all_match=1
     status="deployed == codebase == latest (${codebase})"
+  elif [ -z "$deployed" ] && [ "${codebase_matches_latest}" -eq 1 ]; then
+    not_deployed_current=1
+    status="not deployed; ${codebase_latest_state}"
   else
-    status="${deploy_state}; ${latest_state}"
+    status="${deploy_state}; ${codebase_latest_state}"
   fi
 
   if [[ "$deploy_state" == deployed\ !=* ]]; then
     status="${RED}${status}${NC}"
-  elif [ "${all_match}" -eq 1 ]; then
+  elif [ "${all_match}" -eq 1 ] || [ "${not_deployed_current}" -eq 1 ]; then
     status="${GREEN}${status}${NC}"
-  elif [ "${update_available}" -eq 1 ] || [[ "$deploy_state" == not* ]] || [[ "$deploy_state" == deployed\ ?* ]] || [[ "$latest_state" == latest\ ?* ]]; then
+  elif [ "${update_available}" -eq 1 ] || [[ "$deploy_state" == not* ]] || [[ "$deploy_state" == deployed\ ?* ]] || [[ "$codebase_latest_state" == *"latest ?"* ]] || [[ "$codebase_latest_state" == codebase\ ?* ]]; then
     status="${YELLOW}${status}${NC}"
   else
     status="${GREEN}${status}${NC}"
@@ -1023,6 +1102,8 @@ main() {
   CODE_CERT_MANAGER=$(tf_default_from_variables "cert_manager_chart_version")
   CODE_DEX=$(tf_default_from_variables "dex_chart_version")
   CODE_OAUTH2_PROXY=$(tf_default_from_variables "oauth2_proxy_chart_version")
+  CODE_KIND_NODE_IMAGE="$(tfvar_get_any_stage_or_default "node_image" "$(tf_default_from_variables "node_image")")"
+  CODE_KIND_NODE_TAG="$(image_tag_from_ref "${CODE_KIND_NODE_IMAGE}")"
   if [ -z "${CODE_ARGOCD_IMAGE_REPO}" ]; then
     CODE_ARGOCD_IMAGE_REPO="quay.io/argoproj/argocd"
   fi
@@ -1256,9 +1337,7 @@ main() {
     DEPLOYEDTAG_OAUTH2_PROXY="Unavailable"
   fi
 
-  echo "Component versions"
-  printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n" "Component" "Deployed" "Codebase" "Latest" "DeployTag" "CodeTag" "PrefTag" "LatestTag" "Status"
-  printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n" "---------" "--------" "--------" "------" "---------" "-------" "-------" "---------" "------"
+  section "Component versions"
 
   rows=()
   rows+=("$(print_row "argo-cd chart" "${DEPLOYED_ARGOCD}" "${CODE_ARGOCD}" "${LATEST_ARGOCD}" "${DEPLOYEDTAG_ARGOCD}" "${CODETAG_ARGOCD}" "${LATEST_PREFERRED_ARGOCD_TAG}" "${LATESTTAG_ARGOCD}" "1" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
@@ -1278,15 +1357,13 @@ main() {
   rows+=("$(print_row "dex chart" "${DEPLOYED_DEX}" "${CODE_DEX}" "${LATEST_DEX}" "${DEPLOYEDTAG_DEX}" "${CODETAG_DEX}" "" "${LATESTTAG_DEX}" "0")")
   rows+=("$(print_row "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}" "${CODE_OAUTH2_PROXY}" "${LATEST_OAUTH2_PROXY}" "${DEPLOYEDTAG_OAUTH2_PROXY}" "${CODETAG_OAUTH2_PROXY}" "" "${LATESTTAG_OAUTH2_PROXY}" "0")")
 
-  printf "%s\n" "${rows[@]}" | sort -t $'\t' -k1,1 | \
-    awk -F $'\t' '{
-      printf "%-16s %-12s %-12s %-12s %-13s %-10s %-15s %-10s %s\n", $1, $2, $3, $4, $5, $6, $7, $8, $9
-    }'
+  printf "%s\n" \
+    $'Component\tDeployed\tCodebase\tLatest\tDeployTag\tCodeTag\tPrefTag\tLatestTag\tStatus' \
+    $'---------\t--------\t--------\t------\t---------\t-------\t-------\t---------\t------' \
+    "$(printf "%s\n" "${rows[@]}" | sort -t $'\t' -k1,1)" | render_tsv_table
   echo ""
 
-  echo "Preferred image availability"
-  printf "%-16s %-38s %-38s %s\n" "Component" "Configured" "Candidate" "Status"
-  printf "%-16s %-38s %-38s %s\n" "---------" "----------" "---------" "------"
+  section "Preferred image availability"
 
   image_rows=()
   if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" = "dhi.io/argocd" ]; then
@@ -1297,28 +1374,29 @@ main() {
     warn "No preferred image overrides configured"
     echo ""
   else
-    printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1 | \
-      awk -F $'\t' '{
-        printf "%-16s %-38s %-38s %s\n", $1, $2, $3, $4
-      }'
+    printf "%s\n" \
+      $'Component\tConfigured\tCandidate\tStatus' \
+      $'---------\t----------\t---------\t------' \
+      "$(printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1)" | render_tsv_table
     echo ""
   fi
 
   INSTALLED_KIND="$(kind_installed_version)"
-  progress "Checking latest kind CLI release"
-  LATEST_KIND="$(github_latest_release_tag "kubernetes-sigs/kind")"
+  progress "Checking latest kind release tag"
+  LATEST_KIND_RELEASE_TAG="$(github_latest_release_tag "kubernetes-sigs/kind")"
+  progress "Checking latest kindest/node tag"
+  LATEST_KIND_NODE_TAG="$(kindest_node_latest_tag)"
 
-  echo "Tool versions"
-  printf "%-16s %-12s %-12s %s\n" "Tool" "Installed" "Latest" "Status"
-  printf "%-16s %-12s %-12s %s\n" "----" "---------" "------" "------"
+  section "Kind versions"
 
-  tool_rows=()
-  tool_rows+=("$(print_tool_row "kind cli" "${INSTALLED_KIND}" "${LATEST_KIND}")")
+  kind_rows=()
+  kind_rows+=("$(print_observed_latest_row "kind release tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${LATEST_KIND_RELEASE_TAG}" "installed cli" "release tag")")
+  kind_rows+=("$(print_observed_latest_row "kind node tag" "${CODE_KIND_NODE_TAG}" "${LATEST_KIND_NODE_TAG}" "codebase" "node tag")")
 
-  printf "%s\n" "${tool_rows[@]}" | sort -t $'\t' -k1,1 | \
-    awk -F $'\t' '{
-      printf "%-16s %-12s %-12s %s\n", $1, $2, $3, $4
-    }'
+  printf "%s\n" \
+    $'Item\tObserved\tLatest\tStatus' \
+    $'----\t--------\t------\t------' \
+    "$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)" | render_tsv_table
   echo ""
 
   check_consistent_tfvars "argocd_chart_version"

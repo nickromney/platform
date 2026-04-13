@@ -352,6 +352,13 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "kind reset executes the cluster delete helper instead of previewing it" {
+  run grep -Fn '"$(DELETE_KIND_CLUSTER)" --execute --name "$$CLUSTER_NAME"' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind ensure-kind-running fails before docker start when planned host ports are occupied" {
   state_file="${BATS_TEST_TMPDIR}/docker-state"
   printf 'stopped' >"${state_file}"

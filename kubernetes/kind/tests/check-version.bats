@@ -30,7 +30,7 @@ setup() {
   expected_policy_reporter="$(bash -lc "source '${TF_DEFAULTS_SCRIPT}'; tf_default_from_variables policy_reporter_chart_version")"
   expected_prometheus="$(bash -lc "source '${TF_DEFAULTS_SCRIPT}'; tf_default_from_variables prometheus_chart_version")"
 
-  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}"
+  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ gitea\ chart[[:space:]]+${expected_gitea}[[:space:]]+${expected_gitea} ]]
@@ -41,16 +41,17 @@ setup() {
   [[ ! "${output}" =~ prometheus\ chart[[:space:]]+${expected_prometheus}[[:space:]]+$ ]]
 }
 
-@test "check-version reports kind tool version status" {
+@test "check-version reports kind release and node tag status" {
   if ! command -v kind >/dev/null 2>&1; then
     skip "kind is required"
   fi
 
-  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}"
+  run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ Tool\ versions ]]
-  [[ "${output}" =~ kind\ cli[[:space:]]+v?[0-9]+\.[0-9]+\.[0-9]+ ]]
+  [[ "${output}" =~ Kind\ versions ]]
+  [[ "${output}" =~ kind\ release\ tag[[:space:]]+v?[0-9]+\.[0-9]+\.[0-9]+ ]]
+  [[ "${output}" =~ kind\ node\ tag[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+ ]]
 }
 
 @test "check-version derives preferred hardened tags from latest appVersion" {
@@ -81,4 +82,19 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'available\nauth-required\nmissing')" ]
+}
+
+@test "check-version reports not deployed current components as current" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; CLUSTER_OK=1; print_row 'signoz chart' '' '0.118.0' '0.118.0' '' 'v0.118.0' '' 'v0.118.0' '0'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ not\ deployed\;\ codebase\ ==\ latest\ \(0\.118\.0\) ]]
+  [[ ! "${output}" =~ not\ deployed\;\ latest\ ==\ 0\.118\.0 ]]
+}
+
+@test "check-version renders long tags with aligned spacing" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.6-debian13\tv3.3.6\tok' \$'cert-manager\tv1.20.1\tv1.20.1\tok' | render_tsv_table"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.6-debian13[[:space:]][[:space:]]+v3\.3\.6[[:space:]][[:space:]]+ok ]]
 }
