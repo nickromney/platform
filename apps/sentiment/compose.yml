@@ -3,6 +3,26 @@
 #
 # The local stack uses the same SST-backed sentiment path as the Kubernetes demo.
 
+x-app-runtime-hardening: &app-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777
+
+x-nginx-runtime-hardening: &nginx-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777
+    - /var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+    - /var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.7
@@ -37,10 +57,14 @@ services:
       start_period: 240s
 
   sentiment-api:
+    <<: *app-runtime-hardening
     build:
       context: ./api-sentiment
       dockerfile: Dockerfile
+      args:
+        SENTIMENT_MODEL_ID: ${SENTIMENT_MODEL_ID:-}
     environment:
+      - HOME=/tmp
       - SENTIMENT_MODEL_ID
       - SENTIMENT_MODEL_CACHE_DIR=/opt/transformers-cache
       - SENTIMENT_MODEL_LOCAL_ONLY=1
@@ -51,6 +75,7 @@ services:
       - ./data:/data
 
   sentiment-auth-frontend:
+    <<: *nginx-runtime-hardening
     build:
       context: ./frontend-react-vite/sentiment-auth-ui
       dockerfile: Dockerfile
@@ -60,7 +85,9 @@ services:
       - "8080"
 
   edge:
+    <<: *nginx-runtime-hardening
     image: dhi.io/nginx:1.29.5-debian13
+    user: "65532:65532"
     volumes:
       - ./edge/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     expose:

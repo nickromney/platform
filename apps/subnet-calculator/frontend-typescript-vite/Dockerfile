@@ -39,16 +39,15 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpat
 FROM dhi.io/nginx:1.29.5-debian13
 
 # Copy built files from builder
-COPY --chown=nginx:nginx --from=builder /app/dist /usr/share/nginx/html
+COPY --chown=65532:65532 --from=builder /app/dist /usr/share/nginx/html
 COPY --from=runtime-config-builder /out/runtime-config-entrypoint /usr/local/bin/runtime-config-entrypoint
 
 # Copy nginx configuration
-COPY --chown=nginx:nginx ./frontend-typescript-vite/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --chown=nginx:nginx ./frontend-typescript-vite/public/runtime-config.js /usr/share/nginx/html/runtime-config.js
+COPY --chown=65532:65532 ./frontend-typescript-vite/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=65532:65532 ./frontend-typescript-vite/public/runtime-config.js /usr/share/nginx/html/runtime-config.js
 
 # Expose port
 EXPOSE 8080
 
-USER nginx
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/runtime-config-entrypoint"]
-CMD ["nginx", "-g", "daemon off;"]

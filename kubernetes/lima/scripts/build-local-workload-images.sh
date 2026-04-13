@@ -11,6 +11,7 @@ CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-platform}"
 TAG="${TAG:-latest}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
+SENTIMENT_MODEL_ID="${SENTIMENT_MODEL_ID:-}"
 
 usage() {
   cat <<EOF
@@ -97,7 +98,8 @@ build_and_push() {
 build_and_push \
   "sentiment-api" \
   "${REPO_ROOT}/apps/sentiment/api-sentiment" \
-  "${REPO_ROOT}/apps/sentiment/api-sentiment/Dockerfile"
+  "${REPO_ROOT}/apps/sentiment/api-sentiment/Dockerfile" \
+  --build-arg "SENTIMENT_MODEL_ID=${SENTIMENT_MODEL_ID}"
 
 build_and_push \
   "sentiment-auth-ui" \

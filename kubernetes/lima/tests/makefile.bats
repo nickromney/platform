@@ -122,7 +122,7 @@ setup() {
 }
 
 @test "lima reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
-  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig' \
+  run grep -Fn '"$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$(KUBECONFIG_PATH)"' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]

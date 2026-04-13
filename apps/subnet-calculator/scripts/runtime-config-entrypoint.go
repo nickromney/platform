@@ -107,8 +107,13 @@ func renderRuntimeConfig(outputPath string) error {
 }
 
 func main() {
-	outputPath := firstNonEmpty(os.Getenv("RUNTIME_CONFIG_OUT"), "/usr/share/nginx/html/runtime-config.js")
+	outputPath := firstNonEmpty(os.Getenv("RUNTIME_CONFIG_OUT"), "/tmp/runtime-config.js")
 	if err := renderRuntimeConfig(outputPath); err != nil {
+		fmt.Fprintf(os.Stderr, "runtime-config-entrypoint: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll("/var/run/nginx", 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "runtime-config-entrypoint: %v\n", err)
 		os.Exit(1)
 	}

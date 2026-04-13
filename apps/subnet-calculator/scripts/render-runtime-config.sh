@@ -17,7 +17,7 @@ EOF
 
 shell_cli_handle_standard_no_args usage "would render runtime-config.js from the current environment variables" "$@"
 
-OUT_FILE="${RUNTIME_CONFIG_OUT:-/usr/share/nginx/html/runtime-config.js}"
+OUT_FILE="${RUNTIME_CONFIG_OUT:-/tmp/runtime-config.js}"
 
 mkdir -p "$(dirname "$OUT_FILE")"
 

@@ -159,11 +159,7 @@ setup() {
 }
 
 @test "kind apply refreshes kubeconfig after a successful apply" {
-  run grep -Fn 'if [ $$rc -eq 0 ]; then \' "${REPO_ROOT}/kubernetes/kind/Makefile"
-
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn '"$(REFRESH_KIND_KUBECONFIG)" --execute; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
 }
@@ -422,7 +418,7 @@ EOF
 }
 
 @test "kind reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
-  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig' \
+  run grep -Fn '"$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$$KUBECONFIG_PATH"' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

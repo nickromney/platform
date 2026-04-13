@@ -20,11 +20,11 @@ manifests = {
     "terraform/kubernetes/apps/workloads/base/all.yaml": {
         "sentiment-api": {
             "container": "api",
-            "mounts": {"/data": "persistentVolumeClaim", "/tmp": "emptyDir", "/opt/transformers-cache": "emptyDir"},
+            "mounts": {"/data": "persistentVolumeClaim", "/tmp": "emptyDir"},
         },
         "sentiment-auth-ui": {
             "container": "ui",
-            "mounts": {"/tmp": "emptyDir", "/var/cache/nginx": "emptyDir", "/var/run": "emptyDir"},
+            "mounts": {"/tmp": "emptyDir", "/var/cache/nginx": "emptyDir", "/var/run/nginx": "emptyDir"},
         },
         "sentiment-router": {
             "container": "nginx",
@@ -32,7 +32,7 @@ manifests = {
                 "/etc/nginx/conf.d/default.conf": "configMap",
                 "/tmp": "emptyDir",
                 "/var/cache/nginx": "emptyDir",
-                "/var/run": "emptyDir",
+                "/var/run/nginx": "emptyDir",
             },
         },
         "subnetcalc-api": {
@@ -41,7 +41,7 @@ manifests = {
         },
         "subnetcalc-frontend": {
             "container": "ui",
-            "mounts": {"/tmp": "emptyDir", "/var/cache/nginx": "emptyDir", "/var/run": "emptyDir"},
+            "mounts": {"/tmp": "emptyDir", "/var/cache/nginx": "emptyDir", "/var/run/nginx": "emptyDir"},
         },
         "subnetcalc-router": {
             "container": "nginx",
@@ -49,7 +49,7 @@ manifests = {
                 "/etc/nginx/conf.d/default.conf": "configMap",
                 "/tmp": "emptyDir",
                 "/var/cache/nginx": "emptyDir",
-                "/var/run": "emptyDir",
+                "/var/run/nginx": "emptyDir",
             },
         },
     },

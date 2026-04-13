@@ -293,13 +293,23 @@ recycle_gateway_data_plane() {
 deployment_selector() {
   local namespace="${1}"
   local deploy_name="${2}"
-  local selector
+  local selector=""
+  local status=0
 
+  # Post-apiserver-restart lookups can briefly fail under pipefail; treat that
+  # as "no selector yet" so the higher-level recovery logic can retry or skip.
+  set +e
   selector="$(
     kubectl -n "${namespace}" get deploy "${deploy_name}" \
       -o go-template='{{ range $k,$v := .spec.selector.matchLabels }}{{ printf "%s=%s\n" $k $v }}{{ end }}' 2>/dev/null \
       | paste -sd, -
   )"
+  status=$?
+  set -e
+
+  if [[ "${status}" -ne 0 ]]; then
+    selector=""
+  fi
 
   printf '%s' "${selector}"
 }

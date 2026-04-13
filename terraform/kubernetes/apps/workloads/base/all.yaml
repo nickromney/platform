@@ -100,8 +100,6 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
-            - name: transformers-cache
-              mountPath: /opt/transformers-cache
           readinessProbe:
             httpGet:
               path: /api/v1/health
@@ -130,8 +128,6 @@ spec:
           persistentVolumeClaim:
             claimName: sentiment-api-data
         - name: tmp
-          emptyDir: {}
-        - name: transformers-cache
           emptyDir: {}
 
 ---
@@ -188,6 +184,9 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       imagePullSecrets:
@@ -213,7 +212,7 @@ spec:
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
-              mountPath: /var/run
+              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /
@@ -326,6 +325,9 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -352,7 +354,7 @@ spec:
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
-              mountPath: /var/run
+              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /
@@ -425,6 +427,9 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       imagePullSecrets:
@@ -540,6 +545,9 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       topologySpreadConstraints:
@@ -575,7 +583,7 @@ spec:
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
-              mountPath: /var/run
+              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /
@@ -751,6 +759,9 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -777,7 +788,7 @@ spec:
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
-              mountPath: /var/run
+              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /

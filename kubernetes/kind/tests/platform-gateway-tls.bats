@@ -57,8 +57,20 @@ setup() {
   grep -Fq 'rollout restart "deploy/${deploy_name}"' "${script}"
   grep -Fq 'retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}"' "${script}"
   grep -Fq 'restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
-  grep -Fq 'wait_for_deployment_rollout "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${GATEWAY_DEPLOY_WAIT_SECONDS}"' "${script}"
+  grep -Fq 'wait_for_deployment_rollout_with_early_recycle \' "${script}"
+  grep -Fq '"nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"' "${script}"
   grep -Fq 'wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}"' "${script}"
+}
+
+@test "oidc bootstrap script tolerates missing deployment selector lookups after apiserver restart" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
+
+  grep -Fq 'deployment_selector()' "${script}"
+  grep -Fq 'local selector=""' "${script}"
+  grep -Fq 'set +e' "${script}"
+  grep -Fq 'status=$?' "${script}"
+  grep -Fq 'if [[ "${status}" -ne 0 ]]; then' "${script}"
+  grep -Fq "printf '%s' \"\${selector}\"" "${script}"
 }
 
 @test "cluster health script distinguishes gitea gateway reachability from direct api reachability" {

@@ -21,6 +21,7 @@ STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
+RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
@@ -882,15 +883,21 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$ctx" ]; then \
 		if [ -e "$(KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --delete-file-if-empty; \
+			reset_rc=0; \
+			if ! "$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$(KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --kubeconfig-helper "$(KUBECONFIG_HELPER)" --auto-approve "$(AUTO_APPROVE)" --delete-file-if-empty; then \
+				reset_rc=$$?; \
+			fi; \
+			if [ "$$reset_rc" != "0" ] && [ "$$reset_rc" != "10" ]; then exit "$$reset_rc"; fi; \
 			echo "OK   cleaned $$ctx from $(KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(KUBECONFIG_PATH)"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx"; \
+			reset_rc=0; \
+			if ! "$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$ctx" --cluster "$$ctx" --user "$$ctx" --kubeconfig-helper "$(KUBECONFIG_HELPER)" --auto-approve "$(AUTO_APPROVE)"; then \
+				reset_rc=$$?; \
+			fi; \
+			if [ "$$reset_rc" != "0" ] && [ "$$reset_rc" != "10" ]; then exit "$$reset_rc"; fi; \
 			echo "OK   cleaned $$ctx from $(DEFAULT_KUBECONFIG_PATH)"; \
 		else \
 			echo "OK   no kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \

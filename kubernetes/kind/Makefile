@@ -18,6 +18,7 @@ MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
+RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
@@ -27,6 +28,7 @@ BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
 ENSURE_KIND_KUBECONFIG := $(SCRIPTS_DIR)/ensure-kind-kubeconfig.sh
+REFRESH_KIND_KUBECONFIG := $(SCRIPTS_DIR)/refresh-kind-kubeconfig.sh
 ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
 SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
@@ -648,7 +650,7 @@ apply: workflow-validate-stage
 	fi; \
 	if [ $$rc -ne 0 ] && grep -qi "certificate signed by unknown authority" "$$tg_apply_log"; then \
 		echo "Detected kubeconfig CA mismatch; refreshing kind kubeconfig and retrying once..."; \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
+		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
 		if [ "$$profile_enabled" = "1" ]; then \
 			set +e; \
 			profile_run_step "terragrunt-apply-retry" tg_apply; \
@@ -661,21 +663,21 @@ apply: workflow-validate-stage
 			rc=$${PIPESTATUS[0]}; \
 			set -e; \
 		fi; \
-		fi; \
-			if [ $$rc -eq 0 ]; then \
-				KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute; \
-				if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
-					run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-					run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
-					if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-						if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
-							echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
-						else \
-							run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
-						fi; \
-					fi; \
+	fi; \
+	if [ $$rc -eq 0 ]; then \
+		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
+		if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
+			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+			run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
+			if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
+				if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
+					echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
+				else \
+					run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 				fi; \
 			fi; \
+		fi; \
+	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
 	fi; \
@@ -1084,33 +1086,29 @@ reset:
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
 		if [ -e "$$KUBECONFIG_PATH" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$$KUBECONFIG_PATH"; \
-			if KUBECONFIG="$$KUBECONFIG_PATH" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
-				local_ctx_found=1; \
-			else \
-				local_ctx_found=0; \
-			fi; \
-			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --delete-file-if-empty; \
-			if [ "$$local_ctx_found" = "1" ]; then \
+			if "$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$$KUBECONFIG_PATH" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --kubeconfig-helper "$(KUBECONFIG_HELPER)" --auto-approve "$(AUTO_APPROVE)" --delete-file-if-empty; then \
 				echo "OK   Removed $$CTX from $$KUBECONFIG_PATH"; \
 			else \
-				echo "OK   No $$CTX entry found in $$KUBECONFIG_PATH"; \
+				reset_rc=$$?; \
+				if [ "$$reset_rc" = "10" ]; then \
+					echo "OK   No $$CTX entry found in $$KUBECONFIG_PATH"; \
+				else \
+					exit "$$reset_rc"; \
+				fi; \
 			fi; \
 		else \
 			echo "OK   No kubeconfig file at $$KUBECONFIG_PATH"; \
 		fi; \
 		if [ -e "$(DEFAULT_KUBECONFIG_PATH)" ]; then \
-			KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)"; \
-			if KUBECONFIG="$(DEFAULT_KUBECONFIG_PATH)" kubectl config get-contexts "$$CTX" >/dev/null 2>&1; then \
-				global_ctx_found=1; \
-			else \
-				global_ctx_found=0; \
-			fi; \
-			"$(KUBECONFIG_HELPER)" --execute --action delete-context --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX"; \
-			if [ "$$global_ctx_found" = "1" ]; then \
+			if "$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$$CTX" --cluster "$$CTX" --user "$$CTX" --kubeconfig-helper "$(KUBECONFIG_HELPER)" --auto-approve "$(AUTO_APPROVE)"; then \
 				echo "OK   Removed $$CTX from $(DEFAULT_KUBECONFIG_PATH)"; \
 			else \
-				echo "OK   No $$CTX entry found in $(DEFAULT_KUBECONFIG_PATH)"; \
+				reset_rc=$$?; \
+				if [ "$$reset_rc" = "10" ]; then \
+					echo "OK   No $$CTX entry found in $(DEFAULT_KUBECONFIG_PATH)"; \
+				else \
+					exit "$$reset_rc"; \
+				fi; \
 			fi; \
 		else \
 			echo "OK   No kubeconfig file at $(DEFAULT_KUBECONFIG_PATH)"; \
