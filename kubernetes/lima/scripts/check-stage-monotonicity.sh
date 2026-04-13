@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIMA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+STAGE_LADDER_HELPER="${LIMA_DIR}/../scripts/stage-ladder.sh"
 VARIABLES_FILE="${LIMA_DIR}/../../terraform/kubernetes/variables.tf"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
@@ -40,17 +41,7 @@ immutable_keys=(
   enable_app_of_apps
 )
 
-cat > "${stage_list_file}" <<EOF
-100:${LIMA_DIR}/stages/100-cluster.tfvars
-200:${LIMA_DIR}/stages/200-cilium.tfvars
-300:${LIMA_DIR}/stages/300-hubble.tfvars
-400:${LIMA_DIR}/stages/400-argocd.tfvars
-500:${LIMA_DIR}/stages/500-gitea.tfvars
-600:${LIMA_DIR}/stages/600-policies.tfvars
-700:${LIMA_DIR}/stages/700-app-repos.tfvars
-800:${LIMA_DIR}/stages/800-gateway-tls.tfvars
-900:${LIMA_DIR}/stages/900-sso.tfvars
-EOF
+"${STAGE_LADDER_HELPER}" --execute --stack-dir "${LIMA_DIR}" > "${stage_list_file}"
 
 awk '
   /^variable "enable_[^"]+"/ {

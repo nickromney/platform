@@ -84,6 +84,27 @@ EOF
   [ "${output}" = "$(printf 'available\nauth-required\nmissing')" ]
 }
 
+@test "check-version parses app cooldown policies and locked dependency versions" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
+    \"\$(js_dependency_cooldown_seconds '${REPO_ROOT}/apps/subnet-calculator')\" \
+    \"\$(bun_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/bun.lock' '@azure/static-web-apps-cli')\" \
+    \"\$(python_dependency_cooldown_cutoff '${REPO_ROOT}/apps/subnet-calculator/apim-simulator')\" \
+    \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/apim-simulator/uv.lock' 'anyio')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '604800\n2.0.8\n2026-04-04T13:01:24.862941Z\n4.12.1')" ]
+}
+
+@test "check-version classifies internal image refs and docker hub repositories" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
+    if image_ref_is_internal 'localhost:30090/platform/subnetcalc-api:latest'; then echo internal; else echo external; fi; \
+    if image_ref_is_internal 'ghcr.io/nginx/nginx-gateway-fabric:2.4.1'; then echo internal; else echo external; fi; \
+    printf '%s\n' \"\$(image_ref_registry 'gitea/act_runner:0.2.13')\" \"\$(image_ref_repository 'gitea/act_runner:0.2.13')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'internal\nexternal\ndocker.io\ngitea/act_runner')" ]
+}
+
 @test "check-version reports not deployed current components as current" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; CLUSTER_OK=1; print_row 'signoz chart' '' '0.118.0' '0.118.0' '' 'v0.118.0' '' 'v0.118.0' '0'"
 

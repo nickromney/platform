@@ -59,6 +59,8 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
           image: localhost:30090/platform/sentiment-api:latest
@@ -80,12 +82,26 @@ spec:
               value: "http://otel-collector.observability.svc.cluster.local:4318"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: "http/protobuf"
+            - name: HOME
+              value: /tmp
           ports:
             - name: http
               containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: transformers-cache
+              mountPath: /opt/transformers-cache
           readinessProbe:
             httpGet:
               path: /api/v1/health
@@ -113,6 +129,10 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: sentiment-api-data
+        - name: tmp
+          emptyDir: {}
+        - name: transformers-cache
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -166,21 +186,47 @@ spec:
         tier: frontend
         role: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: gitea-registry-creds
       containers:
         - name: ui
           image: localhost:30090/platform/sentiment-auth-ui:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 8080
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
           readinessProbe:
             httpGet:
               path: /
               port: 8080
             initialDelaySeconds: 2
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -278,10 +324,22 @@ spec:
         tier: gateway
         role: gateway
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nginx
           image: dhi.io/nginx:1.29.5-debian13
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 8080
@@ -289,6 +347,12 @@ spec:
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d/default.conf
               subPath: default.conf
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
           readinessProbe:
             httpGet:
               path: /
@@ -299,6 +363,12 @@ spec:
         - name: nginx-conf
           configMap:
             name: sentiment-router-nginx
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -353,6 +423,10 @@ spec:
         tier: backend
         role: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: gitea-registry-creds
       containers:
@@ -368,9 +442,22 @@ spec:
               value: "http://otel-collector.observability.svc.cluster.local:4318"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: "http/protobuf"
+            - name: HOME
+              value: /tmp
           ports:
             - name: http
               containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /api/v1/health
@@ -394,6 +481,9 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -448,6 +538,10 @@ spec:
         tier: frontend
         role: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -464,9 +558,24 @@ spec:
         - name: ui
           image: localhost:30090/platform/subnetcalc-frontend-react:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 8080
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
           readinessProbe:
             httpGet:
               path: /
@@ -474,6 +583,13 @@ spec:
             initialDelaySeconds: 2
             periodSeconds: 10
             timeoutSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
 
 ---
 apiVersion: v1
@@ -633,10 +749,22 @@ spec:
         tier: gateway
         role: gateway
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nginx
           image: dhi.io/nginx:1.29.5-debian13
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 8080
@@ -644,6 +772,12 @@ spec:
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d/default.conf
               subPath: default.conf
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
           readinessProbe:
             httpGet:
               path: /
@@ -655,6 +789,12 @@ spec:
         - name: nginx-conf
           configMap:
             name: subnetcalc-router-nginx
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
 
 ---
 apiVersion: v1

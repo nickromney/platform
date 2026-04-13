@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
+# shellcheck disable=SC2329
 usage() {
   cat <<EOF
 Usage: ensure-k3s-lima-vms.sh [--dry-run] [--execute]

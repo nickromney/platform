@@ -75,14 +75,13 @@ setup() {
 }
 
 @test "kind check-health forwards PLATFORM_TFVARS to the health script" {
-  run grep -Fn 'if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then \' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900 \
+    PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 
   [ "${status}" -eq 0 ]
-
-  run grep -Fn 'vf="$$vf --var-file $${PLATFORM_TFVARS}"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
-
-  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_TFVARS:-}"'* ]]
+  [[ "${output}" == *'check-cluster-health.sh" --execute $vf'* ]]
 }
 
 @test "kind check-health forwards explicit read-only mode flags" {
@@ -95,6 +94,23 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
+}
+
+@test "kind check-health forwards PLATFORM_BASE_TFVARS before PLATFORM_TFVARS" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900 \
+    PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
+    PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
+}
+
+@test "kind rejects invalid explicit STAGE values for read-only checks with usage exit code" {
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=950
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
 }
 
 @test "check-cluster-health accepts repeated --var-file flags in dry-run mode" {
@@ -117,9 +133,29 @@ setup() {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" 900 check-security PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_TFVARS:-}"'* ]]
   [[ "${output}" == *'check-security.sh" --execute '* ]]
-  [[ "${output}" == *'if [ -n "${PLATFORM_TFVARS:-}" ] && [ -f "${PLATFORM_TFVARS}" ]; then '* ]]
-  [[ "${output}" == *'vf="$vf --var-file ${PLATFORM_TFVARS}"; '* ]]
+  [[ "${output}" == *'check-security.sh" --execute $vf'* ]]
+}
+
+@test "kind check-app forwards ordered tfvars through the shared builder" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-app STAGE=900 APP=signoz \
+    PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
+    PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
+  [[ "${output}" == *'operator-overrides.tfvars"'* ]]
+  [[ "${output}" == *'check-app.sh" --execute $vf --app "${APP}"'* ]]
+}
+
+@test "kind plan rejects invalid explicit STAGE values with usage exit code" {
+  run make -C "${REPO_ROOT}/kubernetes/kind" plan STAGE=950
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
 }
 
 @test "kind apply refreshes kubeconfig after a successful apply" {
@@ -185,7 +221,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" dhi.io "Docker Hardened Images (dhi.io)" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
 }
@@ -200,10 +236,50 @@ setup() {
 }
 
 @test "kind prereqs keeps kyverno in the optional host tool inventory" {
-  run grep -Fn 'optional=(bats bun cilium helm hubble kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \' \
+  run grep -Fn -- '--optional kyverno \' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "kind test-shell delegates to repo shell validation and shellcheck" {
+  stub_root="${BATS_TEST_TMPDIR}/repo-root"
+  log_file="${BATS_TEST_TMPDIR}/kind-test-shell.log"
+  mkdir -p "${stub_root}/scripts"
+
+  cat >"${stub_root}/scripts/check-bash32-compat.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'bash32 %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${stub_root}/scripts/check-bash32-compat.sh"
+
+  cat >"${stub_root}/scripts/audit-shell-scripts.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shell-audit %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${stub_root}/scripts/audit-shell-scripts.sh"
+
+  cat >"${TEST_BIN}/shellcheck" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shellcheck %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${TEST_BIN}/shellcheck"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" test-shell REPO_ROOT="${stub_root}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'bash32 --execute'* ]]
+  [[ "${output}" == *$'shell-audit --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/kind/scripts --path terraform/kubernetes/scripts'* ]]
+  [[ "${output}" == *"shellcheck ${REPO_ROOT}/kubernetes/kind/scripts/"* ]]
+  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-cluster-health.sh"* ]]
+  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-version.sh"* ]]
 }
 
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {

@@ -59,7 +59,7 @@ require() { have "$1" || fail "$1 not found in PATH"; }
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 
-TFVARS_FILE=""
+TFVARS_FILES=()
 APP=""
 HOST=""
 HOST_SUFFIX=""
@@ -85,7 +85,7 @@ while [[ $# -gt 0 ]]; do
   fi
 
   case "$1" in
-    --var-file) TFVARS_FILE="${2:-}"; shift 2 ;;
+    --var-file) TFVARS_FILES+=("${2:-}"); shift 2 ;;
     --app) APP="${2:-}"; shift 2 ;;
     --host) HOST="${2:-}"; shift 2 ;;
     --host-suffix) HOST_SUFFIX="${2:-}"; shift 2 ;;
@@ -111,13 +111,21 @@ shell_cli_maybe_execute_or_preview_summary usage \
 
 [[ -n "${APP}" ]] || { usage; fail "--app is required"; }
 
-if [[ -n "${TFVARS_FILE}" && ! -f "${TFVARS_FILE}" ]]; then
-  if [[ -f "${STACK_DIR}/${TFVARS_FILE}" ]]; then
-    TFVARS_FILE="${STACK_DIR}/${TFVARS_FILE}"
-  fi
-fi
+normalize_tfvars_files() {
+  local tfvars_file=""
+  local normalized_files=()
 
-tfvar_get() {
+  for tfvars_file in "${TFVARS_FILES[@]}"; do
+    if [[ -n "${tfvars_file}" && ! -f "${tfvars_file}" && -f "${STACK_DIR}/${tfvars_file}" ]]; then
+      tfvars_file="${STACK_DIR}/${tfvars_file}"
+    fi
+    normalized_files+=("${tfvars_file}")
+  done
+
+  TFVARS_FILES=("${normalized_files[@]}")
+}
+
+tfvar_value_from_file() {
   local file="$1"
   local key="$2"
   if [[ -z "${file}" || ! -f "${file}" ]]; then
@@ -129,25 +137,43 @@ tfvar_get() {
     sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true
 }
 
+tfvar_get() {
+  local key="$1"
+  local file=""
+  local value=""
+  local candidate=""
+
+  for file in "${TFVARS_FILES[@]}"; do
+    candidate="$(tfvar_value_from_file "${file}" "${key}")"
+    if [[ -n "${candidate}" ]]; then
+      value="${candidate}"
+    fi
+  done
+
+  printf '%s\n' "${value}"
+}
+
+normalize_tfvars_files
+
 if [[ -z "${ARGOCD_NS}" ]]; then
-  ARGOCD_NS="$(tfvar_get "${TFVARS_FILE}" argocd_namespace)"
+  ARGOCD_NS="$(tfvar_get argocd_namespace)"
 fi
 if [[ -z "${ARGOCD_NS}" ]]; then
   ARGOCD_NS="argocd"
 fi
 
 if [[ -z "${HOST_PORT}" ]]; then
-  HOST_PORT="$(tfvar_get "${TFVARS_FILE}" gateway_https_host_port)"
+  HOST_PORT="$(tfvar_get gateway_https_host_port)"
 fi
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT="443"
 fi
 
-PLATFORM_BASE_DOMAIN="$(tfvar_get "${TFVARS_FILE}" platform_base_domain)"
+PLATFORM_BASE_DOMAIN="$(tfvar_get platform_base_domain)"
 if [[ -z "${PLATFORM_BASE_DOMAIN}" ]]; then
   PLATFORM_BASE_DOMAIN="127.0.0.1.sslip.io"
 fi
-PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get "${TFVARS_FILE}" platform_admin_base_domain)"
+PLATFORM_ADMIN_BASE_DOMAIN="$(tfvar_get platform_admin_base_domain)"
 SEPARATE_ADMIN_DOMAIN=0
 if [[ -n "${PLATFORM_ADMIN_BASE_DOMAIN}" ]]; then
   SEPARATE_ADMIN_DOMAIN=1
@@ -326,8 +352,8 @@ print_kv "resolve_ip" "${RESOLVE_IP}"
 print_kv "argocd_ns" "${ARGOCD_NS}"
 print_kv "httproute" "${HTTPROUTE_NS}/${HTTPROUTE_NAME}"
 print_kv "oauth2_proxy" "${SSO_NS}/${OAUTH2_PROXY_NAME}"
-if [[ -n "${TFVARS_FILE}" ]]; then
-  print_kv "tfvars" "${TFVARS_FILE}"
+if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
+  print_kv "tfvars" "$(printf '%s\n' "${TFVARS_FILES[@]}" | paste -sd ', ' -)"
 fi
 
 section "Cluster Reachability"

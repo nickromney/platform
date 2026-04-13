@@ -52,6 +52,15 @@ resolve_requested_tutorials() {
   done
 }
 
+read_tutorials_into_array() {
+  local tutorial_path=""
+  tutorials=()
+  while IFS= read -r tutorial_path; do
+    [[ -n "$tutorial_path" ]] || continue
+    tutorials+=("$tutorial_path")
+  done < <("$@")
+}
+
 run_one() {
   local tutorial_script="$1"
   local tutorial_name
@@ -89,9 +98,9 @@ main() {
   fi
 
   if (($# == 0)); then
-    mapfile -t tutorials < <(discover_tutorials)
+    read_tutorials_into_array discover_tutorials
   else
-    mapfile -t tutorials < <(resolve_requested_tutorials "$@")
+    read_tutorials_into_array resolve_requested_tutorials "$@"
   fi
 
   if ((${#tutorials[@]} == 0)); then

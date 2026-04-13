@@ -3,6 +3,9 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${TEST_BIN}"
+  export PATH="${TEST_BIN}:${PATH}"
 }
 
 @test "lima help documents the stage-first workflow" {
@@ -62,6 +65,34 @@ setup() {
   [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
+@test "lima check-health forwards PLATFORM_BASE_TFVARS before PLATFORM_TFVARS" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900 \
+    PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
+    PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
+}
+
+@test "lima rejects invalid explicit STAGE values for read-only checks with usage exit code" {
+  run make -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=950
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
+}
+
+@test "lima check-app forwards ordered tfvars through the shared builder" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-app STAGE=900 APP=signoz \
+    PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
+    PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
+  [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
+  [[ "${output}" == *'check-app.sh" --execute $vf --app "${APP}"'* ]]
+}
+
 @test "lima stage 900 apply wires k3s apiserver OIDC for Headlamp" {
   run grep -Fn 'run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc;' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
@@ -97,6 +128,13 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "lima plan rejects invalid explicit STAGE values with usage exit code" {
+  run make -C "${REPO_ROOT}/kubernetes/lima" plan STAGE=950
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
+}
+
 @test "lima prereqs groups tool checks and does not run shell audit" {
   run env PATH="/usr/bin:/bin" make -C "${REPO_ROOT}/kubernetes/lima" prereqs STAGE=100
 
@@ -107,8 +145,48 @@ setup() {
 }
 
 @test "lima prereqs keeps kyverno in the optional host tool inventory" {
-  run grep -Fn 'optional=(bats bun cilium helm k3sup-pro kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \' \
+  run grep -Fn -- '--optional kyverno \' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "lima test-shell delegates to repo shell validation and shellcheck" {
+  stub_root="${BATS_TEST_TMPDIR}/repo-root"
+  log_file="${BATS_TEST_TMPDIR}/lima-test-shell.log"
+  mkdir -p "${stub_root}/scripts"
+
+  cat >"${stub_root}/scripts/check-bash32-compat.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'bash32 %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${stub_root}/scripts/check-bash32-compat.sh"
+
+  cat >"${stub_root}/scripts/audit-shell-scripts.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shell-audit %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${stub_root}/scripts/audit-shell-scripts.sh"
+
+  cat >"${TEST_BIN}/shellcheck" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shellcheck %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${TEST_BIN}/shellcheck"
+
+  run make -C "${REPO_ROOT}/kubernetes/lima" test-shell REPO_ROOT="${stub_root}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'bash32 --execute'* ]]
+  [[ "${output}" == *$'shell-audit --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/lima/scripts --path terraform/kubernetes/scripts'* ]]
+  [[ "${output}" == *"shellcheck ${REPO_ROOT}/kubernetes/lima/scripts/"* ]]
+  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-cluster-health.sh"* ]]
+  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-version.sh"* ]]
 }

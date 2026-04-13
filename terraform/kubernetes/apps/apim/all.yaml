@@ -91,6 +91,10 @@ spec:
         tier: gateway
         role: apim
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: gitea-registry-creds
       containers:
@@ -100,13 +104,25 @@ spec:
           env:
             - name: APIM_CONFIG_PATH
               value: /config/config.json
+            - name: HOME
+              value: /tmp
           ports:
             - name: http
               containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: config
               mountPath: /config/config.json
               subPath: config.json
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /apim/startup
@@ -134,6 +150,8 @@ spec:
         - name: config
           configMap:
             name: subnetcalc-apim-simulator-config
+        - name: tmp
+          emptyDir: {}
 
 ---
 # Shared service - both dev and uat use this

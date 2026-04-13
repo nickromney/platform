@@ -2,6 +2,8 @@ VALID_STAGE_HELPERS ?=
 STAGE_WORKFLOW_SUGGEST_GOALS ?= $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE ?= make <stage> <plan|apply> [AUTO_APPROVE=1]
 STAGE_WORKFLOW_GUIDE_HELPER ?= $(if $(filter check-security,$(VALID_STAGE_HELPERS)),check-security,$(firstword $(VALID_STAGE_HELPERS)))
+WORKFLOW_REQUIRE_STAGE_FILE ?= 0
+WORKFLOW_STAGE_FILE ?= $(stage_file)
 
 STAGE_FROM_GOALS := $(firstword $(filter $(VALID_STAGES),$(MAKECMDGOALS)))
 ACTION_FROM_GOALS := $(firstword $(filter $(VALID_ACTIONS),$(MAKECMDGOALS)))
@@ -66,4 +68,14 @@ $(VALID_STAGES): workflow-validate
 			echo "  or: make $@ $(STAGE_WORKFLOW_GUIDE_HELPER)" >&2; \
 		fi; \
 		exit 2; \
+	fi
+
+.PHONY: workflow-validate-stage
+workflow-validate-stage: workflow-validate
+	@set -euo pipefail; \
+	if [ "$(WORKFLOW_REQUIRE_STAGE_FILE)" = "1" ] || [ "$(STAGE_SPECIFIED)" = "1" ]; then \
+		if [ -z "$(WORKFLOW_STAGE_FILE)" ] || [ ! -f "$(WORKFLOW_STAGE_FILE)" ]; then \
+			echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)" >&2; \
+			exit 2; \
+		fi; \
 	fi

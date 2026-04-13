@@ -121,6 +121,40 @@ EOF
   [[ "${output}" == *"OK   shell audit"* ]]
 }
 
+@test "shell audit can scope validation to selected paths" {
+  write_tracked_executable_file "scripts/good.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
+usage() {
+  cat <<USAGE
+Usage: good.sh [--dry-run] [--execute]
+
+$(shell_cli_standard_options)
+USAGE
+}
+
+shell_cli_handle_standard_no_args usage "would do the safe thing" "$@"
+EOF
+
+  write_tracked_executable_file "apps/bad.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "hello"
+EOF
+
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" \
+    --execute \
+    --path scripts
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"OK   shell audit"* ]]
+}
+
 @test "kind node kubectl wrapper stays runnable when mounted alone as kubectl" {
   local mounted_dir="${BATS_TEST_TMPDIR}/usr/local/bin"
   local real_kubectl="${BATS_TEST_TMPDIR}/real-kubectl"

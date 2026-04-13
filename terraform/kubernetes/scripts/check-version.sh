@@ -195,6 +195,415 @@ tfvar_get_any_stage_bool_or_default() {
   esac
 }
 
+cache_file_for_key() {
+  local prefix="$1"
+  local key="$2"
+
+  ensure_check_version_cache_dir
+  printf "%s/%s\n" "${CHECK_VERSION_CACHE_DIR}" "$(printf '%s__%s' "${prefix}" "${key}" | tr '/:@?&=%' '_')"
+}
+
+uri_encode() {
+  jq -rn --arg value "$1" '$value | @uri'
+}
+
+normalize_python_package_name() {
+  printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | tr '_' '-'
+}
+
+js_dependency_cooldown_seconds() {
+  local app_dir="$1"
+  local bunfig="${app_dir}/bunfig.toml"
+  local npmrc="${app_dir}/.npmrc"
+  local value=""
+
+  if [ -f "${bunfig}" ]; then
+    value="$(awk -F= '/minimumReleaseAge[[:space:]]*=/{gsub(/[[:space:]"]/, "", $2); print $2; exit}' "${bunfig}" 2>/dev/null || true)"
+    if [[ "${value}" =~ ^[0-9]+$ ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  fi
+
+  if [ -f "${npmrc}" ]; then
+    value="$(awk -F= '/^min-release-age=/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "${npmrc}" 2>/dev/null || true)"
+    if [[ "${value}" =~ ^[0-9]+$ ]]; then
+      printf '%s\n' "$((value * 86400))"
+      return 0
+    fi
+  fi
+
+  printf '\n'
+}
+
+python_dependency_cooldown_cutoff() {
+  local app_dir="$1"
+  local uv_lock="${app_dir}/uv.lock"
+
+  if [ -f "${uv_lock}" ]; then
+    awk -F'"' '/^exclude-newer = "/ { print $2; exit }' "${uv_lock}" 2>/dev/null || true
+    return 0
+  fi
+
+  printf '\n'
+}
+
+package_json_direct_dependencies() {
+  local package_json="$1"
+
+  if [ ! -f "${package_json}" ]; then
+    return 0
+  fi
+
+  jq -r \
+    '(.dependencies // {} | to_entries[]? | [.key, .value] | @tsv),
+     (.devDependencies // {} | to_entries[]? | [.key, .value] | @tsv)' \
+    "${package_json}" 2>/dev/null || true
+}
+
+bun_lock_resolved_version() {
+  local lockfile="$1"
+  local dep="$2"
+  local line=""
+  local marker=""
+
+  if [ ! -f "${lockfile}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  line="$(grep -F "\"${dep}\": [\"${dep}@" "${lockfile}" 2>/dev/null | head -n 1 || true)"
+  if [ -z "${line}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  marker="\"${dep}\": [\"${dep}@"
+  line="${line#*"${marker}"}"
+  line="${line%%\"*}"
+  printf '%s\n' "${line}" | xargs || true
+}
+
+python_requirement_name() {
+  local requirement="$1"
+  local name=""
+
+  name="$(printf '%s\n' "${requirement}" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//; s/\[.*$//; s/[<>=!~].*$//; s/[[:space:]].*$//' | xargs || true)"
+  normalize_python_package_name "${name}"
+}
+
+uv_lock_resolved_version() {
+  local lockfile="$1"
+  local dep
+
+  dep="$(normalize_python_package_name "$2")"
+  if [ ! -f "${lockfile}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  awk -v dep="${dep}" '
+    /^\[\[package\]\]$/ {
+      in_pkg = 1
+      name = ""
+      version = ""
+      next
+    }
+    in_pkg && /^name = "/ {
+      line = $0
+      sub(/^name = "/, "", line)
+      sub(/".*$/, "", line)
+      gsub(/_/, "-", line)
+      name = tolower(line)
+      next
+    }
+    in_pkg && /^version = "/ {
+      line = $0
+      sub(/^version = "/, "", line)
+      sub(/".*$/, "", line)
+      version = line
+      next
+    }
+    in_pkg && name == dep && version != "" {
+      print version
+      exit
+    }
+  ' "${lockfile}" 2>/dev/null | xargs || true
+}
+
+npm_registry_payload() {
+  local dep="$1"
+  local encoded_dep cache_file
+
+  encoded_dep="$(uri_encode "${dep}")"
+  cache_file="$(cache_file_for_key "npm" "${encoded_dep}")"
+  if [ ! -f "${cache_file}" ]; then
+    curl -fsSL "https://registry.npmjs.org/${encoded_dep}" >"${cache_file}" 2>/dev/null || {
+      rm -f "${cache_file}"
+      return 1
+    }
+  fi
+
+  cat "${cache_file}"
+}
+
+pypi_package_payload() {
+  local dep="$1"
+  local normalized_dep cache_file
+
+  normalized_dep="$(normalize_python_package_name "${dep}")"
+  cache_file="$(cache_file_for_key "pypi" "${normalized_dep}")"
+  if [ ! -f "${cache_file}" ]; then
+    curl -fsSL "https://pypi.org/pypi/${normalized_dep}/json" >"${cache_file}" 2>/dev/null || {
+      rm -f "${cache_file}"
+      return 1
+    }
+  fi
+
+  cat "${cache_file}"
+}
+
+npm_latest_overall_version() {
+  local dep="$1"
+  local payload
+
+  payload="$(npm_registry_payload "${dep}" 2>/dev/null || true)"
+  if [ -z "${payload}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  jq -r '."dist-tags".latest // empty' <<<"${payload}" 2>/dev/null | xargs || true
+}
+
+npm_latest_eligible_version() {
+  local dep="$1"
+  local cooldown_seconds="$2"
+  local payload cutoff versions
+
+  if [ -z "${cooldown_seconds}" ]; then
+    npm_latest_overall_version "${dep}"
+    return 0
+  fi
+
+  payload="$(npm_registry_payload "${dep}" 2>/dev/null || true)"
+  if [ -z "${payload}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  cutoff="$(( $(date +%s) - cooldown_seconds ))"
+  versions="$(
+    jq -r --argjson cutoff "${cutoff}" '
+      .time // {} | to_entries[]
+      | select(.key != "created" and .key != "modified")
+      | select((.value | fromdateiso8601?) != null and (.value | fromdateiso8601) <= $cutoff)
+      | .key
+    ' <<<"${payload}" 2>/dev/null || true
+  )"
+  printf '%s\n' "${versions}" | sed '/^$/d' | sort -V | tail -n 1
+}
+
+pypi_latest_overall_version() {
+  local dep="$1"
+  local payload
+
+  payload="$(pypi_package_payload "${dep}" 2>/dev/null || true)"
+  if [ -z "${payload}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  jq -r '.info.version // empty' <<<"${payload}" 2>/dev/null | xargs || true
+}
+
+pypi_latest_eligible_version() {
+  local dep="$1"
+  local cutoff_iso="$2"
+  local payload versions
+
+  if [ -z "${cutoff_iso}" ]; then
+    pypi_latest_overall_version "${dep}"
+    return 0
+  fi
+
+  payload="$(pypi_package_payload "${dep}" 2>/dev/null || true)"
+  if [ -z "${payload}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  versions="$(
+    jq -r --arg cutoff "${cutoff_iso}" '
+      ($cutoff | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) as $cutoff_epoch
+      | if $cutoff_epoch == null then
+          empty
+        else
+          .releases
+          | to_entries[]
+          | select(.value | length > 0)
+          | select(any(.value[]?;
+              ((."upload_time_iso_8601" // .upload_time // empty)
+                | if . == "" then null else (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) end) as $uploaded
+              | $uploaded != null and $uploaded <= $cutoff_epoch))
+          | .key
+        end
+    ' <<<"${payload}" 2>/dev/null || true
+  )"
+  printf '%s\n' "${versions}" | sed '/^$/d' | sort -V | tail -n 1
+}
+
+dependency_update_status() {
+  local current="$1"
+  local latest_eligible="$2"
+  local latest_overall="$3"
+
+  if [ -z "${current}" ] || [ -z "${latest_overall}" ]; then
+    printf 'unknown/unresolvable\n'
+    return 0
+  fi
+
+  if [ -n "${latest_eligible}" ] && [ "${current}" != "${latest_eligible}" ]; then
+    printf 'update available\n'
+    return 0
+  fi
+
+  if [ -n "${latest_eligible}" ] && [ "${latest_eligible}" != "${latest_overall}" ]; then
+    printf 'cooldown active\n'
+    return 0
+  fi
+
+  if [ "${current}" = "${latest_overall}" ]; then
+    printf 'current\n'
+    return 0
+  fi
+
+  printf 'update available\n'
+}
+
+image_ref_registry() {
+  local image_ref="$1"
+  local no_digest first_segment
+
+  no_digest="${image_ref%@*}"
+  if [[ "${no_digest}" != */* ]]; then
+    printf 'docker.io\n'
+    return 0
+  fi
+
+  first_segment="${no_digest%%/*}"
+  if [[ "${first_segment}" == *.* || "${first_segment}" == *:* || "${first_segment}" == "localhost" ]]; then
+    printf '%s\n' "${first_segment}"
+  else
+    printf 'docker.io\n'
+  fi
+}
+
+image_ref_repository() {
+  local image_ref="$1"
+  local no_digest no_tag first_segment
+
+  no_digest="${image_ref%@*}"
+  no_tag="${no_digest}"
+  if [[ "${no_digest##*/}" == *:* ]]; then
+    no_tag="${no_digest%:*}"
+  fi
+
+  first_segment="${no_tag%%/*}"
+  if [[ "${first_segment}" == *.* || "${first_segment}" == *:* || "${first_segment}" == "localhost" ]]; then
+    printf '%s\n' "${no_tag#*/}"
+  else
+    printf '%s\n' "${no_tag}"
+  fi
+}
+
+image_ref_is_internal() {
+  local image_ref="$1"
+
+  case "${image_ref}" in
+    *\$\{*|localhost:*|127.0.0.1:*|platform/*|platform-*|subnet-calculator-*|subnetcalc-*|apim-simulator*|csharp-*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+docker_hub_latest_tag_for_ref() {
+  local image_ref="$1"
+  local current_tag repository namespace repo_path suffix tags candidate_tags
+
+  current_tag="$(image_tag_from_ref "${image_ref}")"
+  if [ -z "${current_tag}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  repo_path="$(image_ref_repository "${image_ref}")"
+  if [[ "${repo_path}" == */* ]]; then
+    namespace="${repo_path%%/*}"
+    repository="${repo_path#*/}"
+  else
+    namespace="library"
+    repository="${repo_path}"
+  fi
+
+  tags="$(docker_hub_repo_tags "${namespace}" "${repository}" 2>/dev/null || true)"
+  if [ -z "${tags}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  suffix="$(tag_suffix_after_version_prefix "${current_tag}")"
+  candidate_tags="$(
+    while IFS= read -r tag; do
+      [ -n "${tag}" ] || continue
+      if [ -n "$(tag_version_prefix "${tag}")" ] && [ "$(tag_suffix_after_version_prefix "${tag}")" = "${suffix}" ]; then
+        printf '%s\n' "${tag}"
+      fi
+    done <<<"${tags}"
+  )"
+
+  if [ -n "${candidate_tags}" ]; then
+    printf '%s\n' "${candidate_tags}" | sort -V | tail -n 1
+    return 0
+  fi
+
+  if printf '%s\n' "${tags}" | grep -Fx "latest" >/dev/null 2>&1; then
+    printf 'latest\n'
+    return 0
+  fi
+
+  printf '\n'
+}
+
+collect_declared_image_refs() {
+  local scan_root file line lineno ref
+
+  for scan_root in "${REPO_ROOT}/terraform/kubernetes/apps" "${REPO_ROOT}/docker/compose" "${REPO_ROOT}/apps"; do
+    [ -d "${scan_root}" ] || continue
+    while IFS= read -r file; do
+      case "${file}" in
+        *.yaml|*.yml)
+          while IFS=: read -r lineno line; do
+            ref="$(printf '%s\n' "${line}" | sed -E 's/^[[:space:]]*image:[[:space:]]*//; s/[[:space:]]+#.*$//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
+            [ -n "${ref}" ] || continue
+            printf '%s:%s\t%s\n' "${file}" "${lineno}" "${ref}"
+          done < <(grep -nE '^[[:space:]]*image:[[:space:]]+' "${file}" 2>/dev/null || true)
+          ;;
+        *)
+          while IFS=: read -r lineno line; do
+            ref="$(printf '%s\n' "${line}" | sed -E 's/^[[:space:]]*FROM[[:space:]]+//I; s/[[:space:]]+AS[[:space:]].*$//I')"
+            ref="$(printf '%s\n' "${ref}" | awk '{for (i = 1; i <= NF; i++) if ($i !~ /^--platform=/) { print $i; exit }}')"
+            [ -n "${ref}" ] || continue
+            printf '%s:%s\t%s\n' "${file}" "${lineno}" "${ref}"
+          done < <(grep -nEi '^[[:space:]]*FROM[[:space:]]+' "${file}" 2>/dev/null || true)
+          ;;
+      esac
+    done < <(find "${scan_root}" -type f \( -name '*.yaml' -o -name '*.yml' -o -name 'Dockerfile*' \) | LC_ALL=C sort)
+  done
+}
+
 ensure_helm_repo_ready() {
   local repo_name="$1"
   local repo_url="$2"
@@ -1074,6 +1483,103 @@ check_app_yaml_tfvar_drift() {
   echo ""
 }
 
+emit_app_dependency_rows() {
+  local package_json app_dir app_label cooldown_seconds dep _spec current latest_overall latest_eligible status
+  local pyproject cutoff_iso requirement dep_name uv_lock
+
+  while IFS= read -r package_json; do
+    app_dir="$(dirname "${package_json}")"
+    app_label="${app_dir#"${REPO_ROOT}/"}"
+    cooldown_seconds="$(js_dependency_cooldown_seconds "${app_dir}")"
+
+    while IFS=$'\t' read -r dep _spec; do
+      [ -n "${dep}" ] || continue
+      current="$(bun_lock_resolved_version "${app_dir}/bun.lock" "${dep}")"
+      latest_overall="$(npm_latest_overall_version "${dep}")"
+      latest_eligible="$(npm_latest_eligible_version "${dep}" "${cooldown_seconds}")"
+      status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}")"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${app_label}" \
+        "${dep}" \
+        "${current:-}" \
+        "${latest_eligible:-}" \
+        "${latest_overall:-}" \
+        "${status}"
+    done < <(package_json_direct_dependencies "${package_json}")
+  done < <(find "${REPO_ROOT}/apps" -type f -name package.json | LC_ALL=C sort)
+
+  while IFS= read -r pyproject; do
+    app_dir="$(dirname "${pyproject}")"
+    app_label="${app_dir#"${REPO_ROOT}/"}"
+    cutoff_iso="$(python_dependency_cooldown_cutoff "${app_dir}")"
+    uv_lock="${app_dir}/uv.lock"
+
+    while IFS= read -r requirement; do
+      [ -n "${requirement}" ] || continue
+      dep_name="$(python_requirement_name "${requirement}")"
+      [ -n "${dep_name}" ] || continue
+      current="$(uv_lock_resolved_version "${uv_lock}" "${dep_name}")"
+      latest_overall="$(pypi_latest_overall_version "${dep_name}")"
+      latest_eligible="$(pypi_latest_eligible_version "${dep_name}" "${cutoff_iso}")"
+      status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}")"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${app_label}" \
+        "${dep_name}" \
+        "${current:-}" \
+        "${latest_eligible:-}" \
+        "${latest_overall:-}" \
+        "${status}"
+    done < <(
+      awk '
+        /^\[project\]$/ { in_project = 1; next }
+        in_project && /^\[/ && $0 !~ /^\[project(\.|$)/ { in_project = 0 }
+        in_project && /^dependencies = \[/ { in_deps = 1; next }
+        in_deps && /^\]/ { in_deps = 0; next }
+        in_deps {
+          line = $0
+          gsub(/^[[:space:]]*"/, "", line)
+          gsub(/",[[:space:]]*$/, "", line)
+          print line
+        }
+      ' "${pyproject}" 2>/dev/null
+    )
+  done < <(find "${REPO_ROOT}/apps" -type f -name pyproject.toml | LC_ALL=C sort)
+}
+
+emit_external_image_rows() {
+  local source_ref image_ref current_tag latest_tag registry status
+
+  while IFS=$'\t' read -r source_ref image_ref; do
+    [ -n "${image_ref}" ] || continue
+    if image_ref_is_internal "${image_ref}"; then
+      continue
+    fi
+
+    current_tag="$(image_tag_from_ref "${image_ref}")"
+    registry="$(image_ref_registry "${image_ref}")"
+    latest_tag=""
+    if [ "${registry}" = "docker.io" ]; then
+      latest_tag="$(docker_hub_latest_tag_for_ref "${image_ref}")"
+    fi
+
+    if [ -z "${current_tag}" ] || [ -z "${latest_tag}" ]; then
+      status="unknown/unresolvable"
+    elif [ "${current_tag}" = "${latest_tag}" ]; then
+      status="current"
+    else
+      status="update available"
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${source_ref#"${REPO_ROOT}/"}" \
+      "${image_ref}" \
+      "${current_tag:-}" \
+      "${latest_tag:-}" \
+      "${registry}" \
+      "${status}"
+  done < <(collect_declared_image_refs | awk -F'\t' '!seen[$2]++')
+}
+
 main() {
   require curl
   require helm
@@ -1422,6 +1928,34 @@ main() {
   check_app_yaml_tfvar_drift
   check_preload_chart_section_version_alignment
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
+
+  progress "Auditing app dependency freshness"
+  section "App dependency cooldown audit"
+  dependency_rows="$(emit_app_dependency_rows | sort -t $'\t' -k1,1 -k2,2 || true)"
+  if [ -z "${dependency_rows}" ]; then
+    warn "No app dependency roots discovered"
+    echo ""
+  else
+    printf "%s\n" \
+      $'App\tDependency\tCurrent\tLatest eligible\tLatest overall\tStatus' \
+      $'---\t----------\t-------\t---------------\t--------------\t------' \
+      "${dependency_rows}" | render_tsv_table
+    echo ""
+  fi
+
+  progress "Auditing external workload images"
+  section "External workload image audit"
+  image_audit_rows="$(emit_external_image_rows | sort -t $'\t' -k2,2 || true)"
+  if [ -z "${image_audit_rows}" ]; then
+    warn "No external workload images discovered"
+    echo ""
+  else
+    printf "%s\n" \
+      $'Source\tImage\tCurrent\tLatest\tRegistry\tStatus' \
+      $'------\t-----\t-------\t------\t--------\t------' \
+      "${image_audit_rows}" | render_tsv_table
+    echo ""
+  fi
 
   if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then
     ok "Argo CD image override active: ${CODE_ARGOCD_IMAGE_REF} (chart appVersion ${CODETAG_ARGOCD_CHART}, latest upstream appVersion ${LATESTTAG_ARGOCD_CHART})"
