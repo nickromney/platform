@@ -58,6 +58,15 @@ shell_cli_maybe_execute_or_preview_summary usage "would run gateway stack diagno
 
 require kubectl
 
+KUBECTL_BIN="$(command -v kubectl)"
+KUBECTL_CONTEXT_ARGS=()
+if [[ -n "${KUBECONFIG_CONTEXT:-}" ]]; then
+  KUBECTL_CONTEXT_ARGS+=(--context "${KUBECONFIG_CONTEXT}")
+fi
+kubectl() {
+  command "${KUBECTL_BIN}" "${KUBECTL_CONTEXT_ARGS[@]}" "$@"
+}
+
 section() {
   echo
   echo "== $*"
@@ -147,11 +156,14 @@ tail_pod_logs() {
 }
 
 section "Context"
-ctx="$(kubectl config current-context 2>/dev/null || true)"
+ctx="${KUBECONFIG_CONTEXT:-}"
+if [[ -z "${ctx}" ]]; then
+  ctx="$(kubectl config current-context 2>/dev/null || true)"
+fi
 if [[ -n "${ctx}" ]]; then
   ok "kubectl context=${ctx}"
 else
-  fail_soft "kubectl current-context empty"
+  warn "kubectl current-context is empty; continuing"
 fi
 run kubectl version --client
 run kubectl get nodes -o wide

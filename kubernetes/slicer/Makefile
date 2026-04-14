@@ -58,6 +58,7 @@ SLICER_VM_RAM_GB ?=
 SLICER_VM_MIN_DISK_GB ?= 25
 SLICER_SWAP_SIZE ?= 4G
 SLICER_ALLOW_EXISTING_K3S ?= 0
+SLICER_RESET_PRUNE_ALL_IMAGES ?= 0
 SLICER_HOST_FORWARDS_MODE ?= auto
 K3SUP_CONTEXT ?= slicer-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
@@ -265,6 +266,7 @@ help:
 	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)"
 	@echo "  SLICER_ALLOW_EXISTING_K3S=1                          -> let stage 100 reuse an existing k3s install and only refresh kubeconfig"
+	@echo "  SLICER_RESET_PRUNE_ALL_IMAGES=1                      -> troubleshooting-only: reset also deletes ~/slicer-mac/*.img"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
@@ -305,12 +307,18 @@ check-kubeconfig:
 	target_current=$$(kubectl --kubeconfig "$(KUBECONFIG_PATH)" config current-context 2>/dev/null || true); \
 	[ -n "$$target_current" ] || target_current="<none>"; \
 	echo "OK   slicer kubeconfig: $(KUBECONFIG_PATH) ($$target_count context(s), current=$$target_current)"; \
-	kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --execute --action lint || true)"; \
-	if [ -n "$$kubie_lint_output" ]; then \
-		echo "WARN kubie lint:"; \
-		printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
-	elif command -v kubie >/dev/null 2>&1; then \
-		echo "OK   kubie lint"; \
+	if command -v kubie >/dev/null 2>&1; then \
+		if [ "$$default_count" -eq 0 ] && [ "$$target_count" -eq 0 ]; then \
+			echo "OK   kubie lint skipped (no kubeconfig contexts yet)"; \
+		else \
+			kubie_lint_output="$$("$(KUBECONFIG_HELPER)" --execute --action lint || true)"; \
+			if [ -n "$$kubie_lint_output" ]; then \
+				echo "WARN kubie lint:"; \
+				printf '%s\n' "$$kubie_lint_output" | sed 's/^/  /'; \
+			else \
+				echo "OK   kubie lint"; \
+			fi; \
+		fi; \
 	fi
 
 .PHONY: check-host-ports
@@ -705,7 +713,7 @@ check-vm-health:
 	"$(SCRIPTS_DIR)/check-vm-health.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: configure-k3s-apiserver-oidc
-configure-k3s-apiserver-oidc:
+configure-k3s-apiserver-oidc: workflow-validate-stage
 	@set -euo pipefail; \
 	socket="$$($(RESOLVE_SOCKET))"; \
 	tfvar_files=(); \
@@ -719,7 +727,7 @@ configure-k3s-apiserver-oidc:
 	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
 	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
-	"$(CONFIGURE_K3S_APISERVER_OIDC)"
+	"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
 
 .PHONY: init
 init:
@@ -859,7 +867,8 @@ apply: workflow-validate
 		$(MAKE) check-platform-env; \
 	fi; \
 	if [ "$$stage_num" -eq 100 ]; then \
-		$(MAKE) prereqs; \
+		run_step "daemon-up" $(MAKE) daemon-up; \
+		run_step "prereqs" $(MAKE) prereqs; \
 		if [ "$(SLICER_HOST_FORWARDS_MODE)" = "on" ]; then \
 			run_step "check-host-ports" $(MAKE) check-host-ports; \
 		fi; \
@@ -913,7 +922,7 @@ apply: workflow-validate
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-apply" tg_apply; \
 	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
+		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc STAGE="$(STAGE)"; \
 		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
 		run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 	fi
@@ -970,7 +979,7 @@ check-gateway-stack:
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
-	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
+	@KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
 check-cluster:
@@ -1124,7 +1133,11 @@ reset:
 	reset_incomplete=0; \
 	echo "This will:"; \
 	if [ "$$socket" = "$(SLICER_SYSTEM_SOCKET)" ]; then \
-		echo "  - Stop slicer-mac and remove on-device disk images for $(SLICER_VM_NAME)"; \
+		if [ "$(SLICER_RESET_PRUNE_ALL_IMAGES)" = "1" ]; then \
+			echo "  - Stop slicer-mac and remove on-device *.img files"; \
+		else \
+			echo "  - Stop slicer-mac and remove on-device disk images for $(SLICER_VM_NAME)"; \
+		fi; \
 	else \
 		echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present"; \
 	fi; \
@@ -1174,11 +1187,15 @@ reset:
 	fi; \
 	echo ""; \
 	if [ "$$socket" = "$(SLICER_SYSTEM_SOCKET)" ]; then \
-		echo "Stopping slicer-mac and pruning on-device disk images (best-effort)..."; \
+		if [ "$(SLICER_RESET_PRUNE_ALL_IMAGES)" = "1" ]; then \
+			echo "Stopping slicer-mac and pruning on-device *.img files (best-effort)..."; \
+		else \
+			echo "Stopping slicer-mac and pruning on-device disk images for $(SLICER_VM_NAME) (best-effort)..."; \
+		fi; \
 	else \
 		echo "Deleting Slicer VM (best-effort)..."; \
 	fi; \
-	if ! SLICER_URL="$$socket" SLICER_VM_NAME="$(SLICER_VM_NAME)" "$(DELETE_SLICER_VM)" --execute; then \
+	if ! SLICER_URL="$$socket" SLICER_VM_NAME="$(SLICER_VM_NAME)" SLICER_RESET_PRUNE_ALL_IMAGES="$(SLICER_RESET_PRUNE_ALL_IMAGES)" "$(DELETE_SLICER_VM)" --execute; then \
 		reset_incomplete=1; \
 	fi; \
 	echo ""; \

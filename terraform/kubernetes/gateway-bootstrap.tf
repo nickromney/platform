@@ -59,7 +59,23 @@ resource "null_resource" "wait_for_gateway_bootstrap_crds" {
       fi
 
       for crd in ${join(" ", local.gateway_bootstrap_crd_names)}; do
-        kubectl $${KUBECTL_ARGS} wait --for=condition=Established --timeout=180s "crd/$${crd}"
+        deadline=$((SECONDS + 180))
+        established=""
+        while (( SECONDS < deadline )); do
+          established="$(kubectl $${KUBECTL_ARGS} get "crd/$${crd}" -o json 2>/dev/null | jq -r '.status.conditions[]? | select(.type=="Established") | .status' | head -n1 || true)"
+          if [[ "$${established}" == "True" ]]; then
+            break
+          fi
+          sleep 2
+        done
+
+        if [[ "$${established}" != "True" ]]; then
+          echo "Timed out waiting for CRD/$${crd} to become Established" >&2
+          kubectl $${KUBECTL_ARGS} get "crd/$${crd}" -o yaml || true
+          exit 1
+        fi
+
+        kubectl $${KUBECTL_ARGS} wait --for=condition=Established --timeout=10s "crd/$${crd}" >/dev/null
       done
     EOT
   }

@@ -195,6 +195,7 @@ validate_existing_k3s_network_profile() {
 
 fix_vm_dns() {
   local gw
+  local current_nameserver=""
   gw="$(vm_exec_retry "$server_vm" "ip -4 route list 0/0 | awk '{print \$3}' | head -n1" 5 2 | tr -d '\r' | head -n1 || true)"
   if [ -z "$gw" ]; then
     echo "WARN: unable to detect gateway for ${server_vm}; skipping DNS override" >&2
@@ -202,7 +203,12 @@ fix_vm_dns() {
   fi
   echo "==> Setting ${server_vm} DNS to gateway resolver (${gw})"
   if ! vm_exec_retry "$server_vm" "sudo chattr -i /etc/resolv.conf || true; printf 'nameserver ${gw}\noptions timeout:1 attempts:2\n' | sudo tee /etc/resolv.conf >/dev/null; sudo chattr +i /etc/resolv.conf || true" 5 2 >/dev/null; then
-    echo "WARN: failed to override DNS on ${server_vm}; continuing with the guest default resolver" >&2
+    current_nameserver="$(vm_exec_retry "$server_vm" "awk '/^nameserver[[:space:]]+/ {print \$2; exit}' /etc/resolv.conf" 2 1 | tr -d '\r' | head -n1 || true)"
+    if [ "${current_nameserver}" = "${gw}" ]; then
+      echo "INFO: ${server_vm} already points at gateway resolver ${gw}; continuing" >&2
+    else
+      echo "INFO: could not pin ${server_vm} DNS to gateway resolver ${gw}; continuing with the guest default resolver (${current_nameserver:-unknown})" >&2
+    fi
   fi
 }
 

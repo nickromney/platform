@@ -48,12 +48,32 @@ start_local_system_daemon() {
     exit 1
   fi
 
+  if "${system_bin}" service start daemon >/dev/null 2>&1; then
+    rm -f "${pid_file}"
+    echo "Starting on-device slicer-mac launchd service from ${system_dir}"
+    return 0
+  fi
+
   echo "Starting on-device slicer-mac from ${system_dir}"
   (
     cd "${system_dir}"
     nohup "${system_bin}" up >"${log_file}" 2>&1 </dev/null &
     echo "$!" >"${pid_file}"
   )
+}
+
+restart_local_system_daemon_for_stale_socket() {
+  local socket="$1"
+  local pid_file="${RUN_DIR}/slicer-mac.pid"
+
+  echo "Detected stale on-device slicer-mac socket at ${socket}; restarting local daemon"
+  rm -f "${socket}"
+  if "${system_bin}" service restart daemon >/dev/null 2>&1; then
+    rm -f "${pid_file}"
+    echo "Restarting on-device slicer-mac launchd service from ${system_dir}"
+    return 0
+  fi
+  start_local_system_daemon
 }
 
 if [ -n "$configured_url" ] && [ "$configured_url" != "$system_socket" ]; then
@@ -75,8 +95,10 @@ if [ -n "$configured_url" ] && [ "$configured_url" != "$system_socket" ]; then
   exit 1
 fi
 
+started_local_system_daemon=0
 if [ ! -S "$system_socket" ]; then
   start_local_system_daemon
+  started_local_system_daemon=1
 fi
 
 for _ in $(seq 1 "$system_wait_seconds"); do
@@ -86,6 +108,12 @@ for _ in $(seq 1 "$system_wait_seconds"); do
   fi
   rc=$?
   if [ "$rc" = "2" ]; then
+    sleep 1
+    continue
+  fi
+  if [ "$started_local_system_daemon" = "0" ]; then
+    restart_local_system_daemon_for_stale_socket "$system_socket"
+    started_local_system_daemon=1
     sleep 1
     continue
   fi

@@ -46,6 +46,9 @@ if [[ "${1:-}" == "vm" && "${2:-}" == "exec" ]]; then
         exit 1
       fi
       ;;
+    "awk '/^nameserver[[:space:]]+/ {print \$2; exit}' /etc/resolv.conf")
+      printf '8.8.8.8\n'
+      ;;
     "sudo mkdir -p /etc/rancher/k3s; if ! sudo cmp -s /tmp/registries.yaml /etc/rancher/k3s/registries.yaml 2>/dev/null; then sudo mv /tmp/registries.yaml /etc/rancher/k3s/registries.yaml; sudo systemctl is-active --quiet k3s && sudo systemctl restart k3s || true; else rm -f /tmp/registries.yaml; fi")
       ;;
     "sudo test -x /usr/local/bin/k3s && sudo test -f /etc/rancher/k3s/k3s.yaml && sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get --raw=/version")
@@ -129,7 +132,7 @@ EOF
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/slicer-k3s.yaml" \
     DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
     MERGE_KUBECONFIG_TO_DEFAULT=0 \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"existing k3s detected on slicer-1"* ]]
@@ -145,7 +148,7 @@ EOF
     DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
     MERGE_KUBECONFIG_TO_DEFAULT=0 \
     SLICER_ALLOW_EXISTING_K3S=1 \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"refreshing kubeconfig only"* ]]
@@ -153,7 +156,7 @@ EOF
   grep -q "https://192.168.64.2:6443" "${kubeconfig}"
 }
 
-@test "dns override failure is reported as a warning and bootstrap continues" {
+@test "dns override failure is reported as informational fallback and bootstrap continues" {
   kubeconfig="${BATS_TEST_TMPDIR}/slicer-k3s.yaml"
 
   run env \
@@ -163,9 +166,9 @@ EOF
     MERGE_KUBECONFIG_TO_DEFAULT=0 \
     SLICER_ALLOW_EXISTING_K3S=1 \
     SLICER_DNS_WRITE_FAIL=1 \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"WARN: failed to override DNS on slicer-1"* ]]
+  [[ "${output}" == *"INFO: could not pin slicer-1 DNS to gateway resolver 192.168.64.1; continuing with the guest default resolver (8.8.8.8)"* ]]
   [[ "${output}" == *"refreshing kubeconfig only"* ]]
 }
