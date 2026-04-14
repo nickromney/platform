@@ -100,3 +100,33 @@ setup() {
   grep -Fq 'Detected direct Argo CD mode (no app-of-apps parent)' "${script}"
   grep -Fq 'Detected Argo CD app-of-apps mode' "${script}"
 }
+
+@test "gateway stack check tolerates split kubeconfigs with no current-context" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-gateway-stack.sh"
+
+  grep -Fq 'ctx="${KUBECONFIG_CONTEXT:-}"' "${script}"
+  grep -Fq 'warn "kubectl current-context is empty; continuing"' "${script}"
+  grep -Fq 'KUBECTL_CONTEXT_ARGS+=(--context "${KUBECONFIG_CONTEXT}")' "${script}"
+}
+
+@test "gateway stack make targets pass split kubeconfig env through to diagnostics" {
+  kind_makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
+  lima_makefile="${REPO_ROOT}/kubernetes/lima/Makefile"
+  slicer_makefile="${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${kind_makefile}"
+  grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${lima_makefile}"
+  grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${slicer_makefile}"
+}
+
+@test "gateway bootstrap CRD waiter tolerates missing status conditions during early reconciliation" {
+  file="${REPO_ROOT}/terraform/kubernetes/gateway-bootstrap.tf"
+
+  grep -Fq 'deadline=$((SECONDS + 180))' "${file}"
+  grep -Fq "jq -r '.status.conditions[]? | select(.type==\"Established\") | .status'" "${file}"
+  grep -Fq 'established="$(kubectl $${KUBECTL_ARGS} get "crd/$${crd}" -o json 2>/dev/null | jq -r '\''.status.conditions[]? | select(.type=="Established") | .status'\'' | head -n1 || true)"' "${file}"
+  grep -Fq 'Timed out waiting for CRD/$${crd} to become Established' "${file}"
+  grep -Fq 'kubectl $${KUBECTL_ARGS} wait --for=condition=Established --timeout=10s "crd/$${crd}" >/dev/null' "${file}"
+  ! grep -Fq '$$((SECONDS + 180))' "${file}"
+  ! grep -Fq '$$(kubectl' "${file}"
+}

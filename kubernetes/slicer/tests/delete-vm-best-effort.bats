@@ -72,8 +72,9 @@ EOF
   chmod +x "${SLICER_HOME}/slicer-mac"
 }
 
-@test "system-socket cleanup stops slicer-mac and deletes matching disk images without backup" {
+@test "system-socket cleanup stops slicer-mac and deletes only the managed VM disk images by default" {
   touch \
+    "${SLICER_HOME}/slicer-base.img" \
     "${SLICER_HOME}/slicer-1.img" \
     "${SLICER_HOME}/slicer-1-extra.img" \
     "${SLICER_HOME}/slicer-1.log" \
@@ -88,12 +89,32 @@ EOF
   [[ "${output}" == *"stopped on-device slicer-mac daemon"* ]]
   [[ "${output}" == *"removed 2 on-device disk image(s) matching"* ]]
 
+  [ -e "${SLICER_HOME}/slicer-base.img" ]
   [ ! -e "${SLICER_HOME}/slicer-1.img" ]
   [ ! -e "${SLICER_HOME}/slicer-1-extra.img" ]
   [ -e "${SLICER_HOME}/slicer-1.log" ]
   [ -e "${SLICER_HOME}/slicer-1-vsock.sock" ]
   grep -q "service stop daemon" "${SLICER_MAC_LOG}"
   [ ! -s "${SLICER_LOG}" ]
+}
+
+@test "system-socket cleanup prunes all on-device disk images when explicitly requested" {
+  touch \
+    "${SLICER_HOME}/slicer-base.img" \
+    "${SLICER_HOME}/slicer-1.img" \
+    "${SLICER_HOME}/slicer-1-extra.img"
+
+  run env \
+    SLICER_URL="${SLICER_HOME}/slicer.sock" \
+    SLICER_VM_NAME="slicer-1" \
+    SLICER_RESET_PRUNE_ALL_IMAGES=1 \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"removed 3 on-device disk image(s) matching"* ]]
+  [ ! -e "${SLICER_HOME}/slicer-base.img" ]
+  [ ! -e "${SLICER_HOME}/slicer-1.img" ]
+  [ ! -e "${SLICER_HOME}/slicer-1-extra.img" ]
 }
 
 @test "non-system delete failure still exits nonzero" {

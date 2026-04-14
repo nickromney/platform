@@ -7,6 +7,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell
 socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
 vm_name="${SLICER_VM_NAME:-slicer-1}"
 delete_timeout="${SLICER_RESET_DELETE_TIMEOUT_SECONDS:-20}"
+prune_all_images="${SLICER_RESET_PRUNE_ALL_IMAGES:-0}"
 system_socket="${SLICER_SYSTEM_SOCKET:-${HOME}/slicer-mac/slicer.sock}"
 system_dir="${SLICER_SYSTEM_DIR:-${HOME}/slicer-mac}"
 system_bin="${SLICER_SYSTEM_BIN:-${system_dir}/slicer-mac}"
@@ -28,12 +29,15 @@ EOF
 shell_cli_handle_standard_no_args usage "would best-effort delete the configured Slicer VM and related local artifacts" "$@"
 
 [ -n "${socket}" ] || { warn "SLICER_URL or SLICER_SOCKET must be set"; exit 1; }
+[[ "${prune_all_images}" =~ ^(0|1)$ ]] || { warn "SLICER_RESET_PRUNE_ALL_IMAGES must be 0 or 1"; exit 1; }
 
 manual_local_cleanup_hint() {
   warn "Manual on-device cleanup:"
   warn "  ${system_bin} service stop daemon"
-  warn "  pkill -f 'slicer-mac up'"
   warn "  rm -f ${system_dir}/${vm_name}*.img"
+  warn "Troubleshooting-only full image refresh:"
+  warn "  rm -f ${system_dir}/*.img"
+  warn "  ${system_bin} service start daemon"
 }
 
 local_system_daemon_pids() {
@@ -70,13 +74,19 @@ stop_local_system_daemon_processes() {
 }
 
 cleanup_local_system_vm() {
-  local artifact removed=0
+  local artifact removed=0 image_glob
+  local -a image_matches=()
   if [[ ! -x "${system_bin}" ]]; then
     warn "cannot stop on-device slicer-mac automatically; missing ${system_bin}"
     return 1
   fi
 
-  echo "INFO stopping on-device slicer-mac daemon before pruning ${vm_name} disk images"
+  image_glob="${system_dir}/${vm_name}*.img"
+  if [[ "${prune_all_images}" == "1" ]]; then
+    image_glob="${system_dir}/*.img"
+  fi
+
+  echo "INFO stopping on-device slicer-mac daemon before pruning on-device disk images"
   if ! "${system_bin}" service stop daemon >/dev/null 2>&1; then
     warn "launchd-managed slicer-mac daemon was not running or did not stop cleanly"
   fi
@@ -84,16 +94,21 @@ cleanup_local_system_vm() {
   ok "stopped on-device slicer-mac daemon"
 
   shopt -s nullglob
-  for artifact in "${system_dir}/${vm_name}"*.img; do
+  if [[ "${prune_all_images}" == "1" ]]; then
+    image_matches=( "${system_dir}"/*.img )
+  else
+    image_matches=( "${system_dir}/${vm_name}"*.img )
+  fi
+  for artifact in "${image_matches[@]}"; do
     rm -f "${artifact}"
     removed=$((removed + 1))
   done
   shopt -u nullglob
 
   if [[ "${removed}" -eq 0 ]]; then
-    ok "no on-device disk images matched ${system_dir}/${vm_name}*.img"
+    ok "no on-device disk images matched ${image_glob}"
   else
-    ok "removed ${removed} on-device disk image(s) matching ${system_dir}/${vm_name}*.img"
+    ok "removed ${removed} on-device disk image(s) matching ${image_glob}"
   fi
 }
 

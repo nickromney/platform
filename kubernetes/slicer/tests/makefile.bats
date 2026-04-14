@@ -57,8 +57,20 @@ setup() {
   [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
+@test "slicer configure-k3s-apiserver-oidc forwards explicit read-only mode flags" {
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" configure-k3s-apiserver-oidc STAGE=900
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'configure-k3s-apiserver-oidc.sh" --execute'* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" configure-k3s-apiserver-oidc STAGE=900 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'configure-k3s-apiserver-oidc.sh" --dry-run'* ]]
+}
+
 @test "slicer stage 900 apply wires k3s apiserver OIDC for Headlamp" {
-  run grep -Fn 'run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc;' \
+  run grep -Fn 'run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -92,8 +104,20 @@ setup() {
   [[ "${output}" == *"require a reachable Slicer daemon"* ]]
 }
 
+@test "slicer stage 100 apply starts the daemon before prereqs after a reset" {
+  run grep -Fn 'run_step "daemon-up" $(MAKE) daemon-up;' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'run_step "prereqs" $(MAKE) prereqs;' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "slicer reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
-  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --action prepare-for-reset --kubeconfig' \
+  run grep -Fn 'KUBECONFIG_RESET_AUTO_APPROVE="$(AUTO_APPROVE)" "$(KUBECONFIG_HELPER)" --execute --action prepare-for-reset --kubeconfig' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -111,6 +135,14 @@ setup() {
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "slicer check-kubeconfig skips kubie lint noise when there are no contexts yet" {
+  run sed -n '/^check-kubeconfig:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'kubie lint skipped (no kubeconfig contexts yet)'* ]]
+  [[ "${output}" == *'[ "$$default_count" -eq 0 ] && [ "$$target_count" -eq 0 ]'* ]]
 }
 
 @test "slicer prereqs groups tool checks and does not run shell audit" {
