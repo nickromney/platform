@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import secrets
 import time
 from datetime import datetime, timedelta
 
@@ -13,8 +14,26 @@ from flask_session import Session
 
 app = Flask(__name__)
 
+
+def get_flask_secret_key() -> str:
+    """
+    Get the Flask session secret from the environment.
+
+    If the environment variable is not set, generate an ephemeral secret for
+    the current process so local development still works without a committed
+    fallback value.
+    """
+
+    secret = os.getenv("FLASK_SECRET_KEY", "").strip()
+    if secret:
+        return secret
+
+    logging.warning("FLASK_SECRET_KEY is not set; generating an ephemeral session secret")
+    return secrets.token_urlsafe(32)
+
+
 # Configure session
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-key-change-in-production")
+app.secret_key = get_flask_secret_key()
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("FLASK_ENV", "development") == "production"

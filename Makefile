@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan
+MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -10,6 +10,8 @@ VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 CHECK_VERSION_SCRIPT ?= scripts/check-version.sh
+SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
+SONAR_SCAN_REPO ?= $(CURDIR)
 SEMANTIC_RELEASE_CMD ?= npx --yes \
 	--package semantic-release \
 	--package @semantic-release/commit-analyzer \
@@ -23,7 +25,7 @@ RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 
 include mk/common.mk
 
-.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan
+.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 
 help:
 	@echo "Platform workspace Makefile guide"
@@ -45,6 +47,7 @@ help:
 	@echo "  make release-tag VERSION=0.1.0  Create an annotated v-version tag from main"
 	@echo "  make lint-cilium-live  Validate deployed Cilium policies via the current kubeconfig"
 	@echo "  make lint-kyverno-live  Validate deployed Kyverno policy matches via the current kubeconfig"
+	@echo "  make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator  Run SonarQube on any local repo"
 	@echo "  make prereqs      Show the focused prerequisite entrypoints"
 	@echo "  make test         Show the focused test entrypoints"
 	@echo "  make apps         Show the app/frontend Makefiles"
@@ -161,6 +164,9 @@ fmt-markdown:
 
 check-version:
 	@"$(CHECK_VERSION_SCRIPT)" --execute
+
+sonar-scan:
+	@SONAR_SCAN_REPO="$(SONAR_SCAN_REPO)" "$(SONAR_SCAN_SCRIPT)" --execute
 
 release:
 	@$(SEMANTIC_RELEASE_CMD)

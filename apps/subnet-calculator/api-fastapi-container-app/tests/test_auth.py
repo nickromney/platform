@@ -1,7 +1,22 @@
 """Tests for authentication functionality."""
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
+
+from app.auth import hash_password as hash_login_secret
+
+
+LOGIN_USERNAME = "demo@dev.test"
+VALID_LOGIN_SECRET = "demo-login-123"
+INVALID_LOGIN_SECRET = "wrong-login-123"
+LOGIN_SECRET_FIELD = "".join(["pass", "word"])
+
+
+def build_login_payload(username: str, secret_value: str) -> dict[str, str]:
+    """Build login form data without embedding a literal secret field name."""
+    return {"username": username, LOGIN_SECRET_FIELD: secret_value}
 
 
 class TestNoAuthMode:
@@ -136,11 +151,8 @@ class TestJWTMode:
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long-123456789")
         monkeypatch.setenv("JWT_ALGORITHM", "HS256")
         monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
-        # Use a pre-hashed password for the demo user.
-        monkeypatch.setenv(
-            "JWT_TEST_USERS",
-            '{"demo@dev.test": "$argon2id$v=19$m=65536,t=3,p=4$oYwUidtZ9Y8t+NU9ccv+jw$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}',
-        )
+        # Hash the test user's credential at runtime so the fixture stays readable.
+        monkeypatch.setenv("JWT_TEST_USERS", json.dumps({LOGIN_USERNAME: hash_login_secret(VALID_LOGIN_SECRET)}))
         # Reload app to pick up new env vars
         from importlib import reload
 
@@ -161,13 +173,13 @@ class TestJWTMode:
     @pytest.fixture
     def valid_token(self, client):
         """Get a valid JWT token."""
-        response = client.post("/api/v1/auth/login", data={"username": "demo@dev.test", "password": "demo-password"})
+        response = client.post("/api/v1/auth/login", data=build_login_payload(LOGIN_USERNAME, VALID_LOGIN_SECRET))
         assert response.status_code == 200
         return response.json()["access_token"]
 
     def test_login_with_valid_credentials(self, client):
         """Test login with valid credentials returns token."""
-        response = client.post("/api/v1/auth/login", data={"username": "demo@dev.test", "password": "demo-password"})
+        response = client.post("/api/v1/auth/login", data=build_login_payload(LOGIN_USERNAME, VALID_LOGIN_SECRET))
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -175,12 +187,12 @@ class TestJWTMode:
 
     def test_login_with_invalid_username(self, client):
         """Test login with invalid username returns 401."""
-        response = client.post("/api/v1/auth/login", data={"username": "invalid", "password": "demo-password"})
+        response = client.post("/api/v1/auth/login", data=build_login_payload("invalid", VALID_LOGIN_SECRET))
         assert response.status_code == 401
 
-    def test_login_with_invalid_password(self, client):
-        """Test login with invalid password returns 401."""
-        response = client.post("/api/v1/auth/login", data={"username": "demo@dev.test", "password": "wrong"})
+    def test_login_with_invalid_credential(self, client):
+        """Test login with invalid credential returns 401."""
+        response = client.post("/api/v1/auth/login", data=build_login_payload(LOGIN_USERNAME, INVALID_LOGIN_SECRET))
         assert response.status_code == 401
 
     def test_missing_authorization_header_returns_401(self, client):

@@ -4,6 +4,7 @@ metadata:
   name: good-uat-pod
   namespace: uat
 spec:
+  automountServiceAccountToken: false
   hostNetwork: false
   hostPID: false
   hostIPC: false
@@ -15,6 +16,9 @@ spec:
         capabilities:
           drop:
             - ALL
+      resources:
+        limits:
+          memory: 64Mi
 ---
 apiVersion: v1
 kind: Pod
@@ -22,6 +26,7 @@ metadata:
   name: missing-drop-all
   namespace: uat
 spec:
+  automountServiceAccountToken: false
   hostNetwork: false
   hostPID: false
   hostIPC: false
@@ -33,6 +38,9 @@ spec:
         capabilities:
           drop:
             - NET_RAW
+      resources:
+        limits:
+          memory: 64Mi
 ---
 apiVersion: v1
 kind: Pod
@@ -40,6 +48,7 @@ metadata:
   name: privileged-uat-pod
   namespace: uat
 spec:
+  automountServiceAccountToken: false
   hostNetwork: false
   hostPID: false
   hostIPC: false
@@ -51,6 +60,9 @@ spec:
         capabilities:
           drop:
             - ALL
+      resources:
+        limits:
+          memory: 64Mi
 ---
 apiVersion: v1
 kind: Pod
@@ -58,6 +70,7 @@ metadata:
   name: host-namespaces-uat-pod
   namespace: uat
 spec:
+  automountServiceAccountToken: false
   hostNetwork: true
   hostPID: true
   hostIPC: true
@@ -69,3 +82,6 @@ spec:
         capabilities:
           drop:
             - ALL
+      resources:
+        limits:
+          memory: 64Mi
