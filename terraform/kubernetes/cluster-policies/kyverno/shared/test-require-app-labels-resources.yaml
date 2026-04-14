@@ -22,9 +22,13 @@ spec:
         project: kindlocal
         team: dolphin
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: app
           image: quay.io/curl/curl:8.12.1
+          resources:
+            limits:
+              memory: 64Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,6 +50,10 @@ spec:
         app: demo
         tier: frontend
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: app
           image: quay.io/curl/curl:8.12.1
+          resources:
+            limits:
+              memory: 64Mi

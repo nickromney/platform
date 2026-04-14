@@ -9,9 +9,10 @@ This test suite covers:
 - All endpoints protected
 - Edge cases
 
-Note: Tests currently fail because JWT functionality not yet implemented (TDD).
+Note: These tests exercise the JWT implementation and should stay green.
 """
 
+import secrets
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -20,9 +21,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from function_app import api
+from config import get_jwt_algorithm, get_jwt_secret_key
 
 # Create test client
 client = TestClient(api)
+TEST_JWT_SECRET = secrets.token_urlsafe(32)
+
+
+def decode_verified_token(token: str) -> dict:
+    """Decode a JWT with signature verification enabled."""
+
+    return pyjwt.decode(
+        token,
+        get_jwt_secret_key(),
+        algorithms=[get_jwt_algorithm()],
+        options={"verify_aud": False},
+    )
 
 
 # Configuration Tests
@@ -103,7 +117,7 @@ class TestLoginEndpoint:
     def setup_jwt_auth(self, monkeypatch):
         """Set up environment for JWT auth with Argon2 hashed passwords."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
-        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
+        monkeypatch.setenv("JWT_SECRET_KEY", TEST_JWT_SECRET)
         # Use Argon2 hashed passwords for the demo test users.
         monkeypatch.setenv(
             "JWT_TEST_USERS",
@@ -161,8 +175,7 @@ class TestLoginEndpoint:
         response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         token = response.json()["access_token"]
 
-        # Decode without verification (for testing only)
-        payload = pyjwt.decode(token, options={"verify_signature": False})
+        payload = decode_verified_token(token)
         assert payload["sub"] == "alice"
 
     def test_login_token_has_expiration(self):
@@ -170,7 +183,7 @@ class TestLoginEndpoint:
         response = client.post("/api/v1/auth/login", data={"username": "alice", "password": "demo-password"})
         token = response.json()["access_token"]
 
-        payload = pyjwt.decode(token, options={"verify_signature": False})
+        payload = decode_verified_token(token)
 
         exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
         now = datetime.now(UTC)
@@ -188,7 +201,7 @@ class TestJWTTokenValidation:
     def setup_jwt_auth(self, monkeypatch):
         """Set up environment for JWT auth with Argon2 hashed password."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
-        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
+        monkeypatch.setenv("JWT_SECRET_KEY", TEST_JWT_SECRET)
         # Use an Argon2 hashed password for the demo test user.
         monkeypatch.setenv(
             "JWT_TEST_USERS",
@@ -289,7 +302,7 @@ class TestJWTTokenValidation:
             "iat": datetime.now(UTC),
             "exp": datetime.now(UTC) + timedelta(minutes=30),
         }
-        token = pyjwt.encode(payload, "different-secret-key-32-chars-long", algorithm="HS256")
+        token = pyjwt.encode(payload, secrets.token_urlsafe(32), algorithm="HS256")
 
         response = client.post(
             "/api/v1/ipv4/validate",
@@ -305,7 +318,7 @@ class TestJWTTokenValidation:
             "iat": datetime.now(UTC),
             "exp": datetime.now(UTC) + timedelta(minutes=30),
         }
-        token = pyjwt.encode(payload, "test-secret-key-minimum-32-chars-long", algorithm="HS256")
+        token = pyjwt.encode(payload, get_jwt_secret_key(), algorithm="HS256")
 
         response = client.post(
             "/api/v1/ipv4/validate",
@@ -336,7 +349,7 @@ class TestJWTEdgeCases:
     def setup_jwt_auth(self, monkeypatch):
         """Set up environment for JWT auth with Argon2 hashed password."""
         monkeypatch.setenv("AUTH_METHOD", "jwt")
-        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-minimum-32-chars-long")
+        monkeypatch.setenv("JWT_SECRET_KEY", TEST_JWT_SECRET)
         # Use an Argon2 hashed password for the demo test user.
         monkeypatch.setenv(
             "JWT_TEST_USERS",

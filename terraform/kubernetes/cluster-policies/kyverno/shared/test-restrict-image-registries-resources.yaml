@@ -4,9 +4,13 @@ metadata:
   name: allowed-image
   namespace: dev
 spec:
+  automountServiceAccountToken: false
   containers:
     - name: app
       image: quay.io/cilium/cilium:v1.19.1
+      resources:
+        limits:
+          memory: 64Mi
 ---
 apiVersion: v1
 kind: Pod
@@ -14,6 +18,10 @@ metadata:
   name: blocked-image
   namespace: dev
 spec:
+  automountServiceAccountToken: false
   containers:
     - name: app
       image: registry.example.invalid/demo:v1
+      resources:
+        limits:
+          memory: 64Mi
