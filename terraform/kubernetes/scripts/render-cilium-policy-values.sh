@@ -186,9 +186,11 @@ slurp_docs_json() {
 render_bundle_json() {
   local docs_json="$1"
   local jq_program_file
+  local jq_error_file
 
   jq_program_file="$(mktemp "${TMPDIR:-/tmp}/render-cilium.XXXXXX")"
-  trap 'rm -f "${jq_program_file}"' RETURN
+  jq_error_file="$(mktemp "${TMPDIR:-/tmp}/render-cilium.err.XXXXXX")"
+  trap 'rm -f "${jq_program_file}" "${jq_error_file}"' RETURN
 
   cat > "${jq_program_file}" <<'JQ'
 def fail($msg): error($msg);
@@ -227,14 +229,19 @@ if ($set_name != "" and ($docs | length) != 1) then fail("--set-name only suppor
 | {converted: $converted, result: apply_wrap_key($wrap_key; $result)}
 JQ
 
-  jq -n \
+  if ! jq -n \
     -f "${jq_program_file}" \
     --argjson docs "${docs_json}" \
     --arg list_key "${list_key}" \
     --arg wrap_key "${wrap_key}" \
     --arg set_name "${set_name}" \
     --arg set_namespace "${set_namespace}" \
-    2>/dev/null || fail "failed to transform input"
+    2>"${jq_error_file}"; then
+    if [[ -s "${jq_error_file}" ]]; then
+      cat "${jq_error_file}" >&2
+    fi
+    fail "failed to transform input"
+  fi
 }
 
 compose_result_json() {

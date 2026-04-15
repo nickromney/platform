@@ -1,9 +1,0 @@
-{
-  "status_code": 200,
-  "upstream": {
-    "path": "/sample/items",
-    "query": {
-      "source": "/sample/items"
-    }
-  }
-}

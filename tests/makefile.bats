@@ -17,7 +17,7 @@ setup() {
   [[ "${output}" == *"make check-version"* ]]
   [[ "${output}" == *"make release"* ]]
   [[ "${output}" == *"make release-dry-run"* ]]
-  [[ "${output}" == *"make release-tag VERSION=0.1.0"* ]]
+  [[ "${output}" == *"make release-tag VERSION=0.3.0"* ]]
   [[ "${output}" == *"make lint-cilium-live"* ]]
   [[ "${output}" == *"make lint-kyverno-live"* ]]
   [[ "${output}" == *"make prereqs"* ]]
@@ -208,36 +208,36 @@ EOF
   [ "${output}" = $'check-version --execute' ]
 }
 
-@test "root release helpers delegate to semantic-release and the tag script" {
-  semantic_release_stub="${BATS_TEST_TMPDIR}/semantic-release.sh"
+@test "root release helpers delegate to the release and tag scripts" {
+  release_stub="${BATS_TEST_TMPDIR}/release.sh"
   release_tag_stub="${BATS_TEST_TMPDIR}/release-tag.sh"
   log_file="${BATS_TEST_TMPDIR}/release.log"
 
-  cat >"${semantic_release_stub}" <<EOF
+  cat >"${release_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'semantic %s\n' "\$*" >>"${log_file}"
+printf 'release %s\n' "\$*" >>"${log_file}"
 EOF
-  chmod +x "${semantic_release_stub}"
+  chmod +x "${release_stub}"
 
   cat >"${release_tag_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'tag VERSION=%s DRY_RUN=%s\n' "\${1:-}" "\${DRY_RUN:-0}" >>"${log_file}"
+printf 'tag %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${release_tag_stub}"
 
-  run make -C "${REPO_ROOT}" release-dry-run \
-    SEMANTIC_RELEASE_CMD="${semantic_release_stub}"
+  run make -C "${REPO_ROOT}" release-dry-run VERSION=0.3.0 \
+    RELEASE_SCRIPT="${release_stub}"
 
   [ "${status}" -eq 0 ]
 
-  run make -C "${REPO_ROOT}" release-preview \
-    SEMANTIC_RELEASE_CMD="${semantic_release_stub}"
+  run make -C "${REPO_ROOT}" release-preview VERSION=0.3.0 \
+    RELEASE_SCRIPT="${release_stub}"
 
   [ "${status}" -eq 0 ]
 
-  run make -C "${REPO_ROOT}" release-tag-dry-run VERSION=0.1.0 \
+  run make -C "${REPO_ROOT}" release-tag-dry-run VERSION=0.3.0 \
     RELEASE_TAG_SCRIPT="${release_tag_stub}"
 
   [ "${status}" -eq 0 ]
@@ -245,5 +245,5 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'semantic --dry-run\nsemantic --dry-run\ntag VERSION=0.1.0 DRY_RUN=1' ]
+  [ "${output}" = $'release --dry-run 0.3.0\nrelease --dry-run 0.3.0\ntag --dry-run 0.3.0' ]
 }

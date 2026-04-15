@@ -52,7 +52,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run env TEST_STATE_DIR="${TEST_STATE_DIR}" KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" KIND_KUBECONFIG_LOCK_WAIT_SECONDS=2 "${SCRIPT}"
+  run env TEST_STATE_DIR="${TEST_STATE_DIR}" KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" KIND_KUBECONFIG_LOCK_WAIT_SECONDS=2 "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "$(cat "${TEST_STATE_DIR}/kind-export-attempts")" == "2" ]]
@@ -76,7 +76,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
 }
@@ -150,10 +150,10 @@ EOF
     GLOBAL_KUBECONFIG_PATH="${global_kubeconfig}" \
     KUBECONFIG_HELPER="${TEST_BIN}/helper" \
     MERGE_KUBECONFIG_TO_DEFAULT=0 \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
-  run grep -F "delete-context ${global_kubeconfig} kind-kind-local kind-kind-local kind-kind-local 0" "${helper_log}"
+  run grep -F -- "--execute --action delete-context --kubeconfig ${global_kubeconfig} --context kind-kind-local --cluster kind-kind-local --user kind-kind-local" "${helper_log}"
   [ "${status}" -eq 0 ]
 }
 
@@ -224,10 +224,10 @@ EOF
     GLOBAL_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
     KUBECONFIG_HELPER="${TEST_BIN}/helper" \
     MERGE_KUBECONFIG_TO_DEFAULT=1 \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
-  run grep -F 'merge '"${BATS_TEST_TMPDIR}"'/kind-kind-local.yaml '"${BATS_TEST_TMPDIR}"'/config kind-kind-local' "${helper_log}"
+  run grep -F -- '--execute --action merge --source-kubeconfig '"${BATS_TEST_TMPDIR}"'/kind-kind-local.yaml --target-kubeconfig '"${BATS_TEST_TMPDIR}"'/config --context kind-kind-local' "${helper_log}"
   [ "${status}" -eq 0 ]
   run grep -F -- '--kubeconfig '"${BATS_TEST_TMPDIR}"'/config config use-context kind-kind-local' "${kubectl_log}"
   [ "${status}" -eq 0 ]

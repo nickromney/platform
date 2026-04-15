@@ -73,6 +73,22 @@ EOF
 
     return 1
   }
+
+  shell_cli_maybe_execute_or_preview_summary() {
+    local usage_fn="$1"
+    local dry_run_summary="$2"
+
+    if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+      shell_cli_print_dry_run_summary "${dry_run_summary}"
+      exit 0
+    fi
+
+    if [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+      "${usage_fn}"
+      shell_cli_print_dry_run_summary "${dry_run_summary}"
+      exit 0
+    fi
+  }
 fi
 
 usage() {

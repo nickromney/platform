@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${VERSION:-}"
 DRY_RUN="${DRY_RUN:-0}"
+EXECUTE=0
 TAG_BRANCH="${TAG_BRANCH:-main}"
+VERSION_FILE="${VERSION_FILE:-${ROOT_DIR}/VERSION}"
 
 usage() {
   cat <<'EOF'
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --execute)
+      EXECUTE=1
       shift
       ;;
     -h|--help)
@@ -57,18 +60,25 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
     *)
-      if [[ -n "${VERSION}" ]]; then
+      if [[ -z "${VERSION}" ]]; then
+        VERSION="$1"
+      elif [[ "${VERSION}" != "$1" ]]; then
         echo "${script_name}: unexpected argument: $1" >&2
         usage >&2
         exit 1
       fi
-      VERSION="$1"
       shift
       ;;
   esac
 done
 
 if [[ -z "${VERSION}" ]]; then
+  if [[ "${EXECUTE}" != "1" ]]; then
+    usage
+    echo "INFO dry-run: would create a release tag after VERSION is provided"
+    exit 0
+  fi
+
   usage >&2
   exit 1
 fi
@@ -79,6 +89,26 @@ if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 TAG="v${VERSION}"
+
+if [[ "${DRY_RUN}" != "1" && "${EXECUTE}" != "1" ]]; then
+  usage
+  echo "INFO dry-run: would create tag ${TAG}"
+  exit 0
+fi
+
+if [[ -f "${VERSION_FILE}" ]]; then
+  CURRENT_VERSION="$(tr -d '[:space:]' <"${VERSION_FILE}")"
+  if [[ "${CURRENT_VERSION}" != "${VERSION}" ]]; then
+    echo "VERSION file is ${CURRENT_VERSION}, expected ${VERSION}" >&2
+    exit 1
+  fi
+fi
+
+if git -C "${ROOT_DIR}" rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  echo "tag ${TAG} already exists; release is already complete"
+  exit 0
+fi
+
 CURRENT_BRANCH="$(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD)"
 
 if [[ "${DRY_RUN}" != "1" && "${CURRENT_BRANCH}" != "${TAG_BRANCH}" ]]; then
@@ -88,11 +118,6 @@ fi
 
 if [[ "${DRY_RUN}" != "1" && -n "$(git -C "${ROOT_DIR}" status --short)" ]]; then
   echo "git worktree must be clean before creating a release tag" >&2
-  exit 1
-fi
-
-if git -C "${ROOT_DIR}" rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  echo "tag ${TAG} already exists" >&2
   exit 1
 fi
 

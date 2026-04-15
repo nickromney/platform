@@ -21,6 +21,23 @@ HOP_BY_HOP_HEADERS = {
     "host",
 }
 
+INTERNAL_UPSTREAM_HEADERS = {
+    "x-apim-user-object-id",
+    "x-apim-user-email",
+    "x-apim-user-name",
+    "x-apim-auth-method",
+    "x-apim-products",
+    "x-apim-backend-id",
+    "x-apim-managed-identity",
+    "x-apim-managed-identity-resource",
+    "x-apim-client-certificate",
+    "x-apim-client-certificate-thumbprints",
+    "x-user-id",
+    "x-user-name",
+    "x-ms-client-principal",
+    "x-ms-client-principal-name",
+}
+
 
 @dataclass(frozen=True)
 class ResolvedRoute:
@@ -205,7 +222,9 @@ def resolve_route(config: GatewayConfig, request: Request) -> ResolvedRoute | No
 
 def build_upstream_headers(request: Request, auth: AuthContext) -> dict[str, str]:
     headers: dict[str, str] = {
-        key: value for key, value in request.headers.items() if key.lower() not in HOP_BY_HOP_HEADERS
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in HOP_BY_HOP_HEADERS and key.lower() not in INTERNAL_UPSTREAM_HEADERS
     }
     incoming_host = request.headers.get("host")
     if incoming_host:

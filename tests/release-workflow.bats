@@ -3,6 +3,16 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+  export RELEASE_VERSION
+  RELEASE_VERSION="$(tr -d '[:space:]' <"${REPO_ROOT}/VERSION")"
+  export TAG_TEST_VERSION="9.9.9"
+  export TAG_TEST_NAME="v${TAG_TEST_VERSION}"
+  export TAG_TEST_VERSION_FILE="${BATS_TEST_TMPDIR}/VERSION"
+  printf '%s\n' "${TAG_TEST_VERSION}" >"${TAG_TEST_VERSION_FILE}"
+}
+
+teardown() {
+  git -C "${REPO_ROOT}" tag -d "${TAG_TEST_NAME}" >/dev/null 2>&1 || true
 }
 
 @test "release workflow pins GitHub Actions by SHA" {
@@ -28,4 +38,20 @@ for repo, (sha, selector) in expected.items():
 PY
 
   [ "${status}" -eq 0 ]
+}
+
+@test "make release is idempotent when the version is already prepared" {
+  run make -C "${REPO_ROOT}" release VERSION="${RELEASE_VERSION}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"release ${RELEASE_VERSION} is already prepared"* || "${output}" == *"release ${RELEASE_VERSION} is already complete"* ]]
+}
+
+@test "make release-tag is idempotent when the tag already exists" {
+  git -C "${REPO_ROOT}" -c tag.gpgSign=false tag -a "${TAG_TEST_NAME}" -m "Release ${TAG_TEST_NAME}"
+
+  run make -C "${REPO_ROOT}" release-tag VERSION="${TAG_TEST_VERSION}" VERSION_FILE="${TAG_TEST_VERSION_FILE}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"tag ${TAG_TEST_NAME} already exists; release is already complete"* ]]
 }

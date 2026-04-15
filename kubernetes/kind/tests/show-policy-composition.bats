@@ -7,7 +7,7 @@ setup() {
 }
 
 @test "show-policy-composition renders the dev Cloudflare policy and omits the deleted shared policy" {
-  run "${SCRIPT}" --target cilium --format markdown
+  run "${SCRIPT}" --execute --target cilium --format markdown
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'[`terraform/kubernetes/scripts/show-policy-composition.sh`](../scripts/show-policy-composition.sh)'* ]]
@@ -21,7 +21,7 @@ setup() {
 }
 
 @test "show-policy-composition renders kyverno shared and uat overlays" {
-  run "${SCRIPT}" --target kyverno --format text
+  run "${SCRIPT}" --execute --target kyverno --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: shared"* ]]
@@ -31,7 +31,7 @@ setup() {
 }
 
 @test "show-policy-composition supports dev sentiment egress slices" {
-  run "${SCRIPT}" --target cilium --namespace dev --label sentiment --egress --format text
+  run "${SCRIPT}" --execute --target cilium --namespace dev --label sentiment --egress --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: dev"* ]]
@@ -44,7 +44,7 @@ setup() {
 }
 
 @test "show-policy-composition supports uat sentiment ingress slices" {
-  run "${SCRIPT}" --target cilium --namespace uat --label sentiment --ingress --format text
+  run "${SCRIPT}" --execute --target cilium --namespace uat --label sentiment --ingress --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: uat"* ]]
@@ -57,13 +57,13 @@ setup() {
 }
 
 @test "show-policy-composition supports allow and deny label slices" {
-  run "${SCRIPT}" --target cilium --label allow --egress --format text
+  run "${SCRIPT}" --execute --target cilium --label allow --egress --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"  CiliumClusterwideNetworkPolicy"* ]]
   [[ "${output}" == *"allow-application-backend-egress-via-fqdn"* ]]
 
-  run "${SCRIPT}" --target cilium --label deny --egress --format text
+  run "${SCRIPT}" --execute --target cilium --label deny --egress --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"  CiliumClusterwideNetworkPolicy"* ]]
@@ -72,7 +72,7 @@ setup() {
 }
 
 @test "show-policy-composition supports sit overlay slices" {
-  run "${SCRIPT}" --target cilium --namespace sit --label subnetcalc --format text
+  run "${SCRIPT}" --execute --target cilium --namespace sit --label subnetcalc --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Overlay: sit"* ]]

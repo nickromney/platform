@@ -88,6 +88,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}"
@@ -135,6 +136,7 @@ metadata:
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}"
@@ -154,6 +156,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}" \
@@ -179,6 +182,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --output-root "${MODULE_ROOT}"
@@ -199,6 +203,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}" \
@@ -225,6 +230,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}"
@@ -254,6 +260,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}"
@@ -285,6 +292,7 @@ count	direction	verdict	protocol	src_ns	src	dst_class	dst_ns	dst	dst_port
 EOF
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}"
@@ -326,6 +334,7 @@ EOF
   chmod +x "${TEST_BIN}/kubectl"
 
   run "${SCRIPT}" \
+    --execute \
     --input "${input_file}" \
     --category observability \
     --module-root "${MODULE_ROOT}"

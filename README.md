@@ -89,8 +89,8 @@ make
 make lint
 make fmt
 make check-version
-make release-dry-run
-make release-tag VERSION=0.1.0
+make release-dry-run VERSION=0.3.0
+make release-tag VERSION=0.3.0
 ```
 
 Notes:
@@ -100,12 +100,13 @@ Notes:
   you which focused subtree command to run next.
 - `make lint` is the repo-wide reporting pass.
 - `make fmt` applies the tracked markdown formatting pass.
-- `make check-version` verifies the root workflow pins and the repo-local
-  dependency age gates for npm, Bun, and uv-managed Python roots.
-- `make release` runs semantic-release locally when you intentionally want to
-  publish from the current history.
-- `make release-dry-run` runs the local semantic-release preview. The older
-  `make release-preview` alias still works.
+- `make check-version` verifies the root workflow pins, the vendored
+  `apim-simulator` tag/SHA metadata, and the repo-local dependency age gates
+  for npm, Bun, and uv-managed Python roots.
+- `make release VERSION=X.Y.Z` updates the root `VERSION` marker, runs the
+  release gate, and creates a reviewable release commit.
+- `make release-dry-run VERSION=X.Y.Z` previews that release-commit flow. The
+  older `make release-preview VERSION=X.Y.Z` alias still works.
 
 ## Validation And Supporting Workflows
 

@@ -40,6 +40,7 @@ from app.config import (
     UserConfig,
 )
 from app.openapi_import import parse_api_import
+from app.urls import http_url
 
 
 @dataclass(frozen=True)
@@ -961,7 +962,7 @@ def import_from_tofu_show_json(
             credentials = _first_block(res.values.get("credentials")) or {}
             authorization = _first_block(credentials.get("authorization")) or {}
             backends[res.name] = BackendConfig(
-                url=str(res.values.get("url") or "http://upstream"),
+                url=str(res.values.get("url") or http_url("upstream")),
                 description=str(res.values.get("description")) if res.values.get("description") else None,
                 authorization_scheme=(str(authorization.get("scheme")) if authorization.get("scheme") else None),
                 authorization_parameter=(
@@ -978,7 +979,7 @@ def import_from_tofu_show_json(
             api_name = str(res.values.get("name") or res.name)
             revision = str(res.values.get("revision") or "1")
             path = str(res.values.get("path") or api_name)
-            upstream = str(res.values.get("service_url") or "http://upstream")
+            upstream = str(res.values.get("service_url") or http_url("upstream"))
             subscription_header_names, subscription_query_param_names = _subscription_key_parameter_names(res.values)
             version_set_id = str(res.values.get("version_set_id") or "")
             version_set_name = _resource_name_from_id(version_set_id, id_to_name) if version_set_id else None

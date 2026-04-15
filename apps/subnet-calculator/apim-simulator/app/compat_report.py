@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any
-from xml.etree import ElementTree
+
+from defusedxml import ElementTree
 
 from app.terraform_import import (
     ImportDiagnostic,

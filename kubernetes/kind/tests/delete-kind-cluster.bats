@@ -37,7 +37,7 @@ fi
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}" --name kind-local --retries 3 --delay-seconds 0
+  run "${SCRIPT}" --execute --name kind-local --retries 3 --delay-seconds 0
 
   [ "${status}" -eq 0 ]
   [ "$(cat "${attempts_file}")" = "2" ]
@@ -67,7 +67,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}" --name kind-local --retries 3 --delay-seconds 0
+  run "${SCRIPT}" --execute --name kind-local --retries 3 --delay-seconds 0
 
   [ "${status}" -ne 0 ]
   [ "$(cat "${attempts_file}")" = "1" ]

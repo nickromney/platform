@@ -41,10 +41,10 @@ spec:
     - 10.0.0.0/24
 EOF
 
-  cat >"${render_stub}" <<EOF
+cat >"${render_stub}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'render %s\n' "\$1" >>"${log_file}"
+printf 'render %s\n' "\${@: -1}" >>"${log_file}"
 EOF
   chmod +x "${render_stub}"
 

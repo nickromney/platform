@@ -22,7 +22,7 @@ EOF
     PATH="${TEST_BIN}:/usr/bin:/bin" \
     YAMLLINT_BIN=yamllint \
     INSTALL_HINTS_SCRIPT="${hints}" \
-    /bin/bash "${SCRIPT}"
+    /bin/bash "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"FAIL yamllint not found in PATH"* ]]
@@ -47,7 +47,7 @@ EOF
   run env \
     PATH="${TEST_BIN}:/usr/bin:/bin" \
     YAMLLINT_BIN=yamllint \
-    /bin/bash "${SCRIPT}"
+    /bin/bash "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"yamllint 9.9.9"* ]]

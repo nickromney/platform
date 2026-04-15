@@ -63,6 +63,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${SCRIPT}" \
+    --execute \
     --server localhost:4245 \
     --namespace argocd \
     --capture-strategy adaptive \
@@ -125,6 +126,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${SCRIPT}" \
+    --execute \
     --server localhost:4245 \
     --namespace argocd \
     --capture-strategy adaptive \
@@ -157,6 +159,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${SCRIPT}" \
+    --execute \
     --server localhost:4245 \
     --namespace observability \
     --last 42 \
@@ -182,6 +185,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${SCRIPT}" \
+    --execute \
     --server localhost:4245 \
     --namespace observability \
     --capture-strategy last \
@@ -241,6 +245,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${SCRIPT}" \
+    --execute \
     --server localhost:4245 \
     --namespace observability \
     --capture-strategy last \

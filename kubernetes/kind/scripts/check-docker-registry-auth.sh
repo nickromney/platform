@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
+DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS="${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS:-5}"
 registry=""
 display_name=""
 positional=()
@@ -108,9 +109,36 @@ auths_contains_registry() {
 helper_contains_registry() {
   local helper_bin="$1"
   local listing=""
+  local listing_file=""
   local key=""
+  local pid=""
+  local waited=0
+  local helper_status=0
 
-  listing="$("${helper_bin}" list 2>/dev/null || true)"
+  listing_file="$(mktemp "${TMPDIR:-/tmp}/docker-credential-list.XXXXXX")"
+  "${helper_bin}" list >"${listing_file}" 2>/dev/null &
+  pid="$!"
+
+  while kill -0 "${pid}" 2>/dev/null; do
+    if [[ "${waited}" -ge "${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS}" ]]; then
+      kill "${pid}" 2>/dev/null || true
+      wait "${pid}" 2>/dev/null || true
+      rm -f "${listing_file}"
+      return 2
+    fi
+
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  wait "${pid}" || helper_status=$?
+  if [[ "${helper_status}" -ne 0 ]]; then
+    rm -f "${listing_file}"
+    return 1
+  fi
+
+  listing="$(cat "${listing_file}")"
+  rm -f "${listing_file}"
   [[ -n "${listing}" ]] || return 1
 
   while IFS= read -r key; do
@@ -213,9 +241,17 @@ if [[ -n "${helper_name}" ]]; then
     exit 1
   fi
 
+  helper_status=0
   if helper_contains_registry "${helper_bin}"; then
     ok "${display_name} credentials found via ${helper_bin}"
     exit 0
+  else
+    helper_status=$?
+  fi
+
+  if [[ "${helper_status}" -eq 2 ]]; then
+    warn "${display_name} credential helper ${helper_bin} timed out after ${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS}s (run: $(login_hint))"
+    exit 1
   fi
 
   warn "${display_name} credentials not found via ${helper_bin} (run: $(login_hint))"

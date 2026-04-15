@@ -17,7 +17,7 @@ teardown() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'metadata:\n  name: shared-baseline'* ]]
-  [[ "${output}" == *$'specs:\n- description:'* ]]
+  [[ "${output}" == *$'specs:\n  - description:'* ]]
   [[ "${output}" == *'port: "53"'* ]]
   [[ "${output}" != *$'\nkind:'* ]]
   [[ "${output}" != *$'\napiVersion:'* ]]
@@ -31,7 +31,7 @@ teardown() {
   [[ "${output}" == *$'networkPolicy:\n  policies:'* ]]
   [[ "${output}" == *'name: sentiment-router-ingress'* ]]
   [[ "${output}" == *'name: sentiment-backend-ingress'* ]]
-  [[ "${output}" == *$'    specs:\n    - description:'* ]]
+  [[ "${output}" == *$'      specs:\n        - description:'* ]]
 }
 
 @test "render-cilium-policy-values writes one file per document with split-dir" {
@@ -46,7 +46,7 @@ teardown() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'metadata:\n  name: subnetcalc-router-ingress'* ]]
-  [[ "${output}" == *$'specs:\n- description:'* ]]
+  [[ "${output}" == *$'specs:\n  - description:'* ]]
 }
 
 @test "render-cilium-policy-values can inject a namespace for namespaced policy input" {
@@ -55,7 +55,7 @@ teardown() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'metadata:\n  name: subnetcalc-cloudflare-live-fetch\n  namespace: karpenter'* ]]
-  [[ "${output}" == *$'specs:\n- description:'* ]]
+  [[ "${output}" == *$'specs:\n  - description:'* ]]
 }
 
 @test "render-cilium-policy-values rejects namespace injection for clusterwide input" {

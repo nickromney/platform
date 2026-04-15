@@ -1,7 +1,0 @@
-{
-  "method": "GET",
-  "path": "/sample",
-  "query": {
-    "mode": "debug"
-  }
-}

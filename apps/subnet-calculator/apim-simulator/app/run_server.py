@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from string import Template
 
 import uvicorn
 
@@ -21,8 +22,12 @@ def _prepare_runtime_config() -> None:
     if target_path.exists():
         return
 
+    rendered = source_path.read_text(encoding="utf-8")
+    if os.getenv("APIM_CONFIG_TEMPLATE_SUBSTITUTE", "").strip().lower() in {"1", "true", "yes", "on"}:
+        rendered = Template(rendered).safe_substitute(os.environ)
+
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    target_path.write_text(rendered, encoding="utf-8")
 
 
 def main() -> None:

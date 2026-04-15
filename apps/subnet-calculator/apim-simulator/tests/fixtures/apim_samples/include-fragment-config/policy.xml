@@ -1,8 +1,0 @@
-<policies>
-  <inbound>
-    <include-fragment fragment-id="common-header" />
-  </inbound>
-  <backend />
-  <outbound />
-  <on-error />
-</policies>
