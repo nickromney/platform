@@ -11,11 +11,20 @@ VERSION_FILE="${VERSION_FILE:-${ROOT_DIR}/VERSION}"
 usage() {
   cat <<'EOF'
 Usage:
+  release.sh [--dry-run] [--execute] [--version X.Y.Z]
+  release.sh [--dry-run] [--execute] X.Y.Z
   make release VERSION=X.Y.Z
 
+Options:
+  --version X.Y.Z  Release version to prepare.
+  --dry-run        Print the release plan without changing files.
+  --execute        Execute the release preparation.
+  -h, --help       Show this help.
+
 Environment:
-  DRY_RUN=1      Print the release plan without changing files.
-  SKIP_CHECKS=1  Skip check-version, lint, and shell tests.
+  VERSION=...      Release version to prepare.
+  DRY_RUN=1        Print the release plan without changing files.
+  SKIP_CHECKS=1    Skip check-version, lint, and shell tests.
 EOF
 }
 
@@ -81,10 +90,12 @@ fi
 
 TAG="v${VERSION}"
 RELEASE_COMMIT_SUBJECT="chore(release): bump version to ${VERSION}"
+VERSION_REL_PATH="${VERSION_FILE#${ROOT_DIR}/}"
 CURRENT_VERSION=""
 if [[ -f "${VERSION_FILE}" ]]; then
   CURRENT_VERSION="$(tr -d '[:space:]' <"${VERSION_FILE}")"
 fi
+VERSION_FILE_STATUS="$(git -C "${ROOT_DIR}" status --short -- "${VERSION_REL_PATH}")"
 
 if [[ "${CURRENT_VERSION}" == "${VERSION}" ]]; then
   RELEASE_COMMIT_PRESENT="$(
@@ -96,9 +107,11 @@ if [[ "${CURRENT_VERSION}" == "${VERSION}" ]]; then
     exit 0
   fi
 
-  echo "release ${VERSION} is already prepared"
-  echo "next: merge the release commit, then run make release-tag VERSION=${VERSION} from main"
-  exit 0
+  if [[ -z "${VERSION_FILE_STATUS}" ]]; then
+    echo "release ${VERSION} is already prepared"
+    echo "next: merge the release commit, then run make release-tag VERSION=${VERSION} from main"
+    exit 0
+  fi
 fi
 
 if git -C "${ROOT_DIR}" rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
@@ -106,9 +119,12 @@ if git -C "${ROOT_DIR}" rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; the
   exit 1
 fi
 
-if [[ "${DRY_RUN}" != "1" && -n "$(git -C "${ROOT_DIR}" status --short)" ]]; then
-  echo "git worktree must be clean before a real release" >&2
-  exit 1
+if [[ "${DRY_RUN}" != "1" ]]; then
+  NON_VERSION_STATUS="$(git -C "${ROOT_DIR}" status --short -- . ":(exclude)${VERSION_REL_PATH}")"
+  if [[ -n "${NON_VERSION_STATUS}" || ( -n "${VERSION_FILE_STATUS}" && "${CURRENT_VERSION}" != "${VERSION}" ) ]]; then
+    echo "git worktree must be clean before a real release" >&2
+    exit 1
+  fi
 fi
 
 run() {
@@ -119,7 +135,7 @@ run() {
 }
 
 write_version() {
-  echo "+ write ${VERSION_FILE#${ROOT_DIR}/} ${VERSION}"
+  echo "+ write ${VERSION_REL_PATH} ${VERSION}"
   if [[ "${DRY_RUN}" != "1" ]]; then
     printf '%s\n' "${VERSION}" >"${VERSION_FILE}"
   fi
