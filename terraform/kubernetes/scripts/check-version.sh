@@ -119,6 +119,7 @@ STAGES_DIR="${STAGES_DIR:-${REPO_ROOT}/kubernetes/kind/stages}"
 TARGET_TFVARS="${TARGET_TFVARS:-}"
 PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
 ARGOCD_APPS_DIR="${ARGOCD_APPS_DIR:-${STACK_DIR}/apps/argocd-apps}"
+APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/subnet-calculator/apim-simulator}"
 export VARIABLES_FILE="${VARIABLES_FILE:-${STACK_DIR}/variables.tf}"
 HELM_READY_REPOS=""
 CHECK_VERSION_CACHE_DIR="${CHECK_VERSION_CACHE_DIR:-}"
@@ -600,7 +601,22 @@ collect_declared_image_refs() {
           done < <(grep -nEi '^[[:space:]]*FROM[[:space:]]+' "${file}" 2>/dev/null || true)
           ;;
       esac
-    done < <(find "${scan_root}" -type f \( -name '*.yaml' -o -name '*.yml' -o -name 'Dockerfile*' \) | LC_ALL=C sort)
+    done < <(
+      find "${scan_root}" \
+        \( \
+          -path '*/.git' -o \
+          -path '*/.terraform' -o \
+          -path '*/.venv' -o \
+          -path '*/venv' -o \
+          -path '*/node_modules' -o \
+          -path '*/dist' -o \
+          -path '*/build' -o \
+          -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+          -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+        \) -prune \
+        -o -type f \( -name '*.yaml' -o -name '*.yml' -o -name 'Dockerfile*' \) -print \
+        | LC_ALL=C sort
+    )
   done
 }
 
@@ -798,8 +814,15 @@ image_ref_availability() {
   local image_ref="$1"
   local stderr=""
   local rc=0
+  local registry=""
 
   if [ -z "${image_ref}" ]; then
+    printf "unknown\n"
+    return 0
+  fi
+
+  registry="$(image_ref_registry "${image_ref}")"
+  if [ "${registry}" = "dhi.io" ] && [ "${CHECK_VERSION_PROBE_PRIVATE_IMAGES:-0}" != "1" ]; then
     printf "unknown\n"
     return 0
   fi
@@ -842,7 +865,13 @@ docker_manifest_inspect_safe() {
     elapsed=$(( $(date +%s) - start ))
     if [ "${elapsed}" -ge "${timeout}" ]; then
       kill "${pid}" >/dev/null 2>&1 || true
-      wait "${pid}" >/dev/null 2>&1 || true
+      sleep 1
+      if kill -0 "${pid}" >/dev/null 2>&1; then
+        kill -9 "${pid}" >/dev/null 2>&1 || true
+      fi
+      while wait "${pid}" >/dev/null 2>&1; do
+        :
+      done
       rm -f "${tmp}"
       return 124
     fi
@@ -1506,7 +1535,22 @@ emit_app_dependency_rows() {
         "${latest_overall:-}" \
         "${status}"
     done < <(package_json_direct_dependencies "${package_json}")
-  done < <(find "${REPO_ROOT}/apps" -type f -name package.json | LC_ALL=C sort)
+  done < <(
+    find "${REPO_ROOT}/apps" \
+      \( \
+        -path '*/.git' -o \
+        -path '*/.terraform' -o \
+        -path '*/.venv' -o \
+        -path '*/venv' -o \
+        -path '*/node_modules' -o \
+        -path '*/dist' -o \
+        -path '*/build' -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+      \) -prune \
+      -o -type f -name package.json -print \
+      | LC_ALL=C sort
+  )
 
   while IFS= read -r pyproject; do
     app_dir="$(dirname "${pyproject}")"
@@ -1543,7 +1587,22 @@ emit_app_dependency_rows() {
         }
       ' "${pyproject}" 2>/dev/null
     )
-  done < <(find "${REPO_ROOT}/apps" -type f -name pyproject.toml | LC_ALL=C sort)
+  done < <(
+    find "${REPO_ROOT}/apps" \
+      \( \
+        -path '*/.git' -o \
+        -path '*/.terraform' -o \
+        -path '*/.venv' -o \
+        -path '*/venv' -o \
+        -path '*/node_modules' -o \
+        -path '*/dist' -o \
+        -path '*/build' -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+      \) -prune \
+      -o -type f -name pyproject.toml -print \
+      | LC_ALL=C sort
+  )
 }
 
 emit_external_image_rows() {

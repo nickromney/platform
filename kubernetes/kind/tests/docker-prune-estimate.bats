@@ -26,7 +26,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"docker builder prune -af : 21.26 GB"* ]]

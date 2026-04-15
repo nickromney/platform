@@ -51,6 +51,7 @@ KYVERNO_CLEANUP_DEPLOY_NAME="${KYVERNO_CLEANUP_DEPLOY_NAME:-kyverno-cleanup-cont
 GATEWAY_DEPLOY_WAIT_SECONDS="${GATEWAY_DEPLOY_WAIT_SECONDS:-900}"
 OIDC_DISCOVERY_WAIT_SECONDS="${OIDC_DISCOVERY_WAIT_SECONDS:-900}"
 GATEWAY_RECONCILE_WAIT_SECONDS="${GATEWAY_RECONCILE_WAIT_SECONDS:-300}"
+POST_APISERVER_RESTART_SETTLE_SECONDS="${POST_APISERVER_RESTART_SETTLE_SECONDS:-30}"
 
 gateway_condition_status() {
   local condition_type="${1}"
@@ -356,6 +357,7 @@ deployment_pods_need_early_recycle() {
   local pod_name
   local waiting_reasons
   local terminated_reasons
+  local ready_statuses
   local pod_logs
 
   selector="$(deployment_selector "${namespace}" "${deploy_name}")"
@@ -384,8 +386,14 @@ deployment_pods_need_early_recycle() {
       kubectl -n "${namespace}" get pod "${pod_name}" \
         -o jsonpath='{range .status.containerStatuses[*]}{.lastState.terminated.reason}{" "}{end}' 2>/dev/null || true
     )"
+    ready_statuses="$(
+      kubectl -n "${namespace}" get pod "${pod_name}" \
+        -o jsonpath='{range .status.containerStatuses[*]}{.ready}{" "}{end}' 2>/dev/null || true
+    )"
 
-    if [[ "${waiting_reasons}" != *"CrashLoopBackOff"* && "${terminated_reasons}" != *"Error"* ]]; then
+    if [[ "${waiting_reasons}" != *"CrashLoopBackOff"* \
+      && "${terminated_reasons}" != *"Error"* \
+      && " ${ready_statuses} " != *" false "* ]]; then
       continue
     fi
 
@@ -493,6 +501,7 @@ Environment variables:
   GATEWAY_DEPLOY_WAIT_SECONDS
   OIDC_DISCOVERY_WAIT_SECONDS
   GATEWAY_RECONCILE_WAIT_SECONDS
+  POST_APISERVER_RESTART_SETTLE_SECONDS
 
 This is a local-dev helper; it mutates the kind node container and will restart
 the kube-apiserver.
@@ -666,6 +675,11 @@ if ! wait_for_kube_apiserver_ready 120 3; then
 fi
 
 docker exec "${CONTROL_PLANE_NODE}" rm -f "${CONTAINER_MANIFEST_BACKUP}" >/dev/null 2>&1 || true
+
+if [[ "${POST_APISERVER_RESTART_SETTLE_SECONDS}" =~ ^[0-9]+$ ]] && (( POST_APISERVER_RESTART_SETTLE_SECONDS > 0 )); then
+  ok "allowing in-cluster controllers to reconnect after kube-apiserver restart (${POST_APISERVER_RESTART_SETTLE_SECONDS}s)"
+  sleep "${POST_APISERVER_RESTART_SETTLE_SECONDS}"
+fi
 
 wait_for_deployment_recovery_after_apiserver_restart \
   "${KYVERNO_NAMESPACE}" \

@@ -124,8 +124,8 @@ spec:
               memory: 64Mi
               ephemeral-storage: 128Mi
             limits:
-              cpu: 200m
-              memory: 128Mi
+              cpu: 500m
+              memory: 512Mi
               ephemeral-storage: 256Mi
           volumeMounts:
             - name: config
@@ -149,13 +149,6 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 6
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
       volumes:
         - name: config
           configMap:

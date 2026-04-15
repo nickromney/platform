@@ -28,12 +28,16 @@ fail() {
 
 list_yaml_files() {
   if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    git -C "${REPO_ROOT}" ls-files -z -- '*.yaml' '*.yml' '.yamllint'
+    git -C "${REPO_ROOT}" ls-files -z -- \
+      '*.yaml' \
+      '*.yml' \
+      '.yamllint' \
+      ':(exclude)apps/subnet-calculator/apim-simulator/**'
     return 0
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' \) -prune \
+    \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/subnet-calculator/apim-simulator" \) -prune \
     -o \( -type f \( -name '*.yaml' -o -name '*.yml' -o -name '.yamllint' \) -print0 \) | sort -z
 }
 

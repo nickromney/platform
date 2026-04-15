@@ -26,7 +26,7 @@ EOF
   run env \
     PATH="${TEST_BIN}:/usr/bin:/bin" \
     GIT_BIN=git \
-    /bin/bash "${SCRIPT}"
+    /bin/bash "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"WARN markdownlint not found in PATH; skipping tracked Markdown formatting"* ]]
@@ -60,7 +60,7 @@ EOF
     PATH="${TEST_BIN}:/usr/bin:/bin" \
     GIT_BIN=git \
     MARKDOWNLINT_BIN=markdownlint \
-    /bin/bash "${SCRIPT}"
+    /bin/bash "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"formatting 2 tracked Markdown file(s)"* ]]

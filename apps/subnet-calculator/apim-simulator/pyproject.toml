@@ -1,10 +1,11 @@
 [project]
 name = "apim-simulator"
-version = "0.2.0"
+version = "0.3.0"
 description = "Config-driven Azure API Management simulator for local Docker-first testing"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.0",
+    "defusedxml>=0.7.1",
     "httpx>=0.28.1",
     "pyyaml>=6.0.2",
     "pyjwt[crypto]>=2.10.1",
@@ -19,7 +20,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "coverage[toml]>=7.6.0",
+    "diff-cover>=9.2.0",
     "ruff>=0.8.0",
+]
+mcp = [
+    "mcp==1.26.0",
 ]
 
 [build-system]
@@ -39,8 +46,19 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --strict-markers"
 markers = [
+    "contract(*ids): associates a test with one or more contract ids from contracts/contract_matrix.yml",
     "integration: requires external services (e.g. Keycloak) running",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+relative_files = true
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true
+skip_covered = false
 
 [tool.ruff]
 line-length = 120

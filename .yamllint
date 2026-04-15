@@ -7,6 +7,7 @@ ignore: |
   **/node_modules/
   **/.venv/
   **/.terraform/
+  apps/subnet-calculator/apim-simulator/
   terraform/kubernetes/apps/nginx-gateway-fabric-crds/*.yaml
   terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml
   terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ARG PYTHON_BUILD_IMAGE=dhi.io/python:3.13-debian13-dev
 ARG PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13
 FROM ${PYTHON_BUILD_IMAGE} AS builder
@@ -11,7 +12,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv sync --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 FROM ${PYTHON_RUNTIME_IMAGE}
 
@@ -28,7 +30,6 @@ WORKDIR /app
 
 COPY --chown=${APP_UID}:${APP_GID} --from=builder /app/.venv /app/.venv
 COPY --chown=${APP_UID}:${APP_GID} app ./app
-COPY --chown=${APP_UID}:${APP_GID} examples ./examples
 
 EXPOSE 8000
 

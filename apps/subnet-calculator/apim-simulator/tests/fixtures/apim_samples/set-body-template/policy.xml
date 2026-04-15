@@ -1,8 +1,0 @@
-<policies>
-  <inbound>
-    <set-body>{"method":"{method}","path":"{path}"}</set-body>
-  </inbound>
-  <backend />
-  <outbound />
-  <on-error />
-</policies>

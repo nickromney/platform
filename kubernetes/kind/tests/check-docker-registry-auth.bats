@@ -29,7 +29,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/docker-credential-desktop"
 
-  run env DOCKER_CONFIG_PATH="${config_file}" "${SCRIPT}" dhi.io "Docker Hardened Images (dhi.io)"
+  run env DOCKER_CONFIG_PATH="${config_file}" "${SCRIPT}" --execute dhi.io "Docker Hardened Images (dhi.io)"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   Docker Hardened Images (dhi.io) credentials found via docker-credential-desktop"* ]]
@@ -55,7 +55,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/docker-credential-desktop"
 
-  run env DOCKER_CONFIG_PATH="${config_file}" "${SCRIPT}" dhi.io "Docker Hardened Images (dhi.io)"
+  run env DOCKER_CONFIG_PATH="${config_file}" "${SCRIPT}" --execute dhi.io "Docker Hardened Images (dhi.io)"
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"WARN Docker Hardened Images (dhi.io) credentials not found via docker-credential-desktop (run: docker login dhi.io)"* ]]

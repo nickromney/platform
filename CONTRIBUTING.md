@@ -35,30 +35,26 @@ it.
 
 ## Commit Messages and Releases
 
-This repository is set up for manual semantic-release previews plus
-`v`-prefixed git tags.
+This repository is set up for explicit release-prep commits plus `v`-prefixed
+git tags.
 
 Use conventional commit messages where practical so release previews and
 release notes stay useful.
 
 Useful entrypoints:
 
-1. `make check-version` to verify the root workflow pins and repo-local
-   dependency age gates before a release.
-2. `make release-dry-run` to see what semantic-release would do from the
-   current history.
-3. `make release` when you intentionally want to run semantic-release locally.
-4. `make release-tag VERSION=0.1.0` to create an annotated release tag from
-   `main` when you intentionally want to seed or cut a manual tag.
+1. `make check-version` to verify the root workflow pins, vendored
+   `apim-simulator` metadata, and repo-local dependency age gates before a
+   release.
+2. `make release-dry-run VERSION=X.Y.Z` to preview the release-prep commit.
+3. `make release VERSION=X.Y.Z` on a clean release branch to update `VERSION`,
+   run the release gate, and create the release-prep commit.
+4. Merge the release branch.
+5. `make release-tag VERSION=X.Y.Z` from updated `main` to create the
+   annotated `vX.Y.Z` tag.
 
-The initial baseline tag for this repository should be `v0.1.0`.
-
-The release rules are intentionally simple:
-
-1. `feat` releases a minor version.
-2. `fix`, `perf`, and `refactor` release a patch version.
-3. `docs`, `chore`, `ci`, `style`, and `test` do not release by themselves.
-4. Any `BREAKING CHANGE` triggers a major version.
+`make release` and `make release-tag` are idempotent for already-prepared or
+already-tagged releases.
 
 ## Repository Shape
 

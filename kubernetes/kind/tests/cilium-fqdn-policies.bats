@@ -14,7 +14,7 @@ setup() {
     file="${REPO_ROOT}/${relpath}"
     grep -Fq "rules:" "${file}"
     grep -Fq "dns:" "${file}"
-    grep -Fq 'matchPattern: "*"' "${file}"
+    grep -Eq "matchPattern: ['\"]\\*['\"]" "${file}"
   done <<EOF
 ${fqdn_files}
 EOF

@@ -1,0 +1,266 @@
+# Bootstrap slice for enforced contract coverage.
+# Expand this file iteratively until it covers every supported/adapted contract
+# documented in docs/SCOPE.md and docs/CAPABILITY-MATRIX.md.
+version: 1
+scope: bootstrap
+contracts:
+  - id: GW-HEALTH
+    status: supported
+    surface: gateway
+    module: app/main.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#gateway--service-level
+    owner_tests:
+      - tests/test_gateway.py::test_health
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: GW-ROOT-HINT
+    status: supported
+    surface: gateway
+    module: app/main.py
+    doc_refs:
+      - docs/CAPABILITY-MATRIX.md#gateway--service-level
+    owner_tests:
+      - tests/test_gateway.py::test_root_hint_lists_builtin_entrypoints
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: GW-STARTUP-PROBE
+    status: supported
+    surface: gateway
+    module: app/main.py
+    doc_refs:
+      - docs/CAPABILITY-MATRIX.md#gateway--service-level
+    owner_tests:
+      - tests/test_gateway.py::test_startup_probe_returns_200_when_ready
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: ROUTE-HOST-MATCH
+    status: supported
+    surface: routing
+    module: app/proxy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#apis-and-operations
+    owner_tests:
+      - tests/test_gateway.py::test_route_host_match_selects_expected_upstream
+    fixture_or_golden: null
+    assertion_kind: gateway-upstream
+
+  - id: ROUTE-VERSION-HEADER
+    status: supported
+    surface: routing
+    module: app/proxy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#apis-and-operations
+    owner_tests:
+      - tests/test_gateway.py::test_api_version_set_header_routes_to_correct_version
+    fixture_or_golden: null
+    assertion_kind: gateway-upstream
+
+  - id: ROUTE-VERSION-QUERY
+    status: supported
+    surface: routing
+    module: app/proxy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#apis-and-operations
+    owner_tests:
+      - tests/test_gateway.py::test_api_version_set_query_routes_to_correct_version
+    fixture_or_golden: null
+    assertion_kind: gateway-upstream
+
+  - id: ROUTE-VERSION-SEGMENT
+    status: supported
+    surface: routing
+    module: app/proxy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#apis-and-operations
+    owner_tests:
+      - tests/test_gateway.py::test_api_version_set_segment_routes_and_strips_version_segment_for_upstream
+    fixture_or_golden: null
+    assertion_kind: gateway-upstream
+
+  - id: AUTH-SUBSCRIPTION-REQUIRED
+    status: supported
+    surface: auth
+    module: app/security.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#products-and-subscriptions
+    owner_tests:
+      - tests/test_gateway.py::test_missing_subscription_key_returns_401
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: AUTH-PRODUCT-GRANT
+    status: supported
+    surface: auth
+    module: app/security.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#products-and-subscriptions
+    owner_tests:
+      - tests/test_gateway.py::test_product_access_denied_without_product_grant
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: TRACE-LOOKUP
+    status: supported
+    surface: observability
+    module: app/main.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#observability
+    owner_tests:
+      - tests/test_gateway.py::test_trace_headers_and_trace_lookup_work
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: MGMT-TENANT-KEY
+    status: supported
+    surface: management
+    module: app/main.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_gateway.py::test_management_plane_requires_tenant_key
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: MGMT-SUMMARY
+    status: supported
+    surface: management
+    module: app/main.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_gateway.py::test_management_summary_lists_routes_and_gateway_scope
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: MGMT-RESOURCE-COLLECTIONS
+    status: supported
+    surface: management
+    module: app/resource_projection.py
+    doc_refs:
+      - docs/APIM-SDK-SURFACE-GUIDE.md#core-mapping
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_gateway.py::test_management_resource_collections_expose_service_scoped_ids
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: MGMT-OPENAPI-IMPORT
+    status: partial
+    surface: management
+    module: app/openapi_import.py
+    doc_refs:
+      - docs/NEXT-FEATURES.md#better-import-fidelity
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_gateway.py::test_management_api_import_openapi_endpoint_creates_routable_api
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: MGMT-RELOAD
+    status: supported
+    surface: management
+    module: app/main.py
+    doc_refs:
+      - docs/CAPABILITY-MATRIX.md#gateway--service-level
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_gateway.py::test_reload_endpoint_reloads_config
+    fixture_or_golden: null
+    assertion_kind: http-json
+
+  - id: POLICY-SET-HEADER
+    status: supported
+    surface: policy
+    module: app/policy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#policies
+    owner_tests:
+      - tests/test_policy_golden.py::test_golden_policy_set_header_override
+    fixture_or_golden: inline-xml
+    assertion_kind: policy-golden
+
+  - id: POLICY-RETURN-RESPONSE
+    status: supported
+    surface: policy
+    module: app/policy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#policies
+    owner_tests:
+      - tests/test_policy_golden.py::test_golden_policy_return_response
+    fixture_or_golden: inline-xml
+    assertion_kind: policy-golden
+
+  - id: POLICY-INCLUDE-FRAGMENT
+    status: supported
+    surface: policy
+    module: app/policy.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#policies
+    owner_tests:
+      - tests/test_policy_golden.py::test_golden_policy_include_fragment_inserts_fragment_nodes
+    fixture_or_golden: inline-xml
+    assertion_kind: policy-golden
+
+  - id: TF-IMPORT-MVP
+    status: supported
+    surface: import
+    module: app/terraform_import.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_terraform_import.py::test_config_from_tofu_show_json_mvp
+    fixture_or_golden: inline-json
+    assertion_kind: config-projection
+
+  - id: TF-COMPAT-REPORT
+    status: partial
+    surface: compat
+    module: app/compat_report.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/CAPABILITY-MATRIX.md#management-plane
+    owner_tests:
+      - tests/test_terraform_import.py::test_compat_report_is_green_for_supported_fixture
+    fixture_or_golden: tests/fixtures/tofu_show/sample.json
+    assertion_kind: compat-report
+
+  - id: PROJECTION-SUMMARY
+    status: supported
+    surface: projection
+    module: app/resource_projection.py
+    doc_refs:
+      - docs/APIM-SDK-SURFACE-GUIDE.md#core-mapping
+    owner_tests:
+      - tests/test_resource_projection.py::test_project_summary_uses_service_scoped_ids_and_masks_secrets
+    fixture_or_golden: inline-config
+    assertion_kind: resource-projection
+
+  - id: SAMPLE-COMPAT-HARNESS
+    status: adapted
+    surface: compat
+    module: scripts/check_sample_compat.py
+    doc_refs:
+      - docs/SCOPE.md#supported-now
+      - docs/NEXT-FEATURES.md#broader-sample-compatibility-coverage
+    owner_tests:
+      - tests/test_sample_compat.py::test_sample_compat_harness_is_green_for_supported_and_adapted_fixtures
+    fixture_or_golden: tests/fixtures/apim_samples/manifest.json
+    assertion_kind: fixture-harness

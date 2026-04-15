@@ -9,6 +9,7 @@ setup() {
 
   mkdir -p "${FIXTURE_ROOT}/.github/workflows"
   mkdir -p "${FIXTURE_ROOT}/apps/demo"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator"
 
   cat >"${FIXTURE_ROOT}/.github/workflows/release.yml" <<'EOF'
 name: Release
@@ -37,6 +38,24 @@ version = "0.1.0"
 exclude-newer = "7 days"
 EOF
 
+  cat >"${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator/pyproject.toml" <<'EOF'
+[project]
+name = "apim-simulator"
+version = "0.3.0"
+EOF
+
+  cat >"${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator.vendor.json" <<'EOF'
+{
+  "vendored_path": "apps/subnet-calculator/apim-simulator",
+  "upstream": {
+    "origin": "git@example.com:example/apim-simulator.git",
+    "ref_kind": "tag",
+    "requested_ref": "v0.3.0",
+    "resolved_commit": "90254521d2f3eb13f5f1f2a03f7c02e1f14973d0"
+  }
+}
+EOF
+
   mkdir -p "${GITHUB_FIXTURES}/repos/actions/checkout/commits"
   mkdir -p "${GITHUB_FIXTURES}/repos/actions/setup-node/commits"
   printf '{"sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd"}\n' >"${GITHUB_FIXTURES}/repos/actions/checkout/commits/v6.0.2"
@@ -48,10 +67,11 @@ EOF
     CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
     CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
     CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"actions/checkout v6.0.2 resolves to the pinned SHA"* ]]
+  [[ "${output}" == *"apim-simulator v0.3.0 (90254521d2f3eb13f5f1f2a03f7c02e1f14973d0) is vendored; version 0.3.0; profile full"* ]]
   [[ "${output}" == *"All .npmrc files set min-release-age=7"* ]]
   [[ "${output}" == *"All bunfig.toml files set minimumReleaseAge=604800"* ]]
   [[ "${output}" == *"All uv-managed pyproject.toml files set exclude-newer='7 days'"* ]]
@@ -67,7 +87,7 @@ EOF
     CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
     CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
     CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *".npmrc min-release-age gates are not synchronized"* ]]

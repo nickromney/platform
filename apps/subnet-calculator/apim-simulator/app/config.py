@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.urls import http_url
+
 
 class ApiVersioningScheme(StrEnum):
     Header = "Header"
@@ -407,7 +409,7 @@ class RouteConfig(BaseModel):
 class GatewayConfig(BaseModel):
     schema_version: int = 1
     service: ServiceMetadataConfig = Field(default_factory=ServiceMetadataConfig)
-    allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3007"])
+    allowed_origins: list[str] = Field(default_factory=lambda: [http_url("localhost:3007")])
     allow_anonymous: bool = False
     client_certificate: ClientCertificateConfig = Field(default_factory=ClientCertificateConfig)
     oidc: OIDCConfig | None = None
@@ -575,17 +577,16 @@ class ApiConfig(BaseModel):
 
 
 def _default_config_from_env() -> GatewayConfig:
-    backend_base_url = os.getenv("BACKEND_BASE_URL", "http://mock-backend:8080")
+    backend_base_url = os.getenv("BACKEND_BASE_URL", http_url("mock-backend:8080"))
     backend_path_prefix = os.getenv("BACKEND_PATH_PREFIX", "/api")
-    oidc_issuer = os.getenv("OIDC_ISSUER", "http://localhost:8180/realms/subnet-calculator")
+    oidc_issuer = os.getenv("OIDC_ISSUER", http_url("localhost:8180/realms/subnet-calculator"))
     oidc_audience = os.getenv("OIDC_AUDIENCE", "api-app")
     oidc_jwks_uri = os.getenv(
-        "OIDC_JWKS_URI", "http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs"
+        "OIDC_JWKS_URI", http_url("keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs")
     )
+    default_allowed_origins = ",".join([http_url("localhost:3000"), http_url("localhost:8000")])
     allowed_origins = [
-        origin.strip()
-        for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
-        if origin.strip()
+        origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", default_allowed_origins).split(",") if origin.strip()
     ]
     allow_anonymous = os.getenv("ALLOW_ANONYMOUS", "true").lower() == "true"
 

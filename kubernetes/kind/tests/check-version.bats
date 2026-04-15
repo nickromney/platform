@@ -92,7 +92,7 @@ EOF
     \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/apim-simulator/uv.lock' 'anyio')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf '604800\n2.0.8\n2026-04-04T13:01:24.862941Z\n4.12.1')" ]
+  [ "${output}" = "$(printf '604800\n2.0.8\n2026-04-08T06:28:18.790055Z\n4.12.1')" ]
 }
 
 @test "check-version classifies internal image refs and docker hub repositories" {

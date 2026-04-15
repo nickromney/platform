@@ -12,7 +12,7 @@ setup() {
     KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
     KIND_WORKER_COUNT=1 \
     KIND_IMAGE_DISTRIBUTION_MODE=load \
-    "${RENDER_SCRIPT}"
+    "${RENDER_SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [ -f "${OUTPUT_FILE}" ]
@@ -27,7 +27,7 @@ setup() {
     KIND_WORKER_COUNT=2 \
     KIND_IMAGE_DISTRIBUTION_MODE=registry \
     KIND_LOCAL_IMAGE_CACHE_HOST=host.docker.internal:5002 \
-    "${RENDER_SCRIPT}"
+    "${RENDER_SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   grep -F 'worker_count = 2' "${OUTPUT_FILE}"
@@ -43,7 +43,7 @@ setup() {
   run env \
     KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
     KIND_IMAGE_DISTRIBUTION_MODE=baked \
-    "${RENDER_SCRIPT}"
+    "${RENDER_SCRIPT}" --execute
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"KIND_BAKED_NODE_IMAGE is required"* ]]

@@ -10,15 +10,9 @@ VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 CHECK_VERSION_SCRIPT ?= scripts/check-version.sh
+RELEASE_SCRIPT ?= scripts/release.sh
 SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
 SONAR_SCAN_REPO ?= $(CURDIR)
-SEMANTIC_RELEASE_CMD ?= npx --yes \
-	--package semantic-release \
-	--package @semantic-release/commit-analyzer \
-	--package @semantic-release/release-notes-generator \
-	--package @semantic-release/github \
-	--package conventional-changelog-conventionalcommits \
-	semantic-release
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 
 .DEFAULT_GOAL := help
@@ -42,9 +36,9 @@ help:
 	@echo "  make lint-shell   Run repo shell audit checks"
 	@echo "  make fmt          Apply repo-level auto-formatters"
 	@echo "  make check-version  Verify repo-level dependency/version guardrails"
-	@echo "  make release      Run semantic-release locally"
-	@echo "  make release-dry-run  Preview the next semantic-release result locally"
-	@echo "  make release-tag VERSION=0.1.0  Create an annotated v-version tag from main"
+	@echo "  make release VERSION=0.3.0  Bump VERSION, run checks, and create a release commit"
+	@echo "  make release-dry-run VERSION=0.3.0  Preview the release commit flow"
+	@echo "  make release-tag VERSION=0.3.0  Create an annotated v-version tag from main"
 	@echo "  make lint-cilium-live  Validate deployed Cilium policies via the current kubeconfig"
 	@echo "  make lint-kyverno-live  Validate deployed Kyverno policy matches via the current kubeconfig"
 	@echo "  make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator  Run SonarQube on any local repo"
@@ -169,17 +163,19 @@ sonar-scan:
 	@SONAR_SCAN_REPO="$(SONAR_SCAN_REPO)" "$(SONAR_SCAN_SCRIPT)" --execute
 
 release:
-	@$(SEMANTIC_RELEASE_CMD)
+	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release VERSION=0.3.0"; exit 1; }
+	@"$(RELEASE_SCRIPT)" --execute "$(VERSION)"
 
 release-dry-run:
-	@$(SEMANTIC_RELEASE_CMD) --dry-run
+	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release-dry-run VERSION=0.3.0"; exit 1; }
+	@"$(RELEASE_SCRIPT)" --dry-run "$(VERSION)"
 
 release-preview: release-dry-run
 
 release-tag:
-	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release-tag VERSION=0.1.0"; exit 1; }
-	@"$(RELEASE_TAG_SCRIPT)" "$(VERSION)"
+	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release-tag VERSION=0.3.0"; exit 1; }
+	@"$(RELEASE_TAG_SCRIPT)" --execute "$(VERSION)"
 
 release-tag-dry-run:
-	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release-tag-dry-run VERSION=0.1.0"; exit 1; }
-	@DRY_RUN=1 "$(RELEASE_TAG_SCRIPT)" "$(VERSION)"
+	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make release-tag-dry-run VERSION=0.3.0"; exit 1; }
+	@"$(RELEASE_TAG_SCRIPT)" --dry-run "$(VERSION)"

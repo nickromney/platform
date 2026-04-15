@@ -922,6 +922,7 @@ if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
   print_command=1
 elif [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
   usage
+  shell_cli_print_dry_run_summary "would capture Hubble flows using strategy=${capture_strategy}"
   dry_run=1
   print_command=1
 fi
@@ -1007,11 +1008,6 @@ if [[ "${use_default_namespaces}" -eq 1 \
    && "${#from_pods[@]}" -eq 0 \
    && "${#to_pods[@]}" -eq 0 ]]; then
   namespaces=(argocd dev kyverno nginx-gateway observability)
-fi
-
-if [[ "${dry_run}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would capture Hubble flows using strategy=${capture_strategy}"
-  exit 0
 fi
 
 if [[ "${port_forward}" -eq 1 ]]; then

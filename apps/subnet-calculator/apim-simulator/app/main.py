@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -12,9 +13,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree
 
 import httpx
+from defusedxml import ElementTree
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -47,6 +48,7 @@ from app.config import (
     UserConfig,
     load_config,
 )
+from app.management_service import ManagementService
 from app.named_values import mask_secret_data
 from app.openapi_import import parse_api_import
 from app.policy import (
@@ -108,7 +110,13 @@ from app.terraform_import import import_from_tofu_show_json
 logger = logging.getLogger("apim-simulator")
 
 APIM_SERVICE_NAME = "apim-simulator"
-APIM_SERVICE_VERSION = "0.2.0"
+APIM_SERVICE_VERSION = "0.3.0"
+APIM_ROUTE_NAME_ATTR = "apim.route.name"
+APIM_CACHE_RESULT_ATTR = "apim.cache.result"
+APIM_BACKEND_ID_ATTR = "apim.backend.id"
+APIM_TRACE_REQUESTED_ATTR = "apim.trace.requested"
+APIM_RESULT_REASON_ATTR = "apim.result.reason"
+APIM_UPSTREAM_ATTEMPTS_ATTR = "apim.upstream.attempts"
 EMPTY_POLICY_XML = "<policies><inbound /><backend /><outbound /><on-error /></policies>"
 POLICY_SECTION_NAMES = ("inbound", "backend", "outbound", "on-error")
 _GATEWAY_METRICS: GatewayMetrics | None = None
@@ -203,6 +211,119 @@ def _trace_payload(
     return mask_secret_data(payload, cfg)
 
 
+def _request_cache_key(
+    *,
+    method: str,
+    upstream_url: str,
+    query: dict[str, str],
+    authorization: str,
+    subscription_key: str,
+) -> str:
+    payload = json.dumps(
+        {
+            "method": method,
+            "upstream_url": upstream_url,
+            "query": query,
+            "authorization": authorization,
+            "subscription_key": subscription_key,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _cached_gateway_response(
+    *,
+    cached: tuple[float, int, dict[str, str], str | None, bytes] | None,
+    request: Request,
+    route_name: str,
+    policy_req: PolicyRequest,
+    policy_runtime: PolicyRuntime,
+    trace_base: dict[str, Any],
+    trace_collector: PolicyTraceCollector | None,
+    cfg: GatewayConfig,
+    gateway_metrics: Any,
+    correlation_id: str,
+    trace_id: str | None,
+) -> Response | None:
+    if cached is None:
+        return None
+
+    expires_at, cached_status, cached_headers, cached_media_type, cached_body = cached
+    if time.time() >= expires_at:
+        return None
+
+    if not isinstance(cached_status, int) or not (100 <= cached_status <= 599):
+        return None
+
+    body_bytes = bytes(cached_body)
+    out_headers = dict(cached_headers)
+    media_type = (
+        cached_media_type if cached_media_type is None or isinstance(cached_media_type, str) else str(cached_media_type)
+    )
+
+    request.state.apim_cache_result = "hit"
+    request.state.apim_result_reason = "cache_hit"
+    request.state.apim_upstream_attempts = 0
+    gateway_metrics.cache_events.add(
+        1,
+        {
+            APIM_ROUTE_NAME_ATTR: route_name,
+            APIM_CACHE_RESULT_ATTR: "hit",
+            "http.request.method": request.method,
+        },
+    )
+    set_current_span_attributes(
+        **{
+            APIM_CACHE_RESULT_ATTR: "hit",
+            APIM_RESULT_REASON_ATTR: "cache_hit",
+            APIM_UPSTREAM_ATTEMPTS_ATTR: 0,
+        }
+    )
+    final_req = PolicyRequest(
+        method=policy_req.method,
+        path=policy_req.path,
+        query=dict(policy_req.query),
+        headers=dict(policy_req.headers),
+        variables=policy_req.variables,
+        body=policy_req.body,
+        response_status_code=cached_status,
+        response_headers=out_headers,
+        response_body=body_bytes,
+        response_media_type=media_type,
+    )
+    finalize_deferred_actions(final_req, policy_runtime)
+    out_headers["x-apim-cache"] = "hit"
+    out_headers["x-correlation-id"] = correlation_id
+    if trace_id:
+        out_headers["x-apim-trace-id"] = trace_id
+        trace = _trace_payload(
+            trace_base=trace_base,
+            trace_collector=trace_collector,
+            cfg=cfg,
+            extra={
+                "attempts": 0,
+                "status": cached_status,
+                "elapsed_ms": 0,
+                "cache": "hit",
+            },
+        )
+        out_headers["x-apim-trace"] = base64.b64encode(json.dumps(trace).encode("utf-8")).decode("utf-8")
+        trace_store: dict[str, Any] = request.app.state.trace_store
+        trace_store[trace_id] = {
+            "trace_id": trace_id,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            **trace,
+        }
+    return Response(
+        content=body_bytes,
+        status_code=cached_status,
+        headers=out_headers,
+        media_type=media_type,
+    )
+
+
 def _render_backend_value(value: str | None, policy_req: PolicyRequest, cfg: GatewayConfig) -> str | None:
     if value is None:
         return None
@@ -275,10 +396,10 @@ def _request_observation_attrs(request: Request, status_code: int) -> dict[str, 
         "http.request.method": request.method,
         "http.response.status_code": status_code,
         "http.route": _request_route_label(request),
-        "apim.route.name": getattr(request.state, "apim_route_name", "none"),
-        "apim.cache.result": getattr(request.state, "apim_cache_result", "none"),
-        "apim.backend.id": getattr(request.state, "apim_backend_id", "none"),
-        "apim.trace.requested": bool(getattr(request.state, "apim_trace_requested", False)),
+        APIM_ROUTE_NAME_ATTR: getattr(request.state, "apim_route_name", "none"),
+        APIM_CACHE_RESULT_ATTR: getattr(request.state, "apim_cache_result", "none"),
+        APIM_BACKEND_ID_ATTR: getattr(request.state, "apim_backend_id", "none"),
+        APIM_TRACE_REQUESTED_ATTR: bool(getattr(request.state, "apim_trace_requested", False)),
     }
 
 
@@ -303,12 +424,12 @@ def _access_log_fields(request: Request, *, status_code: int, duration_seconds: 
         "duration_ms": round(duration_seconds * 1000, 3),
         "network.client.ip": _request_client_ip(request),
         "correlation_id": get_correlation_id() or getattr(request.state, "correlation_id", None),
-        "apim.route.name": getattr(request.state, "apim_route_name", None),
-        "apim.backend.id": getattr(request.state, "apim_backend_id", None),
-        "apim.cache.result": getattr(request.state, "apim_cache_result", None),
-        "apim.trace.requested": getattr(request.state, "apim_trace_requested", False),
-        "apim.upstream.attempts": getattr(request.state, "apim_upstream_attempts", None),
-        "apim.result.reason": getattr(request.state, "apim_result_reason", None),
+        APIM_ROUTE_NAME_ATTR: getattr(request.state, "apim_route_name", None),
+        APIM_BACKEND_ID_ATTR: getattr(request.state, "apim_backend_id", None),
+        APIM_CACHE_RESULT_ATTR: getattr(request.state, "apim_cache_result", None),
+        APIM_TRACE_REQUESTED_ATTR: getattr(request.state, "apim_trace_requested", False),
+        APIM_UPSTREAM_ATTEMPTS_ATTR: getattr(request.state, "apim_upstream_attempts", None),
+        APIM_RESULT_REASON_ATTR: getattr(request.state, "apim_result_reason", None),
     }
 
 
@@ -491,26 +612,12 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             )
         return verifiers
 
-    oidc_verifiers = _build_oidc_verifiers(gateway_config)
+    management_plane: ManagementService | None = None
 
-    def _reload_config(app: FastAPI) -> GatewayConfig:
-        """Reload configuration from file and update app state."""
-        new_config = load_config()
-        new_config.routes = new_config.materialize_routes()
-        new_verifiers = _build_oidc_verifiers(new_config)
-        app.state.gateway_config = new_config
-        app.state.oidc_verifiers = new_verifiers
-        app.state.policy_cache = {}  # Clear policy cache on reload
-        app.state.policy_response_cache = {}
-        app.state.policy_value_cache = {}
-        app.state.gateway_metrics.config_reloads.add(1, {"result": "success"})
-        logger.info(
-            "config reloaded | routes=%d | origins=%s | anonymous=%s",
-            len(new_config.routes),
-            new_config.allowed_origins,
-            new_config.allow_anonymous,
-        )
-        return new_config
+    def _require_management_plane() -> ManagementService:
+        if management_plane is None:
+            raise HTTPException(status_code=500, detail="Management service not initialized")
+        return management_plane
 
     async def _config_watcher(app: FastAPI, config_path: str, interval: float = 5.0) -> None:
         """Watch config file for changes and reload when modified.
@@ -550,7 +657,11 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
 
                 if changed:
                     logger.info("config file changed, reloading...")
-                    _reload_config(app)
+                    manager = management_plane
+                    if manager is None:
+                        logger.warning("config watcher skipped reload because management service was unavailable")
+                        continue
+                    manager.reload_config()
             except Exception as exc:
                 logger.warning("config watcher error: %s", exc)
 
@@ -563,8 +674,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         else:
             app.state.http_client = http_client
         instrument_httpx_client(app.state.http_client, telemetry)
-        app.state.gateway_config = gateway_config
-        app.state.oidc_verifiers = oidc_verifiers
+        manager = _require_management_plane()
+        manager.apply_runtime_config(gateway_config)
         app.state.cache = {}
         app.state.policy_cache = {}
         app.state.policy_response_cache = {}
@@ -572,7 +683,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         app.state.rate_limit_store = {}
         app.state.quota_store = {}
         app.state.trace_store = {}
-        app.state.config_reload_fn = lambda: _reload_config(app)
+        app.state.config_reload_fn = manager.reload_config
         app.state.startup_complete = True
 
         watcher_task: asyncio.Task | None = None
@@ -601,6 +712,11 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             await app.state.http_client.aclose()
 
     app = FastAPI(title="Local APIM Simulator", version=APIM_SERVICE_VERSION, lifespan=lifespan)
+    management_plane = ManagementService(
+        app=app,
+        serialize_gateway_config=_serialize_gateway_config,
+        build_oidc_verifiers=_build_oidc_verifiers,
+    )
     app.state.telemetry = telemetry
     app.state.gateway_metrics = _get_gateway_metrics(telemetry)
     app.add_middleware(
@@ -650,6 +766,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def root_hint(request: Request) -> dict[str, Any]:
         cfg: GatewayConfig = request.app.state.gateway_config
         route_prefixes = sorted({route.path_prefix or "/" for route in cfg.routes})
+        operator_console_url = os.getenv("OPERATOR_CONSOLE_URL", "http://localhost:3007")
         return {
             "service": cfg.service.display_name,
             "message": "This is an API gateway. Try /apim/health, /apim/startup, or one of the configured route prefixes.",
@@ -661,7 +778,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 "required_header": "X-Apim-Tenant-Key" if cfg.tenant_access.enabled else None,
             },
             "operator_console": {
-                "url": "http://localhost:3007",
+                "url": operator_console_url,
                 "note": "Run make up-ui to start the operator console.",
             },
         }
@@ -805,29 +922,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             sub.keys.secondary = new_key
         return {"subscription_id": sub.id, "subscription_name": sub.name, "rotated": key, "new_key": new_key}
 
-    def _apply_runtime_config(app: FastAPI, cfg: GatewayConfig) -> GatewayConfig:
-        cfg.routes = cfg.materialize_routes()
-        app.state.gateway_config = cfg
-        app.state.oidc_verifiers = _build_oidc_verifiers(cfg)
-        app.state.policy_cache = {}
-        app.state.policy_response_cache = {}
-        app.state.policy_value_cache = {}
-        return cfg
-
     def _persist_or_apply_config(request: Request, cfg: GatewayConfig) -> GatewayConfig:
-        config_path = os.getenv("APIM_CONFIG_PATH", "").strip()
-        if not config_path:
-            return _apply_runtime_config(request.app, cfg)
-
-        try:
-            Path(config_path).write_text(_serialize_gateway_config(cfg), encoding="utf-8")
-        except OSError as exc:
-            raise HTTPException(status_code=500, detail="Unable to persist config update") from exc
-
-        reload_fn = getattr(request.app.state, "config_reload_fn", None)
-        if reload_fn is None:
-            raise HTTPException(status_code=500, detail="Reload not available")
-        return reload_fn()
+        return _require_management_plane().persist_or_apply_config(cfg)
 
     def _policy_scope_target(cfg: GatewayConfig, scope_type: str, scope_name: str) -> Any:
         scope = scope_type.lower()
@@ -1567,7 +1663,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             content = body.body_text.encode("utf-8")
 
         transport = httpx.ASGITransport(app=request.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://apim-replay.local") as replay_client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://apim-replay.local") as replay_client:
             response = await replay_client.request(
                 body.method.upper(),
                 path,
@@ -1607,15 +1703,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def upsert_product(product_id: str, request: Request, body: ProductUpsert) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        existing = cfg.products.get(product_id)
-        cfg.products[product_id] = ProductConfig(
-            name=body.name,
-            description=body.description,
-            require_subscription=body.require_subscription,
-            groups=existing.groups if existing is not None else [],
-            tags=existing.tags if existing is not None else [],
-        )
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().upsert_product(cfg, product_id, body)
         product = _get_product_or_404(updated, product_id)
         return _masked(updated, project_product(updated, product_id, product))
 
@@ -1623,20 +1711,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def delete_product(product_id: str, request: Request) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        _get_product_or_404(cfg, product_id)
-        del cfg.products[product_id]
-        for subscription in cfg.subscription.subscriptions.values():
-            subscription.products = [item for item in subscription.products if item != product_id]
-        for api in cfg.apis.values():
-            api.products = [item for item in api.products if item != product_id]
-            for operation in api.operations.values():
-                if operation.products is not None:
-                    operation.products = [item for item in operation.products if item != product_id]
-        for route in cfg.routes:
-            if route.product == product_id:
-                route.product = None
-            route.products = [item for item in route.products if item != product_id]
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().delete_product(cfg, product_id)
         return {"deleted": True, "product_id": product_id, "remaining": len(updated.products)}
 
     @app.get("/apim/management/products/{product_id}/groups")
@@ -1734,8 +1809,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def upsert_tag(tag_id: str, request: Request, body: TagUpsert) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        cfg.tags[tag_id] = TagConfig(display_name=body.display_name or tag_id)
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().upsert_tag(cfg, tag_id, body)
         tag = _get_tag_or_404(updated, tag_id)
         return _masked(updated, project_tag(updated, tag_id, tag))
 
@@ -1743,15 +1817,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def delete_tag(tag_id: str, request: Request) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        _get_tag_or_404(cfg, tag_id)
-        del cfg.tags[tag_id]
-        for api in cfg.apis.values():
-            _unlink_list_item(api.tags, tag_id)
-            for operation in api.operations.values():
-                _unlink_list_item(operation.tags, tag_id)
-        for product in cfg.products.values():
-            _unlink_list_item(product.tags, tag_id)
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().delete_tag(cfg, tag_id)
         return {"deleted": True, "tag_id": tag_id, "remaining": len(updated.tags)}
 
     @app.get("/apim/management/subscriptions")
@@ -1777,22 +1843,9 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def create_subscription(request: Request, body: SubscriptionUpsert) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        if _find_subscription_by_id(cfg, body.id) is not None:
-            raise HTTPException(status_code=409, detail="Subscription already exists")
-
-        primary = body.primary_key or f"sub-{body.id}-primary"
-        secondary = body.secondary_key or f"sub-{body.id}-secondary"
-        sub = Subscription(
-            id=body.id,
-            name=body.name,
-            keys={"primary": primary, "secondary": secondary},
-            state=body.state,
-            products=body.products,
-            created_by="management",
-        )
-        cfg.subscription.subscriptions[body.id] = sub
-        updated = _persist_or_apply_config(request, cfg)
-        entry = _find_subscription_entry(updated, body.id)
+        manager = _require_management_plane()
+        updated = manager.create_subscription(cfg, body)
+        entry = manager.find_subscription_entry(updated, body.id)
         if entry is None:
             raise HTTPException(status_code=500, detail="Subscription persistence failed")
         config_key, subscription = entry
@@ -1802,18 +1855,9 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def update_subscription(request: Request, subscription_id: str, body: SubscriptionUpdate) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        sub = _find_subscription_by_id(cfg, subscription_id)
-        if sub is None:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-
-        if body.name is not None:
-            sub.name = body.name
-        if body.state is not None:
-            sub.state = body.state
-        if body.products is not None:
-            sub.products = body.products
-        updated = _persist_or_apply_config(request, cfg)
-        entry = _find_subscription_entry(updated, subscription_id)
+        manager = _require_management_plane()
+        updated = manager.update_subscription(cfg, subscription_id, body)
+        entry = manager.find_subscription_entry(updated, subscription_id)
         if entry is None:
             raise HTTPException(status_code=500, detail="Subscription persistence failed")
         config_key, subscription = entry
@@ -1823,12 +1867,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def delete_subscription(subscription_id: str, request: Request) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        entry = _find_subscription_entry(cfg, subscription_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        config_key, _subscription = entry
-        del cfg.subscription.subscriptions[config_key]
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().delete_subscription(cfg, subscription_id)
         return {
             "deleted": True,
             "subscription_id": subscription_id,
@@ -1841,19 +1880,9 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     ) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        sub = _find_subscription_by_id(cfg, subscription_id)
-        if sub is None:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        if key not in {"primary", "secondary"}:
-            raise HTTPException(status_code=400, detail="Invalid key")
-
-        new_key = f"rotated-{sub.id}-{key}"
-        if key == "primary":
-            sub.keys.primary = new_key
-        else:
-            sub.keys.secondary = new_key
-        updated = _persist_or_apply_config(request, cfg)
-        entry = _find_subscription_entry(updated, subscription_id)
+        manager = _require_management_plane()
+        updated, new_key = manager.rotate_subscription_key(cfg, subscription_id, key)
+        entry = manager.find_subscription_entry(updated, subscription_id)
         if entry is None:
             raise HTTPException(status_code=500, detail="Subscription persistence failed")
         config_key, subscription = entry
@@ -2078,20 +2107,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def upsert_user(user_id: str, request: Request, body: UserUpsert) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        first_name = body.first_name.strip() if body.first_name else None
-        last_name = body.last_name.strip() if body.last_name else None
-        full_name = " ".join(part for part in [first_name, last_name] if part).strip() or user_id
-        cfg.users[user_id] = UserConfig(
-            id=user_id,
-            email=body.email,
-            name=full_name,
-            first_name=first_name,
-            last_name=last_name,
-            note=body.note,
-            state=body.state,
-            confirmation=body.confirmation,
-        )
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().upsert_user(cfg, user_id, body)
         user = _get_user_or_404(updated, user_id)
         return _masked(updated, project_user(updated, user_id, user))
 
@@ -2099,11 +2115,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def delete_user(user_id: str, request: Request) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        _get_user_or_404(cfg, user_id)
-        del cfg.users[user_id]
-        for group in cfg.groups.values():
-            _unlink_list_item(group.users, user_id)
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().delete_user(cfg, user_id)
         return {"deleted": True, "user_id": user_id, "remaining": len(updated.users)}
 
     @app.get("/apim/management/groups")
@@ -2162,16 +2174,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def upsert_group(group_id: str, request: Request, body: GroupUpsert) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        existing = cfg.groups.get(group_id)
-        cfg.groups[group_id] = GroupConfig(
-            id=group_id,
-            name=body.name,
-            description=body.description,
-            external_id=body.external_id,
-            type=body.type,
-            users=existing.users if existing is not None else [],
-        )
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().upsert_group(cfg, group_id, body)
         group = _get_group_or_404(updated, group_id)
         return _masked(updated, project_group(updated, group_id, group))
 
@@ -2179,11 +2182,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
     async def delete_group(group_id: str, request: Request) -> dict[str, Any]:
         _require_tenant_access(request)
         cfg: GatewayConfig = request.app.state.gateway_config
-        _get_group_or_404(cfg, group_id)
-        del cfg.groups[group_id]
-        for product in cfg.products.values():
-            _unlink_list_item(product.groups, group_id)
-        updated = _persist_or_apply_config(request, cfg)
+        updated = _require_management_plane().delete_group(cfg, group_id)
         return {"deleted": True, "group_id": group_id, "remaining": len(updated.groups)}
 
     @app.post("/apim/management/import/tofu-show")
@@ -2210,9 +2209,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         if not result.service_imported:
             imported.service = current.service
 
-        imported.routes = imported.materialize_routes()
-        request.app.state.gateway_config = imported
-        request.app.state.oidc_verifiers = _build_oidc_verifiers(imported)
+        _require_management_plane().apply_runtime_config(imported)
         request.app.state.cache = {}
         request.app.state.policy_cache = {}
         request.app.state.policy_response_cache = {}
@@ -2280,7 +2277,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
 
         set_current_span_attributes(
             **{
-                "apim.route.name": route.name,
+                APIM_ROUTE_NAME_ATTR: route.name,
                 "apim.route.path_prefix": route.path_prefix,
                 "apim.subscription.present": auth.subscription is not None,
                 "apim.allowed_products.count": len(allowed_products),
@@ -2436,15 +2433,15 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 gateway_metrics.policy_short_circuits.add(
                     1,
                     {
-                        "apim.route.name": route.name,
+                        APIM_ROUTE_NAME_ATTR: route.name,
                         "apim.policy.stage": "inbound",
                         "http.request.method": request.method,
                     },
                 )
                 set_current_span_attributes(
                     **{
-                        "apim.result.reason": "policy_inbound_short_circuit",
-                        "apim.upstream.attempts": 0,
+                        APIM_RESULT_REASON_ATTR: "policy_inbound_short_circuit",
+                        APIM_UPSTREAM_ATTEMPTS_ATTR: 0,
                     }
                 )
                 out_headers = dict(early.headers)
@@ -2487,15 +2484,15 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 gateway_metrics.policy_short_circuits.add(
                     1,
                     {
-                        "apim.route.name": route.name,
+                        APIM_ROUTE_NAME_ATTR: route.name,
                         "apim.policy.stage": "backend",
                         "http.request.method": request.method,
                     },
                 )
                 set_current_span_attributes(
                     **{
-                        "apim.result.reason": "policy_backend_short_circuit",
-                        "apim.upstream.attempts": 0,
+                        APIM_RESULT_REASON_ATTR: "policy_backend_short_circuit",
+                        APIM_UPSTREAM_ATTEMPTS_ATTR: 0,
                     }
                 )
                 out_headers = dict(backend_early.headers)
@@ -2611,7 +2608,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         request.state.apim_backend_id = backend_id or "direct"
         set_current_span_attributes(
             **{
-                "apim.backend.id": request.state.apim_backend_id,
+                APIM_BACKEND_ID_ATTR: request.state.apim_backend_id,
                 "apim.policy.documents": len(policy_docs),
             }
         )
@@ -2637,64 +2634,30 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         ):
             authz = request.headers.get("authorization", "")
             sub_key = request.headers.get("ocp-apim-subscription-key", "")
-            material = (
-                f"{request.method}|{upstream_url}|{json.dumps(policy_req.query, sort_keys=True)}|{authz}|{sub_key}"
+            cache_key = _request_cache_key(
+                method=request.method,
+                upstream_url=upstream_url,
+                query=policy_req.query,
+                authorization=authz,
+                subscription_key=sub_key,
             )
-            cache_key = str(hash(material))
             cached = request.app.state.cache.get(cache_key)
             if cached is not None:
-                expires_at, cached_status, cached_headers, cached_media_type, cached_body = cached
-                if time.time() < expires_at:
-                    request.state.apim_cache_result = "hit"
-                    request.state.apim_result_reason = "cache_hit"
-                    request.state.apim_upstream_attempts = 0
-                    gateway_metrics.cache_events.add(
-                        1,
-                        {
-                            "apim.route.name": route.name,
-                            "apim.cache.result": "hit",
-                            "http.request.method": request.method,
-                        },
-                    )
-                    set_current_span_attributes(
-                        **{
-                            "apim.cache.result": "hit",
-                            "apim.result.reason": "cache_hit",
-                            "apim.upstream.attempts": 0,
-                        }
-                    )
-                    out_headers = dict(cached_headers)
-                    _finalize_policy_response(
-                        status_code=cached_status,
-                        headers=out_headers,
-                        body_bytes=cached_body,
-                        media_type=cached_media_type,
-                    )
-                    out_headers["x-apim-cache"] = "hit"
-                    out_headers["x-correlation-id"] = correlation_id
-                    if trace_id:
-                        out_headers["x-apim-trace-id"] = trace_id
-                        trace = _trace_payload(
-                            trace_base=trace_base,
-                            trace_collector=trace_collector,
-                            cfg=cfg,
-                            extra={
-                                "attempts": 0,
-                                "status": cached_status,
-                                "elapsed_ms": 0,
-                                "cache": "hit",
-                            },
-                        )
-                        out_headers["x-apim-trace"] = base64.b64encode(json.dumps(trace).encode("utf-8")).decode(
-                            "utf-8"
-                        )
-                        _store_trace(trace)
-                    return Response(
-                        content=cached_body,
-                        status_code=cached_status,
-                        headers=out_headers,
-                        media_type=cached_media_type,
-                    )
+                cached_response = _cached_gateway_response(
+                    cached=cached,
+                    request=request,
+                    route_name=route.name,
+                    policy_req=policy_req,
+                    policy_runtime=policy_runtime,
+                    trace_base=trace_base,
+                    trace_collector=trace_collector,
+                    cfg=cfg,
+                    gateway_metrics=gateway_metrics,
+                    correlation_id=correlation_id,
+                    trace_id=trace_id,
+                )
+                if cached_response is not None:
+                    return cached_response
                 request.app.state.cache.pop(cache_key, None)
 
         timeout = httpx.Timeout(cfg.proxy_timeout_seconds)
@@ -2736,8 +2699,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             request.state.apim_upstream_duration_seconds = elapsed_seconds
             set_current_span_attributes(
                 **{
-                    "apim.result.reason": "upstream_unavailable",
-                    "apim.upstream.attempts": attempts_used,
+                    APIM_RESULT_REASON_ATTR: "upstream_unavailable",
+                    APIM_UPSTREAM_ATTEMPTS_ATTR: attempts_used,
                 }
             )
             if policy_docs:
@@ -2791,6 +2754,9 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         media_type = upstream_response.headers.get("content-type")
         response_headers["x-correlation-id"] = correlation_id
         request.state.apim_upstream_duration_seconds = elapsed_seconds
+        upstream_status_code = int(upstream_response.status_code)
+        if not (100 <= upstream_status_code <= 599):
+            raise HTTPException(status_code=502, detail="Backend API returned invalid status code")
         requires_buffering = cache_key is not None or policy_response_cache_active or not cfg.proxy_streaming
         content = b""
         if requires_buffering:
@@ -2805,7 +2771,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 headers=response_headers,
                 variables=policy_req.variables,
                 body=policy_req.body,
-                response_status_code=upstream_response.status_code,
+                response_status_code=upstream_status_code,
                 response_headers=response_headers,
                 response_body=content,
                 response_media_type=media_type,
@@ -2816,7 +2782,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             media_type = outbound_req.response_media_type or media_type
 
         _finalize_policy_response(
-            status_code=upstream_response.status_code,
+            status_code=upstream_status_code,
             headers=response_headers,
             body_bytes=content,
             media_type=media_type,
@@ -2828,16 +2794,16 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             gateway_metrics.cache_events.add(
                 1,
                 {
-                    "apim.route.name": route.name,
-                    "apim.cache.result": "miss",
+                    APIM_ROUTE_NAME_ATTR: route.name,
+                    APIM_CACHE_RESULT_ATTR: "miss",
                     "http.request.method": request.method,
                 },
             )
             set_current_span_attributes(
                 **{
-                    "apim.cache.result": "miss",
-                    "apim.result.reason": "upstream_response",
-                    "apim.upstream.attempts": attempts_used,
+                    APIM_CACHE_RESULT_ATTR: "miss",
+                    APIM_RESULT_REASON_ATTR: "upstream_response",
+                    APIM_UPSTREAM_ATTEMPTS_ATTR: attempts_used,
                 }
             )
             response_headers["x-apim-cache"] = "miss"
@@ -2845,7 +2811,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 request.app.state.cache.clear()
             request.app.state.cache[cache_key] = (
                 time.time() + cfg.cache_ttl_seconds,
-                upstream_response.status_code,
+                upstream_status_code,
                 dict(response_headers),
                 media_type,
                 content,
@@ -2858,7 +2824,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     cfg=cfg,
                     extra={
                         "attempts": attempts_used,
-                        "status": upstream_response.status_code,
+                        "status": upstream_status_code,
                         "elapsed_ms": elapsed_ms,
                         "cache": "miss",
                     },
@@ -2868,7 +2834,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 _store_trace(trace)
             return Response(
                 content=content,
-                status_code=upstream_response.status_code,
+                status_code=upstream_status_code,
                 headers=response_headers,
                 media_type=media_type,
             )
@@ -2877,8 +2843,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             request.state.apim_result_reason = "upstream_stream"
             set_current_span_attributes(
                 **{
-                    "apim.result.reason": "upstream_stream",
-                    "apim.upstream.attempts": attempts_used,
+                    APIM_RESULT_REASON_ATTR: "upstream_stream",
+                    APIM_UPSTREAM_ATTEMPTS_ATTR: attempts_used,
                 }
             )
             if trace_requested:
@@ -2889,7 +2855,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     cfg=cfg,
                     extra={
                         "attempts": attempts_used,
-                        "status": upstream_response.status_code,
+                        "status": upstream_status_code,
                         "elapsed_ms": elapsed_ms,
                         "cache": None,
                     },
@@ -2899,7 +2865,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 _store_trace(trace)
             return StreamingResponse(
                 upstream_response.aiter_bytes(),
-                status_code=upstream_response.status_code,
+                status_code=upstream_status_code,
                 headers=response_headers,
                 media_type=media_type,
                 background=BackgroundTask(upstream_response.aclose),
@@ -2908,8 +2874,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         request.state.apim_result_reason = "upstream_response"
         set_current_span_attributes(
             **{
-                "apim.result.reason": "upstream_response",
-                "apim.upstream.attempts": attempts_used,
+                APIM_RESULT_REASON_ATTR: "upstream_response",
+                APIM_UPSTREAM_ATTEMPTS_ATTR: attempts_used,
             }
         )
         if trace_requested:
@@ -2920,7 +2886,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 cfg=cfg,
                 extra={
                     "attempts": attempts_used,
-                    "status": upstream_response.status_code,
+                    "status": upstream_status_code,
                     "elapsed_ms": elapsed_ms,
                     "cache": None,
                 },
@@ -2930,7 +2896,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             _store_trace(trace)
         return Response(
             content=content,
-            status_code=upstream_response.status_code,
+            status_code=upstream_status_code,
             headers=response_headers,
             media_type=media_type,
         )

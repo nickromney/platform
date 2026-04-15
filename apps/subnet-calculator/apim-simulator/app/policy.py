@@ -8,10 +8,10 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
-from xml.etree import ElementTree
 
 import httpx
 import jwt
+from defusedxml import ElementTree
 from fastapi import HTTPException
 from jwt.algorithms import RSAAlgorithm
 
@@ -388,10 +388,16 @@ def _mock_response_sample(
         return b"", content_type
 
     if content_type:
-        for representation in representations:
-            if representation.content_type.lower() == content_type.lower():
-                representations = [representation]
-                break
+        matched = next(
+            (
+                representation
+                for representation in representations
+                if representation.content_type.lower() == content_type.lower()
+            ),
+            None,
+        )
+        if matched is not None:
+            representations = [matched]
 
     representation = representations[0]
     resolved_content_type = content_type or representation.content_type

@@ -79,12 +79,15 @@ markdownlint_version() {
 
 list_markdown_files() {
   if tool_exists "${GIT_BIN}" && "${GIT_BIN}" -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    "${GIT_BIN}" -C "${REPO_ROOT}" ls-files -z -- '*.md' '*.markdown'
+    "${GIT_BIN}" -C "${REPO_ROOT}" ls-files -z -- \
+      '*.md' \
+      '*.markdown' \
+      ':(exclude)apps/subnet-calculator/apim-simulator/**'
     return 0
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' \) -prune \
+    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/subnet-calculator/apim-simulator" \) -prune \
     -o \( -type f \( -name '*.md' -o -name '*.markdown' \) -print0 \) | sort -z
 }
 

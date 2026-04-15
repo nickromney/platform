@@ -55,6 +55,7 @@ EOF
 
 @test "hubble-capture-flows normalises HTTPS server input to TLS relay flags" {
   run "${CAPTURE_SCRIPT}" \
+    --execute \
     --server https://relay.example.com \
     --last 10 \
     --namespace observability \
@@ -65,7 +66,8 @@ EOF
   run cat "${HUBBLE_LOG}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"observe --output jsonpb --last 10"* ]]
+  [[ "${output}" == *"observe --output jsonpb"* ]]
+  [[ "${output}" == *"--last 10"* ]]
   [[ "${output}" == *"--server tls://relay.example.com:443"* ]]
   [[ "${output}" == *"--tls"* ]]
   [[ "${output}" == *"--tls-server-name relay.example.com"* ]]
@@ -77,6 +79,7 @@ EOF
   touch "${HOME}/.kube/kind-kind-local.yaml"
 
   run "${CAPTURE_SCRIPT}" \
+    --execute \
     --last 10 \
     --namespace observability \
     </dev/null
@@ -86,7 +89,8 @@ EOF
   run cat "${HUBBLE_LOG}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"observe --output jsonpb --last 10"* ]]
+  [[ "${output}" == *"observe --output jsonpb"* ]]
+  [[ "${output}" == *"--last 10"* ]]
   [[ "${output}" == *"--port-forward"* ]]
   [[ "${output}" == *"--kubeconfig ${HOME}/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"--kube-namespace kube-system"* ]]
@@ -94,6 +98,7 @@ EOF
 
 @test "hubble-capture-flows keeps explicit non-443 HTTPS ports and repo default namespaces" {
   run "${CAPTURE_SCRIPT}" \
+    --execute \
     --server https://hubble.example.com:4443 \
     --since 15m \
     </dev/null
@@ -119,7 +124,7 @@ EOF
 
   run env CAPTURE_SCRIPT="${CAPTURE_SCRIPT}" STDERR_FILE="${stderr_file}" bash -c '
     printf "%s\n" "{\"flow\":1}" \
-      | "${CAPTURE_SCRIPT}" --server https://relay.example.com --print-command 2>"${STDERR_FILE}"
+      | "${CAPTURE_SCRIPT}" --execute --server https://relay.example.com --print-command 2>"${STDERR_FILE}"
   '
 
   [ "${status}" -eq 0 ]
@@ -144,6 +149,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${CAPTURE_SCRIPT}" \
+    --execute \
     --server https://hubble.admin.127.0.0.1.sslip.io \
     --last 10 \
     --namespace observability \
@@ -165,6 +171,7 @@ EOF
   chmod +x "${TEST_BIN}/hubble"
 
   run "${CAPTURE_SCRIPT}" \
+    --execute \
     --server localhost:4245 \
     --last 10 \
     --namespace observability \
@@ -212,7 +219,7 @@ esac
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run "${CAPTURE_SCRIPT}" --last 10 --namespace observability </dev/null
+  run "${CAPTURE_SCRIPT}" --execute --last 10 --namespace observability </dev/null
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required Kubernetes permission to open a Hubble relay port-forward"* ]]
@@ -220,7 +227,7 @@ EOF
 }
 
 @test "hubble-check-connection.sh normalises HTTPS server input to TLS relay flags" {
-  run "${CHECK_SCRIPT}" --server https://relay.example.com
+  run "${CHECK_SCRIPT}" --execute --server https://relay.example.com
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Healthcheck (via stub): Ok"* ]]
@@ -236,7 +243,7 @@ EOF
 @test "hubble-check-connection.sh defaults to repo port-forward mode" {
   touch "${HOME}/.kube/kind-kind-local.yaml"
 
-  run "${CHECK_SCRIPT}"
+  run "${CHECK_SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Healthcheck (via stub): Ok"* ]]
@@ -273,7 +280,7 @@ esac
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run "${CHECK_SCRIPT}"
+  run "${CHECK_SCRIPT}" --execute
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"missing required Kubernetes permission to locate the Hubble relay pod for port-forward mode"* ]]
@@ -287,7 +294,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/nc"
 
-  run "${CHECK_SCRIPT}" --server localhost:4245
+  run "${CHECK_SCRIPT}" --execute --server localhost:4245
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"localhost:4245 is not listening on this machine"* ]]
@@ -304,7 +311,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/hubble"
 
-  run "${CHECK_SCRIPT}" --server https://hubble.admin.127.0.0.1.sslip.io
+  run "${CHECK_SCRIPT}" --execute --server https://hubble.admin.127.0.0.1.sslip.io
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"did not behave like a Hubble Relay gRPC endpoint"* ]]
@@ -320,7 +327,7 @@ EOF
 {"flow":{"verdict":"FORWARDED","traffic_direction":"EGRESS","source":{"namespace":"dev","pod_name":"subnetcalc-api-aaa","workloads":[{"name":"subnetcalc-api","kind":"Deployment"}]},"destination":{"namespace":"observability","pod_name":"otel-collector-xyz","workloads":[{"name":"otel-collector","kind":"Deployment"}]},"l4":{"TCP":{"destination_port":4318}}}}
 EOF
 
-  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction egress --top 10 --format tsv
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${input_file}" --report edges --aggregate-by workload --direction egress --top 10 --format tsv
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'count\tdirection\tverdict\tprotocol\tsrc_ns\tsrc\tdst_class\tdst_ns\tdst\tdst_port'* ]]
@@ -336,7 +343,7 @@ EOF
 {"flow":{"verdict":"FORWARDED","traffic_direction":"EGRESS","source":{"namespace":"sandbox","pod_name":"datadog-agent-123","workloads":[{"name":"datadog-agent","kind":"DaemonSet"}]},"destination":{"labels":["reserved:world"]},"destination_names":["api.datadoghq.com"],"IP":{"destination":"104.16.0.1"},"l4":{"TCP":{"destination_port":443}}}}
 EOF
 
-  run "${SUMMARIZE_SCRIPT}" --input "${world_file}" --report world --aggregate-by workload --direction egress --format tsv
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${world_file}" --report world --aggregate-by workload --direction egress --format tsv
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'count\tdirection\tverdict\tprotocol\tworld_side\tpeer_ns\tpeer\tworld_names\tworld_ip\tport'* ]]
@@ -346,7 +353,7 @@ EOF
 {"flow":{"verdict":"FORWARDED","traffic_direction":"EGRESS","source":{"namespace":"sandbox","pod_name":"datadog-agent-123","workloads":[{"name":"datadog-agent","kind":"DaemonSet"}]},"destination":{"namespace":"kube-system","pod_name":"coredns-123","workloads":[{"name":"coredns","kind":"Deployment"}]},"l7":{"dns":{"query":"api.datadoghq.com.","qtypes":["A"],"rcode":"NOERROR"}}}}
 EOF
 
-  run "${SUMMARIZE_SCRIPT}" --input "${dns_file}" --report dns --aggregate-by workload --direction egress --format tsv
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${dns_file}" --report dns --aggregate-by workload --direction egress --format tsv
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'count\tdirection\tverdict\tsrc_ns\tsrc\tdns_server\tquery\tqtypes\trcode'* ]]
@@ -360,12 +367,12 @@ EOF
 {"flow":{"verdict":"FORWARDED","traffic_direction":"INGRESS","source":{"pod_name":"","workloads":[]},"destination":{"namespace":"datadog","pod_name":"cluster-agent-abc","workloads":[{"name":"cluster-agent","kind":"Deployment"}]},"IP":{"source":"10.0.0.25"},"l4":{"TCP":{"destination_port":5005}}}}
 EOF
 
-  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --format tsv
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${input_file}" --report edges --aggregate-by workload --direction all --format tsv
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'\n1\tINGRESS\tFORWARDED\ttcp\t\t10.0.0.25\tworkload\tdatadog\tcluster-agent\t5005'* ]]
 
-  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --format text
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${input_file}" --report edges --aggregate-by workload --direction all --format text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ tcp[[:space:]]+-[[:space:]]+10\.0\.0\.25[[:space:]]+workload[[:space:]]+datadog[[:space:]]+cluster-agent[[:space:]]+5005 ]]
@@ -378,7 +385,7 @@ EOF
 {"flow":{"verdict":"FORWARDED","traffic_direction":"INGRESS","source":{"pod_name":"","workloads":[]},"destination":{"namespace":"datadog","pod_name":"cluster-agent-abc","workloads":[{"name":"cluster-agent","kind":"Deployment"}]},"IP":{"source":"10.0.0.25"},"l4":{"TCP":{"destination_port":5005}}}}
 EOF
 
-  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report edges --aggregate-by workload --direction all --table
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${input_file}" --report edges --aggregate-by workload --direction all --table
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ protocol[[:space:]]+src_ns[[:space:]]+src[[:space:]]+dst_class ]]
@@ -392,7 +399,7 @@ EOF
 {"flow":{"verdict":"FORWARDED","traffic_direction":"EGRESS","source":{"namespace":"sandbox","pod_name":"datadog-agent-123","workloads":[{"name":"datadog-agent","kind":"DaemonSet"}]},"destination":{"labels":["reserved:world"]},"destination_names":["api.datadoghq.com","trace.agent.datadoghq.com"],"IP":{"destination":"104.16.0.1"},"l4":{"TCP":{"destination_port":443}}}}
 EOF
 
-  run "${SUMMARIZE_SCRIPT}" --input "${input_file}" --report world --aggregate-by workload --direction egress --csv
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${input_file}" --report world --aggregate-by workload --direction egress --csv
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'count,direction,verdict,protocol,world_side,peer_ns,peer,world_names,world_ip,port'* ]]
