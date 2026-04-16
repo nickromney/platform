@@ -55,3 +55,17 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = "update available" ]
 }
+
+@test "terraform kubernetes module pins the kubernetes provider at 3.1" {
+  run grep -Fn 'version = "~> 3.1"' "${REPO_ROOT}/terraform/kubernetes/main.tf"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'version     = "3.1.0"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'constraints = "~> 3.1"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
+
+  [ "${status}" -eq 0 ]
+}
