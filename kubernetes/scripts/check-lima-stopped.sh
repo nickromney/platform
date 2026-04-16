@@ -6,8 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
 
 lima_instance_prefix="${LIMA_INSTANCE_PREFIX:-k3s-node}"
+LIMA_SHARED_PORT_NUMBERS="443 30022 30080 30090 31235 3301"
 running_lima_vms=""
 running_lima_proxies=""
+active_shared_ports=""
 
 usage() {
   cat <<EOF
@@ -21,6 +23,41 @@ EOF
 }
 
 shell_cli_handle_standard_no_args usage "would check whether Lima VMs or proxies are still running" "$@"
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+shared_port_listening() {
+  local port="$1"
+
+  if have_cmd lsof; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return
+  fi
+
+  if have_cmd ss; then
+    ss -H -ltn "sport = :${port}" 2>/dev/null | grep -q .
+    return
+  fi
+
+  return 1
+}
+
+shared_ports_in_use() {
+  local port
+  local ports=""
+
+  for port in ${LIMA_SHARED_PORT_NUMBERS}; do
+    if shared_port_listening "${port}"; then
+      ports+="${port}"$'\n'
+    fi
+  done
+
+  if [[ -n "${ports}" ]]; then
+    printf '%s' "${ports}" | LC_ALL=C sort -n -u
+  fi
+}
 
 if command -v limactl >/dev/null 2>&1; then
   running_lima_vms="$(
@@ -40,10 +77,21 @@ if [[ -z "${running_lima_vms}" && -z "${running_lima_proxies}" ]]; then
   exit 0
 fi
 
+active_shared_ports="$(shared_ports_in_use)"
+
 echo "Lima is still running." >&2
 echo "Stop it before assuming the shared localhost ports are free:" >&2
 echo "  make -C kubernetes/lima stop-lima" >&2
 echo "" >&2
+
+if [[ -n "${active_shared_ports}" ]]; then
+  echo "Conflicting shared host ports currently in use by Lima:" >&2
+  while IFS= read -r port; do
+    [[ -z "${port}" ]] && continue
+    printf '  127.0.0.1:%s\n' "${port}" >&2
+  done <<< "${active_shared_ports}"
+  echo "" >&2
+fi
 
 if [[ -n "${running_lima_vms}" ]]; then
   echo "Running Lima VMs:" >&2

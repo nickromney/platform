@@ -14,16 +14,16 @@ setup() {
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "ps" ]]; then
-  last_arg=""
-  for arg in "$@"; do
-    last_arg="${arg}"
-  done
+    last_arg=""
+    for arg in "$@"; do
+      last_arg="${arg}"
+    done
   case "${last_arg}" in
     '{{.Names}}')
       printf 'kind-local-control-plane\nkind-local-worker\n'
       ;;
     '{{.Names}}|{{.Ports}}')
-      printf 'kind-local-control-plane|127.0.0.1:6443->6443/tcp, 127.0.0.1:443->30070/tcp\n'
+      printf 'kind-local-control-plane|127.0.0.1:6443->6443/tcp, 127.0.0.1:443->30070/tcp, 127.0.0.1:30080->30080/tcp\n'
       printf 'kind-local-worker|\n'
       ;;
   esac
@@ -35,9 +35,14 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"make -C kubernetes/kind stop-kind"* ]]
-  [[ "${output}" == *"Published host ports:"* ]]
+  [[ "${output}" == *"Conflicting shared host ports for Lima/Slicer:"* ]]
   [[ "${output}" == *"127.0.0.1:443"* ]]
+  [[ "${output}" == *"127.0.0.1:30080"* ]]
+  [[ "${output}" == *"Other published kind host ports:"* ]]
   [[ "${output}" == *"127.0.0.1:6443"* ]]
+  [[ "${output}" == *"Running kind containers:"* ]]
+  [[ "${output}" == *"kind-local-control-plane"* ]]
+  [[ "${output}" == *"kind-local-worker"* ]]
 }
 
 @test "returns success when kind-local is not running" {
