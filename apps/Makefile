@@ -13,7 +13,7 @@ TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 prereqs: ## Check shared app workflow prerequisites without requiring Trivy
 	@echo "compose smoke prerequisites are repo-local:"
 	@echo "  - docker"
-	@echo "  - docker compose"
+	@echo "  - docker compose, nerdctl compose, colima nerdctl compose, or podman compose"
 	@echo "  - bun (for frontend test/build workflows)"
 	@echo ""
 	@echo "Trivy remains opt-in. Use 'make trivy-prereqs' when you want scanning."

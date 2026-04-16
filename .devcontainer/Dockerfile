@@ -40,7 +40,7 @@ RUN apt-get update \
         zip \
     && locale-gen en_GB.UTF-8 \
     && chmod +x /tmp/devcontainer/install-toolchain.sh \
-    && /tmp/devcontainer/install-toolchain.sh "${USERNAME}" \
+    && /tmp/devcontainer/install-toolchain.sh --execute "${USERNAME}" \
     && rm -rf /var/lib/apt/lists/* /tmp/devcontainer
 
 ENV LANG=en_GB.UTF-8

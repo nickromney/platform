@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+
 # shellcheck source=/dev/null
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 section() {
   echo
@@ -35,6 +38,7 @@ require kubectl
 
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
 PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
+DEVCONTAINER_HOST_ALIAS="${PLATFORM_DEVCONTAINER_HOST_ALIAS:-${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}}"
 SEPARATE_ADMIN_DOMAIN=0
 if [[ "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]; then
   SEPARATE_ADMIN_DOMAIN=1
@@ -58,6 +62,10 @@ oauth2_proxy_arg_of_interest() {
       return 1
       ;;
   esac
+}
+
+devcontainer_enabled() {
+  [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]
 }
 
 print_oauth2_proxy_args() {
@@ -145,7 +153,7 @@ for ns in sentiment-dev uat; do
        http://sentiment-router.${ns}.svc.cluster.local:8080/api/v1/comments || true"
 done
 
-section "Local HTTPS smoke checks (optional; uses 127.0.0.1:443)"
+section "Local HTTPS smoke checks (optional; uses 127.0.0.1:443 or the devcontainer host alias)"
 if have curl; then
   for host in \
     "$(admin_host gitea)" \
@@ -155,7 +163,11 @@ if have curl; then
     "subnetcalc.uat.${PLATFORM_BASE_DOMAIN}" \
   ; do
     echo "-- ${host} / (expect 302 to dex when unauthenticated)"
-    curl -skI --max-time 5 --resolve "${host}:443:127.0.0.1" "https://${host}/" | sed -n '1,12p' || true
+    if devcontainer_enabled; then
+      curl -skI --max-time 5 --connect-to "${host}:443:${DEVCONTAINER_HOST_ALIAS}:443" "https://${host}/" | sed -n '1,12p' || true
+    else
+      curl -skI --max-time 5 --resolve "${host}:443:127.0.0.1" "https://${host}/" | sed -n '1,12p' || true
+    fi
     echo
   done
 else

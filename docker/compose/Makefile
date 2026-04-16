@@ -3,29 +3,22 @@ MAKE_KNOWN_GOALS := help prereqs check-docker-prerequisites check-mkcert-prerequ
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
+include ../../mk/compose.mk
 
 .PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config build up up-dev up-uat up-all down logs ps urls test
 
-COMPOSE := docker compose -f compose.yml
+COMPOSE := $(COMPOSE_CMD) -f compose.yml
 COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000
 CHECK_HOST_PORTS := ./scripts/check-host-ports.sh
 
 ##@ Prerequisites
-prereqs: ## Check that Docker Desktop and docker compose are usable
+prereqs: ## Check that a supported compose backend and mkcert are usable
 	@$(MAKE) --no-print-directory check-docker-prerequisites
 	@$(MAKE) --no-print-directory check-mkcert-prerequisites
 
-check-docker-prerequisites: ## Check that docker compose is installed and Docker is running
-	@if ! command -v docker >/dev/null 2>&1; then \
-		echo "docker is required but was not found in PATH." >&2; \
-		exit 1; \
-	fi
-	@if ! docker compose version >/dev/null 2>&1; then \
-		echo "'docker compose' is required but not available." >&2; \
-		exit 1; \
-	fi
-	@if ! docker info >/dev/null 2>&1; then \
-		echo "Docker is not running. Start Docker Desktop and try again." >&2; \
+check-docker-prerequisites: ## Check that a supported compose backend is installed and running
+	@if [ -z "$(COMPOSE_CMD)" ]; then \
+		echo "A supported compose backend is required but was not found." >&2; \
 		exit 1; \
 	fi
 

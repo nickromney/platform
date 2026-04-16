@@ -192,18 +192,18 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "kind stage 900 apply skips browser SSO E2E inside the devcontainer" {
-  run grep -Fn 'INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow.' \
+@test "kind stage 900 apply runs browser SSO E2E inside the devcontainer" {
+  run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
 }
 
-@test "kind check-sso-e2e explains the host-oriented devcontainer expectation" {
-  run grep -Fn 'ALLOW_DEVCONTAINER_BROWSER_E2E=1 after provisioning browser deps manually.' \
+@test "kind check-sso-e2e no longer has a devcontainer carveout" {
+  run grep -Fn 'ALLOW_DEVCONTAINER_BROWSER_E2E' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
-  [ "${status}" -eq 0 ]
+  [ "${status}" -ne 0 ]
 }
 
 @test "kind check-kubeconfig refreshes the split kind kubeconfig first" {

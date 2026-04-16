@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+
 # shellcheck source=/dev/null
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 FAILURES=0
 
@@ -39,6 +42,7 @@ DEBUG_PRINTED=0
 WAIT_SECONDS="${WAIT_SECONDS:-30}"
 RETRY_INTERVAL_SECONDS="${RETRY_INTERVAL_SECONDS:-3}"
 ROUTE_ENTRIES=()
+DEVCONTAINER_HOST_ALIAS="${PLATFORM_DEVCONTAINER_HOST_ALIAS:-${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}}"
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
@@ -133,6 +137,19 @@ array_contains() {
   done
 
   return 1
+}
+
+devcontainer_enabled() {
+  [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]
+}
+
+probe_host_for_local_https() {
+  if devcontainer_enabled; then
+    printf '%s\n' "${DEVCONTAINER_HOST_ALIAS}"
+    return 0
+  fi
+
+  printf '%s\n' "127.0.0.1"
 }
 
 debug_gateway_pods() {
@@ -242,15 +259,23 @@ normalize_route_path() {
 }
 
 probe_https_url() {
-  local url="$1"
+  local host="$1"
+  local url="$2"
   local tmp_err curl_rc code err
+  local -a curl_args=()
 
   PROBE_OK=0
   PROBE_DETAIL=""
 
+  if devcontainer_enabled; then
+    curl_args=(--connect-to "${host}:${HOST_PORT}:${DEVCONTAINER_HOST_ALIAS}:${HOST_PORT}")
+  else
+    curl_args=(--resolve "${host}:${HOST_PORT}:127.0.0.1")
+  fi
+
   tmp_err="$(mktemp)"
   set +e
-  code="$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 5 "${url}" 2>"${tmp_err}")"
+  code="$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 5 "${curl_args[@]}" "${url}" 2>"${tmp_err}")"
   curl_rc=$?
   set -e
   err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
@@ -289,7 +314,7 @@ probe_route_urls() {
     path="${entry#*|}"
     url="https://${host}${port_suffix}${path}"
 
-    probe_https_url "${url}"
+    probe_https_url "${host}" "${url}"
     if [[ "${PROBE_OK}" == "1" ]]; then
       HTTPS_RESULTS+=("OK|${url}|${PROBE_DETAIL}")
     else
@@ -443,11 +468,12 @@ if [[ "${HOST_PORT}" != "443" ]]; then
   port_suffix=":${HOST_PORT}"
 fi
 
+local_https_probe_host="$(probe_host_for_local_https)"
 if have_cmd nc; then
-  if nc -z -w 2 127.0.0.1 "${HOST_PORT}" >/dev/null 2>&1; then
-    ok "Host port open: 127.0.0.1:${HOST_PORT}"
+  if nc -z -w 2 "${local_https_probe_host}" "${HOST_PORT}" >/dev/null 2>&1; then
+    ok "Host port open: ${local_https_probe_host}:${HOST_PORT}"
   else
-    fail_soft "Host port not reachable: 127.0.0.1:${HOST_PORT}"
+    fail_soft "Host port not reachable: ${local_https_probe_host}:${HOST_PORT}"
   fi
 fi
 

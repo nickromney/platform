@@ -2,7 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+if [[ -z "${REPO_ROOT:-}" ]]; then
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+fi
 INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 RENDER_KIND_APISERVER_OIDC_MANIFEST="${SCRIPT_DIR}/render-kind-apiserver-oidc-manifest.py"
 # shellcheck source=/dev/null

@@ -298,24 +298,29 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    health_script_sha      = filesha256(abspath("${path.module}/scripts/check-cluster-health.sh"))
-    health_resource_sha    = filesha256(abspath("${path.module}/sso.tf"))
-    stage_tfvars_sha       = filesha256(abspath("${path.module}/../../kubernetes/kind/stages/900-sso.tfvars"))
-    target_tfvars_sha      = filesha256(abspath("${path.module}/../../kubernetes/kind/targets/kind.tfvars"))
-    operator_overrides_sha = try(filesha256(abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")), "absent")
-    oidc_resource_id       = null_resource.configure_kind_apiserver_oidc[0].id
+    health_script_sha          = filesha256(abspath("${path.module}/scripts/check-cluster-health.sh"))
+    health_resource_sha        = filesha256(abspath("${path.module}/sso.tf"))
+    kind_stage_900_tfvars_sha   = try(filesha256(var.kind_stage_900_tfvars_file), "absent")
+    kind_target_tfvars_sha      = try(filesha256(var.kind_target_tfvars_file), "absent")
+    operator_overrides_sha      = try(filesha256(var.kind_operator_overrides_file), "absent")
+    oidc_resource_id            = null_resource.configure_kind_apiserver_oidc[0].id
   }
 
   provisioner "local-exec" {
     command     = <<__EOT__
 set -euo pipefail
 export KUBECONFIG="${local.kubeconfig_path_expanded}"
-KIND_OPERATOR_OVERRIDES_FILE="${abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")}"
+KIND_STAGE_900_TFVARS_FILE="${var.kind_stage_900_tfvars_file}"
+KIND_TARGET_TFVARS_FILE="${var.kind_target_tfvars_file}"
+KIND_OPERATOR_OVERRIDES_FILE="${var.kind_operator_overrides_file}"
 PLATFORM_TFVARS_FILE="$${PLATFORM_TFVARS:-}"
-check_args=(
-  --var-file "${path.module}/../../kubernetes/kind/stages/900-sso.tfvars"
-  --var-file "${path.module}/../../kubernetes/kind/targets/kind.tfvars"
-)
+check_args=()
+if [[ -n "$${KIND_STAGE_900_TFVARS_FILE}" && -f "$${KIND_STAGE_900_TFVARS_FILE}" ]]; then
+  check_args+=(--var-file "$${KIND_STAGE_900_TFVARS_FILE}")
+fi
+if [[ -n "$${KIND_TARGET_TFVARS_FILE}" && -f "$${KIND_TARGET_TFVARS_FILE}" ]]; then
+  check_args+=(--var-file "$${KIND_TARGET_TFVARS_FILE}")
+fi
 if [[ -n "$${PLATFORM_TFVARS_FILE}" && -f "$${PLATFORM_TFVARS_FILE}" ]]; then
   check_args+=(--var-file "$${PLATFORM_TFVARS_FILE}")
 fi

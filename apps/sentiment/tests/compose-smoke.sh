@@ -8,6 +8,8 @@ REPO_ROOT="$(cd "${APP_DIR}/../.." && pwd)"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/compose-cli.sh"
 
 usage() {
   cat <<EOF
@@ -20,18 +22,7 @@ EOF
 }
 
 compose_cmd() {
-  if docker compose version >/dev/null 2>&1; then
-    docker compose -f "${APP_DIR}/compose.yml" -f "${OVERRIDE_FILE}" "$@"
-    return
-  fi
-
-  if command -v podman-compose >/dev/null 2>&1; then
-    podman-compose -f "${APP_DIR}/compose.yml" -f "${OVERRIDE_FILE}" "$@"
-    return
-  fi
-
-  echo "compose-smoke: docker compose or podman-compose is required" >&2
-  exit 1
+  compose_cli -f "${APP_DIR}/compose.yml" -f "${OVERRIDE_FILE}" "$@"
 }
 
 wait_for_url() {

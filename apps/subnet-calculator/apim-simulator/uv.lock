@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-04-08T06:28:18.790055Z"
+exclude-newer = "2026-04-08T21:03:15.909244Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -42,7 +42,7 @@ wheels = [
 
 [[package]]
 name = "apim-simulator"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },

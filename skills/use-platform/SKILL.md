@@ -34,6 +34,7 @@ Use these local cluster command paths when you need to prove a stack end to end 
   `make -C kubernetes/kind 100 apply AUTO_APPROVE=1`
   `make -C kubernetes/kind 900 apply AUTO_APPROVE=1`
   `make -C kubernetes/kind check-health`
+- The kind stage-900 browser path now runs inside the devcontainer too. The shared SSO harness maps `*.127.0.0.1.sslip.io` through `host.docker.internal` when `PLATFORM_DEVCONTAINER=1`, so the devcontainer can exercise the same `check-sso-e2e` step instead of skipping it.
 - Lima conflict preflight while kind is still active:
   `make -C kubernetes/lima 900 apply AUTO_APPROVE=1`
   Expect this to fail fast in `check-kind-stopped` while `kind-local` is running; that is the validated guard before Lima reaches shared host-port checks.
@@ -54,6 +55,12 @@ Validated operator learnings from real teardown/rebuild runs:
 
 - Prefer the split kubeconfigs over `~/.kube/config` when debugging standalone helpers. The validated paths are `~/.kube/kind-kind-local.yaml`, `~/.kube/limavm-k3s.yaml`, and `~/.kube/slicer-k3s.yaml`. If the default kubeconfig has no current context, pass both `KUBECONFIG_PATH` and `KUBECONFIG_CONTEXT` instead of assuming `kubectl config current-context` will succeed.
 - Kind can briefly show `nginx-gateway` instability during OIDC or apiserver reconfiguration and still recover cleanly. Treat the final `check-health` and `check-sso-e2e` results as the source of truth, not transient gateway pod restarts by themselves.
+- The platform devcontainer now bakes Chromium runtime libraries, so the stage-900 kind path is no longer host-only. If browser E2E is failing inside the container, rebuild the devcontainer before assuming the stack is at fault.
+- Inside the devcontainer, local HTTPS probes must target `host.docker.internal` instead of raw `127.0.0.1`. The devcontainer exports `PLATFORM_DEVCONTAINER_HOST_ALIAS` and `KIND_DEVCONTAINER_HOST_ALIAS` for this purpose, and the gateway/app/SSO checkers now honor those aliases.
+- The managed kind kubeconfig is environment-sensitive: `ensure-kind-kubeconfig.sh` rewrites loopback API endpoints to `host.docker.internal` when `PLATFORM_DEVCONTAINER=1`, while the host shell keeps the raw loopback form. The shared `~/.kube/kind-kind-local.yaml` can therefore flip between two valid shapes as you move between shells, which can surface as non-no-op plans even though the cluster itself is unchanged.
+- The devcontainer build only installs the repo toolchain if `.devcontainer/Dockerfile` invokes `install-toolchain.sh --execute`. If the build log prints the installer usage text and an `INFO dry-run` summary, the image is missing the actual CLI stack.
+- Terragrunt runs the Kubernetes Terraform module from its cache copy, so any `path.module` references that reach back into `kubernetes/kind/` or `.run/kind/` must be replaced with absolute paths exported from the kind Makefile. The validated exports are `TF_VAR_kind_stage_900_tfvars_file`, `TF_VAR_kind_target_tfvars_file`, and `TF_VAR_kind_operator_overrides_file`.
+- Terragrunt cache copies also break scripts that re-derive repo-root paths from `BASH_SOURCE[0]`. Terraform helper scripts under `terraform/kubernetes/` should honor an exported `REPO_ROOT` first, then fall back to their on-disk relative path only when the variable is unset.
 - Lima can emit `Failed to allocate directory watch: Too many open files` while reconfiguring k3s OIDC and still complete successfully. If the apply, health checks, Argo sync, and SSO smoke pass afterward, treat that message as a rough edge rather than an automatic failure.
 - Slicer currently assumes the local `~/slicer-mac/slicer-mac.yaml` host group matches the documented validated shape. In practice, `storage_size: 25G` for the `slicer` host group is required; smaller disks fail bootstrap because the root disk cannot be resized in place.
 - If Headlamp SSO fails on Slicer with `Headlamp did not establish an authenticated Kubernetes session`, inspect `/etc/rancher/k3s/config.yaml.d/90-headlamp-oidc.yaml` inside the VM and `journalctl -u k3s`. Repeated `invalid bearer token` errors there mean the apiserver OIDC config did not land or is wrong.

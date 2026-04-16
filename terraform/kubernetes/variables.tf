@@ -64,6 +64,26 @@ variable "devcontainer_tls_server_name" {
   default     = "localhost"
 }
 
+# Absolute tfvars paths passed from the kind Makefile so cache-copied Terragrunt
+# runs can still find the stage, target, and operator override files.
+variable "kind_stage_900_tfvars_file" {
+  description = "Absolute path to kubernetes/kind/stages/900-sso.tfvars."
+  type        = string
+  default     = ""
+}
+
+variable "kind_target_tfvars_file" {
+  description = "Absolute path to kubernetes/kind/targets/kind.tfvars."
+  type        = string
+  default     = ""
+}
+
+variable "kind_operator_overrides_file" {
+  description = "Absolute path to the rendered kind operator overrides tfvars file."
+  type        = string
+  default     = ""
+}
+
 # -----------------------------------------------------------------------------
 # Feature toggles (stage-driven)
 # -----------------------------------------------------------------------------

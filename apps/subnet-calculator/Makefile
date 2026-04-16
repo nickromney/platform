@@ -11,6 +11,7 @@ MAKE_KNOWN_GOALS := help prereqs build test check-prerequisites check-docker-pre
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
+include ../../mk/compose.mk
 
 .PHONY: help prereqs test check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
   vendor-apim-simulator \
@@ -35,71 +36,34 @@ VENDOR_APIM_SIMULATOR_ARGS = \
 prereqs: ## Check local prerequisites
 	@$(MAKE) --no-print-directory check-prerequisites
 
-check-prerequisites: ## Check that podman/docker tooling is available and running
+check-prerequisites: ## Check that a supported compose backend is available and running
 	@echo "Checking prerequisites..."
 	@echo ""
-	@echo "1. Checking for podman-compose or compose..."
-	@if command -v podman-compose > /dev/null 2>&1; then \
-		echo "✓ podman-compose found"; \
-	elif command -v compose > /dev/null 2>&1; then \
-		echo "✓ compose found"; \
+	@echo "1. Checking for a supported compose backend..."
+	@if [ -n "$(COMPOSE_CMD)" ]; then \
+		echo "✓ $(COMPOSE_CMD) found"; \
 	else \
-		echo "✗ Neither podman-compose nor compose found"; \
+		echo "✗ No supported compose backend found"; \
 		echo "  Install hints:"; \
-		"$(abspath ../../scripts/install-tool-hints.sh)" --execute --plain podman-compose | sed 's/^/    /'; \
-		exit 1; \
-	fi
-	@echo ""
-	@echo "2. Checking if podman/docker is running..."
-	@if command -v podman > /dev/null 2>&1; then \
-		if podman info > /dev/null 2>&1; then \
-			echo "✓ Podman is running"; \
-		else \
-			echo "✗ Podman is not running"; \
-			echo "  Start with: podman machine start"; \
-			exit 1; \
-		fi; \
-	elif command -v docker > /dev/null 2>&1; then \
-		if docker info > /dev/null 2>&1; then \
-			echo "✓ Docker is running"; \
-		else \
-			echo "✗ Docker is not running"; \
-			echo "  Start Docker Desktop or use: docker-machine start"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "✗ Neither podman nor docker found"; \
-		echo "  Install hints:"; \
-		"$(abspath ../../scripts/install-tool-hints.sh)" --execute --plain podman docker | sed 's/^/    /'; \
+		"$(abspath ../../scripts/install-tool-hints.sh)" --execute --plain docker podman podman-compose | sed 's/^/    /'; \
 		exit 1; \
 	fi
 	@echo ""
 	@echo "✓ All prerequisites satisfied"
 
-check-docker-prerequisites: ## Check that docker compose is installed and Docker is running
-	@if ! command -v docker >/dev/null 2>&1; then \
-		echo "docker is required but was not found in PATH." >&2; \
-		exit 1; \
-	fi
-	@if ! docker compose version >/dev/null 2>&1; then \
-		echo "'docker compose' is required but not available." >&2; \
-		exit 1; \
-	fi
-	@if ! docker info >/dev/null 2>&1; then \
-		echo "Docker is not running. Start Docker Desktop and try again." >&2; \
-		exit 1; \
-	fi
+check-docker-prerequisites: ## Check that compose tooling is installed and running
+	@$(MAKE) --no-print-directory check-prerequisites
 
-build: check-docker-prerequisites ## Build the default compose images
-	@$(DEFAULT_COMPOSE_ENV) docker compose build api-fastapi-container-app frontend-typescript-vite
+build: check-prerequisites ## Build the default compose images
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build api-fastapi-container-app frontend-typescript-vite
 
 ##@ Vendoring
 vendor-apim-simulator: ## Refresh the vendored APIM simulator from a specific tag or commit SHA
 	@"$(VENDOR_APIM_SIMULATOR_SCRIPT)" --execute $(strip $(VENDOR_APIM_SIMULATOR_ARGS))
 
 ##@ Run
-up: check-docker-prerequisites ## Start the default compose stack and print the local URL
-	@$(DEFAULT_COMPOSE_ENV) docker compose up -d --build api-fastapi-container-app frontend-typescript-vite
+up: check-prerequisites ## Start the default compose stack and print the local URL
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --build api-fastapi-container-app frontend-typescript-vite
 	@echo "Subnet Calculator URL: $(DEFAULT_STACK_URL)"
 	@echo "API docs:              $(DEFAULT_API_DOCS_URL)"
 	@echo "Default stack:         stack 04 (frontend-typescript-vite + api-fastapi-container-app)"
@@ -109,20 +73,20 @@ urls: ## Print the default local URLs for the compose stack
 	@echo "API docs:              $(DEFAULT_API_DOCS_URL)"
 	@echo "Default stack:         stack 04 (frontend-typescript-vite + api-fastapi-container-app)"
 
-logs: check-docker-prerequisites ## Tail compose logs
-	@$(DEFAULT_COMPOSE_ENV) docker compose logs -f --tail=200
+logs: check-prerequisites ## Tail compose logs
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) logs -f --tail=200
 
-ps: check-docker-prerequisites ## Show compose container status
-	@$(DEFAULT_COMPOSE_ENV) docker compose ps
+ps: check-prerequisites ## Show compose container status
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) ps
 
-down: check-docker-prerequisites ## Stop the compose stack
-	@$(DEFAULT_COMPOSE_ENV) docker compose down --remove-orphans
+down: check-prerequisites ## Stop the compose stack
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) down --remove-orphans
 
 ##@ Cleanup
 clean-ports: ## Stop local services and clear the shared demo ports
 	@echo "Cleaning up services..."
-	@echo "  Stopping podman-compose stacks..."
-	@podman-compose down 2>/dev/null || true
+	@echo "  Stopping compose stack..."
+	@if [ -n "$(COMPOSE_CMD)" ]; then $(COMPOSE_CMD) down 2>/dev/null || true; fi
 	@echo "  Killing direct services (7000s) and SWA services (4000s)..."
 	@for port in 7071 7080 7000 7010 4280 4281 4282; do \
 		pid=$$(lsof -ti:$$port 2>/dev/null); \
@@ -193,31 +157,31 @@ wait-direct-services: ## Wait for the direct APIs to become healthy
 	done
 	@echo "✓ All direct services are ready!"
 
-##@ Podman-Compose
+##@ Compose
 
 start-compose-all: check-prerequisites ## Start all compose stacks
-	@echo "Starting all podman-compose stacks..."
+	@echo "Starting all compose stacks..."
 	@echo "  compose-01 (Flask + Azure Function):           http://localhost:8000"
 	@echo "  compose-02 (Static HTML + Container App):      http://localhost:8001"
 	@echo "  compose-03 (Flask + Container App):            http://localhost:8002"
 	@echo "  compose-04 (TypeScript Vite + Container App):  http://localhost:8003"
-	podman-compose up
+	$(COMPOSE_CMD) up
 
 start-compose-01: check-prerequisites ## Start compose-01 on port 8000
 	@echo "Starting compose-01: Flask + Azure Function (port 8000)..."
-	podman-compose up frontend-python-flask api-fastapi-azure-function
+	$(COMPOSE_CMD) up frontend-python-flask api-fastapi-azure-function
 
 start-compose-02: check-prerequisites ## Start compose-02 on port 8001
 	@echo "Starting compose-02: Static HTML + Container App (port 8001)..."
-	podman-compose up frontend-html-static api-fastapi-container-app
+	$(COMPOSE_CMD) up frontend-html-static api-fastapi-container-app
 
 start-compose-03: check-prerequisites ## Start compose-03 on port 8002
 	@echo "Starting compose-03: Flask + Container App (port 8002)..."
-	podman-compose up frontend-python-flask-container-app api-fastapi-container-app
+	$(COMPOSE_CMD) up frontend-python-flask-container-app api-fastapi-container-app
 
 start-compose-04: check-prerequisites ## Start compose-04 on port 8003
 	@echo "Starting compose-04: TypeScript Vite + Container App (port 8003)..."
-	podman-compose up frontend-typescript-vite api-fastapi-container-app
+	$(COMPOSE_CMD) up frontend-typescript-vite api-fastapi-container-app
 
 ##@ SWA CLI
 
@@ -226,7 +190,7 @@ start-swa-04: check-prerequisites ## Start SWA 04 with no auth on port 4280
 	@if ! curl -s http://localhost:8090/api/v1/health > /dev/null 2>&1; then \
 		echo "✗ Container App API (port 8090 - from compose) is not running"; \
 		echo "Starting compose stack..."; \
-		podman-compose up -d api-fastapi-container-app; \
+		$(COMPOSE_CMD) up -d api-fastapi-container-app; \
 		echo "Waiting for Container App to be ready..."; \
 		for i in 1 2 3 4 5; do \
 			if curl -s http://localhost:8090/api/v1/health > /dev/null 2>&1; then \
@@ -253,7 +217,7 @@ start-swa-05: check-prerequisites ## Start SWA 05 with JWT auth on port 4281
 	@if ! curl -s http://localhost:8080/api/v1/health > /dev/null 2>&1; then \
 		echo "✗ Azure Function API (port 8080 - from compose) is not running"; \
 		echo "Starting compose stack..."; \
-		podman-compose up -d api-fastapi-azure-function; \
+		$(COMPOSE_CMD) up -d api-fastapi-azure-function; \
 		echo "Waiting for Azure Function to be ready..."; \
 		for i in 1 2 3 4 5; do \
 			if curl -s http://localhost:8080/api/v1/health > /dev/null 2>&1; then \
@@ -280,7 +244,7 @@ start-swa-06: check-prerequisites ## Start SWA 06 with Entra ID on port 4282
 	@if ! curl -s http://localhost:8090/api/v1/health > /dev/null 2>&1; then \
 		echo "✗ Container App API (port 8090 - from compose) is not running"; \
 		echo "Starting compose stack..."; \
-		podman-compose up -d api-fastapi-container-app; \
+		$(COMPOSE_CMD) up -d api-fastapi-container-app; \
 		echo "Waiting for Container App to be ready..."; \
 		for i in 1 2 3 4 5; do \
 			if curl -s http://localhost:8090/api/v1/health > /dev/null 2>&1; then \
@@ -307,9 +271,9 @@ start-swa-06: check-prerequisites ## Start SWA 06 with Entra ID on port 4282
 start-swa-backends: check-prerequisites ## Start the shared SWA backend services
 	@echo "Starting SWA backends (compose)..."
 	@echo "  Starting Container App (port 8090) for swa-04, swa-06..."
-	@podman-compose up -d api-fastapi-container-app
+	@$(COMPOSE_CMD) up -d api-fastapi-container-app
 	@echo "  Starting Azure Function (port 8080) for swa-05..."
-	@podman-compose up -d api-fastapi-azure-function
+	@$(COMPOSE_CMD) up -d api-fastapi-azure-function
 	@echo "Waiting for backends to be ready..."
 	@for i in 1 2 3 4 5; do \
 		if curl -s http://localhost:8090/api/v1/health > /dev/null && curl -s http://localhost:8080/api/v1/health > /dev/null; then \
@@ -396,7 +360,7 @@ test-bruno-direct-full: clean-ports start-direct-all-bg wait-direct-services tes
 
 test-bruno-compose-full: check-prerequisites ## Start, test, and clean up the compose stacks
 	@echo "Starting compose services..."
-	podman-compose up -d
+	$(COMPOSE_CMD) up -d
 	@echo "Waiting for compose services to be ready..."
 	@sleep 10
 	@echo "Running compose tests..."
@@ -406,14 +370,14 @@ test-bruno-compose-full: check-prerequisites ## Start, test, and clean up the co
 		bun x @usebruno/cli@latest run compose-03 --env local && \
 		bun x @usebruno/cli@latest run compose-04 --env local
 	@echo "Stopping compose services..."
-	podman-compose down
+	$(COMPOSE_CMD) down
 	@echo "✓ Compose testing complete"
 
 test-bruno-swa-full: clean-ports check-prerequisites ## Start, test, and clean up the SWA stacks
 	@echo "Starting SWA backend dependencies (via compose)..."
 	@mkdir -p /tmp/subnet-calc-logs
 	@echo "  Starting both backends..."
-	@podman-compose up -d api-fastapi-container-app api-fastapi-azure-function > /tmp/subnet-calc-logs/compose-up.log 2>&1
+	@$(COMPOSE_CMD) up -d api-fastapi-container-app api-fastapi-azure-function > /tmp/subnet-calc-logs/compose-up.log 2>&1
 	@echo "Waiting for backends to be ready..."
 	@for i in 1 2 3 4 5; do \
 		if curl -s http://localhost:8090/api/v1/health > /dev/null && curl -s http://localhost:8080/api/v1/health > /dev/null; then \
@@ -444,5 +408,5 @@ test-bruno-swa-full: clean-ports check-prerequisites ## Start, test, and clean u
 	@kill $$(cat /tmp/swa-06.pid 2>/dev/null) 2>/dev/null || true
 	@sleep 2
 	@echo "Stopping compose backend services..."
-	@podman-compose down
+	@$(COMPOSE_CMD) down
 	@echo "✓ SWA testing complete"
