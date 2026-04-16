@@ -5,6 +5,8 @@ TG ?= terragrunt
 TG_LOG_SHOW_ABS_PATHS ?= true
 TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
+STACK_RUNTIME_SCOPE := slicer
+STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes-slicer/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -1207,7 +1209,7 @@ reset:
 	rm -rf "$(RUN_DIR)" 2>/dev/null || true; \
 	rm -rf "$$state_dir" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.terraform" "$(STACK_DIR)/.terragrunt-cache" 2>/dev/null || true; \
-	rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \
+	rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   done"; \
 	if [ "$$reset_incomplete" = "1" ]; then \

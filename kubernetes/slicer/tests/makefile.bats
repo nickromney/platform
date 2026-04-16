@@ -137,6 +137,25 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "slicer target profile namespaces shared terraform runtime artifacts" {
+  run grep -En 'runtime_artifact_scope += "slicer"' \
+    "${REPO_ROOT}/kubernetes/slicer/targets/slicer.tfvars"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer reset cleans only the slicer runtime artifact scope" {
+  run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -ne 0 ]
+}
+
 @test "slicer check-kubeconfig skips kubie lint noise when there are no contexts yet" {
   run sed -n '/^check-kubeconfig:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/slicer/Makefile"
 

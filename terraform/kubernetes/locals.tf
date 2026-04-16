@@ -8,10 +8,10 @@ locals {
   kubeconfig_path_expanded          = abspath(pathexpand(var.kubeconfig_path))
   preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${local.repo_root}/kubernetes/kind/preload-images.txt")
 
-  repo_root         = abspath("${local.stack_dir}/../..")
-  monorepo_apps_dir = abspath("${local.repo_root}/apps")
-
-  run_dir = abspath("${local.stack_dir}/.run")
+  repo_root              = abspath("${local.stack_dir}/../..")
+  monorepo_apps_dir      = abspath("${local.repo_root}/apps")
+  runtime_artifact_scope = trimspace(var.runtime_artifact_scope)
+  run_dir                = local.runtime_artifact_scope != "" ? abspath("${local.stack_dir}/.run/${local.runtime_artifact_scope}") : abspath("${local.stack_dir}/.run")
 
   gitea_http_host_local             = "127.0.0.1"
   gitea_ssh_host_local              = "127.0.0.1"
@@ -117,7 +117,7 @@ locals {
   ]) : "        plugins: []"
   signoz_auth_proxy_image_effective = var.prefer_external_platform_images && local.external_platform_signoz_auth_proxy != "" ? local.external_platform_signoz_auth_proxy : local.default_signoz_auth_proxy_image
 
-  containerd_certs_dir = abspath("${local.stack_dir}/.run/containerd-certs.d")
+  containerd_certs_dir = "${local.run_dir}/containerd-certs.d"
   kind_node_kubectl_wrapper_mount = [
     {
       host_path      = abspath("${local.stack_dir}/scripts/kind-node-kubectl-wrapper.sh")

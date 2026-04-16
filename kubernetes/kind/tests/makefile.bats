@@ -646,3 +646,22 @@ EOF
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"FAIL planned kind host port overlap: gateway-https (127.0.0.1:30080) conflicts with argocd (127.0.0.1:30080)"* ]]
 }
+
+@test "kind target profile namespaces shared terraform runtime artifacts" {
+  run grep -En 'runtime_artifact_scope += "kind"' \
+    "${REPO_ROOT}/kubernetes/kind/targets/kind.tfvars"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind reset cleans only the kind runtime artifact scope" {
+  run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -ne 0 ]
+}

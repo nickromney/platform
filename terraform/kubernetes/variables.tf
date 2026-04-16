@@ -40,6 +40,17 @@ variable "kind_stack_dir" {
   default     = ""
 }
 
+variable "runtime_artifact_scope" {
+  description = "Optional target-scoped directory name under <kind_stack_dir>/.run for generated helper artifacts."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.runtime_artifact_scope) == "" || length(regexall("^[A-Za-z0-9][A-Za-z0-9._-]*$", trimspace(var.runtime_artifact_scope))) > 0
+    error_message = "runtime_artifact_scope must be empty or a simple directory name containing only letters, numbers, dot, underscore, and hyphen."
+  }
+}
+
 variable "kubeconfig_path" {
   description = "Path to kubeconfig file."
   type        = string

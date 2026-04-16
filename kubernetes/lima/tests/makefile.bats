@@ -128,6 +128,25 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "lima target profile namespaces shared terraform runtime artifacts" {
+  run grep -En 'runtime_artifact_scope += "lima"' \
+    "${REPO_ROOT}/kubernetes/lima/targets/lima.tfvars"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima reset cleans only the lima runtime artifact scope" {
+  run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -ne 0 ]
+}
+
 @test "lima plan rejects invalid explicit STAGE values with usage exit code" {
   run make -C "${REPO_ROOT}/kubernetes/lima" plan STAGE=950
 

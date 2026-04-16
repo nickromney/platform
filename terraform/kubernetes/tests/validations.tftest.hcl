@@ -73,10 +73,10 @@ run "cilium_policy_audit_mode_requires_cilium" {
   command = plan
 
   variables {
-    cni_provider                     = "none"
-    enable_hubble                    = false
-    enable_argocd                    = false
-    enable_cilium_policy_audit_mode  = true
+    cni_provider                    = "none"
+    enable_hubble                   = false
+    enable_argocd                   = false
+    enable_cilium_policy_audit_mode = true
   }
 
   expect_failures = [check.enable_cilium_policy_audit_mode_requires_cilium_provider]
