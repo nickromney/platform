@@ -11,9 +11,10 @@ If you are testing an older Slicer or Lima cluster, rerun `900 apply` first or i
 The repo uses project-local Playwright from `@playwright/test`; no global
 `playwright` install is expected.
 
-Full browser E2E is a host-oriented workflow. The devcontainer does not bake
-Chromium runtime libraries anymore, so run `check-sso-e2e` from the host unless
-you intentionally provision browser dependencies yourself.
+Full browser E2E now works in the devcontainer too. The image bakes Chromium
+runtime libraries, and `tests/kubernetes/sso/run.sh` still installs the browser
+binary on demand, so the same `check-sso-e2e` target runs from either the host
+or the container.
 
 ## Setup
 

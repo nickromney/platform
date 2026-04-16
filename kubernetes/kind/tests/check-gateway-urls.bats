@@ -22,6 +22,12 @@ EOF
   cat >"${TEST_BIN}/nc" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]; then
+  if [[ "${*}" != *"host.docker.internal"* ]]; then
+    echo "expected devcontainer nc probe to use host.docker.internal" >&2
+    exit 98
+  fi
+fi
 exit 0
 EOF
   chmod +x "${TEST_BIN}/nc"
@@ -29,6 +35,12 @@ EOF
   cat >"${TEST_BIN}/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]; then
+  if [[ "${*}" != *"--connect-to"* || "${*}" != *"host.docker.internal"* ]]; then
+    echo "expected devcontainer curl probe to use host.docker.internal" >&2
+    exit 98
+  fi
+fi
 url="${*: -1}"
 case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
   0:https://headlamp.admin.127.0.0.1.sslip.io/)
@@ -212,4 +224,11 @@ EOF
   [[ "${output}" == *"HTTPS https://headlamp.admin.127.0.0.1.sslip.io/ -> 000"* ]]
   [[ "${output}" == *"curl exit 35"* ]]
   [[ "${output}" != *"signoz.admin.127.0.0.1.sslip.io"* ]]
+}
+
+@test "check-gateway-urls uses host.docker.internal inside the devcontainer" {
+  run env PLATFORM_DEVCONTAINER=1 "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Host port open: host.docker.internal:443"* ]]
 }

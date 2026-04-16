@@ -19,11 +19,27 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'operator_overrides_sha = try(filesha256(abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")), "absent")' "${SSO_FILE}"
+  run grep -Fn 'kind_stage_900_tfvars_sha   = try(filesha256(var.kind_stage_900_tfvars_file), "absent")' "${SSO_FILE}"
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'KIND_OPERATOR_OVERRIDES_FILE="${abspath("${path.module}/../../.run/kind/operator-overrides.tfvars")}"' "${SSO_FILE}"
+  run grep -Fn 'kind_target_tfvars_sha      = try(filesha256(var.kind_target_tfvars_file), "absent")' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'operator_overrides_sha      = try(filesha256(var.kind_operator_overrides_file), "absent")' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'KIND_STAGE_900_TFVARS_FILE="${var.kind_stage_900_tfvars_file}"' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'KIND_TARGET_TFVARS_FILE="${var.kind_target_tfvars_file}"' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'KIND_OPERATOR_OVERRIDES_FILE="${var.kind_operator_overrides_file}"' "${SSO_FILE}"
 
   [ "${status}" -eq 0 ]
 

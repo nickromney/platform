@@ -2,10 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STACK_DIR="${STACK_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+STACK_DIR="${STACK_DIR:-${REPO_ROOT}/terraform/kubernetes}"
 INVENTORY_FILE="${INVENTORY_FILE:-${STACK_DIR}/config/platform-launchpad.apps.json}"
 # shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 MARKER_START="codex:platform-launchpad:start"
 MARKER_END="codex:platform-launchpad:end"

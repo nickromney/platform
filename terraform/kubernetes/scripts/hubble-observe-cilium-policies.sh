@@ -2,8 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 # shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<'EOF'
@@ -2574,7 +2575,7 @@ print_command=0
 dry_run=0
 DEFAULT_KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 CAPTURE_SCRIPT="${SCRIPT_DIR}/hubble-capture-flows.sh"
 SUMMARIZE_SCRIPT="${SCRIPT_DIR}/hubble-summarise-flows.sh"
 RENDER_VALUES_SCRIPT="${SCRIPT_DIR}/render-cilium-policy-values.sh"

@@ -238,6 +238,11 @@ install_kyverno() {
   rm -rf "${tmp_dir}"
 }
 
+install_playwright_chromium() {
+  # Bake the browser runtime dependencies that the stage-900 SSO harness needs.
+  run_as_user "bun x playwright install --with-deps chromium"
+}
+
 if ! command -v arkade >/dev/null 2>&1; then
   curl -fsSL https://get.arkade.dev | sh
 fi
@@ -283,3 +288,5 @@ fi
 if [[ -x "/home/${username}/.bun/bin/bunx" ]]; then
   ln -sf "/home/${username}/.bun/bin/bunx" /usr/local/bin/bunx
 fi
+
+install_playwright_chromium

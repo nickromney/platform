@@ -41,7 +41,7 @@ EOF
   cat >"${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator/pyproject.toml" <<'EOF'
 [project]
 name = "apim-simulator"
-version = "0.3.0"
+version = "0.4.0"
 EOF
 
   cat >"${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator.vendor.json" <<'EOF'
@@ -50,8 +50,8 @@ EOF
   "upstream": {
     "origin": "git@example.com:example/apim-simulator.git",
     "ref_kind": "tag",
-    "requested_ref": "v0.3.0",
-    "resolved_commit": "90254521d2f3eb13f5f1f2a03f7c02e1f14973d0"
+    "requested_ref": "v0.4.0",
+    "resolved_commit": "fd545987759d1d373ef015da2882532717e027fa"
   }
 }
 EOF
@@ -71,7 +71,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"actions/checkout v6.0.2 resolves to the pinned SHA"* ]]
-  [[ "${output}" == *"apim-simulator v0.3.0 (90254521d2f3eb13f5f1f2a03f7c02e1f14973d0) is vendored; version 0.3.0; profile full"* ]]
+  [[ "${output}" == *"apim-simulator v0.4.0 (fd545987759d1d373ef015da2882532717e027fa) is vendored; version 0.4.0; profile full"* ]]
   [[ "${output}" == *"All .npmrc files set min-release-age=7"* ]]
   [[ "${output}" == *"All bunfig.toml files set minimumReleaseAge=604800"* ]]
   [[ "${output}" == *"All uv-managed pyproject.toml files set exclude-newer='7 days'"* ]]

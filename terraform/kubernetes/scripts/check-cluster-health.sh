@@ -2,7 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+if [[ -z "${REPO_ROOT:-}" ]]; then
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+fi
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"

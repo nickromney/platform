@@ -2,8 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 # shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<'EOF'
@@ -447,7 +448,7 @@ require_cmd sort
 require_cmd cut
 require_cmd sed
 
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 RENDER_SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/render-cilium-policy-values.sh"
 MODULE_ROOT_DEFAULT="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/cilium-module"
 

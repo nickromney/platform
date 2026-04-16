@@ -111,8 +111,8 @@ Refresh the vendored copy from an explicit tag or commit SHA:
 
 ```bash
 make vendor-apim-simulator \
-  APIM_SIMULATOR_SOURCE_REPO=~/Developer/personal/apim-simulator \
-  APIM_SIMULATOR_SOURCE_REF=v0.3.0
+  APIM_SIMULATOR_SOURCE_REPO=$HOME/Developer/personal/apim-simulator \
+  APIM_SIMULATOR_SOURCE_REF=v0.4.0
 ```
 
 The vendoring script records the resolved source commit and subset profile in

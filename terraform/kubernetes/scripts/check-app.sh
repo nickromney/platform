@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+
 # shellcheck source=/dev/null
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 FAILURES=0
 
@@ -66,6 +69,7 @@ HOST_SUFFIX=""
 PATH_TO_CHECK="/"
 HOST_PORT=""
 RESOLVE_IP="127.0.0.1"
+DEVCONTAINER_HOST_ALIAS="${PLATFORM_DEVCONTAINER_HOST_ALIAS:-${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}}"
 SINCE="20m"
 TAIL="200"
 EXTENDED=0
@@ -154,6 +158,20 @@ tfvar_get() {
 }
 
 normalize_tfvars_files
+
+devcontainer_enabled() {
+  [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]
+}
+
+resolve_probe_target() {
+  local target="${RESOLVE_IP}"
+
+  if devcontainer_enabled && [[ "${target}" == "127.0.0.1" || "${target}" == "localhost" ]]; then
+    target="${DEVCONTAINER_HOST_ALIAS}"
+  fi
+
+  printf '%s\n' "${target}"
+}
 
 if [[ -z "${ARGOCD_NS}" ]]; then
   ARGOCD_NS="$(tfvar_get argocd_namespace)"
@@ -292,18 +310,25 @@ print_oauth2_proxy_args_summary() {
 
 curl_local() {
   local url="$1"
+  local probe_target curl_args=()
   if ! have curl; then
     warn "curl not found; skipping local HTTPS probe"
     return 0
   fi
   echo "GET ${url}"
   # Unauthenticated: expect 302 to dex (SSO) or 401/403 depending on app.
+  probe_target="$(resolve_probe_target)"
+  if [[ "${probe_target}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ || "${probe_target}" =~ ^\[[0-9A-Fa-f:]+\]$ ]]; then
+    curl_args=(--resolve "${HOST}:${HOST_PORT}:${probe_target}")
+  else
+    curl_args=(--connect-to "${HOST}:${HOST_PORT}:${probe_target}:${HOST_PORT}")
+  fi
   local hdr
   hdr="$(mktemp)"
   local code=""
   set +e
   code="$(curl -k -sS -o /dev/null -D "${hdr}" --max-time 15 \
-    --resolve "${HOST}:${HOST_PORT}:${RESOLVE_IP}" \
+    "${curl_args[@]}" \
     -w '%{http_code}' \
     "${url}")"
   rc=$?
@@ -349,6 +374,7 @@ print_kv "host" "${HOST}"
 print_kv "path" "${PATH_TO_CHECK}"
 print_kv "host_port" "${HOST_PORT}"
 print_kv "resolve_ip" "${RESOLVE_IP}"
+print_kv "probe_target" "$(resolve_probe_target)"
 print_kv "argocd_ns" "${ARGOCD_NS}"
 print_kv "httproute" "${HTTPROUTE_NS}/${HTTPROUTE_NAME}"
 print_kv "oauth2_proxy" "${SSO_NS}/${OAUTH2_PROXY_NAME}"

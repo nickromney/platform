@@ -1,6 +1,6 @@
 [project]
 name = "apim-simulator"
-version = "0.3.0"
+version = "0.4.0"
 description = "Config-driven Azure API Management simulator for local Docker-first testing"
 requires-python = ">=3.13"
 dependencies = [

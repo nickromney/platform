@@ -27,6 +27,8 @@
   ],
   "containerEnv": {
     "PLATFORM_DEVCONTAINER": "1",
+    "PLATFORM_DEVCONTAINER_HOST_ALIAS": "host.docker.internal",
+    "KIND_DEVCONTAINER_HOST_ALIAS": "host.docker.internal",
     "CAROOT": "/home/vscode/.mkcert",
     "DEFAULT_KUBECONFIG_PATH": "${localEnv:HOME}/.kube/config",
     "KIND_KUBECONFIG_PATH": "${localEnv:HOME}/.kube/kind-kind-local.yaml",

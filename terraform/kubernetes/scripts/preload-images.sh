@@ -19,8 +19,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+
 # shellcheck source=/dev/null
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<'EOF'
@@ -56,7 +59,7 @@ require_cmd() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 IMAGE_LIST="${REPO_ROOT}/kubernetes/kind/preload-images.txt"
 CLUSTER_NAME="kind-local"
 USER_PLATFORM=""

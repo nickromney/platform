@@ -3,8 +3,8 @@
   "upstream": {
     "origin": "git@github.com:nickromney/apim-simulator.git",
     "ref_kind": "tag",
-    "requested_ref": "v0.3.0",
-    "resolved_commit": "90254521d2f3eb13f5f1f2a03f7c02e1f14973d0"
+    "requested_ref": "v0.4.0",
+    "resolved_commit": "fd545987759d1d373ef015da2882532717e027fa"
   },
   "subset": {
     "profile": "runtime",

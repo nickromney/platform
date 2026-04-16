@@ -10,6 +10,7 @@ LEGACY_STATE_FILE ?= ../../terraform/.run/platform/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
+export REPO_ROOT
 STAGE_LADDER_MK := $(MAKEFILE_DIR)../stage-ladder.mk
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
@@ -138,6 +139,9 @@ target_profile_file = targets/kind.tfvars
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
+export TF_VAR_kind_stage_900_tfvars_file := $(abspath $(MAKEFILE_DIR)$(STAGE_FILE_REL_900))
+export TF_VAR_kind_target_tfvars_file := $(target_var_file)
+export TF_VAR_kind_operator_overrides_file := $(KIND_OPERATOR_OVERRIDES_FILE)
 .PHONY: help
 help:
 	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/Loki)"
@@ -670,11 +674,7 @@ apply: workflow-validate-stage
 			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
 			run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
 			if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-				if [ "$(PLATFORM_DEVCONTAINER)" = "1" ]; then \
-					echo "INFO skipping check-sso-e2e in the devcontainer; full browser E2E remains a host-side workflow."; \
-				else \
-					run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
-				fi; \
+				run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 			fi; \
 		fi; \
 	fi; \
@@ -769,11 +769,6 @@ check-sso: workflow-validate-stage
 .PHONY: check-sso-e2e
 check-sso-e2e: workflow-validate-stage
 	@set -euo pipefail; \
-	if [ "$(PLATFORM_DEVCONTAINER)" = "1" ] && [ "$${ALLOW_DEVCONTAINER_BROWSER_E2E:-0}" != "1" ]; then \
-		echo "check-sso-e2e is host-oriented. The devcontainer image no longer bakes browser runtime dependencies."; \
-		echo "Run this target from the host, or set ALLOW_DEVCONTAINER_BROWSER_E2E=1 after provisioning browser deps manually."; \
-		exit 1; \
-	fi; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
 	stage_tfvars="$(abspath $(STAGE_FILE_REL_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \

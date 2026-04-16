@@ -196,6 +196,8 @@ and the repo no longer auto-merges them into `~/.kube/config` by default.
 If you deliberately need a repo context copied into `~/.kube/config`, use the
 explicit `make merge-default-kubeconfig` target in that cluster directory.
 
-Full Playwright browser E2E is host-oriented. The devcontainer no longer bakes
-Chromium runtime libraries, so `check-sso-e2e` should be run from the host
-unless you intentionally provision browser dependencies yourself.
+Full Playwright browser E2E now runs inside the devcontainer too. The image
+bakes Chromium runtime libraries, and the shared SSO harness still installs the
+browser binary on demand, so `make -C kubernetes/kind 900 apply
+AUTO_APPROVE=1` can reach `check-sso-e2e` from inside the container as well as
+from the host.

@@ -110,7 +110,7 @@ from app.terraform_import import import_from_tofu_show_json
 logger = logging.getLogger("apim-simulator")
 
 APIM_SERVICE_NAME = "apim-simulator"
-APIM_SERVICE_VERSION = "0.3.0"
+APIM_SERVICE_VERSION = "0.4.0"
 APIM_ROUTE_NAME_ATTR = "apim.route.name"
 APIM_CACHE_RESULT_ATTR = "apim.cache.result"
 APIM_BACKEND_ID_ATTR = "apim.backend.id"
