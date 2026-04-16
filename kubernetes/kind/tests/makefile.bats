@@ -23,6 +23,9 @@ setup() {
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
+  [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
+  [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
+  [[ "${output}" == *"CHECK_VERSION_FORMAT=text|json"* ]]
   [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
   [[ "${output}" != *"${HOME}"* ]]
@@ -212,6 +215,37 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "kind exports the absolute stack and config paths into Terraform" {
+  run grep -Fn 'export TF_VAR_kind_stack_dir := $(abspath $(STACK_DIR))' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "terragrunt reads the kind stack and config paths from the exported env vars" {
+  run grep -Fn 'kind_stack_dir        = get_env("TF_VAR_kind_stack_dir", get_original_terragrunt_dir())' \
+    "${REPO_ROOT}/terraform/kubernetes/terragrunt.hcl"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kind_config_path      = get_env("TF_VAR_kind_config_path", "${get_original_terragrunt_dir()}/kind-config.yaml")' \
+    "${REPO_ROOT}/terraform/kubernetes/terragrunt.hcl"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind stage tfvars no longer hardcode a cache-relative kind config path" {
+  run grep -REn 'kind_config_path[[:space:]]*=[[:space:]]*"./kind-config.yaml"' \
+    "${REPO_ROOT}/kubernetes/kind/stages"
+
+  [ "${status}" -ne 0 ]
+}
+
 @test "kind prereqs surfaces Docker registry auth status" {
   run grep -Fn 'echo "Docker registry auth:"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
@@ -236,6 +270,45 @@ setup() {
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "kind check-version can emit a combined machine-readable JSON report" {
+  stub_stack="${BATS_TEST_TMPDIR}/stack"
+  stub_scripts="${stub_stack}/scripts"
+  mkdir -p "${stub_scripts}"
+
+  cat >"${stub_scripts}/check-version.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"report":"components"}'
+EOF
+  chmod +x "${stub_scripts}/check-version.sh"
+
+  cat >"${stub_scripts}/check-provider-version.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"report":"providers"}'
+EOF
+  chmod +x "${stub_scripts}/check-provider-version.sh"
+
+  cat >"${TEST_BIN}/ensure-kind-kubeconfig.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ensure-kind-kubeconfig.sh"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-version \
+    STACK_DIR="${stub_stack}" \
+    ENSURE_KIND_KUBECONFIG="${TEST_BIN}/ensure-kind-kubeconfig.sh" \
+    CHECK_VERSION_FORMAT=json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.component_report.report + "|" + .provider_report.report' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "components|providers" ]
 }
 
 @test "kind test-shell delegates to repo shell validation and shellcheck" {
@@ -614,4 +687,23 @@ EOF
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"FAIL planned kind host port overlap: gateway-https (127.0.0.1:30080) conflicts with argocd (127.0.0.1:30080)"* ]]
+}
+
+@test "kind target profile namespaces shared terraform runtime artifacts" {
+  run grep -En 'runtime_artifact_scope += "kind"' \
+    "${REPO_ROOT}/kubernetes/kind/targets/kind.tfvars"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind reset cleans only the kind runtime artifact scope" {
+  run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -ne 0 ]
 }

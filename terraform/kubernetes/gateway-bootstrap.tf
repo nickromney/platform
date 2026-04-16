@@ -1,13 +1,13 @@
 data "kubectl_file_documents" "gateway_api_crds" {
   count = var.enable_gateway_tls ? 1 : 0
 
-  content = file("${path.module}/apps/nginx-gateway-fabric-crds/gateway-api-crds.yaml")
+  content = file("${local.stack_dir}/apps/nginx-gateway-fabric-crds/gateway-api-crds.yaml")
 }
 
 data "kubectl_file_documents" "nginx_gateway_fabric_crds" {
   count = var.enable_gateway_tls ? 1 : 0
 
-  content = file("${path.module}/apps/nginx-gateway-fabric-crds/crds.yaml")
+  content = file("${local.stack_dir}/apps/nginx-gateway-fabric-crds/crds.yaml")
 }
 
 locals {
@@ -34,7 +34,7 @@ resource "kubectl_manifest" "gateway_bootstrap_crds" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -102,7 +102,7 @@ __YAML__
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 

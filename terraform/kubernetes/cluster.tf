@@ -80,7 +80,7 @@ resource "local_file" "kind_config" {
 
   filename = local.kind_config_path_expanded
 
-  content = templatefile("${path.module}/templates/kind-config.yaml.tpl", {
+  content = templatefile("${local.stack_dir}/templates/kind-config.yaml.tpl", {
     workers         = local.kind_workers
     ports           = local.extra_port_mappings
     extra_mounts    = local.kind_extra_mounts
@@ -156,21 +156,24 @@ resource "kind_cluster" "local" {
   ]
 }
 
-resource "local_sensitive_file" "kubeconfig" {
-  count                = var.provision_kind_cluster ? 1 : 0
-  content = var.platform_devcontainer ? replace(
-    replace(
-      kind_cluster.local[0].kubeconfig,
-      "server: https://127.0.0.1:${var.kind_api_server_port}",
-      "server: https://${var.devcontainer_host_alias}:${var.kind_api_server_port}\n    tls-server-name: ${var.devcontainer_tls_server_name}"
-    ),
-    "server: https://localhost:${var.kind_api_server_port}",
-    "server: https://${var.devcontainer_host_alias}:${var.kind_api_server_port}\n    tls-server-name: ${var.devcontainer_tls_server_name}"
-  ) : kind_cluster.local[0].kubeconfig
-  filename             = local.kubeconfig_path_expanded
-  file_permission      = "0600"
-  directory_permission = "0700"
-  depends_on           = [kind_cluster.local]
+resource "null_resource" "ensure_kind_kubeconfig" {
+  triggers = {
+    cluster_id         = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
+    kubeconfig_path    = local.kubeconfig_path_expanded
+    ensure_script_sha  = filesha256("${local.repo_root}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh")
+    rewrite_script_sha = filesha256("${local.repo_root}/kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.py")
+  }
+
+  provisioner "local-exec" {
+    command     = "bash \"${local.repo_root}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh\" --execute"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      CLUSTER_NAME                = var.cluster_name
+      KUBECONFIG_PATH             = local.kubeconfig_path_expanded
+      GLOBAL_KUBECONFIG_PATH      = abspath(pathexpand("~/.kube/config"))
+      MERGE_KUBECONFIG_TO_DEFAULT = "0"
+    }
+  }
 }
 
 resource "null_resource" "preload_images" {
@@ -178,7 +181,7 @@ resource "null_resource" "preload_images" {
 
   triggers = {
     cluster_id            = kind_cluster.local[0].id
-    preload_script        = filesha256("${path.module}/scripts/preload-images.sh")
+    preload_script        = filesha256("${local.stack_dir}/scripts/preload-images.sh")
     preload_image_set     = filesha256(local.preload_image_list_path_effective)
     preload_image_list    = local.preload_image_list_path_effective
     enable_signoz         = tostring(var.enable_signoz)
@@ -194,7 +197,7 @@ resource "null_resource" "preload_images" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
+    command = "${local.stack_dir}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
     environment = {
       PRELOAD_IMAGE_LIST            = local.preload_image_list_path_effective
       PRELOAD_ENABLE_SIGNOZ         = tostring(var.enable_signoz)
@@ -211,7 +214,7 @@ resource "null_resource" "preload_images" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     null_resource.kind_restart_containerd_on_registry_config_change,
   ]
 }
@@ -267,7 +270,7 @@ resource "null_resource" "kind_restart_containerd_on_registry_config_change" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     local_file.containerd_hosts_dockerio,
     local_file.containerd_hosts_gitea,
     local_file.containerd_hosts_host_local_registry,

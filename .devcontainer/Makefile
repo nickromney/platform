@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 USE_COMMON_HELP := 1
 MAKE_HELP_WIDTH := 16
-MAKE_KNOWN_GOALS := help prereqs build run up exec
+MAKE_KNOWN_GOALS := help prereqs build run up exec check-version
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 REPO_ROOT := $(abspath $(CURDIR)/..)
@@ -19,7 +19,7 @@ CONTAINER_SHELL ?= zsh -l
 
 include ../mk/common.mk
 
-.PHONY: prereqs build run up exec
+.PHONY: prereqs build run up exec check-version
 
 ##@ Setup
 prereqs: ## Check Docker, devcontainer CLI, VS Code extension state, and host mount dirs
@@ -101,3 +101,6 @@ exec: prereqs ## Ensure the devcontainer is running, then attach a shell
 	fi; \
 	"$(DEVCONTAINER_CLI)" up --workspace-folder "$(REPO_ROOT)"; \
 	"$(DEVCONTAINER_CLI)" exec --workspace-folder "$(REPO_ROOT)" $(CONTAINER_SHELL)
+
+check-version: ## Inspect devcontainer tool versions and flag stale workspace images
+	@"$(REPO_ROOT)/.devcontainer/check-version.sh" --execute

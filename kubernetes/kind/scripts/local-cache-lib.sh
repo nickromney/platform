@@ -27,6 +27,23 @@ docker_build_local() {
   DOCKER_BUILDKIT=1 docker build "$@"
 }
 
+ensure_local_image_tag() {
+  local source_ref="$1"
+  local target_ref="$2"
+
+  if docker image inspect "${target_ref}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! docker image inspect "${source_ref}" >/dev/null 2>&1; then
+    docker pull "${source_ref}" >/dev/null
+  fi
+
+  # BuildKit resolves FROM refs through the local image store first.
+  # Restoring the exact cache tag here avoids a registry pull during builds.
+  docker tag "${source_ref}" "${target_ref}"
+}
+
 tag_exists_in_cache() {
   local cache_host="$1"
   local repo="$2"
@@ -46,6 +63,7 @@ mirror_image_into_cache() {
   local target_ref="${cache_host}/${repo}:${tag}"
 
   if [ "${force_rebuild}" != "1" ] && tag_exists_in_cache "${cache_host}" "${repo}" "${tag}"; then
+    ensure_local_image_tag "${source_ref}" "${target_ref}"
     echo "OK   cached ${target_ref}"
     return 0
   fi

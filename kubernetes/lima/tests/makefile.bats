@@ -128,6 +128,61 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "lima target profile namespaces shared terraform runtime artifacts" {
+  run grep -En 'runtime_artifact_scope += "lima"' \
+    "${REPO_ROOT}/kubernetes/lima/targets/lima.tfvars"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima reset cleans only the lima runtime artifact scope" {
+  run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -ne 0 ]
+}
+
+@test "stop-lima reports the shared host ports it is releasing" {
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  list)
+    if [[ "${2:-}" == "-q" ]]; then
+      printf 'k3s-node-1\n'
+    else
+      printf 'k3s-node-1 Running 127.0.0.1:60022\n'
+    fi
+    ;;
+  stop)
+    exit 0
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
+  cat >"${TEST_BIN}/host-gateway-proxy.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/host-gateway-proxy.sh"
+
+  run make -C "${REPO_ROOT}/kubernetes/lima" stop-lima \
+    HOST_GATEWAY_PROXY="${TEST_BIN}/host-gateway-proxy.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Shared host ports managed by Lima:"* ]]
+  [[ "${output}" == *"127.0.0.1:443"* ]]
+  [[ "${output}" == *"127.0.0.1:30080"* ]]
+  [[ "${output}" == *"127.0.0.1:30022"* ]]
+}
+
 @test "lima plan rejects invalid explicit STAGE values with usage exit code" {
   run make -C "${REPO_ROOT}/kubernetes/lima" plan STAGE=950
 

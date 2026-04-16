@@ -3,6 +3,7 @@
 provision_kind_cluster     = true
 preload_image_list_path    = "../../kubernetes/kind/preload-images.txt"
 gitea_local_access_mode    = "nodeport"
+runtime_artifact_scope     = "kind"
 enable_host_local_registry = true
 
 hardened_image_registry         = "dhi.io"

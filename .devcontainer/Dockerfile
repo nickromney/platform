@@ -20,6 +20,7 @@ RUN apt-get update \
         dnsutils \
         file \
         git \
+        gnupg \
         iproute2 \
         iptables \
         iputils-ping \

@@ -3,7 +3,6 @@
 cluster_name         = "kind-local"
 kubeconfig_path      = "~/.kube/config"
 kubeconfig_context   = "kind-kind-local"
-kind_config_path     = "./kind-config.yaml"
 kind_api_server_port = 6443
 worker_count         = 1
 node_image           = "kindest/node:v1.35.1"

@@ -7,15 +7,38 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
+CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
 NC=$'\033[0m'
 
-ok() { echo "${GREEN}✔${NC} $*"; }
-warn() { echo "${YELLOW}⚠${NC} $*"; }
+json_mode() {
+  [ "${CHECK_VERSION_FORMAT}" = "json" ]
+}
+
+ok() {
+  if json_mode; then
+    return 0
+  fi
+  echo "${GREEN}✔${NC} $*"
+}
+
+warn() {
+  if json_mode; then
+    return 0
+  fi
+  echo "${YELLOW}⚠${NC} $*"
+}
+
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
-progress() { printf '... %s\n' "$*" >&2; }
+progress() {
+  if json_mode; then
+    return 0
+  fi
+  printf '... %s\n' "$*" >&2
+}
 
 usage() {
   cat <<EOF
@@ -158,13 +181,12 @@ latest_registry_version() {
 require curl
 require jq
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+STACK_DIR="${STACK_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 LOCK_FILE="${STACK_DIR}/.terraform.lock.hcl"
 
 [ -f "${LOCK_FILE}" ] || fail "missing ${LOCK_FILE}"
 
-echo "Terraform provider versions"
 rows_file="$(mktemp)"
 trap 'rm -f "${rows_file}"' EXIT
 
@@ -201,26 +223,52 @@ while IFS=$'\t' read -r full_source short_source locked_version constraint; do
     "${short_source}" "${constraint:--}" "${locked_version}" "${latest_version}" "${status}" >>"${rows_file}"
 done < <(extract_locked_providers)
 
-awk -F '\t' '
-  {
-    rows[NR] = $0
-    row_count = NR
-    for (i = 1; i < NF; i++) {
-      if (length($i) > widths[i]) {
-        widths[i] = length($i)
+if json_mode; then
+  jq -Rcs \
+    --argjson outdated_count "${outdated_count}" \
+    --argjson error_count "${error_count}" '
+      split("\n")
+      | .[2:-1]
+      | map(select(length > 0) | split("\t"))
+      | map({
+          provider: .[0],
+          constraint: .[1],
+          locked: .[2],
+          latest: .[3],
+          status: ((.[4] // "") | gsub("\u001b\\[[0-9;]*m"; ""))
+        })
+      | {
+          format: "check-provider-version/v1",
+          providers: .,
+          summary: {
+            outdated_count: $outdated_count,
+            error_count: $error_count
+          }
+        }
+    ' "${rows_file}"
+else
+  echo "Terraform provider versions"
+  awk -F '\t' '
+    {
+      rows[NR] = $0
+      row_count = NR
+      for (i = 1; i < NF; i++) {
+        if (length($i) > widths[i]) {
+          widths[i] = length($i)
+        }
       }
     }
-  }
-  END {
-    for (row = 1; row <= row_count; row++) {
-      split(rows[row], fields, FS)
-      for (i = 1; i < length(fields); i++) {
-        printf "%-*s ", widths[i], fields[i]
+    END {
+      for (row = 1; row <= row_count; row++) {
+        split(rows[row], fields, FS)
+        for (i = 1; i < length(fields); i++) {
+          printf "%-*s ", widths[i], fields[i]
+        }
+        printf "%s\n", fields[length(fields)]
       }
-      printf "%s\n", fields[length(fields)]
     }
-  }
-' "${rows_file}"
+  ' "${rows_file}"
+fi
 
 if [ "${error_count}" -gt 0 ]; then
   warn "${error_count} provider registry lookup(s) failed"

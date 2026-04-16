@@ -62,12 +62,12 @@ resource "null_resource" "bootstrap_mkcert_ca" {
   count = var.enable_gateway_tls ? 1 : 0
 
   triggers = {
-    script_sha     = filesha256(abspath("${path.module}/scripts/bootstrap-mkcert-ca.sh"))
-    kubeconfig_sha = fileexists(local.kubeconfig_path_expanded) ? filesha256(local.kubeconfig_path_expanded) : "missing"
+    script_sha = filesha256(abspath("${local.stack_dir}/scripts/bootstrap-mkcert-ca.sh"))
+    cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : local.kubeconfig_path_expanded}"
   }
 
   provisioner "local-exec" {
-    command     = "bash \"${path.module}/scripts/bootstrap-mkcert-ca.sh\" --execute"
+    command     = "bash \"${local.stack_dir}/scripts/bootstrap-mkcert-ca.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG = local.kubeconfig_path_expanded
@@ -75,7 +75,7 @@ resource "null_resource" "bootstrap_mkcert_ca" {
   }
 
   depends_on = [
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     kubectl_manifest.namespace_cert_manager,
   ]
 }

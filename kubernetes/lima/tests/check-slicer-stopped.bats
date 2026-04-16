@@ -26,10 +26,25 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/ps"
 
-  run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}"
+  cat >"${TEST_BIN}/lsof" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+  *" -iTCP:443 "*)
+    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/lsof"
+
+  run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"make -C kubernetes/slicer stop-slicer"* ]]
+  [[ "${output}" == *"Conflicting shared host ports currently in use by Slicer:"* ]]
+  [[ "${output}" == *"127.0.0.1:443"* ]]
   [[ "${output}" == *"slicer-platform-gateway-443"* ]]
 }
 
@@ -48,7 +63,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/ps"
 
-  run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}"
+  run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
 }

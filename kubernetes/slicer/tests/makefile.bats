@@ -3,6 +3,9 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${TEST_BIN}"
+  export PATH="${TEST_BIN}:${PATH}"
 }
 
 @test "slicer help documents the stage-first workflow" {
@@ -135,6 +138,67 @@ setup() {
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "slicer target profile namespaces shared terraform runtime artifacts" {
+  run grep -En 'runtime_artifact_scope += "slicer"' \
+    "${REPO_ROOT}/kubernetes/slicer/targets/slicer.tfvars"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer reset cleans only the slicer runtime artifact scope" {
+  run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -ne 0 ]
+}
+
+@test "stop-slicer reports the shared host ports it is releasing" {
+  cat >"${TEST_BIN}/resolve-socket.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${BATS_TEST_TMPDIR}/missing.sock"
+EOF
+  chmod +x "${TEST_BIN}/resolve-socket.sh"
+
+  cat >"${TEST_BIN}/host-gateway-proxy.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/host-gateway-proxy.sh"
+
+  cat >"${TEST_BIN}/host-forwards.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/host-forwards.sh"
+
+  cat >"${TEST_BIN}/stop-daemon.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/stop-daemon.sh"
+
+  run make -C "${REPO_ROOT}/kubernetes/slicer" stop-slicer \
+    RESOLVE_SOCKET="${TEST_BIN}/resolve-socket.sh" \
+    HOST_GATEWAY_PROXY="${TEST_BIN}/host-gateway-proxy.sh" \
+    HOST_FORWARDS="${TEST_BIN}/host-forwards.sh" \
+    STOP_DAEMON="${TEST_BIN}/stop-daemon.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Shared host ports managed by Slicer:"* ]]
+  [[ "${output}" == *"127.0.0.1:443"* ]]
+  [[ "${output}" == *"127.0.0.1:30080"* ]]
+  [[ "${output}" == *"127.0.0.1:3302"* ]]
 }
 
 @test "slicer check-kubeconfig skips kubie lint noise when there are no contexts yet" {

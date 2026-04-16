@@ -26,10 +26,26 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}"
+  cat >"${TEST_BIN}/lsof" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+  *" -iTCP:443 "*|*" -iTCP:30080 "*)
+    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/lsof"
+
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"make -C kubernetes/lima stop-lima"* ]]
+  [[ "${output}" == *"Conflicting shared host ports currently in use by Lima:"* ]]
+  [[ "${output}" == *"127.0.0.1:443"* ]]
+  [[ "${output}" == *"127.0.0.1:30080"* ]]
   [[ "${output}" == *"k3s-node-1"* ]]
 }
 
@@ -50,7 +66,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
 }

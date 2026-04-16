@@ -5,6 +5,8 @@ TG ?= terragrunt
 TG_LOG_SHOW_ABS_PATHS ?= true
 TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
+STACK_RUNTIME_SCOPE := lima
+STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes-lima/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -37,6 +39,7 @@ LIMA_INSTANCE_PREFIX ?= k3s-node
 LIMA_VM_USER ?= $(USER)
 LIMA_CONFIG ?= $(MAKEFILE_DIR)config/lima-k3s-node.yaml
 LIMA_HOST_GATEWAY_PROXY_MODE ?= auto
+LIMA_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301
 K3SUP_CONTEXT ?= limavm-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
@@ -434,6 +437,11 @@ status:
 stop-lima:
 	@set -euo pipefail; \
 	command -v limactl >/dev/null 2>&1 || { echo "limactl not found in PATH"; exit 1; }; \
+	echo "Shared host ports managed by Lima:"; \
+	for port in $(LIMA_SHARED_HOST_PORTS); do \
+		printf '  127.0.0.1:%s\n' "$$port"; \
+	done; \
+	echo ""; \
 	echo "Stopping host gateway proxy containers (best-effort)..."; \
 	$(MAKE) stop-host-gateway-proxy >/dev/null 2>&1 || true; \
 	echo "OK   proxies stopped"; \
@@ -915,7 +923,7 @@ reset:
 	echo "Cleaning local state/caches..."; \
 	rm -rf "$$state_dir" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.terraform" "$(STACK_DIR)/.terragrunt-cache" 2>/dev/null || true; \
-	rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \
+	rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   done"
 

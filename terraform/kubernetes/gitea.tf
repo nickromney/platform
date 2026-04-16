@@ -23,7 +23,7 @@ resource "kubernetes_config_map_v1" "gitea_custom_templates" {
   }
 
   data = {
-    "head_navbar.tmpl" = file("${path.module}/templates/gitea/base/head_navbar.tmpl")
+    "head_navbar.tmpl" = file("${local.stack_dir}/templates/gitea/base/head_navbar.tmpl")
   }
 }
 
@@ -199,7 +199,7 @@ resource "null_resource" "gitea_promote_admin" {
 
   triggers = {
     user         = each.value
-    script_sha   = filesha256("${path.module}/scripts/promote-gitea-admin.sh")
+    script_sha   = filesha256("${local.stack_dir}/scripts/promote-gitea-admin.sh")
     gitea_http   = tostring(var.gitea_http_node_port)
     gitea_access = local.gitea_local_access_mode_effective
     gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
@@ -208,7 +208,7 @@ resource "null_resource" "gitea_promote_admin" {
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/promote-gitea-admin.sh\""
+    command = "bash \"${local.stack_dir}/scripts/promote-gitea-admin.sh\""
     environment = {
       GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT    = tostring(var.gitea_http_node_port)
@@ -243,11 +243,11 @@ resource "null_resource" "gitea_org" {
     gitea_ns_uid      = kubernetes_namespace_v1.gitea[0].metadata[0].uid
     admin_user        = var.gitea_admin_username
     admin_pwd         = sha1(var.gitea_admin_pwd)
-    script_sha        = filesha256("${path.module}/scripts/ensure-gitea-org.sh")
+    script_sha        = filesha256("${local.stack_dir}/scripts/ensure-gitea-org.sh")
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/ensure-gitea-org.sh\" --execute"
+    command = "bash \"${local.stack_dir}/scripts/ensure-gitea-org.sh\" --execute"
     environment = {
       GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
@@ -277,12 +277,12 @@ resource "null_resource" "gitea_unset_must_change_password" {
   count = var.enable_gitea ? 1 : 0
 
   triggers = {
-    script_sha   = filesha256("${path.module}/scripts/unset-gitea-must-change-password.sh")
+    script_sha   = filesha256("${local.stack_dir}/scripts/unset-gitea-must-change-password.sh")
     gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/unset-gitea-must-change-password.sh\""
+    command = "bash \"${local.stack_dir}/scripts/unset-gitea-must-change-password.sh\""
     environment = {
       KUBECONFIG = local.kubeconfig_path_expanded
     }

@@ -1,3 +1,33 @@
+run "kind_stack_dir_anchors_generated_files" {
+  command = plan
+
+  variables {
+    provision_kind_cluster = false
+    cni_provider           = "none"
+    enable_hubble          = false
+    enable_argocd          = false
+    enable_gitea           = false
+    enable_signoz          = false
+    kind_stack_dir         = "/tmp/platform-stack"
+    kind_config_path       = "/tmp/platform-stack/kind-config.yaml"
+  }
+
+  assert {
+    condition     = local.stack_dir == "/tmp/platform-stack"
+    error_message = "Expected local.stack_dir to follow the explicit kind_stack_dir input"
+  }
+
+  assert {
+    condition     = local.run_dir == "/tmp/platform-stack/.run"
+    error_message = "Expected local.run_dir to stay anchored under local.stack_dir"
+  }
+
+  assert {
+    condition     = local.kind_config_path_expanded == "/tmp/platform-stack/kind-config.yaml"
+    error_message = "Expected kind_config_path to follow the explicit input"
+  }
+}
+
 run "headlamp_requires_argocd" {
   command = plan
 
@@ -43,10 +73,10 @@ run "cilium_policy_audit_mode_requires_cilium" {
   command = plan
 
   variables {
-    cni_provider                     = "none"
-    enable_hubble                    = false
-    enable_argocd                    = false
-    enable_cilium_policy_audit_mode  = true
+    cni_provider                    = "none"
+    enable_hubble                   = false
+    enable_argocd                   = false
+    enable_cilium_policy_audit_mode = true
   }
 
   expect_failures = [check.enable_cilium_policy_audit_mode_requires_cilium_provider]

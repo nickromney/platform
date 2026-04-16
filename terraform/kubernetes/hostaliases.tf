@@ -84,7 +84,7 @@ resource "null_resource" "wait_headlamp_deployment" {
   }
 
   depends_on = [
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     kubectl_manifest.argocd_app_headlamp,
   ]
 }

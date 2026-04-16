@@ -3,6 +3,7 @@
 provision_kind_cluster        = false
 enable_image_preload          = false
 preload_image_list_path       = "../../kubernetes/slicer/preload-images.txt"
+runtime_artifact_scope        = "slicer"
 enable_apps_dir_mount         = false
 enable_docker_socket_mount    = false
 enable_actions_runner         = false

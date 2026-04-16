@@ -119,3 +119,14 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.6-debian13[[:space:]][[:space:]]+v3\.3\.6[[:space:]][[:space:]]+ok ]]
 }
+
+@test "check-version converts TSV rows into JSON objects without ANSI codes" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%b\n' \$'argo-cd chart\t9.5.0\t9.5.1\t\033[1;33mupdate available\033[0m' | tsv_rows_to_json_array '[\"component\",\"codebase\",\"latest\",\"status\"]'"
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.[0].component + "|" + .[0].status' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "argo-cd chart|update available" ]
+}

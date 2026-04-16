@@ -5,6 +5,8 @@ TG ?= terragrunt
 TG_LOG_SHOW_ABS_PATHS ?= true
 TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
+STACK_RUNTIME_SCOPE := kind
+STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes/terraform.tfstate
 LEGACY_STATE_FILE ?= ../../terraform/.run/platform/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
@@ -38,6 +40,7 @@ RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
+CHECK_VERSION_FORMAT ?= text
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
@@ -141,6 +144,8 @@ target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 export TF_VAR_kind_stage_900_tfvars_file := $(abspath $(MAKEFILE_DIR)$(STAGE_FILE_REL_900))
 export TF_VAR_kind_target_tfvars_file := $(target_var_file)
+export TF_VAR_kind_stack_dir := $(abspath $(STACK_DIR))
+export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml
 export TF_VAR_kind_operator_overrides_file := $(KIND_OPERATOR_OVERRIDES_FILE)
 .PHONY: help
 help:
@@ -166,13 +171,13 @@ help:
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
 	@echo "  make check-lima-stopped"
-	@echo "  make check-provider-version"
+	@echo "  make check-provider-version [CHECK_VERSION_FORMAT=text|json]"
 	@echo "  make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity"
 	@echo "  make check-slicer-stopped"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)"
 	@echo "  make check-stage-monotonicity"
-	@echo "  make check-version"
+	@echo "  make check-version [CHECK_VERSION_FORMAT=text|json]"
 	@echo "  make discover-images                          Dump images from running cluster"
 	@echo "  make docker-health"
 	@echo "  make docker-prune-estimate                   Estimate reclaimable space for docker builder prune -af and docker system prune -af"
@@ -225,6 +230,7 @@ help:
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
+	@echo "  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)"
 	@echo "  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under $(DISPLAY_PLATFORM_PROFILE_DIR)"
 
 .PHONY: check-stage-monotonicity
@@ -1125,7 +1131,7 @@ reset:
 	echo "Cleaning local state/caches..."; \
 	rm -rf "$$STATE_DIR" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.terraform" "$(STACK_DIR)/.terragrunt-cache" 2>/dev/null || true; \
-	rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \
+	rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/kind-config.yaml" "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   Done"
 
@@ -1163,15 +1169,24 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@echo "Running component and chart version audit..."
-	@KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
-	@echo ""
-	@echo "Running Terraform provider version audit..."
-	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
+	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
+		component_report="$$(mktemp)"; \
+		provider_report="$$(mktemp)"; \
+		trap 'rm -f "$$component_report" "$$provider_report"' EXIT; \
+		KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG) >"$$component_report"; \
+		CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG) >"$$provider_report"; \
+		jq -n --slurpfile component_report "$$component_report" --slurpfile provider_report "$$provider_report" '{component_report: $$component_report[0], provider_report: $$provider_report[0]}'; \
+	else \
+		echo "Running component and chart version audit..."; \
+		KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG); \
+		echo ""; \
+		echo "Running Terraform provider version audit..."; \
+		CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG); \
+	fi
 
 .PHONY: check-provider-version
 check-provider-version:
-	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
+	@CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: ensure-kind-kubeconfig
 ensure-kind-kubeconfig:

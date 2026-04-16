@@ -5,6 +5,8 @@ TG ?= terragrunt
 TG_LOG_SHOW_ABS_PATHS ?= true
 TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
+STACK_RUNTIME_SCOPE := slicer
+STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes-slicer/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -60,6 +62,7 @@ SLICER_SWAP_SIZE ?= 4G
 SLICER_ALLOW_EXISTING_K3S ?= 0
 SLICER_RESET_PRUNE_ALL_IMAGES ?= 0
 SLICER_HOST_FORWARDS_MODE ?= auto
+SLICER_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301 3302
 K3SUP_CONTEXT ?= slicer-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
@@ -672,6 +675,11 @@ status:
 stop-slicer:
 	@set -euo pipefail; \
 	socket="$$($(RESOLVE_SOCKET))"; \
+	echo "Shared host ports managed by Slicer:"; \
+	for port in $(SLICER_SHARED_HOST_PORTS); do \
+		printf '  127.0.0.1:%s\n' "$$port"; \
+	done; \
+	echo ""; \
 	echo "Stopping host forwards (best-effort)..."; \
 	$(MAKE) stop-host-forwards >/dev/null 2>&1 || true; \
 	echo "OK   host forwards stopped"; \
@@ -1207,7 +1215,7 @@ reset:
 	rm -rf "$(RUN_DIR)" 2>/dev/null || true; \
 	rm -rf "$$state_dir" 2>/dev/null || true; \
 	rm -rf "$(STACK_DIR)/.terraform" "$(STACK_DIR)/.terragrunt-cache" 2>/dev/null || true; \
-	rm -rf "$(STACK_DIR)/.run" 2>/dev/null || true; \
+	rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   done"; \
 	if [ "$$reset_incomplete" = "1" ]; then \

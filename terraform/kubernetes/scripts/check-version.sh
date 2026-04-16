@@ -7,16 +7,45 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
+CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
 NC=$'\033[0m'
 
-ok() { echo "${GREEN}✔${NC} $*"; }
-warn() { echo "${YELLOW}⚠${NC} $*"; }
+json_mode() {
+  [ "${CHECK_VERSION_FORMAT}" = "json" ]
+}
+
+ok() {
+  if json_mode; then
+    return 0
+  fi
+  echo "${GREEN}✔${NC} $*"
+}
+
+warn() {
+  if json_mode; then
+    return 0
+  fi
+  echo "${YELLOW}⚠${NC} $*"
+}
+
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
-progress() { printf '... %s\n' "$*" >&2; }
-section() { printf '\n%s\n' "$*"; }
+progress() {
+  if json_mode; then
+    return 0
+  fi
+  printf '... %s\n' "$*" >&2
+}
+
+section() {
+  if json_mode; then
+    return 0
+  fi
+  printf '\n%s\n' "$*"
+}
 
 usage() {
   cat <<EOF
@@ -1020,6 +1049,23 @@ render_tsv_table() {
   '
 }
 
+tsv_rows_to_json_array() {
+  local headers_json="$1"
+
+  jq -Rcs --argjson headers "${headers_json}" '
+    split("\n")
+    | map(select(length > 0) | split("\t"))
+    | map(
+        . as $row
+        | reduce range(0; $headers | length) as $i ({};
+            . + {
+              ($headers[$i]): (($row[$i] // "") | gsub("\u001b\\[[0-9;]*m"; ""))
+            }
+          )
+      )
+  '
+}
+
 k8s_deployment_container_image() {
   local namespace="$1"
   local deployment="$2"
@@ -1642,6 +1688,120 @@ emit_external_image_rows() {
   done < <(collect_declared_image_refs | awk -F'\t' '!seen[$2]++')
 }
 
+emit_json_report() {
+  local component_rows="$1"
+  local preferred_image_rows="$2"
+  local kind_rows="$3"
+  local dependency_rows="$4"
+  local external_image_rows="$5"
+  local components_json preferred_images_json kind_versions_json dependencies_json external_images_json
+  local cluster_ok_json expect_kind_provisioning_json argo_cd_image_override_active_json
+
+  components_json="$(
+    printf '%s\n' "${component_rows}" | \
+      tsv_rows_to_json_array '["component","deployed","codebase","latest","deploy_tag","code_tag","preferred_tag","latest_tag","status"]' | \
+      jq '
+        map(
+          . + {
+            status_text: .status,
+            update_available: (.codebase != "" and .latest != "" and .codebase != .latest),
+            deployed_available: (.deployed != "" and .deployed != "Unavailable")
+          }
+          | del(.status)
+        )
+      '
+  )"
+
+  preferred_images_json="$(
+    printf '%s\n' "${preferred_image_rows}" | \
+      tsv_rows_to_json_array '["component","configured","candidate","status"]' | \
+      jq 'map(. + {status_text: .status} | del(.status))'
+  )"
+
+  kind_versions_json="$(
+    printf '%s\n' "${kind_rows}" | \
+      tsv_rows_to_json_array '["item","observed","latest","status"]' | \
+      jq 'map(. + {status_text: .status} | del(.status))'
+  )"
+
+  dependencies_json="$(
+    printf '%s\n' "${dependency_rows}" | \
+      tsv_rows_to_json_array '["app","dependency","current","latest_eligible","latest_overall","status"]' | \
+      jq 'map(. + {status_text: .status} | del(.status))'
+  )"
+
+  external_images_json="$(
+    printf '%s\n' "${external_image_rows}" | \
+      tsv_rows_to_json_array '["source","image","current","latest","registry","status"]' | \
+      jq 'map(. + {status_text: .status} | del(.status))'
+  )"
+
+  if [ "${CLUSTER_OK}" -eq 1 ]; then
+    cluster_ok_json=true
+  else
+    cluster_ok_json=false
+  fi
+
+  if [ "${EXPECT_KIND_PROVISIONING}" = "true" ]; then
+    expect_kind_provisioning_json=true
+  else
+    expect_kind_provisioning_json=false
+  fi
+
+  if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then
+    argo_cd_image_override_active_json=true
+  else
+    argo_cd_image_override_active_json=false
+  fi
+
+  jq -n \
+    --arg format "check-version/v1" \
+    --arg expected_cluster_name "${EXPECTED_CLUSTER_NAME}" \
+    --argjson cluster_ok "${cluster_ok_json}" \
+    --argjson expect_kind_provisioning "${expect_kind_provisioning_json}" \
+    --argjson components "${components_json}" \
+    --argjson preferred_images "${preferred_images_json}" \
+    --argjson kind_versions "${kind_versions_json}" \
+    --argjson app_dependencies "${dependencies_json}" \
+    --argjson external_images "${external_images_json}" \
+    --arg configured_argocd_image "${CODE_ARGOCD_IMAGE_REF}" \
+    --arg configured_argocd_image_status "${CONFIGURED_ARGOCD_IMAGE_STATUS}" \
+    --arg latest_preferred_argocd_image "${LATEST_PREFERRED_ARGOCD_IMAGE_REF}" \
+    --arg latest_preferred_argocd_image_status "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}" \
+    --argjson argo_cd_image_override_active "${argo_cd_image_override_active_json}" \
+    '
+      {
+        format: $format,
+        cluster: {
+          expected_cluster_name: $expected_cluster_name,
+          reachable: $cluster_ok,
+          expect_kind_provisioning: $expect_kind_provisioning
+        },
+        components: $components,
+        preferred_images: $preferred_images,
+        kind_versions: $kind_versions,
+        app_dependencies: $app_dependencies,
+        external_images: $external_images,
+        argo_cd_image_override: {
+          active: $argo_cd_image_override_active,
+          configured_image: $configured_argocd_image,
+          configured_image_status: $configured_argocd_image_status,
+          latest_preferred_image: $latest_preferred_argocd_image,
+          latest_preferred_image_status: $latest_preferred_argocd_image_status
+        },
+        summary: {
+          component_count: ($components | length),
+          component_update_count: ($components | map(select(.update_available == true)) | length),
+          dependency_count: ($app_dependencies | length),
+          dependency_update_count: ($app_dependencies | map(select(.status_text == "update available")) | length),
+          dependency_cooldown_count: ($app_dependencies | map(select(.status_text == "cooldown active")) | length),
+          external_image_count: ($external_images | length),
+          external_image_update_count: ($external_images | map(select(.status_text == "update available")) | length)
+        }
+      }
+    '
+}
+
 main() {
   require curl
   require helm
@@ -1905,8 +2065,6 @@ main() {
     DEPLOYEDTAG_OAUTH2_PROXY="Unavailable"
   fi
 
-  section "Component versions"
-
   rows=()
   rows+=("$(print_row "argo-cd chart" "${DEPLOYED_ARGOCD}" "${CODE_ARGOCD}" "${LATEST_ARGOCD}" "${DEPLOYEDTAG_ARGOCD}" "${CODETAG_ARGOCD}" "${LATEST_PREFERRED_ARGOCD_TAG}" "${LATESTTAG_ARGOCD}" "1" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
   rows+=("$(print_row "gitea chart" "${DEPLOYED_GITEA}" "${CODE_GITEA}" "${LATEST_GITEA}" "${DEPLOYEDTAG_GITEA}" "${CODETAG_GITEA}" "" "${LATESTTAG_GITEA}" "0")")
@@ -1924,30 +2082,13 @@ main() {
   rows+=("$(print_row "cert-manager" "${DEPLOYED_CERT_MANAGER}" "${CODE_CERT_MANAGER}" "${LATEST_CERT_MANAGER}" "${DEPLOYEDTAG_CERT_MANAGER}" "${CODETAG_CERT_MANAGER}" "" "${LATESTTAG_CERT_MANAGER}" "0")")
   rows+=("$(print_row "dex chart" "${DEPLOYED_DEX}" "${CODE_DEX}" "${LATEST_DEX}" "${DEPLOYEDTAG_DEX}" "${CODETAG_DEX}" "" "${LATESTTAG_DEX}" "0")")
   rows+=("$(print_row "oauth2-proxy" "${DEPLOYED_OAUTH2_PROXY}" "${CODE_OAUTH2_PROXY}" "${LATEST_OAUTH2_PROXY}" "${DEPLOYEDTAG_OAUTH2_PROXY}" "${CODETAG_OAUTH2_PROXY}" "" "${LATESTTAG_OAUTH2_PROXY}" "0")")
-
-  printf "%s\n" \
-    $'Component\tDeployed\tCodebase\tLatest\tDeployTag\tCodeTag\tPrefTag\tLatestTag\tStatus' \
-    $'---------\t--------\t--------\t------\t---------\t-------\t-------\t---------\t------' \
-    "$(printf "%s\n" "${rows[@]}" | sort -t $'\t' -k1,1)" | render_tsv_table
-  echo ""
-
-  section "Preferred image availability"
+  component_rows_sorted="$(printf "%s\n" "${rows[@]}" | sort -t $'\t' -k1,1)"
 
   image_rows=()
   if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" = "dhi.io/argocd" ]; then
     image_rows+=("$(print_preferred_image_row "argo-cd image" "${CODE_ARGOCD_IMAGE_REF}" "${CONFIGURED_ARGOCD_IMAGE_STATUS}" "${LATEST_PREFERRED_ARGOCD_IMAGE_REF}" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
   fi
-
-  if [ "${#image_rows[@]}" -eq 0 ]; then
-    warn "No preferred image overrides configured"
-    echo ""
-  else
-    printf "%s\n" \
-      $'Component\tConfigured\tCandidate\tStatus' \
-      $'---------\t----------\t---------\t------' \
-      "$(printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1)" | render_tsv_table
-    echo ""
-  fi
+  preferred_image_rows_sorted="$(printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1 || true)"
 
   INSTALLED_KIND="$(kind_installed_version)"
   progress "Checking latest kind release tag"
@@ -1955,17 +2096,10 @@ main() {
   progress "Checking latest kindest/node tag"
   LATEST_KIND_NODE_TAG="$(kindest_node_latest_tag)"
 
-  section "Kind versions"
-
   kind_rows=()
   kind_rows+=("$(print_observed_latest_row "kind release tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${LATEST_KIND_RELEASE_TAG}" "installed cli" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind node tag" "${CODE_KIND_NODE_TAG}" "${LATEST_KIND_NODE_TAG}" "codebase" "node tag")")
-
-  printf "%s\n" \
-    $'Item\tObserved\tLatest\tStatus' \
-    $'----\t--------\t------\t------' \
-    "$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)" | render_tsv_table
-  echo ""
+  kind_rows_sorted="$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)"
 
   check_consistent_tfvars "argocd_chart_version"
   check_consistent_tfvars "argocd_image_repository"
@@ -1992,8 +2126,48 @@ main() {
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
 
   progress "Auditing app dependency freshness"
-  section "App dependency cooldown audit"
   dependency_rows="$(emit_app_dependency_rows | sort -t $'\t' -k1,1 -k2,2 || true)"
+
+  progress "Auditing external workload images"
+  image_audit_rows="$(emit_external_image_rows | sort -t $'\t' -k2,2 || true)"
+
+  if json_mode; then
+    emit_json_report \
+      "${component_rows_sorted}" \
+      "${preferred_image_rows_sorted}" \
+      "${kind_rows_sorted}" \
+      "${dependency_rows}" \
+      "${image_audit_rows}"
+    return 0
+  fi
+
+  section "Component versions"
+  printf "%s\n" \
+    $'Component\tDeployed\tCodebase\tLatest\tDeployTag\tCodeTag\tPrefTag\tLatestTag\tStatus' \
+    $'---------\t--------\t--------\t------\t---------\t-------\t-------\t---------\t------' \
+    "${component_rows_sorted}" | render_tsv_table
+  echo ""
+
+  section "Preferred image availability"
+  if [ "${#image_rows[@]}" -eq 0 ]; then
+    warn "No preferred image overrides configured"
+    echo ""
+  else
+    printf "%s\n" \
+      $'Component\tConfigured\tCandidate\tStatus' \
+      $'---------\t----------\t---------\t------' \
+      "${preferred_image_rows_sorted}" | render_tsv_table
+    echo ""
+  fi
+
+  section "Kind versions"
+  printf "%s\n" \
+    $'Item\tObserved\tLatest\tStatus' \
+    $'----\t--------\t------\t------' \
+    "${kind_rows_sorted}" | render_tsv_table
+  echo ""
+
+  section "App dependency cooldown audit"
   if [ -z "${dependency_rows}" ]; then
     warn "No app dependency roots discovered"
     echo ""
@@ -2005,9 +2179,7 @@ main() {
     echo ""
   fi
 
-  progress "Auditing external workload images"
   section "External workload image audit"
-  image_audit_rows="$(emit_external_image_rows | sort -t $'\t' -k2,2 || true)"
   if [ -z "${image_audit_rows}" ]; then
     warn "No external workload images discovered"
     echo ""

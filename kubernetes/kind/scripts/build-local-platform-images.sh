@@ -46,6 +46,7 @@ build_and_push() {
   shift 4
 
   local repo="${IMAGE_NAMESPACE}/${image_name}"
+  local build_ref="build-${image_name}:${version_tag}"
   local latest_ref="${CACHE_PUSH_HOST}/${repo}:${TAG}"
   local version_ref="${CACHE_PUSH_HOST}/${repo}:${version_tag}"
   local commit_ref=""
@@ -64,7 +65,9 @@ build_and_push() {
   fi
 
   echo "BUILD ${image_name}"
-  cmd=(-t "${version_ref}" -f "${dockerfile_path}")
+  # Build into a local staging tag first; the final registry push happens
+  # explicitly below and should not be part of the build/export step.
+  cmd=(-t "${build_ref}" -f "${dockerfile_path}")
   while [[ $# -gt 0 ]]; do
     cmd+=("$1")
     shift
@@ -72,12 +75,13 @@ build_and_push() {
   cmd+=("${build_context}")
   docker_build_local "${cmd[@]}"
 
-  docker tag "${version_ref}" "${latest_ref}"
+  docker tag "${build_ref}" "${version_ref}"
+  docker tag "${build_ref}" "${latest_ref}"
   docker_push_local_registry "${version_ref}"
   docker_push_local_registry "${latest_ref}"
 
   if [ -n "${commit_ref}" ]; then
-    docker tag "${version_ref}" "${commit_ref}"
+    docker tag "${build_ref}" "${commit_ref}"
     docker_push_local_registry "${commit_ref}"
   fi
 

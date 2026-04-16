@@ -1,14 +1,17 @@
 locals {
+  # Terragrunt runs this module from a cache copy. Keep generated files and
+  # content hashes anchored to the real checkout path instead of that cache.
+  stack_dir                         = trimspace(var.kind_stack_dir) != "" ? abspath(pathexpand(var.kind_stack_dir)) : abspath(path.module)
   kind_workers                      = range(var.worker_count)
   kind_control_plane_container_name = "${var.cluster_name}-control-plane"
   kind_config_path_expanded         = abspath(pathexpand(var.kind_config_path))
   kubeconfig_path_expanded          = abspath(pathexpand(var.kubeconfig_path))
-  preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${path.module}/../../kubernetes/kind/preload-images.txt")
+  preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${local.repo_root}/kubernetes/kind/preload-images.txt")
 
-  repo_root         = abspath("${path.module}/../..")
-  monorepo_apps_dir = abspath("${local.repo_root}/apps")
-
-  run_dir = abspath("${path.module}/.run")
+  repo_root              = abspath("${local.stack_dir}/../..")
+  monorepo_apps_dir      = abspath("${local.repo_root}/apps")
+  runtime_artifact_scope = trimspace(var.runtime_artifact_scope)
+  run_dir                = local.runtime_artifact_scope != "" ? abspath("${local.stack_dir}/.run/${local.runtime_artifact_scope}") : abspath("${local.stack_dir}/.run")
 
   gitea_http_host_local             = "127.0.0.1"
   gitea_ssh_host_local              = "127.0.0.1"
@@ -114,10 +117,10 @@ locals {
   ]) : "        plugins: []"
   signoz_auth_proxy_image_effective = var.prefer_external_platform_images && local.external_platform_signoz_auth_proxy != "" ? local.external_platform_signoz_auth_proxy : local.default_signoz_auth_proxy_image
 
-  containerd_certs_dir = abspath("${path.module}/.run/containerd-certs.d")
+  containerd_certs_dir = "${local.run_dir}/containerd-certs.d"
   kind_node_kubectl_wrapper_mount = [
     {
-      host_path      = abspath("${path.module}/scripts/kind-node-kubectl-wrapper.sh")
+      host_path      = abspath("${local.stack_dir}/scripts/kind-node-kubectl-wrapper.sh")
       container_path = "/usr/local/bin/kubectl"
       read_only      = true
     }
@@ -246,9 +249,9 @@ locals {
   )))
 
   policies_repo_content_hash = sha1(join("", concat(
-    [for f in sort(fileset(path.module, "apps/**")) : filesha256("${path.module}/${f}")],
-    [for f in sort(fileset(path.module, "cluster-policies/**")) : filesha256("${path.module}/${f}")],
-    [for f in sort(fileset(path.module, "templates/otel-gateway/**")) : filesha256("${path.module}/${f}")]
+    [for f in sort(fileset(local.stack_dir, "apps/**")) : filesha256("${local.stack_dir}/${f}")],
+    [for f in sort(fileset(local.stack_dir, "cluster-policies/**")) : filesha256("${local.stack_dir}/${f}")],
+    [for f in sort(fileset(local.stack_dir, "templates/otel-gateway/**")) : filesha256("${local.stack_dir}/${f}")]
   )))
   policies_repo_render_hash = sha1(jsonencode({
     content_hash                           = local.policies_repo_content_hash
@@ -316,7 +319,7 @@ locals {
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.
   # Stage 100 may run on machines without an existing kubeconfig file, so fall back
   # to a committed, syntactically-valid empty kubeconfig.
-  kubeconfig_path_for_providers = fileexists(local.kubeconfig_path_expanded) ? local.kubeconfig_path_expanded : "${path.module}/templates/empty-kubeconfig.yaml"
+  kubeconfig_path_for_providers = fileexists(local.kubeconfig_path_expanded) ? local.kubeconfig_path_expanded : "${local.stack_dir}/templates/empty-kubeconfig.yaml"
   kubeconfig_raw_for_providers  = file(local.kubeconfig_path_for_providers)
   kubeconfig_context_names_for_providers = [
     for ctx in try(yamldecode(local.kubeconfig_raw_for_providers).contexts, []) : tostring(try(ctx.name, ""))
