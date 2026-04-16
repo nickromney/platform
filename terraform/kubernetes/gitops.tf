@@ -18,7 +18,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
   triggers = {
     repo_render_hash = local.policies_repo_render_hash
     public_key       = tls_private_key.policies_repo[0].public_key_openssh
-    script_sha       = filesha256("${path.module}/scripts/sync-gitea-policies.sh")
+    script_sha       = filesha256("${local.stack_dir}/scripts/sync-gitea-policies.sh")
     gitea_http       = tostring(var.gitea_http_node_port)
     gitea_ssh        = tostring(var.gitea_ssh_node_port)
     gitea_access     = local.gitea_local_access_mode_effective
@@ -26,9 +26,9 @@ resource "null_resource" "sync_gitea_policies_repo" {
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/sync-gitea-policies.sh\" --execute"
+    command = "bash \"${local.stack_dir}/scripts/sync-gitea-policies.sh\" --execute"
     environment = {
-      STACK_DIR                                     = abspath(path.module)
+      STACK_DIR                                     = local.stack_dir
       GITEA_LOCAL_ACCESS_MODE                       = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT                          = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE                               = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
@@ -150,7 +150,7 @@ resource "null_resource" "sync_gitea_app_repo_sentiment" {
   triggers = {
     content_hash = local.sentiment_content_hash
     public_key   = tls_private_key.app_repo_sentiment[0].public_key_openssh
-    script_sha   = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
+    script_sha   = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
     gitea_http   = tostring(var.gitea_http_node_port)
     gitea_ssh    = tostring(var.gitea_ssh_node_port)
     gitea_access = local.gitea_local_access_mode_effective
@@ -160,9 +160,9 @@ resource "null_resource" "sync_gitea_app_repo_sentiment" {
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/sync-gitea-repo.sh\""
+    command = "bash \"${local.stack_dir}/scripts/sync-gitea-repo.sh\""
     environment = {
-      STACK_DIR                 = abspath(path.module)
+      STACK_DIR                 = local.stack_dir
       SOURCE_DIR                = local.sentiment_source_dir
       GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
@@ -217,7 +217,7 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
   triggers = {
     content_hash = local.subnet_calculator_content_hash
     public_key   = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
-    script_sha   = filesha256("${path.module}/scripts/sync-gitea-repo.sh")
+    script_sha   = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
     gitea_http   = tostring(var.gitea_http_node_port)
     gitea_ssh    = tostring(var.gitea_ssh_node_port)
     gitea_access = local.gitea_local_access_mode_effective
@@ -227,9 +227,9 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
   }
 
   provisioner "local-exec" {
-    command = "bash \"${path.module}/scripts/sync-gitea-repo.sh\""
+    command = "bash \"${local.stack_dir}/scripts/sync-gitea-repo.sh\""
     environment = {
-      STACK_DIR                 = abspath(path.module)
+      STACK_DIR                 = local.stack_dir
       SOURCE_DIR                = local.subnet_calculator_source_dir
       GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
@@ -293,7 +293,7 @@ require_cmd kubectl
 require_cmd git
 
 # shellcheck source=/dev/null
-source "${path.module}/scripts/gitea-local-access.sh"
+source "${local.stack_dir}/scripts/gitea-local-access.sh"
 trap 'gitea_local_access_cleanup || true; policies_repo_cleanup || true' EXIT
 gitea_local_access_setup http
 
@@ -629,7 +629,7 @@ require_cmd kubectl
 require_cmd git
 
 # shellcheck source=/dev/null
-source "${path.module}/scripts/gitea-local-access.sh"
+source "${local.stack_dir}/scripts/gitea-local-access.sh"
 trap 'gitea_local_access_cleanup || true; policies_repo_cleanup || true' EXIT
 gitea_local_access_setup http
 
@@ -972,7 +972,7 @@ EOT
 
 data "external" "gitea_runner_token" {
   count   = var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
-  program = ["/bin/bash", "${path.module}/scripts/fetch-gitea-runner-token.sh"]
+  program = ["/bin/bash", "${local.stack_dir}/scripts/fetch-gitea-runner-token.sh"]
 
   query = {
     gitea_http_base         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
@@ -1018,7 +1018,7 @@ resource "kubernetes_secret_v1" "gitea_runner" {
 
 data "external" "gitea_ssh_public_keys_cluster" {
   count   = local.enable_gitops_repo ? 1 : 0
-  program = ["/bin/bash", "${path.module}/scripts/fetch-gitea-ssh-public-keys.sh", "--execute"]
+  program = ["/bin/bash", "${local.stack_dir}/scripts/fetch-gitea-ssh-public-keys.sh", "--execute"]
 
   query = {
     gitea_namespace    = kubernetes_namespace_v1.gitea[0].metadata[0].name
@@ -1694,7 +1694,7 @@ resource "null_resource" "wait_gitea_actions_runner_ready" {
     cluster_id = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     script_v   = "2"
     # If managed via app-of-apps, re-run when the manifest changes.
-    runner_manifest_hash = var.enable_app_of_apps ? filesha256("${path.module}/apps/argocd-apps/60-gitea-actions-runner.application.yaml") : "n/a"
+    runner_manifest_hash = var.enable_app_of_apps ? filesha256("${local.stack_dir}/apps/argocd-apps/60-gitea-actions-runner.application.yaml") : "n/a"
     # Avoid hard coupling to the Terraform-managed ArgoCD Application when the
     # runner app is managed via app-of-apps.
     runner_app = var.enable_app_of_apps ? "managed-by-app-of-apps" : kubectl_manifest.argocd_app_gitea_actions_runner[0].uid

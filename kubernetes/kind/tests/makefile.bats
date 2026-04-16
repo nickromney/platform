@@ -212,6 +212,37 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "kind exports the absolute stack and config paths into Terraform" {
+  run grep -Fn 'export TF_VAR_kind_stack_dir := $(abspath $(STACK_DIR))' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "terragrunt reads the kind stack and config paths from the exported env vars" {
+  run grep -Fn 'kind_stack_dir        = get_env("TF_VAR_kind_stack_dir", get_original_terragrunt_dir())' \
+    "${REPO_ROOT}/terraform/kubernetes/terragrunt.hcl"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kind_config_path      = get_env("TF_VAR_kind_config_path", "${get_original_terragrunt_dir()}/kind-config.yaml")' \
+    "${REPO_ROOT}/terraform/kubernetes/terragrunt.hcl"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind stage tfvars no longer hardcode a cache-relative kind config path" {
+  run grep -REn 'kind_config_path[[:space:]]*=[[:space:]]*"./kind-config.yaml"' \
+    "${REPO_ROOT}/kubernetes/kind/stages"
+
+  [ "${status}" -ne 0 ]
+}
+
 @test "kind prereqs surfaces Docker registry auth status" {
   run grep -Fn 'echo "Docker registry auth:"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 

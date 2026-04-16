@@ -34,6 +34,12 @@ variable "kind_config_path" {
   default     = "./kind-config.yaml"
 }
 
+variable "kind_stack_dir" {
+  description = "Absolute path to the repo-local terraform/kubernetes directory. Terragrunt sets this so generated files stay anchored to the real checkout instead of the cache copy."
+  type        = string
+  default     = ""
+}
+
 variable "kubeconfig_path" {
   description = "Path to kubeconfig file."
   type        = string

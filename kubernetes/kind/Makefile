@@ -141,6 +141,8 @@ target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 export TF_VAR_kind_stage_900_tfvars_file := $(abspath $(MAKEFILE_DIR)$(STAGE_FILE_REL_900))
 export TF_VAR_kind_target_tfvars_file := $(target_var_file)
+export TF_VAR_kind_stack_dir := $(abspath $(STACK_DIR))
+export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml
 export TF_VAR_kind_operator_overrides_file := $(KIND_OPERATOR_OVERRIDES_FILE)
 .PHONY: help
 help:

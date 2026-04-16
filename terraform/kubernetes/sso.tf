@@ -253,7 +253,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    script_sha          = filesha256(abspath("${path.module}/scripts/configure-kind-apiserver-oidc.sh"))
+    script_sha          = filesha256(abspath("${local.stack_dir}/scripts/configure-kind-apiserver-oidc.sh"))
     gateway_service_uid = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
     cluster_name        = var.cluster_name
     dex_host            = local.dex_public_host
@@ -263,7 +263,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   }
 
   provisioner "local-exec" {
-    command     = "bash \"${path.module}/scripts/configure-kind-apiserver-oidc.sh\" --execute"
+    command     = "bash \"${local.stack_dir}/scripts/configure-kind-apiserver-oidc.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG                  = local.kubeconfig_path_expanded
@@ -298,8 +298,8 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    health_script_sha          = filesha256(abspath("${path.module}/scripts/check-cluster-health.sh"))
-    health_resource_sha        = filesha256(abspath("${path.module}/sso.tf"))
+    health_script_sha          = filesha256(abspath("${local.stack_dir}/scripts/check-cluster-health.sh"))
+    health_resource_sha        = filesha256(abspath("${local.stack_dir}/sso.tf"))
     kind_stage_900_tfvars_sha   = try(filesha256(var.kind_stage_900_tfvars_file), "absent")
     kind_target_tfvars_sha      = try(filesha256(var.kind_target_tfvars_file), "absent")
     operator_overrides_sha      = try(filesha256(var.kind_operator_overrides_file), "absent")
@@ -327,7 +327,7 @@ fi
 if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
   check_args+=(--var-file "$${KIND_OPERATOR_OVERRIDES_FILE}")
 fi
-"${path.module}/scripts/check-cluster-health.sh" --execute "$${check_args[@]}"
+"${local.stack_dir}/scripts/check-cluster-health.sh" --execute "$${check_args[@]}"
 __EOT__
     interpreter = ["/bin/bash", "-c"]
   }

@@ -10,7 +10,8 @@ inputs = {
   worker_count          = 1
   node_image            = "kindest/node:v1.35.1"
   kind_api_server_port  = 6443
-  kind_config_path      = "${get_terragrunt_dir()}/kind-config.yaml"
+  kind_config_path      = get_env("TF_VAR_kind_config_path", "${get_original_terragrunt_dir()}/kind-config.yaml")
+  kind_stack_dir        = get_env("TF_VAR_kind_stack_dir", get_original_terragrunt_dir())
   kubeconfig_path       = pathexpand("~/.kube/kind-kind-local.yaml")
   kubeconfig_context    = "kind-kind-local"
   platform_devcontainer = get_env("PLATFORM_DEVCONTAINER", "0") == "1"

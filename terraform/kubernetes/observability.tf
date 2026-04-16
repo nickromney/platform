@@ -1565,7 +1565,7 @@ resource "kubernetes_secret_v1" "grafana_admin_credentials" {
 resource "kubectl_manifest" "argocd_app_otel_collector_prometheus" {
   count = local.enable_otel_gateway_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
-  yaml_body = templatefile("${path.module}/templates/argocd-app-otel-gateway.yaml.tftpl", {
+  yaml_body = templatefile("${local.stack_dir}/templates/argocd-app-otel-gateway.yaml.tftpl", {
     argocd_namespace                      = var.argocd_namespace
     policies_repo_url_cluster             = local.policies_repo_url_cluster
     opentelemetry_collector_chart_path    = local.vendored_chart_paths.opentelemetry_collector

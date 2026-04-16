@@ -3,18 +3,18 @@ resource "null_resource" "kind_storage" {
 
   triggers = {
     cluster_id               = kind_cluster.local[0].id
-    ensure_script_sha        = filesha256("${path.module}/scripts/ensure-kind-storage.sh")
-    local_path_manifest_sha  = filesha256("${path.module}/config/local-path-storage-v0.0.35.yaml")
-    standard_manifest_sha    = filesha256("${path.module}/config/kind-standard-storageclass.yaml")
+    ensure_script_sha        = filesha256("${local.stack_dir}/scripts/ensure-kind-storage.sh")
+    local_path_manifest_sha  = filesha256("${local.stack_dir}/config/local-path-storage-v0.0.35.yaml")
+    standard_manifest_sha    = filesha256("${local.stack_dir}/config/kind-standard-storageclass.yaml")
   }
 
   provisioner "local-exec" {
-    command     = "bash \"${path.module}/scripts/ensure-kind-storage.sh\" --execute"
+    command     = "bash \"${local.stack_dir}/scripts/ensure-kind-storage.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
       KUBECONFIG                         = local.kubeconfig_path_expanded
-      LOCAL_PATH_MANIFEST_PATH           = "${path.module}/config/local-path-storage-v0.0.35.yaml"
-      STANDARD_STORAGECLASS_MANIFEST_PATH = "${path.module}/config/kind-standard-storageclass.yaml"
+      LOCAL_PATH_MANIFEST_PATH           = "${local.stack_dir}/config/local-path-storage-v0.0.35.yaml"
+      STANDARD_STORAGECLASS_MANIFEST_PATH = "${local.stack_dir}/config/kind-standard-storageclass.yaml"
     }
   }
 

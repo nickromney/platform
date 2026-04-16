@@ -80,7 +80,7 @@ resource "local_file" "kind_config" {
 
   filename = local.kind_config_path_expanded
 
-  content = templatefile("${path.module}/templates/kind-config.yaml.tpl", {
+  content = templatefile("${local.stack_dir}/templates/kind-config.yaml.tpl", {
     workers         = local.kind_workers
     ports           = local.extra_port_mappings
     extra_mounts    = local.kind_extra_mounts
@@ -178,7 +178,7 @@ resource "null_resource" "preload_images" {
 
   triggers = {
     cluster_id            = kind_cluster.local[0].id
-    preload_script        = filesha256("${path.module}/scripts/preload-images.sh")
+    preload_script        = filesha256("${local.stack_dir}/scripts/preload-images.sh")
     preload_image_set     = filesha256(local.preload_image_list_path_effective)
     preload_image_list    = local.preload_image_list_path_effective
     enable_signoz         = tostring(var.enable_signoz)
@@ -194,7 +194,7 @@ resource "null_resource" "preload_images" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
+    command = "${local.stack_dir}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
     environment = {
       PRELOAD_IMAGE_LIST            = local.preload_image_list_path_effective
       PRELOAD_ENABLE_SIGNOZ         = tostring(var.enable_signoz)
