@@ -34,7 +34,7 @@ resource "kubectl_manifest" "gateway_bootstrap_crds" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -102,7 +102,7 @@ __YAML__
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 

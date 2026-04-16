@@ -42,7 +42,7 @@ resource "helm_release" "cilium" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     null_resource.preload_images,
     null_resource.hubble_ui_service_legacy_cleanup,
   ]

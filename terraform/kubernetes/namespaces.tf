@@ -11,7 +11,7 @@ resource "kubernetes_namespace_v1" "gitea" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -34,7 +34,7 @@ __YAML__
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -57,7 +57,7 @@ __YAML__
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -80,7 +80,7 @@ __YAML__
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -97,7 +97,7 @@ resource "kubernetes_namespace_v1" "headlamp" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -117,7 +117,7 @@ resource "kubernetes_namespace_v1" "gitea_runner" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -137,7 +137,7 @@ resource "kubernetes_namespace_v1" "dev" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -158,7 +158,7 @@ resource "kubernetes_namespace_v1" "uat" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -178,7 +178,7 @@ resource "kubernetes_namespace_v1" "sit" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -203,6 +203,6 @@ resource "kubernetes_namespace_v1" "apim" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }

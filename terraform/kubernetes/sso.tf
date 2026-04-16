@@ -12,7 +12,7 @@ resource "kubernetes_namespace_v1" "sso" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -278,7 +278,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   }
 
   depends_on = [
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     kubernetes_service_v1.platform_gateway_nginx_internal,
     null_resource.argocd_refresh_gitops_repo_apps,
     kubectl_manifest.argocd_app_dex,
@@ -298,12 +298,12 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    health_script_sha          = filesha256(abspath("${local.stack_dir}/scripts/check-cluster-health.sh"))
-    health_resource_sha        = filesha256(abspath("${local.stack_dir}/sso.tf"))
-    kind_stage_900_tfvars_sha   = try(filesha256(var.kind_stage_900_tfvars_file), "absent")
-    kind_target_tfvars_sha      = try(filesha256(var.kind_target_tfvars_file), "absent")
-    operator_overrides_sha      = try(filesha256(var.kind_operator_overrides_file), "absent")
-    oidc_resource_id            = null_resource.configure_kind_apiserver_oidc[0].id
+    health_script_sha         = filesha256(abspath("${local.stack_dir}/scripts/check-cluster-health.sh"))
+    health_resource_sha       = filesha256(abspath("${local.stack_dir}/sso.tf"))
+    kind_stage_900_tfvars_sha = try(filesha256(var.kind_stage_900_tfvars_file), "absent")
+    kind_target_tfvars_sha    = try(filesha256(var.kind_target_tfvars_file), "absent")
+    operator_overrides_sha    = try(filesha256(var.kind_operator_overrides_file), "absent")
+    oidc_resource_id          = null_resource.configure_kind_apiserver_oidc[0].id
   }
 
   provisioner "local-exec" {

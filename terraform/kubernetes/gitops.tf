@@ -119,7 +119,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
   }
 
   depends_on = [
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     kubectl_manifest.argocd_app_gitea,
     null_resource.gitea_org,
     local_sensitive_file.policies_repo_private_key,
@@ -1028,7 +1028,7 @@ data "external" "gitea_ssh_public_keys_cluster" {
 
   depends_on = [
     kubectl_manifest.argocd_app_gitea,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     null_resource.sync_gitea_policies_repo,
   ]
 }
@@ -1056,36 +1056,39 @@ locals {
       if trimspace(host) != "" && trimspace(host) != "None"
     ]
   ))) : []
-  gitea_known_hosts_cluster_lines = local.enable_gitops_repo ? distinct(flatten([
+  gitea_known_hosts_cluster_lines = local.enable_gitops_repo ? sort(distinct(flatten([
     for host in local.gitea_known_hosts_cluster_hosts : [
       for key_line in local.gitea_ssh_public_key_lines : [
         "${host} ${trimspace(key_line)}",
         "[${host}]:${local.gitea_ssh_port_cluster} ${trimspace(key_line)}",
       ]
     ]
-  ])) : []
+  ]))) : []
   gitea_known_hosts_cluster_content = local.enable_gitops_repo ? format("%s\n", join("\n", local.gitea_known_hosts_cluster_lines)) : ""
   argocd_ssh_known_hosts_base       = local.enable_gitops_repo ? try(data.kubernetes_config_map_v1.argocd_ssh_known_hosts_cm[0].data["ssh_known_hosts"], "") : ""
   argocd_ssh_known_hosts_gitea_hosts = local.enable_gitops_repo ? distinct([
     for line in compact(split("\n", trimspace(local.gitea_known_hosts_cluster_content))) :
     split(" ", trimspace(line))[0]
   ]) : []
-  argocd_ssh_known_hosts_base_filtered = local.enable_gitops_repo ? [
+  argocd_ssh_known_hosts_base_filtered = local.enable_gitops_repo ? sort([
     for line in compact(split("\n", trimspace(local.argocd_ssh_known_hosts_base))) :
     line
     if !contains(local.argocd_ssh_known_hosts_gitea_hosts, split(" ", trimspace(line))[0])
-  ] : []
+  ]) : []
+  argocd_ssh_known_hosts_merged_lines = local.enable_gitops_repo ? sort(distinct(concat(
+    local.argocd_ssh_known_hosts_base_filtered,
+    compact(split("\n", trimspace(local.gitea_known_hosts_cluster_content))),
+  ))) : []
 
-  argocd_ssh_known_hosts_merged = local.enable_gitops_repo ? format(
-    "%s\n",
-    join(
-      "\n",
-      distinct(concat(
-        local.argocd_ssh_known_hosts_base_filtered,
-        compact(split("\n", trimspace(local.gitea_known_hosts_cluster_content))),
-      )),
-    ),
+  argocd_ssh_known_hosts_merged = local.enable_gitops_repo ? (
+    length(local.argocd_ssh_known_hosts_merged_lines) > 0 ?
+    format("%s\n", join("\n", local.argocd_ssh_known_hosts_merged_lines)) :
+    ""
   ) : ""
+  argocd_gitops_repo_trust_hash = local.enable_gitops_repo ? sha1(join("\n", compact([
+    local.policies_repo_url_cluster,
+    join("\n", local.gitea_known_hosts_cluster_lines),
+  ]))) : ""
 }
 
 resource "kubernetes_config_map_v1_data" "argocd_ssh_known_hosts_cm" {
@@ -1115,7 +1118,7 @@ resource "null_resource" "argocd_repo_server_restart" {
     cluster_id       = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     gitea_host_key   = sha1(local.gitea_known_hosts_cluster_content)
     argocd_chart_ver = var.argocd_chart_version
-    known_hosts_hash = sha1(local.argocd_ssh_known_hosts_merged)
+    known_hosts_hash = local.argocd_gitops_repo_trust_hash
     repo_secret_hash = sha1(join("\n", [
       local.policies_repo_url_cluster,
       tls_private_key.policies_repo[0].private_key_openssh,
@@ -1226,9 +1229,9 @@ patch_known_hosts() {
   kubectl -n ${var.argocd_namespace} get configmap argocd-ssh-known-hosts-cm -o jsonpath='{.data.ssh_known_hosts}' > "$base_file"
   printf '\n' >> "$base_file"
 
-  awk 'NF {print $1}' "$KNOWN_HOSTS_FILE" | sort -u > "$current_hosts"
+  awk 'NF {print $1}' "$KNOWN_HOSTS_FILE" | LC_ALL=C sort -u > "$current_hosts"
   awk 'NR==FNR {replace[$1]=1; next} NF && !($1 in replace)' "$current_hosts" "$base_file" > "$base_filtered"
-  awk 'NF && !seen[$0]++' "$base_filtered" "$KNOWN_HOSTS_FILE" > "$merged_file"
+  awk 'NF && !seen[$0]++' "$base_filtered" "$KNOWN_HOSTS_FILE" | LC_ALL=C sort -u > "$merged_file"
 
   {
     echo "data:"
@@ -1293,7 +1296,7 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
 
   triggers = {
     gitops_repo_hash   = local.policies_repo_render_hash
-    known_hosts_hash   = sha1(local.argocd_ssh_known_hosts_merged)
+    known_hosts_hash   = local.argocd_gitops_repo_trust_hash
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
     refresh_script_ver = "8"
   }

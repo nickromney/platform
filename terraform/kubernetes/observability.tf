@@ -23,7 +23,7 @@ resource "kubernetes_namespace_v1" "observability" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 

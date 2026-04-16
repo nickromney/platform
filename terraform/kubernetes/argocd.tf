@@ -11,7 +11,7 @@ resource "kubernetes_namespace_v1" "argocd" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
   ]
 }
 
@@ -32,7 +32,7 @@ resource "helm_release" "argocd" {
 
   depends_on = [
     kind_cluster.local,
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     helm_release.cilium,
     null_resource.kind_storage,
     kubernetes_namespace_v1.argocd,

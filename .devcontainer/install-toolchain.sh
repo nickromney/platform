@@ -149,6 +149,10 @@ if [[ "${#positional[@]}" -gt 1 ]]; then
   exit 1
 fi
 
+OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.11.6}"
+OPENTOFU_INSTALL_DIR="${OPENTOFU_INSTALL_DIR:-/usr/local/lib/opentofu/${OPENTOFU_VERSION}}"
+OPENTOFU_INSTALLER_URL="${OPENTOFU_INSTALLER_URL:-https://get.opentofu.org/install-opentofu.sh}"
+
 shell_cli_maybe_execute_or_preview_summary usage \
   "would install the devcontainer toolchain for ${username}"
 
@@ -238,6 +242,21 @@ install_kyverno() {
   rm -rf "${tmp_dir}"
 }
 
+install_opentofu() {
+  local tmp_dir installer
+
+  tmp_dir="$(mktemp -d)"
+  installer="${tmp_dir}/install-opentofu.sh"
+  curl -fsSL "${OPENTOFU_INSTALLER_URL}" -o "${installer}"
+  chmod +x "${installer}"
+  "${installer}" \
+    --install-method standalone \
+    --opentofu-version "${OPENTOFU_VERSION}" \
+    --install-path "${OPENTOFU_INSTALL_DIR}" \
+    --symlink-path /usr/local/bin
+  rm -rf "${tmp_dir}"
+}
+
 install_playwright_chromium() {
   # Bake the browser runtime dependencies that the stage-900 SSO harness needs.
   run_as_user "bun x playwright install --with-deps chromium"
@@ -265,13 +284,14 @@ arkade_tools=(
   kubectx
   mkcert
   terragrunt
-  tofu
   yq
 )
 
 for tool in "${arkade_tools[@]}"; do
   install_arkade_tool "${tool}"
 done
+
+install_opentofu
 
 arkade oci install ghcr.io/openfaasltd/slicer:latest --path /usr/local/bin
 

@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 allowed_python_execution=(
+  ".devcontainer/check-version.sh"
   "sd-wan/lima/provision/common.sh"
   "sd-wan/lima/provision/cloud2.sh"
   "kubernetes/kind/scripts/ensure-kind-kubeconfig.sh"

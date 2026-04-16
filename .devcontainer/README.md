@@ -13,6 +13,7 @@ make -C .devcontainer prereqs
 make -C .devcontainer build
 make -C .devcontainer run
 make -C .devcontainer exec
+make -C .devcontainer check-version
 ```
 
 Those targets use the Dev Container CLI against the repo root. They exist so
@@ -27,6 +28,10 @@ needed. `exec` and `up` both ensure the container is running and then attach a
 login shell. `run`, `exec`, and `up` are host-side entrypoints. If you are
 already inside the devcontainer, use the current shell rather than calling them
 again.
+
+`check-version` inspects the devcontainer definition plus any existing
+workspace container/image, then flags stale builds, floating version sources,
+and pinned-tool drift.
 
 ## What It Depends On
 
@@ -87,6 +92,7 @@ make -C .devcontainer prereqs
 make -C .devcontainer build
 make -C .devcontainer run
 make -C .devcontainer exec
+make -C .devcontainer check-version
 ```
 
 `build` is the clean-image path. It evicts the existing workspace container
@@ -157,11 +163,20 @@ The devcontainer now follows a Linux-first toolchain split:
 - `apt`: base Linux packages such as `bats`, `neovim`, `shellcheck`, and
   `yamllint`
 - devcontainer features: Docker socket integration and Node.js 24
-- upstream installers: `bun`, `starship`, `step`, `kyverno`, and `lima`
+- upstream installers: `bun`, `starship`, `step`, `kyverno`, `lima`, and the
+  pinned OpenTofu `1.11.6` standalone install
 - direct binary copy: `uv`
 - `arkade`: Kubernetes-facing tools such as `kubectl`, `kind`, `helm`,
-  `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, `tofu`, and the local
-  `slicer` helper
+  `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, and the local `slicer`
+  helper
+
+`make -C .devcontainer check-version` validates that surface in a read-only
+way. It checks the pinned OpenTofu and `uv` definitions, reports floating
+inputs such as `arkade` and installer-based tools, checks the workspace
+container/image age against the default 14-day limit, and confirms the live
+OpenTofu/`uv` versions still match the definition when a running devcontainer
+is available. Override the freshness threshold with
+`DEVCONTAINER_CHECK_STALE_DAYS=<days>`.
 
 The repo-level `make lint` entrypoint works inside the devcontainer too, and
 the image includes both `yamllint` and `kyverno` for the recursive YAML and

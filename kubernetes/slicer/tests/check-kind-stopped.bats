@@ -14,15 +14,30 @@ setup() {
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "ps" ]]; then
-  printf 'kind-local-control-plane\nkind-local-worker\n'
+  last_arg=""
+  for arg in "$@"; do
+    last_arg="${arg}"
+  done
+  case "${last_arg}" in
+    '{{.Names}}')
+      printf 'kind-local-control-plane\nkind-local-worker\n'
+      ;;
+    '{{.Names}}|{{.Ports}}')
+      printf 'kind-local-control-plane|127.0.0.1:6443->6443/tcp, 127.0.0.1:443->30070/tcp\n'
+      printf 'kind-local-worker|\n'
+      ;;
+  esac
 fi
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"make -C kubernetes/kind stop-kind"* ]]
+  [[ "${output}" == *"Published host ports:"* ]]
+  [[ "${output}" == *"127.0.0.1:443"* ]]
+  [[ "${output}" == *"127.0.0.1:6443"* ]]
 }
 
 @test "returns success when kind-local is not running" {
@@ -33,7 +48,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
 }

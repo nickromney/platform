@@ -2,24 +2,24 @@ resource "null_resource" "kind_storage" {
   count = var.provision_kind_cluster && local.enable_cilium_effective ? 1 : 0
 
   triggers = {
-    cluster_id               = kind_cluster.local[0].id
-    ensure_script_sha        = filesha256("${local.stack_dir}/scripts/ensure-kind-storage.sh")
-    local_path_manifest_sha  = filesha256("${local.stack_dir}/config/local-path-storage-v0.0.35.yaml")
-    standard_manifest_sha    = filesha256("${local.stack_dir}/config/kind-standard-storageclass.yaml")
+    cluster_id              = kind_cluster.local[0].id
+    ensure_script_sha       = filesha256("${local.stack_dir}/scripts/ensure-kind-storage.sh")
+    local_path_manifest_sha = filesha256("${local.stack_dir}/config/local-path-storage-v0.0.35.yaml")
+    standard_manifest_sha   = filesha256("${local.stack_dir}/config/kind-standard-storageclass.yaml")
   }
 
   provisioner "local-exec" {
     command     = "bash \"${local.stack_dir}/scripts/ensure-kind-storage.sh\" --execute"
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      KUBECONFIG                         = local.kubeconfig_path_expanded
-      LOCAL_PATH_MANIFEST_PATH           = "${local.stack_dir}/config/local-path-storage-v0.0.35.yaml"
+      KUBECONFIG                          = local.kubeconfig_path_expanded
+      LOCAL_PATH_MANIFEST_PATH            = "${local.stack_dir}/config/local-path-storage-v0.0.35.yaml"
       STANDARD_STORAGECLASS_MANIFEST_PATH = "${local.stack_dir}/config/kind-standard-storageclass.yaml"
     }
   }
 
   depends_on = [
-    local_sensitive_file.kubeconfig,
+    null_resource.ensure_kind_kubeconfig,
     null_resource.kind_restart_containerd_on_registry_config_change,
     helm_release.cilium,
     null_resource.cilium_restart_on_config_change,

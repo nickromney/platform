@@ -27,6 +27,14 @@ running_kind_nodes="$(
     grep -E '^kind-local-(control-plane|worker([0-9]+)?)$' || true
 )"
 
+running_kind_ports="$(
+  docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null | \
+    awk -F '|' '$1 ~ /^kind-local-(control-plane|worker([0-9]+)?)$/ { print $2 }' | \
+    tr ',' '\n' | \
+    sed -nE 's/^[[:space:]]*([^[:space:],]+:[0-9]+)->.*$/\1/p' | \
+    LC_ALL=C sort -u || true
+)"
+
 if [[ -z "${running_kind_nodes}" ]]; then
   exit 0
 fi
@@ -35,6 +43,14 @@ echo "kind-local is still running." >&2
 echo "Stop it before starting Lima or Slicer on this host:" >&2
 echo "  make -C kubernetes/kind stop-kind" >&2
 echo "" >&2
+if [[ -n "${running_kind_ports}" ]]; then
+  echo "Published host ports:" >&2
+  while IFS= read -r host_port; do
+    [[ -z "${host_port}" ]] && continue
+    printf '  %s\n' "${host_port}" >&2
+  done <<< "${running_kind_ports}"
+  echo "" >&2
+fi
 echo "Running kind containers:" >&2
 while IFS= read -r container; do
   [[ -z "${container}" ]] && continue
