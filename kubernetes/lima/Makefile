@@ -39,6 +39,7 @@ LIMA_INSTANCE_PREFIX ?= k3s-node
 LIMA_VM_USER ?= $(USER)
 LIMA_CONFIG ?= $(MAKEFILE_DIR)config/lima-k3s-node.yaml
 LIMA_HOST_GATEWAY_PROXY_MODE ?= auto
+LIMA_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301
 K3SUP_CONTEXT ?= limavm-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
@@ -436,6 +437,11 @@ status:
 stop-lima:
 	@set -euo pipefail; \
 	command -v limactl >/dev/null 2>&1 || { echo "limactl not found in PATH"; exit 1; }; \
+	echo "Shared host ports managed by Lima:"; \
+	for port in $(LIMA_SHARED_HOST_PORTS); do \
+		printf '  127.0.0.1:%s\n' "$$port"; \
+	done; \
+	echo ""; \
 	echo "Stopping host gateway proxy containers (best-effort)..."; \
 	$(MAKE) stop-host-gateway-proxy >/dev/null 2>&1 || true; \
 	echo "OK   proxies stopped"; \

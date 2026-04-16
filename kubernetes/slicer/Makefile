@@ -62,6 +62,7 @@ SLICER_SWAP_SIZE ?= 4G
 SLICER_ALLOW_EXISTING_K3S ?= 0
 SLICER_RESET_PRUNE_ALL_IMAGES ?= 0
 SLICER_HOST_FORWARDS_MODE ?= auto
+SLICER_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301 3302
 K3SUP_CONTEXT ?= slicer-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
@@ -674,6 +675,11 @@ status:
 stop-slicer:
 	@set -euo pipefail; \
 	socket="$$($(RESOLVE_SOCKET))"; \
+	echo "Shared host ports managed by Slicer:"; \
+	for port in $(SLICER_SHARED_HOST_PORTS); do \
+		printf '  127.0.0.1:%s\n' "$$port"; \
+	done; \
+	echo ""; \
 	echo "Stopping host forwards (best-effort)..."; \
 	$(MAKE) stop-host-forwards >/dev/null 2>&1 || true; \
 	echo "OK   host forwards stopped"; \

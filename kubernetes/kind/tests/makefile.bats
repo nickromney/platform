@@ -23,6 +23,9 @@ setup() {
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
+  [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
+  [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
+  [[ "${output}" == *"CHECK_VERSION_FORMAT=text|json"* ]]
   [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
   [[ "${output}" != *"${HOME}"* ]]
@@ -267,6 +270,45 @@ setup() {
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "kind check-version can emit a combined machine-readable JSON report" {
+  stub_stack="${BATS_TEST_TMPDIR}/stack"
+  stub_scripts="${stub_stack}/scripts"
+  mkdir -p "${stub_scripts}"
+
+  cat >"${stub_scripts}/check-version.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"report":"components"}'
+EOF
+  chmod +x "${stub_scripts}/check-version.sh"
+
+  cat >"${stub_scripts}/check-provider-version.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"report":"providers"}'
+EOF
+  chmod +x "${stub_scripts}/check-provider-version.sh"
+
+  cat >"${TEST_BIN}/ensure-kind-kubeconfig.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ensure-kind-kubeconfig.sh"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-version \
+    STACK_DIR="${stub_stack}" \
+    ENSURE_KIND_KUBECONFIG="${TEST_BIN}/ensure-kind-kubeconfig.sh" \
+    CHECK_VERSION_FORMAT=json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.component_report.report + "|" + .provider_report.report' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "components|providers" ]
 }
 
 @test "kind test-shell delegates to repo shell validation and shellcheck" {
