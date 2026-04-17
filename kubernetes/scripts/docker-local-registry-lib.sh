@@ -1,5 +1,69 @@
 #!/usr/bin/env bash
 
+DOCKER_LOCAL_REGISTRY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOCKER_LOCAL_REGISTRY_REPO_ROOT="${REPO_ROOT:-$(cd "${DOCKER_LOCAL_REGISTRY_LIB_DIR}/../.." && pwd)}"
+# shellcheck source=/dev/null
+source "${DOCKER_LOCAL_REGISTRY_REPO_ROOT}/scripts/lib/http-fetch.sh"
+
+registry_require_tools() {
+  command -v docker >/dev/null 2>&1 || { echo "${0##*/}: docker not found" >&2; exit 1; }
+}
+
+registry_assert_reachable() {
+  local cache_host="$1"
+
+  http_fetch -fsS "http://${cache_host}/v2/" >/dev/null 2>&1 || {
+    echo "${0##*/}: local cache not reachable at http://${cache_host}/v2/" >&2
+    exit 1
+  }
+}
+
+registry_cache_repo_and_tag() {
+  local image_ref="$1"
+  local ref_without_digest="${image_ref%%@*}"
+  local ref_without_tag="${ref_without_digest}"
+  local repo_path=""
+  local tag="latest"
+  local first_component=""
+
+  if [[ "${ref_without_digest##*/}" == *:* ]]; then
+    tag="${ref_without_digest##*:}"
+    ref_without_tag="${ref_without_digest%:*}"
+  fi
+
+  if [[ "${ref_without_tag}" != */* ]]; then
+    repo_path="library/${ref_without_tag}"
+  else
+    first_component="${ref_without_tag%%/*}"
+    if [[ "${first_component}" == *.* || "${first_component}" == *:* || "${first_component}" == "localhost" ]]; then
+      repo_path="${ref_without_tag#*/}"
+    else
+      repo_path="${ref_without_tag}"
+    fi
+  fi
+
+  printf '%s\t%s\n' "${repo_path}" "${tag}"
+}
+
+registry_tag_list() {
+  local cache_host="$1"
+  local repo="$2"
+  local payload=""
+
+  payload="$(http_fetch -fsS "http://${cache_host}/v2/${repo}/tags/list" 2>/dev/null || true)"
+  [ -n "${payload}" ] || return 1
+
+  jq -r '.tags[]? // empty' <<<"${payload}" 2>/dev/null || true
+}
+
+registry_tag_exists() {
+  local cache_host="$1"
+  local repo="$2"
+  local tag="$3"
+
+  registry_tag_list "${cache_host}" "${repo}" | grep -Fx "${tag}" >/dev/null 2>&1
+}
+
 docker_push_local_registry() {
   local target_ref="$1"
   local push_ref="${target_ref}"

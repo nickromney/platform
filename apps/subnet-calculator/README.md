@@ -10,7 +10,24 @@ A full-stack IPv4/IPv6 subnet calculator with multiple backend and frontend impl
 
 ## Quick Start
 
-### Run All Services
+### Run Baseline Compose
+
+The default [`compose.yml`](compose.yml) path now starts the fast baseline
+container-app family only. This is the recommended local loop when you want one
+backend kept warm and to swap frontends quickly.
+
+```bash
+# Start the default happy path from this directory
+make start-compose-happy
+
+# Or bring up only the shared backend, then swap frontends
+make start-compose-backend-container
+make start-compose-frontend-vite
+make start-compose-frontend-react
+make start-compose-frontend-static
+```
+
+### Run Full Demo Topology
 
 The main [`compose.yml`](compose.yml) defines many local stack variants. The
 four baseline compose slices below are still the quickest way to understand the
@@ -19,11 +36,11 @@ Easy Auth variants documented in
 [docs/COMPOSE-ARCHITECTURE.md](docs/COMPOSE-ARCHITECTURE.md).
 
 ```bash
-# Start the full local compose topology
-podman-compose up -d
+# Start the full local compose topology explicitly
+make start-compose-full
 
 # Or with Docker
-docker compose up -d
+docker compose --profile function-family --profile oidc --profile mock-easyauth up -d
 
 # Or from this directory, start the default stack-04
 make up

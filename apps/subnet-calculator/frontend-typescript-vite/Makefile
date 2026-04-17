@@ -25,7 +25,27 @@ install: ## Install dependencies
 	@bun install --frozen-lockfile
 
 update: ## Update Bun dependency locks
-	@bun update --latest
+	@deps="$$(jq -r '((.dependencies // {}) + (.devDependencies // {}) + (.optionalDependencies // {})) | to_entries[] | select((.value | startswith("file:")) | not) | .key' package.json | tr '\n' ' ')"; \
+	before_package="$$(mktemp)"; \
+	before_lock="$$(mktemp)"; \
+	output="$$(mktemp)"; \
+	cp package.json "$$before_package"; \
+	cp bun.lock "$$before_lock"; \
+	if [ -n "$$deps" ]; then \
+		if ! bun update --latest $$deps >"$$output" 2>&1; then \
+			cat "$$output"; \
+			rm -f "$$before_package" "$$before_lock" "$$output"; \
+			exit 1; \
+		fi; \
+		if cmp -s package.json "$$before_package" && cmp -s bun.lock "$$before_lock"; then \
+			echo "Bun dependencies already current."; \
+		else \
+			cat "$$output"; \
+		fi; \
+	else \
+		echo "No registry-backed Bun dependencies to update."; \
+	fi; \
+	rm -f "$$before_package" "$$before_lock" "$$output"
 
 ##@ Run
 dev: ## Run development server

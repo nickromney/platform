@@ -130,3 +130,50 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = "argo-cd chart|update available" ]
 }
+
+@test "check-version hides current-only apps from dependency audit text" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(cat <<'EOF'
+apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact\t19.2.5\t19.2.5\t19.2.5\tcurrent
+apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact-dom\t19.2.5\t19.2.5\t19.2.5\tcurrent
+apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t1.0.1\t1.0.1\tupdate available
+EOF
+); render_dependency_audit_text \"\${rows}\""
+
+  [ "${status}" -eq 0 ]
+  [[ ! "${output}" =~ apps/sentiment/frontend-react-vite/sentiment-auth-ui ]]
+  [[ "${output}" =~ apps/subnet-calculator/frontend-react ]]
+  [[ "${output}" =~ hidden\ current-only\ apps:\ 1\ \(dependencies\ hidden:\ 2\) ]]
+}
+
+@test "check-version caches Docker Hub tag listings by repository" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  local call_counter="${BATS_TEST_TMPDIR}/curl-count"
+  local cache_dir="${BATS_TEST_TMPDIR}/cache"
+  mkdir -p "${stub_bin}" "${cache_dir}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+count_file="${CHECK_VERSION_TEST_CURL_COUNT_FILE:?}"
+count=0
+if [ -f "${count_file}" ]; then
+  count="$(cat "${count_file}")"
+fi
+printf '%s\n' "$((count + 1))" >"${count_file}"
+printf '%s\n' '{"results":[{"name":"1.2.3"},{"name":"latest"}],"next":null}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_CACHE_DIR='${cache_dir}' CHECK_VERSION_TEST_CURL_COUNT_FILE='${call_counter}' PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n--\n%s\n' \"\$(docker_hub_repo_tags 'library' 'curl')\" \"\$(docker_hub_repo_tags 'library' 'curl')\""
+
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${call_counter}")" = "1" ]
+  [ "${output}" = "$(printf '1.2.3\nlatest\n--\n1.2.3\nlatest')" ]
+}
+
+@test "check-version parallel line mapper runs callbacks with bounded concurrency" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; callback() { sleep 1; printf '%s\n' \"processed:\$1\"; }; input_file='${BATS_TEST_TMPDIR}/items.txt'; output_dir='${BATS_TEST_TMPDIR}/out'; printf 'a\nb\nc\n' >\"\${input_file}\"; start=\$(date +%s); parallel_map_lines 2 callback \"\${input_file}\" \"\${output_dir}\"; elapsed=\$(( \$(date +%s) - start )); printf '__ELAPSED__=%s\n' \"\${elapsed}\""
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ processed:a$'\n'processed:b$'\n'processed:c$'\n'__ELAPSED__= ]]
+  [[ "${output}" =~ __ELAPSED__=2|__ELAPSED__=1 ]]
+}

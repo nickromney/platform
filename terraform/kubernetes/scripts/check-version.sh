@@ -6,6 +6,10 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/http-fetch.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/parallel.sh"
 
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
 
@@ -64,6 +68,8 @@ fi
 
 CHECK_VERSION_HEARTBEAT_SECONDS="${CHECK_VERSION_HEARTBEAT_SECONDS:-10}"
 CHECK_VERSION_HEARTBEAT_PID=""
+HTTP_FETCH_MAX_TIME_SECONDS="${HTTP_FETCH_MAX_TIME_SECONDS:-${CHECK_VERSION_CURL_MAX_TIME_SECONDS:-15}}"
+HTTP_FETCH_CONNECT_TIMEOUT_SECONDS="${HTTP_FETCH_CONNECT_TIMEOUT_SECONDS:-${CHECK_VERSION_CURL_CONNECT_TIMEOUT_SECONDS:-5}}"
 
 start_heartbeat() {
   local message="$1"
@@ -155,6 +161,7 @@ APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROO
 export VARIABLES_FILE="${VARIABLES_FILE:-${STACK_DIR}/variables.tf}"
 HELM_READY_REPOS=""
 CHECK_VERSION_CACHE_DIR="${CHECK_VERSION_CACHE_DIR:-}"
+HTTP_FETCH_CACHE_DIR="${HTTP_FETCH_CACHE_DIR:-${CHECK_VERSION_CACHE_DIR:-}}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
@@ -226,14 +233,6 @@ tfvar_get_any_stage_bool_or_default() {
       printf '%s\n' "${fallback}"
       ;;
   esac
-}
-
-cache_file_for_key() {
-  local prefix="$1"
-  local key="$2"
-
-  ensure_check_version_cache_dir
-  printf "%s/%s\n" "${CHECK_VERSION_CACHE_DIR}" "$(printf '%s__%s' "${prefix}" "${key}" | tr '/:@?&=%' '_')"
 }
 
 uri_encode() {
@@ -408,9 +407,9 @@ npm_registry_payload() {
   local encoded_dep cache_file
 
   encoded_dep="$(uri_encode "${dep}")"
-  cache_file="$(cache_file_for_key "npm" "${encoded_dep}")"
+  cache_file="$(http_cache_file_for_key "npm" "${encoded_dep}")"
   if [ ! -f "${cache_file}" ]; then
-    curl -fsSL "https://registry.npmjs.org/${encoded_dep}" >"${cache_file}" 2>/dev/null || {
+    http_fetch -fsSL "https://registry.npmjs.org/${encoded_dep}" >"${cache_file}" 2>/dev/null || {
       rm -f "${cache_file}"
       return 1
     }
@@ -419,20 +418,30 @@ npm_registry_payload() {
   cat "${cache_file}"
 }
 
+warm_npm_registry_payload() {
+  local dep="$1"
+  npm_registry_payload "${dep}" >/dev/null || true
+}
+
 pypi_package_payload() {
   local dep="$1"
   local normalized_dep cache_file
 
   normalized_dep="$(normalize_python_package_name "${dep}")"
-  cache_file="$(cache_file_for_key "pypi" "${normalized_dep}")"
+  cache_file="$(http_cache_file_for_key "pypi" "${normalized_dep}")"
   if [ ! -f "${cache_file}" ]; then
-    curl -fsSL "https://pypi.org/pypi/${normalized_dep}/json" >"${cache_file}" 2>/dev/null || {
+    http_fetch -fsSL "https://pypi.org/pypi/${normalized_dep}/json" >"${cache_file}" 2>/dev/null || {
       rm -f "${cache_file}"
       return 1
     }
   fi
 
   cat "${cache_file}"
+}
+
+warm_pypi_package_payload() {
+  local dep="$1"
+  pypi_package_payload "${dep}" >/dev/null || true
 }
 
 npm_latest_overall_version() {
@@ -795,11 +804,9 @@ ensure_helm_repo_ready() {
 }
 
 ensure_check_version_cache_dir() {
-  if [ -n "${CHECK_VERSION_CACHE_DIR}" ] && [ -d "${CHECK_VERSION_CACHE_DIR}" ]; then
-    return 0
-  fi
-
-  CHECK_VERSION_CACHE_DIR="$(mktemp -d)"
+  HTTP_FETCH_CACHE_DIR="${HTTP_FETCH_CACHE_DIR:-${CHECK_VERSION_CACHE_DIR:-}}"
+  HTTP_FETCH_CACHE_DIR="$(http_cache_dir_ensure)"
+  CHECK_VERSION_CACHE_DIR="${HTTP_FETCH_CACHE_DIR}"
 }
 
 chart_app_version_cache_file() {
@@ -866,14 +873,19 @@ image_tag_from_ref() {
   fi
 }
 
+github_latest_release_tag_uncached() {
+  local repo="$1"
+
+  http_fetch -fsSL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null | jq -r '.tag_name // empty' | xargs || true
+}
+
 github_latest_release_tag() {
   local repo="$1"
 
-  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null | \
-    jq -r '.tag_name // empty' | xargs || true
+  http_cached_output "github-release-tag" "${repo}" github_latest_release_tag_uncached "${repo}" || true
 }
 
-docker_hub_repo_tags() {
+docker_hub_repo_tags_uncached() {
   local namespace="$1"
   local repository="$2"
   local next_url="https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags?page_size=100"
@@ -881,12 +893,19 @@ docker_hub_repo_tags() {
   local tags=""
 
   while [ -n "${next_url}" ]; do
-    payload="$(curl -fsSL "${next_url}" 2>/dev/null)" || return 1
+    payload="$(http_fetch -fsSL "${next_url}" 2>/dev/null)" || return 1
     tags="${tags}$(jq -r '.results[]?.name // empty' <<<"${payload}")"$'\n'
     next_url="$(jq -r '.next // empty' <<<"${payload}")"
   done
 
   printf "%s" "${tags}"
+}
+
+docker_hub_repo_tags() {
+  local namespace="$1"
+  local repository="$2"
+
+  http_cached_output "docker-hub-tags" "${namespace}/${repository}" docker_hub_repo_tags_uncached "${namespace}" "${repository}"
 }
 
 parse_www_authenticate_bearer() {
@@ -910,7 +929,7 @@ print(f'{params.get("realm", "")}\t{params.get("service", "")}\t{params.get("sco
 PY
 }
 
-oci_registry_repo_tags() {
+oci_registry_repo_tags_uncached() {
   local registry="$1"
   local repository="$2"
   local url="https://${registry}/v2/${repository}/tags/list?n=1000"
@@ -919,7 +938,7 @@ oci_registry_repo_tags() {
   headers_file="$(mktemp)"
   body_file="$(mktemp)"
 
-  if curl -fsSL -D "${headers_file}" "${url}" -o "${body_file}" 2>/dev/null; then
+  if http_fetch -fsSL -D "${headers_file}" "${url}" -o "${body_file}" 2>/dev/null; then
     jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
     rm -f "${headers_file}" "${body_file}"
     return 0
@@ -941,7 +960,7 @@ oci_registry_repo_tags() {
   fi
 
   token_url="${realm}?service=$(uri_encode "${service}")&scope=$(uri_encode "${scope}")"
-  token_payload="$(curl -fsSL "${token_url}" 2>/dev/null || true)"
+  token_payload="$(http_fetch -fsSL "${token_url}" 2>/dev/null || true)"
   token="$(jq -r '.token // .access_token // empty' <<<"${token_payload}" 2>/dev/null | xargs || true)"
   if [ -z "${token}" ]; then
     rm -f "${headers_file}"
@@ -949,13 +968,20 @@ oci_registry_repo_tags() {
   fi
 
   body_file="$(mktemp)"
-  if ! curl -fsSL -H "Authorization: Bearer ${token}" "${url}" -o "${body_file}" 2>/dev/null; then
+  if ! http_fetch -fsSL -H "Authorization: Bearer ${token}" "${url}" -o "${body_file}" 2>/dev/null; then
     rm -f "${headers_file}" "${body_file}"
     return 1
   fi
 
   jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
   rm -f "${headers_file}" "${body_file}"
+}
+
+oci_registry_repo_tags() {
+  local registry="$1"
+  local repository="$2"
+
+  http_cached_output "oci-registry-tags" "${registry}/${repository}" oci_registry_repo_tags_uncached "${registry}" "${repository}"
 }
 
 kindest_node_latest_tag() {
@@ -1878,45 +1904,161 @@ emit_app_dependency_rows() {
   )
 }
 
+collect_js_dependency_names() {
+  local package_json dep spec spec_status
+
+  while IFS= read -r package_json; do
+    while IFS=$'\t' read -r dep spec; do
+      [ -n "${dep}" ] || continue
+      spec_status="$(js_dependency_spec_status "${spec}")"
+      if [ -n "${spec_status}" ]; then
+        continue
+      fi
+      printf '%s\n' "${dep}"
+    done < <(package_json_direct_dependencies "${package_json}")
+  done < <(
+    find "${REPO_ROOT}/apps" \
+      \( \
+        -path '*/.git' -o \
+        -path '*/.terraform' -o \
+        -path '*/.venv' -o \
+        -path '*/venv' -o \
+        -path '*/node_modules' -o \
+        -path '*/dist' -o \
+        -path '*/build' -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+      \) -prune \
+      -o -type f -name package.json -print \
+      | LC_ALL=C sort
+  )
+}
+
+collect_python_dependency_names() {
+  local pyproject requirement requirement_status dep_name
+
+  while IFS= read -r pyproject; do
+    while IFS= read -r requirement; do
+      [ -n "${requirement}" ] || continue
+      requirement_status="$(python_requirement_status "${requirement}")"
+      if [ "${requirement_status}" = "skip" ]; then
+        continue
+      fi
+      dep_name="$(python_requirement_name "${requirement}")"
+      [ -n "${dep_name}" ] || continue
+      if [ -n "${requirement_status}" ]; then
+        continue
+      fi
+      printf '%s\n' "${dep_name}"
+    done < <(
+      awk '
+        /^\[project\]$/ { in_project = 1; next }
+        in_project && /^\[/ && $0 !~ /^\[project(\.|$)/ { in_project = 0 }
+        in_project && /^dependencies = \[/ { in_deps = 1; next }
+        in_deps && /^\]/ { in_deps = 0; next }
+        in_deps {
+          line = $0
+          gsub(/^[[:space:]]*"/, "", line)
+          gsub(/",[[:space:]]*$/, "", line)
+          print line
+        }
+      ' "${pyproject}" 2>/dev/null
+    )
+  done < <(
+    find "${REPO_ROOT}/apps" \
+      \( \
+        -path '*/.git' -o \
+        -path '*/.terraform' -o \
+        -path '*/.venv' -o \
+        -path '*/venv' -o \
+        -path '*/node_modules' -o \
+        -path '*/dist' -o \
+        -path '*/build' -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+      \) -prune \
+      -o -type f -name pyproject.toml -print \
+      | LC_ALL=C sort
+  )
+}
+
+warm_dependency_metadata_caches() {
+  local max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY:-4}"
+  local js_input py_input output_dir
+
+  js_input="$(mktemp)"
+  py_input="$(mktemp)"
+  output_dir="$(mktemp -d)"
+
+  collect_js_dependency_names | LC_ALL=C sort -u >"${js_input}"
+  collect_python_dependency_names | LC_ALL=C sort -u >"${py_input}"
+
+  if [ -s "${js_input}" ]; then
+    parallel_map_lines "${max_jobs}" warm_npm_registry_payload "${js_input}" "${output_dir}/npm" >/dev/null
+  fi
+
+  if [ -s "${py_input}" ]; then
+    parallel_map_lines "${max_jobs}" warm_pypi_package_payload "${py_input}" "${output_dir}/pypi" >/dev/null
+  fi
+
+  rm -f "${js_input}" "${py_input}"
+  rm -rf "${output_dir}"
+}
+
 emit_external_image_rows() {
+  local input_file output_dir max_jobs
+
+  input_file="$(mktemp)"
+  output_dir="$(mktemp -d)"
+  max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY:-4}"
+
+  collect_declared_image_refs | awk -F'\t' '!seen[$2]++' >"${input_file}"
+  parallel_map_lines "${max_jobs}" emit_external_image_row "${input_file}" "${output_dir}"
+
+  rm -f "${input_file}"
+  rm -rf "${output_dir}"
+}
+
+emit_external_image_row() {
+  local input="$1"
   local source_ref image_ref current_tag latest_tag registry status
 
-  while IFS=$'\t' read -r source_ref image_ref; do
-    [ -n "${image_ref}" ] || continue
-    if image_ref_is_internal "${image_ref}"; then
-      continue
-    fi
+  IFS=$'\t' read -r source_ref image_ref <<<"${input}"
 
-    current_tag="$(image_tag_from_ref "${image_ref}")"
-    registry="$(image_ref_registry "${image_ref}")"
-    latest_tag=""
-    case "${registry}" in
-      docker.io)
-        latest_tag="$(docker_hub_latest_tag_for_ref "${image_ref}")"
-        ;;
-      ghcr.io|quay.io|mcr.microsoft.com)
-        latest_tag="$(oci_registry_latest_tag_for_ref "${image_ref}")"
-        ;;
-    esac
+  [ -n "${image_ref}" ] || return 0
+  if image_ref_is_internal "${image_ref}"; then
+    return 0
+  fi
 
-    if [ -z "${current_tag}" ]; then
-      status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
-    elif [ -z "${latest_tag}" ]; then
-      status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
-    elif [ "${current_tag}" = "${latest_tag}" ]; then
-      status="current"
-    else
-      status="update available"
-    fi
+  current_tag="$(image_tag_from_ref "${image_ref}")"
+  registry="$(image_ref_registry "${image_ref}")"
+  latest_tag=""
+  case "${registry}" in
+    docker.io)
+      latest_tag="$(docker_hub_latest_tag_for_ref "${image_ref}")"
+      ;;
+    ghcr.io|quay.io|mcr.microsoft.com)
+      latest_tag="$(oci_registry_latest_tag_for_ref "${image_ref}")"
+      ;;
+  esac
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "${source_ref#"${REPO_ROOT}/"}" \
-      "${image_ref}" \
-      "${current_tag:-}" \
-      "${latest_tag:-}" \
-      "${registry}" \
-      "${status}"
-  done < <(collect_declared_image_refs | awk -F'\t' '!seen[$2]++')
+  if [ -z "${current_tag}" ]; then
+    status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
+  elif [ -z "${latest_tag}" ]; then
+    status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
+  elif [ "${current_tag}" = "${latest_tag}" ]; then
+    status="current"
+  else
+    status="update available"
+  fi
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${source_ref#"${REPO_ROOT}/"}" \
+    "${image_ref}" \
+    "${current_tag:-}" \
+    "${latest_tag:-}" \
+    "${registry}" \
+    "${status}"
 }
 
 render_dependency_audit_text() {
@@ -1925,6 +2067,12 @@ render_dependency_audit_text() {
   awk -F $'\t' '
     function print_summary(app) {
       if (app == "") {
+        return
+      }
+
+      if ((updates[app] + cooldown[app] + localdep[app] + directurl[app] + unresolved[app]) == 0) {
+        hidden_current_only++
+        hidden_current_deps += current[app]
         return
       }
 
@@ -1992,6 +2140,10 @@ render_dependency_audit_text() {
     END {
       for (i = 1; i <= app_count; i++) {
         print_summary(order[i])
+      }
+
+      if (hidden_current_only > 0) {
+        printf "hidden current-only apps: %d (dependencies hidden: %d)\n\n", hidden_current_only + 0, hidden_current_deps + 0
       }
     }
   ' <<<"${rows}"
@@ -2483,6 +2635,9 @@ main() {
   check_app_yaml_tfvar_drift
   check_preload_chart_section_version_alignment
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
+
+  progress "Warming npm and PyPI metadata cache"
+  warm_dependency_metadata_caches
 
   progress "Auditing app dependency freshness"
   dependency_rows="$(emit_app_dependency_rows | sort -t $'\t' -k1,1 -k2,2 || true)"
