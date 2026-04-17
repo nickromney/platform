@@ -199,6 +199,80 @@ EOF
   [[ "${output}" == *"INFO dry-run: would observe Hubble flows and generate candidate Cilium policies"* ]]
 }
 
+@test "shell audit rejects executable library scripts in scripts/lib" {
+  write_tracked_executable_file "scripts/lib/bad-lib.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "hello"
+EOF
+
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"FAIL shell audit: library scripts under scripts/lib should not be executable entrypoints"* ]]
+  [[ "${output}" == *"scripts/lib/bad-lib.sh"* ]]
+}
+
+@test "compose-backend supports dry-run-by-default interface output" {
+  run "${REPO_ROOT}/scripts/compose-backend.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: compose-backend.sh [--print] [--dry-run] [--execute]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would print the first supported compose backend command"* ]]
+}
+
+@test "fix-hostname supports dry-run-by-default interface output" {
+  run "${REPO_ROOT}/sd-wan/lima/provision/fix-hostname.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: fix-hostname.sh [--dry-run] [--execute]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would repair /etc/hosts for target-hostname mapping"* ]]
+}
+
+@test "sync-gitea-repo supports standard no-op interface" {
+  run "${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-repo.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: sync-gitea-repo.sh [--dry-run] [--execute]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would sync SOURCE_DIR into Gitea if needed"* ]]
+}
+
+@test "create signoz auth proxy secret supports standard no-op interface" {
+  run /bin/bash "${REPO_ROOT}/terraform/kubernetes/scripts/create-signoz-auth-proxy-secret.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: create-signoz-auth-proxy-secret.sh [--dry-run] [--execute]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would create or update the signoz-auth-proxy-credentials secret"* ]]
+}
+
+@test "promote gitea admin supports standard no-op interface" {
+  run /bin/bash "${REPO_ROOT}/terraform/kubernetes/scripts/promote-gitea-admin.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: promote-gitea-admin.sh [--dry-run] [--execute]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would promote the configured user to a Gitea administrator if needed"* ]]
+}
+
+@test "fetch gitea runner token supports standard no-op interface" {
+  run /bin/sh -c "printf '{}' | /bin/bash \"${REPO_ROOT}/terraform/kubernetes/scripts/fetch-gitea-runner-token.sh\""
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: fetch-gitea-runner-token.sh [--dry-run] [--execute]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would fetch or read-through-cache a Gitea Actions runner token"* ]]
+}
+
 @test "hubble observe without --execute prints help plus the dry-run preview" {
   run "${REPO_ROOT}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh" \
     --promote-to-module

@@ -30,7 +30,7 @@ export DEBIAN_FRONTEND=noninteractive
 echo "=== Common provisioning for $CLOUD_NAME ($CLOUD_ROLE) ==="
 
 # Keep sudo quiet by ensuring the active guest hostname resolves locally.
-bash "$PROJECT_DIR/provision/fix-hostname.sh" "$CLOUD_NAME"
+TARGET_CLOUD_NAME="${CLOUD_NAME}" bash "$PROJECT_DIR/provision/fix-hostname.sh"
 
 # Install required packages
 apt-get update

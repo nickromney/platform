@@ -127,7 +127,7 @@ shell_cli_handle_standard_no_args() {
 
   shell_cli_parse_standard_only "${usage_fn}" "$@" || exit 1
   if [ -n "${SHELL_CLI_ARGS}" ]; then
-    set -- ${SHELL_CLI_ARGS}
+    set -- "${SHELL_CLI_ARGS}"
     shell_cli_unexpected_arg "$1"
     exit 1
   fi
