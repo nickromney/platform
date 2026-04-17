@@ -75,9 +75,17 @@ if [ ! -f "$lima_ssh_key" ]; then
   exit 1
 fi
 
+limactl_no_agent() {
+  env SSH_AUTH_SOCK= limactl "$@"
+}
+
+k3sup_no_agent() {
+  env SSH_AUTH_SOCK= "${k3sup_bin}" "$@"
+}
+
 lima_exec() {
   local name="$1"; shift
-  limactl shell "$name" -- "$@"
+  limactl_no_agent shell "$name" -- "$@"
 }
 
 run_with_timeout() {
@@ -216,18 +224,18 @@ EOF"
 
 get_vm_ssh_port() {
   local name="$1"
-  limactl list 2>/dev/null | awk -v n="$name" '$1==n {split($3, parts, ":"); print parts[2]; exit}'
+  limactl_no_agent list 2>/dev/null | awk -v n="$name" '$1==n {split($3, parts, ":"); print parts[2]; exit}'
 }
 
 agent_can_reach_server_api() {
   local agent_name="$1"
   local server_ip="$2"
-  limactl shell "$agent_name" -- bash -lc "nc -z -w 3 ${server_ip} 6443 >/dev/null 2>&1"
+  limactl_no_agent shell "$agent_name" -- bash -lc "nc -z -w 3 ${server_ip} 6443 >/dev/null 2>&1"
 }
 
 get_vm_ip() {
   local name="$1"
-  limactl shell "$name" -- ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7; exit}'
+  limactl_no_agent shell "$name" -- ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7; exit}'
 }
 
 get_k3s_status() {
@@ -395,7 +403,7 @@ if [ "$(get_k3s_status "$server_node")" != "active" ]; then
   echo "Installing k3s server on ${server_node} (${server_ip})"
   echo "Server extra args: ${server_extra_args}"
   install_cmd=(
-    "$k3sup_bin" install
+    install
     --ip "$server_connect_host"
     --ssh-port "$server_ssh_port"
     --user "$lima_vm_user"
@@ -405,7 +413,7 @@ if [ "$(get_k3s_status "$server_node")" != "active" ]; then
     --context "$k3sup_context"
     --local-path "$kubeconfig_path"
   )
-  "${install_cmd[@]}"
+  k3sup_no_agent "${install_cmd[@]}"
 else
   echo "k3s server already active on ${server_node}, skipping install"
 fi
@@ -429,7 +437,7 @@ for i in "${!nodes[@]}"; do
 
   echo "Joining agent ${agent_node} (${agent_ip})"
   join_cmd=(
-    "$k3sup_bin" join
+    join
     --ip "127.0.0.1"
     --ssh-port "$agent_ssh_port"
     --user "$lima_vm_user"
@@ -441,7 +449,7 @@ for i in "${!nodes[@]}"; do
   if [ -n "$agent_extra_args" ]; then
     join_cmd+=(--k3s-extra-args "$agent_extra_args")
   fi
-  run_with_timeout 180 "${join_cmd[@]}"
+  run_with_timeout 180 k3sup_no_agent "${join_cmd[@]}"
 done
 
 nodes_ready=0

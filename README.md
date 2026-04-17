@@ -103,6 +103,10 @@ Notes:
 - `make check-version` verifies the root workflow pins, the vendored
   `apim-simulator` tag/SHA metadata, and the repo-local dependency age gates
   for npm, Bun, and uv-managed Python roots.
+  Prerelease channels stay off by default; opt in with
+  `CHECK_VERSION_INCLUDE_CANARY=1`, `CHECK_VERSION_INCLUDE_ALPHA=1`, or
+  `CHECK_VERSION_INCLUDE_PRERELEASE=1` when you explicitly want canary, alpha,
+  beta, dev, preview, rc, or next versions considered.
 - `make release VERSION=X.Y.Z` updates the root `VERSION` marker, runs the
   release gate, and creates a reviewable release commit.
 - `make release-dry-run VERSION=X.Y.Z` previews that release-commit flow. The

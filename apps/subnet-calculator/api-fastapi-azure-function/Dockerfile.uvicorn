@@ -1,4 +1,4 @@
-FROM dhi.io/python:3.11-debian12-dev AS builder
+FROM dhi.io/python:3.13-debian12-dev AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache --no-dev --no-install-project
 
-FROM dhi.io/python:3.11-debian12
+FROM dhi.io/python:3.13-debian12
 
 WORKDIR /app
 

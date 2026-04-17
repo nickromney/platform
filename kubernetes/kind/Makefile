@@ -177,7 +177,7 @@ help:
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)"
 	@echo "  make check-stage-monotonicity"
-	@echo "  make check-version [CHECK_VERSION_FORMAT=text|json]"
+	@echo "  make check-version [CHECK_VERSION_FORMAT=text|json] [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
 	@echo "  make discover-images                          Dump images from running cluster"
 	@echo "  make docker-health"
 	@echo "  make docker-prune-estimate                   Estimate reclaimable space for docker builder prune -af and docker system prune -af"

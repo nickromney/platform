@@ -95,9 +95,9 @@ There is also an HTTP redirect shim on `:8088` for the app hosts.
 
 ## Demo Credentials
 
-- `demo@dev.test` / `demo-password`
-- `demo@uat.test` / `demo-password`
-- `demo@admin.test` / `demo-password`
+- `demo@dev.test` / `password123`
+- `demo@uat.test` / `password123`
+- `demo@admin.test` / `password123`
 
 ## What This Topology Is Proving
 

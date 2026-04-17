@@ -6,7 +6,7 @@ annotated-doc==0.0.4
     #   typer
 annotated-types==0.7.0
     # via pydantic
-anyio==4.12.1
+anyio==4.13.0
     # via
     #   httpx
     #   starlette
@@ -17,7 +17,7 @@ argon2-cffi-bindings==25.1.0
     # via argon2-cffi
 asgiref==3.11.1
     # via opentelemetry-instrumentation-asgi
-azure-functions==1.24.0
+azure-functions==2.0.0
     # via subnet-calculator-python-api
 certifi==2026.2.25
     # via
@@ -29,9 +29,9 @@ cffi==2.0.0
     # via
     #   argon2-cffi-bindings
     #   cryptography
-charset-normalizer==3.4.6
+charset-normalizer==3.4.7
     # via requests
-click==8.3.1
+click==8.3.2
     # via
     #   rich-toolkit
     #   typer
@@ -40,25 +40,25 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   uvicorn
-cryptography==46.0.5
+cryptography==46.0.7
     # via python-jose
 dnspython==2.8.0
     # via email-validator
-ecdsa==0.19.1
+ecdsa==0.19.2
     # via python-jose
 email-validator==2.3.0
     # via
     #   fastapi
     #   pydantic
-fastapi==0.135.1
+fastapi==0.135.3
     # via subnet-calculator-python-api
 fastapi-cli==0.0.24
     # via fastapi
-fastapi-cloud-cli==0.15.0
+fastapi-cloud-cli==0.16.1
     # via fastapi-cli
-fastar==0.8.0
+fastar==0.10.0
     # via fastapi-cloud-cli
-googleapis-common-protos==1.73.0
+googleapis-common-protos==1.74.0
     # via opentelemetry-exporter-otlp-proto-http
 h11==0.16.0
     # via
@@ -91,7 +91,7 @@ markupsafe==3.0.3
     #   werkzeug
 mdurl==0.1.2
     # via markdown-it-py
-opentelemetry-api==1.40.0
+opentelemetry-api==1.41.0
     # via
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-instrumentation
@@ -100,37 +100,37 @@ opentelemetry-api==1.40.0
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-exporter-otlp-proto-common==1.40.0
+opentelemetry-exporter-otlp-proto-common==1.41.0
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.40.0
+opentelemetry-exporter-otlp-proto-http==1.41.0
     # via subnet-calculator-python-api
-opentelemetry-instrumentation==0.61b0
+opentelemetry-instrumentation==0.62b0
     # via
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
     #   opentelemetry-instrumentation-httpx
-opentelemetry-instrumentation-asgi==0.61b0
+opentelemetry-instrumentation-asgi==0.62b0
     # via opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-fastapi==0.61b0
+opentelemetry-instrumentation-fastapi==0.62b0
     # via subnet-calculator-python-api
-opentelemetry-instrumentation-httpx==0.61b0
+opentelemetry-instrumentation-httpx==0.62b0
     # via subnet-calculator-python-api
-opentelemetry-proto==1.40.0
+opentelemetry-proto==1.41.0
     # via
     #   opentelemetry-exporter-otlp-proto-common
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-sdk==1.40.0
+opentelemetry-sdk==1.41.0
     # via
     #   opentelemetry-exporter-otlp-proto-http
     #   subnet-calculator-python-api
-opentelemetry-semantic-conventions==0.61b0
+opentelemetry-semantic-conventions==0.62b0
     # via
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-sdk
-opentelemetry-util-http==0.61b0
+opentelemetry-util-http==0.62b0
     # via
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
@@ -144,7 +144,7 @@ protobuf==5.29.6
     #   subnet-calculator-python-api
 pwdlib==0.3.0
     # via subnet-calculator-python-api
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via
     #   python-jose
     #   rsa
@@ -158,11 +158,11 @@ pydantic==2.12.5
     #   pydantic-settings
 pydantic-core==2.41.5
     # via pydantic
-pydantic-extra-types==2.11.0
+pydantic-extra-types==2.11.1
     # via fastapi
 pydantic-settings==2.13.1
     # via fastapi
-pygments==2.19.2
+pygments==2.20.0
     # via rich
 pyjwt==2.12.1
     # via subnet-calculator-python-api
@@ -172,11 +172,11 @@ python-dotenv==1.2.2
     #   uvicorn
 python-jose==3.5.0
     # via subnet-calculator-python-api
-python-multipart==0.0.22
+python-multipart==0.0.24
     # via fastapi
 pyyaml==6.0.3
     # via uvicorn
-requests==2.32.5
+requests==2.33.1
     # via opentelemetry-exporter-otlp-proto-http
 rich==14.3.3
     # via
@@ -190,13 +190,13 @@ rignore==0.7.6
     # via fastapi-cloud-cli
 rsa==4.9.1
     # via python-jose
-sentry-sdk==2.54.0
+sentry-sdk==2.57.0
     # via fastapi-cloud-cli
 shellingham==1.5.4
     # via typer
 six==1.17.0
     # via ecdsa
-starlette==0.52.1
+starlette==1.0.0
     # via fastapi
 typer==0.24.1
     # via
@@ -204,7 +204,6 @@ typer==0.24.1
     #   fastapi-cloud-cli
 typing-extensions==4.15.0
     # via
-    #   anyio
     #   fastapi
     #   opentelemetry-api
     #   opentelemetry-exporter-otlp-proto-http
@@ -214,7 +213,6 @@ typing-extensions==4.15.0
     #   pydantic-core
     #   pydantic-extra-types
     #   rich-toolkit
-    #   starlette
     #   typing-inspection
 typing-inspection==0.4.2
     # via
@@ -225,7 +223,7 @@ urllib3==2.6.3
     # via
     #   requests
     #   sentry-sdk
-uvicorn==0.41.0
+uvicorn==0.44.0
     # via
     #   fastapi
     #   fastapi-cli
@@ -236,9 +234,9 @@ watchfiles==1.1.1
     # via uvicorn
 websockets==16.0
     # via uvicorn
-werkzeug==3.1.6
+werkzeug==3.1.8
     # via azure-functions
-wrapt==1.17.3
+wrapt==2.1.2
     # via
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-httpx

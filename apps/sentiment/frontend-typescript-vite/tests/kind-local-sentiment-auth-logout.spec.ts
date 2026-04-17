@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 
 const BASE_URL = process.env.BASE_URL || 'https://sentiment.dev.127.0.0.1.sslip.io'
 const USERNAME = process.env.OIDC_USERNAME || process.env.KEYCLOAK_USERNAME || 'demo@dev.test'

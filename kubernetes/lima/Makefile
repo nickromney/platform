@@ -167,7 +167,7 @@ help:
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e"
 	@echo "  make check-stage-monotonicity"
-	@echo "  make check-version"
+	@echo "  make check-version [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
 	@echo "  make configure-k3s-apiserver-oidc"
 	@echo "  make ensure-host-gateway-proxy"
 	@echo "  make env"

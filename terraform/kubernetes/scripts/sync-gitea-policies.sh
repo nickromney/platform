@@ -153,6 +153,17 @@ wait_for_gitea() {
   fail "Gitea API not reachable at ${GITEA_HTTP_BASE}"
 }
 
+gitea_git_ssh_command() {
+  local ssh_cmd
+
+  printf -v ssh_cmd \
+    'ssh -i %q -p %q -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=publickey -o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+    "${SSH_PRIVATE_KEY_PATH}" \
+    "${GITEA_SSH_PORT}"
+
+  printf '%s\n' "${ssh_cmd}"
+}
+
 refresh_gitea_git_access() {
   gitea_local_access_reset both
   : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
@@ -1403,7 +1414,7 @@ clone_remote_repo() {
   for i in {1..20}; do
     refresh_gitea_git_access
     remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
-    ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ssh_cmd="$(gitea_git_ssh_command)"
 
     rm -rf "${dest}"
     if GIT_SSH_COMMAND="$ssh_cmd" git clone -q --depth 1 --branch main "${remote_url}" "${dest}"; then
@@ -1467,7 +1478,7 @@ push_rendered_repo() {
     local remote_url ssh_cmd
     refresh_gitea_git_access
     remote_url="ssh://${GITEA_SSH_USERNAME}@${GITEA_SSH_HOST}:${GITEA_SSH_PORT}/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git"
-    ssh_cmd="ssh -i ${SSH_PRIVATE_KEY_PATH} -p ${GITEA_SSH_PORT} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ssh_cmd="$(gitea_git_ssh_command)"
     if git remote get-url origin >/dev/null 2>&1; then
       git remote set-url origin "${remote_url}"
     else

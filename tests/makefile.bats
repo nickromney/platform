@@ -53,6 +53,42 @@ setup() {
   [[ "${output}" == *"make -C sd-wan/lima test"* ]]
 }
 
+@test "docker compose test resolves the backend helper in execute mode" {
+  compose_backend_stub="${BATS_TEST_TMPDIR}/compose-backend.sh"
+  compose_cmd_stub="${BATS_TEST_TMPDIR}/compose-cmd.sh"
+  log_file="${BATS_TEST_TMPDIR}/compose.log"
+
+  cat >"${compose_backend_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'backend %s\n' "\$*" >>"${log_file}"
+if [ "\${1:-}" = "--print" ] && [ "\${2:-}" = "--execute" ]; then
+  printf '%s\n' "${compose_cmd_stub}"
+  exit 0
+fi
+printf 'unexpected backend args: %s\n' "\$*" >&2
+exit 1
+EOF
+  chmod +x "${compose_backend_stub}"
+
+  cat >"${compose_cmd_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'compose %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${compose_cmd_stub}"
+
+  run make -C "${REPO_ROOT}/docker/compose" test \
+    COMPOSE_BACKEND_SCRIPT="${compose_backend_stub}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'backend --print --execute\nbackend --print --execute\ncompose -f compose.yml --profile dev --profile uat config -q' ]
+}
+
 @test "root lint delegates to the repo validation scripts" {
   lint_yaml_stub="${BATS_TEST_TMPDIR}/lint-yaml.sh"
   lint_markdown_stub="${BATS_TEST_TMPDIR}/lint-markdown.sh"
