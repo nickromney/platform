@@ -34,7 +34,8 @@ EOF
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
     "${SCRIPT}" --execute
 
-  [ "${status}" -eq 1 ]
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"BLOCKED"* ]]
   [[ "${output}" == *"currently being served by kubernetes/lima"* ]]
   [[ "${output}" == *"make -C kubernetes/lima stop-lima"* ]]
   [ ! -e "${kubectl_log}" ]
@@ -64,7 +65,8 @@ EOF
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
     "${SCRIPT}" --execute
 
-  [ "${status}" -eq 1 ]
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"BLOCKED"* ]]
   [[ "${output}" == *"kubernetes/kind is not running on this machine"* ]]
   [ ! -e "${kubectl_log}" ]
 }
@@ -94,7 +96,8 @@ EOF
     KUBECONFIG_CONTEXT="kind-kind-local" \
     "${SCRIPT}" --execute
 
-  [ "${status}" -eq 1 ]
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"BLOCKED"* ]]
   [[ "${output}" == *"kubernetes/kind is not reachable via kubeconfig"* ]]
   [[ "${output}" == *"kind-kind-local"* ]]
 }
@@ -125,5 +128,7 @@ EOF
     "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
-  [ -z "${output}" ]
+  [[ "${output}" == *"OK"* ]]
+  [[ "${output}" == *"kubernetes/kind is active on this machine"* ]]
+  [[ "${output}" == *"Proceeding with checks."* ]]
 }

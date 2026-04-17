@@ -88,7 +88,7 @@ spec:
       serviceAccountName: platform-gateway-agent-tls-bootstrap
       containers:
         - name: bootstrap
-          image: python:3.12-alpine
+          image: python:3.12.13-alpine3.23
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh

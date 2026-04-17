@@ -490,7 +490,7 @@ python_requirement_status() {
   fi
 
   case "${trimmed}" in
-    *" @ file:"*|*" @ ."*|*" @ ../"*|*" @ /"*)
+    *" @ file:"*|*" @ ../"*|*" @ /"*)
       printf 'local/path dependency\n'
       ;;
     *" @ git+"*|*" @ http://"*|*" @ https://"*)
@@ -811,6 +811,28 @@ dependency_update_status() {
   printf 'update available\n'
 }
 
+external_image_update_status() {
+  local current="$1"
+  local latest="$2"
+
+  if [ -z "${current}" ] || [ -z "${latest}" ]; then
+    printf 'latest lookup failed\n'
+    return 0
+  fi
+
+  if [ "${current}" = "${latest}" ]; then
+    printf 'current\n'
+    return 0
+  fi
+
+  if version_gte "${current}" "${latest}"; then
+    printf 'current\n'
+    return 0
+  fi
+
+  printf 'update available\n'
+}
+
 image_ref_registry() {
   local image_ref="$1"
   local no_digest first_segment
@@ -861,10 +883,15 @@ image_ref_is_internal() {
 
 docker_hub_latest_tag_for_ref() {
   local image_ref="$1"
-  local current_tag repository namespace repo_path suffix tags candidate_tags
+  local current_tag repository namespace repo_path suffix tags candidate_tags current_series
 
   current_tag="$(image_tag_from_ref "${image_ref}")"
   if [ -z "${current_tag}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  if [ "$(tag_version_segment_count "${current_tag}")" -lt 3 ]; then
     printf '\n'
     return 0
   fi
@@ -884,11 +911,14 @@ docker_hub_latest_tag_for_ref() {
     return 0
   fi
 
+  current_series="$(tag_release_series_key "${current_tag}")"
   suffix="$(tag_suffix_after_version_prefix "${current_tag}")"
   candidate_tags="$(
     while IFS= read -r tag; do
       [ -n "${tag}" ] || continue
-      if [ -n "$(tag_version_prefix "${tag}")" ] && [ "$(tag_suffix_after_version_prefix "${tag}")" = "${suffix}" ]; then
+      if [ -n "$(tag_version_prefix "${tag}")" ] && \
+         [ "$(tag_release_series_key "${tag}")" = "${current_series}" ] && \
+         [ "$(tag_suffix_after_version_prefix "${tag}")" = "${suffix}" ]; then
         printf '%s\n' "${tag}"
       fi
     done <<<"${tags}"
@@ -899,20 +929,20 @@ docker_hub_latest_tag_for_ref() {
     return 0
   fi
 
-  if printf '%s\n' "${tags}" | grep -Fx "latest" >/dev/null 2>&1; then
-    printf 'latest\n'
-    return 0
-  fi
-
   printf '\n'
 }
 
 oci_registry_latest_tag_for_ref() {
   local image_ref="$1"
-  local current_tag registry repository suffix tags candidate_tags
+  local current_tag registry repository suffix tags candidate_tags current_series
 
   current_tag="$(image_tag_from_ref "${image_ref}")"
   if [ -z "${current_tag}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  if [ "$(tag_version_segment_count "${current_tag}")" -lt 3 ]; then
     printf '\n'
     return 0
   fi
@@ -925,11 +955,14 @@ oci_registry_latest_tag_for_ref() {
     return 0
   fi
 
+  current_series="$(tag_release_series_key "${current_tag}")"
   suffix="$(tag_suffix_after_version_prefix "${current_tag}")"
   candidate_tags="$(
     while IFS= read -r tag; do
       [ -n "${tag}" ] || continue
-      if [ -n "$(tag_version_prefix "${tag}")" ] && [ "$(tag_suffix_after_version_prefix "${tag}")" = "${suffix}" ]; then
+      if [ -n "$(tag_version_prefix "${tag}")" ] && \
+         [ "$(tag_release_series_key "${tag}")" = "${current_series}" ] && \
+         [ "$(tag_suffix_after_version_prefix "${tag}")" = "${suffix}" ]; then
         printf '%s\n' "${tag}"
       fi
     done <<<"${tags}"
@@ -940,11 +973,6 @@ oci_registry_latest_tag_for_ref() {
     return 0
   fi
 
-  if printf '%s\n' "${tags}" | grep -Fx "latest" >/dev/null 2>&1; then
-    printf 'latest\n'
-    return 0
-  fi
-
   printf '\n'
 }
 
@@ -952,7 +980,7 @@ image_ref_has_template_placeholders() {
   local image_ref="$1"
 
   case "${image_ref}" in
-    *'${'*|__*__/*|*'__'*'__'*)
+    *"\${"*|__*__/*|*'__'*'__'*)
       return 0
       ;;
   esac
@@ -1274,6 +1302,42 @@ tag_version_prefix() {
   fi
 
   printf "\n"
+}
+
+tag_version_core() {
+  local prefix
+
+  prefix="$(tag_version_prefix "$1")"
+  prefix="${prefix#v}"
+  prefix="${prefix#V}"
+  printf "%s\n" "${prefix}"
+}
+
+tag_version_segment_count() {
+  local core
+
+  core="$(tag_version_core "$1")"
+  if [ -z "${core}" ]; then
+    printf '0\n'
+    return 0
+  fi
+
+  awk -F '.' '{ print NF }' <<<"${core}"
+}
+
+tag_release_series_key() {
+  local core
+
+  core="$(tag_version_core "$1")"
+  if [ -z "${core}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  awk -F '.' '
+    NF >= 2 { print $1 "." $2; next }
+    NF == 1 { print $1; next }
+  ' <<<"${core}"
 }
 
 tag_suffix_after_version_prefix() {
@@ -2265,10 +2329,8 @@ emit_external_image_row() {
     status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
   elif [ -z "${latest_tag}" ]; then
     status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
-  elif [ "${current_tag}" = "${latest_tag}" ]; then
-    status="current"
   else
-    status="update available"
+    status="$(external_image_update_status "${current_tag}" "${latest_tag}")"
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
@@ -2387,12 +2449,12 @@ render_external_image_audit_text() {
 
       if (status == "update available") {
         update_count++
-        details[++detail_count] = "  - " source ": " image " (" current " -> " latest ", " registry ")"
+        update_details[++update_detail_count] = "  - " source ": " image " (" current " -> " latest ", " registry ")"
         next
       }
 
       other_count++
-      details[++detail_count] = "  - " source ": " image " [" status ", " registry "]"
+      other_details[++other_detail_count] = "  - " source ": " image " [" status ", " registry "]"
     }
 
     END {
@@ -2408,10 +2470,19 @@ render_external_image_audit_text() {
       }
       printf "current hidden: %d\n\n", current_count + 0
 
-      for (i = 1; i <= detail_count; i++) {
-        print details[i]
+      if (update_detail_count > 0) {
+        print "Updates:"
+        for (i = 1; i <= update_detail_count; i++) {
+          print update_details[i]
+        }
+        print ""
       }
-      if (detail_count > 0) {
+
+      if (other_detail_count > 0) {
+        print "Skipped / non-updatable:"
+        for (i = 1; i <= other_detail_count; i++) {
+          print other_details[i]
+        }
         print ""
       }
     }
@@ -2925,7 +2996,10 @@ main() {
 }
 
 if [ "${CHECK_VERSION_LIB_ONLY:-0}" = "1" ]; then
-  return 0 2>/dev/null || exit 0
+  if ! return 0 2>/dev/null; then
+    # shellcheck disable=SC2317
+    exit 0
+  fi
 fi
 
 main "$@"

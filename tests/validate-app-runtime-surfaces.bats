@@ -354,3 +354,138 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated runtime-config tmpfs contract"* ]]
 }
+
+@test "external runtime image refs stay aligned across dockerfiles, compose, and kubernetes manifests" {
+  run uv run python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+expected_counts = {
+    "apps/sentiment/api-sentiment/Dockerfile": {
+        "FROM oven/bun:1.3.12 AS deps": 1,
+        "FROM oven/bun:1.3.12 AS preload": 1,
+    },
+    "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile": {
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS build": 1,
+    },
+    "apps/subnet-calculator/frontend-react/Dockerfile": {
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
+        "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
+    },
+    "apps/subnet-calculator/frontend-react/Dockerfile.server": {
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS deps": 1,
+    },
+    "apps/subnet-calculator/frontend-typescript-vite/Dockerfile": {
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
+        "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
+    },
+    "apps/sentiment/compose.yml": {
+        "image: quay.io/keycloak/keycloak:26.6.1": 1,
+        "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
+    },
+    "apps/subnet-calculator/compose.yml": {
+        "image: quay.io/keycloak/keycloak:26.6.1": 1,
+        "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2": 2,
+    },
+    "apps/subnet-calculator/compose.azurite.yml": {
+        "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
+    },
+    "apps/subnet-calculator/api-fastapi-azure-function/compose.azurite.yml": {
+        "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
+    },
+    "docker/compose/keycloak/Dockerfile": {
+        "FROM quay.io/keycloak/keycloak:26.6.1": 1,
+    },
+    "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
+        "image: docker:29.4.0-cli": 1,
+        "image: gitea/act_runner:0.4.0": 2,
+    },
+    "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
+        "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
+    },
+    "terraform/kubernetes/apps/platform-gateway-routes-sso/job-signoz-bootstrap.yaml": {
+        "image: curlimages/curl:8.19.0": 1,
+    },
+    "terraform/kubernetes/apps/platform-gateway/agent-tls-bootstrap.yaml": {
+        "image: python:3.12.13-alpine3.23": 1,
+    },
+    "terraform/kubernetes/scripts/check-security.sh": {
+        'POLICY_PROBE_IMAGE="curlimages/curl:8.19.0"': 1,
+    },
+}
+
+validated = 0
+for relative_path, expectations in expected_counts.items():
+    content = (repo_root / relative_path).read_text(encoding="utf-8")
+    for needle, expected_count in expectations.items():
+        actual_count = content.count(needle)
+        assert actual_count == expected_count, (relative_path, needle, expected_count, actual_count)
+        validated += 1
+
+print(f"validated {validated} external image expectation(s)")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 22 external image expectation(s)"* ]]
+}
+
+@test "preload image artifacts track the current external runtime bump set" {
+  run uv run python - <<'PY'
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+preload_files = [
+    "kubernetes/kind/preload-images.txt",
+    "kubernetes/lima/preload-images.txt",
+    "kubernetes/slicer/preload-images.txt",
+    "kubernetes/docker-desktop/preload-images.txt",
+]
+
+required_lines = [
+    "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
+    "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
+    "docker:29.4.0-cli",
+    "gitea/act_runner:0.4.0",
+    "python:3.12.13-alpine3.23",
+    "docker.io/curlimages/curl:8.19.0",
+    "curlimages/curl:8.19.0",
+]
+
+for relative_path in preload_files:
+    content = (repo_root / relative_path).read_text(encoding="utf-8")
+    for needle in required_lines:
+        assert needle in content, (relative_path, needle)
+
+lock_file = (repo_root / "terraform/kubernetes/scripts/preload-images.linux-arm64.lock").read_text(encoding="utf-8")
+lock_expectations = [
+    "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
+    "docker:29.4.0-cli",
+    "gitea/act_runner:0.4.0",
+    "python:3.12.13-alpine3.23",
+    "docker.io/curlimages/curl:8.19.0",
+    "curlimages/curl:8.19.0",
+    "oven/bun:1.3.12",
+    "oven/bun:1.3.12-alpine",
+    "golang:1.26.2-alpine3.23",
+]
+
+for image_ref in lock_expectations:
+    pattern = re.compile(rf"^{re.escape(image_ref)}\t.+@sha256:[0-9a-f]+$", re.MULTILINE)
+    assert pattern.search(lock_file), image_ref
+
+print(f"validated {len(preload_files)} preload image snapshot(s) and {len(lock_expectations)} lock entry(ies)")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 4 preload image snapshot(s) and 9 lock entry(ies)"* ]]
+}

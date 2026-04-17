@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.10-alpine AS builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -28,7 +28,7 @@ COPY ./frontend-react .
 # Build application (Vite will embed environment variables)
 RUN bun run build
 
-FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine3.23 AS runtime-config-builder
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder
 
 WORKDIR /src
 ARG TARGETOS

@@ -216,12 +216,20 @@ setup() {
 }
 
 @test "kind cluster-dependent read-only targets gate on assert-kind-active" {
-  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls check-version gitea-sync; do
+  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls gitea-sync; do
     run sed -n "/^${target}:/,/^\\.PHONY:/p" "${REPO_ROOT}/kubernetes/kind/Makefile"
 
     [ "${status}" -eq 0 ]
     [[ "${output}" == *'$(MAKE) assert-kind-active >/dev/null'* ]]
   done
+}
+
+@test "kind check-version runs the active-project assertion directly so it can report readiness" {
+  run sed -n '/^check-version:/,/^\.PHONY:/p' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
+  [[ "${output}" != *'$(MAKE) assert-kind-active >/dev/null'* ]]
 }
 
 @test "kind exports the absolute stack and config paths into Terraform" {
@@ -393,6 +401,62 @@ EOF
   [[ "${output}" == *"make -C kubernetes/lima stop-lima"* ]]
   [ ! -e "${log_file}" ]
   [ ! -e "${kubectl_log}" ]
+}
+
+@test "kind check-version positively reports that the expected cluster is active before the audit" {
+  stub_stack="${BATS_TEST_TMPDIR}/stack"
+  stub_scripts="${stub_stack}/scripts"
+  kubeconfig_path="${BATS_TEST_TMPDIR}/kind-kind-local.yaml"
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  mkdir -p "${stub_scripts}"
+  : >"${kubeconfig_path}"
+
+  cat >"${stub_scripts}/check-version.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'component audit ok\n'
+EOF
+  chmod +x "${stub_scripts}/check-version.sh"
+
+  cat >"${stub_scripts}/check-provider-version.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'provider audit ok\n'
+EOF
+  chmod +x "${stub_scripts}/check-provider-version.sh"
+
+  cat >"${TEST_BIN}/ensure-kind-kubeconfig.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ensure-kind-kubeconfig.sh"
+
+  cat >"${status_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"overall_state":"running","active_project_path":"kubernetes/kind","projects":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+EOF
+  chmod +x "${status_stub}"
+
+  cat >"${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-version \
+    STACK_DIR="${stub_stack}" \
+    ENSURE_KIND_KUBECONFIG="${TEST_BIN}/ensure-kind-kubeconfig.sh" \
+    PLATFORM_STATUS_SCRIPT="${status_stub}" \
+    KUBECONFIG_PATH="${kubeconfig_path}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kubernetes/kind is active on this machine"* ]]
+  [[ "${output}" == *"Proceeding with checks."* ]]
+  [[ "${output}" == *"Running component and chart version audit..."* ]]
+  [[ "${output}" == *"component audit ok"* ]]
 }
 
 @test "kind test-shell delegates to repo shell validation and shellcheck" {

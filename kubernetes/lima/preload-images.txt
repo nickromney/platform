@@ -13,8 +13,8 @@ quay.io/cilium/hubble-ui-backend:v0.13.3
 quay.io/cilium/hubble-ui:v0.13.3
 
 # --- NGINX Gateway Fabric (chart main) ---
-ghcr.io/nginx/nginx-gateway-fabric:2.4.1
-ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.1
+ghcr.io/nginx/nginx-gateway-fabric:2.5.1
+ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1
 
 # --- ArgoCD (chart 9.5.1) ---
 dhi.io/argocd:3.3.6-debian13
@@ -85,8 +85,8 @@ dhi.io/oauth2-proxy:7.15.2-debian13
 otel/opentelemetry-collector-contrib:0.149.0
 
 # --- Gitea Actions Runner ---
-docker:27.5-cli
-gitea/act_runner:0.2.13
+docker:29.4.0-cli
+gitea/act_runner:0.4.0
 
 # --- Build base images (used in COPY --from during docker build) ---
 ghcr.io/astral-sh/uv:0.10.4
@@ -95,7 +95,7 @@ node:22-alpine
 
 # --- Platform support images ---
 dhi.io/nginx:1.29.5-debian13
-python:3.12-alpine
-docker.io/curlimages/curl:8.9.1
-curlimages/curl:8.10.1
+python:3.12.13-alpine3.23
+docker.io/curlimages/curl:8.19.0
+curlimages/curl:8.19.0
 ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest

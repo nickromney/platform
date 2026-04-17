@@ -53,6 +53,42 @@ append_line() {
   fi
 }
 
+first_non_empty_line() {
+  local input="${1-}"
+
+  [ -n "${input}" ] || return 0
+  printf '%s\n' "${input}" | awk 'NF { print; exit }'
+}
+
+strip_status_prefix() {
+  local input="${1-}"
+
+  [ -n "${input}" ] || return 0
+  printf '%s\n' "${input}" | sed -E 's/^(OK|WARN)[[:space:]]+//'
+}
+
+registry_source_from_probe() {
+  local probe_output="${1-}"
+
+  case "${probe_output}" in
+    *" via "*)
+      printf '%s\n' "${probe_output}" | sed -nE 's/^.* via ([^[:space:]]+).*$/\1/p' | head -n 1
+      ;;
+    *" in "*config.json*)
+      printf 'config.json\n'
+      ;;
+    *"Docker config not found"*)
+      printf 'config.json missing\n'
+      ;;
+    *"uses "*", but it is not available on PATH"*)
+      printf '%s\n' "${probe_output}" | sed -nE 's/^.* uses ([^[:space:]]+), but it is not available on PATH.*$/\1/p' | head -n 1
+      ;;
+    *)
+      printf ''
+      ;;
+  esac
+}
+
 json_array_from_newline() {
   local input="${1-}"
 
@@ -188,6 +224,44 @@ build_project_json() {
     }'
 }
 
+build_runtime_json() {
+  local name="$1"
+  local available="$2"
+  local running="$3"
+  local detail="${4-}"
+
+  jq -cn \
+    --arg name "${name}" \
+    --arg detail "${detail}" \
+    --argjson available "$(bool_json "${available}")" \
+    --argjson running "$(bool_json "${running}")" \
+    '{
+      name: $name,
+      available: $available,
+      running: $running,
+      detail: (if $detail == "" then null else $detail end)
+    }'
+}
+
+build_registry_auth_json() {
+  local registry="$1"
+  local authenticated="$2"
+  local source="${3-}"
+  local detail="${4-}"
+
+  jq -cn \
+    --arg registry "${registry}" \
+    --arg source "${source}" \
+    --arg detail "${detail}" \
+    --argjson authenticated "$(bool_json "${authenticated}")" \
+    '{
+      registry: $registry,
+      authenticated: $authenticated,
+      source: (if $source == "" then null else $source end),
+      detail: (if $detail == "" then null else $detail end)
+    }'
+}
+
 kube_version_for() {
   local kubeconfig_path="$1"
   local kubeconfig_context="${2-}"
@@ -234,7 +308,49 @@ render_status_table() {
         ]
       | @tsv
     )
-  ' <<<"${json_payload}" | awk -F $'\t' '
+  ' <<<"${json_payload}" | render_tsv_table
+}
+
+render_runtime_table() {
+  local json_payload="$1"
+
+  jq -r '
+    (["RUNTIME", "AVAIL", "RUNNING", "DETAIL"] | @tsv),
+    (
+      .host_runtimes_order[] as $key
+      | .host_runtimes[$key] as $runtime
+      | [
+          $runtime.name,
+          (if $runtime.available then "Y" else "N" end),
+          (if $runtime.running then "Y" else "N" end),
+          ($runtime.detail // "-")
+        ]
+      | @tsv
+    )
+  ' <<<"${json_payload}" | render_tsv_table
+}
+
+render_registry_auth_table() {
+  local json_payload="$1"
+
+  jq -r '
+    (["REGISTRY", "AUTH", "SOURCE", "DETAIL"] | @tsv),
+    (
+      .registry_auth_order[] as $key
+      | .registry_auth[$key] as $entry
+      | [
+          $entry.registry,
+          (if $entry.authenticated then "Y" else "N" end),
+          ($entry.source // "-"),
+          ($entry.detail // "-")
+        ]
+      | @tsv
+    )
+  ' <<<"${json_payload}" | render_tsv_table
+}
+
+render_tsv_table() {
+  awk -F $'\t' '
     function repeat(char, count,    result, i) {
       result = ""
       for (i = 0; i < count; i++) {
@@ -313,8 +429,12 @@ build_action_json() {
 render_human_output() {
   local json_payload="$1"
   local table_output=""
+  local runtime_table=""
+  local registry_auth_table=""
 
   table_output="$(render_status_table "${json_payload}")"
+  runtime_table="$(render_runtime_table "${json_payload}")"
+  registry_auth_table="$(render_registry_auth_table "${json_payload}")"
 
   jq -r '
     "Platform local runtime status",
@@ -330,7 +450,9 @@ render_human_output() {
       end
     )
   ' <<<"${json_payload}"
-  printf '\n%s\n' "${table_output}"
+  printf '\nContainer runtimes:\n%s\n' "${runtime_table}"
+  printf '\nRegistry auth (Docker config + credential helper probe):\n%s\n' "${registry_auth_table}"
+  printf '\nTracked projects:\n%s\n' "${table_output}"
   jq -r '
     "",
     "Recommended actions:",
@@ -392,6 +514,7 @@ docker_daemon=0
 docker_context=""
 docker_ps_output=""
 docker_ps_all_output=""
+docker_runtime_detail=""
 if have_cmd docker; then
   docker_available=1
   if docker info >/dev/null 2>&1; then
@@ -399,7 +522,58 @@ if have_cmd docker; then
     docker_context="$(docker context show 2>/dev/null || true)"
     docker_ps_output="$(docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null || true)"
     docker_ps_all_output="$(docker ps -a --format '{{.Names}}|{{.Status}}|{{.Ports}}' 2>/dev/null || true)"
+    if [ -n "${docker_context}" ]; then
+      docker_runtime_detail="context=${docker_context}"
+    else
+      docker_runtime_detail="daemon reachable"
+    fi
+  else
+    docker_runtime_detail="daemon unreachable"
   fi
+else
+  docker_runtime_detail="docker not found"
+fi
+
+colima_available=0
+colima_running=0
+colima_runtime_detail=""
+if have_cmd colima; then
+  colima_available=1
+  if colima_status_output="$(colima status 2>&1)"; then
+    colima_running=1
+    colima_runtime_detail="$(first_non_empty_line "${colima_status_output}")"
+    if [ -z "${colima_runtime_detail}" ]; then
+      colima_runtime_detail="colima status ok"
+    fi
+  else
+    colima_runtime_detail="$(first_non_empty_line "${colima_status_output:-}")"
+    if [ -z "${colima_runtime_detail}" ]; then
+      colima_runtime_detail="colima not running"
+    fi
+  fi
+else
+  colima_runtime_detail="colima not found"
+fi
+
+podman_available=0
+podman_running=0
+podman_runtime_detail=""
+if have_cmd podman; then
+  podman_available=1
+  if podman_info_output="$(podman info 2>&1)"; then
+    podman_running=1
+    podman_runtime_detail="$(first_non_empty_line "${podman_info_output}")"
+    if [ -z "${podman_runtime_detail}" ]; then
+      podman_runtime_detail="podman info ok"
+    fi
+  else
+    podman_runtime_detail="$(first_non_empty_line "${podman_info_output:-}")"
+    if [ -z "${podman_runtime_detail}" ]; then
+      podman_runtime_detail="podman not running"
+    fi
+  fi
+else
+  podman_runtime_detail="podman not found"
 fi
 
 kind_available=0
@@ -576,16 +750,27 @@ if [ -n "${listener_58081}" ] && [ "${sdwan_serving}" -eq 0 ]; then
   append_line foreign_ports '127.0.0.1:58081'
 fi
 
-kind_dhi_auth=1
-kind_docker_hub_auth=1
+kind_dhi_auth=0
+kind_dhi_auth_source=""
+kind_dhi_auth_detail=""
+kind_docker_hub_auth=0
+kind_docker_hub_auth_source=""
+kind_docker_hub_auth_detail=""
 if [ -x "${CHECK_DOCKER_REGISTRY_AUTH_SCRIPT}" ]; then
-  if ! "${CHECK_DOCKER_REGISTRY_AUTH_SCRIPT}" --execute dhi.io "Docker Hardened Images (dhi.io)" >/dev/null 2>&1; then
-    kind_dhi_auth=0
+  if dhi_auth_probe_output="$("${CHECK_DOCKER_REGISTRY_AUTH_SCRIPT}" --execute dhi.io "Docker Hardened Images (dhi.io)" 2>&1)"; then
+    kind_dhi_auth=1
   fi
-  if ! "${CHECK_DOCKER_REGISTRY_AUTH_SCRIPT}" --execute index.docker.io "Docker Hub" >/dev/null 2>&1; then
-    kind_docker_hub_auth=0
+  if docker_hub_auth_probe_output="$("${CHECK_DOCKER_REGISTRY_AUTH_SCRIPT}" --execute index.docker.io "Docker Hub" 2>&1)"; then
+    kind_docker_hub_auth=1
   fi
+else
+  dhi_auth_probe_output="Docker auth probe helper is unavailable"
+  docker_hub_auth_probe_output="Docker auth probe helper is unavailable"
 fi
+kind_dhi_auth_source="$(registry_source_from_probe "${dhi_auth_probe_output}")"
+kind_dhi_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${dhi_auth_probe_output}")")"
+kind_docker_hub_auth_source="$(registry_source_from_probe "${docker_hub_auth_probe_output}")"
+kind_docker_hub_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${docker_hub_auth_probe_output}")")"
 
 kind_blockers=""
 if [ "${docker_available}" -ne 1 ]; then
@@ -672,6 +857,13 @@ fi
 if printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:58081'; then
   append_line sdwan_blockers '127.0.0.1:58081 is already in use by a non-platform process'
 fi
+
+docker_runtime_json="$(build_runtime_json docker "${docker_available}" "${docker_daemon}" "${docker_runtime_detail}")"
+colima_runtime_json="$(build_runtime_json colima "${colima_available}" "${colima_running}" "${colima_runtime_detail}")"
+podman_runtime_json="$(build_runtime_json podman "${podman_available}" "${podman_running}" "${podman_runtime_detail}")"
+
+dhi_registry_auth_json="$(build_registry_auth_json dhi.io "${kind_dhi_auth}" "${kind_dhi_auth_source}" "${kind_dhi_auth_detail}")"
+docker_io_registry_auth_json="$(build_registry_auth_json docker.io "${kind_docker_hub_auth}" "${kind_docker_hub_auth_source}" "${kind_docker_hub_auth_detail}")"
 
 kind_readiness_json="$(jq -cn \
   --argjson docker_available "$(bool_json "${docker_available}")" \
@@ -923,6 +1115,11 @@ status_json="$(jq -cn \
   --arg active_project "${active_project}" \
   --arg active_project_path "${active_project_path}" \
   --argjson foreign_ports "$(json_array_from_newline "${foreign_ports}")" \
+  --argjson docker_runtime "${docker_runtime_json}" \
+  --argjson colima_runtime "${colima_runtime_json}" \
+  --argjson podman_runtime "${podman_runtime_json}" \
+  --argjson dhi_registry_auth "${dhi_registry_auth_json}" \
+  --argjson docker_io_registry_auth "${docker_io_registry_auth_json}" \
   --argjson kind "${kind_project_json}" \
   --argjson lima "${lima_project_json}" \
   --argjson slicer "${slicer_project_json}" \
@@ -936,6 +1133,17 @@ status_json="$(jq -cn \
     active_project: (if $active_project == "" then null else $active_project end),
     active_project_path: (if $active_project_path == "" then null else $active_project_path end),
     foreign_ports: $foreign_ports,
+    host_runtimes: {
+      docker: $docker_runtime,
+      colima: $colima_runtime,
+      podman: $podman_runtime
+    },
+    host_runtimes_order: ["docker", "colima", "podman"],
+    registry_auth: {
+      dhi_io: $dhi_registry_auth,
+      docker_io: $docker_io_registry_auth
+    },
+    registry_auth_order: ["dhi_io", "docker_io"],
     providers: {
       kind: $kind,
       lima: $lima,

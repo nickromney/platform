@@ -34,9 +34,15 @@ for arg in "$@"; do
 done
 case "${registry}" in
   dhi.io)
+    if [[ -n "${MOCK_AUTH_DHI_OUTPUT:-}" ]]; then
+      printf '%s\n' "${MOCK_AUTH_DHI_OUTPUT}"
+    fi
     exit "${MOCK_AUTH_DHI_EXIT:-0}"
     ;;
   index.docker.io|docker.io)
+    if [[ -n "${MOCK_AUTH_DOCKER_OUTPUT:-}" ]]; then
+      printf '%s\n' "${MOCK_AUTH_DOCKER_OUTPUT}"
+    fi
     exit "${MOCK_AUTH_DOCKER_EXIT:-0}"
     ;;
 esac
@@ -159,6 +165,40 @@ EOF
   chmod +x "${TEST_BIN}/ps"
 }
 
+install_colima_stub() {
+  cat >"${TEST_BIN}/colima" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  status)
+    if [[ -n "${MOCK_COLIMA_STATUS_OUTPUT:-}" ]]; then
+      printf '%s\n' "${MOCK_COLIMA_STATUS_OUTPUT}"
+    fi
+    exit "${MOCK_COLIMA_STATUS_EXIT:-1}"
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/colima"
+}
+
+install_podman_stub() {
+  cat >"${TEST_BIN}/podman" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  info)
+    if [[ -n "${MOCK_PODMAN_INFO_OUTPUT:-}" ]]; then
+      printf '%s\n' "${MOCK_PODMAN_INFO_OUTPUT}"
+    fi
+    exit "${MOCK_PODMAN_INFO_EXIT:-1}"
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/podman"
+}
+
 @test "platform status reports no local projects when nothing is active" {
   run "${SCRIPT}" --execute --output json
 
@@ -278,4 +318,38 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == false\|false\|* ]]
+}
+
+@test "platform status reports host runtimes and registry auth sources" {
+  install_colima_stub
+  install_podman_stub
+  export MOCK_COLIMA_STATUS_EXIT=0
+  export MOCK_COLIMA_STATUS_OUTPUT='INFO colima is running using qemu'
+  export MOCK_PODMAN_INFO_EXIT=0
+  export MOCK_PODMAN_INFO_OUTPUT='host: podman machine is running'
+  export MOCK_AUTH_DHI_OUTPUT='OK   Docker Hardened Images (dhi.io) credentials found via docker-credential-desktop'
+  export MOCK_AUTH_DOCKER_OUTPUT='OK   Docker Hub credentials found in config.json'
+
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '(.host_runtimes.docker.running|tostring)
+    + "|" + (.host_runtimes.colima.available|tostring)
+    + "|" + (.host_runtimes.colima.running|tostring)
+    + "|" + (.host_runtimes.podman.running|tostring)
+    + "|" + (.registry_auth.dhi_io.authenticated|tostring)
+    + "|" + (.registry_auth.dhi_io.source // "-")
+    + "|" + (.registry_auth.docker_io.source // "-")' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = 'true|true|true|true|true|docker-credential-desktop|config.json' ]
+
+  run "${SCRIPT}" --execute --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Container runtimes:"* ]]
+  [[ "${output}" == *"Registry auth (Docker config + credential helper probe):"* ]]
+  [[ "${output}" == *"docker-credential-desktop"* ]]
+  [[ "${output}" == *"config.json"* ]]
 }

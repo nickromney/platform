@@ -8,10 +8,10 @@ setup() {
 }
 
 @test "registry_cache_repo_and_tag normalizes image refs" {
-  run bash -lc "source '${HTTP_FETCH_LIB}'; source '${REGISTRY_LIB}'; printf '%s\n' \"\$(registry_cache_repo_and_tag 'docker.io/library/nginx:1.2.3')\" \"\$(registry_cache_repo_and_tag 'quay.io/keycloak/keycloak:26.4.7')\""
+  run bash -lc "source '${HTTP_FETCH_LIB}'; source '${REGISTRY_LIB}'; printf '%s\n' \"\$(registry_cache_repo_and_tag 'docker.io/library/nginx:1.2.3')\" \"\$(registry_cache_repo_and_tag 'quay.io/keycloak/keycloak:26.6.1')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf 'library/nginx\t1.2.3\nkeycloak/keycloak\t26.4.7')" ]
+  [ "${output}" = "$(printf 'library/nginx\t1.2.3\nkeycloak/keycloak\t26.6.1')" ]
 }
 
 @test "registry_tag_exists checks cached registry tags via HTTP" {

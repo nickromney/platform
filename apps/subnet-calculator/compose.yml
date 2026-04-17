@@ -359,7 +359,7 @@ services:
 
   keycloak:
     profiles: ["oidc"]
-    image: quay.io/keycloak/keycloak:26.4.7
+    image: quay.io/keycloak/keycloak:26.6.1
     ports:
       - "8300:8080"
     environment:
@@ -513,7 +513,7 @@ services:
   # OAuth2 Proxy - Acts like Azure Easy Auth
   oauth2-proxy-frontend:
     profiles: ["oidc"]
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
     platform: linux/amd64
     ports:
       - "3007:4180"
@@ -604,7 +604,7 @@ services:
   # OAuth2 Proxy for the admin frontend on :3008
   oauth2-proxy-frontend-admin:
     profiles: ["oidc"]
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
     platform: linux/amd64
     ports:
       - "3008:4180"

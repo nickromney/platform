@@ -41,26 +41,30 @@ help:
 	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  Makefile$$/d'
 	@echo ""
 	@echo "Root shortcuts:"
-	@echo "  make lint         Run repo-level reporting checks"
-	@echo "  make lint-bash32  Run Bash 3.2 shell compatibility checks"
-	@echo "  make lint-shell   Run repo shell audit checks"
-	@echo "  make fmt          Apply repo-level auto-formatters"
-	@echo "  make check-version  Verify repo-level dependency/version guardrails"
-	@echo "  make release VERSION=0.3.0  Bump VERSION, run checks, and create a release commit"
-	@echo "  make release-dry-run VERSION=0.3.0  Preview the release commit flow"
-	@echo "  make release-tag VERSION=0.3.0  Create an annotated v-version tag from main"
-	@echo "  make lint-cilium-live  Validate deployed Cilium policies via the current kubeconfig"
-	@echo "  make lint-kyverno-live  Validate deployed Kyverno policy matches via the current kubeconfig"
-	@echo "  make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator  Run SonarQube on any local repo"
-	@echo "  make prereqs      Show the focused prerequisite entrypoints"
-	@echo "  make status [STATUS_FORMAT=text|json]  Show root local-runtime status across kind/Lima/Slicer/SD-WAN"
-	@echo "  make test         Show the focused test entrypoints"
-	@echo "  make tui          Open the Gum-based local runtime chooser when available"
-	@echo "  make apps         Show the app/frontend Makefiles"
-	@echo "  make kubernetes   Show the staged Kubernetes Makefiles"
-	@echo "  make docker       Show the Docker/Compose Makefiles"
-	@echo "  make makefiles    List every Makefile in the repo"
-	@echo "  make sdwan        Show the SD-WAN Makefiles"
+	@printf '%b\n' \
+		'make apps\tShow the app/frontend Makefiles' \
+		'make check-version\tVerify repo-level dependency/version guardrails' \
+		'make docker\tShow the Docker/Compose Makefiles' \
+		'make fmt\tApply repo-level auto-formatters' \
+		'make kubernetes\tShow the staged Kubernetes Makefiles' \
+		'make lint\tRun repo-level reporting checks' \
+		'make lint-bash32\tRun Bash 3.2 shell compatibility checks' \
+		'make lint-cilium-live\tValidate deployed Cilium policies via the current kubeconfig' \
+		'make lint-kyverno-live\tValidate deployed Kyverno policy matches via the current kubeconfig' \
+		'make lint-shell\tRun repo shell audit checks' \
+		'make makefiles\tList every Makefile in the repo' \
+		'make prereqs\tShow the focused prerequisite entrypoints' \
+		'make release VERSION=0.3.0\tBump VERSION, run checks, and create a release commit' \
+		'make release-dry-run VERSION=0.3.0\tPreview the release commit flow' \
+		'make release-tag VERSION=0.3.0\tCreate an annotated v-version tag from main' \
+		'make sdwan\tShow the SD-WAN Makefiles' \
+		'make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator\tRun SonarQube on any local repo' \
+		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer/SD-WAN' \
+		'make test\tShow the focused test entrypoints' \
+		'make tui\tOpen the Gum-based local runtime chooser when available' \
+	| while IFS=$$'\t' read -r command description; do \
+		printf '  %-60s %s\n' "$$command" "$$description"; \
+	done
 
 makefiles:
 	@echo "Makefiles in this repo:"

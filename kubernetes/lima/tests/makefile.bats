@@ -115,12 +115,20 @@ setup() {
 }
 
 @test "lima cluster-dependent read-only targets gate on assert-lima-active" {
-  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls check-version gitea-sync; do
+  for target in check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e show-urls gitea-sync; do
     run sed -n "/^${target}:/,/^\\.PHONY:/p" "${REPO_ROOT}/kubernetes/lima/Makefile"
 
     [ "${status}" -eq 0 ]
     [[ "${output}" == *'$(MAKE) assert-lima-active >/dev/null'* ]]
   done
+}
+
+@test "lima check-version runs the active-project assertion directly so it can report readiness" {
+  run sed -n '/^check-version:/,/^\.PHONY:/p' "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
+  [[ "${output}" != *'$(MAKE) assert-lima-active >/dev/null'* ]]
 }
 
 @test "lima check-sso-e2e does not repair k3s apiserver OIDC" {

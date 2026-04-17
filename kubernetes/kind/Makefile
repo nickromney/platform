@@ -1193,7 +1193,21 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@$(MAKE) assert-kind-active >/dev/null
+	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
+		EXPECTED_PROJECT_PATH="kubernetes/kind" \
+		EXPECTED_PROJECT_LABEL="kubernetes/kind" \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
+	else \
+		EXPECTED_PROJECT_PATH="kubernetes/kind" \
+		EXPECTED_PROJECT_LABEL="kubernetes/kind" \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG); \
+	fi
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
 		component_report="$$(mktemp)"; \
 		provider_report="$$(mktemp)"; \

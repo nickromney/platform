@@ -30,6 +30,32 @@ setup() {
   [[ "${output}" == *"make sdwan"* ]]
 }
 
+@test "root make help prints aligned alphabetised shortcuts" {
+  run make -C "${REPO_ROOT}" help
+
+  [ "${status}" -eq 0 ]
+
+  printf '%s\n' "${output}" | grep -Eq '^  make apps[[:space:]]+Show the app/frontend Makefiles$'
+  printf '%s\n' "${output}" | grep -Eq '^  make status \[STATUS_FORMAT=text\|json\][[:space:]]+Show root local-runtime status across kind/Lima/Slicer/SD-WAN$'
+
+  apps_line="$(printf '%s\n' "${output}" | grep -n '^  make apps' | cut -d: -f1)"
+  check_version_line="$(printf '%s\n' "${output}" | grep -n '^  make check-version' | cut -d: -f1)"
+  docker_line="$(printf '%s\n' "${output}" | grep -n '^  make docker' | cut -d: -f1)"
+  fmt_line="$(printf '%s\n' "${output}" | grep -n '^  make fmt' | cut -d: -f1)"
+  kubernetes_line="$(printf '%s\n' "${output}" | grep -n '^  make kubernetes' | cut -d: -f1)"
+  lint_line="$(printf '%s\n' "${output}" | grep -n '^  make lint[[:space:]]' | cut -d: -f1)"
+  status_line="$(printf '%s\n' "${output}" | grep -n '^  make status ' | cut -d: -f1)"
+  tui_line="$(printf '%s\n' "${output}" | grep -n '^  make tui' | cut -d: -f1)"
+
+  [ "${apps_line}" -lt "${check_version_line}" ]
+  [ "${check_version_line}" -lt "${docker_line}" ]
+  [ "${docker_line}" -lt "${fmt_line}" ]
+  [ "${fmt_line}" -lt "${kubernetes_line}" ]
+  [ "${kubernetes_line}" -lt "${lint_line}" ]
+  [ "${lint_line}" -lt "${status_line}" ]
+  [ "${status_line}" -lt "${tui_line}" ]
+}
+
 @test "root bare make defaults to informational help" {
   run make -C "${REPO_ROOT}"
 
