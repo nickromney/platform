@@ -1298,7 +1298,7 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = local.argocd_gitops_repo_trust_hash
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_ver = "8"
+    refresh_script_ver = "9"
   }
 
   provisioner "local-exec" {
@@ -1385,7 +1385,6 @@ managed_workloads_ready() {
 
   workloads="$(kubectl -n "$ARGOCD_NS" get app "$app" -o json 2>/dev/null | jq -r '
     .status.resources[]?
-    | select(.status == "Synced")
     | select(.kind == "Deployment" or .kind == "StatefulSet" or .kind == "DaemonSet" or .kind == "Job")
     | [(.kind // ""), (.namespace // ""), (.name // "")]
     | @tsv
@@ -1448,22 +1447,27 @@ needs_refresh() {
   health_status="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
   comparison_msg="$(kubectl -n "$ARGOCD_NS" get app "$app" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)"
 
-  if [[ "$sync_status" == "Unknown" ]]; then
-    needs_refresh_reason="sync=Unknown"
-    return 0
-  fi
-
   if grep -qiE 'knownhosts: key is unknown|failed to list refs: dial tcp .*:22: connect: connection refused|failed to list refs: unexpected EOF' <<<"$comparison_msg"; then
     needs_refresh_reason="comparison=$comparison_msg"
     return 0
   fi
 
-  # Argo can keep the parent Application at Degraded/Progressing after the child
-  # resources have all become ready. Only treat that as stale cache when the
-  # live managed workloads are actually ready; some Argo versions leave child
-  # resource health empty while the workloads are still converging.
+  # Argo can keep the parent Application at Unknown/Degraded/Progressing after
+  # the child resources have all become ready. Only treat that as stale cache
+  # when the live managed workloads are actually ready; some Argo versions leave
+  # child resource sync/health empty while the workloads are still converging.
+  if [[ "$sync_status" == "Unknown" && "$health_status" == "Healthy" ]] && managed_workloads_ready "$app"; then
+    needs_refresh_reason="managed-workloads-ready"
+    return 0
+  fi
+
   if [[ "$sync_status" == "Synced" && "$health_status" != "Healthy" ]] && managed_workloads_ready "$app"; then
     needs_refresh_reason="managed-workloads-ready"
+    return 0
+  fi
+
+  if [[ "$sync_status" == "Unknown" ]]; then
+    needs_refresh_reason="sync=Unknown"
     return 0
   fi
 

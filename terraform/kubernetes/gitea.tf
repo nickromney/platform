@@ -89,16 +89,16 @@ ${var.expose_admin_nodeports ? "            nodePort: ${var.gitea_ssh_node_port}
         ingress:
           enabled: false
         image:
-          tag: "1.25.4"
+          tag: "1.25.5"
         strategy:
           type: Recreate
         resources:
           requests:
             cpu: 50m
-            memory: 128Mi
+            memory: 256Mi
           limits:
             cpu: 250m
-            memory: 384Mi
+            memory: 768Mi
         postgresql:
           enabled: true
           primary:
