@@ -391,7 +391,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-admin
@@ -493,7 +493,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-admin
@@ -595,7 +595,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-admin
@@ -696,7 +696,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-admin
@@ -801,7 +801,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-admin
@@ -905,7 +905,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-dev
@@ -1010,7 +1010,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-uat
@@ -1116,7 +1116,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-dev
@@ -1223,7 +1223,7 @@ spec:
         image:
           registry: ${local.hardened_image_registry_effective}
           repository: oauth2-proxy
-          tag: 7.15.1-debian13
+          tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
           cookieName: kind-sso-uat

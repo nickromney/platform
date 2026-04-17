@@ -5,10 +5,10 @@
 # (localhost:30090/platform/subnetcalc-*, localhost:30090/platform/sentiment-*).
 # Those are built inside the cluster and cannot be pre-pulled.
 
-# --- Cilium (chart 1.19.2) ---
-quay.io/cilium/cilium:v1.19.2
-quay.io/cilium/operator-generic:v1.19.2
-quay.io/cilium/hubble-relay:v1.19.2
+# --- Cilium (chart 1.19.3) ---
+quay.io/cilium/cilium:v1.19.3
+quay.io/cilium/operator-generic:v1.19.3
+quay.io/cilium/hubble-relay:v1.19.3
 quay.io/cilium/hubble-ui-backend:v0.13.3
 quay.io/cilium/hubble-ui:v0.13.3
 
@@ -16,12 +16,12 @@ quay.io/cilium/hubble-ui:v0.13.3
 ghcr.io/nginx/nginx-gateway-fabric:2.4.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.4.1
 
-# --- ArgoCD (chart 9.5.0) ---
+# --- ArgoCD (chart 9.5.1) ---
 dhi.io/argocd:3.3.6-debian13
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine
 
-# --- Gitea (chart 12.5.0) ---
-docker.gitea.com/gitea:1.25.4-rootless
+# --- Gitea (chart 12.5.3) ---
+docker.gitea.com/gitea:1.25.5-rootless
 
 # --- Kyverno (chart 3.7.1) ---
 dhi.io/kyverno:1.17.1-debian13
@@ -31,14 +31,14 @@ dhi.io/kyverno-cleanup-controller:1.17.1-debian13
 dhi.io/kyverno-reports-controller:1.17.1-debian13
 ghcr.io/kyverno/readiness-checker:v0.1.0
 
-# --- cert-manager (chart v1.20.1) ---
-quay.io/jetstack/cert-manager-controller:v1.20.1
-quay.io/jetstack/cert-manager-webhook:v1.20.1
-quay.io/jetstack/cert-manager-cainjector:v1.20.1
-quay.io/jetstack/cert-manager-startupapicheck:v1.20.1
+# --- cert-manager (chart v1.20.2) ---
+quay.io/jetstack/cert-manager-controller:v1.20.2
+quay.io/jetstack/cert-manager-webhook:v1.20.2
+quay.io/jetstack/cert-manager-cainjector:v1.20.2
+quay.io/jetstack/cert-manager-startupapicheck:v1.20.2
 
-# --- SigNoz (chart 0.118.0) ---
-docker.io/signoz/signoz:v0.118.0
+# --- SigNoz (chart 0.119.0) ---
+docker.io/signoz/signoz:v0.119.0
 docker.io/signoz/signoz-otel-collector:v0.144.2
 docker.io/signoz/signoz-schema-migrator:v0.144.2
 docker.io/clickhouse/clickhouse-server:25.5.6
@@ -47,9 +47,9 @@ docker.io/altinity/metrics-exporter:0.21.2
 signoz/zookeeper:3.7.1
 docker.io/groundnuty/k8s-wait-for:v2.0
 
-# --- Prometheus (chart 29.2.0) ---
-quay.io/prometheus/prometheus:v3.11.1
-dhi.io/prometheus:3.11.1-debian13
+# --- Prometheus (chart 29.2.1) ---
+quay.io/prometheus/prometheus:v3.11.2
+dhi.io/prometheus:3.11.2-debian13
 dhi.io/prometheus-config-reloader:0.89.0-debian13
 dhi.io/alertmanager:0.31.1-debian13
 dhi.io/kube-state-metrics:2.18.0-debian13
@@ -59,8 +59,8 @@ dhi.io/node-exporter:1.10.2-debian13
 docker.io/grafana/loki:3.6.7
 dhi.io/loki:3.6.7-debian13
 
-# --- VictoriaLogs (chart 0.11.31) ---
-docker.io/victoriametrics/victoria-logs:v1.49.0
+# --- VictoriaLogs (chart 0.12.0) ---
+docker.io/victoriametrics/victoria-logs:v1.50.0
 
 # --- Tempo (chart 1.24.4) ---
 docker.io/grafana/tempo:2.9.0
@@ -78,8 +78,8 @@ node:lts-alpine
 # --- Dex (chart 0.24.0) ---
 dhi.io/dex:2.44.0-debian13
 
-# --- oauth2-proxy (chart 10.4.2) ---
-dhi.io/oauth2-proxy:7.15.1-debian13
+# --- oauth2-proxy (chart 10.4.3) ---
+dhi.io/oauth2-proxy:7.15.2-debian13
 
 # --- OpenTelemetry Collector (chart 0.150.0) ---
 otel/opentelemetry-collector-contrib:0.149.0

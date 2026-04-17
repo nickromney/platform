@@ -375,13 +375,13 @@ variable "public_demo_allow_actions_runner_host_mounts" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.19.2"
+  default     = "1.19.3"
 }
 
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.5.0"
+  default     = "9.5.1"
 }
 
 variable "argocd_image_repository" {
@@ -417,19 +417,19 @@ variable "argocd_notifications_enabled" {
 variable "gitea_chart_version" {
   description = "Gitea chart version."
   type        = string
-  default     = "12.5.0"
+  default     = "12.5.3"
 }
 
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.2.0"
+  default     = "29.2.1"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus hardened container image tag."
   type        = string
-  default     = "3.11.1-debian13"
+  default     = "3.11.2-debian13"
 }
 
 variable "grafana_chart_version" {
@@ -501,7 +501,7 @@ variable "loki_image_tag" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.11.31"
+  default     = "0.12.0"
 }
 
 variable "tempo_chart_version" {
@@ -513,7 +513,7 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.118.0"
+  default     = "0.119.0"
 }
 
 variable "headlamp_chart_version" {
@@ -537,7 +537,7 @@ variable "policy_reporter_chart_version" {
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.20.1"
+  default     = "v1.20.2"
 }
 
 variable "hardened_image_registry" {
@@ -555,7 +555,7 @@ variable "dex_chart_version" {
 variable "oauth2_proxy_chart_version" {
   description = "oauth2-proxy chart version (oauth2-proxy.github.io/manifests)."
   type        = string
-  default     = "10.4.2"
+  default     = "10.4.3"
 }
 
 variable "opentelemetry_collector_chart_version" {
