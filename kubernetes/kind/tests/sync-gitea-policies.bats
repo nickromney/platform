@@ -156,6 +156,96 @@ EOF
   ! grep -Fq "chart: cert-manager" "${apps_dir}/001-cert-manager.application.yaml"
 }
 
+@test "clone_remote_repo disables ssh agents and prompts" {
+  capture_file="${BATS_TEST_TMPDIR}/clone-ssh-command"
+  export CAPTURE_FILE="${capture_file}"
+
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '200'
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  cat >"${TEST_BIN}/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "${cmd}" in
+  clone)
+    printf '%s\n' "${GIT_SSH_COMMAND:-}" >"${CAPTURE_FILE:?}"
+    dest="${@: -1}"
+    mkdir -p "${dest}"
+    exit 0
+    ;;
+esac
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/git"
+
+  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\"; source '${SCRIPT}'; clone_remote_repo '${BATS_TEST_TMPDIR}/remote'; cat '${capture_file}'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"-o IdentityAgent=none"* ]]
+  [[ "${output}" == *"-o BatchMode=yes"* ]]
+  [[ "${output}" == *"-o ConnectTimeout=5"* ]]
+}
+
+@test "push_rendered_repo disables ssh agents and prompts" {
+  capture_file="${BATS_TEST_TMPDIR}/push-ssh-command"
+  rendered_dir="${BATS_TEST_TMPDIR}/rendered"
+  mkdir -p "${rendered_dir}"
+  echo "policy: true" >"${rendered_dir}/policy.yaml"
+  export CAPTURE_FILE="${capture_file}"
+
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '200'
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  cat >"${TEST_BIN}/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "${cmd}" in
+  init|config|add|commit|branch)
+    exit 0
+    ;;
+  diff)
+    exit 1
+    ;;
+  remote)
+    subcmd="${1:-}"
+    case "${subcmd}" in
+      get-url)
+        exit 1
+        ;;
+      add|set-url)
+        exit 0
+        ;;
+    esac
+    ;;
+  push)
+    printf '%s\n' "${GIT_SSH_COMMAND:-}" >"${CAPTURE_FILE:?}"
+    exit 0
+    ;;
+esac
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/git"
+
+  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\"; source '${SCRIPT}'; push_rendered_repo '${rendered_dir}'; cat '${capture_file}'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"-o IdentityAgent=none"* ]]
+  [[ "${output}" == *"-o BatchMode=yes"* ]]
+  [[ "${output}" == *"-o ConnectTimeout=5"* ]]
+}
+
 @test "rewrite_external_argocd_apps_to_vendored_charts rejects unpinned external chart versions" {
   apps_dir="${BATS_TEST_TMPDIR}/apps"
   vendor_root="${BATS_TEST_TMPDIR}/vendor"

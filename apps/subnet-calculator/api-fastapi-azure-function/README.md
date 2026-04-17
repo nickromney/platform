@@ -1,6 +1,6 @@
 # IPv4 Subnet Validation API
 
-A lightweight microservice API for IPv4/IPv6 address validation, subnet calculations, and cloud provider IP analysis. Built with FastAPI and Azure Functions on Python 3.11.
+A lightweight microservice API for IPv4/IPv6 address validation, subnet calculations, and cloud provider IP analysis. Built with FastAPI and Azure Functions on Python 3.13.
 
 ## Overview
 
@@ -180,7 +180,7 @@ details, see `function_app.py` and the test suite in this directory.
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - [uv](https://github.com/astral-sh/uv) package manager
 - Azure Functions Core Tools
 
@@ -368,7 +368,7 @@ curl -X POST http://localhost:7071/api/v1/ipv4/check-cloudflare \
 
 ## Tech Stack
 
-- **Runtime**: Python 3.11
+- **Runtime**: Python 3.13
 - **Framework**: FastAPI with Azure Functions ASGI middleware
 - **Core Library**: Python's built-in `ipaddress` module
 - **API Documentation**: Auto-generated OpenAPI/Swagger via FastAPI

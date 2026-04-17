@@ -85,6 +85,9 @@ EOF
 }
 
 @test "check-version parses app cooldown policies and locked dependency versions" {
+  local expected_cutoff
+  expected_cutoff="$(awk -F'\"' '/^exclude-newer = \"/ { print $2; exit }' "${REPO_ROOT}/apps/subnet-calculator/apim-simulator/uv.lock")"
+
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
     \"\$(js_dependency_cooldown_seconds '${REPO_ROOT}/apps/subnet-calculator')\" \
     \"\$(bun_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/bun.lock' '@azure/static-web-apps-cli')\" \
@@ -92,7 +95,49 @@ EOF
     \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/apim-simulator/uv.lock' 'anyio')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf '604800\n2.0.8\n2026-04-08T06:28:18.790055Z\n4.12.1')" ]
+  [ "${output}" = "$(printf '604800\n2.0.8\n%s\n4.12.1' "${expected_cutoff}")" ]
+}
+
+@test "check-version collects only project dependencies from pyproject arrays" {
+  run bash -lc "
+    tmp_root='${BATS_TEST_TMPDIR}/repo'
+    mkdir -p \"\${tmp_root}/apps/with-comments\" \"\${tmp_root}/apps/empty-inline\"
+
+    cat >\"\${tmp_root}/apps/with-comments/pyproject.toml\" <<'EOF'
+[project]
+name = \"with-comments\"
+version = \"0.1.0\"
+dependencies = [
+    \"fastapi[standard]>=0.118.0\",  # inline comment
+    \"httpx>=0.28.1\",
+]
+
+[project.optional-dependencies]
+dev = [
+    \"pytest>=8.0.0\",
+]
+EOF
+
+    cat >\"\${tmp_root}/apps/empty-inline/pyproject.toml\" <<'EOF'
+[project]
+name = \"empty-inline\"
+version = \"0.1.0\"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    \"playwright>=1.55.0\",
+]
+EOF
+
+    export CHECK_VERSION_LIB_ONLY=1
+    source '${SCRIPT}'
+    REPO_ROOT=\"\${tmp_root}\"
+    collect_python_dependency_names | LC_ALL=C sort -u
+  "
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'fastapi\nhttpx')" ]
 }
 
 @test "check-version classifies internal image refs and docker hub repositories" {
@@ -143,6 +188,87 @@ EOF
   [[ ! "${output}" =~ apps/sentiment/frontend-react-vite/sentiment-auth-ui ]]
   [[ "${output}" =~ apps/subnet-calculator/frontend-react ]]
   [[ "${output}" =~ hidden\ current-only\ apps:\ 1\ \(dependencies\ hidden:\ 2\) ]]
+}
+
+@test "check-version honors npm cooldown timestamps with fractional seconds" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"dist-tags":{"latest":"1.1.0"},"time":{"created":"2026-04-01T00:00:00.000Z","modified":"2026-04-17T00:00:00.000Z","1.0.0":"2026-04-01T00:00:00.000Z","1.1.0":"2026-04-15T00:00:00.000Z"}}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(npm_latest_eligible_version example 604800)\" \"\$(dependency_update_status 1.0.0 \"\$(npm_latest_eligible_version example 604800)\" \"\$(npm_latest_overall_version example)\")\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '1.0.0\ncooldown active')" ]
+}
+
+@test "check-version help advertises prerelease channel toggles as opt-in" {
+  run bash "${SCRIPT}" --help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"CHECK_VERSION_INCLUDE_CANARY=1"* ]]
+  [[ "${output}" == *"CHECK_VERSION_INCLUDE_ALPHA=1"* ]]
+  [[ "${output}" == *"CHECK_VERSION_INCLUDE_PRERELEASE=1"* ]]
+  [[ "${output}" == *"All prerelease channels default to off"* ]]
+}
+
+@test "check-version keeps npm alpha releases disabled unless alpha is explicitly enabled" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"dist-tags":{"latest":"1.0.0"},"time":{"created":"2026-04-01T00:00:00.000Z","modified":"2026-04-17T00:00:00.000Z","1.0.0":"2026-04-01T00:00:00.000Z","1.1.0-alpha.1":"2026-04-05T00:00:00.000Z"}}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(npm_latest_eligible_version example 604800)\" \"\$(CHECK_VERSION_INCLUDE_PRERELEASE=1 npm_latest_eligible_version example 604800)\" \"\$(CHECK_VERSION_INCLUDE_ALPHA=1 npm_latest_eligible_version example 604800)\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '1.0.0\n1.0.0\n1.1.0-alpha.1')" ]
+}
+
+@test "check-version keeps npm canary releases disabled unless canary is explicitly enabled" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"dist-tags":{"latest":"19.2.5"},"time":{"created":"2026-04-01T00:00:00.000Z","modified":"2026-04-17T00:00:00.000Z","19.2.5":"2026-04-01T00:00:00.000Z","19.3.0-canary-fd524fe0-20251121":"2026-04-10T00:00:00.000Z"}}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(npm_latest_eligible_version example 604800)\" \"\$(CHECK_VERSION_INCLUDE_PRERELEASE=1 npm_latest_eligible_version example 604800)\" \"\$(CHECK_VERSION_INCLUDE_CANARY=1 npm_latest_eligible_version example 604800)\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '19.2.5\n19.2.5\n19.3.0-canary-fd524fe0-20251121')" ]
+}
+
+@test "check-version ignores PyPI prereleases by default during cooldown selection" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"info":{"version":"0.28.1"},"releases":{"0.28.1":[{"upload_time_iso_8601":"2026-04-01T00:00:00.000Z"}],"1.0.dev3":[{"upload_time_iso_8601":"2026-04-05T00:00:00.000Z"}]}}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(pypi_latest_eligible_version example 2026-04-10T00:00:00.000Z)\" \"\$(CHECK_VERSION_INCLUDE_PRERELEASE=1 pypi_latest_eligible_version example 2026-04-10T00:00:00.000Z)\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '0.28.1\n1.0.dev3')" ]
+}
+
+@test "check-version treats current prereleases ahead of stable as current" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; dependency_update_status '19.3.0-canary-fd524fe0-20251121' '19.2.5' '19.2.5'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "current" ]
 }
 
 @test "check-version caches Docker Hub tag listings by repository" {

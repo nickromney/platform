@@ -3,18 +3,21 @@ name = "subnet-calculator-python-api"
 version = "0.1.0"
 description = "IPv4/IPv6 subnet validation and analysis API with cloud provider support"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 
 dependencies = [
-    "azure-functions>=1.23.0",
+    "azure-functions>=2.0.0",
     "fastapi[standard]>=0.118.0",
+    # The cooldown-eligible FastAPI line still requires httpx<1.0, so the
+    # httpx 1.0 prerelease track is not solvable here yet without bypassing
+    # the repo's 7-day age gate on FastAPI itself.
     "pwdlib[argon2]>=0.2.0",
     "pyjwt>=2.10.1",
     "python-jose[cryptography]>=3.3.0",
     "httpx>=0.28.1",
-    # Must stay compatible with the Azure Functions Python worker's bundled protobuf.
-    # The Functions base image currently ships protobuf 5.x; protobuf 6.x has caused
-    # Python worker segfaults (exit code 139) due to mixed worker/customer deps.
+    # Teaching repo policy still follows cooled-off latest, but the current
+    # OpenTelemetry exporter line caps protobuf below 7.x, so this app stays on
+    # the highest compatible 5.x line until that upstream constraint moves.
     "protobuf>=5.29.5,<6",
     # Avoid the opentelemetry-exporter-otlp meta-package (pulls grpcio), which can
     # override Azure Functions worker dependencies and destabilize the runtime.
@@ -35,7 +38,7 @@ exclude-newer = "7 days"
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [

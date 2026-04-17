@@ -58,6 +58,12 @@ Usage: check-version.sh [--dry-run] [--execute]
 Checks pinned platform component versions against current upstream releases and
 the live cluster when reachable.
 
+Environment:
+  CHECK_VERSION_INCLUDE_CANARY=1      Include canary releases in latest-version checks
+  CHECK_VERSION_INCLUDE_ALPHA=1       Include alpha releases in latest-version checks
+  CHECK_VERSION_INCLUDE_PRERELEASE=1  Include other prerelease channels (beta/dev/rc/preview/next)
+                                      All prerelease channels default to off
+
 $(shell_cli_standard_options)
 EOF
 }
@@ -70,6 +76,9 @@ CHECK_VERSION_HEARTBEAT_SECONDS="${CHECK_VERSION_HEARTBEAT_SECONDS:-10}"
 CHECK_VERSION_HEARTBEAT_PID=""
 HTTP_FETCH_MAX_TIME_SECONDS="${HTTP_FETCH_MAX_TIME_SECONDS:-${CHECK_VERSION_CURL_MAX_TIME_SECONDS:-15}}"
 HTTP_FETCH_CONNECT_TIMEOUT_SECONDS="${HTTP_FETCH_CONNECT_TIMEOUT_SECONDS:-${CHECK_VERSION_CURL_CONNECT_TIMEOUT_SECONDS:-5}}"
+CHECK_VERSION_INCLUDE_PRERELEASE="${CHECK_VERSION_INCLUDE_PRERELEASE:-0}"
+CHECK_VERSION_INCLUDE_CANARY="${CHECK_VERSION_INCLUDE_CANARY:-0}"
+CHECK_VERSION_INCLUDE_ALPHA="${CHECK_VERSION_INCLUDE_ALPHA:-0}"
 
 start_heartbeat() {
   local message="$1"
@@ -105,6 +114,15 @@ stop_heartbeat() {
 require() {
   local bin="$1"
   command -v "$bin" >/dev/null 2>&1 || fail "$bin not found in PATH"
+}
+
+run_inline_python() {
+  if command -v uv >/dev/null 2>&1; then
+    uv run --isolated python - "$@"
+    return 0
+  fi
+
+  python3 - "$@"
 }
 
 cluster_reachable() {
@@ -332,11 +350,132 @@ bun_lock_resolved_version() {
   printf '%s\n' "${line}" | xargs || true
 }
 
+trim_surrounding_whitespace() {
+  local value="$1"
+
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "${value}"
+}
+
+pyproject_project_dependencies() {
+  local pyproject="$1"
+
+  [ -f "${pyproject}" ] || return 0
+
+  run_inline_python "${pyproject}" <<'PY' 2>/dev/null || true
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+in_project = False
+collecting = False
+buffer = []
+
+def array_closed(fragment: str) -> bool:
+    in_string = False
+    escaped = False
+    in_comment = False
+
+    for char in fragment:
+        if in_comment:
+            if char == "\n":
+                in_comment = False
+            continue
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == "#":
+            in_comment = True
+        elif char == '"':
+            in_string = True
+        elif char == "]":
+            return True
+
+    return False
+
+for line in text.splitlines(keepends=True):
+    stripped = line.strip()
+
+    if collecting:
+        buffer.append(line)
+        if array_closed(line):
+            break
+        continue
+
+    if stripped.startswith("[") and stripped.endswith("]"):
+        in_project = stripped == "[project]"
+        continue
+
+    if not in_project:
+        continue
+
+    before, sep, after = line.partition("=")
+    if not sep or before.strip() != "dependencies":
+        continue
+
+    bracket_index = after.find("[")
+    if bracket_index == -1:
+        continue
+
+    fragment = after[bracket_index:]
+    buffer.append(fragment if fragment.endswith("\n") else fragment + "\n")
+    if array_closed(fragment):
+        break
+    collecting = True
+
+if not buffer:
+    raise SystemExit(0)
+
+array_text = "".join(buffer)
+in_string = False
+escaped = False
+in_comment = False
+current = []
+
+for char in array_text:
+    if in_comment:
+        if char == "\n":
+            in_comment = False
+        continue
+
+    if in_string:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            current.append(char)
+            escaped = True
+        elif char == '"':
+            print("".join(current))
+            current = []
+            in_string = False
+        else:
+            current.append(char)
+        continue
+
+    if char == "#":
+        in_comment = True
+    elif char == '"':
+        in_string = True
+    elif char == "]":
+        break
+PY
+}
+
 python_requirement_name() {
   local requirement="$1"
   local name=""
 
-  name="$(printf '%s\n' "${requirement}" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//; s/\[.*$//; s/[<>=!~].*$//; s/[[:space:]].*$//' | xargs || true)"
+  requirement="$(trim_surrounding_whitespace "${requirement}")"
+  name="$(printf '%s\n' "${requirement}" | sed -E 's/\[.*$//; s/[<>=!~].*$//; s/[[:space:]].*$//')"
   normalize_python_package_name "${name}"
 }
 
@@ -344,7 +483,7 @@ python_requirement_status() {
   local requirement="$1"
   local trimmed=""
 
-  trimmed="$(printf '%s\n' "${requirement}" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//' | xargs || true)"
+  trimmed="$(trim_surrounding_whitespace "${requirement}")"
   if [ -z "${trimmed}" ] || [[ "${trimmed}" == \#* ]]; then
     printf 'skip\n'
     return 0
@@ -361,6 +500,106 @@ python_requirement_status() {
       printf '\n'
       ;;
   esac
+}
+
+check_version_flag_enabled() {
+  case "${1:-0}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+check_version_include_prerelease() {
+  check_version_flag_enabled "${CHECK_VERSION_INCLUDE_PRERELEASE}"
+}
+
+check_version_include_canary() {
+  check_version_flag_enabled "${CHECK_VERSION_INCLUDE_CANARY}"
+}
+
+check_version_include_alpha() {
+  check_version_flag_enabled "${CHECK_VERSION_INCLUDE_ALPHA}"
+}
+
+version_prerelease_channel() {
+  local version
+
+  version="$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]')"
+
+  case "${version}" in
+    *canary*)
+      printf 'canary\n'
+      return 0
+      ;;
+    *alpha*)
+      printf 'alpha\n'
+      return 0
+      ;;
+    *beta*|*preview*|*dev*|*next*)
+      printf 'other\n'
+      return 0
+      ;;
+  esac
+
+  if [[ "${version}" =~ [0-9]a[0-9] ]]; then
+    printf 'alpha\n'
+    return 0
+  fi
+
+  if [[ "${version}" =~ [0-9]b[0-9] ]] || [[ "${version}" =~ [0-9]rc[0-9] ]]; then
+    printf 'other\n'
+    return 0
+  fi
+
+  if [[ "${version}" =~ (^|[._-])pre([._-]|[0-9]|$) ]] || [[ "${version}" =~ (^|[._-])rc([._-]|[0-9]|$) ]]; then
+    printf 'other\n'
+    return 0
+  fi
+
+  printf 'stable\n'
+}
+
+version_is_prerelease() {
+  [ "$(version_prerelease_channel "$1")" != "stable" ]
+}
+
+version_prerelease_allowed() {
+  case "$(version_prerelease_channel "$1")" in
+    stable)
+      return 0
+      ;;
+    canary)
+      check_version_include_canary
+      ;;
+    alpha)
+      check_version_include_alpha
+      ;;
+    *)
+      check_version_include_prerelease
+      ;;
+  esac
+}
+
+filter_prerelease_versions() {
+  local version
+
+  while IFS= read -r version; do
+    [ -n "${version}" ] || continue
+    if version_prerelease_allowed "${version}"; then
+      printf '%s\n' "${version}"
+    fi
+  done
+}
+
+version_gte() {
+  local left="$1"
+  local right="$2"
+
+  [ "${left}" = "${right}" ] || [ "$(printf '%s\n%s\n' "${left}" "${right}" | sort -V | tail -n 1)" = "${left}" ]
 }
 
 uv_lock_resolved_version() {
@@ -478,11 +717,12 @@ npm_latest_eligible_version() {
     jq -r --argjson cutoff "${cutoff}" '
       .time // {} | to_entries[]
       | select(.key != "created" and .key != "modified")
-      | select((.value | fromdateiso8601?) != null and (.value | fromdateiso8601) <= $cutoff)
+      | (.value | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) as $published
+      | select($published != null and $published <= $cutoff)
       | .key
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | sort -V | tail -n 1
 }
 
 pypi_latest_overall_version() {
@@ -531,7 +771,7 @@ pypi_latest_eligible_version() {
         end
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | sort -V | tail -n 1
 }
 
 dependency_update_status() {
@@ -548,6 +788,16 @@ dependency_update_status() {
     return 0
   fi
 
+  if [ "${current}" = "${latest_overall}" ]; then
+    printf 'current\n'
+    return 0
+  fi
+
+  if version_gte "${current}" "${latest_overall}"; then
+    printf 'current\n'
+    return 0
+  fi
+
   if [ -n "${latest_eligible}" ] && [ "${current}" != "${latest_eligible}" ]; then
     printf 'update available\n'
     return 0
@@ -555,11 +805,6 @@ dependency_update_status() {
 
   if [ -n "${latest_eligible}" ] && [ "${latest_eligible}" != "${latest_overall}" ]; then
     printf 'cooldown active\n'
-    return 0
-  fi
-
-  if [ "${current}" = "${latest_overall}" ]; then
-    printf 'current\n'
     return 0
   fi
 
@@ -911,7 +1156,7 @@ docker_hub_repo_tags() {
 parse_www_authenticate_bearer() {
   local header_file="$1"
 
-  python3 - "${header_file}" <<'PY'
+  run_inline_python "${header_file}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -1872,20 +2117,7 @@ emit_app_dependency_rows() {
         "${latest_eligible:-}" \
         "${latest_overall:-}" \
         "${status}"
-    done < <(
-      awk '
-        /^\[project\]$/ { in_project = 1; next }
-        in_project && /^\[/ && $0 !~ /^\[project(\.|$)/ { in_project = 0 }
-        in_project && /^dependencies = \[/ { in_deps = 1; next }
-        in_deps && /^\]/ { in_deps = 0; next }
-        in_deps {
-          line = $0
-          gsub(/^[[:space:]]*"/, "", line)
-          gsub(/",[[:space:]]*$/, "", line)
-          print line
-        }
-      ' "${pyproject}" 2>/dev/null
-    )
+    done < <(pyproject_project_dependencies "${pyproject}")
   done < <(
     find "${REPO_ROOT}/apps" \
       \( \
@@ -1950,20 +2182,7 @@ collect_python_dependency_names() {
         continue
       fi
       printf '%s\n' "${dep_name}"
-    done < <(
-      awk '
-        /^\[project\]$/ { in_project = 1; next }
-        in_project && /^\[/ && $0 !~ /^\[project(\.|$)/ { in_project = 0 }
-        in_project && /^dependencies = \[/ { in_deps = 1; next }
-        in_deps && /^\]/ { in_deps = 0; next }
-        in_deps {
-          line = $0
-          gsub(/^[[:space:]]*"/, "", line)
-          gsub(/",[[:space:]]*$/, "", line)
-          print line
-        }
-      ' "${pyproject}" 2>/dev/null
-    )
+    done < <(pyproject_project_dependencies "${pyproject}")
   done < <(
     find "${REPO_ROOT}/apps" \
       \( \
@@ -2706,10 +2925,7 @@ main() {
 }
 
 if [ "${CHECK_VERSION_LIB_ONLY:-0}" = "1" ]; then
-  if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
-    return 0
-  fi
-  exit 0
+  return 0 2>/dev/null || exit 0
 fi
 
 main "$@"

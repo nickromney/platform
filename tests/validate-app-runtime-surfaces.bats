@@ -213,6 +213,50 @@ PY
   [[ "${output}" == *"validated 13 compose service(s)"* ]]
 }
 
+@test "docker compose Dex demo credentials are pinned to password123" {
+  local hashes_file="${BATS_TEST_TMPDIR}/dex-hashes.txt"
+  local htpasswd_file="${BATS_TEST_TMPDIR}/dex.htpasswd"
+
+  run python3 - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+config = yaml.safe_load((repo_root / "docker/compose/dex/config.yaml").read_text(encoding="utf-8"))
+hashes = [entry["hash"] for entry in config["staticPasswords"]]
+
+assert len(hashes) == 3, hashes
+assert len(set(hashes)) == 1, hashes
+
+for value in hashes:
+    print(value)
+PY
+
+  [ "${status}" -eq 0 ]
+  printf '%s\n' "${output}" >"${hashes_file}"
+
+  while IFS= read -r hash_value; do
+    [ -n "${hash_value}" ] || continue
+    printf 'demo:%s\n' "${hash_value}" >"${htpasswd_file}"
+    run htpasswd -vb "${htpasswd_file}" demo password123
+    [ "${status}" -eq 0 ]
+
+    run htpasswd -vb "${htpasswd_file}" demo demo-password
+    [ "${status}" -ne 0 ]
+  done <"${hashes_file}"
+
+  run make -C "${REPO_ROOT}/docker/compose" urls
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"demo@dev.test / password123"* ]]
+  [[ "${output}" == *"demo@uat.test / password123"* ]]
+  [[ "${output}" == *"demo@admin.test / password123"* ]]
+}
+
 @test "kubernetes app workloads pin numeric runtime users for hardened deployments" {
   run python3 - <<'PY'
 from __future__ import annotations

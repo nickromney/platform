@@ -68,6 +68,16 @@ require() {
   command -v "$bin" >/dev/null 2>&1 || fail "$bin not found in PATH"
 }
 
+cleanup_temp_paths() {
+  local first="${1:-}"
+  local second="${2:-}"
+  local directory="${3:-}"
+
+  [ -n "${first}" ] && rm -f "${first}"
+  [ -n "${second}" ] && rm -f "${second}"
+  [ -n "${directory}" ] && rm -rf "${directory}"
+}
+
 version_lt() {
   local left="$1"
   local right="$2"
@@ -256,7 +266,7 @@ main() {
   providers_file="$(mktemp)"
   rows_file="$(mktemp)"
   output_dir="$(mktemp -d)"
-  trap 'rm -f "${providers_file}" "${rows_file}"; rm -rf "${output_dir}"' EXIT
+  trap "cleanup_temp_paths '${providers_file}' '${rows_file}' '${output_dir}'" EXIT
 
   extract_locked_providers >"${providers_file}"
   printf '%s\n' $'Provider\tConstraint\tLocked\tLatest\tStatus' >"${rows_file}"
