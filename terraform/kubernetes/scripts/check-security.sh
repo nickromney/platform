@@ -36,7 +36,7 @@ STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 IMAGE_REGISTRY_POLICY_FILE="${STACK_DIR}/cluster-policies/kyverno/shared/restrict-image-registries.yaml"
 POLICY_PROBE_NAMESPACE="uat"
 POLICY_PROBE_POD="policy-probe"
-POLICY_PROBE_IMAGE="curlimages/curl:8.16.0"
+POLICY_PROBE_IMAGE="curlimages/curl:8.19.0"
 POLICY_PROBE_LABELS="app=sentiment,project=kindlocal,team=dolphin,tier=backend,role=backend,app.kubernetes.io/name=sentiment-api,app.kubernetes.io/component=backend"
 POLICY_PROBE_CREATED=0
 

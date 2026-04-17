@@ -19,6 +19,7 @@ K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
+ASSERT_PROJECT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-project-active.sh
 STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
@@ -66,6 +67,7 @@ GITEA_REGISTRY_HOST ?= localhost:30090
 GITEA_REGISTRY_SCHEME ?= http
 LIMA_CHECK_SLICER_VM_NAME ?= slicer-1
 LIMA_CHECK_SLICER_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
+PLATFORM_STATUS_SCRIPT ?= $(REPO_ROOT)/scripts/platform-status.sh
 WORKLOAD_IMAGE_NAMESPACE ?= platform
 WORKLOAD_IMAGE_TAG ?= latest
 EXPECT_SENTIMENT_REPO ?= 0
@@ -91,7 +93,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped check-platform-env-file prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -260,6 +262,15 @@ check-slicer-stopped:
 check-conflicting-clusters-stopped:
 	@$(MAKE) check-kind-stopped
 	@$(MAKE) check-slicer-stopped
+
+.PHONY: assert-lima-active
+assert-lima-active:
+	@EXPECTED_PROJECT_PATH="kubernetes/lima" \
+	EXPECTED_PROJECT_LABEL="kubernetes/lima" \
+	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+	"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)
 
 .PHONY: prereqs
 prereqs:
@@ -697,12 +708,13 @@ apply: workflow-validate-stage
 
 .PHONY: check-health
 check-health: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
 		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
 		off) ;; \
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac
-	@$(MAKE) check-kubeconfig >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -714,6 +726,7 @@ check-health: workflow-validate-stage
 .PHONY: check-security
 check-security: workflow-validate-stage
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -725,11 +738,14 @@ check-security: workflow-validate-stage
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
 check-cluster:
 	@$(MAKE) check-platform-env
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" \
 		GITEA_USER="gitea-admin" \
 		GITEA_PWD="$${GITEA_PWD:-$${PLATFORM_ADMIN_PASSWORD}}" \
@@ -744,12 +760,13 @@ check-cluster:
 
 .PHONY: check-gateway-urls
 check-gateway-urls: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
 		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
 		off) ;; \
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac
-	@$(MAKE) check-kubeconfig >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -760,12 +777,13 @@ check-gateway-urls: workflow-validate-stage
 
 .PHONY: check-app
 check-app: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
 		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
 		off) ;; \
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac
-	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
 	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
@@ -784,12 +802,13 @@ check-app: workflow-validate-stage
 
 .PHONY: check-sso
 check-sso: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
 		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
 		off) ;; \
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac
-	@$(MAKE) check-kubeconfig >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -802,6 +821,7 @@ check-sso: workflow-validate-stage
 check-sso-e2e: workflow-validate-stage
 	@set -euo pipefail; \
 	$(MAKE) check-kubeconfig >/dev/null; \
+	$(MAKE) assert-lima-active >/dev/null; \
 	case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
 		on|auto) $(MAKE) ensure-host-gateway-proxy ;; \
 		off) echo "check-sso-e2e requires host gateway proxies or an equivalent manual setup. Set LIMA_HOST_GATEWAY_PROXY_MODE=on to let the Makefile manage them."; exit 1 ;; \
@@ -817,6 +837,8 @@ check-sso-e2e: workflow-validate-stage
 gitea-sync: workflow-validate-stage
 	@set -euo pipefail; \
 	$(MAKE) check-platform-env; \
+	$(MAKE) check-kubeconfig >/dev/null; \
+	$(MAKE) assert-lima-active >/dev/null; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
@@ -845,6 +867,8 @@ launchpad-render:
 
 .PHONY: show-urls
 show-urls: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
 	@case "$(LIMA_HOST_GATEWAY_PROXY_MODE)" in \
 		on|auto) $(MAKE) ensure-host-gateway-proxy >/dev/null ;; \
 		off) ;; \
@@ -963,6 +987,21 @@ test-unit: test-bats
 .PHONY: check-version
 check-version:
 	@$(MAKE) check-kubeconfig >/dev/null
+	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
+		EXPECTED_PROJECT_PATH="kubernetes/lima" \
+		EXPECTED_PROJECT_LABEL="kubernetes/lima" \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
+	else \
+		EXPECTED_PROJECT_PATH="kubernetes/lima" \
+		EXPECTED_PROJECT_LABEL="kubernetes/lima" \
+		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG); \
+	fi
 	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(abspath $(MAKEFILE_DIR)stages)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""
 	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)

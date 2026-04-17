@@ -146,6 +146,9 @@ if [[ "${args}" == "-n gateway-routes get httproute" ]]; then
   exit 0
 fi
 if [[ "${args}" == *"-n gateway-routes get httproute -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.items[*]'; then
+  if [[ "${MOCK_NO_ROUTES:-0}" == "1" ]]; then
+    exit 0
+  fi
   printf 'headlamp\nsubnetcalc-uat\ndex\n'
   exit 0
 fi
@@ -231,4 +234,12 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Host port open: host.docker.internal:443"* ]]
+}
+
+@test "check-gateway-urls handles empty discovered route lists without bash nounset crashes" {
+  run env MOCK_NO_ROUTES=1 /bin/bash "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"No gateway route hostnames available to probe"* ]]
+  [[ "${output}" != *"unbound variable"* ]]
 }

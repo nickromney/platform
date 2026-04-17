@@ -11,7 +11,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -n 'POLICY_PROBE_IMAGE="curlimages/curl:8.16.0"' "${SECURITY_SCRIPT}"
+  run grep -n 'POLICY_PROBE_IMAGE="curlimages/curl:8.19.0"' "${SECURITY_SCRIPT}"
 
   [ "${status}" -eq 0 ]
 

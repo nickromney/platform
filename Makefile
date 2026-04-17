@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -14,12 +14,22 @@ RELEASE_SCRIPT ?= scripts/release.sh
 SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
 SONAR_SCAN_REPO ?= $(CURDIR)
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
+PLATFORM_STATUS_SCRIPT ?= scripts/platform-status.sh
+PLATFORM_TUI_SCRIPT ?= scripts/platform-tui.sh
+STATUS_FORMAT ?= text
 
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := default
 
 include mk/common.mk
 
-.PHONY: help prereqs test lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+.PHONY: default help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+
+default:
+	@$(MAKE) --no-print-directory help
+	@if [ -t 0 ] && [ -t 1 ]; then \
+		echo ""; \
+		$(MAKE) --no-print-directory status STATUS_FORMAT=text; \
+	fi
 
 help:
 	@echo "Platform workspace Makefile guide"
@@ -31,24 +41,30 @@ help:
 	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  Makefile$$/d'
 	@echo ""
 	@echo "Root shortcuts:"
-	@echo "  make lint         Run repo-level reporting checks"
-	@echo "  make lint-bash32  Run Bash 3.2 shell compatibility checks"
-	@echo "  make lint-shell   Run repo shell audit checks"
-	@echo "  make fmt          Apply repo-level auto-formatters"
-	@echo "  make check-version  Verify repo-level dependency/version guardrails"
-	@echo "  make release VERSION=0.3.0  Bump VERSION, run checks, and create a release commit"
-	@echo "  make release-dry-run VERSION=0.3.0  Preview the release commit flow"
-	@echo "  make release-tag VERSION=0.3.0  Create an annotated v-version tag from main"
-	@echo "  make lint-cilium-live  Validate deployed Cilium policies via the current kubeconfig"
-	@echo "  make lint-kyverno-live  Validate deployed Kyverno policy matches via the current kubeconfig"
-	@echo "  make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator  Run SonarQube on any local repo"
-	@echo "  make prereqs      Show the focused prerequisite entrypoints"
-	@echo "  make test         Show the focused test entrypoints"
-	@echo "  make apps         Show the app/frontend Makefiles"
-	@echo "  make kubernetes   Show the staged Kubernetes Makefiles"
-	@echo "  make docker       Show the Docker/Compose Makefiles"
-	@echo "  make makefiles    List every Makefile in the repo"
-	@echo "  make sdwan        Show the SD-WAN Makefiles"
+	@printf '%b\n' \
+		'make apps\tShow the app/frontend Makefiles' \
+		'make check-version\tVerify repo-level dependency/version guardrails' \
+		'make docker\tShow the Docker/Compose Makefiles' \
+		'make fmt\tApply repo-level auto-formatters' \
+		'make kubernetes\tShow the staged Kubernetes Makefiles' \
+		'make lint\tRun repo-level reporting checks' \
+		'make lint-bash32\tRun Bash 3.2 shell compatibility checks' \
+		'make lint-cilium-live\tValidate deployed Cilium policies via the current kubeconfig' \
+		'make lint-kyverno-live\tValidate deployed Kyverno policy matches via the current kubeconfig' \
+		'make lint-shell\tRun repo shell audit checks' \
+		'make makefiles\tList every Makefile in the repo' \
+		'make prereqs\tShow the focused prerequisite entrypoints' \
+		'make release VERSION=0.3.0\tBump VERSION, run checks, and create a release commit' \
+		'make release-dry-run VERSION=0.3.0\tPreview the release commit flow' \
+		'make release-tag VERSION=0.3.0\tCreate an annotated v-version tag from main' \
+		'make sdwan\tShow the SD-WAN Makefiles' \
+		'make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator\tRun SonarQube on any local repo' \
+		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer/SD-WAN' \
+		'make test\tShow the focused test entrypoints' \
+		'make tui\tOpen the Gum-based local runtime chooser when available' \
+	| while IFS=$$'\t' read -r command description; do \
+		printf '  %-60s %s\n' "$$command" "$$description"; \
+	done
 
 makefiles:
 	@echo "Makefiles in this repo:"
@@ -117,6 +133,12 @@ test:
 	@echo "  make -C kubernetes/lima test"
 	@echo "  make -C kubernetes/slicer test"
 	@echo "  make -C sd-wan/lima test"
+
+status:
+	@"$(PLATFORM_STATUS_SCRIPT)" --execute --output "$(STATUS_FORMAT)"
+
+tui:
+	@"$(PLATFORM_TUI_SCRIPT)" --execute
 
 lint:
 	@$(MAKE) --no-print-directory lint-yaml

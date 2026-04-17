@@ -82,15 +82,20 @@ shell_cli_maybe_execute_or_preview_summary usage "would check public and admin g
 [[ "${WAIT_SECONDS}" =~ ^[0-9]+$ ]] || fail "--wait-seconds must be an integer >= 0"
 [[ "${RETRY_INTERVAL_SECONDS}" =~ ^[0-9]+$ ]] || fail "--retry-interval-seconds must be an integer >= 0"
 
-for i in "${!TFVARS_FILES[@]}"; do
-  if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
-    TFVARS_FILES[i]="${STACK_DIR}/${TFVARS_FILES[i]}"
-  fi
-done
+if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
+  for i in "${!TFVARS_FILES[@]}"; do
+    if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
+      TFVARS_FILES[i]="${STACK_DIR}/${TFVARS_FILES[i]}"
+    fi
+  done
+fi
 
 tfvar_get() {
   local key="$2"
   local file value=""
+  if [[ "${#TFVARS_FILES[@]}" -eq 0 ]]; then
+    return 0
+  fi
   for file in "${TFVARS_FILES[@]}"; do
     [[ -n "${file}" && -f "${file}" ]] || continue
     value="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true)"
@@ -104,6 +109,10 @@ tfvar_list_entries() {
   local file raw=""
   local entry=""
   local -a values=()
+
+  if [[ "${#TFVARS_FILES[@]}" -eq 0 ]]; then
+    return 0
+  fi
 
   for file in "${TFVARS_FILES[@]}"; do
     [[ -n "${file}" && -f "${file}" ]] || continue
@@ -122,7 +131,9 @@ tfvar_list_entries() {
     done < <(printf '%s\n' "${raw}" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' || true)
   done
 
-  printf '%s\n' "${values[@]}"
+  if [[ "${#values[@]}" -gt 0 ]]; then
+    printf '%s\n' "${values[@]}"
+  fi
 }
 
 array_contains() {
@@ -308,6 +319,10 @@ probe_route_urls() {
   HTTPS_FAILURE_COUNT=0
   HTTPS_RESULTS=()
 
+  if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
   local entry host path url
   for entry in "${ROUTE_ENTRIES[@]}"; do
     host="${entry%%|*}"
@@ -451,7 +466,7 @@ if kubectl -n gateway-routes get httproute >/dev/null 2>&1; then
       while IFS= read -r hostname; do
         [[ -n "${hostname}" ]] || continue
         route_entry="${hostname}|${route_path}"
-        if ! array_contains "${route_entry}" "${ROUTE_ENTRIES[@]}"; then
+        if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]] || ! array_contains "${route_entry}" "${ROUTE_ENTRIES[@]}"; then
           ROUTE_ENTRIES+=("${route_entry}")
         fi
       done <<<"${hostnames_lines}"
@@ -488,17 +503,19 @@ else
     probe_route_urls
   done
 
-  for result in "${HTTPS_RESULTS[@]}"; do
-    status="${result%%|*}"
-    rest="${result#*|}"
-    url="${rest%%|*}"
-    detail="${rest#*|}"
-    if [[ "${status}" == "OK" ]]; then
-      ok "HTTPS ${url} -> ${detail}"
-    else
-      fail_soft "HTTPS ${url} -> ${detail}"
-    fi
-  done
+  if [[ "${#HTTPS_RESULTS[@]}" -gt 0 ]]; then
+    for result in "${HTTPS_RESULTS[@]}"; do
+      status="${result%%|*}"
+      rest="${result#*|}"
+      url="${rest%%|*}"
+      detail="${rest#*|}"
+      if [[ "${status}" == "OK" ]]; then
+        ok "HTTPS ${url} -> ${detail}"
+      else
+        fail_soft "HTTPS ${url} -> ${detail}"
+      fi
+    done
+  fi
 fi
 
 if [[ "${FAILURES}" -gt 0 ]]; then

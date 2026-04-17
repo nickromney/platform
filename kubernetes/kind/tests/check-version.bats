@@ -143,8 +143,8 @@ EOF
 @test "check-version classifies internal image refs and docker hub repositories" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     if image_ref_is_internal 'localhost:30090/platform/subnetcalc-api:latest'; then echo internal; else echo external; fi; \
-    if image_ref_is_internal 'ghcr.io/nginx/nginx-gateway-fabric:2.4.1'; then echo internal; else echo external; fi; \
-    printf '%s\n' \"\$(image_ref_registry 'gitea/act_runner:0.2.13')\" \"\$(image_ref_repository 'gitea/act_runner:0.2.13')\""
+    if image_ref_is_internal 'ghcr.io/nginx/nginx-gateway-fabric:2.5.1'; then echo internal; else echo external; fi; \
+    printf '%s\n' \"\$(image_ref_registry 'gitea/act_runner:0.4.0')\" \"\$(image_ref_repository 'gitea/act_runner:0.4.0')\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'internal\nexternal\ndocker.io\ngitea/act_runner')" ]
@@ -294,6 +294,60 @@ EOF
   [ "${status}" -eq 0 ]
   [ "$(cat "${call_counter}")" = "1" ]
   [ "${output}" = "$(printf '1.2.3\nlatest\n--\n1.2.3\nlatest')" ]
+}
+
+@test "check-version external image audit separates updates from skipped references" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(cat <<'EOF'
+apps/subnet-calculator/csharp-test/web-app/Dockerfile:10	mcr.microsoft.com/dotnet/aspnet:9.0	9.0	10.0.6	mcr.microsoft.com	update available
+terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml:46	__GRAFANA_IMAGE_REGISTRY__/__GRAFANA_IMAGE_REPOSITORY__:__GRAFANA_IMAGE_TAG__			docker.io	templated image reference
+docker/compose/compose.yml:35	dhi.io/dex:2.44.0-debian13			dhi.io	vendor-managed mirror
+apps/sentiment/compose.yml:100	quay.io/oauth2-proxy/oauth2-proxy:v7.15.2	v7.15.2	v7.15.2	quay.io	current
+EOF
+); render_external_image_audit_text \"\${rows}\""
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ updates\ available:\ 1 ]]
+  [[ "${output}" =~ non-updatable\ references:\ 2 ]]
+  [[ "${output}" =~ current\ hidden:\ 1 ]]
+  [[ "${output}" =~ Updates: ]]
+  [[ "${output}" =~ Skipped\ /\ non-updatable: ]]
+  [[ "${output}" =~ mcr\.microsoft\.com/dotnet/aspnet:9\.0\ \(9\.0\ \-\>\ 10\.0\.6,\ mcr\.microsoft\.com\) ]]
+  [[ "${output}" =~ templated\ image\ reference,\ docker\.io ]]
+  [[ "${output}" =~ vendor-managed\ mirror,\ dhi\.io ]]
+}
+
+@test "check-version does not report older discovered image tags as updates" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
+    \"\$(external_image_update_status '26.6.1' '23.0.4')\" \
+    \"\$(external_image_update_status 'v7.15.2' 'v7.14.2')\" \
+    \"\$(external_image_update_status '9.0' '10.0.6')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'current\ncurrent\nupdate available')" ]
+}
+
+@test "check-version resolves latest pinned image tags within the current release series" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
+    docker_hub_repo_tags() { printf '%s\n' '3.14.4-alpine3.23' '3.12.14-alpine3.23' '3.12.13-alpine3.23'; }; \
+    oci_registry_repo_tags() { printf '%s\n' '26.7.0' '26.6.2' '26.6.1'; }; \
+    printf '%s\n' \
+      \"\$(docker_hub_latest_tag_for_ref 'python:3.12.13-alpine3.23')\" \
+      \"\$(oci_registry_latest_tag_for_ref 'quay.io/keycloak/keycloak:26.6.1')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '3.12.14-alpine3.23\n26.6.2')" ]
+}
+
+@test "check-version treats floating track tags as unresolved rather than actionable updates" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
+    docker_hub_repo_tags() { printf '%s\n' '10.0.6' '9.0.9' '9.0'; }; \
+    oci_registry_repo_tags() { printf '%s\n' '4.1036.0' '4.1035.0'; }; \
+    printf '%s\n' \
+      \"\$(docker_hub_latest_tag_for_ref 'mcr.microsoft.com/dotnet/aspnet:9.0')\" \
+      \"\$(oci_registry_latest_tag_for_ref 'mcr.microsoft.com/azure-functions/python:4-python3.13')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '\n')" ]
 }
 
 @test "check-version parallel line mapper runs callbacks with bounded concurrency" {
