@@ -10,7 +10,7 @@ to determine application health, readiness, and liveness.
 
 from fastapi import APIRouter
 
-from ..cloudflare_ips import is_using_live_cloudflare_ranges
+from ..cloudflare_ips import is_using_live_cloudflare_ranges_cached
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
@@ -26,7 +26,7 @@ async def health_check():
         "status": "healthy",
         "service": "Subnet Calculator API (Container App)",
         "version": "1.0.0",
-        "using_live_cloudflare_ranges": is_using_live_cloudflare_ranges(),
+        "using_live_cloudflare_ranges": is_using_live_cloudflare_ranges_cached(),
     }
 
 

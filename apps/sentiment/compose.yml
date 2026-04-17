@@ -48,13 +48,13 @@ services:
       test:
         [
           "CMD-SHELL",
-          "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200\\|UP'",
+          "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200\\|UP'",
         ]
       interval: 10s
       timeout: 5s
-      # Keycloak can take 2-4 minutes to start on Apple Silicon when running linux/amd64.
+      # Keycloak startup can be substantially slower on cold linux/amd64 boots under emulation.
       retries: 30
-      start_period: 240s
+      start_period: 600s
 
   sentiment-api:
     <<: *app-runtime-hardening

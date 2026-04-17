@@ -294,6 +294,22 @@ package_json_direct_dependencies() {
     "${package_json}" 2>/dev/null || true
 }
 
+js_dependency_spec_status() {
+  local spec="$1"
+
+  case "${spec}" in
+    file:*|link:*|workspace:*)
+      printf 'local/path dependency\n'
+      ;;
+    git+*|github:*|http://*|https://*)
+      printf 'direct-url dependency\n'
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
 bun_lock_resolved_version() {
   local lockfile="$1"
   local dep="$2"
@@ -323,6 +339,29 @@ python_requirement_name() {
 
   name="$(printf '%s\n' "${requirement}" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//; s/\[.*$//; s/[<>=!~].*$//; s/[[:space:]].*$//' | xargs || true)"
   normalize_python_package_name "${name}"
+}
+
+python_requirement_status() {
+  local requirement="$1"
+  local trimmed=""
+
+  trimmed="$(printf '%s\n' "${requirement}" | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//' | xargs || true)"
+  if [ -z "${trimmed}" ] || [[ "${trimmed}" == \#* ]]; then
+    printf 'skip\n'
+    return 0
+  fi
+
+  case "${trimmed}" in
+    *" @ file:"*|*" @ ."*|*" @ ../"*|*" @ /"*)
+      printf 'local/path dependency\n'
+      ;;
+    *" @ git+"*|*" @ http://"*|*" @ https://"*)
+      printf 'direct-url dependency\n'
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
 }
 
 uv_lock_resolved_version() {
@@ -492,7 +531,11 @@ dependency_update_status() {
   local latest_overall="$3"
 
   if [ -z "${current}" ] || [ -z "${latest_overall}" ]; then
-    printf 'unknown/unresolvable\n'
+    if [ -z "${current}" ]; then
+      printf 'lockfile missing or unresolved\n'
+    else
+      printf 'latest lookup failed\n'
+    fi
     return 0
   fi
 
@@ -608,6 +651,93 @@ docker_hub_latest_tag_for_ref() {
   fi
 
   printf '\n'
+}
+
+oci_registry_latest_tag_for_ref() {
+  local image_ref="$1"
+  local current_tag registry repository suffix tags candidate_tags
+
+  current_tag="$(image_tag_from_ref "${image_ref}")"
+  if [ -z "${current_tag}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  registry="$(image_ref_registry "${image_ref}")"
+  repository="$(image_ref_repository "${image_ref}")"
+  tags="$(oci_registry_repo_tags "${registry}" "${repository}" 2>/dev/null || true)"
+  if [ -z "${tags}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  suffix="$(tag_suffix_after_version_prefix "${current_tag}")"
+  candidate_tags="$(
+    while IFS= read -r tag; do
+      [ -n "${tag}" ] || continue
+      if [ -n "$(tag_version_prefix "${tag}")" ] && [ "$(tag_suffix_after_version_prefix "${tag}")" = "${suffix}" ]; then
+        printf '%s\n' "${tag}"
+      fi
+    done <<<"${tags}"
+  )"
+
+  if [ -n "${candidate_tags}" ]; then
+    printf '%s\n' "${candidate_tags}" | sort -V | tail -n 1
+    return 0
+  fi
+
+  if printf '%s\n' "${tags}" | grep -Fx "latest" >/dev/null 2>&1; then
+    printf 'latest\n'
+    return 0
+  fi
+
+  printf '\n'
+}
+
+image_ref_has_template_placeholders() {
+  local image_ref="$1"
+
+  case "${image_ref}" in
+    *'${'*|__*__/*|*'__'*'__'*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+image_status_when_latest_unknown() {
+  local image_ref="$1"
+  local registry="$2"
+  local availability=""
+
+  if image_ref_has_template_placeholders "${image_ref}"; then
+    printf 'templated image reference\n'
+    return 0
+  fi
+
+  case "${registry}" in
+    dhi.io)
+      printf 'vendor-managed mirror\n'
+      return 0
+      ;;
+  esac
+
+  availability="$(image_ref_availability "${image_ref}")"
+  case "${availability}" in
+    available)
+      printf 'current tag verified; latest unresolved\n'
+      ;;
+    auth-required)
+      printf 'registry auth required\n'
+      ;;
+    missing)
+      printf 'current tag missing from registry\n'
+      ;;
+    *)
+      printf 'latest lookup failed\n'
+      ;;
+  esac
 }
 
 collect_declared_image_refs() {
@@ -757,6 +887,75 @@ docker_hub_repo_tags() {
   done
 
   printf "%s" "${tags}"
+}
+
+parse_www_authenticate_bearer() {
+  local header_file="$1"
+
+  python3 - "${header_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="ignore")
+match = re.search(r'^[Ww][Ww][Ww]-[Aa]uthenticate:\s*Bearer\s+(.*)$', text, re.MULTILINE)
+if not match:
+    raise SystemExit(1)
+
+params = {}
+for key, value in re.findall(r'([A-Za-z]+)="([^"]*)"', match.group(1)):
+    params[key.lower()] = value
+
+print(f'{params.get("realm", "")}\t{params.get("service", "")}\t{params.get("scope", "")}')
+PY
+}
+
+oci_registry_repo_tags() {
+  local registry="$1"
+  local repository="$2"
+  local url="https://${registry}/v2/${repository}/tags/list?n=1000"
+  local headers_file body_file realm service scope token_url token_payload token
+
+  headers_file="$(mktemp)"
+  body_file="$(mktemp)"
+
+  if curl -fsSL -D "${headers_file}" "${url}" -o "${body_file}" 2>/dev/null; then
+    jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
+    rm -f "${headers_file}" "${body_file}"
+    return 0
+  fi
+
+  if ! IFS=$'\t' read -r realm service scope < <(parse_www_authenticate_bearer "${headers_file}" 2>/dev/null || true); then
+    rm -f "${headers_file}" "${body_file}"
+    return 1
+  fi
+
+  rm -f "${body_file}"
+  if [ -z "${realm}" ]; then
+    rm -f "${headers_file}"
+    return 1
+  fi
+
+  if [ -z "${scope}" ]; then
+    scope="repository:${repository}:pull"
+  fi
+
+  token_url="${realm}?service=$(uri_encode "${service}")&scope=$(uri_encode "${scope}")"
+  token_payload="$(curl -fsSL "${token_url}" 2>/dev/null || true)"
+  token="$(jq -r '.token // .access_token // empty' <<<"${token_payload}" 2>/dev/null | xargs || true)"
+  if [ -z "${token}" ]; then
+    rm -f "${headers_file}"
+    return 1
+  fi
+
+  body_file="$(mktemp)"
+  if ! curl -fsSL -H "Authorization: Bearer ${token}" "${url}" -o "${body_file}" 2>/dev/null; then
+    rm -f "${headers_file}" "${body_file}"
+    return 1
+  fi
+
+  jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
+  rm -f "${headers_file}" "${body_file}"
 }
 
 kindest_node_latest_tag() {
@@ -1562,16 +1761,27 @@ check_app_yaml_tfvar_drift() {
 }
 
 emit_app_dependency_rows() {
-  local package_json app_dir app_label cooldown_seconds dep _spec current latest_overall latest_eligible status
-  local pyproject cutoff_iso requirement dep_name uv_lock
+  local package_json app_dir app_label cooldown_seconds dep spec current latest_overall latest_eligible status
+  local pyproject cutoff_iso requirement dep_name uv_lock requirement_status spec_status
 
   while IFS= read -r package_json; do
     app_dir="$(dirname "${package_json}")"
     app_label="${app_dir#"${REPO_ROOT}/"}"
     cooldown_seconds="$(js_dependency_cooldown_seconds "${app_dir}")"
 
-    while IFS=$'\t' read -r dep _spec; do
+    while IFS=$'\t' read -r dep spec; do
       [ -n "${dep}" ] || continue
+      spec_status="$(js_dependency_spec_status "${spec}")"
+      if [ -n "${spec_status}" ]; then
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "${app_label}" \
+          "${dep}" \
+          "${spec:-}" \
+          "" \
+          "" \
+          "${spec_status}"
+        continue
+      fi
       current="$(bun_lock_resolved_version "${app_dir}/bun.lock" "${dep}")"
       latest_overall="$(npm_latest_overall_version "${dep}")"
       latest_eligible="$(npm_latest_eligible_version "${dep}" "${cooldown_seconds}")"
@@ -1609,8 +1819,22 @@ emit_app_dependency_rows() {
 
     while IFS= read -r requirement; do
       [ -n "${requirement}" ] || continue
+      requirement_status="$(python_requirement_status "${requirement}")"
+      if [ "${requirement_status}" = "skip" ]; then
+        continue
+      fi
       dep_name="$(python_requirement_name "${requirement}")"
       [ -n "${dep_name}" ] || continue
+      if [ -n "${requirement_status}" ]; then
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "${app_label}" \
+          "${dep_name}" \
+          "${requirement}" \
+          "" \
+          "" \
+          "${requirement_status}"
+        continue
+      fi
       current="$(uv_lock_resolved_version "${uv_lock}" "${dep_name}")"
       latest_overall="$(pypi_latest_overall_version "${dep_name}")"
       latest_eligible="$(pypi_latest_eligible_version "${dep_name}" "${cutoff_iso}")"
@@ -1666,12 +1890,19 @@ emit_external_image_rows() {
     current_tag="$(image_tag_from_ref "${image_ref}")"
     registry="$(image_ref_registry "${image_ref}")"
     latest_tag=""
-    if [ "${registry}" = "docker.io" ]; then
-      latest_tag="$(docker_hub_latest_tag_for_ref "${image_ref}")"
-    fi
+    case "${registry}" in
+      docker.io)
+        latest_tag="$(docker_hub_latest_tag_for_ref "${image_ref}")"
+        ;;
+      ghcr.io|quay.io|mcr.microsoft.com)
+        latest_tag="$(oci_registry_latest_tag_for_ref "${image_ref}")"
+        ;;
+    esac
 
-    if [ -z "${current_tag}" ] || [ -z "${latest_tag}" ]; then
-      status="unknown/unresolvable"
+    if [ -z "${current_tag}" ]; then
+      status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
+    elif [ -z "${latest_tag}" ]; then
+      status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
     elif [ "${current_tag}" = "${latest_tag}" ]; then
       status="current"
     else
@@ -1686,6 +1917,134 @@ emit_external_image_rows() {
       "${registry}" \
       "${status}"
   done < <(collect_declared_image_refs | awk -F'\t' '!seen[$2]++')
+}
+
+render_dependency_audit_text() {
+  local rows="$1"
+
+  awk -F $'\t' '
+    function print_summary(app) {
+      if (app == "") {
+        return
+      }
+
+      printf "%s\n", app
+      printf "  updates: %d, cooldown: %d, local: %d, direct-url: %d, unresolved: %d, current: %d\n",
+        updates[app] + 0,
+        cooldown[app] + 0,
+        localdep[app] + 0,
+        directurl[app] + 0,
+        unresolved[app] + 0,
+        current[app] + 0
+
+      for (i = 1; i <= detail_count[app]; i++) {
+        print "  - " detail[app, i]
+      }
+      print ""
+    }
+
+    {
+      app = $1
+      dep = $2
+      current_value = $3
+      eligible = $4
+      latest = $5
+      status = $6
+
+      if (!(app in seen)) {
+        order[++app_count] = app
+        seen[app] = 1
+      }
+
+      if (status == "current") {
+        current[app]++
+        next
+      }
+
+      if (status == "update available") {
+        updates[app]++
+        detail[app, ++detail_count[app]] = dep ": " current_value " -> " eligible " (latest " latest ")"
+        next
+      }
+
+      if (status == "cooldown active") {
+        cooldown[app]++
+        detail[app, ++detail_count[app]] = dep ": " current_value " held by cooldown; latest " latest
+        next
+      }
+
+      if (status == "local/path dependency") {
+        localdep[app]++
+        detail[app, ++detail_count[app]] = dep ": " current_value " (" status ")"
+        next
+      }
+
+      if (status == "direct-url dependency") {
+        directurl[app]++
+        detail[app, ++detail_count[app]] = dep ": " current_value " (" status ")"
+        next
+      }
+
+      unresolved[app]++
+      detail[app, ++detail_count[app]] = dep ": " status
+    }
+
+    END {
+      for (i = 1; i <= app_count; i++) {
+        print_summary(order[i])
+      }
+    }
+  ' <<<"${rows}"
+}
+
+render_external_image_audit_text() {
+  local rows="$1"
+
+  awk -F $'\t' '
+    {
+      source = $1
+      image = $2
+      current = $3
+      latest = $4
+      registry = $5
+      status = $6
+
+      if (status == "current") {
+        current_count++
+        next
+      }
+
+      if (status == "update available") {
+        update_count++
+        details[++detail_count] = "  - " source ": " image " (" current " -> " latest ", " registry ")"
+        next
+      }
+
+      other_count++
+      details[++detail_count] = "  - " source ": " image " [" status ", " registry "]"
+    }
+
+    END {
+      if (update_count > 0) {
+        printf "updates available: %d\n", update_count
+      } else {
+        print "updates available: 0"
+      }
+      if (other_count > 0) {
+        printf "non-updatable references: %d\n", other_count
+      } else {
+        print "non-updatable references: 0"
+      }
+      printf "current hidden: %d\n\n", current_count + 0
+
+      for (i = 1; i <= detail_count; i++) {
+        print details[i]
+      }
+      if (detail_count > 0) {
+        print ""
+      }
+    }
+  ' <<<"${rows}"
 }
 
 emit_json_report() {
@@ -2172,11 +2531,7 @@ main() {
     warn "No app dependency roots discovered"
     echo ""
   else
-    printf "%s\n" \
-      $'App\tDependency\tCurrent\tLatest eligible\tLatest overall\tStatus' \
-      $'---\t----------\t-------\t---------------\t--------------\t------' \
-      "${dependency_rows}" | render_tsv_table
-    echo ""
+    render_dependency_audit_text "${dependency_rows}"
   fi
 
   section "External workload image audit"
@@ -2184,11 +2539,7 @@ main() {
     warn "No external workload images discovered"
     echo ""
   else
-    printf "%s\n" \
-      $'Source\tImage\tCurrent\tLatest\tRegistry\tStatus' \
-      $'------\t-----\t-------\t------\t--------\t------' \
-      "${image_audit_rows}" | render_tsv_table
-    echo ""
+    render_external_image_audit_text "${image_audit_rows}"
   fi
 
   if [ -n "${CODE_ARGOCD_IMAGE_REF}" ] && [ "${CODE_ARGOCD_IMAGE_REPO}" != "quay.io/argoproj/argocd" ]; then

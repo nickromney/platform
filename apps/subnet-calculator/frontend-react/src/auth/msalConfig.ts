@@ -17,7 +17,6 @@ export const msalConfig: Configuration = {
   },
   cache: {
     cacheLocation: 'localStorage', // Store tokens in localStorage
-    storeAuthStateInCookie: false, // Set to true for IE11 or Edge
   },
   system: {
     loggerOptions: {

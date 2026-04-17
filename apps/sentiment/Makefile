@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test check-prerequisites up up-tls down logs ps smoke urls
+MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites up up-tls down logs ps smoke urls
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -13,7 +13,7 @@ KEYCLOAK_URL := http://localhost:8300
 COMPOSE := $(COMPOSE_CMD) -f compose.yml
 COMPOSE_TLS := $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
 
-.PHONY: help prereqs test check-prerequisites build up up-tls down logs ps smoke urls
+.PHONY: help prereqs test update check-prerequisites build up up-tls down logs ps smoke urls
 
 ##@ Setup
 prereqs: ## Check local prerequisites
@@ -61,6 +61,11 @@ smoke: check-prerequisites ## Run the local compose smoke test
 ##@ Test
 test: ## Run the local compose smoke test
 	@$(MAKE) --no-print-directory smoke
+
+update: ## Update Bun dependency locks for each sentiment dependency root
+	@cd api-sentiment && bun update --latest
+	@cd frontend-react-vite/sentiment-auth-ui && bun update --latest
+	@cd frontend-typescript-vite && bun update --latest
 
 ##@ Cleanup
 down: check-prerequisites ## Stop the compose stack

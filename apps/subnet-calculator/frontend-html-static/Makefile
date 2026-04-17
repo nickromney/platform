@@ -1,10 +1,10 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs install serve test test-docker
+MAKE_KNOWN_GOALS := help prereqs install update serve test test-docker
 MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
 
 include ../../../mk/common.mk
 
-.PHONY: help prereqs install serve test test-docker
+.PHONY: help prereqs install update serve test test-docker
 
 ##@ Workflow
 test: ## Run Playwright tests
@@ -20,6 +20,10 @@ prereqs: ## Install local frontend prerequisites
 
 install: ## Install dependencies
 	@uv sync --frozen --extra dev
+
+update: ## Update uv lockfile and sync dev dependencies
+	@uv lock --upgrade
+	@uv sync --group dev
 
 ##@ Run
 serve: ## Serve static files (requires Python http.server or nginx)

@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.routers import health
 
 
 @pytest.fixture
@@ -30,6 +31,24 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
+
+
+def test_health_endpoint_uses_cached_cloudflare_status(client, monkeypatch):
+    """Health checks must not trigger outbound Cloudflare fetches."""
+    called = False
+
+    def fake_cached_status():
+        nonlocal called
+        called = True
+        return False
+
+    monkeypatch.setattr(health, "is_using_live_cloudflare_ranges_cached", fake_cached_status)
+
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json()["using_live_cloudflare_ranges"] is False
+    assert called is True
 
 
 def test_health_ready_endpoint(client):

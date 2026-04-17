@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from './App.jsx'
 
+const originalFetch = globalThis.fetch
+
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -15,6 +17,11 @@ function jsonResponse(body, status = 200) {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  if (originalFetch === undefined) {
+    delete globalThis.fetch
+  } else {
+    globalThis.fetch = originalFetch
+  }
 })
 
 describe('sentiment-auth-ui', () => {
@@ -37,7 +44,7 @@ describe('sentiment-auth-ui', () => {
       }
       throw new Error(`Unhandled request: ${String(url)}`)
     })
-    vi.stubGlobal('fetch', fetchMock)
+    globalThis.fetch = fetchMock
 
     render(<App />)
 
@@ -47,7 +54,7 @@ describe('sentiment-auth-ui', () => {
   })
 
   it('populates the textarea from the sample buttons', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
+    globalThis.fetch = vi.fn(async (url) => {
       if (url === '/oauth2/userinfo') {
         return jsonResponse({ email: 'demo@dev.test' })
       }
@@ -55,7 +62,7 @@ describe('sentiment-auth-ui', () => {
         return jsonResponse({ items: [] })
       }
       throw new Error(`Unhandled request: ${String(url)}`)
-    }))
+    })
 
     render(<App />)
 
@@ -100,7 +107,7 @@ describe('sentiment-auth-ui', () => {
       }
       throw new Error(`Unhandled request: ${String(url)}`)
     })
-    vi.stubGlobal('fetch', fetchMock)
+    globalThis.fetch = fetchMock
 
     render(<App />)
 
