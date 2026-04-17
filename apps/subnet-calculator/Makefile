@@ -5,6 +5,8 @@ MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites check-doc
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
+  build-compose-frontends start-compose-backend-container start-compose-happy \
+  start-compose-frontend-static start-compose-frontend-flask-container start-compose-frontend-vite start-compose-frontend-react start-compose-full \
   start-swa-04 start-swa-05 start-swa-06 start-swa-backends start-swa-all \
   test-bruno-direct test-bruno-compose test-bruno-swa test-bruno-swa-all \
   test-bruno-direct-full test-bruno-compose-full test-bruno-swa-full
@@ -18,12 +20,15 @@ include ../../mk/compose.mk
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
+  build-compose-frontends start-compose-backend-container start-compose-happy \
+  start-compose-frontend-static start-compose-frontend-flask-container start-compose-frontend-vite start-compose-frontend-react start-compose-full \
   start-swa-04 start-swa-05 start-swa-06 start-swa-backends start-swa-all \
   test-bruno-direct test-bruno-compose test-bruno-swa test-bruno-swa-all \
   test-bruno-direct-full test-bruno-compose-full test-bruno-swa-full
 
 DEFAULT_STACK_URL := http://localhost:8003
 DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
+CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/docs
 DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000 STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 VENDOR_APIM_SIMULATOR_SCRIPT := ./scripts/vendor-apim-simulator.sh
 VENDOR_APIM_SIMULATOR_ARGS = \
@@ -169,13 +174,52 @@ wait-direct-services: ## Wait for the direct APIs to become healthy
 
 ##@ Compose
 
-start-compose-all: check-prerequisites ## Start all compose stacks
-	@echo "Starting all compose stacks..."
-	@echo "  compose-01 (Flask + Azure Function):           http://localhost:8000"
-	@echo "  compose-02 (Static HTML + Container App):      http://localhost:8001"
-	@echo "  compose-03 (Flask + Container App):            http://localhost:8002"
-	@echo "  compose-04 (TypeScript Vite + Container App):  http://localhost:8003"
-	$(COMPOSE_CMD) up
+build-compose-frontends: check-prerequisites ## Prebuild the container-app frontend images for faster frontend swaps
+	@echo "Prebuilding container-app frontend images..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build frontend-html-static frontend-python-flask-container-app frontend-typescript-vite frontend-react
+
+start-compose-backend-container: check-prerequisites ## Start only the shared container-app backend on port 8090
+	@echo "Starting shared container-app backend (port 8090)..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d api-fastapi-container-app
+	@echo "API docs: $(CONTAINER_APP_BACKEND_URL)"
+
+start-compose-happy: start-compose-backend-container ## Start the fast happy path: shared backend + TypeScript Vite frontend
+	@echo "Starting happy path frontend: TypeScript Vite (port 8003)..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --no-deps frontend-typescript-vite
+	@echo "Subnet Calculator URL: http://localhost:8003"
+	@echo "API docs:              $(CONTAINER_APP_BACKEND_URL)"
+	@echo "Workflow:              backend stays warm; swap frontends with start-compose-frontend-*"
+
+start-compose-frontend-static: start-compose-backend-container ## Swap in the static HTML frontend against the shared container-app backend
+	@echo "Starting static HTML frontend (port 8001) against the warm container-app backend..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --no-deps frontend-html-static
+	@echo "Static Frontend URL: http://localhost:8001"
+	@echo "API docs:            $(CONTAINER_APP_BACKEND_URL)"
+
+start-compose-frontend-flask-container: start-compose-backend-container ## Swap in the Flask frontend against the shared container-app backend
+	@echo "Starting Flask frontend (port 8002) against the warm container-app backend..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --no-deps frontend-python-flask-container-app
+	@echo "Flask Frontend URL: http://localhost:8002"
+	@echo "API docs:           $(CONTAINER_APP_BACKEND_URL)"
+
+start-compose-frontend-vite: start-compose-backend-container ## Swap in the TypeScript Vite frontend against the shared container-app backend
+	@echo "Starting TypeScript Vite frontend (port 8003) against the warm container-app backend..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --no-deps frontend-typescript-vite
+	@echo "Vite Frontend URL: http://localhost:8003"
+	@echo "API docs:          $(CONTAINER_APP_BACKEND_URL)"
+
+start-compose-frontend-react: start-compose-backend-container ## Swap in the React frontend against the shared container-app backend
+	@echo "Starting React frontend (port 8004) against the warm container-app backend..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --no-deps frontend-react
+	@echo "React Frontend URL: http://localhost:8004"
+	@echo "API docs:           $(CONTAINER_APP_BACKEND_URL)"
+
+start-compose-full: check-prerequisites ## Start the full demo/integration topology with function, OIDC, and mock-easyauth profiles
+	@echo "Starting full subnet-calculator compose topology..."
+	@echo "  baseline container-app family + function family + OIDC/APIM + mock-easyauth"
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) --profile function-family --profile oidc --profile mock-easyauth up -d
+
+start-compose-all: start-compose-full ## Alias for the full demo/integration topology
 
 start-compose-01: check-prerequisites ## Start compose-01 on port 8000
 	@echo "Starting compose-01: Flask + Azure Function (port 8000)..."

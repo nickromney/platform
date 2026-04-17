@@ -37,7 +37,7 @@ skip_or_fail() {
 shell_cli_handle_standard_no_args usage "would sync preload images from ${IMAGE_LIST_FILE} into ${CACHE_PUSH_HOST}" "$@"
 
 command -v curl >/dev/null 2>&1 || skip_or_fail "curl not found"
-command -v docker >/dev/null 2>&1 || skip_or_fail "docker not found"
+registry_require_tools
 
 if ! docker info >/dev/null 2>&1; then
   skip_or_fail "docker daemon not reachable"
@@ -45,43 +45,7 @@ fi
 
 [ -f "${IMAGE_LIST_FILE}" ] || skip_or_fail "image list not found: ${IMAGE_LIST_FILE}"
 [ -f "${PRELOAD_IMAGES_SCRIPT}" ] || skip_or_fail "preload helper not found: ${PRELOAD_IMAGES_SCRIPT}"
-curl -fsS "http://${CACHE_PUSH_HOST}/v2/" >/dev/null 2>&1 || skip_or_fail "local cache not reachable at http://${CACHE_PUSH_HOST}/v2/"
-
-tag_exists_in_cache() {
-  local repo="$1"
-  local tag="$2"
-  local payload
-
-  payload="$(curl -fsS "http://${CACHE_PUSH_HOST}/v2/${repo}/tags/list" 2>/dev/null || true)"
-  [[ -n "${payload}" ]] && printf '%s' "${payload}" | grep -F "\"${tag}\"" >/dev/null 2>&1
-}
-
-cache_repo_and_tag() {
-  local image_ref="$1"
-  local ref_without_digest="${image_ref%%@*}"
-  local ref_without_tag="${ref_without_digest}"
-  local repo_path=""
-  local tag="latest"
-  local first_component=""
-
-  if [[ "${ref_without_digest##*/}" == *:* ]]; then
-    tag="${ref_without_digest##*:}"
-    ref_without_tag="${ref_without_digest%:*}"
-  fi
-
-  if [[ "${ref_without_tag}" != */* ]]; then
-    repo_path="library/${ref_without_tag}"
-  else
-    first_component="${ref_without_tag%%/*}"
-    if [[ "${first_component}" == *.* || "${first_component}" == *:* || "${first_component}" == "localhost" ]]; then
-      repo_path="${ref_without_tag#*/}"
-    else
-      repo_path="${ref_without_tag}"
-    fi
-  fi
-
-  printf '%s\t%s\n' "${repo_path}" "${tag}"
-}
+registry_assert_reachable "${CACHE_PUSH_HOST}" || skip_or_fail "local cache not reachable at http://${CACHE_PUSH_HOST}/v2/"
 
 mirror_remote_image() {
   local source_ref="$1"
@@ -89,10 +53,10 @@ mirror_remote_image() {
   local tag=""
   local cache_ref=""
 
-  IFS=$'\t' read -r repo tag < <(cache_repo_and_tag "${source_ref}")
+  IFS=$'\t' read -r repo tag < <(registry_cache_repo_and_tag "${source_ref}")
   cache_ref="${CACHE_PUSH_HOST}/${repo}:${tag}"
 
-  if tag_exists_in_cache "${repo}" "${tag}"; then
+  if registry_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${tag}"; then
     echo "OK   cached ${cache_ref}"
     return 0
   fi

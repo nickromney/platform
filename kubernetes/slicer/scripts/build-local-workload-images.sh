@@ -27,12 +27,8 @@ EOF
 shell_cli_handle_standard_no_args usage "would build and push Slicer workload images into ${CACHE_PUSH_HOST} with tag ${TAG}" "$@"
 
 command -v curl >/dev/null 2>&1 || { echo "build-local-workload-images: curl not found" >&2; exit 1; }
-command -v docker >/dev/null 2>&1 || { echo "build-local-workload-images: docker not found" >&2; exit 1; }
-
-curl -fsS "http://${CACHE_PUSH_HOST}/v2/" >/dev/null 2>&1 || {
-  echo "build-local-workload-images: local cache not reachable at http://${CACHE_PUSH_HOST}/v2/" >&2
-  exit 1
-}
+registry_require_tools
+registry_assert_reachable "${CACHE_PUSH_HOST}"
 
 commit_tag="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"
 
@@ -43,15 +39,6 @@ docker_build() {
   fi
 
   DOCKER_BUILDKIT=1 docker build "$@"
-}
-
-tag_exists_in_cache() {
-  local repo="$1"
-  local tag="$2"
-  local payload
-
-  payload="$(curl -fsS "http://${CACHE_PUSH_HOST}/v2/${repo}/tags/list" 2>/dev/null || true)"
-  [[ -n "${payload}" ]] && printf '%s' "${payload}" | grep -F "\"${tag}\"" >/dev/null 2>&1
 }
 
 build_and_push() {
@@ -72,8 +59,8 @@ build_and_push() {
 
   if [ "${FORCE_REBUILD}" != "1" ] \
     && [ -n "${commit_tag}" ] \
-    && tag_exists_in_cache "${repo}" "${commit_tag}" \
-    && tag_exists_in_cache "${repo}" "${TAG}"; then
+    && registry_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${commit_tag}" \
+    && registry_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${TAG}"; then
     echo "OK   cached ${commit_ref}"
     return 0
   fi

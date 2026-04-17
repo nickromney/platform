@@ -81,6 +81,30 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "returns success when kind get clusters times out" {
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "get" ]]; then
+  sleep 10
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/kind"
+
+  cat >"${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run env KIND_GET_CLUSTERS_TIMEOUT_SECONDS=1 "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "keeps the split kubeconfig canonical and removes stale global repo context by default" {
   helper_log="${BATS_TEST_TMPDIR}/helper.log"
   global_kubeconfig="${BATS_TEST_TMPDIR}/config"

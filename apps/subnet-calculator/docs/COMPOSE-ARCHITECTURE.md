@@ -7,7 +7,9 @@ Kubernetes/Terraform platform stack.
 ## Scope
 
 - [`compose.yml`](../compose.yml) is the main local topology and defines the
-  numbered local stacks.
+  numbered local stacks. By default it now starts only the baseline
+  container-app family; the heavier function, OIDC, and mock Easy Auth families
+  are opt-in via compose profiles.
 - [`compose.tls.yml`](../compose.tls.yml) adds a TLS 1.3 front door in front of
   one compose slice.
 - [`compose.azurite.yml`](../compose.azurite.yml) adds local Azure Storage
@@ -19,7 +21,7 @@ Kubernetes/Terraform platform stack.
 
 | File | Role |
 | --- | --- |
-| [`compose.yml`](../compose.yml) | Main multi-stack local runtime. |
+| [`compose.yml`](../compose.yml) | Main local runtime. Default `compose up` starts the baseline container-app family; `function-family`, `oidc`, and `mock-easyauth` profiles opt into the heavier slices. |
 | [`compose.tls.yml`](../compose.tls.yml) | Optional TLS 1.3 overlay, currently wired for the static frontend plus container-app API path. |
 | [`compose.azurite.yml`](../compose.azurite.yml) | Optional Azurite overlay for the Function-based paths. |
 | `*/compose.yml` | Narrow per-component stacks used for focused local work. |

@@ -11,6 +11,10 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"update"* ]]
   [[ "${output}" == *"vendor-apim-simulator"* ]]
+  [[ "${output}" == *"start-compose-happy"* ]]
+  [[ "${output}" == *"start-compose-backend-container"* ]]
+  [[ "${output}" == *"start-compose-frontend-react"* ]]
+  [[ "${output}" == *"start-compose-full"* ]]
 }
 
 @test "subnet-calculator vendor-apim-simulator delegates to the vendoring script" {
@@ -34,4 +38,38 @@ setup() {
   [[ "${output}" == *"cd api-fastapi-container-app && uv lock --upgrade && uv sync --extra dev"* ]]
   [[ "${output}" == *"make --no-print-directory -C frontend-html-static update"* ]]
   [[ "${output}" == *"make --no-print-directory -C frontend-python-flask update"* ]]
+}
+
+@test "subnet-calculator happy path keeps the backend warm and swaps frontends without deps" {
+  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" start-compose-happy
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"up -d api-fastapi-container-app"* ]]
+  [[ "${output}" == *"up -d --no-deps frontend-typescript-vite"* ]]
+
+  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" start-compose-frontend-react
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"up -d api-fastapi-container-app"* ]]
+  [[ "${output}" == *"up -d --no-deps frontend-react"* ]]
+}
+
+@test "subnet-calculator full compose topology is explicit and profile-gated" {
+  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" start-compose-full
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"--profile function-family"* ]]
+  [[ "${output}" == *"--profile oidc"* ]]
+  [[ "${output}" == *"--profile mock-easyauth"* ]]
+  [[ "${output}" == *"up -d"* ]]
+
+  run bash -lc "cd '${REPO_ROOT}' && \
+    grep -qE '^  api-fastapi-azure-function:$' apps/subnet-calculator/compose.yml && \
+    grep -A3 '^  api-fastapi-azure-function:$' apps/subnet-calculator/compose.yml | grep -q 'function-family' && \
+    grep -qE '^  keycloak:$' apps/subnet-calculator/compose.yml && \
+    grep -A3 '^  keycloak:$' apps/subnet-calculator/compose.yml | grep -q 'oidc' && \
+    grep -qE '^  easyauth-router:$' apps/subnet-calculator/compose.yml && \
+    grep -A3 '^  easyauth-router:$' apps/subnet-calculator/compose.yml | grep -q 'mock-easyauth'"
+
+  [ "${status}" -eq 0 ]
 }

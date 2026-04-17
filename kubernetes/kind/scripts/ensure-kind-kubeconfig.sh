@@ -13,6 +13,7 @@ GLOBAL_KUBECONFIG_PATH="${GLOBAL_KUBECONFIG_PATH:-$HOME/.kube/config}"
 KUBECONFIG_HELPER="${KUBECONFIG_HELPER:-${REPO_ROOT}/terraform/kubernetes/scripts/manage-kubeconfig.sh}"
 MERGE_KUBECONFIG_TO_DEFAULT="${MERGE_KUBECONFIG_TO_DEFAULT:-0}"
 WAIT_SECONDS="${KIND_KUBECONFIG_LOCK_WAIT_SECONDS:-15}"
+KIND_GET_CLUSTERS_TIMEOUT_SECONDS="${KIND_GET_CLUSTERS_TIMEOUT_SECONDS:-5}"
 DEVCONTAINER_HOST_ALIAS="${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}"
 DEVCONTAINER_TLS_SERVER_NAME="${KIND_DEVCONTAINER_TLS_SERVER_NAME:-localhost}"
 
@@ -31,6 +32,33 @@ shell_cli_handle_standard_no_args usage "would export the current kind kubeconfi
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+kind_get_clusters_safe() {
+  local timeout="${KIND_GET_CLUSTERS_TIMEOUT_SECONDS}"
+  local tmp pid start elapsed rc
+
+  tmp="$(mktemp)"
+  kind get clusters >"${tmp}" 2>/dev/null &
+  pid=$!
+  start="$(date +%s)"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    elapsed=$(( $(date +%s) - start ))
+    if [ "${elapsed}" -ge "${timeout}" ]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      rm -f "${tmp}"
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}"
+  rc=$?
+  cat "${tmp}"
+  rm -f "${tmp}"
+  return "${rc}"
 }
 
 run_with_lock_retry() {
@@ -94,7 +122,7 @@ if ! have_cmd kind || ! have_cmd kubectl; then
   exit 0
 fi
 
-if ! kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
+if ! kind_get_clusters_safe 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
   exit 0
 fi
 

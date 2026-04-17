@@ -1,5 +1,12 @@
-# Compose configuration for Subnet Calculator - All Services
+# Compose configuration for Subnet Calculator
 # Works with both podman-compose and docker compose
+#
+# Default `compose up` now starts only the baseline container-app family.
+# The heavier function/JWT, OIDC/APIM/oauth2-proxy, and mock Easy Auth services
+# are opt-in via compose profiles:
+#   --profile function-family
+#   --profile oidc
+#   --profile mock-easyauth
 #
 # Services:
 #   - api-fastapi-azure-function: Azure Function backend (FastAPI via AsgiMiddleware)
@@ -16,7 +23,9 @@
 #   - frontend-react-keycloak: React SPA with Keycloak OIDC authentication
 #
 # Usage:
-#   podman-compose up                           # Start all services
+#   podman-compose up                           # Start the baseline container-app family
+#   podman-compose --profile function-family --profile oidc --profile mock-easyauth up
+#                                             # Start the full demo/integration topology
 #   podman-compose up api-fastapi-container-app frontend-html-static                  # local-stack-01
 #   podman-compose up api-fastapi-container-app frontend-python-flask-container-app   # local-stack-02
 #   podman-compose up api-fastapi-azure-function frontend-python-flask                # local-stack-03
@@ -103,6 +112,7 @@ x-nginx-runtime-hardening: &nginx-runtime-hardening
 
 services:
   api-fastapi-azure-function:
+    profiles: ["function-family"]
     build:
       context: ./api-fastapi-azure-function
       dockerfile: Dockerfile
@@ -134,6 +144,7 @@ services:
       retries: 3
 
   frontend-python-flask:
+    profiles: ["function-family"]
     build:
       context: ./frontend-python-flask
       dockerfile: Dockerfile
@@ -223,6 +234,7 @@ services:
         condition: service_healthy
 
   frontend-typescript-vite-jwt:
+    profiles: ["function-family"]
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
@@ -256,6 +268,7 @@ services:
         condition: service_healthy
 
   frontend-react-jwt:
+    profiles: ["function-family"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -273,6 +286,7 @@ services:
         condition: service_healthy
 
   frontend-react-msal:
+    profiles: ["function-family"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -292,6 +306,7 @@ services:
         condition: service_healthy
 
   frontend-react-server-jwt:
+    profiles: ["function-family"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile.server
@@ -312,6 +327,7 @@ services:
         condition: service_healthy
 
   frontend-react-proxy:
+    profiles: ["function-family"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile.server
@@ -342,6 +358,7 @@ services:
   # -----------------------------------------------------------------------------
 
   keycloak:
+    profiles: ["oidc"]
     image: quay.io/keycloak/keycloak:26.4.7
     ports:
       - "8300:8080"
@@ -376,6 +393,7 @@ services:
       start_period: 240s
 
   api-fastapi-keycloak:
+    profiles: ["oidc"]
     build:
       context: ./api-fastapi-azure-function
       dockerfile: Dockerfile
@@ -408,6 +426,7 @@ services:
         condition: service_healthy
 
   frontend-react-keycloak:
+    profiles: ["oidc"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -435,6 +454,7 @@ services:
 
   # Frontend (not directly exposed - only accessible through OAuth2 Proxy)
   frontend-react-keycloak-protected:
+    profiles: ["oidc"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -463,6 +483,7 @@ services:
 
   # Admin frontend (separate "app") that calls the admin APIM surface (/admin/api/*)
   frontend-react-keycloak-protected-admin:
+    profiles: ["oidc"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -491,6 +512,7 @@ services:
 
   # OAuth2 Proxy - Acts like Azure Easy Auth
   oauth2-proxy-frontend:
+    profiles: ["oidc"]
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0
     platform: linux/amd64
     ports:
@@ -581,6 +603,7 @@ services:
 
   # OAuth2 Proxy for the admin frontend on :3008
   oauth2-proxy-frontend-admin:
+    profiles: ["oidc"]
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0
     platform: linux/amd64
     ports:
@@ -631,6 +654,7 @@ services:
 
   # API Management simulator - validates tokens then forwards to the FastAPI backend
   apim-simulator:
+    profiles: ["oidc"]
     build:
       context: ./apim-simulator
       dockerfile: Dockerfile
@@ -652,6 +676,7 @@ services:
   # -----------------------------------------------------------------------------
 
   frontend-react-easyauth-mock:
+    profiles: ["mock-easyauth"]
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -665,6 +690,7 @@ services:
       AUTH_METHOD: "easyauth"
 
   easyauth-router:
+    profiles: ["mock-easyauth"]
     image: dhi.io/nginx:1.29.5-debian13
     platform: linux/amd64
     ports:
