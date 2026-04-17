@@ -18,6 +18,7 @@ SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
+ASSERT_PROJECT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-project-active.sh
 STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 CHECK_HOST_PORTS := $(SCRIPTS_DIR)/check-slicer-host-ports.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
@@ -62,6 +63,7 @@ SLICER_SWAP_SIZE ?= 4G
 SLICER_ALLOW_EXISTING_K3S ?= 0
 SLICER_RESET_PRUNE_ALL_IMAGES ?= 0
 SLICER_HOST_FORWARDS_MODE ?= auto
+PLATFORM_STATUS_SCRIPT ?= $(REPO_ROOT)/scripts/platform-status.sh
 SLICER_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301 3302
 K3SUP_CONTEXT ?= slicer-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
@@ -117,7 +119,7 @@ VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -291,6 +293,15 @@ check-lima-stopped:
 check-conflicting-clusters-stopped:
 	@$(MAKE) check-kind-stopped
 	@$(MAKE) check-lima-stopped
+
+.PHONY: assert-slicer-active
+assert-slicer-active:
+	@EXPECTED_PROJECT_PATH="kubernetes/slicer" \
+	EXPECTED_PROJECT_LABEL="kubernetes/slicer" \
+	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+	"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)
 
 .PHONY: prepare-state
 prepare-state:
@@ -937,6 +948,9 @@ apply: workflow-validate
 
 .PHONY: check-health
 check-health:
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@set -euo pipefail; \
 	mode="$(SLICER_HOST_FORWARDS_MODE)"; \
 	stage_num=$$((10#$(STAGE))); \
@@ -946,8 +960,6 @@ check-health:
 		off) ;; \
 		*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
 	esac
-	@$(MAKE) check-kubeconfig >/dev/null
-	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -966,6 +978,7 @@ check-health:
 .PHONY: check-security
 check-security:
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
@@ -984,17 +997,19 @@ check-security:
 
 .PHONY: check-gateway-stack
 check-gateway-stack:
-	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@$(MAKE) ensure-host-forwards >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
 check-cluster:
 	@$(MAKE) check-platform-env
-	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@$(MAKE) ensure-host-forwards >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" \
 		GITEA_USER="gitea-admin" \
 		GITEA_PWD="$${GITEA_PWD:-$${PLATFORM_ADMIN_PASSWORD}}" \
@@ -1009,9 +1024,10 @@ check-cluster:
 
 .PHONY: check-gateway-urls
 check-gateway-urls:
-	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@$(MAKE) ensure-host-forwards >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -1029,9 +1045,10 @@ check-gateway-urls:
 
 .PHONY: check-app
 check-app:
-	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@$(MAKE) ensure-host-forwards >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
 	vf=""; \
@@ -1057,9 +1074,10 @@ check-app:
 
 .PHONY: check-sso
 check-sso:
-	@$(MAKE) ensure-host-forwards >/dev/null
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@$(MAKE) ensure-host-forwards >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -1078,6 +1096,9 @@ check-sso:
 .PHONY: check-sso-e2e
 check-sso-e2e:
 	@set -euo pipefail; \
+	$(MAKE) check-kubeconfig >/dev/null; \
+	$(MAKE) assert-slicer-active >/dev/null; \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null; \
 	$(MAKE) ensure-host-forwards >/dev/null; \
 	stage_tfvars="$(abspath $(STAGE_FILE_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
@@ -1089,6 +1110,9 @@ check-sso-e2e:
 gitea-sync:
 	@set -euo pipefail; \
 	$(MAKE) check-platform-env; \
+	$(MAKE) check-kubeconfig >/dev/null; \
+	$(MAKE) assert-slicer-active >/dev/null; \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
@@ -1117,6 +1141,10 @@ launchpad-render:
 
 .PHONY: show-urls
 show-urls:
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@$(MAKE) ensure-host-forwards >/dev/null
 	@vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \
@@ -1255,6 +1283,7 @@ test-unit: test-bats
 .PHONY: check-version
 check-version:
 	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(stage_dir_abs)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""

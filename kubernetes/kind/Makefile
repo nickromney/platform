@@ -25,6 +25,7 @@ RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
+ASSERT_PROJECT_ACTIVE := $(K8S_SCRIPTS_DIR)/assert-project-active.sh
 STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
@@ -68,6 +69,7 @@ PLATFORM_PROFILE_CAPTURE_KUBECTL ?= auto
 PLATFORM_PROFILE_KEEP_SUCCESS ?= 1
 PLATFORM_PROFILE_ENABLE_PLUGIN_CACHE ?= 0
 PLATFORM_PROFILE_PLUGIN_CACHE_DIR ?= $(REPO_ROOT)/.run/tofu-plugin-cache
+PLATFORM_STATUS_SCRIPT ?= $(REPO_ROOT)/scripts/platform-status.sh
 KIND_API_READY_ATTEMPTS ?= 30
 KIND_API_READY_DELAY_SECONDS ?= 2
 KIND_CHECK_LIMA_INSTANCE_PREFIX ?= k3s-node
@@ -96,7 +98,7 @@ VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -425,6 +427,15 @@ check-conflicting-clusters-stopped:
 	@$(MAKE) check-lima-stopped
 	@$(MAKE) check-slicer-stopped
 
+.PHONY: assert-kind-active
+assert-kind-active:
+	@EXPECTED_PROJECT_PATH="kubernetes/kind" \
+	EXPECTED_PROJECT_LABEL="kubernetes/kind" \
+	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+	"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)
+
 .PHONY: kind
 kind: workflow-validate
 	@set -euo pipefail; \
@@ -691,8 +702,9 @@ apply: workflow-validate-stage
 endif
 .PHONY: check-health
 check-health: workflow-validate-stage
-	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -704,8 +716,9 @@ check-health: workflow-validate-stage
 
 .PHONY: check-security
 check-security: workflow-validate-stage
-	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -718,17 +731,21 @@ check-security: workflow-validate-stage
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-cluster
 check-cluster:
 	@$(MAKE) check-platform-env
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
 	"$(STACK_DIR)/scripts/check-cluster.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: check-gateway-urls
 check-gateway-urls: workflow-validate-stage
-	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -740,8 +757,9 @@ check-gateway-urls: workflow-validate-stage
 
 .PHONY: check-app
 check-app: workflow-validate-stage
-	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) render-operator-overrides >/dev/null
 	@set -euo pipefail; \
 	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
 	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
@@ -761,8 +779,9 @@ check-app: workflow-validate-stage
 
 .PHONY: check-sso
 check-sso: workflow-validate-stage
-	@$(MAKE) render-operator-overrides >/dev/null
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
@@ -776,6 +795,7 @@ check-sso: workflow-validate-stage
 check-sso-e2e: workflow-validate-stage
 	@set -euo pipefail; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
+	$(MAKE) assert-kind-active >/dev/null; \
 	stage_tfvars="$(abspath $(STAGE_FILE_REL_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
@@ -786,6 +806,8 @@ check-sso-e2e: workflow-validate-stage
 gitea-sync: workflow-validate-stage
 	@set -euo pipefail; \
 	$(MAKE) check-platform-env; \
+	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
+	$(MAKE) assert-kind-active >/dev/null; \
 	stack_path="$(abspath $(STACK_DIR))"; \
 	script="$$stack_path/scripts/sync-gitea.sh"; \
 	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
@@ -814,6 +836,8 @@ launchpad-render:
 
 .PHONY: show-urls
 show-urls: workflow-validate-stage
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
 	@$(MAKE) render-operator-overrides >/dev/null
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
@@ -1169,6 +1193,7 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
 		component_report="$$(mktemp)"; \
 		provider_report="$$(mktemp)"; \
@@ -1195,4 +1220,5 @@ ensure-kind-kubeconfig:
 .PHONY: audit-bootstrap
 audit-bootstrap:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
 	@"$(MAKEFILE_DIR)scripts/audit-bootstrap.sh" $(READONLY_MODE_FLAG)

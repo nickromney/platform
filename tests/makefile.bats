@@ -21,7 +21,9 @@ setup() {
   [[ "${output}" == *"make lint-cilium-live"* ]]
   [[ "${output}" == *"make lint-kyverno-live"* ]]
   [[ "${output}" == *"make prereqs"* ]]
+  [[ "${output}" == *"make status [STATUS_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make test"* ]]
+  [[ "${output}" == *"make tui"* ]]
   [[ "${output}" == *"make kubernetes"* ]]
   [[ "${output}" == *"make docker"* ]]
   [[ "${output}" == *"make apps"* ]]
@@ -34,6 +36,94 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Platform workspace Makefile guide"* ]]
   [[ "${output}" == *"This root Makefile is primarily informational."* ]]
+}
+
+@test "root bare make in a tty prints help then status" {
+  command -v script >/dev/null 2>&1 || skip "script not available"
+
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+
+  cat >"${status_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'status %s\n' "$*"
+EOF
+  chmod +x "${status_stub}"
+
+  run script -q /dev/null env PLATFORM_STATUS_SCRIPT="${status_stub}" make -C "${REPO_ROOT}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Platform workspace Makefile guide"* ]]
+  [[ "${output}" == *"status --execute --output text"* ]]
+}
+
+@test "root status delegates to the platform status helper in text mode by default" {
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  log_file="${BATS_TEST_TMPDIR}/platform-status.log"
+
+  cat >"${status_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'status %s\n' "\$*" >>"${log_file}"
+printf 'platform status text\n'
+EOF
+  chmod +x "${status_stub}"
+
+  run make -C "${REPO_ROOT}" status PLATFORM_STATUS_SCRIPT="${status_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"platform status text"* ]]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'status --execute --output text' ]
+}
+
+@test "root status supports json output without requiring platform env" {
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  log_file="${BATS_TEST_TMPDIR}/platform-status-json.log"
+
+  cat >"${status_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'status %s\n' "\$*" >>"${log_file}"
+printf '{"overall_state":"idle"}\n'
+EOF
+  chmod +x "${status_stub}"
+
+  run env PLATFORM_ENV_FILE="${BATS_TEST_TMPDIR}/missing.env" make -C "${REPO_ROOT}" status STATUS_FORMAT=json PLATFORM_STATUS_SCRIPT="${status_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == '{"overall_state":"idle"}' ]]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'status --execute --output json' ]
+}
+
+@test "root tui delegates to the platform tui helper" {
+  tui_stub="${BATS_TEST_TMPDIR}/platform-tui.sh"
+  log_file="${BATS_TEST_TMPDIR}/platform-tui.log"
+
+  cat >"${tui_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'tui %s\n' "\$*" >>"${log_file}"
+printf 'platform tui\n'
+EOF
+  chmod +x "${tui_stub}"
+
+  run make -C "${REPO_ROOT}" tui PLATFORM_TUI_SCRIPT="${tui_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"platform tui"* ]]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'tui --execute' ]
 }
 
 @test "root prereqs and test are informational entrypoints" {
