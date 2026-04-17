@@ -3,6 +3,25 @@ set -euo pipefail
 
 fail() { echo "sync-gitea-repo: $*" >&2; exit 1; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: sync-gitea-repo.sh [--dry-run] [--execute]
+
+Synchronize the configured repository into Gitea.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would sync SOURCE_DIR into Gitea if needed" \
+  "$@"
+
 : "${STACK_DIR:?STACK_DIR is required}"
 : "${SOURCE_DIR:?SOURCE_DIR is required (host path to the repo content)}"
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"

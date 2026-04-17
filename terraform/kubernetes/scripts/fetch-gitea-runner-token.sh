@@ -4,10 +4,28 @@ set -euo pipefail
 fail() { echo "fetch-gitea-runner-token: $*" >&2; exit 1; }
 log() { echo "fetch-gitea-runner-token: $*" >&2; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: fetch-gitea-runner-token.sh [--dry-run] [--execute]
+
+Request or read-through-cache a Gitea Actions runner registration token from stdin payload.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would fetch or read-through-cache a Gitea Actions runner token" \
+  "$@"
+
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v jq >/dev/null 2>&1 || fail "jq not found"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 query="$(cat)"
 GITEA_HTTP_BASE="$(jq -r '.gitea_http_base // empty' <<<"${query}")"
 GITEA_ADMIN_USERNAME="$(jq -r '.gitea_admin_username // empty' <<<"${query}")"

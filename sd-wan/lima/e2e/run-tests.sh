@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Run Playwright E2E tests
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/../../.." && pwd)
-playwright_args=
+playwright_args=()
 
 . "${REPO_ROOT}/scripts/lib/shell-cli-posix.sh"
 
@@ -22,7 +22,7 @@ EOF
 }
 
 shell_cli_init_standard_flags
-while [ "$#" -gt 0 ]; do
+while [[ "$#" -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
     shift
     continue
@@ -31,7 +31,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --)
       shift
-      playwright_args="$*"
+      while [[ "$#" -gt 0 ]]; do
+        playwright_args+=("$1")
+        shift
+      done
       break
       ;;
     -*)
@@ -39,7 +42,7 @@ while [ "$#" -gt 0 ]; do
       exit 2
       ;;
     *)
-      playwright_args="$playwright_args $1"
+      playwright_args+=("$1")
       ;;
   esac
   shift
@@ -56,16 +59,26 @@ if [ ! -d "node_modules" ]; then
 	npm install
 fi
 
-if [ ! -f "$HOME/Library/Caches/ms-playwright/chromium-*/chrome-linux/chrome" ] &&
-	[ ! -f "$HOME/.cache/ms-playwright/chromium-*/chrome-linux/chrome" ]; then
+has_cached_chromium=0
+for cache_root in \
+  "$HOME/Library/Caches/ms-playwright" \
+  "$HOME/.cache/ms-playwright"; do
+  for chrome_binary in "${cache_root}/chromium-"*"/chrome-linux/chrome"; do
+    if [[ -f "${chrome_binary}" ]]; then
+      has_cached_chromium=1
+      break 2
+    fi
+  done
+done
+
+if [[ "${has_cached_chromium}" -eq 0 ]]; then
 	echo "Installing Playwright browsers..."
 	npx playwright install chromium
 fi
 
 echo "Running Playwright tests..."
-if [ -n "${playwright_args}" ]; then
-  # shellcheck disable=SC2086
-  npx playwright test ${playwright_args}
+if [[ "${#playwright_args[@]}" -gt 0 ]]; then
+  npx playwright test "${playwright_args[@]}"
 else
   npx playwright test
 fi

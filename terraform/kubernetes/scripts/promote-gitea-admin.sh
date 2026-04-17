@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
+
 fail() { echo "promote-gitea-admin: $*" >&2; exit 1; }
 warn() { echo "promote-gitea-admin: $*" >&2; }
 ok() { echo "promote-gitea-admin: $*"; }
+
+usage() {
+  cat <<EOF
+Usage: promote-gitea-admin.sh [--dry-run] [--execute]
+
+Promote a Gitea user to an administrator account.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would promote the configured user to a Gitea administrator if needed" \
+  "$@"
 
 : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
 : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
@@ -11,7 +30,6 @@ ok() { echo "promote-gitea-admin: $*"; }
 command -v jq >/dev/null 2>&1 || fail "jq is required to parse Gitea API responses"
 
 GITEA_WAIT_MAX_SECONDS="${GITEA_WAIT_MAX_SECONDS:-600}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/gitea-local-access.sh"

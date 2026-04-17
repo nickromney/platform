@@ -60,6 +60,7 @@ unexpected_python=()
 yaml_module_usage=()
 bash4_feature_usage=()
 interface_failures=()
+library_entrypoint_failures=()
 scope_paths=()
 
 shell_cli_init_standard_flags
@@ -275,7 +276,9 @@ while IFS= read -r -d '' rel; do
   fi
   count=$((count + 1))
 
-  if [[ -x "${file}" ]]; then
+  if [[ "${rel}" == "scripts/lib/"* && -x "${file}" ]]; then
+    library_entrypoint_failures+=("${rel}")
+  elif [[ -x "${file}" ]]; then
     entrypoint_count=$((entrypoint_count + 1))
     validate_entrypoint_interface "${rel}" "${file}"
   fi
@@ -301,6 +304,12 @@ done < <(list_shell_scripts)
 if [[ "${#interface_failures[@]}" -gt 0 ]]; then
   printf 'FAIL shell audit: executable shell entrypoints must support --help, --dry-run, and --execute without prerequisites:\n' >&2
   printf '  %s\n' "${interface_failures[@]}" >&2
+  exit 1
+fi
+
+if [[ "${#library_entrypoint_failures[@]}" -gt 0 ]]; then
+  printf 'FAIL shell audit: library scripts under scripts/lib should not be executable entrypoints:\n' >&2
+  printf '  %s\n' "${library_entrypoint_failures[@]}" >&2
   exit 1
 fi
 
