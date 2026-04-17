@@ -213,6 +213,17 @@ def is_using_live_cloudflare_ranges() -> bool:
     return _cache_source_ipv4 == "cloudflare" or _cache_source_ipv6 == "cloudflare"
 
 
+def is_using_live_cloudflare_ranges_cached() -> bool:
+    """
+    Check the cached Cloudflare range source without triggering remote fetches.
+
+    Health probes must stay local and deterministic. This helper reports whether
+    a previous fetch populated the cache from Cloudflare, but it never performs
+    network I/O itself.
+    """
+    return _cache_source_ipv4 == "cloudflare" or _cache_source_ipv6 == "cloudflare"
+
+
 def get_cloudflare_ranges_info() -> dict:
     """
     Get information about the current Cloudflare IP ranges.

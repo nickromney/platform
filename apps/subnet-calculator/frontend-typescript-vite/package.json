@@ -26,14 +26,14 @@
     "check": "biome check . && (cd ../shared-frontend && bun run build) && tsc --noEmit"
   },
   "dependencies": {
-    "@picocss/pico": "^2.0.6",
+    "@picocss/pico": "^2.1.1",
     "@subnet-calculator/shared-frontend": "file:../shared-frontend"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.7",
-    "@playwright/test": "^1.58.2",
-    "@types/node": "^22.19.15",
-    "typescript": "^5.5.0",
-    "vite": "^8.0.0"
+    "@biomejs/biome": "^2.4.11",
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.8"
   }
 }

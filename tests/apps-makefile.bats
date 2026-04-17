@@ -11,6 +11,7 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"prereqs"* ]]
   [[ "${output}" == *"test"* ]]
+  [[ "${output}" == *"update"* ]]
   [[ "${output}" == *"trivy-prereqs"* ]]
   [[ "${output}" == *"trivy-scan"* ]]
   [[ "${output}" == *"trivy-scan-images"* ]]
@@ -32,4 +33,12 @@ setup() {
   [[ "${output}" == *"compose-smoke"* ]]
   [[ "${output}" == *"./sentiment/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./subnet-calculator/tests/compose-smoke.sh"* ]]
+}
+
+@test "apps update delegates to each app root update workflow" {
+  run make -n -C "${REPO_ROOT}/apps" update
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"make --no-print-directory -C ./sentiment update"* ]]
+  [[ "${output}" == *"make --no-print-directory -C ./subnet-calculator update"* ]]
 }

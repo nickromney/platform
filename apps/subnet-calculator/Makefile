@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test check-prerequisites check-docker-prerequisites clean-ports \
+MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites check-docker-prerequisites clean-ports \
   up down urls logs ps \
   vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
@@ -13,7 +13,7 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 include ../../mk/common.mk
 include ../../mk/compose.mk
 
-.PHONY: help prereqs test check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
+.PHONY: help prereqs test update check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
   vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
@@ -56,6 +56,16 @@ check-docker-prerequisites: ## Check that compose tooling is installed and runni
 
 build: check-prerequisites ## Build the default compose images
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build api-fastapi-container-app frontend-typescript-vite
+
+update: ## Update dependency locks across the subnet-calculator app roots
+	@cd . && bun update --latest
+	@cd shared-frontend && bun update --latest
+	@$(MAKE) --no-print-directory -C frontend-react update
+	@$(MAKE) --no-print-directory -C frontend-typescript-vite update
+	@cd api-fastapi-azure-function && uv lock --upgrade && uv sync --extra dev
+	@cd api-fastapi-container-app && uv lock --upgrade && uv sync --extra dev
+	@$(MAKE) --no-print-directory -C frontend-html-static update
+	@$(MAKE) --no-print-directory -C frontend-python-flask update
 
 ##@ Vendoring
 vendor-apim-simulator: ## Refresh the vendored APIM simulator from a specific tag or commit SHA

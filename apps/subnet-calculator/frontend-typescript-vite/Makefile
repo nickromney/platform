@@ -1,10 +1,10 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs install dev build lint type-check test test-headed test-ui
+MAKE_KNOWN_GOALS := help prereqs install update dev build lint type-check test test-headed test-ui
 MAKE_SUGGEST_SCRIPT := ../../../scripts/suggest-make-goal.sh
 
 include ../../../mk/common.mk
 
-.PHONY: help prereqs install dev build lint type-check test test-headed test-ui
+.PHONY: help prereqs install update dev build lint type-check test test-headed test-ui
 
 ##@ Workflow
 test: ## Run Playwright tests
@@ -23,6 +23,9 @@ prereqs: ## Install local frontend prerequisites
 
 install: ## Install dependencies
 	@bun install --frozen-lockfile
+
+update: ## Update Bun dependency locks
+	@bun update --latest
 
 ##@ Run
 dev: ## Run development server

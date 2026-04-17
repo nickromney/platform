@@ -12,8 +12,8 @@ global.fetch = mockFetch
 describe('TokenManager', () => {
   beforeEach(() => {
     mockFetch.mockReset()
-    vi.clearAllTimers()
     vi.useFakeTimers()
+    vi.clearAllTimers()
   })
 
   afterEach(() => {
