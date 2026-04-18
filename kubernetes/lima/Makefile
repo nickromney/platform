@@ -31,6 +31,8 @@ CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
+OIDC_RECOVERY_FORMAT ?= text
+OIDC_RECOVERY_FORCE_MODE ?= k3s-restart
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
@@ -93,7 +95,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/stage-workflow.mk
@@ -171,6 +173,7 @@ help:
 	@echo "  make check-stage-monotonicity"
 	@echo "  make check-version [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]"
 	@echo "  make configure-k3s-apiserver-oidc"
+	@echo "  make exercise-k3s-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=k3s-restart]"
 	@echo "  make ensure-host-gateway-proxy"
 	@echo "  make env"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
@@ -215,6 +218,8 @@ help:
 	@echo "Local helper modes:"
 	@echo "  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)"
 	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
+	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the Lima OIDC restart drill as human text or machine-readable JSON (default: text)"
+	@echo "  OIDC_RECOVERY_FORCE_MODE=k3s-restart                 -> controlled perturbation used to force the Lima OIDC restart path (default: k3s-restart)"
 	@echo "  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)"
 	@echo "  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)"
 	@echo "  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)"
@@ -515,8 +520,33 @@ configure-k3s-apiserver-oidc: workflow-validate-stage
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	LIMA_NODE_NAME="$(LIMA_INSTANCE_PREFIX)-1" \
 	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
+		PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
+		"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
+
+.PHONY: exercise-k3s-oidc-recovery
+exercise-k3s-oidc-recovery: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
+	@set -euo pipefail; \
+	tfvar_files=(); \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		tfvar_files+=("$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
+			--optional-file "$(target_var_file)" \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+	); \
+	KUBECONFIG="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+	LIMA_NODE_NAME="$(LIMA_INSTANCE_PREFIX)-1" \
+	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
 	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
-	"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
+	OIDC_RECOVERY_FORMAT="$(OIDC_RECOVERY_FORMAT)" \
+	OIDC_RECOVERY_FORCE_MODE="$(OIDC_RECOVERY_FORCE_MODE)" \
+	"$(SCRIPTS_DIR)/exercise-k3s-oidc-recovery.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: init
 init: WORKFLOW_REQUIRE_STAGE_FILE=1

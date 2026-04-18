@@ -190,6 +190,17 @@ EOF
   [ "${lines[1]}" = "1" ]
 }
 
+@test "check-version dependency audit renderer labels follow-up items without unresolved status" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(printf '%b\n' \
+  'apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t\t1.0.1\tlatest lookup failed' \
+  'apps/subnet-calculator/frontend-react\tleft-pad-lock\t\t\t\tlockfile missing or unverified'); render_dependency_audit_text \"\${rows}\""
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ follow-up:\ 2 ]]
+  [[ ! "${output}" =~ unresolved: ]]
+  [[ "${output}" =~ lockfile\ missing\ or\ unverified ]]
+}
+
 @test "check-version dependency audit renderer does not loop when visible and hidden apps are adjacent" {
   if ! command -v timeout >/dev/null 2>&1; then
     skip "timeout is required"
@@ -428,7 +439,62 @@ EOF
   [ "${output}" = "$(printf '3.12.14-alpine3.23\n26.6.2')" ]
 }
 
-@test "check-version treats floating track tags as unresolved rather than actionable updates" {
+@test "check-version follows OCI pagination when resolving latest pinned image tags" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+headers_file=""
+body_file=""
+url=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -D|-o|-H|--connect-timeout|--max-time|--retry)
+      if [ "$1" = "-D" ]; then
+        headers_file="$2"
+      elif [ "$1" = "-o" ]; then
+        body_file="$2"
+      fi
+      shift 2
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      url="$1"
+      shift
+      ;;
+  esac
+done
+
+case "${url}" in
+  "https://quay.io/v2/keycloak/keycloak/tags/list?n=1000")
+    printf 'HTTP/2 200\r\nlink: </v2/keycloak/keycloak/tags/list?n=100&last=26.6.1>; rel=\"next\"\r\n\r\n' >"${headers_file}"
+    printf '%s\n' '{"tags":["26.6.1","26.5.9"]}' >"${body_file}"
+    ;;
+  "https://quay.io/v2/keycloak/keycloak/tags/list?n=100&last=26.6.1")
+    printf 'HTTP/2 200\r\n\r\n' >"${headers_file}"
+    printf '%s\n' '{"tags":["26.6.2","26.7.0"]}' >"${body_file}"
+    ;;
+  *)
+    printf 'unexpected url: %s\n' "${url}" >&2
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(oci_registry_latest_tag_for_ref 'quay.io/keycloak/keycloak:26.6.1')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "26.6.2" ]
+}
+
+@test "check-version does not auto-upgrade floating track tags" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     docker_hub_repo_tags() { printf '%s\n' '10.0.6' '9.0.9' '9.0'; }; \
     oci_registry_repo_tags() { printf '%s\n' '4.1036.0' '4.1035.0'; }; \
@@ -438,6 +504,47 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf '\n')" ]
+}
+
+@test "check-version classifies non-comparable image tags for manual follow-up" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
+    \"\$(image_status_when_latest_unknown 'ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest' 'ghcr.io')\" \
+    \"\$(image_status_when_latest_unknown 'mcr.microsoft.com/dotnet/aspnet:9.0' 'mcr.microsoft.com')\" \
+    \"\$(image_status_when_latest_unknown 'mcr.microsoft.com/azure-functions/python:4-python3.13' 'mcr.microsoft.com')\" \
+    \"\$(image_status_when_latest_unknown 'ghcr.io/example/demo' 'ghcr.io')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'floating tag\nmajor.minor pin\nvendor composite tag\ntag missing from image reference')" ]
+}
+
+@test "check-version heartbeat wrapper emits progress while a phase is running" {
+  local stderr_file="${BATS_TEST_TMPDIR}/heartbeat.stderr"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_HEARTBEAT_SECONDS=1; source '${SCRIPT}'; slow_phase() { sleep 2; printf 'done\n'; }; run_with_heartbeat 'Still running test phase' slow_phase 2>'${stderr_file}'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "done" ]
+
+  run cat "${stderr_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ Still\ running\ test\ phase ]]
+}
+
+@test "check-version JSON report exposes machine-friendly status fields for agents" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; EXPECTED_CLUSTER_NAME='kind-local'; CLUSTER_OK=1; EXPECT_KIND_PROVISIONING='true'; CODE_ARGOCD_IMAGE_REF=''; CONFIGURED_ARGOCD_IMAGE_STATUS='unknown'; LATEST_PREFERRED_ARGOCD_IMAGE_REF=''; LATEST_PREFERRED_ARGOCD_IMAGE_STATUS='unknown'; emit_json_report \
+    \$'argo-cd chart\t9.0.0\t9.0.0\t9.0.0\tv9.0.0\tv9.0.0\t\tv9.0.0\tcurrent' \
+    '' \
+    \$'kind release tag\tv0.29.0\tv0.29.0\tcurrent' \
+    \$'apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t\t1.0.1\tlockfile missing or unverified' \
+    \$'apps/subnet-calculator/csharp-test/web-app/Dockerfile:10\tmcr.microsoft.com/dotnet/aspnet:9.0\t9.0\t\tmcr.microsoft.com\tmajor.minor pin\napps/sentiment/compose.yml:100\tquay.io/oauth2-proxy/oauth2-proxy:v7.15.2\tv7.15.2\tv7.15.2\tquay.io\tcurrent'"
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '[.app_dependencies[0].status_code, .app_dependencies[0].status_group, .external_images[0].status_code, .external_images[0].status_group, (.summary.app_dependency_status_counts.lockfile_missing_or_unverified // 0), (.summary.external_image_status_counts.major_minor_pin // 0)] | @tsv' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'lockfile_missing_or_unverified\tfollow_up\tmajor_minor_pin\tfollow_up\t1\t1')" ]
 }
 
 @test "check-version parallel line mapper runs callbacks with bounded concurrency" {

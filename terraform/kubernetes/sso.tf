@@ -253,13 +253,15 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    script_sha          = filesha256(abspath("${local.stack_dir}/scripts/configure-kind-apiserver-oidc.sh"))
-    gateway_service_uid = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
-    cluster_name        = var.cluster_name
-    dex_host            = local.dex_public_host
-    oidc_client_id      = "headlamp"
-    oidc_issuer_url     = local.dex_public_url
-    mkcert_ca_dest      = "/etc/kubernetes/pki/mkcert-rootCA.pem"
+    configure_script_sha = filesha256(abspath("${local.stack_dir}/scripts/configure-kind-apiserver-oidc.sh"))
+    helper_lib_sha       = filesha256(abspath("${local.stack_dir}/scripts/kind-apiserver-oidc-lib.sh"))
+    render_helper_sha    = filesha256(abspath("${local.stack_dir}/scripts/render-kind-apiserver-oidc-manifest.py"))
+    gateway_service_uid  = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
+    cluster_name         = var.cluster_name
+    dex_host             = local.dex_public_host
+    oidc_client_id       = "headlamp"
+    oidc_issuer_url      = local.dex_public_url
+    mkcert_ca_dest       = "/etc/kubernetes/pki/mkcert-rootCA.pem"
   }
 
   provisioner "local-exec" {
@@ -294,6 +296,28 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   ]
 }
 
+resource "null_resource" "recover_kind_cluster_after_oidc_restart" {
+  count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
+
+  triggers = {
+    recovery_script_sha = filesha256(abspath("${local.stack_dir}/scripts/recover-kind-cluster-after-apiserver-restart.sh"))
+    helper_lib_sha      = filesha256(abspath("${local.stack_dir}/scripts/kind-apiserver-oidc-lib.sh"))
+    oidc_resource_id    = null_resource.configure_kind_apiserver_oidc[0].id
+  }
+
+  provisioner "local-exec" {
+    command     = "bash \"${local.stack_dir}/scripts/recover-kind-cluster-after-apiserver-restart.sh\" --execute"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = local.kubeconfig_path_expanded
+    }
+  }
+
+  depends_on = [
+    null_resource.configure_kind_apiserver_oidc,
+  ]
+}
+
 resource "null_resource" "check_kind_cluster_health_after_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
@@ -303,7 +327,7 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
     kind_stage_900_tfvars_sha = try(filesha256(var.kind_stage_900_tfvars_file), "absent")
     kind_target_tfvars_sha    = try(filesha256(var.kind_target_tfvars_file), "absent")
     operator_overrides_sha    = try(filesha256(var.kind_operator_overrides_file), "absent")
-    oidc_resource_id          = null_resource.configure_kind_apiserver_oidc[0].id
+    recovery_resource_id      = null_resource.recover_kind_cluster_after_oidc_restart[0].id
   }
 
   provisioner "local-exec" {
@@ -333,7 +357,7 @@ __EOT__
   }
 
   depends_on = [
-    null_resource.configure_kind_apiserver_oidc,
+    null_resource.recover_kind_cluster_after_oidc_restart,
   ]
 }
 

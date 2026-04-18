@@ -34,6 +34,7 @@ Useful follow-ups:
 ```bash
 make -C kubernetes/lima 900 check-health DRY_RUN=1
 make -C kubernetes/lima check-sso-e2e
+make -C kubernetes/lima exercise-k3s-oidc-recovery OIDC_RECOVERY_FORMAT=json
 make -C kubernetes/lima status
 make -C kubernetes/lima reset AUTO_APPROVE=1
 ```
@@ -60,6 +61,13 @@ stages can still work, but only if an equivalent service is already present.
 For example, stage `700+` still expects workload images to exist at
 `host.lima.internal:5002`; with cache management disabled, the Makefile now
 fails fast unless a compatible registry is already reachable.
+
+`make -C kubernetes/lima exercise-k3s-oidc-recovery` is the Lima-specific
+operator drill for the stage-900 k3s OIDC restart path. It first converges the
+guest OIDC config with `configure-k3s-apiserver-oidc`, then forces a `k3s`
+restart, proves the API outage was observed, and verifies that API readiness,
+Gateway programming, and in-VM Dex issuer reachability all recover. Set
+`OIDC_RECOVERY_FORMAT=json` for a single machine-readable result object.
 
 The Lima target profile now sets `gitea_local_access_mode = "port-forward"`.
 That keeps the shared Terraform Gitea automation working without assuming a

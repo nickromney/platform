@@ -81,6 +81,7 @@ make 100 plan
 make 100 apply AUTO_APPROVE=1
 make 900 apply AUTO_APPROVE=1
 make 900 check-health
+make exercise-oidc-recovery OIDC_RECOVERY_FORMAT=json
 make 900 check-health DRY_RUN=1
 make docker-prune-estimate
 make reset AUTO_APPROVE=1
@@ -88,6 +89,13 @@ make reset AUTO_APPROVE=1
 
 If you prefer to stay at repo root, use `make -C kubernetes/kind ...`. The old
 target-prefixed compatibility form, such as `make kind 100 apply`, still works.
+
+`make exercise-oidc-recovery` is the explicit operator drill for the post-OIDC
+apiserver-restart recovery path. It intentionally restarts the nginx gateway
+controller to force the recovery branch, then delegates to the shared
+`recover-kind-cluster-after-apiserver-restart.sh` step. Set
+`OIDC_RECOVERY_FORMAT=json` for a single machine-readable result object that
+non-human callers can consume.
 
 This wrapper drives the Terraform stack in `../../terraform/kubernetes` using the kind target profile in `targets/kind.tfvars`.
 

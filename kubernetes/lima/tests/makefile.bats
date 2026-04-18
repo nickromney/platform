@@ -15,10 +15,12 @@ setup() {
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
+  [[ "${output}" == *"make exercise-k3s-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=k3s-restart]"* ]]
   [[ "${output}" == *"make start"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]
   [[ "${output}" == *"split by default"* ]]
   [[ "${output}" == *"~/.kube/limavm-k3s.yaml"* ]]
+  [[ "${output}" == *"OIDC_RECOVERY_FORMAT=text|json"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
   [[ "${output}" != *"${HOME}"* ]]
 }
@@ -136,6 +138,19 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"configure-k3s-apiserver-oidc"* ]]
+}
+
+@test "lima exercise-k3s-oidc-recovery runs the dedicated harness with format and force knobs" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" exercise-k3s-oidc-recovery \
+    OIDC_RECOVERY_FORMAT=json \
+    OIDC_RECOVERY_FORCE_MODE=k3s-restart
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-kubeconfig >/dev/null'* ]]
+  [[ "${output}" == *'assert-lima-active >/dev/null'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORMAT="json"'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORCE_MODE="k3s-restart"'* ]]
+  [[ "${output}" == *'exercise-k3s-oidc-recovery.sh" --execute'* ]]
 }
 
 @test "lima reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
