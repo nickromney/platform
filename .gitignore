@@ -40,6 +40,7 @@ backend.tf
 # Local run artifacts
 .run/
 **/.run/
+.run/check-version/
 oci-cache/
 
 # Generated local stack files

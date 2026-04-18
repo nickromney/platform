@@ -17,7 +17,7 @@ argon2-cffi-bindings==25.1.0
     # via argon2-cffi
 asgiref==3.11.1
     # via opentelemetry-instrumentation-asgi
-azure-functions==2.0.0
+azure-functions==2.1.0
     # via subnet-calculator-python-api
 certifi==2026.2.25
     # via
@@ -50,14 +50,16 @@ email-validator==2.3.0
     # via
     #   fastapi
     #   pydantic
-fastapi==0.135.3
+fastapi==0.136.0
     # via subnet-calculator-python-api
 fastapi-cli==0.0.24
     # via fastapi
 fastapi-cloud-cli==0.16.1
     # via fastapi-cli
 fastar==0.10.0
-    # via fastapi-cloud-cli
+    # via
+    #   fastapi
+    #   fastapi-cloud-cli
 googleapis-common-protos==1.74.0
     # via opentelemetry-exporter-otlp-proto-http
 h11==0.16.0

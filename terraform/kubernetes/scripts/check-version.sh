@@ -63,6 +63,7 @@ Environment:
   CHECK_VERSION_INCLUDE_ALPHA=1       Include alpha releases in latest-version checks
   CHECK_VERSION_INCLUDE_PRERELEASE=1  Include other prerelease channels (beta/dev/rc/preview/next)
                                       All prerelease channels default to off
+  CHECK_VERSION_RUNTIME_ROOT=...      Store temp/cache state under a repo-owned .run/check-version root
 
 $(shell_cli_standard_options)
 EOF
@@ -79,6 +80,10 @@ HTTP_FETCH_CONNECT_TIMEOUT_SECONDS="${HTTP_FETCH_CONNECT_TIMEOUT_SECONDS:-${CHEC
 CHECK_VERSION_INCLUDE_PRERELEASE="${CHECK_VERSION_INCLUDE_PRERELEASE:-0}"
 CHECK_VERSION_INCLUDE_CANARY="${CHECK_VERSION_INCLUDE_CANARY:-0}"
 CHECK_VERSION_INCLUDE_ALPHA="${CHECK_VERSION_INCLUDE_ALPHA:-0}"
+CHECK_VERSION_TEMP_PATHS=()
+CHECK_VERSION_RUNTIME_ROOT="${CHECK_VERSION_RUNTIME_ROOT:-${REPO_ROOT}/.run/check-version}"
+CHECK_VERSION_TMP_ROOT="${CHECK_VERSION_TMP_ROOT:-${CHECK_VERSION_RUNTIME_ROOT}/tmp}"
+CHECK_VERSION_SESSION_DIR="${CHECK_VERSION_SESSION_DIR:-}"
 
 start_heartbeat() {
   local message="$1"
@@ -110,6 +115,125 @@ stop_heartbeat() {
   wait "${pid}" >/dev/null 2>&1 || true
   CHECK_VERSION_HEARTBEAT_PID=""
 }
+
+register_temp_path() {
+  local path="${1:-}"
+
+  [ -n "${path}" ] || return 0
+  CHECK_VERSION_TEMP_PATHS+=("${path}")
+}
+
+ensure_check_version_runtime_root() {
+  mkdir -p "${CHECK_VERSION_TMP_ROOT}"
+  prune_stale_check_version_sessions
+}
+
+check_version_pid_is_running() {
+  local pid="${1:-}"
+
+  case "${pid}" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+
+  kill -0 "${pid}" >/dev/null 2>&1
+}
+
+prune_stale_check_version_sessions() {
+  local session_dir owner_pid_file owner_pid
+
+  [ -d "${CHECK_VERSION_TMP_ROOT}" ] || return 0
+
+  for session_dir in "${CHECK_VERSION_TMP_ROOT}"/session.*; do
+    [ -d "${session_dir}" ] || continue
+    owner_pid_file="${session_dir}/owner.pid"
+    if [ -f "${owner_pid_file}" ]; then
+      owner_pid="$(tr -d '[:space:]' <"${owner_pid_file}" 2>/dev/null || true)"
+      if check_version_pid_is_running "${owner_pid}"; then
+        continue
+      fi
+    fi
+
+    rm -rf "${session_dir}" 2>/dev/null || true
+  done
+}
+
+ensure_check_version_session_dir() {
+  local path
+
+  if [ -n "${CHECK_VERSION_SESSION_DIR}" ] && [ -d "${CHECK_VERSION_SESSION_DIR}" ]; then
+    return 0
+  fi
+
+  ensure_check_version_runtime_root
+  path="$(mktemp -d "${CHECK_VERSION_TMP_ROOT}/session.XXXXXX")"
+  CHECK_VERSION_SESSION_DIR="${path}"
+  printf '%s\n' "$$" >"${CHECK_VERSION_SESSION_DIR}/owner.pid"
+  register_temp_path "${CHECK_VERSION_SESSION_DIR}"
+}
+
+platform_mktemp_file() {
+  local var_name="${1:-}"
+  local path
+
+  ensure_check_version_session_dir
+  path="$(mktemp "${CHECK_VERSION_SESSION_DIR}/tmp.XXXXXX")"
+  register_temp_path "${path}"
+
+  if [ -n "${var_name}" ]; then
+    printf -v "${var_name}" '%s' "${path}"
+    return 0
+  fi
+
+  printf '%s\n' "${path}"
+}
+
+platform_mktemp_dir() {
+  local var_name="${1:-}"
+  local path
+
+  ensure_check_version_session_dir
+  path="$(mktemp -d "${CHECK_VERSION_SESSION_DIR}/tmpdir.XXXXXX")"
+  register_temp_path "${path}"
+
+  if [ -n "${var_name}" ]; then
+    printf -v "${var_name}" '%s' "${path}"
+    return 0
+  fi
+
+  printf '%s\n' "${path}"
+}
+
+cleanup_registered_temp_paths() {
+  local idx path
+
+  if [ "${#CHECK_VERSION_TEMP_PATHS[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  for ((idx=${#CHECK_VERSION_TEMP_PATHS[@]} - 1; idx >= 0; idx--)); do
+    path="${CHECK_VERSION_TEMP_PATHS[idx]}"
+    [ -n "${path}" ] || continue
+
+    if [ -L "${path}" ] || [ -e "${path}" ]; then
+      rm -rf "${path}" 2>/dev/null || true
+    fi
+  done
+
+  CHECK_VERSION_TEMP_PATHS=()
+}
+
+check_version_cleanup() {
+  stop_heartbeat
+  cleanup_registered_temp_paths
+}
+
+if [ "${CHECK_VERSION_LIB_ONLY:-0}" != "1" ]; then
+  trap 'check_version_cleanup' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+fi
 
 require() {
   local bin="$1"
@@ -145,7 +269,7 @@ kind_get_clusters_safe() {
   local timeout="${CHECK_VERSION_KIND_GET_CLUSTERS_TIMEOUT_SECONDS:-5}"
   local tmp pid start elapsed rc
 
-  tmp="$(mktemp)"
+  platform_mktemp_file tmp
   kind get clusters >"${tmp}" 2>/dev/null &
   pid=$!
   start="$(date +%s)"
@@ -479,6 +603,24 @@ python_requirement_name() {
   normalize_python_package_name "${name}"
 }
 
+python_requirement_specifiers() {
+  local requirement="$1"
+  local trimmed=""
+  local specifiers=""
+
+  trimmed="$(trim_surrounding_whitespace "${requirement}")"
+  trimmed="${trimmed%%;*}"
+  case "${trimmed}" in
+    *" @ "*)
+      printf '\n'
+      return 0
+      ;;
+  esac
+
+  specifiers="$(printf '%s\n' "${trimmed}" | sed -E 's/^[[:space:]]*[A-Za-z0-9_.-]+(\[[^]]+\])?[[:space:]]*//')"
+  trim_surrounding_whitespace "${specifiers}"
+}
+
 python_requirement_status() {
   local requirement="$1"
   local trimmed=""
@@ -590,6 +732,118 @@ filter_prerelease_versions() {
   while IFS= read -r version; do
     [ -n "${version}" ] || continue
     if version_prerelease_allowed "${version}"; then
+      printf '%s\n' "${version}"
+    fi
+  done
+}
+
+python_compatible_upper_bound() {
+  local spec="$1"
+  local -a parts=()
+  local keep_count=0
+  local idx value
+
+  IFS='.' read -r -a parts <<<"${spec}"
+  if [ "${#parts[@]}" -eq 0 ]; then
+    printf '\n'
+    return 0
+  fi
+
+  if [ "${#parts[@]}" -eq 1 ]; then
+    keep_count=1
+  else
+    keep_count=$(("${#parts[@]}" - 1))
+  fi
+
+  if ! [[ "${parts[$((keep_count - 1))]}" =~ ^[0-9]+$ ]]; then
+    printf '\n'
+    return 0
+  fi
+
+  parts[$((keep_count - 1))]=$(("${parts[$((keep_count - 1))]}" + 1))
+  for ((idx = keep_count; idx < ${#parts[@]}; idx++)); do
+    parts[idx]=0
+  done
+
+  value="${parts[0]}"
+  for ((idx = 1; idx < keep_count; idx++)); do
+    value+=".${parts[idx]}"
+  done
+  printf '%s\n' "${value}"
+}
+
+python_version_satisfies_specifiers() {
+  local version="$1"
+  local specifiers="$2"
+  local token target prefix upper_bound
+  local -a tokens=()
+
+  [ -n "${specifiers}" ] || return 0
+
+  IFS=',' read -r -a tokens <<<"${specifiers}"
+  for token in "${tokens[@]}"; do
+    token="$(trim_surrounding_whitespace "${token}")"
+    [ -n "${token}" ] || continue
+
+    case "${token}" in
+      '!='*)
+        target="${token#'!='}"
+        if [[ "${target}" == *'*' ]]; then
+          prefix="${target%\*}"
+          [[ "${version}" == "${prefix}"* ]] && return 1
+        else
+          [ "${version}" = "${target}" ] && return 1
+        fi
+        ;;
+      '=='*)
+        target="${token#'=='}"
+        if [[ "${target}" == *'*' ]]; then
+          prefix="${target%\*}"
+          [[ "${version}" == "${prefix}"* ]] || return 1
+        else
+          [ "${version}" = "${target}" ] || return 1
+        fi
+        ;;
+      '>='*)
+        target="${token#'>='}"
+        version_gte "${version}" "${target}" || return 1
+        ;;
+      '<='*)
+        target="${token#'<='}"
+        version_gte "${target}" "${version}" || return 1
+        ;;
+      '>'*)
+        target="${token#'>'}"
+        [ "${version}" != "${target}" ] || return 1
+        version_gte "${version}" "${target}" || return 1
+        ;;
+      '<'*)
+        target="${token#'<'}"
+        [ "${version}" != "${target}" ] || return 1
+        version_gte "${target}" "${version}" || return 1
+        ;;
+      '~='*)
+        target="${token#'~='}"
+        version_gte "${version}" "${target}" || return 1
+        upper_bound="$(python_compatible_upper_bound "${target}")"
+        if [ -n "${upper_bound}" ]; then
+          [ "${version}" != "${upper_bound}" ] || return 1
+          version_gte "${upper_bound}" "${version}" || return 1
+        fi
+        ;;
+    esac
+  done
+
+  return 0
+}
+
+filter_python_versions_by_specifiers() {
+  local specifiers="$1"
+  local version
+
+  while IFS= read -r version; do
+    [ -n "${version}" ] || continue
+    if python_version_satisfies_specifiers "${version}" "${specifiers}"; then
       printf '%s\n' "${version}"
     fi
   done
@@ -727,7 +981,8 @@ npm_latest_eligible_version() {
 
 pypi_latest_overall_version() {
   local dep="$1"
-  local payload
+  local specifiers="${2:-}"
+  local payload versions
 
   payload="$(pypi_package_payload "${dep}" 2>/dev/null || true)"
   if [ -z "${payload}" ]; then
@@ -735,16 +990,47 @@ pypi_latest_overall_version() {
     return 0
   fi
 
-  jq -r '.info.version // empty' <<<"${payload}" 2>/dev/null | xargs || true
+  versions="$(
+    jq -r '
+      .releases
+      | to_entries[]
+      | select(.value | length > 0)
+      | .key
+    ' <<<"${payload}" 2>/dev/null || true
+  )"
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
+}
+
+pypi_latest_any_version() {
+  local dep="$1"
+  local specifiers="${2:-}"
+  local payload versions
+
+  payload="$(pypi_package_payload "${dep}" 2>/dev/null || true)"
+  if [ -z "${payload}" ]; then
+    printf '\n'
+    return 0
+  fi
+
+  versions="$(
+    jq -r '
+      .releases
+      | to_entries[]
+      | select(.value | length > 0)
+      | .key
+    ' <<<"${payload}" 2>/dev/null || true
+  )"
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
 }
 
 pypi_latest_eligible_version() {
   local dep="$1"
   local cutoff_iso="$2"
+  local specifiers="${3:-}"
   local payload versions
 
   if [ -z "${cutoff_iso}" ]; then
-    pypi_latest_overall_version "${dep}"
+    pypi_latest_overall_version "${dep}" "${specifiers}"
     return 0
   fi
 
@@ -771,15 +1057,16 @@ pypi_latest_eligible_version() {
         end
     ' <<<"${payload}" 2>/dev/null || true
   )"
-  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | sort -V | tail -n 1
+  printf '%s\n' "${versions}" | sed '/^$/d' | filter_prerelease_versions | filter_python_versions_by_specifiers "${specifiers}" | sort -V | tail -n 1
 }
 
 dependency_update_status() {
   local current="$1"
   local latest_eligible="$2"
   local latest_overall="$3"
+  local latest_any="${4:-}"
 
-  if [ -z "${current}" ] || [ -z "${latest_overall}" ]; then
+  if [ -z "${current}" ] || { [ -z "${latest_overall}" ] && [ -z "${latest_any}" ]; }; then
     if [ -z "${current}" ]; then
       printf 'lockfile missing or unresolved\n'
     else
@@ -793,8 +1080,36 @@ dependency_update_status() {
     return 0
   fi
 
+  if [ -z "${latest_overall}" ] && [ -n "${latest_any}" ]; then
+    if version_is_prerelease "${latest_any}" && version_is_prerelease "${current}" && version_gte "${current}" "${latest_any}"; then
+      printf 'current\n'
+    else
+      printf 'stable release unavailable; latest prerelease %s\n' "${latest_any}"
+    fi
+    return 0
+  fi
+
+  if [ -z "${latest_eligible}" ] && [ -n "${latest_overall}" ]; then
+    printf 'cooldown active\n'
+    return 0
+  fi
+
+  if version_is_prerelease "${current}" && ! version_prerelease_allowed "${current}"; then
+    printf 'update available\n'
+    return 0
+  fi
+
   if version_gte "${current}" "${latest_overall}"; then
     printf 'current\n'
+    return 0
+  fi
+
+  if [ -n "${latest_eligible}" ] && version_gte "${current}" "${latest_eligible}"; then
+    if [ "${latest_eligible}" != "${latest_overall}" ]; then
+      printf 'cooldown active\n'
+    else
+      printf 'current\n'
+    fi
     return 0
   fi
 
@@ -1077,9 +1392,18 @@ ensure_helm_repo_ready() {
 }
 
 ensure_check_version_cache_dir() {
-  HTTP_FETCH_CACHE_DIR="${HTTP_FETCH_CACHE_DIR:-${CHECK_VERSION_CACHE_DIR:-}}"
-  HTTP_FETCH_CACHE_DIR="$(http_cache_dir_ensure)"
-  CHECK_VERSION_CACHE_DIR="${HTTP_FETCH_CACHE_DIR}"
+  ensure_check_version_session_dir
+
+  if [ -n "${HTTP_FETCH_CACHE_DIR:-}" ] && [ -z "${CHECK_VERSION_CACHE_DIR:-}" ]; then
+    CHECK_VERSION_CACHE_DIR="${HTTP_FETCH_CACHE_DIR}"
+  fi
+
+  if [ -z "${CHECK_VERSION_CACHE_DIR:-}" ]; then
+    CHECK_VERSION_CACHE_DIR="${CHECK_VERSION_SESSION_DIR}/cache"
+  fi
+
+  mkdir -p "${CHECK_VERSION_CACHE_DIR}"
+  HTTP_FETCH_CACHE_DIR="${CHECK_VERSION_CACHE_DIR}"
 }
 
 chart_app_version_cache_file() {
@@ -1208,8 +1532,8 @@ oci_registry_repo_tags_uncached() {
   local url="https://${registry}/v2/${repository}/tags/list?n=1000"
   local headers_file body_file realm service scope token_url token_payload token
 
-  headers_file="$(mktemp)"
-  body_file="$(mktemp)"
+  platform_mktemp_file headers_file
+  platform_mktemp_file body_file
 
   if http_fetch -fsSL -D "${headers_file}" "${url}" -o "${body_file}" 2>/dev/null; then
     jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
@@ -1240,7 +1564,7 @@ oci_registry_repo_tags_uncached() {
     return 1
   fi
 
-  body_file="$(mktemp)"
+  platform_mktemp_file body_file
   if ! http_fetch -fsSL -H "Authorization: Bearer ${token}" "${url}" -o "${body_file}" 2>/dev/null; then
     rm -f "${headers_file}" "${body_file}"
     return 1
@@ -1422,7 +1746,7 @@ docker_manifest_inspect_safe() {
   local timeout="${CHECK_VERSION_DOCKER_MANIFEST_TIMEOUT_SECONDS:-10}"
   local tmp pid start elapsed rc
 
-  tmp="$(mktemp)"
+  platform_mktemp_file tmp
   docker manifest inspect "${image_ref}" >/dev/null 2>"${tmp}" &
   pid=$!
   start="$(date +%s)"
@@ -2097,7 +2421,7 @@ check_app_yaml_tfvar_drift() {
 
 emit_app_dependency_rows() {
   local package_json app_dir app_label cooldown_seconds dep spec current latest_overall latest_eligible status
-  local pyproject cutoff_iso requirement dep_name uv_lock requirement_status spec_status
+  local pyproject cutoff_iso requirement dep_name requirement_specifiers uv_lock requirement_status spec_status latest_any latest_display
 
   while IFS= read -r package_json; do
     app_dir="$(dirname "${package_json}")"
@@ -2171,15 +2495,18 @@ emit_app_dependency_rows() {
         continue
       fi
       current="$(uv_lock_resolved_version "${uv_lock}" "${dep_name}")"
-      latest_overall="$(pypi_latest_overall_version "${dep_name}")"
-      latest_eligible="$(pypi_latest_eligible_version "${dep_name}" "${cutoff_iso}")"
-      status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}")"
+      requirement_specifiers="$(python_requirement_specifiers "${requirement}")"
+      latest_overall="$(pypi_latest_overall_version "${dep_name}" "${requirement_specifiers}")"
+      latest_eligible="$(pypi_latest_eligible_version "${dep_name}" "${cutoff_iso}" "${requirement_specifiers}")"
+      latest_any="$(pypi_latest_any_version "${dep_name}" "${requirement_specifiers}")"
+      latest_display="${latest_overall:-${latest_any:-}}"
+      status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}" "${latest_any}")"
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${app_label}" \
         "${dep_name}" \
         "${current:-}" \
         "${latest_eligible:-}" \
-        "${latest_overall:-}" \
+        "${latest_display:-}" \
         "${status}"
     done < <(pyproject_project_dependencies "${pyproject}")
   done < <(
@@ -2269,9 +2596,12 @@ warm_dependency_metadata_caches() {
   local max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY:-4}"
   local js_input py_input output_dir
 
-  js_input="$(mktemp)"
-  py_input="$(mktemp)"
-  output_dir="$(mktemp -d)"
+  ensure_check_version_cache_dir
+  export HTTP_FETCH_CACHE_DIR CHECK_VERSION_CACHE_DIR
+
+  platform_mktemp_file js_input
+  platform_mktemp_file py_input
+  platform_mktemp_dir output_dir
 
   collect_js_dependency_names | LC_ALL=C sort -u >"${js_input}"
   collect_python_dependency_names | LC_ALL=C sort -u >"${py_input}"
@@ -2291,8 +2621,11 @@ warm_dependency_metadata_caches() {
 emit_external_image_rows() {
   local input_file output_dir max_jobs
 
-  input_file="$(mktemp)"
-  output_dir="$(mktemp -d)"
+  ensure_check_version_cache_dir
+  export HTTP_FETCH_CACHE_DIR CHECK_VERSION_CACHE_DIR
+
+  platform_mktemp_file input_file
+  platform_mktemp_dir output_dir
   max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY:-4}"
 
   collect_declared_image_refs | awk -F'\t' '!seen[$2]++' >"${input_file}"
@@ -2346,12 +2679,13 @@ render_dependency_audit_text() {
   local rows="$1"
 
   awk -F $'\t' '
-    function print_summary(app) {
+    function print_summary(app, detail_idx, issue_total) {
       if (app == "") {
         return
       }
 
-      if ((updates[app] + cooldown[app] + localdep[app] + directurl[app] + unresolved[app]) == 0) {
+      issue_total = updates[app] + cooldown[app] + localdep[app] + directurl[app] + unresolved[app]
+      if (issue_total == 0) {
         hidden_current_only++
         hidden_current_deps += current[app]
         return
@@ -2366,8 +2700,8 @@ render_dependency_audit_text() {
         unresolved[app] + 0,
         current[app] + 0
 
-      for (i = 1; i <= detail_count[app]; i++) {
-        print "  - " detail[app, i]
+      for (detail_idx = 1; detail_idx <= detail_count[app]; detail_idx++) {
+        print "  - " detail[app, detail_idx]
       }
       print ""
     }
@@ -2419,8 +2753,8 @@ render_dependency_audit_text() {
     }
 
     END {
-      for (i = 1; i <= app_count; i++) {
-        print_summary(order[i])
+      for (app_idx = 1; app_idx <= app_count; app_idx++) {
+        print_summary(order[app_idx])
       }
 
       if (hidden_current_only > 0) {
@@ -2607,6 +2941,8 @@ main() {
   require curl
   require helm
   require jq
+  ensure_check_version_cache_dir
+  export HTTP_FETCH_CACHE_DIR CHECK_VERSION_CACHE_DIR
 
   echo ""
   ok "Version check (Deployed vs Codebase vs Latest)"

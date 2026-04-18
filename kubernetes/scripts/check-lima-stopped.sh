@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
 
 lima_instance_prefix="${LIMA_INSTANCE_PREFIX:-k3s-node}"
-LIMA_SHARED_PORT_NUMBERS="443 30022 30080 30090 31235 3301"
+LIMA_SHARED_PORT_NUMBERS="443 30022 30080 30090 31235 3301 3302"
 running_lima_vms=""
 running_lima_proxies=""
 active_shared_ports=""

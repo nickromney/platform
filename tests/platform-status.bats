@@ -131,22 +131,14 @@ install_lsof_stub() {
   cat >"${TEST_BIN}/lsof" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-case "$*" in
-  *"-iTCP:443"*)
-    if [[ -n "${MOCK_LSOF_443:-}" ]]; then
-      printf '%s\n' "${MOCK_LSOF_443}"
-      exit 0
-    fi
-    exit 1
-    ;;
-  *"-iTCP:58081"*)
-    if [[ -n "${MOCK_LSOF_58081:-}" ]]; then
-      printf '%s\n' "${MOCK_LSOF_58081}"
-      exit 0
-    fi
-    exit 1
-    ;;
-esac
+if [[ "$*" =~ -i(TCP|UDP):([0-9]+) ]]; then
+  port="${BASH_REMATCH[2]}"
+  env_var="MOCK_LSOF_${port}"
+  if [[ -n "${!env_var:-}" ]]; then
+    printf '%s\n' "${!env_var}"
+    exit 0
+  fi
+fi
 exit 1
 EOF
   chmod +x "${TEST_BIN}/lsof"
@@ -212,7 +204,7 @@ EOF
 
 @test "platform status reports kind as the active serving cluster" {
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
-  export MOCK_DOCKER_PS_A="${MOCK_DOCKER_PS}"
+  export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
   export MOCK_KIND_CLUSTERS='kind-local'
   touch "${HOME}/.kube/kind-kind-local.yaml"
 
@@ -224,12 +216,47 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'running|kind|running|true|true' ]
+
+  run "${SCRIPT}" --execute --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"CLAIMED BY"* ]]
+  [[ "${output}" == *"shared host ports"* ]]
+  [[ "${output}" == *"kubernetes/kind"* ]]
+  [[ "${output}" != *"is already using shared localhost ports"* ]]
+
+  run awk '/^kubernetes\/lima[[:space:]]/ { print; exit }' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kubernetes/kind"* ]]
+  [[ "${output}" == *"shared host ports"* ]]
+}
+
+@test "platform status falls back to docker ps when docker info is unavailable" {
+  export MOCK_DOCKER_INFO_EXIT=1
+  export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
+  export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
+  export MOCK_KIND_CLUSTERS='kind-local'
+  touch "${HOME}/.kube/kind-kind-local.yaml"
+
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.platforms.docker.detail + "|" + .providers.kind.state + "|" + (.providers.kind.runtime_present|tostring)' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = 'context=desktop-linux|running|true' ]
 }
 
 @test "platform status reports kubernetes lima as active and sd-wan lima as another running project" {
-  export MOCK_DOCKER_PS='limavm-platform-gateway-443|127.0.0.1:443->host.docker.internal:30070/tcp'
-  export MOCK_DOCKER_PS_A="${MOCK_DOCKER_PS}"
   export MOCK_LSOF_58081=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:58081 (LISTEN)'
+  export MOCK_LSOF_443=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:443 (LISTEN)'
+  export MOCK_LSOF_30022=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 13u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:30022 (LISTEN)'
+  export MOCK_LSOF_30080=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 14u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:30080 (LISTEN)'
+  export MOCK_LSOF_30090=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 15u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:30090 (LISTEN)'
+  export MOCK_LSOF_31235=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 16u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:31235 (LISTEN)'
+  export MOCK_LSOF_3301=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 17u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:3301 (LISTEN)'
   export MOCK_LIMACTL_LIST=$'NAME STATUS SSH CPUS MEMORY DISK DIR\nk3s-node-1 Running 127.0.0.1:60022 4 8GiB 25GiB ~/.lima/k3s-node-1\ncloud1 Running 127.0.0.1:60031 2 4GiB 20GiB ~/.lima/cloud1\ncloud2 Running 127.0.0.1:60032 2 4GiB 20GiB ~/.lima/cloud2\ncloud3 Running 127.0.0.1:60033 2 4GiB 20GiB ~/.lima/cloud3'
   touch "${HOME}/.kube/limavm-k3s.yaml"
 
@@ -247,6 +274,20 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Active cluster provider: kubernetes/lima"* ]]
   [[ "${output}" == *"sd-wan/lima"* ]]
+  [[ "${output}" == *"30022,30080,30090"* ]]
+  [[ "${output}" == *"31235,3301,443"* ]]
+  [[ "${output}" != *"127.0.0.1:30022"* ]]
+  [[ "${output}" != *"127.0.0.1:30090"* ]]
+  [[ "${output}" != *"127.0.0.1:31235"* ]]
+
+  run awk '/^kubernetes\/lima[[:space:]]/ { print; getline; print; exit }' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  first_line="$(printf '%s\n' "${output}" | sed -n '1p')"
+  second_line="$(printf '%s\n' "${output}" | sed -n '2p')"
+  [[ "${first_line}" == *"30022,30080,30090"* ]]
+  [[ "${second_line}" == *"31235,3301,443"* ]]
+  [[ "${second_line}" != *"kubernetes/lima"* ]]
 }
 
 @test "platform status reports lima as degraded when the vm is running but the localhost proxy is missing" {
@@ -279,8 +320,9 @@ EOF
 
 @test "platform status reports a conflict when multiple providers claim localhost https" {
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nlimavm-platform-gateway-443|127.0.0.1:443->host.docker.internal:30070/tcp'
-  export MOCK_DOCKER_PS_A="${MOCK_DOCKER_PS}"
+  export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nlimavm-platform-gateway-443|Up 1 minute|127.0.0.1:443->host.docker.internal:30070/tcp'
   export MOCK_KIND_CLUSTERS='kind-local'
+  export MOCK_LSOF_443=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:443 (LISTEN)'
   export MOCK_LIMACTL_LIST=$'NAME STATUS SSH CPUS MEMORY DISK DIR\nk3s-node-1 Running 127.0.0.1:60022 4 8GiB 25GiB ~/.lima/k3s-node-1'
 
   run "${SCRIPT}" --execute --output json
@@ -320,7 +362,7 @@ EOF
   [[ "${output}" == false\|false\|* ]]
 }
 
-@test "platform status reports host runtimes and registry auth sources" {
+@test "platform status reports platforms and registry auth sources" {
   install_colima_stub
   install_podman_stub
   export MOCK_COLIMA_STATUS_EXIT=0
@@ -334,22 +376,47 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '(.host_runtimes.docker.running|tostring)
+  run jq -r '(.platforms.docker.running|tostring)
     + "|" + (.host_runtimes.colima.available|tostring)
     + "|" + (.host_runtimes.colima.running|tostring)
     + "|" + (.host_runtimes.podman.running|tostring)
+    + "|" + (.platforms.lima.available|tostring)
+    + "|" + (.platforms.slicer.available|tostring)
     + "|" + (.registry_auth.dhi_io.authenticated|tostring)
     + "|" + (.registry_auth.dhi_io.source // "-")
     + "|" + (.registry_auth.docker_io.source // "-")' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'true|true|true|true|true|docker-credential-desktop|config.json' ]
+  [ "${output}" = 'true|true|true|true|true|true|true|docker-credential-desktop|config.json' ]
 
   run "${SCRIPT}" --execute --output text
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Container runtimes:"* ]]
+  [[ "${output}" == *"Platforms:"* ]]
+  [[ "${output}" == *"lima"* ]]
+  [[ "${output}" == *"slicer"* ]]
   [[ "${output}" == *"Registry auth (Docker config + credential helper probe):"* ]]
   [[ "${output}" == *"docker-credential-desktop"* ]]
   [[ "${output}" == *"config.json"* ]]
+}
+
+@test "platform status text shows only available platforms in alphabetical order" {
+  run "${SCRIPT}" --execute --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'Platforms:\nPLATFORM  AVAIL  RUNNING  DETAIL'* ]]
+  [[ "${output}" == *$'\ndocker    Y      Y'* ]]
+  [[ "${output}" == *$'\nlima      Y      N'* ]]
+  [[ "${output}" == *$'\nslicer    Y      N'* ]]
+  [[ "${output}" != *$'\ncolima    '* ]]
+  [[ "${output}" != *$'\npodman    '* ]]
+
+  docker_line="$(printf '%s\n' "${output}" | awk '/^docker[[:space:]]/ { print NR; exit }')"
+  lima_line="$(printf '%s\n' "${output}" | awk '/^lima[[:space:]]/ { print NR; exit }')"
+  slicer_line="$(printf '%s\n' "${output}" | awk '/^slicer[[:space:]]/ { print NR; exit }')"
+  [ -n "${docker_line}" ]
+  [ -n "${lima_line}" ]
+  [ -n "${slicer_line}" ]
+  [ "${docker_line}" -lt "${lima_line}" ]
+  [ "${lima_line}" -lt "${slicer_line}" ]
 }

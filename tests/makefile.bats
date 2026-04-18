@@ -64,7 +64,7 @@ setup() {
   [[ "${output}" == *"This root Makefile is primarily informational."* ]]
 }
 
-@test "root bare make in a tty prints help then status" {
+@test "root bare make in a tty stays informational" {
   command -v script >/dev/null 2>&1 || skip "script not available"
 
   status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
@@ -80,7 +80,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Platform workspace Makefile guide"* ]]
-  [[ "${output}" == *"status --execute --output text"* ]]
+  [[ "${output}" != *"status --execute --output text"* ]]
 }
 
 @test "root status delegates to the platform status helper in text mode by default" {
@@ -318,6 +318,8 @@ EOF
 
 @test "root fmt delegates to the repo formatter scripts" {
   fmt_markdown_stub="${BATS_TEST_TMPDIR}/fmt-markdown.sh"
+  lint_yaml_stub="${BATS_TEST_TMPDIR}/lint-yaml.sh"
+  fmt_hcl_stub="${BATS_TEST_TMPDIR}/fmt-hcl.sh"
   log_file="${BATS_TEST_TMPDIR}/fmt.log"
 
   cat >"${fmt_markdown_stub}" <<EOF
@@ -327,15 +329,31 @@ printf 'fmt-markdown %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${fmt_markdown_stub}"
 
+  cat >"${lint_yaml_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'yaml %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${lint_yaml_stub}"
+
+  cat >"${fmt_hcl_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'fmt-hcl %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${fmt_hcl_stub}"
+
   run make -C "${REPO_ROOT}" fmt \
-    FMT_MARKDOWN_SCRIPT="${fmt_markdown_stub}"
+    FMT_MARKDOWN_SCRIPT="${fmt_markdown_stub}" \
+    LINT_YAML_SCRIPT="${lint_yaml_stub}" \
+    FMT_HCL_SCRIPT="${fmt_hcl_stub}"
 
   [ "${status}" -eq 0 ]
 
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'fmt-markdown --execute' ]
+  [ "${output}" = $'fmt-markdown --execute\nyaml --execute\nfmt-hcl --execute' ]
 }
 
 @test "root check-version delegates to the repo version checker" {

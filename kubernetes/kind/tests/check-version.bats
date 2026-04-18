@@ -159,14 +159,14 @@ EOF
 }
 
 @test "check-version renders long tags with aligned spacing" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.6-debian13\tv3.3.6\tok' \$'cert-manager\tv1.20.1\tv1.20.1\tok' | render_tsv_table"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.7-debian13\tv3.3.7\tok' \$'cert-manager\tv1.20.1\tv1.20.1\tok' | render_tsv_table"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.6-debian13[[:space:]][[:space:]]+v3\.3\.6[[:space:]][[:space:]]+ok ]]
+  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.7-debian13[[:space:]][[:space:]]+v3\.3\.7[[:space:]][[:space:]]+ok ]]
 }
 
 @test "check-version converts TSV rows into JSON objects without ANSI codes" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%b\n' \$'argo-cd chart\t9.5.0\t9.5.1\t\033[1;33mupdate available\033[0m' | tsv_rows_to_json_array '[\"component\",\"codebase\",\"latest\",\"status\"]'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%b\n' \$'argo-cd chart\t9.5.1\t9.5.2\t\033[1;33mupdate available\033[0m' | tsv_rows_to_json_array '[\"component\",\"codebase\",\"latest\",\"status\"]'"
 
   [ "${status}" -eq 0 ]
 
@@ -177,17 +177,36 @@ EOF
 }
 
 @test "check-version hides current-only apps from dependency audit text" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(cat <<'EOF'
-apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact\t19.2.5\t19.2.5\t19.2.5\tcurrent
-apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact-dom\t19.2.5\t19.2.5\t19.2.5\tcurrent
-apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t1.0.1\t1.0.1\tupdate available
-EOF
-); render_dependency_audit_text \"\${rows}\""
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(printf '%b\n' \
+  'apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact\t19.2.5\t19.2.5\t19.2.5\tcurrent' \
+  'apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact-dom\t19.2.5\t19.2.5\t19.2.5\tcurrent' \
+  'apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t1.0.1\t1.0.1\tupdate available'); rendered=\$(render_dependency_audit_text \"\${rows}\"); printf '%s\n%s\n' \
+  \"\$(printf '%s\n' \"\${rendered}\" | awk '/^apps\\// { count++ } END { print count + 0 }')\" \
+  \"\$(printf '%s\n' \"\${rendered}\" | awk '/^hidden current-only apps: 1 \\(dependencies hidden: 2\\)$/ { found = 1 } END { print found + 0 }')\""
 
   [ "${status}" -eq 0 ]
-  [[ ! "${output}" =~ apps/sentiment/frontend-react-vite/sentiment-auth-ui ]]
-  [[ "${output}" =~ apps/subnet-calculator/frontend-react ]]
-  [[ "${output}" =~ hidden\ current-only\ apps:\ 1\ \(dependencies\ hidden:\ 2\) ]]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "1" ]
+  [ "${lines[1]}" = "1" ]
+}
+
+@test "check-version dependency audit renderer does not loop when visible and hidden apps are adjacent" {
+  if ! command -v timeout >/dev/null 2>&1; then
+    skip "timeout is required"
+  fi
+
+  run bash -lc "rows=\$(printf '%b\n' \
+  'apps/sentiment/api-sentiment\talpha\t1.0.0\t1.0.0\t1.0.0\tcurrent' \
+  'apps/sentiment/frontend-react-vite/sentiment-auth-ui\tbeta\t1.0.0\t1.0.0\t1.0.0\tcurrent' \
+  'apps/subnet-calculator/frontend-react\t@subnet-calculator/shared-frontend\tfile:../shared-frontend\t\t\tlocal/path dependency' \
+  'apps/subnet-calculator/frontend-typescript-vite\tgamma\t1.0.0\t1.0.0\t1.0.0\tcurrent'); rendered=\$(timeout 5 bash -lc 'export CHECK_VERSION_LIB_ONLY=1; source \"\$1\"; render_dependency_audit_text \"\$2\"' _ '${SCRIPT}' \"\${rows}\"); printf '%s\n%s\n' \
+  \"\$(printf '%s\n' \"\${rendered}\" | awk '/^apps\\/subnet-calculator\\/frontend-react$/ { count++ } END { print count + 0 }')\" \
+  \"\$(printf '%s\n' \"\${rendered}\" | awk '/^hidden current-only apps: 3 \\(dependencies hidden: 3\\)$/ { found = 1 } END { print found + 0 }')\""
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "1" ]
+  [ "${lines[1]}" = "1" ]
 }
 
 @test "check-version honors npm cooldown timestamps with fractional seconds" {
@@ -264,11 +283,82 @@ EOF
   [ "${output}" = "$(printf '0.28.1\n1.0.dev3')" ]
 }
 
-@test "check-version treats current prereleases ahead of stable as current" {
+@test "check-version treats prerelease-only PyPI packages as current when current prerelease matches upstream" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"info":{"version":"0.62b0"},"releases":{"0.61b0":[{"upload_time_iso_8601":"2026-03-04T14:20:32.759Z"}],"0.62b0":[{"upload_time_iso_8601":"2026-04-09T14:40:36.438Z"}]}}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \
+    \"\$(pypi_latest_overall_version example)\" \
+    \"\$(pypi_latest_any_version example)\" \
+    \"\$(dependency_update_status 0.62b0 \"\$(pypi_latest_eligible_version example 2026-04-18T00:00:00.000Z)\" \"\$(pypi_latest_overall_version example)\" \"\$(pypi_latest_any_version example)\")\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '\n0.62b0\ncurrent')" ]
+}
+
+@test "check-version respects Python requirement upper bounds during version selection" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"info":{"version":"7.34.1"},"releases":{"5.29.6":[{"upload_time_iso_8601":"2026-02-04T22:54:39.462Z"}],"7.34.1":[{"upload_time_iso_8601":"2026-04-12T00:00:00.000Z"}]}}'
+EOF
+  chmod +x "${stub_bin}/curl"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \
+    \"\$(pypi_latest_overall_version example)\" \
+    \"\$(pypi_latest_overall_version example '>=5.29.5,<6')\" \
+    \"\$(dependency_update_status 5.29.6 \"\$(pypi_latest_eligible_version example 2026-04-18T00:00:00.000Z '>=5.29.5,<6')\" \"\$(pypi_latest_overall_version example '>=5.29.5,<6')\")\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf '7.34.1\n5.29.6\ncurrent')" ]
+}
+
+@test "check-version registers and cleans temp paths used by HTTP cache helpers" {
+  run bash -lc "runtime_root='${BATS_TEST_TMPDIR}/check-version-runtime'; export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_RUNTIME_ROOT=\"\${runtime_root}\"; source '${SCRIPT}'; ensure_check_version_cache_dir; cache_dir=\${HTTP_FETCH_CACHE_DIR}; session_dir=\${CHECK_VERSION_SESSION_DIR}; platform_mktemp_file temp_file; [ -d \"\${runtime_root}/tmp\" ]; [ -d \"\${session_dir}\" ]; [ -d \"\${cache_dir}\" ]; [ -f \"\${temp_file}\" ]; [[ \"\${session_dir}\" == \"\${runtime_root}\"/tmp/session.* ]]; [[ \"\${cache_dir}\" == \"\${session_dir}/cache\" ]]; [[ \"\${temp_file}\" == \"\${session_dir}\"/tmp.* ]]; cleanup_registered_temp_paths; [ -d \"\${runtime_root}/tmp\" ]; [ ! -e \"\${session_dir}\" ]; [ ! -e \"\${cache_dir}\" ]; [ ! -e \"\${temp_file}\" ]"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "check-version prunes abandoned repo-owned sessions before starting a new one" {
+  run bash -lc "runtime_root='${BATS_TEST_TMPDIR}/check-version-runtime'; stale_dir=\"\${runtime_root}/tmp/session.stale\"; mkdir -p \"\${stale_dir}\"; printf '999999\\n' >\"\${stale_dir}/owner.pid\"; export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_RUNTIME_ROOT=\"\${runtime_root}\"; source '${SCRIPT}'; ensure_check_version_cache_dir; [ ! -e \"\${stale_dir}\" ]; [ -d \"\${CHECK_VERSION_SESSION_DIR}\" ]"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "check-version flags current prereleases ahead of stable by default" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; dependency_update_status '19.3.0-canary-fd524fe0-20251121' '19.2.5' '19.2.5'"
 
   [ "${status}" -eq 0 ]
+  [ "${output}" = "update available" ]
+}
+
+@test "check-version honors prerelease opt-in when current dependency is canary" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_INCLUDE_CANARY=1; source '${SCRIPT}'; dependency_update_status '19.3.0-canary-fd524fe0-20251121' '19.3.0-canary-fd524fe0-20251121' '19.2.5'"
+
+  [ "${status}" -eq 0 ]
   [ "${output}" = "current" ]
+}
+
+@test "check-version keeps cooldown active when current stable is ahead of the cooled-off floor" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; dependency_update_status '2.1.0' '2.0.0' '2.2.0'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "cooldown active" ]
+}
+
+@test "check-version reports cooldown active when no stable release has cooled off yet" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; dependency_update_status '2.13.0b3' '' '2.13.2' '2.13.2'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "cooldown active" ]
 }
 
 @test "check-version caches Docker Hub tag listings by repository" {

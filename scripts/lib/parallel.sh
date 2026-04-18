@@ -5,6 +5,24 @@ parallel_default_jobs() {
   printf '%s\n' "${PLATFORM_PARALLEL_JOBS:-4}"
 }
 
+parallel_temp_file() {
+  local var_name="${1:-}"
+  local path=""
+
+  if declare -F platform_mktemp_file >/dev/null 2>&1 && [ -n "${var_name}" ]; then
+    platform_mktemp_file "${var_name}"
+    return 0
+  fi
+
+  path="$(mktemp)"
+  if [ -n "${var_name}" ]; then
+    printf -v "${var_name}" '%s' "${path}"
+    return 0
+  fi
+
+  printf '%s\n' "${path}"
+}
+
 parallel_wait_all() {
   local overall_status=0
   local pid
@@ -67,7 +85,7 @@ parallel_map_stdin() {
   local output_dir="$3"
   local input_file
 
-  input_file="$(mktemp)"
+  parallel_temp_file input_file
   cat >"${input_file}"
   parallel_map_lines "${max_jobs}" "${callback}" "${input_file}" "${output_dir}"
   rm -f "${input_file}"

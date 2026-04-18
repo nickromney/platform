@@ -100,14 +100,14 @@ run "policies_enabled_with_cilium_policies_disabled" {
   command = plan
 
   variables {
-    cni_provider            = "cilium"
-    enable_hubble           = false
-    enable_argocd           = true
-    enable_gitea            = true
-    enable_signoz           = false
-    enable_sso              = false
-    enable_policies         = true
-    enable_cilium_policies  = false
+    cni_provider           = "cilium"
+    enable_hubble          = false
+    enable_argocd          = true
+    enable_gitea           = true
+    enable_signoz          = false
+    enable_sso             = false
+    enable_policies        = true
+    enable_cilium_policies = false
   }
 
   assert {

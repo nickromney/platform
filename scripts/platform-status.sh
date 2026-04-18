@@ -12,6 +12,12 @@ LIMA_KUBECONFIG_PATH="${PLATFORM_STATUS_LIMA_KUBECONFIG_PATH:-${HOME}/.kube/lima
 SLICER_KUBECONFIG_PATH="${PLATFORM_STATUS_SLICER_KUBECONFIG_PATH:-${HOME}/.kube/slicer-k3s.yaml}"
 SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 output_format="human"
+PLATFORM_SHARED_PORTS="${PLATFORM_STATUS_SHARED_PORTS:-443 30022 30080 30090 31235 3301 3302}"
+PLATFORM_PROVIDER_PORTS="${PLATFORM_STATUS_PROVIDER_PORTS:-6443 ${PLATFORM_SHARED_PORTS}}"
+PLATFORM_SDWAN_PORTS="${PLATFORM_STATUS_SDWAN_PORTS:-58081}"
+PLATFORM_PROBE_PORTS="${PLATFORM_STATUS_PROBE_PORTS:-${PLATFORM_PROVIDER_PORTS} ${PLATFORM_SDWAN_PORTS}}"
+PLATFORM_STATUS_PORTS_WRAP_WIDTH="${PLATFORM_STATUS_PORTS_WRAP_WIDTH:-20}"
+PLATFORM_STATUS_CELL_WRAP_SENTINEL="__PLATFORM_CELL_WRAP__"
 
 usage() {
   cat <<'EOF'
@@ -67,6 +73,14 @@ strip_status_prefix() {
   printf '%s\n' "${input}" | sed -E 's/^(OK|WARN)[[:space:]]+//'
 }
 
+shared_host_ports_claimed_by() {
+  printf 'shared host ports claimed by %s\n' "$1"
+}
+
+lima_vms_claimed_by() {
+  printf 'Lima VMs claimed by %s\n' "$1"
+}
+
 registry_source_from_probe() {
   local probe_output="${1-}"
 
@@ -112,6 +126,13 @@ docker_host_ports_for_pattern() {
     | LC_ALL=C sort -u
 }
 
+docker_running_name_ports() {
+  local docker_lines="${1-}"
+
+  [ -n "${docker_lines}" ] || return 0
+  printf '%s\n' "${docker_lines}" | awk -F '|' '$2 ~ /^Up/ { print $1 "|" $3 }'
+}
+
 docker_name_exists() {
   local docker_lines="${1-}"
   local name_pattern="${2-}"
@@ -142,6 +163,158 @@ port_listener_output() {
   fi
 
   printf ''
+}
+
+append_lines() {
+  local var_name="$1"
+  local value_lines="${2-}"
+  local line=""
+
+  [ -n "${value_lines}" ] || return 0
+
+  while IFS= read -r line; do
+    [ -n "${line}" ] || continue
+    append_line "${var_name}" "${line}"
+  done <<<"${value_lines}"
+}
+
+unique_sorted_lines() {
+  local input="${1-}"
+
+  [ -n "${input}" ] || return 0
+  printf '%s\n' "${input}" | awk 'NF && !seen[$0]++ { print }' | LC_ALL=C sort
+}
+
+listener_addresses_from_lsof() {
+  local input="${1-}"
+
+  [ -n "${input}" ] || return 0
+  printf '%s\n' "${input}" | awk '
+    NR == 1 { next }
+    {
+      addr = ($NF == "(LISTEN)" && NF > 1) ? $(NF - 1) : $NF
+      if (addr ~ /^\*:/) {
+        sub(/^\*:/, "0.0.0.0:", addr)
+      } else if (addr ~ /^localhost:/) {
+        sub(/^localhost:/, "127.0.0.1:", addr)
+      }
+      if (addr ~ /:[0-9]+$/ || addr ~ /^\[[^]]+\]:[0-9]+$/) {
+        print addr
+      }
+    }
+  '
+}
+
+listener_addresses_from_ss() {
+  local input="${1-}"
+
+  [ -n "${input}" ] || return 0
+  printf '%s\n' "${input}" | awk '
+    {
+      addr = ($4 != "" ? $4 : $5)
+      if (addr ~ /^\*:/) {
+        sub(/^\*:/, "0.0.0.0:", addr)
+      } else if (addr ~ /^localhost:/) {
+        sub(/^localhost:/, "127.0.0.1:", addr)
+      }
+      if (addr ~ /:[0-9]+$/ || addr ~ /^\[[^]]+\]:[0-9]+$/) {
+        print addr
+      }
+    }
+  '
+}
+
+listener_addresses_for_port() {
+  local port="$1"
+  local raw_output=""
+
+  raw_output="$(port_listener_output "${port}")"
+  [ -n "${raw_output}" ] || return 0
+
+  if have_cmd lsof; then
+    listener_addresses_from_lsof "${raw_output}"
+    return 0
+  fi
+
+  if have_cmd ss; then
+    listener_addresses_from_ss "${raw_output}"
+    return 0
+  fi
+}
+
+listener_addresses_for_ports() {
+  local ports_text="${1-}"
+  local port=""
+  local combined=""
+  local addresses=""
+
+  [ -n "${ports_text}" ] || return 0
+
+  for port in ${ports_text}; do
+    addresses="$(listener_addresses_for_port "${port}")"
+    append_lines combined "${addresses}"
+  done
+
+  unique_sorted_lines "${combined}"
+}
+
+filter_ports_by_numbers() {
+  local ports_text="${1-}"
+  local port_numbers="${2-}"
+
+  [ -n "${ports_text}" ] || return 0
+  [ -n "${port_numbers}" ] || return 0
+
+  printf '%s\n' "${ports_text}" | awk -F ':' -v numbers="${port_numbers}" '
+    BEGIN {
+      split(numbers, wanted_numbers, /[[:space:]]+/)
+      for (i in wanted_numbers) {
+        if (wanted_numbers[i] != "") {
+          wanted[wanted_numbers[i]] = 1
+        }
+      }
+    }
+    NF && wanted[$NF] {
+      print $0
+    }
+  ' | LC_ALL=C sort -u
+}
+
+line_set_difference() {
+  local input_text="${1-}"
+  local exclude_text="${2-}"
+
+  [ -n "${input_text}" ] || return 0
+
+  if [ -z "${exclude_text}" ]; then
+    unique_sorted_lines "${input_text}"
+    return 0
+  fi
+
+  awk '
+    NR == FNR {
+      if (NF) {
+        excluded[$0] = 1
+      }
+      next
+    }
+    NF && !excluded[$0] {
+      print $0
+    }
+  ' <(printf '%s\n' "${exclude_text}") <(printf '%s\n' "${input_text}") | LC_ALL=C sort -u
+}
+
+append_foreign_port_blockers() {
+  local var_name="$1"
+  local ports_text="${2-}"
+  local port=""
+
+  [ -n "${ports_text}" ] || return 0
+
+  while IFS= read -r port; do
+    [ -n "${port}" ] || continue
+    append_line "${var_name}" "${port} is already in use by a non-platform process"
+  done <<<"${ports_text}"
 }
 
 limactl_state_for() {
@@ -280,11 +453,38 @@ kube_version_for() {
 render_status_table() {
   local json_payload="$1"
 
-  jq -r '
-    (["PROJECT", "STATE", "SERVE", "PRESENT", "VERSION", "PORTS", "NOTE"] | @tsv),
+  jq -r \
+    --arg wrap_sentinel "${PLATFORM_STATUS_CELL_WRAP_SENTINEL}" \
+    --argjson ports_wrap_width "${PLATFORM_STATUS_PORTS_WRAP_WIDTH}" '
+    def wrap_items($width; $sentinel):
+      reduce .[] as $item (
+        {lines: [], current: ""};
+        if .current == "" then
+          .current = $item
+        elif ((.current | length) + 1 + ($item | length)) <= $width then
+          .current += "," + $item
+        else
+          .lines += [.current] | .current = $item
+        end
+      )
+      | (.lines + (if .current == "" then [] else [.current] end))
+      | join($sentinel);
+
+    def truncate_note($text):
+      if ($text | length) > 56 then $text[0:53] + "..." else $text end;
+
+    (["PROJECT", "STATE", "SERVE", "PRESENT", "VERSION", "PORTS", "CLAIMED BY", "NOTE"] | @tsv),
     (
       .projects_order[] as $key
       | .projects[$key] as $project
+      | ($project.blockers[0] // "") as $blocker
+      | (
+          if ($blocker | test("^(?<claim>.+) claimed by (?<owner>.+)$")) then
+            ($blocker | capture("^(?<claim>.+) claimed by (?<owner>.+)$"))
+          else
+            null
+          end
+        ) as $claim_match
       | [
           $project.path,
           $project.state,
@@ -293,16 +493,30 @@ render_status_table() {
           ($project.version // "-"),
           (
             if ($project.shared_ports | length) > 0 then
-              (($project.shared_ports | join(",")) | if length > 28 then .[0:25] + "..." else . end)
+              (
+                $project.shared_ports
+                | map(split(":") | last)
+                | unique
+                | wrap_items($ports_wrap_width; $wrap_sentinel)
+              )
             else
               "-"
             end
           ),
           (
-            if ($project.blockers | length) > 0 then
-              (($project.blockers[0]) | if length > 56 then .[0:53] + "..." else . end)
+            if $claim_match then
+              $claim_match.owner
             else
               "-"
+            end
+          ),
+          (
+            if $blocker == "" then
+              "-"
+            elif $claim_match then
+              truncate_note($claim_match.claim)
+            else
+              truncate_note($blocker)
             end
           )
         ]
@@ -315,10 +529,14 @@ render_runtime_table() {
   local json_payload="$1"
 
   jq -r '
-    (["RUNTIME", "AVAIL", "RUNNING", "DETAIL"] | @tsv),
+    (["PLATFORM", "AVAIL", "RUNNING", "DETAIL"] | @tsv),
     (
-      .host_runtimes_order[] as $key
-      | .host_runtimes[$key] as $runtime
+      .platforms
+      | to_entries
+      | map(select(.value.available))
+      | sort_by(.key)
+      | .[] as $entry
+      | $entry.value as $runtime
       | [
           $runtime.name,
           (if $runtime.available then "Y" else "N" end),
@@ -350,7 +568,7 @@ render_registry_auth_table() {
 }
 
 render_tsv_table() {
-  awk -F $'\t' '
+  awk -F $'\t' -v wrap_sentinel="${PLATFORM_STATUS_CELL_WRAP_SENTINEL}" '
     function repeat(char, count,    result, i) {
       result = ""
       for (i = 0; i < count; i++) {
@@ -358,26 +576,47 @@ render_tsv_table() {
       }
       return result
     }
+    function split_cell(cell, lines,    count) {
+      if (cell == "") {
+        lines[1] = ""
+        return 1
+      }
+      return split(cell, lines, wrap_sentinel)
+    }
     {
-      rows[NR] = $0
       if (NF > max_nf) {
         max_nf = NF
       }
       for (i = 1; i <= NF; i++) {
-        if (length($i) > widths[i]) {
-          widths[i] = length($i)
+        cells[NR, i] = $i
+        line_count = split_cell($i, cell_lines)
+        if (line_count > row_heights[NR]) {
+          row_heights[NR] = line_count
+        }
+        for (line = 1; line <= line_count; line++) {
+          if (length(cell_lines[line]) > widths[i]) {
+            widths[i] = length(cell_lines[line])
+          }
         }
       }
     }
     END {
       for (row = 1; row <= NR; row++) {
-        split(rows[row], cols, FS)
-        for (i = 1; i <= max_nf; i++) {
-          printf "%-*s", widths[i], cols[i]
-          if (i < max_nf) {
-            printf "  "
-          } else {
-            printf "\n"
+        row_height = row_heights[row]
+        if (row_height < 1) {
+          row_height = 1
+        }
+        for (line = 1; line <= row_height; line++) {
+          for (i = 1; i <= max_nf; i++) {
+            cell = cells[row, i]
+            line_count = split_cell(cell, cell_lines)
+            value = (line <= line_count ? cell_lines[line] : "")
+            printf "%-*s", widths[i], value
+            if (i < max_nf) {
+              printf "  "
+            } else {
+              printf "\n"
+            }
           }
         }
         if (row == 1) {
@@ -450,7 +689,7 @@ render_human_output() {
       end
     )
   ' <<<"${json_payload}"
-  printf '\nContainer runtimes:\n%s\n' "${runtime_table}"
+  printf '\nPlatforms:\n%s\n' "${runtime_table}"
   printf '\nRegistry auth (Docker config + credential helper probe):\n%s\n' "${registry_auth_table}"
   printf '\nTracked projects:\n%s\n' "${table_output}"
   jq -r '
@@ -515,13 +754,19 @@ docker_context=""
 docker_ps_output=""
 docker_ps_all_output=""
 docker_runtime_detail=""
+docker_ps_all_ok=0
 if have_cmd docker; then
   docker_available=1
-  if docker info >/dev/null 2>&1; then
+  docker_context="$(docker context show 2>/dev/null || true)"
+  if docker_ps_all_output="$(docker ps -a --format '{{.Names}}|{{.Status}}|{{.Ports}}' 2>/dev/null)"; then
+    docker_ps_all_ok=1
+    docker_ps_output="$(docker_running_name_ports "${docker_ps_all_output}")"
+  else
+    docker_ps_all_output=""
+    docker_ps_output=""
+  fi
+  if docker info >/dev/null 2>&1 || [ "${docker_ps_all_ok}" -eq 1 ]; then
     docker_daemon=1
-    docker_context="$(docker context show 2>/dev/null || true)"
-    docker_ps_output="$(docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null || true)"
-    docker_ps_all_output="$(docker ps -a --format '{{.Names}}|{{.Status}}|{{.Ports}}' 2>/dev/null || true)"
     if [ -n "${docker_context}" ]; then
       docker_runtime_detail="context=${docker_context}"
     else
@@ -612,42 +857,29 @@ for candidate in "${K3SUP_PRO_BIN:-}" "$(command -v k3sup-pro 2>/dev/null || tru
   break
 done
 
-listener_443="$(port_listener_output 443)"
-listener_58081="$(port_listener_output 58081)"
-
 kind_ports="$(docker_host_ports_for_pattern "${docker_ps_output}" '^kind-local-(control-plane|worker([0-9]+)?)$' || true)"
+kind_ports="$(unique_sorted_lines "${kind_ports}")"
 kind_runtime_present=0
 kind_running=0
-kind_serving=0
 if [ -n "${kind_clusters}" ] || [ -n "${kind_ports}" ] || docker_name_exists "${docker_ps_all_output}" '^kind-local-(control-plane|worker([0-9]+)?)$'; then
   kind_runtime_present=1
 fi
 if docker_name_exists "${docker_ps_output}" '^kind-local-control-plane$'; then
   kind_running=1
 fi
-if ports_include_number "${kind_ports}" 443; then
-  kind_serving=1
-fi
 
-lima_ports="$(docker_host_ports_for_pattern "${docker_ps_output}" '^limavm-platform-gateway-443$' || true)"
 lima_runtime_present=0
 lima_running=0
-lima_serving=0
 if limactl_has_prefix "${limactl_list_output}" 'k3s-node-'; then
   lima_runtime_present=1
 fi
 if limactl_running_prefix "${limactl_list_output}" 'k3s-node-'; then
   lima_running=1
 fi
-if ports_include_number "${lima_ports}" 443; then
-  lima_serving=1
-fi
 
-slicer_ports="$(docker_host_ports_for_pattern "${docker_ps_output}" '^slicer-platform-gateway-443$' || true)"
 slicer_runtime_present=0
 slicer_running=0
 slicer_paused=0
-slicer_serving=0
 slicer_vm_state=""
 if [ "${slicer_endpoint_reachable}" -eq 1 ]; then
   slicer_vm_state="$(jq -r --arg vm "${SLICER_VM_NAME}" '.[] | select(.hostname == $vm) | .status // empty' <<<"${slicer_vm_list_json}" | head -n 1 || true)"
@@ -661,13 +893,9 @@ if [ "${slicer_endpoint_reachable}" -eq 1 ]; then
     slicer_paused=1
   fi
 fi
-if ports_include_number "${slicer_ports}" 443; then
-  slicer_serving=1
-fi
 
 sdwan_present_count=0
 sdwan_running_count=0
-sdwan_serving=0
 for cloud in cloud1 cloud2 cloud3; do
   cloud_state="$(limactl_state_for "${limactl_list_output}" "${cloud}")"
   if [ -n "${cloud_state}" ]; then
@@ -681,12 +909,43 @@ sdwan_runtime_present=0
 if [ "${sdwan_present_count}" -gt 0 ]; then
   sdwan_runtime_present=1
 fi
-if [ "${sdwan_running_count}" -eq 3 ] && [ -n "${listener_58081}" ]; then
-  sdwan_serving=1
+
+lima_ports=""
+if [ "${lima_running}" -eq 1 ]; then
+  lima_ports="$(listener_addresses_for_ports "${PLATFORM_PROVIDER_PORTS}" || true)"
 fi
+lima_ports="$(unique_sorted_lines "${lima_ports}")"
+
+slicer_ports=""
+if [ "${slicer_running}" -eq 1 ]; then
+  slicer_ports="$(listener_addresses_for_ports "${PLATFORM_PROVIDER_PORTS}" || true)"
+fi
+slicer_ports="$(unique_sorted_lines "${slicer_ports}")"
+
 sdwan_ports=""
-if [ "${sdwan_runtime_present}" -eq 1 ] || [ -n "${listener_58081}" ]; then
-  sdwan_ports='127.0.0.1:58081'
+if [ "${sdwan_runtime_present}" -eq 1 ] || [ -n "$(listener_addresses_for_ports "${PLATFORM_SDWAN_PORTS}" || true)" ]; then
+  sdwan_ports="$(listener_addresses_for_ports "${PLATFORM_SDWAN_PORTS}" || true)"
+fi
+sdwan_ports="$(unique_sorted_lines "${sdwan_ports}")"
+
+kind_serving=0
+if ports_include_number "${kind_ports}" 443; then
+  kind_serving=1
+fi
+
+lima_serving=0
+if ports_include_number "${lima_ports}" 443; then
+  lima_serving=1
+fi
+
+slicer_serving=0
+if ports_include_number "${slicer_ports}" 443; then
+  slicer_serving=1
+fi
+
+sdwan_serving=0
+if [ "${sdwan_running_count}" -eq 3 ] && ports_include_number "${sdwan_ports}" 58081; then
+  sdwan_serving=1
 fi
 
 kind_version="$(kube_version_for "${KIND_KUBECONFIG_PATH}" 'kind-kind-local')"
@@ -742,12 +1001,41 @@ if [ "${sdwan_runtime_present}" -eq 1 ]; then
   fi
 fi
 
-foreign_ports=""
-if [ -n "${listener_443}" ] && [ "${kind_serving}" -eq 0 ] && [ "${lima_serving}" -eq 0 ] && [ "${slicer_serving}" -eq 0 ]; then
-  append_line foreign_ports '127.0.0.1:443'
+all_project_ports=""
+append_lines all_project_ports "${kind_ports}"
+append_lines all_project_ports "${lima_ports}"
+append_lines all_project_ports "${slicer_ports}"
+append_lines all_project_ports "${sdwan_ports}"
+all_project_ports="$(unique_sorted_lines "${all_project_ports}")"
+
+probe_listener_ports="$(listener_addresses_for_ports "${PLATFORM_PROBE_PORTS}" || true)"
+foreign_ports="$(line_set_difference "${probe_listener_ports}" "${all_project_ports}")"
+
+lima_platform_running=0
+if [ "${lima_running}" -eq 1 ] || [ "${sdwan_running_count}" -gt 0 ]; then
+  lima_platform_running=1
 fi
-if [ -n "${listener_58081}" ] && [ "${sdwan_serving}" -eq 0 ]; then
-  append_line foreign_ports '127.0.0.1:58081'
+lima_platform_detail=""
+if [ "${limactl_available}" -eq 1 ]; then
+  lima_instances="$(printf '%s\n' "${limactl_list_output}" | awk 'NR > 1 { printf("%s%s:%s", (count++ ? "," : ""), $1, $2) }')"
+  if [ -n "${lima_instances}" ]; then
+    lima_platform_detail="instances=${lima_instances}"
+  else
+    lima_platform_detail="no Lima instances"
+  fi
+else
+  lima_platform_detail="limactl not found"
+fi
+
+slicer_platform_detail=""
+if [ "${slicer_available}" -ne 1 ]; then
+  slicer_platform_detail="slicer not found"
+elif [ "${slicer_endpoint_reachable}" -ne 1 ]; then
+  slicer_platform_detail="endpoint unreachable"
+elif [ -n "${slicer_vm_state}" ]; then
+  slicer_platform_detail="vm=${SLICER_VM_NAME}:${slicer_vm_state}"
+else
+  slicer_platform_detail="endpoint reachable"
 fi
 
 kind_dhi_auth=0
@@ -772,6 +1060,11 @@ kind_dhi_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${dhi_auth_
 kind_docker_hub_auth_source="$(registry_source_from_probe "${docker_hub_auth_probe_output}")"
 kind_docker_hub_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${docker_hub_auth_probe_output}")")"
 
+kind_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_PROVIDER_PORTS}")"
+lima_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_PROVIDER_PORTS}")"
+slicer_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_PROVIDER_PORTS}")"
+sdwan_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_SDWAN_PORTS}")"
+
 kind_blockers=""
 if [ "${docker_available}" -ne 1 ]; then
   append_line kind_blockers 'docker not found in PATH'
@@ -788,14 +1081,12 @@ if [ "${kind_docker_hub_auth}" -ne 1 ]; then
   append_line kind_blockers 'Docker Hub auth missing'
 fi
 if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
-  append_line kind_blockers 'kubernetes/lima is already using shared localhost ports'
+  append_line kind_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
 fi
 if [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
-  append_line kind_blockers 'kubernetes/slicer is already using shared localhost ports'
+  append_line kind_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 fi
-if printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:443'; then
-  append_line kind_blockers '127.0.0.1:443 is already in use by a non-platform process'
-fi
+append_foreign_port_blockers kind_blockers "${kind_foreign_ports}"
 
 lima_blockers=""
 if [ "${docker_available}" -ne 1 ]; then
@@ -810,17 +1101,15 @@ if [ "${bootstrap_client_available}" -ne 1 ]; then
   append_line lima_blockers 'bootstrap client not found (k3sup-pro or k3sup)'
 fi
 if [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
-  append_line lima_blockers 'kubernetes/kind is already using shared localhost ports'
+  append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/kind')"
 fi
 if [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
-  append_line lima_blockers 'kubernetes/slicer is already using shared localhost ports'
+  append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 fi
 if [ "${sdwan_state}" = "running" ] || [ "${sdwan_state}" = "degraded" ]; then
-  append_line lima_blockers 'sd-wan/lima is already using Lima VMs'
+  append_line lima_blockers "$(lima_vms_claimed_by 'sd-wan/lima')"
 fi
-if printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:443'; then
-  append_line lima_blockers '127.0.0.1:443 is already in use by a non-platform process'
-fi
+append_foreign_port_blockers lima_blockers "${lima_foreign_ports}"
 
 slicer_blockers=""
 if [ "${docker_available}" -ne 1 ]; then
@@ -838,29 +1127,27 @@ if [ "${bootstrap_client_available}" -ne 1 ]; then
   append_line slicer_blockers 'bootstrap client not found (k3sup-pro or k3sup)'
 fi
 if [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
-  append_line slicer_blockers 'kubernetes/kind is already using shared localhost ports'
+  append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/kind')"
 fi
 if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
-  append_line slicer_blockers 'kubernetes/lima is already using shared localhost ports'
+  append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
 fi
-if printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:443'; then
-  append_line slicer_blockers '127.0.0.1:443 is already in use by a non-platform process'
-fi
+append_foreign_port_blockers slicer_blockers "${slicer_foreign_ports}"
 
 sdwan_blockers=""
 if [ "${limactl_available}" -ne 1 ]; then
   append_line sdwan_blockers 'limactl not found in PATH'
 fi
 if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
-  append_line sdwan_blockers 'kubernetes/lima is also using Lima VMs'
+  append_line sdwan_blockers "$(lima_vms_claimed_by 'kubernetes/lima')"
 fi
-if printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:58081'; then
-  append_line sdwan_blockers '127.0.0.1:58081 is already in use by a non-platform process'
-fi
+append_foreign_port_blockers sdwan_blockers "${sdwan_foreign_ports}"
 
 docker_runtime_json="$(build_runtime_json docker "${docker_available}" "${docker_daemon}" "${docker_runtime_detail}")"
 colima_runtime_json="$(build_runtime_json colima "${colima_available}" "${colima_running}" "${colima_runtime_detail}")"
 podman_runtime_json="$(build_runtime_json podman "${podman_available}" "${podman_running}" "${podman_runtime_detail}")"
+lima_platform_json="$(build_runtime_json lima "${limactl_available}" "${lima_platform_running}" "${lima_platform_detail}")"
+slicer_platform_json="$(build_runtime_json slicer "${slicer_available}" "${slicer_running}" "${slicer_platform_detail}")"
 
 dhi_registry_auth_json="$(build_registry_auth_json dhi.io "${kind_dhi_auth}" "${kind_dhi_auth_source}" "${kind_dhi_auth_detail}")"
 docker_io_registry_auth_json="$(build_registry_auth_json docker.io "${kind_docker_hub_auth}" "${kind_docker_hub_auth_source}" "${kind_docker_hub_auth_detail}")"
@@ -917,7 +1204,7 @@ slicer_readiness_json="$(jq -cn \
 
 sdwan_readiness_json="$(jq -cn \
   --argjson limactl_available "$(bool_json "${limactl_available}")" \
-  --argjson listener_58081 "$(bool_json "$( [ -n "${listener_58081}" ] && printf 1 || printf 0 )")" \
+  --argjson listener_58081 "$(bool_json "$( ports_include_number "${sdwan_ports}" 58081 && printf 1 || printf 0 )")" \
   '{
     limactl_available: $limactl_available,
     listener_58081: $listener_58081
@@ -990,13 +1277,13 @@ elif [ "${kind_available}" -ne 1 ]; then
   kind_apply_100_reason='kind not found in PATH'
 elif [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
   kind_apply_100_enabled=0
-  kind_apply_100_reason='kubernetes/lima must be cleared first'
+  kind_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/lima')"
 elif [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
   kind_apply_100_enabled=0
-  kind_apply_100_reason='kubernetes/slicer must be cleared first'
-elif printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:443'; then
+  kind_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
+elif [ -n "${kind_foreign_ports}" ]; then
   kind_apply_100_enabled=0
-  kind_apply_100_reason='127.0.0.1:443 is already in use by another process'
+  kind_apply_100_reason="$(first_non_empty_line "${kind_foreign_ports}") is already in use by another process"
 fi
 
 kind_apply_900_enabled="${kind_apply_100_enabled}"
@@ -1026,16 +1313,16 @@ elif [ "${bootstrap_client_available}" -ne 1 ]; then
   lima_apply_100_reason='bootstrap client not found (k3sup-pro or k3sup)'
 elif [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
   lima_apply_100_enabled=0
-  lima_apply_100_reason='kubernetes/kind must be cleared first'
+  lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/kind')"
 elif [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
   lima_apply_100_enabled=0
-  lima_apply_100_reason='kubernetes/slicer must be cleared first'
+  lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 elif [ "${sdwan_state}" = "running" ] || [ "${sdwan_state}" = "degraded" ]; then
   lima_apply_100_enabled=0
-  lima_apply_100_reason='sd-wan/lima is already using Lima VMs'
-elif printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:443'; then
+  lima_apply_100_reason="$(lima_vms_claimed_by 'sd-wan/lima')"
+elif [ -n "${lima_foreign_ports}" ]; then
   lima_apply_100_enabled=0
-  lima_apply_100_reason='127.0.0.1:443 is already in use by another process'
+  lima_apply_100_reason="$(first_non_empty_line "${lima_foreign_ports}") is already in use by another process"
 fi
 lima_apply_900_enabled="${lima_apply_100_enabled}"
 lima_apply_900_reason="${lima_apply_100_reason}"
@@ -1056,13 +1343,13 @@ elif [ "${bootstrap_client_available}" -ne 1 ]; then
   slicer_apply_100_reason='bootstrap client not found (k3sup-pro or k3sup)'
 elif [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
   slicer_apply_100_enabled=0
-  slicer_apply_100_reason='kubernetes/kind must be cleared first'
+  slicer_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/kind')"
 elif [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
   slicer_apply_100_enabled=0
-  slicer_apply_100_reason='kubernetes/lima must be cleared first'
-elif printf '%s\n' "${foreign_ports}" | grep -qx '127.0.0.1:443'; then
+  slicer_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/lima')"
+elif [ -n "${slicer_foreign_ports}" ]; then
   slicer_apply_100_enabled=0
-  slicer_apply_100_reason='127.0.0.1:443 is already in use by another process'
+  slicer_apply_100_reason="$(first_non_empty_line "${slicer_foreign_ports}") is already in use by another process"
 fi
 slicer_apply_900_enabled="${slicer_apply_100_enabled}"
 slicer_apply_900_reason="${slicer_apply_100_reason}"
@@ -1077,7 +1364,7 @@ actions_json="$(
     build_action_json kind-reset 'Reset kind' kind kubernetes/kind "$( [ "${kind_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${kind_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/kind is not present' )" 'make -C kubernetes/kind reset AUTO_APPROVE=1' 1
     build_action_json kind-apply-100 'Kind stage 100 apply' kind kubernetes/kind "${kind_apply_100_enabled}" "${kind_apply_100_reason}" 'make -C kubernetes/kind 100 apply AUTO_APPROVE=1' 1
     build_action_json kind-apply-900 'Kind stage 900 apply' kind kubernetes/kind "${kind_apply_900_enabled}" "${kind_apply_900_reason}" 'make -C kubernetes/kind 900 apply AUTO_APPROVE=1' 1
-    build_action_json kind-switch 'Switch to kind' kind kubernetes/kind "${kind_apply_900_enabled}" "$( [ "${kind_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${kind_apply_900_reason}" )" 'make -C kubernetes/kind reset AUTO_APPROVE=1 && make -C kubernetes/kind 100 apply AUTO_APPROVE=1 && make -C kubernetes/kind 900 apply AUTO_APPROVE=1' 1
+    build_action_json kind-switch 'Switch to kind' kind kubernetes/kind "${kind_apply_900_enabled}" "$( [ "${kind_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${kind_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/kind reset && make -C kubernetes/kind 100 apply && make -C kubernetes/kind 900 apply' 1
 
     build_action_json lima-status 'Kubernetes Lima status' lima kubernetes/lima 1 '' 'make -C kubernetes/lima status' 0
     build_action_json lima-prereqs 'Kubernetes Lima prereqs' lima kubernetes/lima 1 '' 'make -C kubernetes/lima prereqs' 0
@@ -1087,7 +1374,7 @@ actions_json="$(
     build_action_json lima-reset 'Reset Kubernetes Lima' lima kubernetes/lima "$( [ "${lima_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${lima_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/lima is not present' )" 'make -C kubernetes/lima reset AUTO_APPROVE=1' 1
     build_action_json lima-apply-100 'Kubernetes Lima stage 100 apply' lima kubernetes/lima "${lima_apply_100_enabled}" "${lima_apply_100_reason}" 'make -C kubernetes/lima 100 apply AUTO_APPROVE=1' 1
     build_action_json lima-apply-900 'Kubernetes Lima stage 900 apply' lima kubernetes/lima "${lima_apply_900_enabled}" "${lima_apply_900_reason}" 'make -C kubernetes/lima 900 apply AUTO_APPROVE=1' 1
-    build_action_json lima-switch 'Switch to Kubernetes Lima' lima kubernetes/lima "${lima_apply_900_enabled}" "$( [ "${lima_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${lima_apply_900_reason}" )" 'make -C kubernetes/lima reset AUTO_APPROVE=1 && make -C kubernetes/lima 100 apply AUTO_APPROVE=1 && make -C kubernetes/lima 900 apply AUTO_APPROVE=1' 1
+    build_action_json lima-switch 'Switch to Kubernetes Lima' lima kubernetes/lima "${lima_apply_900_enabled}" "$( [ "${lima_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${lima_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/lima reset && make -C kubernetes/lima 100 apply && make -C kubernetes/lima 900 apply' 1
 
     build_action_json slicer-status 'Slicer status' slicer kubernetes/slicer 1 '' 'make -C kubernetes/slicer status' 0
     build_action_json slicer-prereqs 'Slicer prereqs' slicer kubernetes/slicer 1 '' 'make -C kubernetes/slicer prereqs' 0
@@ -1097,7 +1384,7 @@ actions_json="$(
     build_action_json slicer-reset 'Reset Slicer' slicer kubernetes/slicer "$( [ "${slicer_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${slicer_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/slicer is not present' )" 'make -C kubernetes/slicer reset AUTO_APPROVE=1' 1
     build_action_json slicer-apply-100 'Slicer stage 100 apply' slicer kubernetes/slicer "${slicer_apply_100_enabled}" "${slicer_apply_100_reason}" 'make -C kubernetes/slicer 100 apply AUTO_APPROVE=1' 1
     build_action_json slicer-apply-900 'Slicer stage 900 apply' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "${slicer_apply_900_reason}" 'make -C kubernetes/slicer 900 apply AUTO_APPROVE=1' 1
-    build_action_json slicer-switch 'Switch to Slicer' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "$( [ "${slicer_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${slicer_apply_900_reason}" )" 'make -C kubernetes/slicer reset AUTO_APPROVE=1 && make -C kubernetes/slicer 100 apply AUTO_APPROVE=1 && make -C kubernetes/slicer 900 apply AUTO_APPROVE=1' 1
+    build_action_json slicer-switch 'Switch to Slicer' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "$( [ "${slicer_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${slicer_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/slicer reset && make -C kubernetes/slicer 100 apply && make -C kubernetes/slicer 900 apply' 1
 
     build_action_json sdwan-status 'SD-WAN Lima status' sdwan_lima sd-wan/lima 1 '' 'make -C sd-wan/lima status' 0
     build_action_json sdwan-show-urls 'SD-WAN Lima URLs' sdwan_lima sd-wan/lima "$( [ "${sdwan_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${sdwan_runtime_present}" -eq 1 ] && printf '' || printf 'sd-wan/lima is not present' )" 'make -C sd-wan/lima show-urls' 0
@@ -1118,6 +1405,8 @@ status_json="$(jq -cn \
   --argjson docker_runtime "${docker_runtime_json}" \
   --argjson colima_runtime "${colima_runtime_json}" \
   --argjson podman_runtime "${podman_runtime_json}" \
+  --argjson lima_platform "${lima_platform_json}" \
+  --argjson slicer_platform "${slicer_platform_json}" \
   --argjson dhi_registry_auth "${dhi_registry_auth_json}" \
   --argjson docker_io_registry_auth "${docker_io_registry_auth_json}" \
   --argjson kind "${kind_project_json}" \
@@ -1133,6 +1422,14 @@ status_json="$(jq -cn \
     active_project: (if $active_project == "" then null else $active_project end),
     active_project_path: (if $active_project_path == "" then null else $active_project_path end),
     foreign_ports: $foreign_ports,
+    platforms: {
+      docker: $docker_runtime,
+      colima: $colima_runtime,
+      podman: $podman_runtime,
+      lima: $lima_platform,
+      slicer: $slicer_platform
+    },
+    platforms_order: ["docker", "colima", "podman", "lima", "slicer"],
     host_runtimes: {
       docker: $docker_runtime,
       colima: $colima_runtime,

@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -9,6 +9,7 @@ AUDIT_SHELL_SCRIPTS_SCRIPT ?= scripts/audit-shell-scripts.sh
 VALIDATE_CILIUM_POLICIES_SCRIPT ?= scripts/validate-cilium-policies.sh
 VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
+FMT_HCL_SCRIPT ?= scripts/fmt-hcl.sh
 CHECK_VERSION_SCRIPT ?= scripts/check-version.sh
 RELEASE_SCRIPT ?= scripts/release.sh
 SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
@@ -22,14 +23,10 @@ STATUS_FORMAT ?= text
 
 include mk/common.mk
 
-.PHONY: default help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+.PHONY: default help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
-	@if [ -t 0 ] && [ -t 1 ]; then \
-		echo ""; \
-		$(MAKE) --no-print-directory status STATUS_FORMAT=text; \
-	fi
 
 help:
 	@echo "Platform workspace Makefile guide"
@@ -150,6 +147,8 @@ lint:
 
 fmt:
 	@$(MAKE) --no-print-directory fmt-markdown
+	@$(MAKE) --no-print-directory lint-yaml
+	@$(MAKE) --no-print-directory fmt-hcl
 
 lint-yaml:
 	@"$(LINT_YAML_SCRIPT)" --execute
@@ -177,6 +176,9 @@ lint-kyverno-live:
 
 fmt-markdown:
 	@"$(FMT_MARKDOWN_SCRIPT)" --execute
+
+fmt-hcl:
+	@"$(FMT_HCL_SCRIPT)" --execute
 
 check-version:
 	@"$(CHECK_VERSION_SCRIPT)" --execute
