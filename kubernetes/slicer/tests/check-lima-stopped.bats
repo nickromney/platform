@@ -30,7 +30,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 case " $* " in
-  *" -iTCP:443 "*|*" -iTCP:30080 "*)
+  *" -iTCP:443 "*|*" -iTCP:30080 "*|*" -iTCP:3302 "*)
     printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
     exit 0
     ;;
@@ -46,6 +46,7 @@ EOF
   [[ "${output}" == *"Conflicting shared host ports currently in use by Lima:"* ]]
   [[ "${output}" == *"127.0.0.1:443"* ]]
   [[ "${output}" == *"127.0.0.1:30080"* ]]
+  [[ "${output}" == *"127.0.0.1:3302"* ]]
   [[ "${output}" == *"k3s-node-1"* ]]
 }
 

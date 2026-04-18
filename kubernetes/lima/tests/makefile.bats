@@ -198,6 +198,7 @@ EOF
   [[ "${output}" == *"127.0.0.1:443"* ]]
   [[ "${output}" == *"127.0.0.1:30080"* ]]
   [[ "${output}" == *"127.0.0.1:30022"* ]]
+  [[ "${output}" == *"127.0.0.1:3302"* ]]
 }
 
 @test "lima plan rejects invalid explicit STAGE values with usage exit code" {

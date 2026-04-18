@@ -52,12 +52,12 @@ run "policy_audit_mode_enabled" {
   command = plan
 
   variables {
-    cni_provider                     = "cilium"
-    enable_hubble                    = false
-    enable_argocd                    = false
-    enable_gitea                     = false
-    enable_signoz                    = false
-    enable_cilium_policy_audit_mode  = true
+    cni_provider                    = "cilium"
+    enable_hubble                   = false
+    enable_argocd                   = false
+    enable_gitea                    = false
+    enable_signoz                   = false
+    enable_cilium_policy_audit_mode = true
   }
 
   assert {

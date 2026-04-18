@@ -381,7 +381,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.5.1"
+  default     = "9.5.2"
 }
 
 variable "argocd_image_repository" {
@@ -393,7 +393,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.3.6-debian13"
+  default     = "3.3.7-debian13"
 }
 
 variable "provision_argocd" {
@@ -561,7 +561,7 @@ variable "oauth2_proxy_chart_version" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.150.0"
+  default     = "0.150.1"
 }
 
 # -----------------------------------------------------------------------------

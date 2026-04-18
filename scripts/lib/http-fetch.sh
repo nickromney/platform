@@ -8,6 +8,42 @@ http_require_curl() {
   }
 }
 
+http_temp_file() {
+  local var_name="${1:-}"
+  local path=""
+
+  if declare -F platform_mktemp_file >/dev/null 2>&1 && [ -n "${var_name}" ]; then
+    platform_mktemp_file "${var_name}"
+    return 0
+  fi
+
+  path="$(mktemp)"
+  if [ -n "${var_name}" ]; then
+    printf -v "${var_name}" '%s' "${path}"
+    return 0
+  fi
+
+  printf '%s\n' "${path}"
+}
+
+http_temp_dir() {
+  local var_name="${1:-}"
+  local path=""
+
+  if declare -F platform_mktemp_dir >/dev/null 2>&1 && [ -n "${var_name}" ]; then
+    platform_mktemp_dir "${var_name}"
+    return 0
+  fi
+
+  path="$(mktemp -d)"
+  if [ -n "${var_name}" ]; then
+    printf -v "${var_name}" '%s' "${path}"
+    return 0
+  fi
+
+  printf '%s\n' "${path}"
+}
+
 http_fetch() {
   local max_time="${HTTP_FETCH_MAX_TIME_SECONDS:-15}"
   local connect_timeout="${HTTP_FETCH_CONNECT_TIMEOUT_SECONDS:-5}"
@@ -20,12 +56,24 @@ http_fetch() {
 }
 
 http_cache_dir_ensure() {
+  local var_name="${1:-}"
+
   if [ -n "${HTTP_FETCH_CACHE_DIR:-}" ] && [ -d "${HTTP_FETCH_CACHE_DIR}" ]; then
+    if [ -n "${var_name}" ]; then
+      printf -v "${var_name}" '%s' "${HTTP_FETCH_CACHE_DIR}"
+      return 0
+    fi
+
     printf '%s\n' "${HTTP_FETCH_CACHE_DIR}"
     return 0
   fi
 
-  HTTP_FETCH_CACHE_DIR="$(mktemp -d)"
+  http_temp_dir HTTP_FETCH_CACHE_DIR
+  if [ -n "${var_name}" ]; then
+    printf -v "${var_name}" '%s' "${HTTP_FETCH_CACHE_DIR}"
+    return 0
+  fi
+
   printf '%s\n' "${HTTP_FETCH_CACHE_DIR}"
 }
 
@@ -34,7 +82,7 @@ http_cache_file_for_key() {
   local key="$2"
   local cache_dir=""
 
-  cache_dir="$(http_cache_dir_ensure)"
+  http_cache_dir_ensure cache_dir
   printf "%s/%s\n" "${cache_dir}" "$(printf '%s__%s' "${prefix}" "${key}" | tr '/:@?&=%' '_')"
 }
 
@@ -50,7 +98,7 @@ http_cached_output() {
     return 0
   fi
 
-  tmp_file="$(mktemp)"
+  http_temp_file tmp_file
   if "$@" >"${tmp_file}"; then
     mv "${tmp_file}" "${cache_file}"
     cat "${cache_file}"

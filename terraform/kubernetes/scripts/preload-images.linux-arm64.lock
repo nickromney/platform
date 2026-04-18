@@ -5,7 +5,7 @@ quay.io/cilium/hubble-ui-backend:v0.13.3	quay.io/cilium/hubble-ui-backend@sha256
 quay.io/cilium/hubble-ui:v0.13.3	quay.io/cilium/hubble-ui@sha256:97984d00bbd7fb233a71255b98c83ef203efae43be9a268d0e9e0483c30c0256
 ghcr.io/nginx/nginx-gateway-fabric:2.5.1	ghcr.io/nginx/nginx-gateway-fabric@sha256:30172fc9bdebd145c250e81500b6112f989afd9956e0e7606f504bf16de28f88
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1	ghcr.io/nginx/nginx-gateway-fabric/nginx@sha256:908376c8bc6b99e48312a212116f3a548805a94619484640617d89ff79514989
-dhi.io/argocd:3.3.6-debian13	dhi.io/argocd@sha256:aa35c959dd1ee2710acfe82c96c526315fe137f161dbd255bc9e439bf4bba31b
+dhi.io/argocd:3.3.7-debian13	dhi.io/argocd@sha256:305f093aaa7bc1217668dd2d01257bda4672ac964dd15d255652873348a61aae
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine	-
 docker.gitea.com/gitea:1.25.5-rootless	docker.gitea.com/gitea@sha256:fc9a63f855efc6733d79262a50003845f092b01d169bcb81c3683263368120d0
 dhi.io/kyverno:1.17.1-debian13	dhi.io/kyverno@sha256:e86d512362c533455e8c3384703f481ab85039f27a1553900e29cd58656e3117

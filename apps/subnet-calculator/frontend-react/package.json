@@ -21,32 +21,32 @@
     "test:easyauth-mock": "playwright test tests/easyauth-mock-logout.spec.ts -c playwright.easyauth-mock.config.ts"
   },
   "dependencies": {
-    "@azure/identity": "^4.14.0-beta.3",
-    "@azure/msal-browser": "^5.6.3",
-    "@azure/msal-react": "^5.2.1",
+    "@azure/identity": "^4.13.1",
+    "@azure/msal-browser": "^5.7.0",
+    "@azure/msal-react": "^5.3.0",
     "@subnet-calculator/shared-frontend": "file:../shared-frontend",
     "express": "^5.2.1",
     "oidc-client-ts": "^3.5.0",
-    "react": "^19.3.0-canary-fd524fe0-20251121",
-    "react-dom": "^19.3.0-canary-fd524fe0-20251121"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "overrides": {
     "jsonwebtoken": "9.0.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.11",
+    "@biomejs/biome": "^2.4.12",
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.60.0-alpha-2026-04-10",
+    "@playwright/test": "^1.59.1",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "eslint": "^10.2.0",
-    "eslint-plugin-react-hooks": "^7.1.0-canary-fd524fe0-20251121",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.4.0",
-    "typescript": "~6.0.2",
-    "typescript-eslint": "^8.58.2-alpha.8",
+    "globals": "^17.5.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.58.2",
     "vite": "^8.0.8"
   }
 }
