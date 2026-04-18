@@ -25,7 +25,9 @@ setup() {
   [[ "${output}" == *"make docker-prune-estimate"* ]]
   [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
+  [[ "${output}" == *"make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"* ]]
   [[ "${output}" == *"CHECK_VERSION_FORMAT=text|json"* ]]
+  [[ "${output}" == *"OIDC_RECOVERY_FORMAT=text|json"* ]]
   [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
   [[ "${output}" != *"${HOME}"* ]]
@@ -230,6 +232,19 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
   [[ "${output}" != *'$(MAKE) assert-kind-active >/dev/null'* ]]
+}
+
+@test "kind exercise-oidc-recovery runs the explicit harness with format and force knobs" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" exercise-oidc-recovery \
+    OIDC_RECOVERY_FORMAT=json \
+    OIDC_RECOVERY_FORCE_MODE=nginx-rollout
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'ensure-kind-kubeconfig >/dev/null'* ]]
+  [[ "${output}" == *'assert-kind-active >/dev/null'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORMAT="json"'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORCE_MODE="nginx-rollout"'* ]]
+  [[ "${output}" == *'exercise-kind-oidc-recovery.sh" --execute'* ]]
 }
 
 @test "kind exports the absolute stack and config paths into Terraform" {

@@ -33,7 +33,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"skipping Lima apiserver OIDC configuration"* ]]
@@ -60,7 +60,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/kubectl"
 
-  run "${SCRIPT}"
+  run "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"Could not determine clusterIP"* ]]

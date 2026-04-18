@@ -49,21 +49,34 @@ setup() {
   ! grep -Fq 'docker.io/*"' "${policy}"
 }
 
-@test "oidc bootstrap script performs a controlled nginx gateway restart after kube-apiserver restart" {
-  script="${REPO_ROOT}/terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
+@test "oidc post-restart recovery script performs a controlled nginx gateway restart after kube-apiserver restart" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/recover-kind-cluster-after-apiserver-restart.sh"
+  helper="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
 
-  grep -Fq "retry_webhook_fail()" "${script}"
-  grep -Fq "restart_deployment()" "${script}"
-  grep -Fq 'rollout restart "deploy/${deploy_name}"' "${script}"
-  grep -Fq 'retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}"' "${script}"
+  grep -Fq 'KIND_OIDC_RECOVERY_FORCE_RUN="${KIND_OIDC_RECOVERY_FORCE_RUN:-0}"' "${script}"
+  grep -Fq 'source "${SCRIPT_DIR}/kind-apiserver-oidc-lib.sh"' "${script}"
+  grep -Fq 'if [[ "${KIND_OIDC_RECOVERY_FORCE_RUN}" != "1" ]] && kind_oidc_post_restart_dependencies_healthy; then' "${script}"
+  grep -Fq 'ok "forcing the explicit post-restart recovery flow"' "${script}"
+  grep -Fq "retry_webhook_fail()" "${helper}"
+  grep -Fq "restart_deployment()" "${helper}"
+  grep -Fq 'rollout restart "deploy/${deploy_name}"' "${helper}"
+  grep -Fq 'retry_webhook_fail 12 kubectl -n "${namespace}" rollout restart "deploy/${deploy_name}"' "${helper}"
   grep -Fq 'restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
   grep -Fq 'wait_for_deployment_rollout_with_early_recycle \' "${script}"
   grep -Fq '"nginx gateway control plane (${NGINX_GATEWAY_NAMESPACE}/${NGINX_GATEWAY_DEPLOY_NAME})"' "${script}"
   grep -Fq 'wait_for_service_endpoints "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_SERVICE}" "${GATEWAY_DEPLOY_WAIT_SECONDS}"' "${script}"
 }
 
-@test "oidc bootstrap script tolerates missing deployment selector lookups after apiserver restart" {
+@test "oidc apiserver patch script stops at apiserver readiness and leaves recovery to explicit follow-up steps" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
+
+  grep -Fq 'wait_for_kube_apiserver_ready 120 3' "${script}"
+  ! grep -Fq 'restart_deployment "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}"' "${script}"
+  ! grep -Fq 'wait_for_deployment_recovery_after_apiserver_restart \' "${script}"
+}
+
+@test "oidc helper library tolerates missing deployment selector lookups after apiserver restart" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
 
   grep -Fq 'deployment_selector()' "${script}"
   grep -Fq 'local selector=""' "${script}"
@@ -71,6 +84,19 @@ setup() {
   grep -Fq 'status=$?' "${script}"
   grep -Fq 'if [[ "${status}" -ne 0 ]]; then' "${script}"
   grep -Fq "printf '%s' \"\${selector}\"" "${script}"
+}
+
+@test "oidc helper library repairs node-local cilium when post-restart controllers lose kubernetes service reachability" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
+
+  grep -Fq 'recycle_cilium_on_nodes()' "${script}"
+  grep -Fq 'kubectl -n kube-system get pods \' "${script}"
+  grep -Fq -- '-l "k8s-app=cilium"' "${script}"
+  grep -Fq -- '--field-selector "spec.nodeName=${node_name}"' "${script}"
+  grep -Fq 'deployment_api_connectivity_failure_nodes()' "${script}"
+  grep -Fq 'connect: connection refused' "${script}"
+  grep -Fq 'recycling node-local Cilium for transient API connectivity recovery' "${script}"
+  grep -Fq 'recycle_cilium_on_nodes "${failed_nodes}"' "${script}"
 }
 
 @test "cluster health script distinguishes gitea gateway reachability from direct api reachability" {

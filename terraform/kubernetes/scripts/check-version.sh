@@ -116,6 +116,21 @@ stop_heartbeat() {
   CHECK_VERSION_HEARTBEAT_PID=""
 }
 
+run_with_heartbeat() {
+  local message="$1"
+  local rc=0
+  shift
+
+  start_heartbeat "${message}"
+  if "$@"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  stop_heartbeat
+  return "${rc}"
+}
+
 register_temp_path() {
   local path="${1:-}"
 
@@ -760,7 +775,7 @@ python_compatible_upper_bound() {
     return 0
   fi
 
-  parts[$((keep_count - 1))]=$(("${parts[$((keep_count - 1))]}" + 1))
+  parts[keep_count - 1]=$(("${parts[keep_count - 1]}" + 1))
   for ((idx = keep_count; idx < ${#parts[@]}; idx++)); do
     parts[idx]=0
   done
@@ -1068,7 +1083,7 @@ dependency_update_status() {
 
   if [ -z "${current}" ] || { [ -z "${latest_overall}" ] && [ -z "${latest_any}" ]; }; then
     if [ -z "${current}" ]; then
-      printf 'lockfile missing or unresolved\n'
+      printf 'lockfile missing or unverified\n'
     else
       printf 'latest lookup failed\n'
     fi
@@ -1303,10 +1318,48 @@ image_ref_has_template_placeholders() {
   return 1
 }
 
+image_ref_non_comparable_status() {
+  local image_ref="$1"
+  local current_tag=""
+  local segment_count=""
+
+  current_tag="$(image_tag_from_ref "${image_ref}")"
+  if [ -z "${current_tag}" ]; then
+    printf 'tag missing from image reference\n'
+    return 0
+  fi
+
+  case "${current_tag}" in
+    latest|latest-*|stable|stable-*|edge|edge-*|nightly|nightly-*|canary|canary-*|alpha|alpha-*|beta|beta-*|preview|preview-*|dev|dev-*|main|master)
+      printf 'floating tag\n'
+      return 0
+      ;;
+  esac
+
+  segment_count="$(tag_version_segment_count "${current_tag}")"
+  case "${segment_count}" in
+    0)
+      case "${current_tag}" in
+        *[0-9]*)
+          printf 'vendor composite tag\n'
+          return 0
+          ;;
+      esac
+      ;;
+    2)
+      printf 'major.minor pin\n'
+      return 0
+      ;;
+  esac
+
+  printf '\n'
+}
+
 image_status_when_latest_unknown() {
   local image_ref="$1"
   local registry="$2"
   local availability=""
+  local non_comparable_status=""
 
   if image_ref_has_template_placeholders "${image_ref}"; then
     printf 'templated image reference\n'
@@ -1320,10 +1373,16 @@ image_status_when_latest_unknown() {
       ;;
   esac
 
+  non_comparable_status="$(image_ref_non_comparable_status "${image_ref}")"
+  if [ -n "${non_comparable_status}" ]; then
+    printf '%s\n' "${non_comparable_status}"
+    return 0
+  fi
+
   availability="$(image_ref_availability "${image_ref}")"
   case "${availability}" in
     available)
-      printf 'current tag verified; latest unresolved\n'
+      printf 'current tag verified; latest not determined\n'
       ;;
     auth-required)
       printf 'registry auth required\n'
@@ -1526,52 +1585,98 @@ print(f'{params.get("realm", "")}\t{params.get("service", "")}\t{params.get("sco
 PY
 }
 
-oci_registry_repo_tags_uncached() {
-  local registry="$1"
-  local repository="$2"
-  local url="https://${registry}/v2/${repository}/tags/list?n=1000"
-  local headers_file body_file realm service scope token_url token_payload token
+parse_link_header_next_url() {
+  local header_file="$1"
 
-  platform_mktemp_file headers_file
-  platform_mktemp_file body_file
+  run_inline_python "${header_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
 
-  if http_fetch -fsSL -D "${headers_file}" "${url}" -o "${body_file}" 2>/dev/null; then
-    jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
-    rm -f "${headers_file}" "${body_file}"
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="ignore")
+for line in text.splitlines():
+    if not line.lower().startswith("link:"):
+        continue
+    for part in line.split(":", 1)[1].split(","):
+        if 'rel="next"' not in part.lower():
+            continue
+        match = re.search(r"<([^>]+)>", part)
+        if match:
+            print(match.group(1))
+            raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+oci_registry_fetch_tags_page() {
+  local url="$1"
+  local token="$2"
+  local headers_file="$3"
+  local body_file="$4"
+
+  if [ -n "${token}" ]; then
+    http_fetch -fsSL -H "Authorization: Bearer ${token}" -D "${headers_file}" "${url}" -o "${body_file}"
     return 0
   fi
 
-  if ! IFS=$'\t' read -r realm service scope < <(parse_www_authenticate_bearer "${headers_file}" 2>/dev/null || true); then
-    rm -f "${headers_file}" "${body_file}"
-    return 1
-  fi
+  http_fetch -fsSL -D "${headers_file}" "${url}" -o "${body_file}"
+}
 
-  rm -f "${body_file}"
-  if [ -z "${realm}" ]; then
+oci_registry_repo_tags_uncached() {
+  local registry="$1"
+  local repository="$2"
+  local next_url="https://${registry}/v2/${repository}/tags/list?n=1000"
+  local headers_file body_file realm service scope token_url token_payload token next_link
+  local tags=""
+
+  while [ -n "${next_url}" ]; do
+    platform_mktemp_file headers_file
+    platform_mktemp_file body_file
+
+    if oci_registry_fetch_tags_page "${next_url}" "${token:-}" "${headers_file}" "${body_file}" 2>/dev/null; then
+      tags="${tags}$(jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true)"$'\n'
+      next_link="$(parse_link_header_next_url "${headers_file}" 2>/dev/null || true)"
+      rm -f "${headers_file}" "${body_file}"
+
+      if [ -n "${next_link}" ] && [[ "${next_link}" != http://* && "${next_link}" != https://* ]]; then
+        next_url="https://${registry}${next_link}"
+      else
+        next_url="${next_link}"
+      fi
+      continue
+    fi
+
+    if [ -n "${token:-}" ]; then
+      rm -f "${headers_file}" "${body_file}"
+      return 1
+    fi
+
+    if ! IFS=$'\t' read -r realm service scope < <(parse_www_authenticate_bearer "${headers_file}" 2>/dev/null || true); then
+      rm -f "${headers_file}" "${body_file}"
+      return 1
+    fi
+
+    rm -f "${body_file}"
+    if [ -z "${realm}" ]; then
+      rm -f "${headers_file}"
+      return 1
+    fi
+
+    if [ -z "${scope}" ]; then
+      scope="repository:${repository}:pull"
+    fi
+
+    token_url="${realm}?service=$(uri_encode "${service}")&scope=$(uri_encode "${scope}")"
+    token_payload="$(http_fetch -fsSL "${token_url}" 2>/dev/null || true)"
+    token="$(jq -r '.token // .access_token // empty' <<<"${token_payload}" 2>/dev/null | xargs || true)"
     rm -f "${headers_file}"
-    return 1
-  fi
+    if [ -z "${token}" ]; then
+      return 1
+    fi
+  done
 
-  if [ -z "${scope}" ]; then
-    scope="repository:${repository}:pull"
-  fi
-
-  token_url="${realm}?service=$(uri_encode "${service}")&scope=$(uri_encode "${scope}")"
-  token_payload="$(http_fetch -fsSL "${token_url}" 2>/dev/null || true)"
-  token="$(jq -r '.token // .access_token // empty' <<<"${token_payload}" 2>/dev/null | xargs || true)"
-  if [ -z "${token}" ]; then
-    rm -f "${headers_file}"
-    return 1
-  fi
-
-  platform_mktemp_file body_file
-  if ! http_fetch -fsSL -H "Authorization: Bearer ${token}" "${url}" -o "${body_file}" 2>/dev/null; then
-    rm -f "${headers_file}" "${body_file}"
-    return 1
-  fi
-
-  jq -r '.tags[]? // empty' "${body_file}" 2>/dev/null || true
-  rm -f "${headers_file}" "${body_file}"
+  printf "%s" "${tags}"
 }
 
 oci_registry_repo_tags() {
@@ -2420,111 +2525,140 @@ check_app_yaml_tfvar_drift() {
 }
 
 emit_app_dependency_rows() {
-  local package_json app_dir app_label cooldown_seconds dep spec current latest_overall latest_eligible status
-  local pyproject cutoff_iso requirement dep_name requirement_specifiers uv_lock requirement_status spec_status latest_any latest_display
+  local max_jobs="${CHECK_VERSION_DEPENDENCY_CONCURRENCY:-${CHECK_VERSION_HTTP_CONCURRENCY:-4}}"
+  local js_input py_input output_dir
 
-  while IFS= read -r package_json; do
-    app_dir="$(dirname "${package_json}")"
-    app_label="${app_dir#"${REPO_ROOT}/"}"
-    cooldown_seconds="$(js_dependency_cooldown_seconds "${app_dir}")"
+  platform_mktemp_file js_input
+  platform_mktemp_file py_input
+  platform_mktemp_dir output_dir
 
-    while IFS=$'\t' read -r dep spec; do
-      [ -n "${dep}" ] || continue
-      spec_status="$(js_dependency_spec_status "${spec}")"
-      if [ -n "${spec_status}" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "${app_label}" \
-          "${dep}" \
-          "${spec:-}" \
-          "" \
-          "" \
-          "${spec_status}"
-        continue
-      fi
-      current="$(bun_lock_resolved_version "${app_dir}/bun.lock" "${dep}")"
-      latest_overall="$(npm_latest_overall_version "${dep}")"
-      latest_eligible="$(npm_latest_eligible_version "${dep}" "${cooldown_seconds}")"
-      status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}")"
+  find_app_package_json_files >"${js_input}"
+  find_app_pyproject_files >"${py_input}"
+
+  if [ -s "${js_input}" ]; then
+    parallel_map_lines "${max_jobs}" emit_js_dependency_rows_for_package_json "${js_input}" "${output_dir}/js"
+  fi
+
+  if [ -s "${py_input}" ]; then
+    parallel_map_lines "${max_jobs}" emit_python_dependency_rows_for_pyproject "${py_input}" "${output_dir}/py"
+  fi
+
+  rm -f "${js_input}" "${py_input}"
+  rm -rf "${output_dir}"
+}
+
+find_app_package_json_files() {
+  find "${REPO_ROOT}/apps" \
+    \( \
+      -path '*/.git' -o \
+      -path '*/.terraform' -o \
+      -path '*/.venv' -o \
+      -path '*/venv' -o \
+      -path '*/node_modules' -o \
+      -path '*/dist' -o \
+      -path '*/build' -o \
+      -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+      -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+    \) -prune \
+    -o -type f -name package.json -print \
+    | LC_ALL=C sort
+}
+
+find_app_pyproject_files() {
+  find "${REPO_ROOT}/apps" \
+    \( \
+      -path '*/.git' -o \
+      -path '*/.terraform' -o \
+      -path '*/.venv' -o \
+      -path '*/venv' -o \
+      -path '*/node_modules' -o \
+      -path '*/dist' -o \
+      -path '*/build' -o \
+      -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
+      -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
+    \) -prune \
+    -o -type f -name pyproject.toml -print \
+    | LC_ALL=C sort
+}
+
+emit_js_dependency_rows_for_package_json() {
+  local package_json="$1"
+  local app_dir app_label cooldown_seconds dep spec current latest_overall latest_eligible status spec_status
+
+  app_dir="$(dirname "${package_json}")"
+  app_label="${app_dir#"${REPO_ROOT}/"}"
+  cooldown_seconds="$(js_dependency_cooldown_seconds "${app_dir}")"
+
+  while IFS=$'\t' read -r dep spec; do
+    [ -n "${dep}" ] || continue
+    spec_status="$(js_dependency_spec_status "${spec}")"
+    if [ -n "${spec_status}" ]; then
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${app_label}" \
         "${dep}" \
-        "${current:-}" \
-        "${latest_eligible:-}" \
-        "${latest_overall:-}" \
-        "${status}"
-    done < <(package_json_direct_dependencies "${package_json}")
-  done < <(
-    find "${REPO_ROOT}/apps" \
-      \( \
-        -path '*/.git' -o \
-        -path '*/.terraform' -o \
-        -path '*/.venv' -o \
-        -path '*/venv' -o \
-        -path '*/node_modules' -o \
-        -path '*/dist' -o \
-        -path '*/build' -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
-      \) -prune \
-      -o -type f -name package.json -print \
-      | LC_ALL=C sort
-  )
+        "${spec:-}" \
+        "" \
+        "" \
+        "${spec_status}"
+      continue
+    fi
+    current="$(bun_lock_resolved_version "${app_dir}/bun.lock" "${dep}")"
+    latest_overall="$(npm_latest_overall_version "${dep}")"
+    latest_eligible="$(npm_latest_eligible_version "${dep}" "${cooldown_seconds}")"
+    status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${app_label}" \
+      "${dep}" \
+      "${current:-}" \
+      "${latest_eligible:-}" \
+      "${latest_overall:-}" \
+      "${status}"
+  done < <(package_json_direct_dependencies "${package_json}")
+}
 
-  while IFS= read -r pyproject; do
-    app_dir="$(dirname "${pyproject}")"
-    app_label="${app_dir#"${REPO_ROOT}/"}"
-    cutoff_iso="$(python_dependency_cooldown_cutoff "${app_dir}")"
-    uv_lock="${app_dir}/uv.lock"
+emit_python_dependency_rows_for_pyproject() {
+  local pyproject="$1"
+  local app_dir app_label cutoff_iso uv_lock requirement requirement_status dep_name requirement_specifiers
+  local current latest_overall latest_eligible latest_any latest_display status
 
-    while IFS= read -r requirement; do
-      [ -n "${requirement}" ] || continue
-      requirement_status="$(python_requirement_status "${requirement}")"
-      if [ "${requirement_status}" = "skip" ]; then
-        continue
-      fi
-      dep_name="$(python_requirement_name "${requirement}")"
-      [ -n "${dep_name}" ] || continue
-      if [ -n "${requirement_status}" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "${app_label}" \
-          "${dep_name}" \
-          "${requirement}" \
-          "" \
-          "" \
-          "${requirement_status}"
-        continue
-      fi
-      current="$(uv_lock_resolved_version "${uv_lock}" "${dep_name}")"
-      requirement_specifiers="$(python_requirement_specifiers "${requirement}")"
-      latest_overall="$(pypi_latest_overall_version "${dep_name}" "${requirement_specifiers}")"
-      latest_eligible="$(pypi_latest_eligible_version "${dep_name}" "${cutoff_iso}" "${requirement_specifiers}")"
-      latest_any="$(pypi_latest_any_version "${dep_name}" "${requirement_specifiers}")"
-      latest_display="${latest_overall:-${latest_any:-}}"
-      status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}" "${latest_any}")"
+  app_dir="$(dirname "${pyproject}")"
+  app_label="${app_dir#"${REPO_ROOT}/"}"
+  cutoff_iso="$(python_dependency_cooldown_cutoff "${app_dir}")"
+  uv_lock="${app_dir}/uv.lock"
+
+  while IFS= read -r requirement; do
+    [ -n "${requirement}" ] || continue
+    requirement_status="$(python_requirement_status "${requirement}")"
+    if [ "${requirement_status}" = "skip" ]; then
+      continue
+    fi
+    dep_name="$(python_requirement_name "${requirement}")"
+    [ -n "${dep_name}" ] || continue
+    if [ -n "${requirement_status}" ]; then
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${app_label}" \
         "${dep_name}" \
-        "${current:-}" \
-        "${latest_eligible:-}" \
-        "${latest_display:-}" \
-        "${status}"
-    done < <(pyproject_project_dependencies "${pyproject}")
-  done < <(
-    find "${REPO_ROOT}/apps" \
-      \( \
-        -path '*/.git' -o \
-        -path '*/.terraform' -o \
-        -path '*/.venv' -o \
-        -path '*/venv' -o \
-        -path '*/node_modules' -o \
-        -path '*/dist' -o \
-        -path '*/build' -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
-      \) -prune \
-      -o -type f -name pyproject.toml -print \
-      | LC_ALL=C sort
-  )
+        "${requirement}" \
+        "" \
+        "" \
+        "${requirement_status}"
+      continue
+    fi
+    current="$(uv_lock_resolved_version "${uv_lock}" "${dep_name}")"
+    requirement_specifiers="$(python_requirement_specifiers "${requirement}")"
+    latest_overall="$(pypi_latest_overall_version "${dep_name}" "${requirement_specifiers}")"
+    latest_eligible="$(pypi_latest_eligible_version "${dep_name}" "${cutoff_iso}" "${requirement_specifiers}")"
+    latest_any="$(pypi_latest_any_version "${dep_name}" "${requirement_specifiers}")"
+    latest_display="${latest_overall:-${latest_any:-}}"
+    status="$(dependency_update_status "${current}" "${latest_eligible}" "${latest_overall}" "${latest_any}")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${app_label}" \
+      "${dep_name}" \
+      "${current:-}" \
+      "${latest_eligible:-}" \
+      "${latest_display:-}" \
+      "${status}"
+  done < <(pyproject_project_dependencies "${pyproject}")
 }
 
 collect_js_dependency_names() {
@@ -2539,22 +2673,7 @@ collect_js_dependency_names() {
       fi
       printf '%s\n' "${dep}"
     done < <(package_json_direct_dependencies "${package_json}")
-  done < <(
-    find "${REPO_ROOT}/apps" \
-      \( \
-        -path '*/.git' -o \
-        -path '*/.terraform' -o \
-        -path '*/.venv' -o \
-        -path '*/venv' -o \
-        -path '*/node_modules' -o \
-        -path '*/dist' -o \
-        -path '*/build' -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
-      \) -prune \
-      -o -type f -name package.json -print \
-      | LC_ALL=C sort
-  )
+  done < <(find_app_package_json_files)
 }
 
 collect_python_dependency_names() {
@@ -2574,22 +2693,7 @@ collect_python_dependency_names() {
       fi
       printf '%s\n' "${dep_name}"
     done < <(pyproject_project_dependencies "${pyproject}")
-  done < <(
-    find "${REPO_ROOT}/apps" \
-      \( \
-        -path '*/.git' -o \
-        -path '*/.terraform' -o \
-        -path '*/.venv' -o \
-        -path '*/venv' -o \
-        -path '*/node_modules' -o \
-        -path '*/dist' -o \
-        -path '*/build' -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}" -o \
-        -path "${APIM_SIMULATOR_VENDOR_DIR}/*" \
-      \) -prune \
-      -o -type f -name pyproject.toml -print \
-      | LC_ALL=C sort
-  )
+  done < <(find_app_pyproject_files)
 }
 
 warm_dependency_metadata_caches() {
@@ -2633,6 +2737,14 @@ emit_external_image_rows() {
 
   rm -f "${input_file}"
   rm -rf "${output_dir}"
+}
+
+emit_sorted_app_dependency_rows() {
+  emit_app_dependency_rows | sort -t $'\t' -k1,1 -k2,2 || true
+}
+
+emit_sorted_external_image_rows() {
+  emit_external_image_rows | sort -t $'\t' -k2,2 || true
 }
 
 emit_external_image_row() {
@@ -2684,7 +2796,7 @@ render_dependency_audit_text() {
         return
       }
 
-      issue_total = updates[app] + cooldown[app] + localdep[app] + directurl[app] + unresolved[app]
+      issue_total = updates[app] + cooldown[app] + localdep[app] + directurl[app] + followup[app]
       if (issue_total == 0) {
         hidden_current_only++
         hidden_current_deps += current[app]
@@ -2692,12 +2804,12 @@ render_dependency_audit_text() {
       }
 
       printf "%s\n", app
-      printf "  updates: %d, cooldown: %d, local: %d, direct-url: %d, unresolved: %d, current: %d\n",
+      printf "  updates: %d, cooldown: %d, local: %d, direct-url: %d, follow-up: %d, current: %d\n",
         updates[app] + 0,
         cooldown[app] + 0,
         localdep[app] + 0,
         directurl[app] + 0,
-        unresolved[app] + 0,
+        followup[app] + 0,
         current[app] + 0
 
       for (detail_idx = 1; detail_idx <= detail_count[app]; detail_idx++) {
@@ -2748,7 +2860,7 @@ render_dependency_audit_text() {
         next
       }
 
-      unresolved[app]++
+      followup[app]++
       detail[app, ++detail_count[app]] = dep ": " status
     }
 
@@ -2862,13 +2974,109 @@ emit_json_report() {
   dependencies_json="$(
     printf '%s\n' "${dependency_rows}" | \
       tsv_rows_to_json_array '["app","dependency","current","latest_eligible","latest_overall","status"]' | \
-      jq 'map(. + {status_text: .status} | del(.status))'
+      jq '
+        def dependency_status_code($status):
+          if $status == "current" then
+            "current"
+          elif $status == "update available" then
+            "update_available"
+          elif $status == "cooldown active" then
+            "cooldown_active"
+          elif $status == "local/path dependency" then
+            "local_path_dependency"
+          elif $status == "direct-url dependency" then
+            "direct_url_dependency"
+          elif $status == "lockfile missing or unverified" then
+            "lockfile_missing_or_unverified"
+          elif $status == "latest lookup failed" then
+            "latest_lookup_failed"
+          elif ($status | startswith("stable release unavailable; latest prerelease ")) then
+            "prerelease_only_upstream"
+          else
+            "follow_up"
+          end;
+        def dependency_status_group($code):
+          if $code == "current" then
+            "current"
+          elif $code == "update_available" then
+            "update"
+          elif $code == "cooldown_active" then
+            "cooldown"
+          elif $code == "local_path_dependency" then
+            "local"
+          elif $code == "direct_url_dependency" then
+            "direct_url"
+          else
+            "follow_up"
+          end;
+        map(
+          . as $row
+          | (dependency_status_code($row.status)) as $status_code
+          | . + {
+              status_text: .status,
+              status_code: $status_code,
+              status_group: dependency_status_group($status_code)
+            }
+          | del(.status)
+        )
+      '
   )"
 
   external_images_json="$(
     printf '%s\n' "${external_image_rows}" | \
       tsv_rows_to_json_array '["source","image","current","latest","registry","status"]' | \
-      jq 'map(. + {status_text: .status} | del(.status))'
+      jq '
+        def external_image_status_code($status):
+          if $status == "current" then
+            "current"
+          elif $status == "update available" then
+            "update_available"
+          elif $status == "templated image reference" then
+            "templated_image_reference"
+          elif $status == "vendor-managed mirror" then
+            "vendor_managed_mirror"
+          elif $status == "floating tag" then
+            "floating_tag"
+          elif $status == "major.minor pin" then
+            "major_minor_pin"
+          elif $status == "vendor composite tag" then
+            "vendor_composite_tag"
+          elif $status == "tag missing from image reference" then
+            "tag_missing"
+          elif $status == "registry auth required" then
+            "registry_auth_required"
+          elif $status == "current tag missing from registry" then
+            "current_tag_missing_from_registry"
+          elif $status == "current tag verified; latest not determined" then
+            "latest_not_determined"
+          elif $status == "latest lookup failed" then
+            "latest_lookup_failed"
+          else
+            "follow_up"
+          end;
+        def external_image_status_group($code):
+          if $code == "current" then
+            "current"
+          elif $code == "update_available" then
+            "update"
+          elif ($code == "templated_image_reference" or $code == "vendor_managed_mirror") then
+            "skipped"
+          elif ($code == "registry_auth_required" or $code == "current_tag_missing_from_registry") then
+            "blocked"
+          else
+            "follow_up"
+          end;
+        map(
+          . as $row
+          | (external_image_status_code($row.status)) as $status_code
+          | . + {
+              status_text: .status,
+              status_code: $status_code,
+              status_group: external_image_status_group($status_code)
+            }
+          | del(.status)
+        )
+      '
   )"
 
   if [ "${CLUSTER_OK}" -eq 1 ]; then
@@ -2905,6 +3113,10 @@ emit_json_report() {
     --arg latest_preferred_argocd_image_status "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}" \
     --argjson argo_cd_image_override_active "${argo_cd_image_override_active_json}" \
     '
+      def count_by_status_code($rows):
+        reduce $rows[] as $row ({};
+          .[$row.status_code] = ((.[$row.status_code] // 0) + 1)
+        );
       {
         format: $format,
         cluster: {
@@ -2930,8 +3142,13 @@ emit_json_report() {
           dependency_count: ($app_dependencies | length),
           dependency_update_count: ($app_dependencies | map(select(.status_text == "update available")) | length),
           dependency_cooldown_count: ($app_dependencies | map(select(.status_text == "cooldown active")) | length),
+          app_dependency_follow_up_count: ($app_dependencies | map(select(.status_group == "follow_up")) | length),
+          app_dependency_status_counts: count_by_status_code($app_dependencies),
           external_image_count: ($external_images | length),
-          external_image_update_count: ($external_images | map(select(.status_text == "update available")) | length)
+          external_image_update_count: ($external_images | map(select(.status_text == "update available")) | length),
+          external_image_follow_up_count: ($external_images | map(select(.status_group == "follow_up")) | length),
+          external_image_blocked_count: ($external_images | map(select(.status_group == "blocked")) | length),
+          external_image_status_counts: count_by_status_code($external_images)
         }
       }
     '
@@ -3263,13 +3480,13 @@ main() {
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
 
   progress "Warming npm and PyPI metadata cache"
-  warm_dependency_metadata_caches
+  run_with_heartbeat "Still warming npm and PyPI metadata cache" warm_dependency_metadata_caches
 
   progress "Auditing app dependency freshness"
-  dependency_rows="$(emit_app_dependency_rows | sort -t $'\t' -k1,1 -k2,2 || true)"
+  dependency_rows="$(run_with_heartbeat "Still auditing app dependency freshness" emit_sorted_app_dependency_rows)"
 
   progress "Auditing external workload images"
-  image_audit_rows="$(emit_external_image_rows | sort -t $'\t' -k2,2 || true)"
+  image_audit_rows="$(run_with_heartbeat "Still auditing external workload images" emit_sorted_external_image_rows)"
 
   if json_mode; then
     emit_json_report \
