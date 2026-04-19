@@ -60,6 +60,14 @@ setup() {
   [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
+@test "slicer test-idempotence supports dry-run without touching the cluster" {
+  run make -C "${REPO_ROOT}/kubernetes/slicer" test-idempotence STAGE=100 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"INFO dry-run: would run apply/apply/plan idempotence checks for stack 'slicer'"* ]]
+  [[ "${output}" == *"stage 100"* ]]
+}
+
 @test "slicer configure-k3s-apiserver-oidc forwards explicit read-only mode flags" {
   run make -n -C "${REPO_ROOT}/kubernetes/slicer" configure-k3s-apiserver-oidc STAGE=900
 
@@ -237,6 +245,28 @@ EOF
 
 @test "slicer prereqs keeps kyverno in the optional host tool inventory" {
   run grep -Fn 'optional=(bats bun cilium helm kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer uses the shared terragrunt make helpers for init plan and apply" {
+  run grep -Fn 'include ../../mk/k8s-terragrunt.mk' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '@$(call tg_stack_init)' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '$(call tg_stack_plan,$$plan_args)' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '$(call tg_stack_apply,$$apply_args)' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]

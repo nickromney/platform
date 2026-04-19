@@ -1,9 +1,6 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-TG ?= terragrunt
-TG_LOG_SHOW_ABS_PATHS ?= true
-TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := lima
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
@@ -25,6 +22,7 @@ RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
 RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
+TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
@@ -95,9 +93,10 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
+include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk
 
 export KUBECONFIG_PATH
@@ -192,6 +191,7 @@ help:
 	@echo "  make stop-host-gateway-proxy"
 	@echo "  make sync-image-cache"
 	@echo "  make test"
+	@echo "  make test-idempotence STAGE=100 [DRY_RUN=1]"
 	@echo ""
 	@echo "Stages:"
 	@echo "  100 - $(STAGE_DESC_LIMA_100)"
@@ -553,7 +553,7 @@ init: WORKFLOW_REQUIRE_STAGE_FILE=1
 init: workflow-validate-stage
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
+	@$(call tg_stack_init)
 
 .PHONY: plan
 plan: WORKFLOW_REQUIRE_STAGE_FILE=1
@@ -606,12 +606,10 @@ plan: workflow-validate-stage
 	if [ -n "$${KUBECONFIG_CONTEXT:-}" ]; then plan_args="$$plan_args -var kubeconfig_context=$${KUBECONFIG_CONTEXT}"; fi; \
 	if [ -n "$${TARGET_CLUSTER_NAME:-}" ]; then plan_args="$$plan_args -var cluster_name=$${TARGET_CLUSTER_NAME}"; fi; \
 	tg_init() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+		$(call tg_stack_init); \
 	}; \
 	tg_plan() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args; \
+		$(call tg_stack_plan,$$plan_args); \
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-plan" tg_plan
@@ -721,19 +719,16 @@ apply: workflow-validate-stage
 		apply_args="$$apply_args -auto-approve"; \
 	fi; \
 	tg_init() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+		$(call tg_stack_init); \
 	}; \
 	tg_apply() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args; \
+		$(call tg_stack_apply,$$apply_args); \
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-apply" tg_apply; \
 	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
 		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
 		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-		run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 	fi
 
 .PHONY: check-health
@@ -992,6 +987,15 @@ test:
 	@$(MAKE) test-bats
 	@$(MAKE) prepare-state
 	@cd "$(STACK_DIR)" && tofu init -backend=false -input=false && tofu test
+
+.PHONY: test-idempotence
+test-idempotence: WORKFLOW_REQUIRE_STAGE_FILE=1
+test-idempotence: workflow-validate-stage
+	@"$(TEST_IDEMPOTENCE)" $(READONLY_MODE_FLAG) \
+		--stack-name lima \
+		--stack-dir "$(MAKEFILE_DIR)" \
+		--stage "$(STAGE)" \
+		--allowlist-file "$(REPO_ROOT)/kubernetes/idempotence-allowlist.tsv"
 
 .PHONY: test-shell
 test-shell:

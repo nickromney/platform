@@ -67,6 +67,14 @@ setup() {
   [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
+@test "lima test-idempotence supports dry-run without touching the cluster" {
+  run make -C "${REPO_ROOT}/kubernetes/lima" test-idempotence STAGE=100 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"INFO dry-run: would run apply/apply/plan idempotence checks for stack 'lima'"* ]]
+  [[ "${output}" == *"stage 100"* ]]
+}
+
 @test "lima check-health forwards PLATFORM_BASE_TFVARS before PLATFORM_TFVARS" {
   run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900 \
     PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
@@ -109,11 +117,11 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "lima stage 900 apply runs browser SSO E2E verification after health checks" {
+@test "lima stage 900 apply does not run browser SSO E2E verification inline" {
   run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
-  [ "${status}" -eq 0 ]
+  [ "${status}" -ne 0 ]
 }
 
 @test "lima cluster-dependent read-only targets gate on assert-lima-active" {
@@ -230,6 +238,28 @@ EOF
   [[ "${output}" == *"Tool installation verification:"* ]]
   [[ "${output}" == *"Install hints:"* ]]
   [[ "${output}" != *"Shell audit:"* ]]
+}
+
+@test "lima uses the shared terragrunt make helpers for init plan and apply" {
+  run grep -Fn 'include ../../mk/k8s-terragrunt.mk' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '@$(call tg_stack_init)' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '$(call tg_stack_plan,$$plan_args)' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '$(call tg_stack_apply,$$apply_args)' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "lima prereqs keeps kyverno in the optional host tool inventory" {

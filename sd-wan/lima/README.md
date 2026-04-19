@@ -34,6 +34,13 @@ make -C sd-wan/lima destroy
 ./sd-wan/lima/scripts/query-all-dns.sh
 ```
 
+Rerunning `make -C sd-wan/lima up` is a supported repair path.
+
+If the three lab VMs are already running, `up` now leaves them running and
+re-applies the guest hostname and sync steps instead of issuing another VM
+start. Use `make -C sd-wan/lima down` or `make -C sd-wan/lima destroy` when
+you actually want a cold restart or a full teardown.
+
 ## What This Lab Teaches
 
 - the same RFC1918 address can mean different things in different clouds

@@ -51,7 +51,7 @@ provision:
       # Find project dir via host mount
       PROJECT_DIR=""
       for base in /Users /home; do
-        found=$(find "$base" -maxdepth 6 -path '*/sd-wan/lima' -type d 2>/dev/null | head -1)
+        found=$(find "$base" -maxdepth 6 -path '*/sd-wan/lima' -type d -print -quit 2>/dev/null)
         if [ -n "$found" ]; then
           PROJECT_DIR="$found"
           break

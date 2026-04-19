@@ -1,9 +1,6 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-TG ?= terragrunt
-TG_LOG_SHOW_ABS_PATHS ?= true
-TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := slicer
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
@@ -15,6 +12,7 @@ MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 RUN_DIR := $(MAKEFILE_DIR).run
 PROFILE_LIB := $(STACK_DIR)/scripts/profile-lib.sh
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
+K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
@@ -32,6 +30,7 @@ HOST_FORWARDS := $(SCRIPTS_DIR)/ensure-host-forwards.sh
 ENSURE_IMAGE_CACHE := $(SCRIPTS_DIR)/ensure-image-cache.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
+TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
@@ -119,9 +118,10 @@ VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
+include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk
 
 export KUBECONFIG_PATH
@@ -236,6 +236,7 @@ help:
 	@echo "  make stop-host-forwards"
 	@echo "  make sync-image-cache"
 	@echo "  make test"
+	@echo "  make test-idempotence STAGE=100 [DRY_RUN=1]"
 	@echo "  make build-local-platform-images"
 	@echo ""
 	@echo "Stages:"
@@ -753,7 +754,7 @@ init:
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@if [ -n "$(stage_file)" ] && [ ! -f "$(stage_file)" ]; then echo "Unknown STAGE=$(STAGE). Expected one of: $(VALID_STAGES)"; exit 1; fi
-	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
+	@$(call tg_stack_init)
 
 .PHONY: plan
 plan: workflow-validate
@@ -806,12 +807,10 @@ plan: workflow-validate
 	if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_BASE_TFVARS}"; fi; \
 	if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_TFVARS}"; fi; \
 	tg_init() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+		$(call tg_stack_init); \
 	}; \
 	tg_plan() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args; \
+		$(call tg_stack_plan,$$plan_args); \
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-plan" tg_plan
@@ -931,12 +930,10 @@ apply: workflow-validate
 		apply_args="$$apply_args -auto-approve"; \
 	fi; \
 	tg_init() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+		$(call tg_stack_init); \
 	}; \
 	tg_apply() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args; \
+		$(call tg_stack_apply,$$apply_args); \
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-apply" tg_apply; \
@@ -1262,6 +1259,14 @@ test:
 	@$(MAKE) test-bats
 	@$(MAKE) prepare-state
 	@cd "$(STACK_DIR)" && tofu init -backend=false -input=false && tofu test
+
+.PHONY: test-idempotence
+test-idempotence: workflow-validate
+	@"$(TEST_IDEMPOTENCE)" $(READONLY_MODE_FLAG) \
+		--stack-name slicer \
+		--stack-dir "$(MAKEFILE_DIR)" \
+		--stage "$(STAGE)" \
+		--allowlist-file "$(REPO_ROOT)/kubernetes/idempotence-allowlist.tsv"
 
 .PHONY: test-shell
 test-shell:

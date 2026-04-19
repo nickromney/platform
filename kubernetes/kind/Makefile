@@ -1,9 +1,6 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-TG ?= terragrunt
-TG_LOG_SHOW_ABS_PATHS ?= true
-TG_INIT_FLAGS ?= -reconfigure
 STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := kind
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
@@ -38,6 +35,7 @@ SYNC_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh
 RENDER_OPERATOR_OVERRIDES := $(SCRIPTS_DIR)/render-operator-overrides.sh
 DELETE_KIND_CLUSTER := $(SCRIPTS_DIR)/delete-kind-cluster.sh
 RESOLVE_TFVAR_VALUE := $(K8S_SCRIPTS_DIR)/resolve-tfvar-value.sh
+TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
@@ -100,13 +98,14 @@ VALID_STAGE_HELPERS := check-health check-security
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 
 include ../../mk/common.mk
+include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk
 
 KUBECONFIG_PATH ?= $(KIND_KUBECONFIG_PATH)
@@ -205,6 +204,7 @@ help:
 	@echo "  make stop                                    Alias for stop-kind"
 	@echo "  make stop-kind"
 	@echo "  make test"
+	@echo "  make test-idempotence STAGE=100 [DRY_RUN=1]"
 	@echo ""
 	@echo "Stages:"
 	@echo "  100 - $(STAGE_DESC_KIND_100)"
@@ -455,7 +455,7 @@ init: WORKFLOW_REQUIRE_STAGE_FILE=1
 init: workflow-validate-stage
 	@$(MAKE) prepare-state
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
-	@cd "$(STACK_DIR)" && TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS)
+	@$(call tg_stack_init)
 
 .PHONY: prepare-state
 prepare-state:
@@ -529,12 +529,10 @@ plan: workflow-validate-stage
 	if [ -n "$${KUBECONFIG_CONTEXT:-}" ]; then plan_args="$$plan_args -var kubeconfig_context=$${KUBECONFIG_CONTEXT}"; fi; \
 	if [ -n "$${TARGET_CLUSTER_NAME:-}" ]; then plan_args="$$plan_args -var cluster_name=$${TARGET_CLUSTER_NAME}"; fi; \
 	tg_init() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+		$(call tg_stack_init); \
 	}; \
 	tg_plan() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) plan $$plan_args; \
+		$(call tg_stack_plan,$$plan_args); \
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-plan" tg_plan
@@ -652,12 +650,10 @@ apply: workflow-validate-stage
 		apply_args="$$apply_args -auto-approve"; \
 	fi; \
 	tg_init() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) init $(TG_INIT_FLAGS); \
+		$(call tg_stack_init); \
 	}; \
 	tg_apply() { \
-		cd "$(STACK_DIR)" && \
-		TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS) $(TG) apply $$apply_args; \
+		$(call tg_stack_apply,$$apply_args); \
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	if [ "$$profile_enabled" = "1" ]; then \
@@ -1177,6 +1173,15 @@ reset:
 .PHONY: env
 env:
 	@$(MAKE) prereqs
+
+.PHONY: test-idempotence
+test-idempotence: WORKFLOW_REQUIRE_STAGE_FILE=1
+test-idempotence: workflow-validate-stage
+	@"$(TEST_IDEMPOTENCE)" $(READONLY_MODE_FLAG) \
+		--stack-name kind \
+		--stack-dir "$(MAKEFILE_DIR)" \
+		--stage "$(STAGE)" \
+		--allowlist-file "$(REPO_ROOT)/kubernetes/idempotence-allowlist.tsv"
 
 .PHONY: test
 test:
