@@ -101,6 +101,14 @@ setup() {
   [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
 }
 
+@test "kind test-idempotence supports dry-run without touching the cluster" {
+  run make -C "${REPO_ROOT}/kubernetes/kind" test-idempotence STAGE=100 DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"INFO dry-run: would run apply/apply/plan idempotence checks for stack 'kind'"* ]]
+  [[ "${output}" == *"stage 100"* ]]
+}
+
 @test "kind check-health forwards PLATFORM_BASE_TFVARS before PLATFORM_TFVARS" {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900 \
     PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
@@ -254,6 +262,28 @@ setup() {
   [ "${status}" -eq 0 ]
 
   run grep -Fn 'export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind uses the shared terragrunt make helpers for init plan and apply" {
+  run grep -Fn 'include ../../mk/k8s-terragrunt.mk' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '@$(call tg_stack_init)' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '$(call tg_stack_plan,$$plan_args)' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '$(call tg_stack_apply,$$apply_args)' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

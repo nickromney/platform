@@ -273,6 +273,16 @@ EOF
   [[ "${output}" == *"INFO dry-run: would fetch or read-through-cache a Gitea Actions runner token"* ]]
 }
 
+@test "test-idempotence harness supports standard no-op interface" {
+  run "${REPO_ROOT}/kubernetes/scripts/test-idempotence.sh"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: test-idempotence.sh [options]"* ]]
+  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
+  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
+  [[ "${output}" == *"INFO dry-run: would run apply/apply/plan idempotence checks for a Kubernetes stack"* ]]
+}
+
 @test "hubble observe without --execute prints help plus the dry-run preview" {
   run "${REPO_ROOT}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh" \
     --promote-to-module

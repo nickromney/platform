@@ -102,7 +102,8 @@ Then use:
   separate repair step.
 - Stage `900` is the confidence path when you drive it through `make`. A
   successful `make -C kubernetes/lima 900 apply` now also runs `check-health`
-  and `check-sso-e2e` before returning success. Raw Terragrunt/OpenTofu applies
+  before returning success. Keep `make -C kubernetes/lima check-sso-e2e` as an
+  explicit post-apply browser smoke check. Raw Terragrunt/OpenTofu applies
   remain apply-only.
 - Stages `200+` reuse the shared Terraform platform root. The Lima target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
@@ -154,5 +155,5 @@ Then use:
 For older Lima clusters created before this wiring was moved into `900 apply`,
 rerun `make -C kubernetes/lima 900 apply AUTO_APPROVE=1` or run
 `make -C kubernetes/lima configure-k3s-apiserver-oidc` once before relying on
-Headlamp. `make -C kubernetes/lima check-sso-e2e` now validates the provisioned
-state and no longer patches the VM first.
+Headlamp. `make -C kubernetes/lima check-sso-e2e` remains an explicit
+post-apply validation step and no longer patches the VM first.

@@ -16,6 +16,19 @@ setup() {
   [[ "${output}" == *"test-e2e"* ]]
 }
 
+@test "sd-wan lima cloud templates use a pipefail-safe repo lookup" {
+  for cloud_yaml in \
+    "${REPO_ROOT}/sd-wan/lima/cloud1.yaml" \
+    "${REPO_ROOT}/sd-wan/lima/cloud2.yaml" \
+    "${REPO_ROOT}/sd-wan/lima/cloud3.yaml"; do
+    run grep -n -- "| head -1" "${cloud_yaml}"
+    [ "${status}" -ne 0 ]
+
+    run grep -n -- "-print -quit" "${cloud_yaml}"
+    [ "${status}" -eq 0 ]
+  done
+}
+
 @test "sd-wan lima prereqs fails cleanly when limactl is missing" {
   cat >"${TEST_BIN}/lsof" <<'EOF'
 #!/usr/bin/env bash
@@ -28,8 +41,91 @@ EOF
 
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"Missing Lima CLI: limactl"* ]]
+  [[ "${output}" == *"Missing Bun runtime: bun"* ]]
   [[ "${output}" == *"Install hints:"* ]]
+  [[ "${output}" == *"bun:"* ]]
   [[ "${output}" == *"limactl:"* ]]
+}
+
+@test "sd-wan lima build-frontend uses the bun-managed frontend workflow" {
+  frontend_shared="${BATS_TEST_TMPDIR}/frontend-shared"
+  frontend_dir="${BATS_TEST_TMPDIR}/frontend"
+  mkdir -p "${frontend_shared}" "${frontend_dir}/dist"
+  printf '%s\n' '<html>sd-wan</html>' >"${frontend_dir}/dist/index.html"
+
+  cat >"${TEST_BIN}/npm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "npm should not be called by build-frontend" >&2
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/npm"
+
+  export BUN_LOG="${BATS_TEST_TMPDIR}/bun.log"
+  : >"${BUN_LOG}"
+  cat >"${TEST_BIN}/bun" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s::%s\n' "$PWD" "$*" >>"${BUN_LOG:?}"
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/bun"
+
+  env_file="${BATS_TEST_TMPDIR}/platform.env"
+  cat >"${env_file}" <<'EOF'
+PLATFORM_ADMIN_PASSWORD=admin-password
+PLATFORM_DEMO_PASSWORD=demo-password
+EOF
+
+  run make -C "${REPO_ROOT}/sd-wan/lima" \
+    FRONTEND_SHARED_DIR="${frontend_shared}" \
+    FRONTEND_DIR="${frontend_dir}" \
+    PLATFORM_ENV_FILE="${env_file}" \
+    build-frontend
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"=== Building frontend ==="* ]]
+  [[ "${output}" == *"Frontend built and staged to /tmp/lima/frontend/"* ]]
+
+  run cat "${BUN_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"${frontend_shared}::run build"* ]]
+  [[ "${output}" == *"${frontend_dir}::install --frozen-lockfile"* ]]
+  [[ "${output}" == *"${frontend_dir}::run build"* ]]
+}
+
+@test "sd-wan lima fix-guest-hostnames executes the helper for running clouds" {
+  export LIMA_LOG="${BATS_TEST_TMPDIR}/limactl.log"
+  : >"${LIMA_LOG}"
+
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${LIMA_LOG:?}"
+if [[ "${1:-}" == "list" && "${2:-}" == "--format" && "${3:-}" == "{{.Name}} {{.Status}}" ]]; then
+  printf '%s\n' "cloud1 Running" "cloud2 Stopped" "cloud3 Running"
+  exit 0
+fi
+if [[ "${1:-}" == "shell" ]]; then
+  printf '%s\n' "$*" >>"${log}"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
+  run make -C "${REPO_ROOT}/sd-wan/lima" fix-guest-hostnames
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${LIMA_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'shell cloud1 -- env TARGET_CLOUD_NAME=cloud1 bash '* ]]
+  [[ "${output}" == *'fix-hostname.sh --execute'* ]]
+  [[ "${output}" == *'shell cloud3 -- env TARGET_CLOUD_NAME=cloud3 bash '* ]]
+  [[ "${output}" != *'shell cloud2'* ]]
 }
 
 @test "sd-wan lima host port preflight passes when no listeners are present" {
@@ -221,4 +317,123 @@ EOF
   [[ "${output}" == *"Skipping cloud3 (not present)"* ]]
   [[ "${output}" == *"Removed /tmp/lima/pki"* ]]
   [[ "${output}" == *"Removed /tmp/lima/wireguard"* ]]
+}
+
+@test "sd-wan lima up reuses already-running instances and still resyncs lab state" {
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}/.lima/_config"
+  cat >"${HOME}/.lima/_config/networks.yaml" <<'EOF'
+paths:
+  socketVMNet: "/bin/bash"
+networks:
+  user-v2:
+EOF
+
+  frontend_shared="${BATS_TEST_TMPDIR}/frontend-shared"
+  frontend_dir="${BATS_TEST_TMPDIR}/frontend"
+  mkdir -p "${frontend_shared}" "${frontend_dir}/dist"
+  printf '%s\n' '<html>sd-wan</html>' >"${frontend_dir}/dist/index.html"
+
+  check_host_ports="${BATS_TEST_TMPDIR}/check-host-ports.sh"
+  cat >"${check_host_ports}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "host ports look good"
+EOF
+  chmod +x "${check_host_ports}"
+
+  cat >"${TEST_BIN}/node" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' 'v20.0.0'
+EOF
+  chmod +x "${TEST_BIN}/node"
+
+  cat >"${TEST_BIN}/npm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "npm should not be called by up" >&2
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/npm"
+
+  cat >"${TEST_BIN}/bun" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/bun"
+
+  export LIMA_LOG="${BATS_TEST_TMPDIR}/limactl.log"
+  : >"${LIMA_LOG}"
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${LIMA_LOG:?}"
+case "${1:-}" in
+  --version)
+    printf '%s\n' 'limactl version 1.0.0'
+    ;;
+  list)
+    if [[ "${2:-}" == "--format" ]]; then
+      case "${3:-}" in
+        "{{.Name}}")
+          printf '%s\n' cloud1 cloud2 cloud3
+          ;;
+        "{{.Name}} {{.Status}}")
+          printf '%s\n' "cloud1 Running" "cloud2 Running" "cloud3 Running"
+          ;;
+      esac
+      exit 0
+    fi
+    cat <<'OUT'
+NAME    STATUS
+cloud1  Running
+cloud2  Running
+cloud3  Running
+OUT
+    ;;
+  start)
+    printf 'start %s\n' "$*" >>"${log}"
+    ;;
+  shell)
+    printf 'shell %s\n' "${2:-unknown}" >>"${log}"
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
+  env_file="${BATS_TEST_TMPDIR}/platform.env"
+  cat >"${env_file}" <<'EOF'
+PLATFORM_ADMIN_PASSWORD=admin-password
+PLATFORM_DEMO_PASSWORD=demo-password
+EOF
+
+  run make -C "${REPO_ROOT}/sd-wan/lima" \
+    CHECK_HOST_PORTS="${check_host_ports}" \
+    FRONTEND_SHARED_DIR="${frontend_shared}" \
+    FRONTEND_DIR="${frontend_dir}" \
+    PLATFORM_ENV_FILE="${env_file}" \
+    up
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"=== Starting SD-WAN simulation ==="* ]]
+  [[ "${output}" == *"cloud1 already running"* ]]
+  [[ "${output}" == *"cloud2 already running"* ]]
+  [[ "${output}" == *"cloud3 already running"* ]]
+  [[ "${output}" == *"=== Syncing frontend on cloud1 ==="* ]]
+  [[ "${output}" == *"=== Syncing subnet calculator API on cloud2 ==="* ]]
+  [[ "${output}" == *"=== Syncing WireGuard mesh ==="* ]]
+  [[ "${output}" != *"Starting existing cloud1"* ]]
+  [[ "${output}" != *"Creating and starting cloud1"* ]]
+
+  run cat "${LIMA_LOG}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"start cloud1"* ]]
+  [[ "${output}" != *"start cloud2"* ]]
+  [[ "${output}" != *"start cloud3"* ]]
+  [[ "${output}" == *"shell cloud1"* ]]
+  [[ "${output}" == *"shell cloud2"* ]]
+  [[ "${output}" == *"shell cloud3"* ]]
 }

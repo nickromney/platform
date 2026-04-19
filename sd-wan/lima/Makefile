@@ -63,6 +63,13 @@ prereqs: ## Check macOS host prerequisites for Lima + networking
 	else \
 		echo "  OK: npm found ($$(npm --version 2>/dev/null))"; \
 	fi; \
+	if ! command -v bun >/dev/null 2>&1; then \
+		echo "  Missing Bun runtime: bun"; \
+		missing_tools+=("bun"); \
+		missing=1; \
+	else \
+		echo "  OK: bun found ($$(bun --version 2>/dev/null))"; \
+	fi; \
 	echo ""; \
 	echo "Host configuration verification:"; \
 	if command -v socket_vmnet >/dev/null 2>&1; then \
@@ -111,13 +118,13 @@ fix-guest-hostnames:
 		if [ "$$state" != "Running" ]; then \
 			continue; \
 		fi; \
-		limactl shell "$$cloud" -- env TARGET_CLOUD_NAME="$$cloud" bash "$(PROJECT_DIR)/provision/fix-hostname.sh" >/dev/null; \
+		limactl shell "$$cloud" -- env TARGET_CLOUD_NAME="$$cloud" bash "$(PROJECT_DIR)/provision/fix-hostname.sh" --execute >/dev/null; \
 	done
 
 build-frontend: ## Build subnet-calculator frontend for deployment
 	@$(MAKE) check-platform-env
 	@echo "=== Building frontend ==="
-	@npm --prefix "$(FRONTEND_SHARED_DIR)" run build
+	@cd "$(FRONTEND_SHARED_DIR)" && bun run build
 	@cd "$(FRONTEND_DIR)" && \
 		VITE_API_URL='' \
 		VITE_AUTH_ENABLED=true \
@@ -133,7 +140,7 @@ build-frontend: ## Build subnet-calculator frontend for deployment
 		VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL='Frontend Diagnostics (cloud1 viewpoint)' \
 		VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH='/cloud1-diagnostics/network/diagnostics' \
 		VITE_NETWORK_HOPS='[{"label":"Browser","detail":"localhost:58081","role":"Host browser entrypoint"},{"label":"cloud1 nginx","detail":"127.0.0.1:58081 -> guest 10.10.1.4:8080","role":"Frontend + reverse proxy"},{"label":"WireGuard SD-WAN","detail":"172.16.11.2:443 (mTLS)","role":"Encrypted cross-cloud VIP path"},{"label":"cloud2 nginx","detail":"172.16.11.2:443","role":"Inbound gateway + mTLS termination"},{"label":"cloud2 FastAPI","detail":"10.10.1.4:8000","role":"Subnet Calculator API (JWT auth)"}]' \
-		npm ci && \
+		bun install --frozen-lockfile && \
 		VITE_API_URL='' \
 		VITE_AUTH_ENABLED=true \
 		VITE_AUTH_METHOD=jwt \
@@ -148,7 +155,7 @@ build-frontend: ## Build subnet-calculator frontend for deployment
 		VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL='Frontend Diagnostics (cloud1 viewpoint)' \
 		VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH='/cloud1-diagnostics/network/diagnostics' \
 		VITE_NETWORK_HOPS='[{"label":"Browser","detail":"localhost:58081","role":"Host browser entrypoint"},{"label":"cloud1 nginx","detail":"127.0.0.1:58081 -> guest 10.10.1.4:8080","role":"Frontend + reverse proxy"},{"label":"WireGuard SD-WAN","detail":"172.16.11.2:443 (mTLS)","role":"Encrypted cross-cloud VIP path"},{"label":"cloud2 nginx","detail":"172.16.11.2:443","role":"Inbound gateway + mTLS termination"},{"label":"cloud2 FastAPI","detail":"10.10.1.4:8000","role":"Subnet Calculator API (JWT auth)"}]' \
-		npm run build
+		bun run build
 	@mkdir -p /tmp/lima/frontend
 	@rm -rf /tmp/lima/frontend/*
 	@cp -r "$(FRONTEND_DIR)/dist/." /tmp/lima/frontend/
@@ -161,8 +168,11 @@ up: prereqs build-frontend ## Start all 3 Lima VMs
 	@echo "=== Starting SD-WAN simulation ==="
 	@mkdir -p /tmp/lima/pki /tmp/lima/wireguard
 	@set -e; for cloud in $(CLOUDS); do \
-		if limactl list --format '{{.Name}}' 2>/dev/null | grep -qx "$$cloud"; then \
-			echo "  Starting existing $$cloud..."; \
+		state="$$(limactl list --format '{{.Name}} {{.Status}}' 2>/dev/null | awk -v target="$$cloud" '$$1 == target {print $$2; exit}')"; \
+		if [ "$$state" = "Running" ]; then \
+			echo "  $$cloud already running; reusing instance."; \
+		elif [ -n "$$state" ]; then \
+			echo "  Starting existing $$cloud ($$state)..."; \
 			limactl start $$cloud --tty=false --timeout=$(LIMA_START_TIMEOUT); \
 		else \
 			echo "  Creating and starting $$cloud..."; \

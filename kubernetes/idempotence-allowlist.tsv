@@ -1,0 +1,4 @@
+# stack	stage	phase	pattern	reason
+#
+# Use shell globs in the pattern column.
+# Keep this file intentionally small. Only accepted churn belongs here.
