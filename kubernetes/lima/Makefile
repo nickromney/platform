@@ -16,7 +16,7 @@ K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
-ASSERT_PROJECT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-project-active.sh
+ASSERT_VARIANT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
@@ -270,12 +270,12 @@ check-conflicting-clusters-stopped:
 
 .PHONY: assert-lima-active
 assert-lima-active:
-	@EXPECTED_PROJECT_PATH="kubernetes/lima" \
-	EXPECTED_PROJECT_LABEL="kubernetes/lima" \
+	@EXPECTED_VARIANT_PATH="kubernetes/lima" \
+	EXPECTED_VARIANT_LABEL="kubernetes/lima" \
 	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)
+	"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG)
 
 .PHONY: prereqs
 prereqs:
@@ -1022,19 +1022,19 @@ test-unit: test-bats
 check-version:
 	@$(MAKE) check-kubeconfig >/dev/null
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
-		EXPECTED_PROJECT_PATH="kubernetes/lima" \
-		EXPECTED_PROJECT_LABEL="kubernetes/lima" \
+		EXPECTED_VARIANT_PATH="kubernetes/lima" \
+		EXPECTED_VARIANT_LABEL="kubernetes/lima" \
 		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
+		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
 	else \
-		EXPECTED_PROJECT_PATH="kubernetes/lima" \
-		EXPECTED_PROJECT_LABEL="kubernetes/lima" \
+		EXPECTED_VARIANT_PATH="kubernetes/lima" \
+		EXPECTED_VARIANT_LABEL="kubernetes/lima" \
 		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG); \
+		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG); \
 	fi
 	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(abspath $(MAKEFILE_DIR)stages)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""

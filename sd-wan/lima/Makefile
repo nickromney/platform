@@ -13,8 +13,8 @@ PLATFORM_ADMIN_PASSWORD ?=
 PLATFORM_DEMO_PASSWORD ?=
 PLATFORM_REQUIRED_ENV_VARS := PLATFORM_ADMIN_PASSWORD PLATFORM_DEMO_PASSWORD
 -include $(PLATFORM_ENV_FILE)
-FRONTEND_SHARED_DIR := $(REPO_ROOT)/apps/subnet-calculator/shared-frontend
-FRONTEND_DIR := $(REPO_ROOT)/apps/subnet-calculator/frontend-typescript-vite
+FRONTEND_SHARED_DIR := $(REPO_ROOT)/apps/subnetcalc/shared-frontend
+FRONTEND_DIR := $(REPO_ROOT)/apps/subnetcalc/frontend-typescript-vite
 CHECK_HOST_PORTS := $(PROJECT_DIR)/scripts/check-lima-host-ports.sh
 CLOUDS := cloud1 cloud2 cloud3
 LIMA_START_TIMEOUT ?= 30m
@@ -121,7 +121,7 @@ fix-guest-hostnames:
 		limactl shell "$$cloud" -- env TARGET_CLOUD_NAME="$$cloud" bash "$(PROJECT_DIR)/provision/fix-hostname.sh" --execute >/dev/null; \
 	done
 
-build-frontend: ## Build subnet-calculator frontend for deployment
+build-frontend: ## Build subnetcalc frontend for deployment
 	@$(MAKE) check-platform-env
 	@echo "=== Building frontend ==="
 	@cd "$(FRONTEND_SHARED_DIR)" && bun run build
@@ -239,11 +239,11 @@ sync-cloud1-diagnostics: fix-guest-hostnames ## Sync cloud1 diagnostics API and 
 		systemctl enable --now sdwan-cloud1-diagnostics; \
 		systemctl restart nginx'
 
-sync-subnet-api: fix-guest-hostnames ## Sync subnet-calculator API code to cloud2 and restart service
+sync-subnet-api: fix-guest-hostnames ## Sync subnetcalc API code to cloud2 and restart service
 	@echo "=== Syncing subnet calculator API on cloud2 ==="
 	@limactl shell cloud2 -- sudo env REPO_ROOT="$(REPO_ROOT)" bash -c 'set -euo pipefail; \
 		mkdir -p /opt/app/app; \
-		cp -r "$$REPO_ROOT/apps/subnet-calculator/api-fastapi-container-app/app/." /opt/app/app/; \
+		cp -r "$$REPO_ROOT/apps/subnetcalc/api-fastapi-container-app/app/." /opt/app/app/; \
 		systemctl restart sdwan-app'
 
 down: ## Stop all VMs (preserves state)

@@ -10,5 +10,5 @@ sequenceDiagram
         Cloudflare-->>API: Published range files
     else uat
         API->>API: Use bundled fallback ranges
-        Note over API: Application code path in [cloudflare_ips.py](../../apps/subnet-calculator/api-fastapi-container-app/app/cloudflare_ips.py)
+        Note over API: Application code path in [cloudflare_ips.py](../../apps/subnetcalc/api-fastapi-container-app/app/cloudflare_ips.py)
     end

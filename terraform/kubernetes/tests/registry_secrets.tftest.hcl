@@ -33,11 +33,11 @@ run "registry_secret_namespaces_auto_from_app_repos" {
   command = plan
 
   variables {
-    enable_argocd                     = true
-    enable_gitea                      = true
-    enable_actions_runner             = true
-    enable_app_repo_sentiment         = true
-    enable_app_repo_subnet_calculator = true
+    enable_argocd              = true
+    enable_gitea               = true
+    enable_actions_runner      = true
+    enable_app_repo_sentiment  = true
+    enable_app_repo_subnetcalc = true
 
     registry_secret_namespaces = []
   }

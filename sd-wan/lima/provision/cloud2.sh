@@ -54,7 +54,7 @@ bash "$PROJECT_DIR/provision/setup-nginx.sh" --execute
 # --- Setup iptables outbound gateway ---
 bash "$PROJECT_DIR/provision/setup-iptables.sh" --execute
 
-# --- Deploy subnet-calculator API ---
+# --- Deploy subnetcalc API ---
 # Find the repo root (PROJECT_DIR is sd-wan/lima)
 REPO_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
 
@@ -63,7 +63,7 @@ source "${REPO_ROOT}/scripts/platform-env.sh"
 platform_load_env
 platform_require_vars PLATFORM_DEMO_PASSWORD || exit 1
 
-cp -r "$REPO_ROOT/apps/subnet-calculator/api-fastapi-container-app/app" /opt/app/app
+cp -r "$REPO_ROOT/apps/subnetcalc/api-fastapi-container-app/app" /opt/app/app
 
 cat > /etc/systemd/system/sdwan-app.service << 'UNIT'
 [Unit]

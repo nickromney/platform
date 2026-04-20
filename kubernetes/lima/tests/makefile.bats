@@ -14,6 +14,10 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
+  [[ "${output}" == *"100 - cluster available"* ]]
+  [[ "${output}" == *"700 - app repos"* ]]
+  [[ "${output}" == *"800 - observability"* ]]
+  [[ "${output}" == *"900 - sso"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
   [[ "${output}" == *"make exercise-k3s-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=k3s-restart]"* ]]
   [[ "${output}" == *"make start"* ]]
@@ -133,11 +137,11 @@ setup() {
   done
 }
 
-@test "lima check-version runs the active-project assertion directly so it can report readiness" {
+@test "lima check-version runs the active-variant assertion directly so it can report readiness" {
   run sed -n '/^check-version:/,/^\.PHONY:/p' "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
+  [[ "${output}" == *'"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
   [[ "${output}" != *'$(MAKE) assert-lima-active >/dev/null'* ]]
 }
 

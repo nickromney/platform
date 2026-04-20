@@ -69,7 +69,7 @@ The labels below are the working shorthand for the current imperative tail:
 | `gitea_org` | `terraform-bootstrap` | Ensures the expected Gitea org exists before repo sync and GitOps bootstrap continue. |
 | `sync_gitea_policies_repo` | `terraform-bootstrap` | Seeds the GitOps policies repo that Argo depends on for initial reconciliation. |
 | `sync_gitea_app_repo_sentiment` | `terraform-bootstrap` | Pushes the sentiment workload repo into Gitea so cluster-side automation has a source of truth to reconcile from. |
-| `sync_gitea_app_repo_subnet_calculator` | `terraform-bootstrap` | Pushes the subnet calculator workload repo into Gitea so cluster-side automation has a source of truth to reconcile from. |
+| `sync_gitea_app_repo_subnetcalc` | `terraform-bootstrap` | Pushes the subnet calculator workload repo into Gitea so cluster-side automation has a source of truth to reconcile from. |
 | `wait_subnetcalc_images` | `validation-only` | Waits for workload image publication to finish; it is a readiness gate, not durable state. |
 | `wait_sentiment_images` | `validation-only` | Waits for workload image publication to finish; it is a readiness gate, not durable state. |
 | `argocd_repo_server_restart` | `validation-only` | Forces the repo-server to pick up known-hosts or repo-trust changes; useful in bootstrap, but still a restart side effect rather than durable desired state. |

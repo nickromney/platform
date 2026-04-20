@@ -5,8 +5,8 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-@test "subnet-calculator make help exposes the vendoring workflow" {
-  run make -C "${REPO_ROOT}/apps/subnet-calculator" help
+@test "subnetcalc make help exposes the vendoring workflow" {
+  run make -C "${REPO_ROOT}/apps/subnetcalc" help
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"update"* ]]
@@ -17,8 +17,8 @@ setup() {
   [[ "${output}" == *"start-compose-full"* ]]
 }
 
-@test "subnet-calculator vendor-apim-simulator delegates to the vendoring script" {
-  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" vendor-apim-simulator \
+@test "subnetcalc vendor-apim-simulator delegates to the vendoring script" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" vendor-apim-simulator \
     APIM_SIMULATOR_SOURCE_REPO=/tmp/apim-simulator \
     APIM_SIMULATOR_SOURCE_REF=v0.4.0
 
@@ -26,8 +26,8 @@ setup() {
   [[ "${output}" == *"\"./scripts/vendor-apim-simulator.sh\" --execute --source \"/tmp/apim-simulator\" --ref \"v0.4.0\""* ]]
 }
 
-@test "subnet-calculator update delegates to bun and uv roots" {
-  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" update
+@test "subnetcalc update delegates to bun and uv roots" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" update
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"cd . && bun update --latest"* ]]
@@ -40,22 +40,22 @@ setup() {
   [[ "${output}" == *"make --no-print-directory -C frontend-python-flask update"* ]]
 }
 
-@test "subnet-calculator happy path keeps the backend warm and swaps frontends without deps" {
-  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" start-compose-happy
+@test "subnetcalc happy path keeps the backend warm and swaps frontends without deps" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" start-compose-happy
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"up -d api-fastapi-container-app"* ]]
   [[ "${output}" == *"up -d --no-deps frontend-typescript-vite"* ]]
 
-  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" start-compose-frontend-react
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" start-compose-frontend-react
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"up -d api-fastapi-container-app"* ]]
   [[ "${output}" == *"up -d --no-deps frontend-react"* ]]
 }
 
-@test "subnet-calculator full compose topology is explicit and profile-gated" {
-  run make -n -C "${REPO_ROOT}/apps/subnet-calculator" start-compose-full
+@test "subnetcalc full compose topology is explicit and profile-gated" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" start-compose-full
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"--profile function-family"* ]]
@@ -64,12 +64,12 @@ setup() {
   [[ "${output}" == *"up -d"* ]]
 
   run bash -lc "cd '${REPO_ROOT}' && \
-    grep -qE '^  api-fastapi-azure-function:$' apps/subnet-calculator/compose.yml && \
-    grep -A3 '^  api-fastapi-azure-function:$' apps/subnet-calculator/compose.yml | grep -q 'function-family' && \
-    grep -qE '^  keycloak:$' apps/subnet-calculator/compose.yml && \
-    grep -A3 '^  keycloak:$' apps/subnet-calculator/compose.yml | grep -q 'oidc' && \
-    grep -qE '^  easyauth-router:$' apps/subnet-calculator/compose.yml && \
-    grep -A3 '^  easyauth-router:$' apps/subnet-calculator/compose.yml | grep -q 'mock-easyauth'"
+    grep -qE '^  api-fastapi-azure-function:$' apps/subnetcalc/compose.yml && \
+    grep -A3 '^  api-fastapi-azure-function:$' apps/subnetcalc/compose.yml | grep -q 'function-family' && \
+    grep -qE '^  keycloak:$' apps/subnetcalc/compose.yml && \
+    grep -A3 '^  keycloak:$' apps/subnetcalc/compose.yml | grep -q 'oidc' && \
+    grep -qE '^  easyauth-router:$' apps/subnetcalc/compose.yml && \
+    grep -A3 '^  easyauth-router:$' apps/subnetcalc/compose.yml | grep -q 'mock-easyauth'"
 
   [ "${status}" -eq 0 ]
 }

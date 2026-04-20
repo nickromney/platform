@@ -25,12 +25,12 @@ enable_cert_manager           = true
 enable_sso                    = true
 enable_app_of_apps            = false
 
-enable_apps_dir_mount             = false
-enable_docker_socket_mount        = false
-enable_actions_runner             = false
-enable_app_repo_subnet_calculator = true
-enable_app_repo_sentiment         = true
-prefer_external_workload_images   = true
+enable_apps_dir_mount           = false
+enable_docker_socket_mount      = false
+enable_actions_runner           = false
+enable_app_repo_subnetcalc      = true
+enable_app_repo_sentiment       = true
+prefer_external_workload_images = true
 
 argocd_namespace          = "argocd"
 gitea_admin_username      = "gitea-admin"

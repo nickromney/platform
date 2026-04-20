@@ -72,4 +72,4 @@ Follow-up hardening after this rollout:
 
 ## Related Observations During Triage
 
-There was a separate Gitea Actions issue earlier where `subnet-calculator` builds timed out pulling `python:3.13-slim` from Docker Hub. That issue is independent from this Kyverno/capability-port binding mismatch but surfaced in the same apply runs.
+There was a separate Gitea Actions issue earlier where `subnetcalc` builds timed out pulling `python:3.13-slim` from Docker Hub. That issue is independent from this Kyverno/capability-port binding mismatch but surfaced in the same apply runs.

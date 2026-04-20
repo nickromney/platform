@@ -155,12 +155,12 @@ locals {
     local.apps_dir_mount
   )
 
-  sentiment_repo_name            = "sentiment"
-  subnet_calculator_repo_name    = "subnet-calculator"
-  sentiment_source_dir           = var.sentiment_source_dir != "" ? abspath(pathexpand(var.sentiment_source_dir)) : abspath("${local.monorepo_apps_dir}/sentiment")
-  subnet_calculator_source_dir   = var.subnet_calculator_source_dir != "" ? abspath(pathexpand(var.subnet_calculator_source_dir)) : abspath("${local.monorepo_apps_dir}/${local.subnet_calculator_repo_name}")
-  sentiment_content_hash         = var.enable_app_repo_sentiment ? try(sha1(join("", [for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")])), "") : ""
-  subnet_calculator_content_hash = var.enable_app_repo_subnet_calculator ? try(sha1(join("", [for f in sort(fileset(local.subnet_calculator_source_dir, "**")) : filesha256("${local.subnet_calculator_source_dir}/${f}")])), "") : ""
+  sentiment_repo_name     = "sentiment"
+  subnetcalc_repo_name    = "subnetcalc"
+  sentiment_source_dir    = var.sentiment_source_dir != "" ? abspath(pathexpand(var.sentiment_source_dir)) : abspath("${local.monorepo_apps_dir}/sentiment")
+  subnetcalc_source_dir   = var.subnetcalc_source_dir != "" ? abspath(pathexpand(var.subnetcalc_source_dir)) : abspath("${local.monorepo_apps_dir}/${local.subnetcalc_repo_name}")
+  sentiment_content_hash  = var.enable_app_repo_sentiment ? try(sha1(join("", [for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")])), "") : ""
+  subnetcalc_content_hash = var.enable_app_repo_subnetcalc ? try(sha1(join("", [for f in sort(fileset(local.subnetcalc_source_dir, "**")) : filesha256("${local.subnetcalc_source_dir}/${f}")])), "") : ""
   enable_sentiment_external_images = (
     var.prefer_external_workload_images &&
     lookup(var.external_workload_image_refs, "sentiment-api", "") != "" &&
@@ -176,7 +176,7 @@ locals {
   # not advance the teaching-stage rollout on their own. Stage files remain the
   # source of truth for when these workloads are introduced.
   enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment
-  enable_subnetcalc_workloads_effective = var.enable_app_repo_subnet_calculator
+  enable_subnetcalc_workloads_effective = var.enable_app_repo_subnetcalc
 
   policies_repo_name        = "policies"
   policies_repo_url_cluster = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/${local.gitea_repo_owner}/${local.policies_repo_name}.git"
@@ -268,7 +268,7 @@ locals {
     enable_cert_manager                    = var.enable_cert_manager
     enable_actions_runner                  = var.enable_actions_runner
     enable_app_repo_sentiment              = var.enable_app_repo_sentiment
-    enable_app_repo_subnetcalc             = var.enable_app_repo_subnet_calculator
+    enable_app_repo_subnetcalc             = var.enable_app_repo_subnetcalc
     enable_prometheus                      = var.enable_prometheus
     enable_grafana                         = var.enable_grafana
     enable_loki                            = var.enable_loki
@@ -496,6 +496,128 @@ locals {
 
       cm = tomap(merge(
         {
+          "resource.customizations.health.apps_Deployment" = trimspace(<<-EOT
+            hs = {}
+            if obj.status == nil then
+              hs.status = "Progressing"
+              hs.message = "Waiting for Deployment status"
+              return hs
+            end
+
+            local generation = 0
+            if obj.metadata ~= nil and obj.metadata.generation ~= nil then
+              generation = obj.metadata.generation
+            end
+
+            local observed = obj.status.observedGeneration or 0
+            if observed < generation then
+              hs.status = "Progressing"
+              hs.message = "Waiting for Deployment controller to observe the latest generation"
+              return hs
+            end
+
+            for _, condition in ipairs(obj.status.conditions or {}) do
+              if condition.type == "Progressing" and condition.reason == "ProgressDeadlineExceeded" then
+                hs.status = "Degraded"
+                hs.message = condition.message or "Deployment exceeded its progress deadline"
+                return hs
+              end
+            end
+
+            local desired = 1
+            if obj.spec ~= nil and obj.spec.replicas ~= nil then
+              desired = obj.spec.replicas
+            end
+
+            local updated = obj.status.updatedReplicas or 0
+            local ready = obj.status.readyReplicas or 0
+            local available = obj.status.availableReplicas or 0
+
+            if updated == desired and ready == desired and available == desired then
+              hs.status = "Healthy"
+              hs.message = "Deployment rollout complete"
+              return hs
+            end
+
+            hs.status = "Progressing"
+            hs.message = string.format(
+              "Deployment rollout in progress (updated=%d ready=%d available=%d desired=%d)",
+              updated,
+              ready,
+              available,
+              desired
+            )
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.networking.k8s.io_HTTPRoute" = trimspace(<<-EOT
+            hs = {}
+
+            local parents = {}
+            if obj.status ~= nil and obj.status.parents ~= nil then
+              parents = obj.status.parents
+            end
+
+            if #parents == 0 then
+              hs.status = "Progressing"
+              hs.message = "Waiting for Gateway controller to accept the route"
+              return hs
+            end
+
+            local accepted = false
+            for _, parent in ipairs(parents) do
+              for _, condition in ipairs(parent.conditions or {}) do
+                if condition.type == "Accepted" then
+                  if condition.status == "False" then
+                    hs.status = "Degraded"
+                    hs.message = condition.message or "HTTPRoute was rejected by its parent Gateway"
+                    return hs
+                  end
+                  if condition.status == "True" then
+                    accepted = true
+                  end
+                end
+
+                if condition.type == "ResolvedRefs" and condition.status == "False" then
+                  hs.status = "Degraded"
+                  hs.message = condition.message or "HTTPRoute has unresolved backend references"
+                  return hs
+                end
+              end
+            end
+
+            if accepted then
+              hs.status = "Healthy"
+              hs.message = "HTTPRoute accepted by the Gateway controller"
+              return hs
+            end
+
+            hs.status = "Progressing"
+            hs.message = "Waiting for HTTPRoute acceptance"
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.networking.k8s.io_ReferenceGrant" = trimspace(<<-EOT
+            hs = {}
+            hs.status = "Healthy"
+            hs.message = "ReferenceGrant applied"
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.nginx.org_ObservabilityPolicy" = trimspace(<<-EOT
+            hs = {}
+            hs.status = "Healthy"
+            hs.message = "ObservabilityPolicy applied"
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.nginx.org_SnippetsFilter" = trimspace(<<-EOT
+            hs = {}
+            hs.status = "Healthy"
+            hs.message = "SnippetsFilter applied"
+            return hs
+          EOT
+          )
           # Altinity ClickHouse operator can leave CHI status at InProgress even
           # when the cluster is fully up; avoid perma-Progressing Argo apps.
           "resource.customizations.health.clickhouse.altinity.com_ClickHouseInstallation" = trimspace(<<-EOT

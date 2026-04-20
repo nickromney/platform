@@ -679,7 +679,7 @@ EXPECT_SSO=$(expected_from_tfvars enable_sso)
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
-EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnet_calculator)
+EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
 [[ -n "${EXPECT_CILIUM_POLICIES}" ]] || EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
@@ -1313,7 +1313,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     if kubectl -n "${ARGOCD_NS}" get app apim >/dev/null 2>&1; then
       ok "Argo CD app apim exists"
     else
-      fail_soft "Argo CD app apim missing (enable_app_repo_subnet_calculator=true${tfvars_hint})"
+      fail_soft "Argo CD app apim missing (enable_app_repo_subnetcalc=true${tfvars_hint})"
     fi
   fi
 
@@ -1444,7 +1444,7 @@ gitea_repo_check() {
   fi
 }
 
-gitea_repo_check "subnet-calculator" ".gitea/workflows/build-images.yaml" "${EXPECT_APP_REPO_SUBNET_CALC}"
+gitea_repo_check "subnetcalc" ".gitea/workflows/build-images.yaml" "${EXPECT_APP_REPO_SUBNET_CALC}"
 gitea_repo_check "sentiment" ".gitea/workflows/build-images.yaml" "${EXPECT_APP_REPO_SENTIMENT}"
 fi
 

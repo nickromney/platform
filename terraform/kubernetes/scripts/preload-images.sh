@@ -69,10 +69,10 @@ REFRESH_LOCK=0
 PARALLELISM=4
 MODE="default"
 WORKFLOW_DOCKERFILES=(
-  "apps/subnet-calculator/api-fastapi-container-app/Dockerfile"
-  "apps/subnet-calculator/apim-simulator/Dockerfile"
-  "apps/subnet-calculator/frontend-typescript-vite/Dockerfile"
-  "apps/subnet-calculator/frontend-react/Dockerfile"
+  "apps/subnetcalc/api-fastapi-container-app/Dockerfile"
+  "apps/subnetcalc/apim-simulator/Dockerfile"
+  "apps/subnetcalc/frontend-typescript-vite/Dockerfile"
+  "apps/subnetcalc/frontend-react/Dockerfile"
   "apps/sentiment/api-sentiment/Dockerfile"
   "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile"
 )

@@ -86,13 +86,13 @@ EOF
 
 @test "check-version parses app cooldown policies and locked dependency versions" {
   local expected_cutoff
-  expected_cutoff="$(awk -F'\"' '/^exclude-newer = \"/ { print $2; exit }' "${REPO_ROOT}/apps/subnet-calculator/apim-simulator/uv.lock")"
+  expected_cutoff="$(awk -F'\"' '/^exclude-newer = \"/ { print $2; exit }' "${REPO_ROOT}/apps/subnetcalc/apim-simulator/uv.lock")"
 
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
-    \"\$(js_dependency_cooldown_seconds '${REPO_ROOT}/apps/subnet-calculator')\" \
-    \"\$(bun_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/bun.lock' '@azure/static-web-apps-cli')\" \
-    \"\$(python_dependency_cooldown_cutoff '${REPO_ROOT}/apps/subnet-calculator/apim-simulator')\" \
-    \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnet-calculator/apim-simulator/uv.lock' 'anyio')\""
+    \"\$(js_dependency_cooldown_seconds '${REPO_ROOT}/apps/subnetcalc')\" \
+    \"\$(bun_lock_resolved_version '${REPO_ROOT}/apps/subnetcalc/bun.lock' '@azure/static-web-apps-cli')\" \
+    \"\$(python_dependency_cooldown_cutoff '${REPO_ROOT}/apps/subnetcalc/apim-simulator')\" \
+    \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnetcalc/apim-simulator/uv.lock' 'anyio')\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf '604800\n2.0.8\n%s\n4.12.1' "${expected_cutoff}")" ]
@@ -180,7 +180,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(printf '%b\n' \
   'apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact\t19.2.5\t19.2.5\t19.2.5\tcurrent' \
   'apps/sentiment/frontend-react-vite/sentiment-auth-ui\treact-dom\t19.2.5\t19.2.5\t19.2.5\tcurrent' \
-  'apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t1.0.1\t1.0.1\tupdate available'); rendered=\$(render_dependency_audit_text \"\${rows}\"); printf '%s\n%s\n' \
+  'apps/subnetcalc/frontend-react\tleft-pad\t1.0.0\t1.0.1\t1.0.1\tupdate available'); rendered=\$(render_dependency_audit_text \"\${rows}\"); printf '%s\n%s\n' \
   \"\$(printf '%s\n' \"\${rendered}\" | awk '/^apps\\// { count++ } END { print count + 0 }')\" \
   \"\$(printf '%s\n' \"\${rendered}\" | awk '/^hidden current-only apps: 1 \\(dependencies hidden: 2\\)$/ { found = 1 } END { print found + 0 }')\""
 
@@ -192,8 +192,8 @@ EOF
 
 @test "check-version dependency audit renderer labels follow-up items without unresolved status" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(printf '%b\n' \
-  'apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t\t1.0.1\tlatest lookup failed' \
-  'apps/subnet-calculator/frontend-react\tleft-pad-lock\t\t\t\tlockfile missing or unverified'); render_dependency_audit_text \"\${rows}\""
+  'apps/subnetcalc/frontend-react\tleft-pad\t1.0.0\t\t1.0.1\tlatest lookup failed' \
+  'apps/subnetcalc/frontend-react\tleft-pad-lock\t\t\t\tlockfile missing or unverified'); render_dependency_audit_text \"\${rows}\""
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ follow-up:\ 2 ]]
@@ -209,9 +209,9 @@ EOF
   run bash -lc "rows=\$(printf '%b\n' \
   'apps/sentiment/api-sentiment\talpha\t1.0.0\t1.0.0\t1.0.0\tcurrent' \
   'apps/sentiment/frontend-react-vite/sentiment-auth-ui\tbeta\t1.0.0\t1.0.0\t1.0.0\tcurrent' \
-  'apps/subnet-calculator/frontend-react\t@subnet-calculator/shared-frontend\tfile:../shared-frontend\t\t\tlocal/path dependency' \
-  'apps/subnet-calculator/frontend-typescript-vite\tgamma\t1.0.0\t1.0.0\t1.0.0\tcurrent'); rendered=\$(timeout 5 bash -lc 'export CHECK_VERSION_LIB_ONLY=1; source \"\$1\"; render_dependency_audit_text \"\$2\"' _ '${SCRIPT}' \"\${rows}\"); printf '%s\n%s\n' \
-  \"\$(printf '%s\n' \"\${rendered}\" | awk '/^apps\\/subnet-calculator\\/frontend-react$/ { count++ } END { print count + 0 }')\" \
+  'apps/subnetcalc/frontend-react\t@subnetcalc/shared-frontend\tfile:../shared-frontend\t\t\tlocal/path dependency' \
+  'apps/subnetcalc/frontend-typescript-vite\tgamma\t1.0.0\t1.0.0\t1.0.0\tcurrent'); rendered=\$(timeout 5 bash -lc 'export CHECK_VERSION_LIB_ONLY=1; source \"\$1\"; render_dependency_audit_text \"\$2\"' _ '${SCRIPT}' \"\${rows}\"); printf '%s\n%s\n' \
+  \"\$(printf '%s\n' \"\${rendered}\" | awk '/^apps\\/subnetcalc\\/frontend-react$/ { count++ } END { print count + 0 }')\" \
   \"\$(printf '%s\n' \"\${rendered}\" | awk '/^hidden current-only apps: 3 \\(dependencies hidden: 3\\)$/ { found = 1 } END { print found + 0 }')\""
 
   [ "${status}" -eq 0 ]
@@ -399,7 +399,7 @@ EOF
 
 @test "check-version external image audit separates updates from skipped references" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(cat <<'EOF'
-apps/subnet-calculator/csharp-test/web-app/Dockerfile:10	mcr.microsoft.com/dotnet/aspnet:9.0	9.0	10.0.6	mcr.microsoft.com	update available
+apps/subnetcalc/csharp-test/web-app/Dockerfile:10	mcr.microsoft.com/dotnet/aspnet:9.0	9.0	10.0.6	mcr.microsoft.com	update available
 terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml:46	__GRAFANA_IMAGE_REGISTRY__/__GRAFANA_IMAGE_REPOSITORY__:__GRAFANA_IMAGE_TAG__			docker.io	templated image reference
 docker/compose/compose.yml:35	dhi.io/dex:2.44.0-debian13			dhi.io	vendor-managed mirror
 apps/sentiment/compose.yml:100	quay.io/oauth2-proxy/oauth2-proxy:v7.15.2	v7.15.2	v7.15.2	quay.io	current
@@ -536,8 +536,8 @@ EOF
     \$'argo-cd chart\t9.0.0\t9.0.0\t9.0.0\tv9.0.0\tv9.0.0\t\tv9.0.0\tcurrent' \
     '' \
     \$'kind release tag\tv0.29.0\tv0.29.0\tcurrent' \
-    \$'apps/subnet-calculator/frontend-react\tleft-pad\t1.0.0\t\t1.0.1\tlockfile missing or unverified' \
-    \$'apps/subnet-calculator/csharp-test/web-app/Dockerfile:10\tmcr.microsoft.com/dotnet/aspnet:9.0\t9.0\t\tmcr.microsoft.com\tmajor.minor pin\napps/sentiment/compose.yml:100\tquay.io/oauth2-proxy/oauth2-proxy:v7.15.2\tv7.15.2\tv7.15.2\tquay.io\tcurrent'"
+    \$'apps/subnetcalc/frontend-react\tleft-pad\t1.0.0\t\t1.0.1\tlockfile missing or unverified' \
+    \$'apps/subnetcalc/csharp-test/web-app/Dockerfile:10\tmcr.microsoft.com/dotnet/aspnet:9.0\t9.0\t\tmcr.microsoft.com\tmajor.minor pin\napps/sentiment/compose.yml:100\tquay.io/oauth2-proxy/oauth2-proxy:v7.15.2\tv7.15.2\tv7.15.2\tquay.io\tcurrent'"
 
   [ "${status}" -eq 0 ]
 

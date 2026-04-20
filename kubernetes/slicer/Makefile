@@ -8,6 +8,7 @@ STATE_FILE ?= ../../terraform/.run/kubernetes-slicer/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
+STAGE_LADDER_MK := $(MAKEFILE_DIR)../stage-ladder.mk
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 RUN_DIR := $(MAKEFILE_DIR).run
 PROFILE_LIB := $(STACK_DIR)/scripts/profile-lib.sh
@@ -16,7 +17,7 @@ K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
 CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
 CHECK_LIMA_STOPPED := $(MAKEFILE_DIR)../scripts/check-lima-stopped.sh
-ASSERT_PROJECT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-project-active.sh
+ASSERT_VARIANT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 CHECK_HOST_PORTS := $(SCRIPTS_DIR)/check-slicer-host-ports.sh
 HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
@@ -112,6 +113,8 @@ DISPLAY_PLATFORM_PROFILE_DIR := $(patsubst $(HOME)/%,~/%,$(patsubst $(REPO_ROOT)
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
+
+include $(STAGE_LADDER_MK)
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
@@ -240,15 +243,15 @@ help:
 	@echo "  make build-local-platform-images"
 	@echo ""
 	@echo "Stages:"
-	@echo "  100 - bootstrap k3s on Slicer"
-	@echo "  200 - cilium (or default-CNI no-op placeholder)"
-	@echo "  300 - hubble (or default-CNI no-op placeholder)"
-	@echo "  400 - argocd core"
-	@echo "  500 - gitea"
-	@echo "  600 - policies (or default-CNI no-op placeholder)"
-	@echo "  700 - app workloads from local images"
-	@echo "  800 - gateway tls + observability"
-	@echo "  900 - sso"
+	@echo "  100 - $(STAGE_DESC_SLICER_100)"
+	@echo "  200 - $(STAGE_DESC_SLICER_200) (or default-CNI no-op placeholder)"
+	@echo "  300 - $(STAGE_DESC_SLICER_300) (or default-CNI no-op placeholder)"
+	@echo "  400 - $(STAGE_DESC_SLICER_400)"
+	@echo "  500 - $(STAGE_DESC_SLICER_500)"
+	@echo "  600 - $(STAGE_DESC_SLICER_600) (or default-CNI no-op placeholder)"
+	@echo "  700 - $(STAGE_DESC_SLICER_700)"
+	@echo "  800 - $(STAGE_DESC_SLICER_800)"
+	@echo "  900 - $(STAGE_DESC_SLICER_900)"
 	@echo ""
 	@echo "Stage examples:"
 	@echo "  make 100 plan"
@@ -297,12 +300,12 @@ check-conflicting-clusters-stopped:
 
 .PHONY: assert-slicer-active
 assert-slicer-active:
-	@EXPECTED_PROJECT_PATH="kubernetes/slicer" \
-	EXPECTED_PROJECT_LABEL="kubernetes/slicer" \
+	@EXPECTED_VARIANT_PATH="kubernetes/slicer" \
+	EXPECTED_VARIANT_LABEL="kubernetes/slicer" \
 	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)
+	"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG)
 
 .PHONY: prepare-state
 prepare-state:
@@ -1289,19 +1292,19 @@ test-unit: test-bats
 check-version:
 	@$(MAKE) check-kubeconfig >/dev/null
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
-		EXPECTED_PROJECT_PATH="kubernetes/slicer" \
-		EXPECTED_PROJECT_LABEL="kubernetes/slicer" \
+		EXPECTED_VARIANT_PATH="kubernetes/slicer" \
+		EXPECTED_VARIANT_LABEL="kubernetes/slicer" \
 		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
+		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
 	else \
-		EXPECTED_PROJECT_PATH="kubernetes/slicer" \
-		EXPECTED_PROJECT_LABEL="kubernetes/slicer" \
+		EXPECTED_VARIANT_PATH="kubernetes/slicer" \
+		EXPECTED_VARIANT_LABEL="kubernetes/slicer" \
 		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG); \
+		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG); \
 	fi
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(stage_dir_abs)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)

@@ -1,5 +1,5 @@
 {
-  "realm": "subnet-calculator",
+  "realm": "sentiment",
   "enabled": true,
   "displayName": "Entra ID Simulator",
   "sslRequired": "none",

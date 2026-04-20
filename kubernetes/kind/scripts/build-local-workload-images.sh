@@ -90,22 +90,22 @@ build_and_push \
 
 build_and_push \
   "subnetcalc-api-fastapi-container-app" \
-  "${REPO_ROOT}/apps/subnet-calculator/api-fastapi-container-app" \
-  "${REPO_ROOT}/apps/subnet-calculator/api-fastapi-container-app/Dockerfile"
+  "${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app" \
+  "${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app/Dockerfile"
 
 build_and_push \
   "subnetcalc-apim-simulator" \
-  "${REPO_ROOT}/apps/subnet-calculator/apim-simulator" \
-  "${REPO_ROOT}/apps/subnet-calculator/apim-simulator/Dockerfile"
+  "${REPO_ROOT}/apps/subnetcalc/apim-simulator" \
+  "${REPO_ROOT}/apps/subnetcalc/apim-simulator/Dockerfile"
 
 build_and_push \
   "subnetcalc-frontend-typescript-vite" \
-  "${REPO_ROOT}/apps/subnet-calculator" \
-  "${REPO_ROOT}/apps/subnet-calculator/frontend-typescript-vite/Dockerfile"
+  "${REPO_ROOT}/apps/subnetcalc" \
+  "${REPO_ROOT}/apps/subnetcalc/frontend-typescript-vite/Dockerfile"
 
 build_and_push \
   "subnetcalc-frontend-react" \
-  "${REPO_ROOT}/apps/subnet-calculator" \
-  "${REPO_ROOT}/apps/subnet-calculator/frontend-react/Dockerfile" \
+  "${REPO_ROOT}/apps/subnetcalc" \
+  "${REPO_ROOT}/apps/subnetcalc/frontend-react/Dockerfile" \
   --build-arg VITE_API_PROXY_ENABLED=true \
   --build-arg VITE_AUTH_METHOD=easyauth

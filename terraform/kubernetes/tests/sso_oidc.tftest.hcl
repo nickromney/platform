@@ -92,30 +92,30 @@ run "sso_with_subnetcalc_apps" {
   command = plan
 
   variables {
-    cni_provider                      = "none"
-    enable_hubble                     = false
-    enable_argocd                     = true
-    enable_gitea                      = true
-    enable_signoz                     = false
-    enable_gateway_tls                = true
-    enable_sso                        = true
-    enable_actions_runner             = true
-    enable_app_repo_subnet_calculator = true
+    cni_provider               = "none"
+    enable_hubble              = false
+    enable_argocd              = true
+    enable_gitea               = true
+    enable_signoz              = false
+    enable_gateway_tls         = true
+    enable_sso                 = true
+    enable_actions_runner      = true
+    enable_app_repo_subnetcalc = true
   }
 
   assert {
     condition     = length(kubernetes_namespace_v1.apim) == 1
-    error_message = "Expected kubernetes_namespace_v1.apim to exist when enable_app_repo_subnet_calculator=true"
+    error_message = "Expected kubernetes_namespace_v1.apim to exist when enable_app_repo_subnetcalc=true"
   }
 
   assert {
     condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc to exist when enable_sso=true and enable_app_repo_subnet_calculator=true"
+    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc to exist when enable_sso=true and enable_app_repo_subnetcalc=true"
   }
 
   assert {
     condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat to exist when enable_sso=true and enable_app_repo_subnet_calculator=true"
+    error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat to exist when enable_sso=true and enable_app_repo_subnetcalc=true"
   }
 
   assert {

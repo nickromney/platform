@@ -3,7 +3,7 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
-  export SCRIPT="${REPO_ROOT}/apps/subnet-calculator/scripts/vendor-apim-simulator.sh"
+  export SCRIPT="${REPO_ROOT}/apps/subnetcalc/scripts/vendor-apim-simulator.sh"
   export SOURCE_REPO="${BATS_TEST_TMPDIR}/source"
   export TARGET_DIR="${BATS_TEST_TMPDIR}/target"
   export METADATA_FILE="${BATS_TEST_TMPDIR}/apim-simulator.vendor.json"

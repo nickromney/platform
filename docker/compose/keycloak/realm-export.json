@@ -1,5 +1,5 @@
 {
-  "realm": "subnet-calculator",
+  "realm": "subnetcalc",
   "enabled": true,
   "displayName": "Subnet Calculator Compose Platform",
   "displayNameHtml": "<div>Subnet Calculator Compose Platform</div>",

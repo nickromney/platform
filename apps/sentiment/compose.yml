@@ -106,11 +106,11 @@ services:
     command:
       - --provider=oidc
       - --skip-oidc-discovery=true
-      - --oidc-issuer-url=http://localhost:8300/realms/subnet-calculator
-      - --login-url=http://localhost:8300/realms/subnet-calculator/protocol/openid-connect/auth?max_age=0
-      - --redeem-url=http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/token
-      - --oidc-jwks-url=http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs
-      - --validate-url=http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/userinfo
+      - --oidc-issuer-url=http://localhost:8300/realms/sentiment
+      - --login-url=http://localhost:8300/realms/sentiment/protocol/openid-connect/auth?max_age=0
+      - --redeem-url=http://keycloak:8080/realms/sentiment/protocol/openid-connect/token
+      - --oidc-jwks-url=http://keycloak:8080/realms/sentiment/protocol/openid-connect/certs
+      - --validate-url=http://keycloak:8080/realms/sentiment/protocol/openid-connect/userinfo
       - --client-id=oauth2-proxy
       - --client-secret=${PLATFORM_DEMO_PASSWORD:?Set PLATFORM_DEMO_PASSWORD in the repo .env or export it before running docker compose}
       - --redirect-url=http://localhost:8304/oauth2/callback

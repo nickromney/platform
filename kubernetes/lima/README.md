@@ -129,14 +129,14 @@ Then use:
 
 | Stage | Intent |
 | --- | --- |
-| `100` | Bootstrap k3s on Lima |
+| `100` | Cluster available |
 | `200` | Install Cilium |
 | `300` | Add Hubble |
 | `400` | Add Argo CD |
 | `500` | Add Gitea |
 | `600` | Add policies |
-| `700` | Deploy app workloads from local images |
-| `800` | Add HTTPS routes and observability |
+| `700` | Add app repos |
+| `800` | Add observability |
 | `900` | Add SSO |
 
 ## Layout

@@ -23,7 +23,7 @@ usage() {
   cat <<'EOF'
 Usage: platform-status.sh [--output human|text|json] [--dry-run] [--execute]
 
-Summarises local project runtime status across:
+Summarises local variant runtime status across:
   - kubernetes/kind
   - kubernetes/lima
   - kubernetes/slicer
@@ -473,10 +473,10 @@ render_status_table() {
     def truncate_note($text):
       if ($text | length) > 56 then $text[0:53] + "..." else $text end;
 
-    (["PROJECT", "STATE", "SERVE", "PRESENT", "VERSION", "PORTS", "CLAIMED BY", "NOTE"] | @tsv),
+    (["VARIANT", "STATE", "SERVE", "PRESENT", "VERSION", "PORTS", "CLAIMED BY", "NOTE"] | @tsv),
     (
-      .projects_order[] as $key
-      | .projects[$key] as $project
+      (.variants_order // .projects_order)[] as $key
+      | ((.variants // .projects)[$key]) as $project
       | ($project.blockers[0] // "") as $blocker
       | (
           if ($blocker | test("^(?<claim>.+) claimed by (?<owner>.+)$")) then
@@ -637,8 +637,8 @@ render_tsv_table() {
 build_action_json() {
   local id="$1"
   local label="$2"
-  local provider="$3"
-  local project="$4"
+  local variant="$3"
+  local variant_path="$4"
   local enabled="$5"
   local reason="$6"
   local command="$7"
@@ -647,8 +647,8 @@ build_action_json() {
   jq -cn \
     --arg id "${id}" \
     --arg label "${label}" \
-    --arg provider "${provider}" \
-    --arg project "${project}" \
+    --arg variant "${variant}" \
+    --arg variant_path "${variant_path}" \
     --arg reason "${reason}" \
     --arg command "${command}" \
     --argjson enabled "$(bool_json "${enabled}")" \
@@ -656,8 +656,10 @@ build_action_json() {
     '{
       id: $id,
       label: $label,
-      provider: $provider,
-      project: $project,
+      variant: $variant,
+      variant_path: $variant_path,
+      provider: $variant,
+      project: $variant_path,
       enabled: $enabled,
       reason: (if $reason == "" then null else $reason end),
       command: $command,
@@ -679,8 +681,8 @@ render_human_output() {
     "Platform local runtime status",
     "",
     "Overall state: \(.overall_state)",
-    "Active cluster provider: \((.active_provider_path // "none"))",
-    "Active project surface: \((.active_project_path // "none"))",
+    "Active cluster variant: \((.active_cluster_variant_path // .active_provider_path // "none"))",
+    "Active variant surface: \((.active_variant_path // .active_project_path // "none"))",
     (
       if (.foreign_ports | length) > 0 then
         "Foreign shared ports:\n" + ((.foreign_ports | map("  - " + .)) | join("\n"))
@@ -691,7 +693,7 @@ render_human_output() {
   ' <<<"${json_payload}"
   printf '\nPlatforms:\n%s\n' "${runtime_table}"
   printf '\nRegistry auth (Docker config + credential helper probe):\n%s\n' "${registry_auth_table}"
-  printf '\nTracked projects:\n%s\n' "${table_output}"
+  printf '\nTracked variants:\n%s\n' "${table_output}"
   jq -r '
     "",
     "Recommended actions:",
@@ -729,7 +731,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-shell_cli_maybe_execute_or_preview_summary usage "would inspect local platform project status"
+shell_cli_maybe_execute_or_preview_summary usage "would inspect local platform variant status"
 
 case "${output_format}" in
   text)
@@ -1264,6 +1266,11 @@ elif [ "${sdwan_serving}" -eq 1 ]; then
   active_project_path="sd-wan/lima"
 fi
 
+active_cluster_variant="${active_provider}"
+active_cluster_variant_path="${active_provider_path}"
+active_variant="${active_project}"
+active_variant_path="${active_project_path}"
+
 kind_apply_100_enabled=1
 kind_apply_100_reason=""
 if [ "${docker_available}" -ne 1 ]; then
@@ -1397,6 +1404,10 @@ actions_json="$(
 status_json="$(jq -cn \
   --arg generated_at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
   --arg overall_state "${overall_state}" \
+  --arg active_cluster_variant "${active_cluster_variant}" \
+  --arg active_cluster_variant_path "${active_cluster_variant_path}" \
+  --arg active_variant "${active_variant}" \
+  --arg active_variant_path "${active_variant_path}" \
   --arg active_provider "${active_provider}" \
   --arg active_provider_path "${active_provider_path}" \
   --arg active_project "${active_project}" \
@@ -1417,6 +1428,10 @@ status_json="$(jq -cn \
   '{
     generated_at: $generated_at,
     overall_state: $overall_state,
+    active_cluster_variant: (if $active_cluster_variant == "" then null else $active_cluster_variant end),
+    active_cluster_variant_path: (if $active_cluster_variant_path == "" then null else $active_cluster_variant_path end),
+    active_variant: (if $active_variant == "" then null else $active_variant end),
+    active_variant_path: (if $active_variant_path == "" then null else $active_variant_path end),
     active_provider: (if $active_provider == "" then null else $active_provider end),
     active_provider_path: (if $active_provider_path == "" then null else $active_provider_path end),
     active_project: (if $active_project == "" then null else $active_project end),
@@ -1441,6 +1456,19 @@ status_json="$(jq -cn \
       docker_io: $docker_io_registry_auth
     },
     registry_auth_order: ["dhi_io", "docker_io"],
+    cluster_variants: {
+      kind: $kind,
+      lima: $lima,
+      slicer: $slicer
+    },
+    cluster_variants_order: ["kind", "lima", "slicer"],
+    variants: {
+      kind: $kind,
+      lima: $lima,
+      slicer: $slicer,
+      sdwan_lima: $sdwan_lima
+    },
+    variants_order: ["kind", "lima", "slicer", "sdwan_lima"],
     providers: {
       kind: $kind,
       lima: $lima,
