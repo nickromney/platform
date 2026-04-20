@@ -496,6 +496,128 @@ locals {
 
       cm = tomap(merge(
         {
+          "resource.customizations.health.apps_Deployment" = trimspace(<<-EOT
+            hs = {}
+            if obj.status == nil then
+              hs.status = "Progressing"
+              hs.message = "Waiting for Deployment status"
+              return hs
+            end
+
+            local generation = 0
+            if obj.metadata ~= nil and obj.metadata.generation ~= nil then
+              generation = obj.metadata.generation
+            end
+
+            local observed = obj.status.observedGeneration or 0
+            if observed < generation then
+              hs.status = "Progressing"
+              hs.message = "Waiting for Deployment controller to observe the latest generation"
+              return hs
+            end
+
+            for _, condition in ipairs(obj.status.conditions or {}) do
+              if condition.type == "Progressing" and condition.reason == "ProgressDeadlineExceeded" then
+                hs.status = "Degraded"
+                hs.message = condition.message or "Deployment exceeded its progress deadline"
+                return hs
+              end
+            end
+
+            local desired = 1
+            if obj.spec ~= nil and obj.spec.replicas ~= nil then
+              desired = obj.spec.replicas
+            end
+
+            local updated = obj.status.updatedReplicas or 0
+            local ready = obj.status.readyReplicas or 0
+            local available = obj.status.availableReplicas or 0
+
+            if updated == desired and ready == desired and available == desired then
+              hs.status = "Healthy"
+              hs.message = "Deployment rollout complete"
+              return hs
+            end
+
+            hs.status = "Progressing"
+            hs.message = string.format(
+              "Deployment rollout in progress (updated=%d ready=%d available=%d desired=%d)",
+              updated,
+              ready,
+              available,
+              desired
+            )
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.networking.k8s.io_HTTPRoute" = trimspace(<<-EOT
+            hs = {}
+
+            local parents = {}
+            if obj.status ~= nil and obj.status.parents ~= nil then
+              parents = obj.status.parents
+            end
+
+            if #parents == 0 then
+              hs.status = "Progressing"
+              hs.message = "Waiting for Gateway controller to accept the route"
+              return hs
+            end
+
+            local accepted = false
+            for _, parent in ipairs(parents) do
+              for _, condition in ipairs(parent.conditions or {}) do
+                if condition.type == "Accepted" then
+                  if condition.status == "False" then
+                    hs.status = "Degraded"
+                    hs.message = condition.message or "HTTPRoute was rejected by its parent Gateway"
+                    return hs
+                  end
+                  if condition.status == "True" then
+                    accepted = true
+                  end
+                end
+
+                if condition.type == "ResolvedRefs" and condition.status == "False" then
+                  hs.status = "Degraded"
+                  hs.message = condition.message or "HTTPRoute has unresolved backend references"
+                  return hs
+                end
+              end
+            end
+
+            if accepted then
+              hs.status = "Healthy"
+              hs.message = "HTTPRoute accepted by the Gateway controller"
+              return hs
+            end
+
+            hs.status = "Progressing"
+            hs.message = "Waiting for HTTPRoute acceptance"
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.networking.k8s.io_ReferenceGrant" = trimspace(<<-EOT
+            hs = {}
+            hs.status = "Healthy"
+            hs.message = "ReferenceGrant applied"
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.nginx.org_ObservabilityPolicy" = trimspace(<<-EOT
+            hs = {}
+            hs.status = "Healthy"
+            hs.message = "ObservabilityPolicy applied"
+            return hs
+          EOT
+          )
+          "resource.customizations.health.gateway.nginx.org_SnippetsFilter" = trimspace(<<-EOT
+            hs = {}
+            hs.status = "Healthy"
+            hs.message = "SnippetsFilter applied"
+            return hs
+          EOT
+          )
           # Altinity ClickHouse operator can leave CHI status at InProgress even
           # when the cluster is fully up; avoid perma-Progressing Argo apps.
           "resource.customizations.health.clickhouse.altinity.com_ClickHouseInstallation" = trimspace(<<-EOT
