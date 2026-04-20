@@ -9,7 +9,7 @@ setup() {
 
   mkdir -p "${FIXTURE_ROOT}/.github/workflows"
   mkdir -p "${FIXTURE_ROOT}/apps/demo"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator"
 
   cat >"${FIXTURE_ROOT}/.github/workflows/release.yml" <<'EOF'
 name: Release
@@ -38,15 +38,15 @@ version = "0.1.0"
 exclude-newer = "7 days"
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator/pyproject.toml" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator/pyproject.toml" <<'EOF'
 [project]
 name = "apim-simulator"
 version = "0.4.0"
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/subnet-calculator/apim-simulator.vendor.json" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator.vendor.json" <<'EOF'
 {
-  "vendored_path": "apps/subnet-calculator/apim-simulator",
+  "vendored_path": "apps/subnetcalc/apim-simulator",
   "upstream": {
     "origin": "git@example.com:example/apim-simulator.git",
     "ref_kind": "tag",

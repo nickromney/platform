@@ -4,9 +4,9 @@ This directory contains the source applications that feed the local platform dem
 
 ## Layout
 
-- [`subnet-calculator/`](subnet-calculator/) contains the subnet calculator app and its local compose-based workflows.
-  Local compose architecture: [`subnet-calculator/docs/COMPOSE-ARCHITECTURE.md`](subnet-calculator/docs/COMPOSE-ARCHITECTURE.md)
-  Test runbook: [`subnet-calculator/docs/TEST-RUNBOOK.md`](subnet-calculator/docs/TEST-RUNBOOK.md)
+- [`subnetcalc/`](subnetcalc/) contains the subnet calculator app and its local compose-based workflows.
+  Local compose architecture: [`subnetcalc/docs/COMPOSE-ARCHITECTURE.md`](subnetcalc/docs/COMPOSE-ARCHITECTURE.md)
+  Test runbook: [`subnetcalc/docs/TEST-RUNBOOK.md`](subnetcalc/docs/TEST-RUNBOOK.md)
 - [`sentiment/`](sentiment/) contains the sentiment demo and its local compose-based workflows.
   Local compose architecture: [`sentiment/docs/COMPOSE-ARCHITECTURE.md`](sentiment/docs/COMPOSE-ARCHITECTURE.md)
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)

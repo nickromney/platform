@@ -151,6 +151,6 @@ flowchart TD
 
 ## Workload Choice
 
-The cloud2 API comes from `apps/subnet-calculator/api-fastapi-container-app/app`. The cloud1 demo frontend is built from `apps/subnet-calculator/frontend-typescript-vite`, with `apps/subnet-calculator/shared-frontend` built first because the Vite frontend consumes its generated types.
+The cloud2 API comes from `apps/subnetcalc/api-fastapi-container-app/app`. The cloud1 demo frontend is built from `apps/subnetcalc/frontend-typescript-vite`, with `apps/subnetcalc/shared-frontend` built first because the Vite frontend consumes its generated types.
 
 Read next: [network-verification.md](network-verification.md) to see the same topology exercised with live DNS answers, WireGuard state, and end-to-end traffic.

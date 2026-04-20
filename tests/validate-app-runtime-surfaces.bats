@@ -17,14 +17,14 @@ repo_root = Path(os.environ["REPO_ROOT"])
 expected_users = {
     "apps/sentiment/api-sentiment/Dockerfile": "1000:1000",
     "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile": "65532:65532",
-    "apps/subnet-calculator/api-fastapi-container-app/Dockerfile": "65532:65532",
-    "apps/subnet-calculator/api-fastapi-azure-function/Dockerfile": "65532:65532",
-    "apps/subnet-calculator/api-fastapi-azure-function/Dockerfile.uvicorn": "65532:65532",
-    "apps/subnet-calculator/frontend-html-static/Dockerfile": "65532:65532",
-    "apps/subnet-calculator/frontend-python-flask/Dockerfile": "65532:65532",
-    "apps/subnet-calculator/frontend-react/Dockerfile": "65532:65532",
-    "apps/subnet-calculator/frontend-react/Dockerfile.server": "1000:1000",
-    "apps/subnet-calculator/frontend-typescript-vite/Dockerfile": "65532:65532",
+    "apps/subnetcalc/api-fastapi-container-app/Dockerfile": "65532:65532",
+    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile": "65532:65532",
+    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn": "65532:65532",
+    "apps/subnetcalc/frontend-html-static/Dockerfile": "65532:65532",
+    "apps/subnetcalc/frontend-python-flask/Dockerfile": "65532:65532",
+    "apps/subnetcalc/frontend-react/Dockerfile": "65532:65532",
+    "apps/subnetcalc/frontend-react/Dockerfile.server": "1000:1000",
+    "apps/subnetcalc/frontend-typescript-vite/Dockerfile": "65532:65532",
 }
 
 for relative_path, expected_user in expected_users.items():
@@ -94,7 +94,7 @@ compose_expectations = {
             ],
         },
     },
-    "apps/subnet-calculator/compose.yml": {
+    "apps/subnetcalc/compose.yml": {
         "api-fastapi-container-app": {
             "read_only": True,
             "cap_drop": ["ALL"],
@@ -337,10 +337,10 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 
-entrypoint = (repo_root / "apps/subnet-calculator/scripts/runtime-config-entrypoint.go").read_text(encoding="utf-8")
-render_script = (repo_root / "apps/subnet-calculator/scripts/render-runtime-config.sh").read_text(encoding="utf-8")
-react_nginx = (repo_root / "apps/subnet-calculator/frontend-react/nginx.conf").read_text(encoding="utf-8")
-vite_nginx = (repo_root / "apps/subnet-calculator/frontend-typescript-vite/nginx.conf").read_text(encoding="utf-8")
+entrypoint = (repo_root / "apps/subnetcalc/scripts/runtime-config-entrypoint.go").read_text(encoding="utf-8")
+render_script = (repo_root / "apps/subnetcalc/scripts/render-runtime-config.sh").read_text(encoding="utf-8")
+react_nginx = (repo_root / "apps/subnetcalc/frontend-react/nginx.conf").read_text(encoding="utf-8")
+vite_nginx = (repo_root / "apps/subnetcalc/frontend-typescript-vite/nginx.conf").read_text(encoding="utf-8")
 
 assert '"/tmp/runtime-config.js"' in entrypoint, entrypoint
 assert '"/var/run/nginx"' in entrypoint, entrypoint
@@ -372,15 +372,15 @@ expected_counts = {
     "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS build": 1,
     },
-    "apps/subnet-calculator/frontend-react/Dockerfile": {
+    "apps/subnetcalc/frontend-react/Dockerfile": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
         "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
     },
-    "apps/subnet-calculator/frontend-react/Dockerfile.server": {
+    "apps/subnetcalc/frontend-react/Dockerfile.server": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS deps": 1,
     },
-    "apps/subnet-calculator/frontend-typescript-vite/Dockerfile": {
+    "apps/subnetcalc/frontend-typescript-vite/Dockerfile": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
         "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
     },
@@ -388,14 +388,14 @@ expected_counts = {
         "image: quay.io/keycloak/keycloak:26.6.1": 1,
         "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
     },
-    "apps/subnet-calculator/compose.yml": {
+    "apps/subnetcalc/compose.yml": {
         "image: quay.io/keycloak/keycloak:26.6.1": 1,
         "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2": 2,
     },
-    "apps/subnet-calculator/compose.azurite.yml": {
+    "apps/subnetcalc/compose.azurite.yml": {
         "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
     },
-    "apps/subnet-calculator/api-fastapi-azure-function/compose.azurite.yml": {
+    "apps/subnetcalc/api-fastapi-azure-function/compose.azurite.yml": {
         "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
     },
     "docker/compose/keycloak/Dockerfile": {

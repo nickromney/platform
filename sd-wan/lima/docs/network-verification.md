@@ -16,7 +16,7 @@ The current Lima underlay uses the named `user-v2` network, so fresh runs now sh
 | cloud2 | 172.16.11.2 | 10.10.1.0/24 (on-prem sim) | 10.10.1.10 | — |
 | cloud3 | 172.16.12.3 | 172.31.1.0/24 (AWS sim) | **172.31.1.10** | — |
 
-Traffic flow for a subnet-calculator lookup:
+Traffic flow for a subnetcalc lookup:
 
 ```text
 Browser → localhost:58081 → cloud1 nginx → WireGuard (wg0)

@@ -77,7 +77,7 @@ The stage ladder is cumulative:
 | The SD-WAN lab | [`sd-wan/lima`](sd-wan/lima) | `make -C sd-wan/lima help` |
 
 The most important secondary app path is
-[`apps/subnet-calculator`](apps/subnet-calculator), which supplies the sample
+[`apps/subnetcalc`](apps/subnetcalc), which supplies the sample
 workloads used by the local cluster stack.
 
 ## Repo-Level Commands
@@ -121,7 +121,7 @@ Useful references once the kind path is working:
   kubeconfig model
 - [`terraform/kubernetes/docs/README.md`](terraform/kubernetes/docs/README.md)
   for the shared stack internals
-- [`apps/subnet-calculator/README.md`](apps/subnet-calculator/README.md) for
+- [`apps/subnetcalc/README.md`](apps/subnetcalc/README.md) for
   the main sample application workflow
 
 ## Devcontainer

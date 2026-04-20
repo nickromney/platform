@@ -14,7 +14,10 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
-  [[ "${output}" == *"900 - full stack + sso"* ]]
+  [[ "${output}" == *"100 - cluster available"* ]]
+  [[ "${output}" == *"700 - app repos"* ]]
+  [[ "${output}" == *"800 - observability"* ]]
+  [[ "${output}" == *"900 - sso"* ]]
   [[ "${output}" == *"Linux -> Docker Engine or Docker Desktop"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]
   [[ "${output}" == *"split by default"* ]]
@@ -234,11 +237,11 @@ setup() {
   done
 }
 
-@test "kind check-version runs the active-project assertion directly so it can report readiness" {
+@test "kind check-version runs the active-variant assertion directly so it can report readiness" {
   run sed -n '/^check-version:/,/^\.PHONY:/p' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
+  [[ "${output}" == *'"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
   [[ "${output}" != *'$(MAKE) assert-kind-active >/dev/null'* ]]
 }
 
@@ -366,7 +369,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_project_path":"kubernetes/kind","projects":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -392,7 +395,7 @@ EOF
   [ "${output}" = "components|providers" ]
 }
 
-@test "kind check-version fails before the audit when another tracked project owns the machine" {
+@test "kind check-version fails before the audit when another tracked variant owns the machine" {
   stub_stack="${BATS_TEST_TMPDIR}/stack"
   stub_scripts="${stub_stack}/scripts"
   status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
@@ -424,7 +427,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_project_path":"kubernetes/lima","projects":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -442,7 +445,7 @@ EOF
     PLATFORM_STATUS_SCRIPT="${status_stub}"
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"currently being served by kubernetes/lima"* ]]
+  [[ "${output}" == *"currently owned by kubernetes/lima"* ]]
   [[ "${output}" == *"make -C kubernetes/lima stop-lima"* ]]
   [ ! -e "${log_file}" ]
   [ ! -e "${kubectl_log}" ]
@@ -480,7 +483,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_project_path":"kubernetes/kind","projects":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -498,7 +501,7 @@ EOF
     KUBECONFIG_PATH="${kubeconfig_path}"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"kubernetes/kind is active on this machine"* ]]
+  [[ "${output}" == *"kubernetes/kind is the active variant on this machine"* ]]
   [[ "${output}" == *"Proceeding with checks."* ]]
   [[ "${output}" == *"Running component and chart version audit..."* ]]
   [[ "${output}" == *"component audit ok"* ]]

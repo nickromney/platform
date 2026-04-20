@@ -44,7 +44,7 @@ services:
 
   apim-simulator:
     build:
-      context: ../../apps/subnet-calculator/apim-simulator
+      context: ../../apps/subnetcalc/apim-simulator
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-apim-simulator:compose
@@ -62,7 +62,7 @@ services:
     profiles: ["dev"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnet-calculator/api-fastapi-container-app
+      context: ../../apps/subnetcalc/api-fastapi-container-app
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-api:compose
@@ -87,7 +87,7 @@ services:
     profiles: ["uat"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnet-calculator/api-fastapi-container-app
+      context: ../../apps/subnetcalc/api-fastapi-container-app
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-api:compose
@@ -112,7 +112,7 @@ services:
     profiles: ["dev"]
     <<: *nginx-runtime-hardening
     build:
-      context: ../../apps/subnet-calculator
+      context: ../../apps/subnetcalc
       dockerfile: ./frontend-react/Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-frontend-react:compose
@@ -125,7 +125,7 @@ services:
     profiles: ["uat"]
     <<: *nginx-runtime-hardening
     build:
-      context: ../../apps/subnet-calculator
+      context: ../../apps/subnetcalc
       dockerfile: ./frontend-react/Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-frontend-react:compose

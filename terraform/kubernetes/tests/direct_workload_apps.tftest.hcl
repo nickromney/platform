@@ -2,16 +2,16 @@ run "direct_mode_creates_workload_apps" {
   command = plan
 
   variables {
-    cni_provider                      = "cilium"
-    enable_hubble                     = false
-    enable_argocd                     = true
-    enable_gitea                      = true
-    enable_policies                   = true
-    enable_gateway_tls                = true
-    enable_actions_runner             = true
-    enable_app_of_apps                = false
-    enable_app_repo_sentiment         = true
-    enable_app_repo_subnet_calculator = true
+    cni_provider               = "cilium"
+    enable_hubble              = false
+    enable_argocd              = true
+    enable_gitea               = true
+    enable_policies            = true
+    enable_gateway_tls         = true
+    enable_actions_runner      = true
+    enable_app_of_apps         = false
+    enable_app_repo_sentiment  = true
+    enable_app_repo_subnetcalc = true
   }
 
   assert {

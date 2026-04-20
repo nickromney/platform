@@ -23,10 +23,10 @@ enable_headlamp                 = false
 enable_gateway_tls              = false
 enable_sso                      = false
 
-enable_apps_dir_mount             = true
-enable_actions_runner             = false
-enable_app_repo_sentiment         = false
-enable_app_repo_subnet_calculator = false
+enable_apps_dir_mount      = true
+enable_actions_runner      = false
+enable_app_repo_sentiment  = false
+enable_app_repo_subnetcalc = false
 
 argocd_namespace     = "argocd"
 gitea_admin_username = "gitea-admin"

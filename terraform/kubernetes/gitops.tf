@@ -69,7 +69,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       ENABLE_CERT_MANAGER                           = tostring(var.enable_cert_manager)
       ENABLE_ACTIONS_RUNNER                         = tostring(var.enable_actions_runner)
       ENABLE_APP_REPO_SENTIMENT                     = tostring(var.enable_app_repo_sentiment)
-      ENABLE_APP_REPO_SUBNETCALC                    = tostring(var.enable_app_repo_subnet_calculator)
+      ENABLE_APP_REPO_SUBNETCALC                    = tostring(var.enable_app_repo_subnetcalc)
       ENABLE_PROMETHEUS                             = tostring(var.enable_prometheus)
       ENABLE_GRAFANA                                = tostring(var.enable_grafana)
       ENABLE_LOKI                                   = tostring(var.enable_loki)
@@ -192,31 +192,31 @@ resource "null_resource" "sync_gitea_app_repo_sentiment" {
     local_sensitive_file.app_repo_sentiment_private_key,
     # Ensure the runner is ready before pushing code that triggers workflows.
     null_resource.wait_gitea_actions_runner_ready,
-    # Policies repo must be synced first (see sync_gitea_app_repo_subnet_calculator).
+    # Policies repo must be synced first (see sync_gitea_app_repo_subnetcalc).
     null_resource.sync_gitea_policies_repo,
   ]
 }
 
-resource "tls_private_key" "app_repo_subnet_calculator" {
-  count     = var.enable_app_repo_subnet_calculator && var.enable_actions_runner ? 1 : 0
+resource "tls_private_key" "app_repo_subnetcalc" {
+  count     = var.enable_app_repo_subnetcalc && var.enable_actions_runner ? 1 : 0
   algorithm = "ED25519"
 }
 
-resource "local_sensitive_file" "app_repo_subnet_calculator_private_key" {
-  count                = var.enable_app_repo_subnet_calculator && var.enable_actions_runner ? 1 : 0
-  filename             = "${local.run_dir}/app-${local.subnet_calculator_repo_name}.id_ed25519"
-  content              = tls_private_key.app_repo_subnet_calculator[0].private_key_openssh
+resource "local_sensitive_file" "app_repo_subnetcalc_private_key" {
+  count                = var.enable_app_repo_subnetcalc && var.enable_actions_runner ? 1 : 0
+  filename             = "${local.run_dir}/app-${local.subnetcalc_repo_name}.id_ed25519"
+  content              = tls_private_key.app_repo_subnetcalc[0].private_key_openssh
   file_permission      = "0600"
   directory_permission = "0700"
-  depends_on           = [tls_private_key.app_repo_subnet_calculator]
+  depends_on           = [tls_private_key.app_repo_subnetcalc]
 }
 
-resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
-  count = var.enable_app_repo_subnet_calculator && var.enable_actions_runner ? 1 : 0
+resource "null_resource" "sync_gitea_app_repo_subnetcalc" {
+  count = var.enable_app_repo_subnetcalc && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash = local.subnet_calculator_content_hash
-    public_key   = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
+    content_hash = local.subnetcalc_content_hash
+    public_key   = tls_private_key.app_repo_subnetcalc[0].public_key_openssh
     script_sha   = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
     gitea_http   = tostring(var.gitea_http_node_port)
     gitea_ssh    = tostring(var.gitea_ssh_node_port)
@@ -230,7 +230,7 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
     command = "bash \"${local.stack_dir}/scripts/sync-gitea-repo.sh\""
     environment = {
       STACK_DIR                 = local.stack_dir
-      SOURCE_DIR                = local.subnet_calculator_source_dir
+      SOURCE_DIR                = local.subnetcalc_source_dir
       GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
@@ -244,10 +244,10 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
       GITEA_REPO_OWNER          = local.gitea_repo_owner
       GITEA_REPO_OWNER_IS_ORG   = tostring(local.gitea_repo_owner_is_org)
       GITEA_REPO_OWNER_FALLBACK = local.gitea_repo_owner_fallback
-      GITEA_REPO_NAME           = local.subnet_calculator_repo_name
-      DEPLOY_KEY_TITLE          = "ci-${local.subnet_calculator_repo_name}-key"
-      DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_subnet_calculator[0].public_key_openssh
-      SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_subnet_calculator_private_key[0].filename
+      GITEA_REPO_NAME           = local.subnetcalc_repo_name
+      DEPLOY_KEY_TITLE          = "ci-${local.subnetcalc_repo_name}-key"
+      DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_subnetcalc[0].public_key_openssh
+      SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_subnetcalc_private_key[0].filename
       KUBECONFIG                = local.kubeconfig_path_expanded
       KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
     }
@@ -256,7 +256,7 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
   depends_on = [
     kubectl_manifest.argocd_app_gitea,
     null_resource.gitea_org,
-    local_sensitive_file.app_repo_subnet_calculator_private_key,
+    local_sensitive_file.app_repo_subnetcalc_private_key,
     # Ensure the runner is ready before pushing code that triggers workflows.
     # Without this, the workflow triggers before any runner can pick it up.
     null_resource.wait_gitea_actions_runner_ready,
@@ -271,10 +271,10 @@ resource "null_resource" "sync_gitea_app_repo_subnet_calculator" {
 # Reference pattern: wait for app images + policy stamping to complete after a
 # full reset. Keep this scoped to the repos that feed live workloads.
 resource "null_resource" "wait_subnetcalc_images" {
-  count = var.enable_app_repo_subnet_calculator && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
+  count = var.enable_app_repo_subnetcalc && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
 
   triggers = {
-    app_repo_sync       = null_resource.sync_gitea_app_repo_subnet_calculator[0].id
+    app_repo_sync       = null_resource.sync_gitea_app_repo_subnetcalc[0].id
     registry_host       = var.gitea_registry_host
     registry_scheme     = var.gitea_registry_scheme
     repo_owner          = local.gitea_repo_owner
@@ -427,7 +427,7 @@ latest_subnetcalc_sha() {
   while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
     local resp code json sha
     resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-      "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnet-calculator/commits?limit=1" \
+      "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/commits?limit=1" \
       -w '\n%%{http_code}')"
     code="$(printf '%s' "$${resp}" | tail -n 1)"
     json="$(printf '%s' "$${resp}" | sed '$d')"
@@ -439,9 +439,9 @@ latest_subnetcalc_sha() {
         return 0
       fi
     elif [ "$${code}" = "409" ]; then
-      echo "Subnet-calculator repo has no commits yet; waiting..." >&2
+      echo "subnetcalc repo has no commits yet; waiting..." >&2
     else
-      echo "Unexpected HTTP $${code} from subnet-calculator commits API" >&2
+      echo "Unexpected HTTP $${code} from subnetcalc commits API" >&2
     fi
 
     sleep "$${SLEEP_SECONDS}"
@@ -501,7 +501,7 @@ dispatch_subnetcalc_workflow() {
     -X POST \
     -H "Content-Type: application/json" \
     -d '{"ref":"main"}' \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnet-calculator/actions/workflows/$${SUBNETCALC_WORKFLOW_ID}/dispatches" \
+    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/workflows/$${SUBNETCALC_WORKFLOW_ID}/dispatches" \
     -w '\n%%{http_code}' || true)"
   code="$(printf '%s' "$${resp}" | tail -n 1)"
   body="$(printf '%s' "$${resp}" | sed '$d')"
@@ -510,7 +510,7 @@ dispatch_subnetcalc_workflow() {
     return 0
   fi
 
-  echo "Failed to dispatch subnet-calculator workflow ($${SUBNETCALC_WORKFLOW_ID}), HTTP $${code}" >&2
+  echo "Failed to dispatch subnetcalc workflow ($${SUBNETCALC_WORKFLOW_ID}), HTTP $${code}" >&2
   if [ -n "$${body}" ]; then
     echo "$${body}" >&2
   fi
@@ -521,7 +521,7 @@ check_actions_failure() {
   local tag="$1"
   local json status conclusion run_id run_url
   json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnet-calculator/actions/runs?limit=5" || true)"
+    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/runs?limit=5" || true)"
   if [ -z "$${json}" ]; then
     return 0
   fi
@@ -531,7 +531,7 @@ check_actions_failure() {
   run_url="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .html_url // empty' | head -n1)"
   if [ "$${status}" = "completed" ] && [ -n "$${conclusion}" ] && [ "$${conclusion}" != "success" ]; then
     if [ "$${ACTIONS_RETRIGGERED_TAG}" != "$${tag}" ]; then
-      echo "Subnet-calculator Actions run for $${tag} failed ($${conclusion}). Triggering one workflow_dispatch retry..." >&2
+      echo "subnetcalc Actions run for $${tag} failed ($${conclusion}). Triggering one workflow_dispatch retry..." >&2
       if dispatch_subnetcalc_workflow; then
         ACTIONS_RETRIGGERED_TAG="$${tag}"
         return 0
@@ -539,19 +539,19 @@ check_actions_failure() {
       echo "Automatic retry dispatch failed; surfacing workflow failure details." >&2
     fi
 
-    echo "Subnet-calculator Actions run for $${tag} failed ($${conclusion}). Policies will not update until it succeeds." >&2
+    echo "subnetcalc Actions run for $${tag} failed ($${conclusion}). Policies will not update until it succeeds." >&2
     if [ -n "$${run_url}" ]; then
       echo "Run URL: $${run_url}" >&2
     fi
     if [ -n "$${run_id}" ]; then
       local job_json job_id excerpt
       job_json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-        "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnet-calculator/actions/runs/$${run_id}/jobs" || true)"
+        "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/runs/$${run_id}/jobs" || true)"
       job_id="$(echo "$${job_json}" | jq -r '.jobs[0].id // empty')"
       if [ -n "$${job_id}" ]; then
         excerpt="$(
           curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-            "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnet-calculator/actions/jobs/$${job_id}/logs" 2>/dev/null \
+            "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/jobs/$${job_id}/logs" 2>/dev/null \
             | tr -d '\r' \
             | grep -Ei "ERROR|failed to|\\bFailure\\b|exit status|timed out|timeout|denied|unauthorized|DeadlineExceeded" \
             | tail -n 30 || true
@@ -569,7 +569,7 @@ check_actions_failure() {
 wait_for_gitea
 wait_for_runner
 if ! sha="$(latest_subnetcalc_sha)"; then
-  echo "Failed to resolve subnet-calculator commit SHA" >&2
+  echo "Failed to resolve subnetcalc commit SHA" >&2
   exit 1
 fi
 TAG="$${sha:0:12}"
@@ -601,7 +601,7 @@ EOT
   }
 
   depends_on = [
-    null_resource.sync_gitea_app_repo_subnet_calculator,
+    null_resource.sync_gitea_app_repo_subnetcalc,
     kubernetes_secret_v1.gitea_runner,
   ]
 }

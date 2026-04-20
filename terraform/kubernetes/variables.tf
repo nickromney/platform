@@ -819,8 +819,8 @@ variable "sentiment_source_dir" {
   default     = ""
 }
 
-variable "enable_app_repo_subnet_calculator" {
-  description = "Seed the monorepo app apps/subnet-calculator into in-cluster Gitea as a standalone repo (enables Gitea Actions pipelines)."
+variable "enable_app_repo_subnetcalc" {
+  description = "Seed the monorepo app apps/subnetcalc into in-cluster Gitea as a standalone repo (enables Gitea Actions pipelines)."
   type        = bool
   default     = false
 }
@@ -1069,9 +1069,9 @@ check "enable_app_repo_sentiment_requires_gitea_and_actions_runner" {
   }
 }
 
-check "enable_app_repo_subnet_calculator_requires_gitea_and_actions_runner" {
+check "enable_app_repo_subnetcalc_requires_gitea_and_actions_runner" {
   assert {
-    condition = !var.enable_app_repo_subnet_calculator || (
+    condition = !var.enable_app_repo_subnetcalc || (
       var.enable_gitea && (
         var.enable_actions_runner || (
           var.prefer_external_workload_images &&
@@ -1081,12 +1081,12 @@ check "enable_app_repo_subnet_calculator_requires_gitea_and_actions_runner" {
         )
       )
     )
-    error_message = "enable_app_repo_subnet_calculator requires enable_gitea=true and either enable_actions_runner=true or explicit external subnetcalc image refs when prefer_external_workload_images=true."
+    error_message = "enable_app_repo_subnetcalc requires enable_gitea=true and either enable_actions_runner=true or explicit external subnetcalc image refs when prefer_external_workload_images=true."
   }
 }
 
-variable "subnet_calculator_source_dir" {
-  description = "Host path to the monorepo app directory for subnet-calculator. Empty means auto-detect (repo_root/apps/subnet-calculator)."
+variable "subnetcalc_source_dir" {
+  description = "Host path to the monorepo app directory for subnetcalc. Empty means auto-detect (repo_root/apps/subnetcalc)."
   type        = string
   default     = ""
 }

@@ -12,13 +12,13 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [--dry-run] [--execute]
 
-Run the SD-WAN subnet-calculator frontend, mTLS, and JWT verification suite.
+Run the SD-WAN subnetcalc frontend, mTLS, and JWT verification suite.
 
 $(shell_cli_standard_options)
 EOF
 }
 
-shell_cli_handle_standard_no_args usage "would run the SD-WAN subnet-calculator verification suite" "$@"
+shell_cli_handle_standard_no_args usage "would run the SD-WAN subnetcalc verification suite" "$@"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/platform-env.sh"

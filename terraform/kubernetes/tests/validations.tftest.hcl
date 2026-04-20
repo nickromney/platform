@@ -144,16 +144,16 @@ run "app_repo_subnetcalc_requires_gitea_and_actions_runner" {
   command = plan
 
   variables {
-    cni_provider                      = "none"
-    enable_hubble                     = false
-    enable_gitea                      = true
-    gitea_admin_pwd                   = "test-admin-password"
-    gitea_member_user_pwd             = "test-member-password"
-    enable_actions_runner             = false
-    enable_app_repo_subnet_calculator = true
+    cni_provider               = "none"
+    enable_hubble              = false
+    enable_gitea               = true
+    gitea_admin_pwd            = "test-admin-password"
+    gitea_member_user_pwd      = "test-member-password"
+    enable_actions_runner      = false
+    enable_app_repo_subnetcalc = true
   }
 
-  expect_failures = [check.enable_app_repo_subnet_calculator_requires_gitea_and_actions_runner]
+  expect_failures = [check.enable_app_repo_subnetcalc_requires_gitea_and_actions_runner]
 }
 
 run "app_repo_sentiment_allows_external_images_without_runner" {
@@ -181,16 +181,16 @@ run "app_repo_subnetcalc_allows_external_images_without_runner" {
   command = plan
 
   variables {
-    cni_provider                      = "none"
-    enable_hubble                     = false
-    enable_gitea                      = true
-    gitea_admin_pwd                   = "test-admin-password"
-    gitea_member_user_pwd             = "test-member-password"
-    enable_host_local_registry        = true
-    host_local_registry_host          = "host.lima.internal:5002"
-    enable_actions_runner             = false
-    enable_app_repo_subnet_calculator = true
-    prefer_external_workload_images   = true
+    cni_provider                    = "none"
+    enable_hubble                   = false
+    enable_gitea                    = true
+    gitea_admin_pwd                 = "test-admin-password"
+    gitea_member_user_pwd           = "test-member-password"
+    enable_host_local_registry      = true
+    host_local_registry_host        = "host.lima.internal:5002"
+    enable_actions_runner           = false
+    enable_app_repo_subnetcalc      = true
+    prefer_external_workload_images = true
     external_workload_image_refs = {
       "subnetcalc-api-fastapi-container-app" = "host.lima.internal:5002/platform/subnetcalc-api-fastapi-container-app:latest"
       "subnetcalc-apim-simulator"            = "host.lima.internal:5002/platform/subnetcalc-apim-simulator:latest"

@@ -22,7 +22,7 @@ RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
-ASSERT_PROJECT_ACTIVE := $(K8S_SCRIPTS_DIR)/assert-project-active.sh
+ASSERT_VARIANT_ACTIVE := $(K8S_SCRIPTS_DIR)/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
@@ -434,12 +434,12 @@ check-conflicting-clusters-stopped:
 
 .PHONY: assert-kind-active
 assert-kind-active:
-	@EXPECTED_PROJECT_PATH="kubernetes/kind" \
-	EXPECTED_PROJECT_LABEL="kubernetes/kind" \
+	@EXPECTED_VARIANT_PATH="kubernetes/kind" \
+	EXPECTED_VARIANT_LABEL="kubernetes/kind" \
 	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-	"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)
+	"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG)
 
 .PHONY: kind
 kind: workflow-validate
@@ -1214,19 +1214,19 @@ test-bats:
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
-		EXPECTED_PROJECT_PATH="kubernetes/kind" \
-		EXPECTED_PROJECT_LABEL="kubernetes/kind" \
+		EXPECTED_VARIANT_PATH="kubernetes/kind" \
+		EXPECTED_VARIANT_LABEL="kubernetes/kind" \
 		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
+		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
 	else \
-		EXPECTED_PROJECT_PATH="kubernetes/kind" \
-		EXPECTED_PROJECT_LABEL="kubernetes/kind" \
+		EXPECTED_VARIANT_PATH="kubernetes/kind" \
+		EXPECTED_VARIANT_LABEL="kubernetes/kind" \
 		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
 		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG); \
+		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG); \
 	fi
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
 		component_report="$$(mktemp)"; \

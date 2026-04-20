@@ -13,7 +13,7 @@ allowed_python_execution=(
   "sd-wan/lima/provision/cloud2.sh"
   "kubernetes/kind/scripts/ensure-kind-kubeconfig.sh"
   "terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
-  "apps/subnet-calculator/scripts/vendor-apim-simulator.sh"
+  "apps/subnetcalc/scripts/vendor-apim-simulator.sh"
   "scripts/check-version.sh"
 )
 
@@ -134,7 +134,7 @@ list_shell_scripts() {
 
     git -C "${REPO_ROOT}" ls-files -z -- \
       '*.sh' \
-      ':(exclude)apps/subnet-calculator/apim-simulator/**'
+      ':(exclude)apps/subnetcalc/apim-simulator/**'
     return 0
   fi
 
@@ -156,7 +156,7 @@ list_shell_scripts() {
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.run' -o -path '*/.terraform' -o -path '*/.venv' -o -path '*/venv' -o -path '*/dist' -o -path '*/build' -o -path "${REPO_ROOT}/apps/subnet-calculator/apim-simulator" \) -prune \
+    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.run' -o -path '*/.terraform' -o -path '*/.venv' -o -path '*/venv' -o -path '*/dist' -o -path '*/build' -o -path "${REPO_ROOT}/apps/subnetcalc/apim-simulator" \) -prune \
     -o -type f -name '*.sh' -print0 | sort -z
 }
 

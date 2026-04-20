@@ -23,7 +23,7 @@ test: ## Run the default app smoke checks
 
 update: ## Update dependency locks across both app roots using native package managers
 	@$(MAKE) --no-print-directory -C ./sentiment update
-	@$(MAKE) --no-print-directory -C ./subnet-calculator update
+	@$(MAKE) --no-print-directory -C ./subnetcalc update
 
 ##@ Security
 trivy: trivy-scan ## Alias for trivy-scan
@@ -52,5 +52,5 @@ compose-smoke: compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compo
 compose-smoke-sentiment: ## Run the lightweight sentiment compose smoke check
 	@./sentiment/tests/compose-smoke.sh --execute
 
-compose-smoke-subnetcalc: ## Run the lightweight subnet-calculator compose smoke check
-	@./subnet-calculator/tests/compose-smoke.sh --execute
+compose-smoke-subnetcalc: ## Run the lightweight subnetcalc compose smoke check
+	@./subnetcalc/tests/compose-smoke.sh --execute

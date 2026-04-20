@@ -26,7 +26,7 @@ If you install Homebrew `make`, the binary is `gmake` unless you add GNU Make's 
 
 - `make` runs the workflow entrypoints in [../Makefile](../Makefile).
 - `limactl` creates, starts, stops, and deletes the three Lima VMs.
-- `node` and `npm` build the cloud1 subnet-calculator frontend before it is staged into `/tmp/lima/frontend`.
+- `node` and `npm` build the cloud1 subnetcalc frontend before it is staged into `/tmp/lima/frontend`.
 
 ## What The Optional Tool Does
 

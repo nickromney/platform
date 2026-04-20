@@ -198,14 +198,14 @@ entrypoint on `:443`.
 
 | Stage | Intent |
 | --- | --- |
-| `100` | Bootstrap k3s on Slicer |
+| `100` | Cluster available |
 | `200` | Install Cilium, or no-op placeholder for `SLICER_NETWORK_PROFILE=default` |
 | `300` | Add Hubble, or no-op placeholder for `SLICER_NETWORK_PROFILE=default` |
 | `400` | Add Argo CD |
 | `500` | Add Gitea |
 | `600` | Add policies, or no-op placeholder for `SLICER_NETWORK_PROFILE=default` |
-| `700` | Deploy app workloads from local images |
-| `800` | Add HTTPS routes and observability |
+| `700` | Add app repos |
+| `800` | Add observability |
 | `900` | Add SSO |
 
 ## Layout

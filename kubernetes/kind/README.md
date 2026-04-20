@@ -126,33 +126,35 @@ Stages are cumulative. `make kind apply 300 AUTO_APPROVE=1` means "bring the clu
 
 ```mermaid
 flowchart LR
-    s100["100<br/>Cluster"] --> s200["200<br/>Cilium"]
+    s100["100<br/>Cluster Available"] --> s200["200<br/>Cilium"]
     s200 --> s300["300<br/>Hubble"]
     s300 --> s400["400<br/>Argo CD"]
     s400 --> s500["500<br/>Gitea"]
     s500 --> s600["600<br/>Policies"]
     s600 --> s700["700<br/>App Repos"]
-    s700 --> s800["800<br/>TLS + Observability"]
+    s700 --> s800["800<br/>Observability"]
     s800 --> s900["900<br/>SSO"]
 ```
 
 | Stage | Intent | Main toggles |
 | --- | --- | --- |
-| `100` | Provision the cluster only. | `worker_count=1`, `cni_provider="none"`, `kind_disable_default_cni=true` |
+| `100` | Make the cluster available. | `worker_count=1`, `cni_provider="none"`, `kind_disable_default_cni=true` |
 | `200` | Install Cilium as the CNI. | `cni_provider="cilium"` |
 | `300` | Add Hubble on top of Cilium. | `enable_hubble=true` |
 | `400` | Add Argo CD for GitOps. | `enable_argocd=true`, `argocd_applicationset_enabled=false`, `argocd_notifications_enabled=false` |
 | `500` | Add Gitea and re-enable the full Argo CD controller set. | `enable_gitea=true`, `argocd_applicationset_enabled=true`, `argocd_notifications_enabled=true` |
 | `600` | Add Kyverno and Cilium policy controls. | `enable_policies=true`, `enable_cert_manager=true`, `enable_cilium_wireguard=true` |
-| `700` | Seed application repos and add the in-cluster runner. | `enable_actions_runner=true`, app repo flags enabled |
-| `800` | Add HTTPS routes and platform observability. | `enable_gateway_tls=true`, `enable_headlamp=true`, `enable_prometheus=true`, `enable_grafana=true`, `enable_loki=true` |
-| `900` | Add single sign-on with Dex and `oauth2-proxy`. | `enable_sso=true` |
+| `700` | Make app repos available to GitOps. | `enable_actions_runner=true`, app repo flags enabled |
+| `800` | Add observability, including HTTPS routes and Headlamp. | `enable_gateway_tls=true`, `enable_headlamp=true`, `enable_prometheus=true`, `enable_grafana=true`, `enable_loki=true` |
+| `900` | Add SSO with Dex and `oauth2-proxy`. | `enable_sso=true` |
 
 ## Stage-by-stage control knobs
 
-### Stage 100: cluster only
+### Stage 100: cluster available
 
-Stage 100 renders a minimal kind cluster: one control-plane node and one worker node. It is intentionally created without a pod network so later stages can install Cilium without recreating the cluster.
+Stage 100 makes a minimal kind cluster available: one control-plane node and
+one worker node. It is intentionally created without a pod network so later
+stages can install Cilium without recreating the cluster.
 
 ```mermaid
 flowchart TB
@@ -280,9 +282,11 @@ flowchart LR
 - `enable_cilium_wireguard = true` adds encrypted node-to-node transport in the Cilium layer.
 - `enable_cert_manager = true` lays groundwork for the later TLS stages.
 
-### Stage 700: add app repos and the in-cluster runner
+### Stage 700: app repos
 
-Stage 700 is where the demo app supply chain becomes concrete. The platform seeds the app repos into Gitea, enables the in-cluster runner, and gives Argo CD real application sources to watch.
+Stage 700 is where app repos become available to GitOps. The platform seeds
+the app repos into Gitea, enables the in-cluster runner when that path is in
+use, and gives Argo CD real application sources to watch.
 
 ```mermaid
 flowchart LR
@@ -294,15 +298,17 @@ flowchart LR
 ```
 
 - `enable_actions_runner = true` adds the in-cluster CI executor.
-- `enable_app_repo_subnet_calculator = true` and `enable_app_repo_sentiment = true` seed the demo application repos.
+- `enable_app_repo_subnetcalc = true` and `enable_app_repo_sentiment = true` seed the demo application repos.
 
 With the default `KIND_IMAGE_DISTRIBUTION_MODE=registry` path, the served workloads stay the same but this stage takes the faster Docker-host route instead: the host registry becomes the image source of truth and the in-cluster Actions runner path is disabled for that run. Switch back to `load` if you explicitly want the old `kind load` behavior.
 
 The demo applications are explained in [docs/sample-apps.md](docs/sample-apps.md).
 
-### Stage 800: add TLS, Headlamp, and observability
+### Stage 800: observability
 
-Stage 800 makes the platform feel more like a real environment: HTTPS routes are enabled, Headlamp is added for cluster UI access, and the Prometheus/Grafana/Loki stack comes online for metrics and logs.
+Stage 800 makes the platform feel more like a real environment: HTTPS routes
+are enabled, Headlamp is added for cluster UI access, and the
+Prometheus/Grafana/Loki stack comes online for metrics and logs.
 
 ```mermaid
 flowchart LR
@@ -318,9 +324,11 @@ flowchart LR
 - `enable_headlamp = true` adds a Kubernetes dashboard.
 - `enable_prometheus = true`, `enable_grafana = true`, and `enable_loki = true` add the core observability stack.
 
-### Stage 900: add single sign-on with Dex
+### Stage 900: SSO
 
-Stage 900 adds [Dex](https://dexidp.io/) and `oauth2-proxy`, then swaps the gateway routes to the SSO-protected set. From here on, the platform is not just encrypted; it is also fronted by a login flow.
+Stage 900 adds [Dex](https://dexidp.io/) and `oauth2-proxy`, then swaps the
+gateway routes to the SSO-protected set. From here on, the platform is not
+just encrypted; it is also fronted by a login flow.
 
 ```mermaid
 flowchart LR

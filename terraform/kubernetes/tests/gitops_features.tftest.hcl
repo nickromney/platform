@@ -348,37 +348,37 @@ run "app_repo_sentiment_enabled" {
   }
 }
 
-run "app_repo_subnet_calculator_enabled" {
+run "app_repo_subnetcalc_enabled" {
   command = plan
 
   variables {
-    cni_provider                      = "none"
-    enable_hubble                     = false
-    enable_argocd                     = true
-    enable_gitea                      = true
-    enable_signoz                     = false
-    enable_sso                        = false
-    enable_actions_runner             = true
-    enable_app_repo_subnet_calculator = true
+    cni_provider               = "none"
+    enable_hubble              = false
+    enable_argocd              = true
+    enable_gitea               = true
+    enable_signoz              = false
+    enable_sso                 = false
+    enable_actions_runner      = true
+    enable_app_repo_subnetcalc = true
   }
 
   assert {
     condition     = length(kubernetes_namespace_v1.apim) == 1
-    error_message = "Expected kubernetes_namespace_v1.apim to exist when enable_app_repo_subnet_calculator=true"
+    error_message = "Expected kubernetes_namespace_v1.apim to exist when enable_app_repo_subnetcalc=true"
   }
 
   assert {
-    condition     = length(null_resource.sync_gitea_app_repo_subnet_calculator) == 1
-    error_message = "Expected null_resource.sync_gitea_app_repo_subnet_calculator to exist when enable_app_repo_subnet_calculator=true"
+    condition     = length(null_resource.sync_gitea_app_repo_subnetcalc) == 1
+    error_message = "Expected null_resource.sync_gitea_app_repo_subnetcalc to exist when enable_app_repo_subnetcalc=true"
   }
 
   assert {
-    condition     = length(tls_private_key.app_repo_subnet_calculator) == 1
-    error_message = "Expected tls_private_key.app_repo_subnet_calculator to exist when enable_app_repo_subnet_calculator=true"
+    condition     = length(tls_private_key.app_repo_subnetcalc) == 1
+    error_message = "Expected tls_private_key.app_repo_subnetcalc to exist when enable_app_repo_subnetcalc=true"
   }
 
   assert {
     condition     = length(null_resource.wait_subnetcalc_images) == 1
-    error_message = "Expected null_resource.wait_subnetcalc_images to exist when enable_app_repo_subnet_calculator=true"
+    error_message = "Expected null_resource.wait_subnetcalc_images to exist when enable_app_repo_subnetcalc=true"
   }
 }

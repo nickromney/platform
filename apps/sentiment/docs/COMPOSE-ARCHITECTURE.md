@@ -16,13 +16,6 @@ compose files in this app directory, without Kubernetes or Terraform.
 | [`compose.yml`](../compose.yml) | Main authenticated local stack: Keycloak, oauth2-proxy, edge router, API, UI, and SST inference. |
 | [`compose.tls.yml`](../compose.tls.yml) | Optional TLS 1.3 overlay in front of `oauth2-proxy`. |
 
-## Important Local Quirk
-
-The local Keycloak realm asset still uses the realm name `subnet-calculator`.
-That is not a typo in this document. It is the current checked-in compose
-behavior in [`compose.yml`](../compose.yml) and
-[`keycloak/realm-export.json`](../keycloak/realm-export.json).
-
 ## System Context
 
 ```mermaid
@@ -30,7 +23,7 @@ flowchart LR
     Browser["Browser"]
     TLS["tls-proxy<br/>compose.tls.yml<br/>8443/8444"]
     OAuth["oauth2-proxy<br/>8304"]
-    KC["Keycloak<br/>8300<br/>realm: subnet-calculator"]
+    KC["Keycloak<br/>8300<br/>realm: sentiment"]
     Edge["edge nginx<br/>internal router"]
     UI["sentiment-auth-frontend<br/>static SPA"]
     API["sentiment-api"]

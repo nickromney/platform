@@ -191,18 +191,18 @@ EOF
   chmod +x "${TEST_BIN}/podman"
 }
 
-@test "platform status reports no local projects when nothing is active" {
+@test "no variant owns the machine when no local stack is active" {
   run "${SCRIPT}" --execute --output json
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.overall_state + "|" + (.active_provider // "null") + "|" + .projects.kind.state + "|" + .projects.lima.state + "|" + .projects.slicer.state + "|" + .projects.sdwan_lima.state' <<<"${output}"
+  run jq -r '.overall_state + "|" + (.active_variant // "null") + "|" + .variants.kind.state + "|" + .variants.lima.state + "|" + .variants.slicer.state + "|" + .variants.sdwan_lima.state' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'idle|null|absent|absent|absent|absent' ]
 }
 
-@test "platform status reports kind as the active serving cluster" {
+@test "the reference variant owns the machine when kind is serving traffic" {
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
   export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
   export MOCK_KIND_CLUSTERS='kind-local'
@@ -212,7 +212,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.overall_state + "|" + .active_provider + "|" + .providers.kind.state + "|" + (.providers.kind.serving|tostring) + "|" + (.providers.kind.runtime_present|tostring)' <<<"${output}"
+  run jq -r '.overall_state + "|" + .active_cluster_variant + "|" + .cluster_variants.kind.state + "|" + (.cluster_variants.kind.serving|tostring) + "|" + (.cluster_variants.kind.runtime_present|tostring)' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'running|kind|running|true|true' ]
@@ -243,7 +243,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.platforms.docker.detail + "|" + .providers.kind.state + "|" + (.providers.kind.runtime_present|tostring)' <<<"${output}"
+  run jq -r '.platforms.docker.detail + "|" + .cluster_variants.kind.state + "|" + (.cluster_variants.kind.runtime_present|tostring)' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'context=desktop-linux|running|true' ]
@@ -264,7 +264,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.active_provider + "|" + .projects.lima.state + "|" + .projects.sdwan_lima.state + "|" + (.projects.sdwan_lima.serving|tostring)' <<<"${output}"
+  run jq -r '.active_cluster_variant + "|" + .variants.lima.state + "|" + .variants.sdwan_lima.state + "|" + (.variants.sdwan_lima.serving|tostring)' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'lima|running|running|true' ]
@@ -272,7 +272,7 @@ EOF
   run "${SCRIPT}" --execute --output text
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Active cluster provider: kubernetes/lima"* ]]
+  [[ "${output}" == *"Active cluster variant: kubernetes/lima"* ]]
   [[ "${output}" == *"sd-wan/lima"* ]]
   [[ "${output}" == *"30022,30080,30090"* ]]
   [[ "${output}" == *"31235,3301,443"* ]]
@@ -298,7 +298,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.providers.lima.state + "|" + (.providers.lima.serving|tostring)' <<<"${output}"
+  run jq -r '.cluster_variants.lima.state + "|" + (.cluster_variants.lima.serving|tostring)' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'degraded|false' ]
@@ -312,7 +312,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.providers.slicer.state + "|" + (.providers.slicer.runtime_present|tostring)' <<<"${output}"
+  run jq -r '.cluster_variants.slicer.state + "|" + (.cluster_variants.slicer.runtime_present|tostring)' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'paused|true' ]
@@ -329,7 +329,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.overall_state + "|" + (.active_provider // "null")' <<<"${output}"
+  run jq -r '.overall_state + "|" + (.active_cluster_variant // "null")' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'conflict|null' ]
@@ -356,7 +356,7 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '(.providers.kind.readiness.dhi_auth|tostring) + "|" + (.providers.kind.readiness.docker_hub_auth|tostring) + "|" + .providers.kind.blockers[0]' <<<"${output}"
+  run jq -r '(.cluster_variants.kind.readiness.dhi_auth|tostring) + "|" + (.cluster_variants.kind.readiness.docker_hub_auth|tostring) + "|" + .cluster_variants.kind.blockers[0]' <<<"${output}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == false\|false\|* ]]

@@ -14,6 +14,10 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make 100 apply"* ]]
   [[ "${output}" == *"make apply 100"* ]]
+  [[ "${output}" == *"100 - cluster available"* ]]
+  [[ "${output}" == *"700 - app repos"* ]]
+  [[ "${output}" == *"800 - observability"* ]]
+  [[ "${output}" == *"900 - sso"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
   [[ "${output}" == *"Docker-only hosts       -> use ../kind"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]
@@ -110,11 +114,11 @@ setup() {
   done
 }
 
-@test "slicer check-version runs the active-project assertion directly so it can report readiness" {
+@test "slicer check-version runs the active-variant assertion directly so it can report readiness" {
   run sed -n '/^check-version:/,/^\.PHONY:/p' "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'"$(ASSERT_PROJECT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
+  [[ "${output}" == *'"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG)'* ]]
   [[ "${output}" != *'$(MAKE) assert-slicer-active >/dev/null'* ]]
 }
 

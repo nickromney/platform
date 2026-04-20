@@ -314,7 +314,7 @@ STAGES_DIR="${STAGES_DIR:-${REPO_ROOT}/kubernetes/kind/stages}"
 TARGET_TFVARS="${TARGET_TFVARS:-}"
 PRELOAD_IMAGES_FILE="${PRELOAD_IMAGES_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
 ARGOCD_APPS_DIR="${ARGOCD_APPS_DIR:-${STACK_DIR}/apps/argocd-apps}"
-APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/subnet-calculator/apim-simulator}"
+APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/subnetcalc/apim-simulator}"
 export VARIABLES_FILE="${VARIABLES_FILE:-${STACK_DIR}/variables.tf}"
 HELM_READY_REPOS=""
 CHECK_VERSION_CACHE_DIR="${CHECK_VERSION_CACHE_DIR:-}"
@@ -1203,7 +1203,7 @@ image_ref_is_internal() {
   local image_ref="$1"
 
   case "${image_ref}" in
-    *\$\{*|localhost:*|127.0.0.1:*|platform/*|platform-*|subnet-calculator-*|subnetcalc-*|apim-simulator*|csharp-*)
+    *\$\{*|localhost:*|127.0.0.1:*|platform/*|platform-*|subnetcalc-*|subnetcalc-*|apim-simulator*|csharp-*)
       return 0
       ;;
   esac

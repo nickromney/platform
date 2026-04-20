@@ -29,39 +29,39 @@ print_summary() {
   summary="$(jq -r '
     [
       "Overall: \(.overall_state)",
-      "Active cluster: \((.active_provider_path // "none"))",
-      "Active project: \((.active_project_path // "none"))"
+      "Active cluster variant: \((.active_cluster_variant_path // .active_provider_path // "none"))",
+      "Active variant: \((.active_variant_path // .active_project_path // "none"))"
     ] | join("\n")
   ' <<<"${json_payload}")"
 
   gum style --border rounded --padding "1 2" "${summary}"
 }
 
-project_menu() {
+variant_menu() {
   local json_payload="$1"
   local options=""
 
   options="$(jq -r '
     . as $root
-    | $root.projects_order[]
-    | $root.projects[.].path
+    | ($root.variants_order // $root.projects_order)[]
+    | (($root.variants // $root.projects)[.].path)
   ' <<<"${json_payload}")"
 
   {
     printf '%s\n' "${options}"
     printf '%s\n' 'Refresh'
     printf '%s\n' 'Quit'
-  } | gum choose --header "Select project"
+  } | gum choose --header "Select variant"
 }
 
 action_menu() {
   local json_payload="$1"
-  local project_path="$2"
+  local variant_path="$2"
   local options=""
 
-  options="$(jq -r --arg project "${project_path}" '
+  options="$(jq -r --arg variant_path "${variant_path}" '
     .actions[]
-    | select(.project == $project)
+    | select((.variant_path // .project) == $variant_path)
     | .label
   ' <<<"${json_payload}")"
 
@@ -93,8 +93,8 @@ while :; do
   status_json="$("${PLATFORM_STATUS_SCRIPT}" --execute --output json)"
   print_summary "${status_json}"
 
-  selected_project="$(project_menu "${status_json}")"
-  case "${selected_project}" in
+  selected_variant="$(variant_menu "${status_json}")"
+  case "${selected_variant}" in
     ''|Quit)
       exit 0
       ;;
@@ -104,7 +104,7 @@ while :; do
   esac
 
   while :; do
-    selected_action_label="$(action_menu "${status_json}" "${selected_project}")"
+    selected_action_label="$(action_menu "${status_json}" "${selected_variant}")"
     case "${selected_action_label}" in
       ''|Quit)
         exit 0
@@ -114,9 +114,9 @@ while :; do
         ;;
     esac
 
-    selected_action_json="$(jq -c --arg project "${selected_project}" --arg label "${selected_action_label}" '
+    selected_action_json="$(jq -c --arg variant_path "${selected_variant}" --arg label "${selected_action_label}" '
       .actions[]
-      | select(.project == $project and .label == $label)
+      | select((.variant_path // .project) == $variant_path and .label == $label)
     ' <<<"${status_json}")"
 
     [ -n "${selected_action_json}" ] || continue

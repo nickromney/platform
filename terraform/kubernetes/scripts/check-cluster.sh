@@ -78,7 +78,7 @@ check_gitea_repos() {
 	fi
 
 	if [ "${EXPECT_SUBNETCALC_REPO}" = "1" ]; then
-		expected_repos+=("subnet-calculator")
+		expected_repos+=("subnetcalc")
 	fi
 
 	for repo in "${expected_repos[@]}"; do
@@ -110,7 +110,7 @@ check_gitea_actions() {
 	fi
 
 	if [ "${EXPECT_SUBNETCALC_REPO}" = "1" ]; then
-		repos+=("subnet-calculator")
+		repos+=("subnetcalc")
 	fi
 
 	if [ "${#repos[@]}" -eq 0 ]; then

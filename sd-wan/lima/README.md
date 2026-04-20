@@ -1,6 +1,6 @@
 # Lima SD-WAN Lab
 
-`sd-wan/lima` is the Lima-backed SD-WAN teaching lab, grouped outcome first and implementation second. It uses three macOS-hosted VMs to demonstrate overlapping address space, split-brain DNS, WireGuard transport, mTLS ingress, and a subnet-calculator workload.
+`sd-wan/lima` is the Lima-backed SD-WAN teaching lab, grouped outcome first and implementation second. It uses three macOS-hosted VMs to demonstrate overlapping address space, split-brain DNS, WireGuard transport, mTLS ingress, and a subnetcalc workload.
 
 The central idea is simple: private RFC1918 addresses are reused on purpose, so raw private IPs are not trustworthy cross-cloud identifiers. Resolver viewpoint and vanity names matter.
 
@@ -20,7 +20,7 @@ make -C sd-wan/lima test
 What success looks like:
 
 1. `make -C sd-wan/lima show-urls` prints `http://127.0.0.1:58081/`
-1. opening that URL shows the subnet-calculator frontend on cloud1
+1. opening that URL shows the subnetcalc frontend on cloud1
 1. after a lookup, the page shows both `Frontend Diagnostics (cloud1 viewpoint)` and `Backend Diagnostics (cloud2 viewpoint)`
 1. those two panels show the same service being understood from two different places in the lab
 
