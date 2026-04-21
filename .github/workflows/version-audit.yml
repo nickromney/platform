@@ -1,0 +1,31 @@
+name: Version Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 22
+
+      - name: Run repo version guard
+        run: make check-version
+
+      - name: Run Terraform provider version guard
+        run: ./terraform/kubernetes/scripts/check-provider-version.sh --execute
+
+      - name: Run Kubernetes stack version guard in CI mode
+        run: ./terraform/kubernetes/scripts/check-version.sh --execute --ci

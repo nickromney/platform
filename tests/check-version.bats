@@ -17,7 +17,7 @@ jobs:
   semantic-release:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
 EOF
 
   cat >"${FIXTURE_ROOT}/apps/demo/.npmrc" <<'EOF'
@@ -59,7 +59,7 @@ EOF
   mkdir -p "${GITHUB_FIXTURES}/repos/actions/checkout/commits"
   mkdir -p "${GITHUB_FIXTURES}/repos/actions/setup-node/commits"
   printf '{"sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd"}\n' >"${GITHUB_FIXTURES}/repos/actions/checkout/commits/v6.0.2"
-  printf '{"sha":"53b83947a5a98c8d113130e565377fae1a50d02f"}\n' >"${GITHUB_FIXTURES}/repos/actions/setup-node/commits/v6"
+  printf '{"sha":"48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e"}\n' >"${GITHUB_FIXTURES}/repos/actions/setup-node/commits/v6.4.0"
 }
 
 @test "check-version passes with matching workflow pins and dependency age gates" {

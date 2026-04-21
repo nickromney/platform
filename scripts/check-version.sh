@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="${CHECK_VERSION_REPO_ROOT:-${ROOT_DIR}}"
-WORKFLOW_FILE="${CHECK_VERSION_WORKFLOW_FILE:-${REPO_ROOT}/.github/workflows/release.yml}"
+WORKFLOW_FILE="${CHECK_VERSION_WORKFLOW_FILE:-}"
 APIM_SIMULATOR_VENDOR_METADATA_FILE="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_METADATA_FILE:-${REPO_ROOT}/apps/subnetcalc/apim-simulator.vendor.json}"
 APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/subnetcalc/apim-simulator}"
 CHECK_VERSION_SKIP_UPSTREAM="${CHECK_VERSION_SKIP_UPSTREAM:-0}"
@@ -50,7 +50,7 @@ Options:
 
 Environment:
   CHECK_VERSION_REPO_ROOT=...           Override the repo root to scan.
-  CHECK_VERSION_WORKFLOW_FILE=...       Override the workflow file to validate.
+  CHECK_VERSION_WORKFLOW_FILE=...       Override the single workflow file to validate.
   CHECK_VERSION_APIM_SIMULATOR_VENDOR_METADATA_FILE=...
                                         Override the APIM simulator vendoring metadata file.
   CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR=...
@@ -139,9 +139,16 @@ tracked_files() {
 }
 
 check_action_pins() {
-  local pins
-  pins="$(
-    python3 - "$WORKFLOW_FILE" <<'PY'
+  section "GitHub Actions"
+
+  local workflow_file_found=0
+  local workflow_file="" pins="" repo="" sha="" selector="" resolved="" label=""
+
+  while IFS= read -r workflow_file; do
+    [[ -n "${workflow_file}" ]] || continue
+    workflow_file_found=1
+    pins="$(
+      python3 - "$workflow_file" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -157,35 +164,56 @@ for repo, sha, selector in pattern.findall(Path(sys.argv[1]).read_text(encoding=
     seen.add(item)
     print(f"{repo}\t{sha}\t{selector}")
 PY
-  )"
+    )"
 
-  section "GitHub Actions"
-
-  local repo sha selector resolved
-  while IFS=$'\t' read -r repo sha selector; do
-    [[ -n "${repo}" ]] || continue
-    if [[ -z "${selector}" ]]; then
-      fail_note "${repo} is pinned by SHA without a trailing '# v...' selector comment"
+    label="$(basename "${workflow_file}")"
+    if [[ -z "${pins}" ]]; then
+      warn "${label} has no SHA-pinned GitHub Actions"
       continue
     fi
 
-    if [[ "${CHECK_VERSION_SKIP_UPSTREAM}" == "1" ]]; then
-      warn "${repo} ${selector} upstream resolution skipped"
-      continue
-    fi
+    while IFS=$'\t' read -r repo sha selector; do
+      [[ -n "${repo}" ]] || continue
+      if [[ -z "${selector}" ]]; then
+        fail_note "${label}: ${repo} is pinned by SHA without a trailing '# v...' selector comment"
+        continue
+      fi
 
-    resolved="$(github_commit_sha "${repo}" "${selector}" 2>/dev/null || true)"
-    if [[ -z "${resolved}" ]]; then
-      warn "Could not resolve ${repo} ${selector}"
-      continue
-    fi
+      if [[ "${CHECK_VERSION_SKIP_UPSTREAM}" == "1" ]]; then
+        warn "${label}: ${repo} ${selector} upstream resolution skipped"
+        continue
+      fi
 
-    if [[ "${resolved}" == "${sha}" ]]; then
-      ok "${repo} ${selector} resolves to the pinned SHA"
-    else
-      fail_note "${repo} ${selector} resolves to ${resolved}, but the workflow pins ${sha}"
-    fi
-  done <<< "${pins}"
+      resolved="$(github_commit_sha "${repo}" "${selector}" 2>/dev/null || true)"
+      if [[ -z "${resolved}" ]]; then
+        warn "${label}: could not resolve ${repo} ${selector}"
+        continue
+      fi
+
+      if [[ "${resolved}" == "${sha}" ]]; then
+        ok "${label}: ${repo} ${selector} resolves to the pinned SHA"
+      else
+        fail_note "${label}: ${repo} ${selector} resolves to ${resolved}, but the workflow pins ${sha}"
+      fi
+    done <<< "${pins}"
+  done < <(workflow_files)
+
+  if [[ "${workflow_file_found}" != "1" ]]; then
+    fail_note "No GitHub workflow files found to validate"
+  fi
+}
+
+workflow_files() {
+  if [[ -n "${WORKFLOW_FILE}" ]]; then
+    printf '%s\n' "${WORKFLOW_FILE}"
+    return 0
+  fi
+
+  if [[ ! -d "${REPO_ROOT}/.github/workflows" ]]; then
+    return 0
+  fi
+
+  find "${REPO_ROOT}/.github/workflows" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort
 }
 
 check_apim_simulator_vendor() {

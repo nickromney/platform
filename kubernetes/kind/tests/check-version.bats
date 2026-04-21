@@ -8,6 +8,18 @@ setup() {
   export KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
 }
 
+kind_argocd_app_synced_healthy() {
+  local app="$1"
+  local status=""
+
+  status="$(
+    KUBECONFIG="${KIND_KUBECONFIG}" kubectl -n argocd get app "${app}" \
+      -o jsonpath='{.status.sync.status} {.status.health.status}' 2>/dev/null || true
+  )"
+
+  [ "${status}" = "Synced Healthy" ]
+}
+
 @test "check-version reports vendored Argo chart apps from live resource labels" {
   if ! command -v kubectl >/dev/null 2>&1; then
     skip "kubectl is required"
@@ -24,6 +36,13 @@ setup() {
   if ! KUBECONFIG="${KIND_KUBECONFIG}" kubectl get ns --request-timeout=5s >/dev/null 2>&1; then
     skip "kind cluster is not reachable"
   fi
+
+  local app=""
+  for app in gitea policy-reporter prometheus; do
+    if ! kind_argocd_app_synced_healthy "${app}"; then
+      skip "kind cluster is reachable but required Argo CD app ${app} is not Synced/Healthy"
+    fi
+  done
 
   local expected_gitea expected_policy_reporter expected_prometheus
   expected_gitea="$(bash -lc "source '${TF_DEFAULTS_SCRIPT}'; tf_default_from_variables gitea_chart_version")"
@@ -54,6 +73,13 @@ setup() {
   [[ "${output}" =~ kind\ node\ tag[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+ ]]
 }
 
+@test "check-version accepts --ci in dry-run mode" {
+  run "${SCRIPT}" --dry-run --ci
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"would compare pinned platform component versions against current upstream releases"* ]]
+}
+
 @test "check-version derives preferred hardened tags from latest appVersion" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(derive_tag_with_existing_suffix 'v3.3.5' '3.3.4-debian13')\" \"\$(derive_tag_with_existing_suffix '3.3.5' 'v3.3.4-debian13')\""
 
@@ -82,6 +108,23 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'available\nauth-required\nmissing')" ]
+}
+
+@test "check-version skips docker manifest probes in ci mode" {
+  local stub_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${stub_bin}"
+
+  cat >"${stub_bin}/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "docker should not be invoked in ci mode" >&2
+exit 99
+EOF
+  chmod +x "${stub_bin}/docker"
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_CI_MODE=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; image_ref_availability 'available/image:1'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "unknown" ]
 }
 
 @test "check-version parses app cooldown policies and locked dependency versions" {
@@ -156,6 +199,14 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ not\ deployed\;\ codebase\ ==\ latest\ \(0\.118\.0\) ]]
   [[ ! "${output}" =~ not\ deployed\;\ latest\ ==\ 0\.118\.0 ]]
+}
+
+@test "check-version renders ci-skipped deployed status" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_DEPLOYED_REASON='ci mode skipped'; source '${SCRIPT}'; CLUSTER_OK=0; print_row 'signoz chart' 'Unavailable' '0.118.0' '0.118.0' 'Unavailable' 'v0.118.0' '' 'v0.118.0' '0'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" =~ deployed\ \?\ \(ci\ mode\ skipped\) ]]
+  [[ "${output}" =~ codebase\ ==\ latest\ \(0\.118\.0\) ]]
 }
 
 @test "check-version renders long tags with aligned spacing" {

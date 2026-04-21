@@ -12,6 +12,8 @@ source "${REPO_ROOT}/scripts/lib/http-fetch.sh"
 source "${REPO_ROOT}/scripts/lib/parallel.sh"
 
 CHECK_VERSION_FORMAT="${CHECK_VERSION_FORMAT:-text}"
+CHECK_VERSION_CI_MODE="${CHECK_VERSION_CI_MODE:-0}"
+CHECK_VERSION_DEPLOYED_REASON="${CHECK_VERSION_DEPLOYED_REASON:-cluster unreachable}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -53,16 +55,20 @@ section() {
 
 usage() {
   cat <<EOF
-Usage: check-version.sh [--dry-run] [--execute]
+Usage: check-version.sh [--dry-run] [--execute] [--ci]
 
 Checks pinned platform component versions against current upstream releases and
 the live cluster when reachable.
+
+Options:
+  --ci                           Skip live cluster inspection and Docker manifest probes
 
 Environment:
   CHECK_VERSION_INCLUDE_CANARY=1      Include canary releases in latest-version checks
   CHECK_VERSION_INCLUDE_ALPHA=1       Include alpha releases in latest-version checks
   CHECK_VERSION_INCLUDE_PRERELEASE=1  Include other prerelease channels (beta/dev/rc/preview/next)
                                       All prerelease channels default to off
+  CHECK_VERSION_CI_MODE=1             Same as --ci; skips live cluster inspection and Docker manifest probes
   CHECK_VERSION_RUNTIME_ROOT=...      Store temp/cache state under a repo-owned .run/check-version root
 
 $(shell_cli_standard_options)
@@ -70,7 +76,41 @@ EOF
 }
 
 if [ "${CHECK_VERSION_LIB_ONLY:-0}" != "1" ]; then
-  shell_cli_handle_standard_no_args usage "would compare pinned platform component versions against current upstream releases" "$@"
+  shell_cli_init_standard_flags
+  script_name="$(shell_cli_script_name)"
+
+  while [[ $# -gt 0 ]]; do
+    if shell_cli_handle_standard_flag usage "$1"; then
+      shift
+      continue
+    fi
+
+    case "$1" in
+      --ci)
+        CHECK_VERSION_CI_MODE=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        shell_cli_unknown_flag "${script_name}" "$1"
+        exit 1
+        ;;
+      *)
+        shell_cli_unexpected_arg "${script_name}" "$1"
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ $# -gt 0 ]]; then
+    shell_cli_unexpected_arg "${script_name}" "$1"
+    exit 1
+  fi
+
+  shell_cli_maybe_execute_or_preview_summary usage "would compare pinned platform component versions against current upstream releases"
 fi
 
 CHECK_VERSION_HEARTBEAT_SECONDS="${CHECK_VERSION_HEARTBEAT_SECONDS:-10}"
@@ -1818,6 +1858,11 @@ image_ref_availability() {
     return 0
   fi
 
+  if [ "${CHECK_VERSION_CI_MODE}" = "1" ]; then
+    printf "unknown\n"
+    return 0
+  fi
+
   registry="$(image_ref_registry "${image_ref}")"
   if [ "${registry}" = "dhi.io" ] && [ "${CHECK_VERSION_PROBE_PRIVATE_IMAGES:-0}" != "1" ]; then
     printf "unknown\n"
@@ -2080,7 +2125,7 @@ print_row() {
   fi
 
   if [ "${CLUSTER_OK}" -ne 1 ]; then
-    deploy_state="deployed ? (cluster unreachable)"
+    deploy_state="deployed ? (${CHECK_VERSION_DEPLOYED_REASON})"
   elif [ -z "$deployed" ]; then
     deploy_state="not deployed"
   elif [ -n "$codebase" ] && [ "$deployed" = "$codebase" ]; then
@@ -3267,6 +3312,7 @@ main() {
   stop_heartbeat
 
   progress "Checking preferred image availability and cluster reachability"
+  CHECK_VERSION_DEPLOYED_REASON="cluster unreachable"
   progress "Checking configured Argo CD image availability"
   CONFIGURED_ARGOCD_IMAGE_STATUS="$(image_ref_availability "${CODE_ARGOCD_IMAGE_REF}")"
   LATEST_PREFERRED_ARGOCD_TAG=""
@@ -3282,7 +3328,10 @@ main() {
   fi
 
   CLUSTER_OK=0
-  if [ "${EXPECT_KIND_PROVISIONING}" = "true" ] && command -v kind >/dev/null 2>&1; then
+  if [ "${CHECK_VERSION_CI_MODE}" = "1" ]; then
+    CHECK_VERSION_DEPLOYED_REASON="ci mode skipped"
+    warn "CI mode enabled; skipping deployed version inspection and Docker manifest probes"
+  elif [ "${EXPECT_KIND_PROVISIONING}" = "true" ] && command -v kind >/dev/null 2>&1; then
     progress "Checking kind cluster presence"
     if ! kind_get_clusters_safe | grep -qx "${EXPECTED_CLUSTER_NAME}"; then
       warn "Cluster '${EXPECTED_CLUSTER_NAME}' not found; Deployed=Unavailable"
