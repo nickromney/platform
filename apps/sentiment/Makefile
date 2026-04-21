@@ -5,6 +5,16 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 include ../../mk/common.mk
 include ../../mk/compose.mk
 
+REPO_ROOT := $(abspath $(CURDIR)/../..)
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+PLATFORM_DEMO_PASSWORD ?=
+OAUTH2_PROXY_COOKIE_SECRET ?=
+PLATFORM_REQUIRED_ENV_VARS := PLATFORM_DEMO_PASSWORD OAUTH2_PROXY_COOKIE_SECRET
+ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
+include $(PLATFORM_ENV_FILE)
+endif
+
 APP_BASE_URL := http://localhost:8304
 APP_URL := $(APP_BASE_URL)/oauth2/sign_in
 APP_TLS_BASE_URL := https://localhost:8443
@@ -15,11 +25,17 @@ COMPOSE_TLS := $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
 
 .PHONY: help prereqs test update check-prerequisites build up up-tls down logs ps smoke urls
 
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export PLATFORM_DEMO_PASSWORD
+export OAUTH2_PROXY_COOKIE_SECRET
+
 ##@ Setup
 prereqs: ## Check local prerequisites
 	@$(MAKE) --no-print-directory check-prerequisites
 
 check-prerequisites: ## Check that a supported compose backend is installed and running
+	@$(MAKE) --no-print-directory check-platform-env
 	@if [ -z "$(COMPOSE_CMD)" ]; then \
 		echo "A supported compose backend is required but was not found." >&2; \
 		exit 1; \

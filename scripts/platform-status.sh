@@ -13,9 +13,9 @@ SLICER_KUBECONFIG_PATH="${PLATFORM_STATUS_SLICER_KUBECONFIG_PATH:-${HOME}/.kube/
 SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 output_format="human"
 PLATFORM_SHARED_PORTS="${PLATFORM_STATUS_SHARED_PORTS:-443 30022 30080 30090 31235 3301 3302}"
-PLATFORM_PROVIDER_PORTS="${PLATFORM_STATUS_PROVIDER_PORTS:-6443 ${PLATFORM_SHARED_PORTS}}"
+PLATFORM_VARIANT_PORTS="${PLATFORM_STATUS_VARIANT_PORTS:-${PLATFORM_STATUS_PROVIDER_PORTS:-6443 ${PLATFORM_SHARED_PORTS}}}"
 PLATFORM_SDWAN_PORTS="${PLATFORM_STATUS_SDWAN_PORTS:-58081}"
-PLATFORM_PROBE_PORTS="${PLATFORM_STATUS_PROBE_PORTS:-${PLATFORM_PROVIDER_PORTS} ${PLATFORM_SDWAN_PORTS}}"
+PLATFORM_PROBE_PORTS="${PLATFORM_STATUS_PROBE_PORTS:-${PLATFORM_VARIANT_PORTS} ${PLATFORM_SDWAN_PORTS}}"
 PLATFORM_STATUS_PORTS_WRAP_WIDTH="${PLATFORM_STATUS_PORTS_WRAP_WIDTH:-20}"
 PLATFORM_STATUS_CELL_WRAP_SENTINEL="__PLATFORM_CELL_WRAP__"
 
@@ -680,7 +680,7 @@ render_human_output() {
     "",
     "Overall state: \(.overall_state)",
     "Active cluster variant: \((.active_cluster_variant_path // "none"))",
-    "Active variant surface: \((.active_variant_path // "none"))",
+    "Active variant: \((.active_variant_path // "none"))",
     (
       if (.foreign_ports | length) > 0 then
         "Foreign shared ports:\n" + ((.foreign_ports | map("  - " + .)) | join("\n"))
@@ -912,13 +912,13 @@ fi
 
 lima_ports=""
 if [ "${lima_running}" -eq 1 ]; then
-  lima_ports="$(listener_addresses_for_ports "${PLATFORM_PROVIDER_PORTS}" || true)"
+  lima_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
 fi
 lima_ports="$(unique_sorted_lines "${lima_ports}")"
 
 slicer_ports=""
 if [ "${slicer_running}" -eq 1 ]; then
-  slicer_ports="$(listener_addresses_for_ports "${PLATFORM_PROVIDER_PORTS}" || true)"
+  slicer_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
 fi
 slicer_ports="$(unique_sorted_lines "${slicer_ports}")"
 
@@ -1060,9 +1060,9 @@ kind_dhi_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${dhi_auth_
 kind_docker_hub_auth_source="$(registry_source_from_probe "${docker_hub_auth_probe_output}")"
 kind_docker_hub_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${docker_hub_auth_probe_output}")")"
 
-kind_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_PROVIDER_PORTS}")"
-lima_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_PROVIDER_PORTS}")"
-slicer_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_PROVIDER_PORTS}")"
+kind_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
+lima_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
+slicer_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
 sdwan_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_SDWAN_PORTS}")"
 
 kind_blockers=""

@@ -102,7 +102,7 @@ services:
     ports:
       - "8304:4180"
     environment:
-      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET:-00000000000000000000000000000000}
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
     command:
       - --provider=oidc
       - --skip-oidc-discovery=true

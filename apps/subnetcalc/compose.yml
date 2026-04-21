@@ -472,7 +472,7 @@ services:
       OIDC_CLIENT_ID: "frontend-app"
       OIDC_REDIRECT_URI: "http://localhost:3007"
       OIDC_AUTO_LOGIN: "true"
-      APIM_SUBSCRIPTION_KEY: ${STACK12_APIM_SUBSCRIPTION_KEY}
+      APIM_SUBSCRIPTION_KEY: ${STACK12_APIM_SUBSCRIPTION_KEY:-dev-subscription-key}
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -499,7 +499,7 @@ services:
       OIDC_CLIENT_ID: "frontend-app"
       OIDC_REDIRECT_URI: "http://localhost:3008"
       OIDC_AUTO_LOGIN: "true"
-      APIM_SUBSCRIPTION_KEY: ${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY}
+      APIM_SUBSCRIPTION_KEY: ${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY:-dev-admin-subscription-key}
       OIDC_PROMPT: "login"
       OIDC_FORCE_REAUTH: "true"
     depends_on:
@@ -534,7 +534,7 @@ services:
       # For production OAuth2 Proxy deployments, set the client secret via environment
       # variables or a secrets management system (Azure Key Vault, Kubernetes Secrets).
       # ---------------------------------------------------------------------------------
-      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET}
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-dev-oauth-secret}
       - --redirect-url=http://localhost:3007/oauth2/callback
       - --code-challenge-method=S256
 
@@ -570,7 +570,7 @@ services:
       # or a secrets management system. Generate a new secret with:
       #   python -c 'import secrets; print(secrets.token_urlsafe(32))'
       # ---------------------------------------------------------------------------------
-      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
       - --cookie-secure=false
       - --cookie-httponly=true
       - --cookie-expire=4h
@@ -613,7 +613,7 @@ services:
       - --oidc-issuer-url=http://localhost:8300/realms/subnetcalc
       - --client-id=frontend-app
       - --allowed-role=admin
-      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET}
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-dev-oauth-secret}
       - --redirect-url=http://localhost:3008/oauth2/callback
       - --code-challenge-method=S256
 
@@ -626,7 +626,7 @@ services:
       - --upstream=http://frontend-react-keycloak-protected-admin:8080
       - --http-address=0.0.0.0:4180
 
-      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
       - --cookie-secure=false
       - --cookie-httponly=true
       - --cookie-expire=4h

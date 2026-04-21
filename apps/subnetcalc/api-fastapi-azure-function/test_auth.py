@@ -11,9 +11,13 @@ This test suite covers:
 Note: Tests currently fail because auth functionality not yet implemented (TDD).
 """
 
+import asyncio
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
+import auth
 from function_app import api
 
 # Create test client
@@ -243,3 +247,94 @@ class TestEdgeCases:
         # Key with leading/trailing whitespace should work
         response = client.get("/api/v1/health", headers={"X-API-Key": "  valid-key-123  "})
         assert response.status_code == 200
+
+
+class TestOidcJwksCache:
+    """Test JWKS caching behavior for OIDC token verification."""
+
+    def setup_method(self):
+        auth._oidc_jwks_cache.clear()
+
+    def teardown_method(self):
+        auth._oidc_jwks_cache.clear()
+
+    def test_get_oidc_jwks_reuses_unexpired_cache(self, monkeypatch):
+        """A second request should reuse the cached JWKS until the TTL expires."""
+        calls: list[str] = []
+        responses = iter(
+            [
+                {"keys": [{"kid": "first"}]},
+            ]
+        )
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url, timeout=10.0):
+                calls.append(url)
+                return FakeResponse(next(responses))
+
+        monkeypatch.setattr(auth.httpx, "AsyncClient", FakeAsyncClient)
+
+        first = asyncio.run(auth.get_oidc_jwks("https://issuer.example/keys", "https://issuer.example"))
+        second = asyncio.run(auth.get_oidc_jwks("https://issuer.example/keys", "https://issuer.example"))
+
+        assert first == second
+        assert calls == ["https://issuer.example/keys"]
+
+    def test_get_oidc_jwks_refreshes_cache_after_ttl(self, monkeypatch):
+        """Expired cache entries should trigger a fresh JWKS fetch."""
+        calls: list[str] = []
+        responses = iter(
+            [
+                {"keys": [{"kid": "first"}]},
+                {"keys": [{"kid": "second"}]},
+            ]
+        )
+        now = {"value": 1_000.0}
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self.payload
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url, timeout=10.0):
+                calls.append(url)
+                return FakeResponse(next(responses))
+
+        monkeypatch.setattr(auth.httpx, "AsyncClient", FakeAsyncClient)
+        monkeypatch.setattr(time, "time", lambda: now["value"])
+
+        first = asyncio.run(auth.get_oidc_jwks("https://issuer.example/keys", "https://issuer.example"))
+        now["value"] += auth._JWKS_CACHE_TTL_SECONDS + 1
+        second = asyncio.run(auth.get_oidc_jwks("https://issuer.example/keys", "https://issuer.example"))
+
+        assert first == {"keys": [{"kid": "first"}]}
+        assert second == {"keys": [{"kid": "second"}]}
+        assert calls == ["https://issuer.example/keys", "https://issuer.example/keys"]

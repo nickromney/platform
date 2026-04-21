@@ -182,7 +182,7 @@ services:
       - --upstream=http://subnetcalc-router-dev:8080
       - --http-address=0.0.0.0:4180
       - --cookie-name=compose-sso-dev
-      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-00000000000000000000000000000000}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
       - --cookie-secure=true
       - --cookie-httponly=true
       - --cookie-expire=4h
@@ -225,7 +225,7 @@ services:
       - --upstream=http://subnetcalc-router-uat:8080
       - --http-address=0.0.0.0:4180
       - --cookie-name=compose-sso-uat
-      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-00000000000000000000000000000000}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
       - --cookie-secure=true
       - --cookie-httponly=true
       - --cookie-expire=4h

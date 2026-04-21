@@ -5,14 +5,28 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 include ../../mk/common.mk
 include ../../mk/compose.mk
 
+REPO_ROOT := $(abspath $(CURDIR)/../..)
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+OAUTH2_PROXY_COOKIE_SECRET ?=
+PLATFORM_REQUIRED_ENV_VARS := OAUTH2_PROXY_COOKIE_SECRET
+ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
+include $(PLATFORM_ENV_FILE)
+endif
+
 .PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config build up up-dev up-uat up-all down logs ps urls test
 
 COMPOSE := $(COMPOSE_CMD) -f compose.yml
-COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000
+COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret
 CHECK_HOST_PORTS := ./scripts/check-host-ports.sh
+
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export OAUTH2_PROXY_COOKIE_SECRET
 
 ##@ Prerequisites
 prereqs: ## Check that a supported compose backend and mkcert are usable
+	@$(MAKE) --no-print-directory check-platform-env
 	@$(MAKE) --no-print-directory check-docker-prerequisites
 	@$(MAKE) --no-print-directory check-mkcert-prerequisites
 

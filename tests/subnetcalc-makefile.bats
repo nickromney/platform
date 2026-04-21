@@ -73,3 +73,13 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "subnetcalc compose prereqs fails cleanly when the repo env file is missing" {
+  missing_env="${BATS_TEST_TMPDIR}/missing.env"
+
+  run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/apps/subnetcalc" prereqs
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Missing platform env file: ${missing_env}"* ]]
+  [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
+}

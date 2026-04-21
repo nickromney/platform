@@ -20,14 +20,10 @@ logger = logging.getLogger(__name__)
 # Password hasher (uses Argon2 - modern, secure)
 pwd_hash = PasswordHash.recommended()
 
-# Cache for OIDC JWKS (JSON Web Key Sets)
-# TODO: Implement TTL-based cache with expiration for production use.
-# Consider using cachetools.TTLCache to refresh keys periodically (e.g., 1-hour TTL)
-# to handle OIDC provider key rotation. Example:
-#   from cachetools import TTLCache
-#   _oidc_jwks_cache: TTLCache[str, Any] = TTLCache(maxsize=10, ttl=3600)
-# For now, this simple dict cache is acceptable for development/testing.
-_oidc_jwks_cache: dict[str, Any] = {}
+# Cache for OIDC JWKS (JSON Web Key Sets) with TTL
+# Each entry is a tuple: (jwks_data, expiry_timestamp)
+_oidc_jwks_cache: dict[str, tuple[dict[str, Any], float]] = {}
+_JWKS_CACHE_TTL_SECONDS = 3600  # 1 hour
 
 
 def validate_api_key(api_key: str | None, valid_keys: list[str]) -> bool:
@@ -173,10 +169,14 @@ async def get_oidc_jwks(jwks_uri: str, issuer: str) -> dict[str, Any]:
     Raises:
         ValueError: If JWKS cannot be fetched
     """
-    # Use cached JWKS if available
+    import time
+
+    # Use cached JWKS if available and not expired
     cache_key = jwks_uri or issuer
     if cache_key in _oidc_jwks_cache:
-        return _oidc_jwks_cache[cache_key]
+        jwks, expiry = _oidc_jwks_cache[cache_key]
+        if time.time() < expiry:
+            return jwks
 
     try:
         async with httpx.AsyncClient() as client:
@@ -196,8 +196,8 @@ async def get_oidc_jwks(jwks_uri: str, issuer: str) -> dict[str, Any]:
             jwks_response.raise_for_status()
             jwks = jwks_response.json()
 
-            # Cache for future use
-            _oidc_jwks_cache[cache_key] = jwks
+            # Cache for future use with TTL
+            _oidc_jwks_cache[cache_key] = (jwks, time.time() + _JWKS_CACHE_TTL_SECONDS)
             return jwks
 
     except httpx.HTTPError as e:
