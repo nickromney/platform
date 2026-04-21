@@ -1,13 +1,35 @@
 """Pydantic models for subnet calculator API."""
 
-from pydantic import BaseModel, Field
+from fastapi import HTTPException
+from pydantic import BaseModel, Field, field_validator
+
+from .cloud_mode import CloudMode
 
 
 class SubnetIPv4Request(BaseModel):
     """Request model for IPv4 subnet calculation."""
 
     network: str = Field(..., description="IPv4 network in CIDR notation (e.g., 192.168.1.0/24)")
-    mode: str = Field(default="Azure", description="Cloud provider mode: Azure, AWS, OCI, or Standard")
+    mode: CloudMode = Field(
+        default=CloudMode.AZURE,
+        description="Cloud provider mode: Azure, AWS, OCI, or Standard",
+    )
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def validate_mode(cls, value: CloudMode | str) -> CloudMode:
+        """Preserve the existing 400 response for unsupported cloud modes."""
+        if isinstance(value, CloudMode):
+            return value
+
+        try:
+            return CloudMode(value)
+        except ValueError as exc:
+            valid_modes = ", ".join(mode.value for mode in CloudMode)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid mode '{value}'. Must be one of: {valid_modes}",
+            ) from exc
 
 
 class SubnetIPv4Response(BaseModel):

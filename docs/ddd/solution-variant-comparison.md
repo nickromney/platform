@@ -48,7 +48,7 @@ These concepts are stable across `kubernetes/kind`, `kubernetes/lima`, and
 Shared preferred stage language:
 
 | Stage | Preferred operator-facing label | Notes |
-| --- | --- |
+| --- | --- | --- |
 | `100` | cluster available | Prefer the outcome over the bootstrap mechanism. |
 | `200` | Cilium | Product label is preferred here over a generic CNI term. |
 | `300` | Hubble | Product label is preferred because it is the concept operators actually use. |
@@ -192,7 +192,10 @@ That suggests:
 - Product names such as `Cilium`, `Hubble`, `Argo CD`, `Gitea`, and `Headlamp`
   should stay in the stage language where they are the real operator nouns.
 
-## Remaining Open Question
+## Resolved Open Question
 
-- Whether `host access path` is actually a better umbrella term than the
-  current mix of `proxy`, `port-forward`, and `host forwards`.
+`host access path` is kept as a documentation umbrella for `proxy`,
+`port-forward`, and `host forwards`. It does not replace those terms in
+Makefiles, scripts, or status output. See
+[ubiquitous-language.md](./ubiquitous-language.md#resolved-questions) for the
+final form.

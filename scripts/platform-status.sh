@@ -475,9 +475,9 @@ render_status_table() {
 
     (["VARIANT", "STATE", "SERVE", "PRESENT", "VERSION", "PORTS", "CLAIMED BY", "NOTE"] | @tsv),
     (
-      (.variants_order // .projects_order)[] as $key
-      | ((.variants // .projects)[$key]) as $project
-      | ($project.blockers[0] // "") as $blocker
+      .variants_order[] as $key
+      | (.variants[$key]) as $variant
+      | ($variant.blockers[0] // "") as $blocker
       | (
           if ($blocker | test("^(?<claim>.+) claimed by (?<owner>.+)$")) then
             ($blocker | capture("^(?<claim>.+) claimed by (?<owner>.+)$"))
@@ -486,15 +486,15 @@ render_status_table() {
           end
         ) as $claim_match
       | [
-          $project.path,
-          $project.state,
-          (if $project.serving then "Y" else "N" end),
-          (if $project.runtime_present then "Y" else "N" end),
-          ($project.version // "-"),
+          $variant.path,
+          $variant.state,
+          (if $variant.serving then "Y" else "N" end),
+          (if $variant.runtime_present then "Y" else "N" end),
+          ($variant.version // "-"),
           (
-            if ($project.shared_ports | length) > 0 then
+            if ($variant.shared_ports | length) > 0 then
               (
-                $project.shared_ports
+                $variant.shared_ports
                 | map(split(":") | last)
                 | unique
                 | wrap_items($ports_wrap_width; $wrap_sentinel)
@@ -658,8 +658,6 @@ build_action_json() {
       label: $label,
       variant: $variant,
       variant_path: $variant_path,
-      provider: $variant,
-      project: $variant_path,
       enabled: $enabled,
       reason: (if $reason == "" then null else $reason end),
       command: $command,
@@ -681,8 +679,8 @@ render_human_output() {
     "Platform local runtime status",
     "",
     "Overall state: \(.overall_state)",
-    "Active cluster variant: \((.active_cluster_variant_path // .active_provider_path // "none"))",
-    "Active variant surface: \((.active_variant_path // .active_project_path // "none"))",
+    "Active cluster variant: \((.active_cluster_variant_path // "none"))",
+    "Active variant surface: \((.active_variant_path // "none"))",
     (
       if (.foreign_ports | length) > 0 then
         "Foreign shared ports:\n" + ((.foreign_ports | map("  - " + .)) | join("\n"))
@@ -1217,34 +1215,34 @@ lima_project_json="$(build_project_json lima kubernetes/lima 'Kubernetes Lima cl
 slicer_project_json="$(build_project_json slicer kubernetes/slicer 'Slicer local cluster' slicer "${slicer_state}" "${slicer_serving}" "${slicer_runtime_present}" "${SLICER_KUBECONFIG_PATH}" "${slicer_version}" "${slicer_ports}" "${slicer_blockers}" "${slicer_readiness_json}")"
 sdwan_project_json="$(build_project_json sdwan_lima sd-wan/lima 'SD-WAN Lima lab' lima "${sdwan_state}" "${sdwan_serving}" "${sdwan_runtime_present}" "" "${sdwan_version}" "${sdwan_ports}" "${sdwan_blockers}" "${sdwan_readiness_json}")"
 
-active_provider=""
-active_provider_path=""
-serving_provider_count=0
-for provider_key in kind lima slicer; do
-  provider_serving="$(jq -r --arg key "${provider_key}" '.[$key].serving' <<<"$(jq -cn \
+active_cluster_variant=""
+active_cluster_variant_path=""
+serving_cluster_variant_count=0
+for cluster_variant_key in kind lima slicer; do
+  cluster_variant_serving="$(jq -r --arg key "${cluster_variant_key}" '.[$key].serving' <<<"$(jq -cn \
     --argjson kind "${kind_project_json}" \
     --argjson lima "${lima_project_json}" \
     --argjson slicer "${slicer_project_json}" \
     '{kind: $kind, lima: $lima, slicer: $slicer}')")"
-  if [ "${provider_serving}" = "true" ]; then
-    serving_provider_count=$((serving_provider_count + 1))
-    active_provider="${provider_key}"
+  if [ "${cluster_variant_serving}" = "true" ]; then
+    serving_cluster_variant_count=$((serving_cluster_variant_count + 1))
+    active_cluster_variant="${cluster_variant_key}"
   fi
 done
 
 overall_state="idle"
-if [ "${serving_provider_count}" -gt 1 ]; then
+if [ "${serving_cluster_variant_count}" -gt 1 ]; then
   overall_state="conflict"
-  active_provider=""
-elif [ -n "${active_provider}" ]; then
+  active_cluster_variant=""
+elif [ -n "${active_cluster_variant}" ]; then
   overall_state="running"
 fi
 
-if [ -n "${active_provider}" ]; then
-  case "${active_provider}" in
-    kind) active_provider_path="kubernetes/kind" ;;
-    lima) active_provider_path="kubernetes/lima" ;;
-    slicer) active_provider_path="kubernetes/slicer" ;;
+if [ -n "${active_cluster_variant}" ]; then
+  case "${active_cluster_variant}" in
+    kind) active_cluster_variant_path="kubernetes/kind" ;;
+    lima) active_cluster_variant_path="kubernetes/lima" ;;
+    slicer) active_cluster_variant_path="kubernetes/slicer" ;;
   esac
 elif [ "${sdwan_serving}" -eq 1 ]; then
   overall_state="running"
@@ -1256,20 +1254,15 @@ if [ "${overall_state}" != "conflict" ] && [ "${overall_state}" != "running" ]; 
   fi
 fi
 
-active_project=""
-active_project_path=""
-if [ -n "${active_provider}" ]; then
-  active_project="${active_provider}"
-  active_project_path="${active_provider_path}"
+active_variant=""
+active_variant_path=""
+if [ -n "${active_cluster_variant}" ]; then
+  active_variant="${active_cluster_variant}"
+  active_variant_path="${active_cluster_variant_path}"
 elif [ "${sdwan_serving}" -eq 1 ]; then
-  active_project="sdwan_lima"
-  active_project_path="sd-wan/lima"
+  active_variant="sdwan_lima"
+  active_variant_path="sd-wan/lima"
 fi
-
-active_cluster_variant="${active_provider}"
-active_cluster_variant_path="${active_provider_path}"
-active_variant="${active_project}"
-active_variant_path="${active_project_path}"
 
 kind_apply_100_enabled=1
 kind_apply_100_reason=""
@@ -1408,10 +1401,6 @@ status_json="$(jq -cn \
   --arg active_cluster_variant_path "${active_cluster_variant_path}" \
   --arg active_variant "${active_variant}" \
   --arg active_variant_path "${active_variant_path}" \
-  --arg active_provider "${active_provider}" \
-  --arg active_provider_path "${active_provider_path}" \
-  --arg active_project "${active_project}" \
-  --arg active_project_path "${active_project_path}" \
   --argjson foreign_ports "$(json_array_from_newline "${foreign_ports}")" \
   --argjson docker_runtime "${docker_runtime_json}" \
   --argjson colima_runtime "${colima_runtime_json}" \
@@ -1432,10 +1421,6 @@ status_json="$(jq -cn \
     active_cluster_variant_path: (if $active_cluster_variant_path == "" then null else $active_cluster_variant_path end),
     active_variant: (if $active_variant == "" then null else $active_variant end),
     active_variant_path: (if $active_variant_path == "" then null else $active_variant_path end),
-    active_provider: (if $active_provider == "" then null else $active_provider end),
-    active_provider_path: (if $active_provider_path == "" then null else $active_provider_path end),
-    active_project: (if $active_project == "" then null else $active_project end),
-    active_project_path: (if $active_project_path == "" then null else $active_project_path end),
     foreign_ports: $foreign_ports,
     platforms: {
       docker: $docker_runtime,
@@ -1469,18 +1454,6 @@ status_json="$(jq -cn \
       sdwan_lima: $sdwan_lima
     },
     variants_order: ["kind", "lima", "slicer", "sdwan_lima"],
-    providers: {
-      kind: $kind,
-      lima: $lima,
-      slicer: $slicer
-    },
-    projects: {
-      kind: $kind,
-      lima: $lima,
-      slicer: $slicer,
-      sdwan_lima: $sdwan_lima
-    },
-    projects_order: ["kind", "lima", "slicer", "sdwan_lima"],
     actions: $actions
   }')"
 

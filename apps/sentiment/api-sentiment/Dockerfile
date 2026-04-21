@@ -10,7 +10,7 @@ FROM oven/bun:1.3.12 AS preload
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json config.js preload-model.js server.js telemetry.js ./
+COPY package.json config.js preload-model.js server.js telemetry.js comment-analysis-policy.js sentiment-label.js ./
 
 ARG SENTIMENT_MODEL_ID
 ENV NODE_ENV=production
@@ -28,7 +28,7 @@ ARG SENTIMENT_MODEL_ID
 
 COPY --chown=1000:1000 --from=deps /app/node_modules ./node_modules
 COPY --chown=1000:1000 --from=preload /opt/transformers-cache /opt/transformers-cache
-COPY --chown=1000:1000 package.json config.js server.js telemetry.js ./
+COPY --chown=1000:1000 package.json config.js server.js telemetry.js comment-analysis-policy.js sentiment-label.js ./
 
 ENV NODE_ENV=production
 ENV PORT=8080
