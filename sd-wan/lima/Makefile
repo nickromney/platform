@@ -1,6 +1,6 @@
 # SD-WAN Multi-Cloud Simulation - Lima VM Orchestration
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
+MAKE_KNOWN_GOALS := help readiness prereqs build check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -23,6 +23,13 @@ export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
 export PLATFORM_ADMIN_PASSWORD
 export PLATFORM_DEMO_PASSWORD
+
+.PHONY: readiness
+readiness: ## Check operator and variant readiness
+	@$(MAKE) prereqs
+	@if limactl list | grep -q "cloud1.*Running"; then \
+		$(MAKE) test-e2e; \
+	fi
 
 .PHONY: prereqs build check-host-ports fix-guest-hostnames up down status show-urls show-wireguard sync-wireguard sync-frontend sync-cloud1-diagnostics sync-subnet-api build-frontend test test-dns test-tunnel test-routing test-egress test-mtls test-tls test-subnetcalc test-e2e \
         ssh-cloud1 ssh-cloud2 ssh-cloud3 logs destroy clean-pki

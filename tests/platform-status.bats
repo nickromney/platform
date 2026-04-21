@@ -259,7 +259,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Active cluster variant: kubernetes/kind"* ]]
-  [[ "${output}" == *"Active variant surface: kubernetes/kind"* ]]
+  [[ "${output}" == *"Active variant: kubernetes/kind"* ]]
   [[ "${output}" != *"Active cluster provider:"* ]]
   [[ "${output}" != *"Active provider:"* ]]
 }
@@ -378,6 +378,22 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"127.0.0.1:443"* ]]
+}
+
+@test "platform status keeps the legacy provider ports env alias working" {
+  export PLATFORM_STATUS_SHARED_PORTS=""
+  export PLATFORM_STATUS_SDWAN_PORTS=""
+  export PLATFORM_STATUS_PROVIDER_PORTS="5555"
+  export MOCK_LSOF_5555=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nnginx 321 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:5555 (LISTEN)'
+
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.foreign_ports[0]' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = '127.0.0.1:5555' ]
 }
 
 @test "platform status reports kind blockers when docker auth is missing" {

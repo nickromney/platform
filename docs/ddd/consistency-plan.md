@@ -57,7 +57,7 @@ These touch shell scripts and BATS tests. Status-output format has consumers
 
 | # | Gap | Direction | Red | Green |
 | --- | --- | --- | --- | --- |
-| C1 | Operator status and TUI surfaces now use variant-oriented keys and labels instead of provider/project aliases. | Resolved. | `tests/platform-status.bats` fails if `active_provider*`, `active_project*`, `providers`, `projects`, or action-level `provider` / `project` aliases remain. | The BATS checks pass, `platform-tui.sh` consumes only variant-oriented fields, and the migration note for generated release notes is: `platform status` renamed `active_provider*` aliases to `active_variant*` / `variant`. |
+| C1 | Operator status and TUI surfaces now use variant-oriented keys and labels instead of provider/project aliases. | Resolved. | `tests/platform-status.bats` fails if `active_provider*`, `active_project*`, `providers`, `projects`, or action-level `provider` / `project` aliases remain. | The BATS checks pass, `platform-tui.sh` consumes only variant-oriented fields, and the `platform status` output was updated to `active_variant`. |
 | C2 | Status output uses `claimed by` for ingress/VM ownership; glossary ratifies `ownership`. | Resolved. | n/a | `claimed by` remains an acceptable human-readable rendering of ownership. |
 
 ### D. Post-launch only

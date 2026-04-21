@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background for contrast (optional, usually logos are transparent) -->
+  <!-- <rect width="100" height="100" rx="16" fill="#F8FAFC"/> -->
+  
+  <!-- Bottom Layer (Foundation - Deep Navy) -->
+  <path d="M50 85L15 67.5V57.5L50 75L85 57.5V67.5L50 85Z" fill="#0F172A"/>
+  <path d="M50 75L15 57.5L50 40L85 57.5L50 75Z" fill="#1E293B"/>
+  
+  <!-- Middle Layer (Stability - Slate Gray) -->
+  <path d="M50 65L25 52.5V42.5L50 55L75 42.5V52.5L50 65Z" fill="#475569"/>
+  <path d="M50 55L25 42.5L50 30L75 42.5L50 55Z" fill="#64748B"/>
+  
+  <!-- Top Layer (Innovation - Electric Blue) -->
+  <path d="M50 45L35 37.5V32.5L50 40L65 32.5V37.5L50 45Z" fill="#0077B6"/>
+  <path d="M50 40L35 32.5L50 25L65 32.5L50 40Z" fill="#00B4D8"/>
+</svg>

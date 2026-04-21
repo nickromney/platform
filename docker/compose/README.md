@@ -50,6 +50,16 @@ The separate `check-https-443-available` target exists so the repo can answer
 
 ## Quick Start
 
+Before these compose targets, copy the repo root template and set
+`OAUTH2_PROXY_COOKIE_SECRET`:
+
+```bash
+cp .env.example .env
+```
+
+The `make -C docker/compose ...` targets load that repo-root `.env`
+automatically.
+
 From the repo root:
 
 ```bash

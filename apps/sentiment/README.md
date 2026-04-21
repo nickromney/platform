@@ -20,8 +20,18 @@ frontend and API separation, and an SST-backed API runtime.
 
 ## Quick Start
 
+Before the authenticated compose flows, copy the repo root template and set the
+secrets it needs:
+
 ```bash
-docker compose up
+cp ../../.env.example ../../.env
+```
+
+`make` targets in this directory load `../../.env` automatically. Raw
+`docker compose` commands should pass it explicitly with `--env-file ../../.env`.
+
+```bash
+docker compose --env-file ../../.env up
 ```
 
 From this directory you can also use:
@@ -35,5 +45,5 @@ That starts the authenticated local stack and prints the URL to open.
 Optional TLS front door:
 
 ```bash
-docker compose -f compose.yml -f compose.tls.yml up
+docker compose --env-file ../../.env -f compose.yml -f compose.tls.yml up
 ```

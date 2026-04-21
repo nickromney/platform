@@ -10,6 +10,14 @@ A full-stack IPv4/IPv6 subnet calculator with multiple backend and frontend impl
 
 ## Quick Start
 
+Compose workflows in this directory now read `OAUTH2_PROXY_COOKIE_SECRET` from
+the repo root `.env`. Copy the template before using the `make` or raw Compose
+commands below:
+
+```bash
+cp ../../.env.example ../../.env
+```
+
 ### Run Baseline Compose
 
 The default [`compose.yml`](compose.yml) path now starts the fast baseline
@@ -40,7 +48,7 @@ Easy Auth variants documented in
 make start-compose-full
 
 # Or with Docker
-docker compose --profile function-family --profile oidc --profile mock-easyauth up -d
+docker compose --env-file ../../.env --profile function-family --profile oidc --profile mock-easyauth up -d
 
 # Or from this directory, start the default stack-04
 make up
@@ -743,7 +751,7 @@ podman-compose logs frontend-python-flask-container-app -f
 ```bash
 podman-compose up --build
 # or
-docker compose up --build
+docker compose --env-file ../../.env up --build
 ```
 
 ### Check service health

@@ -173,6 +173,11 @@ EOF
   compose_backend_stub="${BATS_TEST_TMPDIR}/compose-backend.sh"
   compose_cmd_stub="${BATS_TEST_TMPDIR}/compose-cmd.sh"
   log_file="${BATS_TEST_TMPDIR}/compose.log"
+  env_file="${BATS_TEST_TMPDIR}/platform.env"
+
+  cat >"${env_file}" <<'EOF'
+OAUTH2_PROXY_COOKIE_SECRET=test-cookie-secret
+EOF
 
   cat >"${compose_backend_stub}" <<EOF
 #!/usr/bin/env bash
@@ -195,7 +200,8 @@ EOF
   chmod +x "${compose_cmd_stub}"
 
   run make -C "${REPO_ROOT}/docker/compose" test \
-    COMPOSE_BACKEND_SCRIPT="${compose_backend_stub}"
+    COMPOSE_BACKEND_SCRIPT="${compose_backend_stub}" \
+    PLATFORM_ENV_FILE="${env_file}"
 
   [ "${status}" -eq 0 ]
 
@@ -203,6 +209,16 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'backend --print --execute\nbackend --print --execute\ncompose -f compose.yml --profile dev --profile uat config -q' ]
+}
+
+@test "docker compose prereqs fails cleanly when the repo env file is missing" {
+  missing_env="${BATS_TEST_TMPDIR}/missing.env"
+
+  run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/docker/compose" prereqs
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Missing platform env file: ${missing_env}"* ]]
+  [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
 }
 
 @test "root lint delegates to the repo validation scripts" {

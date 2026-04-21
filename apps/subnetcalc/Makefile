@@ -15,6 +15,15 @@ MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 include ../../mk/common.mk
 include ../../mk/compose.mk
 
+REPO_ROOT := $(abspath $(CURDIR)/../..)
+PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
+PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
+OAUTH2_PROXY_COOKIE_SECRET ?=
+PLATFORM_REQUIRED_ENV_VARS := OAUTH2_PROXY_COOKIE_SECRET
+ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
+include $(PLATFORM_ENV_FILE)
+endif
+
 .PHONY: help prereqs test update check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
   vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
@@ -29,7 +38,7 @@ include ../../mk/compose.mk
 DEFAULT_STACK_URL := http://localhost:8003
 DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
 CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/docs
-DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret OAUTH2_PROXY_COOKIE_SECRET=00000000000000000000000000000000 STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
+DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 VENDOR_APIM_SIMULATOR_SCRIPT := ./scripts/vendor-apim-simulator.sh
 VENDOR_APIM_SIMULATOR_ARGS = \
 	$(if $(APIM_SIMULATOR_SOURCE_REPO),--source "$(APIM_SIMULATOR_SOURCE_REPO)") \
@@ -37,11 +46,16 @@ VENDOR_APIM_SIMULATOR_ARGS = \
 	$(if $(APIM_SIMULATOR_TARGET_DIR),--target "$(APIM_SIMULATOR_TARGET_DIR)") \
 	$(if $(APIM_SIMULATOR_VENDOR_METADATA_FILE),--metadata "$(APIM_SIMULATOR_VENDOR_METADATA_FILE)")
 
+export PLATFORM_ENV_FILE
+export PLATFORM_ENV_TEMPLATE
+export OAUTH2_PROXY_COOKIE_SECRET
+
 ##@ Prerequisites
 prereqs: ## Check local prerequisites
 	@$(MAKE) --no-print-directory check-prerequisites
 
 check-prerequisites: ## Check that a supported compose backend is available and running
+	@$(MAKE) --no-print-directory check-platform-env
 	@echo "Checking prerequisites..."
 	@echo ""
 	@echo "1. Checking for a supported compose backend..."
