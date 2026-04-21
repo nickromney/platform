@@ -4,7 +4,13 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { createApp, detectMixedSignals, resolveClassifierResult, startServer } from './server.js'
+import {
+  commentAnalysisPolicy,
+  detectMixedSignals,
+  resolveClassifierResult,
+} from './comment-analysis-policy.js'
+import { createApp, startServer } from './server.js'
+import { SentimentLabel } from './sentiment-label.js'
 
 async function withServer(options, run) {
   const runtime = createApp(options)
@@ -72,7 +78,7 @@ test('comments endpoints persist and return the newest records first', async () 
       analyzeWithSst: async (text) => {
         counter += 1
         return {
-          label: counter === 1 ? 'positive' : 'negative',
+          label: counter === 1 ? SentimentLabel.POSITIVE : SentimentLabel.NEGATIVE,
           confidence: 0.95,
           latency_ms: 12,
           echoed: text,
@@ -100,7 +106,7 @@ test('comments endpoints persist and return the newest records first', async () 
       const payload = await listResponse.json()
       assert.equal(payload.items.length, 1)
       assert.equal(payload.items[0].text, 'second comment')
-      assert.equal(payload.items[0].label, 'negative')
+      assert.equal(payload.items[0].label, SentimentLabel.NEGATIVE)
     },
   )
 })
@@ -159,7 +165,7 @@ test('createApp always uses the SST analyzer unless explicitly overridden', asyn
     analyzeWithSst: async () => {
       analyzed += 1
       return {
-        label: 'neutral',
+        label: SentimentLabel.NEUTRAL,
         confidence: 0.75,
         latency_ms: 3,
       }
@@ -168,8 +174,40 @@ test('createApp always uses the SST analyzer unless explicitly overridden', asyn
 
   const result = await runtime.analyzeSentiment('sst should remain the only default path')
 
-  assert.equal(result.label, 'neutral')
+  assert.equal(result.label, SentimentLabel.NEUTRAL)
   assert.equal(analyzed, 1)
+})
+
+test('SentimentLabel defines the analyze path labels from the glossary module', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sentiment-api-'))
+  const runtime = createApp({
+    dataDir: tempDir,
+    analyzeWithSst: async () => ({
+      label: SentimentLabel.NEUTRAL,
+      confidence: 0.75,
+      latency_ms: 3,
+    }),
+  })
+
+  const result = await runtime.analyzeSentiment('glossary-backed labels only')
+
+  assert.deepEqual(Object.values(SentimentLabel), ['positive', 'negative', 'neutral'])
+  assert.equal(Object.values(SentimentLabel).includes(result.label), true)
+})
+
+test('commentAnalysisPolicy neutralizes mixed signals outside the HTTP path', () => {
+  const result = commentAnalysisPolicy.resolveClassifierResult(
+    [
+      { label: 'NEGATIVE', score: 0.999 },
+      { label: 'POSITIVE', score: 0.001 },
+    ],
+    {
+      text: 'Some parts are fine, but overall I am disappointed and frustrated.',
+    },
+  )
+
+  assert.equal(result.label, 'neutral')
+  assert.equal(result.confidence, 0.65)
 })
 
 test('startServer warms the sentiment backend before listening', async () => {

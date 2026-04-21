@@ -1,12 +1,15 @@
 #!/usr/bin/env bats
 
 setup() {
+  local source_repo_root
+
   export REPO_ROOT
-  REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
-  export SCRIPT_UNDER_TEST="${REPO_ROOT}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh"
+  source_repo_root="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
+  REPO_ROOT="${source_repo_root}"
+  export SCRIPT_UNDER_TEST="${source_repo_root}/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh"
   export TEST_ROOT="${BATS_TEST_TMPDIR}/audit-sandbox"
   export SCRIPT_DIR="${TEST_ROOT}/terraform/kubernetes/scripts"
-  export SHELL_CLI_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli.sh"
+  export SHELL_CLI_SOURCE="${source_repo_root}/scripts/lib/shell-cli.sh"
   export HOME="${BATS_TEST_TMPDIR}/home"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   export PATH="${TEST_BIN}:${PATH}"
@@ -19,6 +22,7 @@ setup() {
   cp "${SCRIPT_UNDER_TEST}" "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh"
   cp "${SHELL_CLI_SOURCE}" "${TEST_ROOT}/scripts/lib/shell-cli.sh"
   chmod +x "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh"
+  REPO_ROOT="${TEST_ROOT}"
 
   cat > "${TEST_BIN}/kubectl" <<'EOF'
 #!/usr/bin/env bash
@@ -65,7 +69,7 @@ case "$*" in
 {"items":[{"metadata":{"name":"kube-system"}},{"metadata":{"name":"observability"}},{"metadata":{"name":"datadog"}}]}
 JSON
     ;;
-  "config current-context")
+  *"config current-context")
     printf '%s\n' "kind-kind-local"
     ;;
   "get ciliumnodes -o json")
@@ -228,7 +232,7 @@ case "$*" in
   *"auth can-i list namespaces")
     printf '%s\n' "no"
     ;;
-  "config current-context")
+  *"config current-context")
     printf '%s\n' "kind-kind-local"
     ;;
   *)

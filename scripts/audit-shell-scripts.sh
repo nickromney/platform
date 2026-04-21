@@ -15,6 +15,7 @@ allowed_python_execution=(
   "terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
   "apps/subnetcalc/scripts/vendor-apim-simulator.sh"
   "scripts/check-version.sh"
+  "terraform/kubernetes/scripts/check-version.sh"
 )
 
 bash4_feature_patterns=(

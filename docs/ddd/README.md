@@ -20,9 +20,12 @@ not as a source of final truth.
 
 - [Ubiquitous Language](./ubiquitous-language.md)
 - [Context Map](./context-map.md)
+- [Contracts Between Contexts](./contracts.md)
+- [Consistency Plan](./consistency-plan.md)
 - [Solution Variant Comparison](./solution-variant-comparison.md)
 - [Subnetcalc Analysis](./subnetcalc-analysis.md)
 - [Sentiment Analysis](./sentiment-analysis.md)
+- [SD-WAN Analysis](./sd-wan-analysis.md)
 
 ## Current Read Of The Solution
 
@@ -43,10 +46,12 @@ taxonomy is `solution` first, then `variant`.
 
 ## What These Notes Are For
 
-- Make the current language visible.
-- Expose vocabulary collisions early.
+- Make the code and the glossary consistent.
+- Name the gaps that still exist, with a direction of travel and a red/green
+  TDD step for each one.
 - Separate business meaning from hosting and topology details.
-- Give TDD a better target by naming scenarios in domain language first.
+- Keep wire-visible contracts frozen while internal identifiers converge on
+  the glossary.
 
 ## Likely Next Passes
 
@@ -54,3 +59,16 @@ taxonomy is `solution` first, then `variant`.
 - Replace overloaded implementation terms where possible.
 - Write example scenarios in domain language before changing structure.
 - Use those scenarios as the red tests for subsequent refactors.
+
+## Pre-Launch Stance
+
+- The goal is consistency between glossary and code, not just visibility.
+- Wire contracts stay frozen — see [Contracts](./contracts.md) for the
+  authoritative breaking-change list.
+- Everything else is a candidate for pre-launch alignment. The ordered,
+  TDD-driven plan lives in [consistency-plan.md](./consistency-plan.md).
+- Each consistency change must have a red test that fails against current
+  code and a green condition that proves it landed.
+- The three prior open questions (`lookup`, `target` vs `variant`,
+  `host access path`) are resolved in
+  [ubiquitous-language.md](./ubiquitous-language.md#resolved-questions).

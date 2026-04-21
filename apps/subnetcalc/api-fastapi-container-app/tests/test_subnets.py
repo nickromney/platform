@@ -150,6 +150,21 @@ class TestCheckCloudflare:
 class TestIPv4SubnetCalculation:
     """Tests for /api/v1/ipv4/subnet-info endpoint."""
 
+    def test_cloud_mode_request_contract(self):
+        """Test the CloudMode enum and request serialization contract."""
+        from app.models.cloud_mode import CloudMode
+        from app.models.subnet import SubnetIPv4Request
+
+        assert CloudMode.STANDARD.value == "Standard"
+        assert CloudMode.AWS.value == "AWS"
+        assert CloudMode.AZURE.value == "Azure"
+        assert CloudMode.OCI.value == "OCI"
+        assert SubnetIPv4Request.model_fields["mode"].annotation is CloudMode
+
+        request = SubnetIPv4Request(network="192.168.1.0/24", mode=CloudMode.AWS)
+        assert request.model_dump(mode="json") == {"network": "192.168.1.0/24", "mode": "AWS"}
+        assert request.model_dump_json() == '{"network":"192.168.1.0/24","mode":"AWS"}'
+
     def test_standard_subnet_azure_mode(self, client):
         """Test Azure mode subnet calculation."""
         response = client.post("/api/v1/ipv4/subnet-info", json={"network": "192.168.1.0/24", "mode": "Azure"})

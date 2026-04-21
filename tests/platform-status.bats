@@ -232,6 +232,38 @@ EOF
   [[ "${output}" == *"shared host ports"* ]]
 }
 
+@test "platform status exposes variant-oriented operator fields without provider aliases" {
+  export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
+  export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
+  export MOCK_KIND_CLUSTERS='kind-local'
+  touch "${HOME}/.kube/kind-kind-local.yaml"
+
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '[
+    has("active_provider"),
+    has("active_provider_path"),
+    has("active_project"),
+    has("active_project_path"),
+    has("providers"),
+    has("projects"),
+    (.actions | any(has("provider") or has("project")))
+  ] | map(tostring) | join("|")' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = 'false|false|false|false|false|false|false' ]
+
+  run "${SCRIPT}" --execute --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Active cluster variant: kubernetes/kind"* ]]
+  [[ "${output}" == *"Active variant surface: kubernetes/kind"* ]]
+  [[ "${output}" != *"Active cluster provider:"* ]]
+  [[ "${output}" != *"Active provider:"* ]]
+}
+
 @test "platform status falls back to docker ps when docker info is unavailable" {
   export MOCK_DOCKER_INFO_EXIT=1
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
@@ -318,7 +350,7 @@ EOF
   [ "${output}" = 'paused|true' ]
 }
 
-@test "platform status reports a conflict when multiple providers claim localhost https" {
+@test "platform status reports a conflict when multiple cluster variants claim localhost https" {
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nlimavm-platform-gateway-443|127.0.0.1:443->host.docker.internal:30070/tcp'
   export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nlimavm-platform-gateway-443|Up 1 minute|127.0.0.1:443->host.docker.internal:30070/tcp'
   export MOCK_KIND_CLUSTERS='kind-local'

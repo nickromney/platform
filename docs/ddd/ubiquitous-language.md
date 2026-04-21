@@ -1,22 +1,27 @@
-# Working Ubiquitous Language
+# Ubiquitous Language
 
-This is an initial draft extracted from the current solution.
+This is the canonical vocabulary for the repo.
 
-It is intentionally split into two layers:
+It is split into two layers:
 
 - the implementation and test language that exists today
-- the candidate domain language that seems closer to how a domain expert would
-  reason about the solution
+- the domain language that the code should converge on
 
-The goal is not to freeze current names. The goal is to make the translation
-problem visible so the team can agree on better names.
+The goal is to **make the code and the glossary consistent**. Where they still
+diverge, the gap is tracked in
+[consistency-plan.md](./consistency-plan.md) with an explicit direction of
+travel (update the code, update the glossary, or leave both and accept the
+overload).
+
+Wire-visible contracts stay frozen until a planned version bump — see
+[contracts.md](./contracts.md) for the breaking-change surfaces.
 
 ## Translation From Current Test And Operator Dialect
 
 | Current term | Candidate meaning | Notes |
 | --- | --- | --- |
-| active provider | the active variant currently owning the local stack | In repo terms today this usually means a path such as `kubernetes/kind` or `kubernetes/lima`. `provider` should stay Terraform-specific in the domain language. |
-| active project path | the active solution/variant path | Seen in machine-ownership checks such as `kubernetes/kind` or `kubernetes/lima`. |
+| active variant surface | the active variant currently owning the local stack | In repo terms today this usually means a path such as `kubernetes/kind` or `kubernetes/lima`. |
+| active variant path | the active solution/variant path | Seen in machine-ownership checks such as `kubernetes/kind` or `kubernetes/lima`. |
 | claimed by | currently owns the shared local ingress surface | Expresses machine ownership more than business value. |
 | shared host ports | the scarce local edge resource that only one variant should own at a time | Useful operational concept; poor business term. |
 | blocked | a safety precondition failed and operation should not continue | Good concept, but implementation-heavy in current tests. |
@@ -89,7 +94,7 @@ problem visible so the team can agree on better names.
 | usable addresses | addresses available after reservation rules | Important domain concept. |
 | first usable IP | first allocatable host address in the subnet | Important result field. |
 | last usable IP | last allocatable host address in the subnet | Important result field. |
-| lookup | the frontend's combined query over validation, private-range, Cloudflare, and subnet-info checks | Useful application term, not yet a clear domain term. |
+| lookup | the frontend's combined query over validation, private-range, Cloudflare, and subnet-info checks | Frontend orchestration term; not a backend domain concept pre-launch. |
 | API mediation | policy and forwarding layer in front of the subnet API | Implemented today by the APIM simulator in some paths. |
 
 ## Sentiment Analysis Language
@@ -106,10 +111,20 @@ problem visible so the team can agree on better names.
 | analysis latency | time spent classifying the comment | Present in the API result and telemetry. |
 | warm on start | preloading the classifier during startup | Technical, but meaningful within this bounded context. |
 
-## Remaining Open Questions
+## Resolved Questions
 
-- whether `lookup` is a genuine domain term or only a frontend orchestration term
-- where the boundary should sit between Makefile `target` language and DDD
-  `variant` language
-- whether `host access path` is genuinely a better umbrella term than the
-  current mix of `proxy`, `port-forward`, and `host forwards`
+These were open for a while. They are resolved here so the pre-launch
+vocabulary is stable.
+
+- `lookup` is a **frontend orchestration term**, not a domain term. It is
+  the React client's name for the composed call over validation,
+  private-range classification, Cloudflare membership, and subnet info. The
+  backend does not need a `lookup` endpoint to ship. Revisit post-launch if
+  an additive `/lookup` endpoint earns its place.
+- `target` stays a **Makefile and workflow noun**. `variant` stays the DDD
+  taxonomy term. They coexist: `target` describes what `make` invokes,
+  `variant` describes what the operator is running. No rename pre-launch.
+- `host access path` is kept as a **documentation umbrella** for the mix of
+  `proxy`, `port-forward`, and `host forwards`. It does not replace those
+  terms in Makefiles, scripts, or status output. Use it only when explaining
+  the concept across variants.

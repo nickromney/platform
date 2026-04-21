@@ -75,8 +75,10 @@ fi
 
 CHECK_VERSION_HEARTBEAT_SECONDS="${CHECK_VERSION_HEARTBEAT_SECONDS:-10}"
 CHECK_VERSION_HEARTBEAT_PID=""
-HTTP_FETCH_MAX_TIME_SECONDS="${HTTP_FETCH_MAX_TIME_SECONDS:-${CHECK_VERSION_CURL_MAX_TIME_SECONDS:-15}}"
-HTTP_FETCH_CONNECT_TIMEOUT_SECONDS="${HTTP_FETCH_CONNECT_TIMEOUT_SECONDS:-${CHECK_VERSION_CURL_CONNECT_TIMEOUT_SECONDS:-5}}"
+HTTP_FETCH_MAX_TIME_SECONDS="${HTTP_FETCH_MAX_TIME_SECONDS:-${CHECK_VERSION_CURL_MAX_TIME_SECONDS:-10}}"
+HTTP_FETCH_CONNECT_TIMEOUT_SECONDS="${HTTP_FETCH_CONNECT_TIMEOUT_SECONDS:-${CHECK_VERSION_CURL_CONNECT_TIMEOUT_SECONDS:-4}}"
+CHECK_VERSION_HTTP_CONCURRENCY="${CHECK_VERSION_HTTP_CONCURRENCY:-12}"
+CHECK_VERSION_DEPENDENCY_CONCURRENCY="${CHECK_VERSION_DEPENDENCY_CONCURRENCY:-${CHECK_VERSION_HTTP_CONCURRENCY}}"
 CHECK_VERSION_INCLUDE_PRERELEASE="${CHECK_VERSION_INCLUDE_PRERELEASE:-0}"
 CHECK_VERSION_INCLUDE_CANARY="${CHECK_VERSION_INCLUDE_CANARY:-0}"
 CHECK_VERSION_INCLUDE_ALPHA="${CHECK_VERSION_INCLUDE_ALPHA:-0}"
@@ -1203,7 +1205,7 @@ image_ref_is_internal() {
   local image_ref="$1"
 
   case "${image_ref}" in
-    *\$\{*|localhost:*|127.0.0.1:*|platform/*|platform-*|subnetcalc-*|subnetcalc-*|apim-simulator*|csharp-*)
+    *\$\{*|localhost:*|127.0.0.1:*|platform/*|platform-*|subnetcalc-*|apim-simulator*|csharp-*)
       return 0
       ;;
   esac
@@ -2525,7 +2527,7 @@ check_app_yaml_tfvar_drift() {
 }
 
 emit_app_dependency_rows() {
-  local max_jobs="${CHECK_VERSION_DEPENDENCY_CONCURRENCY:-${CHECK_VERSION_HTTP_CONCURRENCY:-4}}"
+  local max_jobs="${CHECK_VERSION_DEPENDENCY_CONCURRENCY}"
   local js_input py_input output_dir
 
   platform_mktemp_file js_input
@@ -2697,7 +2699,7 @@ collect_python_dependency_names() {
 }
 
 warm_dependency_metadata_caches() {
-  local max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY:-4}"
+  local max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY}"
   local js_input py_input output_dir
 
   ensure_check_version_cache_dir
@@ -2730,7 +2732,7 @@ emit_external_image_rows() {
 
   platform_mktemp_file input_file
   platform_mktemp_dir output_dir
-  max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY:-4}"
+  max_jobs="${CHECK_VERSION_HTTP_CONCURRENCY}"
 
   collect_declared_image_refs | awk -F'\t' '!seen[$2]++' >"${input_file}"
   parallel_map_lines "${max_jobs}" emit_external_image_row "${input_file}" "${output_dir}"

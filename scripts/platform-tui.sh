@@ -29,8 +29,8 @@ print_summary() {
   summary="$(jq -r '
     [
       "Overall: \(.overall_state)",
-      "Active cluster variant: \((.active_cluster_variant_path // .active_provider_path // "none"))",
-      "Active variant: \((.active_variant_path // .active_project_path // "none"))"
+      "Active cluster variant: \((.active_cluster_variant_path // "none"))",
+      "Active variant: \((.active_variant_path // "none"))"
     ] | join("\n")
   ' <<<"${json_payload}")"
 
@@ -43,8 +43,8 @@ variant_menu() {
 
   options="$(jq -r '
     . as $root
-    | ($root.variants_order // $root.projects_order)[]
-    | (($root.variants // $root.projects)[.].path)
+    | $root.variants_order[]
+    | ($root.variants[.].path)
   ' <<<"${json_payload}")"
 
   {
@@ -61,7 +61,7 @@ action_menu() {
 
   options="$(jq -r --arg variant_path "${variant_path}" '
     .actions[]
-    | select((.variant_path // .project) == $variant_path)
+    | select(.variant_path == $variant_path)
     | .label
   ' <<<"${json_payload}")"
 
@@ -116,7 +116,7 @@ while :; do
 
     selected_action_json="$(jq -c --arg variant_path "${selected_variant}" --arg label "${selected_action_label}" '
       .actions[]
-      | select((.variant_path // .project) == $variant_path and .label == $label)
+      | select(.variant_path == $variant_path and .label == $label)
     ' <<<"${status_json}")"
 
     [ -n "${selected_action_json}" ] || continue

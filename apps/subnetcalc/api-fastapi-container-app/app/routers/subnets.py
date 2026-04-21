@@ -1,6 +1,11 @@
 """Subnet calculation endpoints.
 
 Provides IPv4/IPv6 subnet calculations with cloud provider-specific modes.
+
+Domain concepts implicit in this module (see docs/ddd/subnetcalc-analysis.md):
+Address, Network, CloudMode, SubnetInfo, PrivateRangeMatch, CloudflareMembership.
+The published endpoints are listed in docs/ddd/contracts.md and are a
+breaking-change surface.
 """
 
 from ipaddress import (
@@ -21,6 +26,7 @@ from ..cloudflare_ips import (
     get_cloudflare_ipv4_ranges,
     get_cloudflare_ipv6_ranges,
 )
+from ..models.cloud_mode import CloudMode
 from ..models.subnet import (
     SubnetIPv4Request,
     SubnetIPv4Response,
@@ -69,14 +75,6 @@ async def calculate_ipv4_subnet(request: SubnetIPv4Request, current_user: str = 
     network_str = request.network
     mode = request.mode
 
-    # Validate mode
-    valid_modes = ["Azure", "AWS", "OCI", "Standard"]
-    if mode not in valid_modes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid mode '{mode}'. Must be one of: {', '.join(valid_modes)}",
-        )
-
     # Parse network
     try:
         network = ip_network(network_str, strict=False)
@@ -94,9 +92,9 @@ async def calculate_ipv4_subnet(request: SubnetIPv4Request, current_user: str = 
     if prefix_len < 31:
         # Standard subnets have network and broadcast addresses
         # Calculate first usable based on mode
-        if mode in ["Azure", "AWS"]:
+        if mode in {CloudMode.AZURE, CloudMode.AWS}:
             first_usable_offset = 4  # Skip .0, .1, .2, .3
-        elif mode == "OCI":
+        elif mode == CloudMode.OCI:
             first_usable_offset = 2  # Skip .0, .1
         else:  # Standard
             first_usable_offset = 1  # Skip .0
@@ -111,7 +109,7 @@ async def calculate_ipv4_subnet(request: SubnetIPv4Request, current_user: str = 
 
         return SubnetIPv4Response(
             network=network_str,
-            mode=mode,
+            mode=mode.value,
             network_address=str(network.network_address),
             broadcast_address=str(network.broadcast_address),
             netmask=str(network.netmask),
@@ -132,7 +130,7 @@ async def calculate_ipv4_subnet(request: SubnetIPv4Request, current_user: str = 
 
             return SubnetIPv4Response(
                 network=network_str,
-                mode=mode,
+                mode=mode.value,
                 network_address=str(network.network_address),
                 broadcast_address=None,
                 netmask=str(network.netmask),
@@ -150,7 +148,7 @@ async def calculate_ipv4_subnet(request: SubnetIPv4Request, current_user: str = 
 
             return SubnetIPv4Response(
                 network=network_str,
-                mode=mode,
+                mode=mode.value,
                 network_address=host_ip,
                 broadcast_address=None,
                 netmask=str(network.netmask),
