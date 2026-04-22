@@ -213,6 +213,113 @@ PY
   [[ "${output}" == *"validated 13 compose service(s)"* ]]
 }
 
+@test "subnetcalc function-style compose healthchecks do not require /bin/sh" {
+  run python3 - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
+
+for service_name in ("api-fastapi-azure-function", "api-fastapi-keycloak"):
+    healthcheck = compose["services"][service_name]["healthcheck"]["test"]
+    assert healthcheck[:2] == ["CMD", "python"], (service_name, healthcheck)
+    assert "urllib.request.urlopen('http://127.0.0.1:8080/api/v1/health')" in healthcheck[3], (
+        service_name,
+        healthcheck,
+    )
+
+print("validated 2 shell-free function healthchecks")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 2 shell-free function healthchecks"* ]]
+}
+
+@test "stack12 lightweight frontends stay in gateway mode behind oauth2-proxy" {
+  run python3 - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
+
+for service_name in ("frontend-typescript-vite-gateway", "frontend-typescript-vite-gateway-admin"):
+    env_entries = compose["services"][service_name]["environment"]
+    if isinstance(env_entries, dict):
+        auth_method = env_entries.get("AUTH_METHOD")
+    else:
+        auth_method = next((entry.split("=", 1)[1] for entry in env_entries if entry.startswith("AUTH_METHOD=")), None)
+    assert auth_method == "gateway", (service_name, auth_method)
+
+print("validated 2 stack12 gateway auth configs")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 2 stack12 gateway auth configs"* ]]
+}
+
+@test "gateway auth shim only falls back to Authorization when no forwarded access token exists" {
+  run python3 - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+nginx_conf = (repo_root / "apps/subnetcalc/frontend-typescript-vite/nginx.conf").read_text(encoding="utf-8")
+
+assert 'set $authorization_bearer "";' in nginx_conf, nginx_conf
+assert 'if ($http_authorization ~* "^Bearer (.+)$") {' in nginx_conf, nginx_conf
+assert 'set $authorization_bearer $1;' in nginx_conf, nginx_conf
+assert 'if ($access_token = "") {' in nginx_conf, nginx_conf
+assert 'set $access_token $authorization_bearer;' in nginx_conf, nginx_conf
+
+print("validated gateway auth header fallback ordering")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated gateway auth header fallback ordering"* ]]
+}
+
+@test "stack12 oauth2-proxy frontends expose public login and logout landing pages" {
+  run python3 - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
+
+required_flags = {
+    "--skip-auth-regex=^/login\\.html$",
+    "--skip-auth-regex=^/logged-out\\.html$",
+}
+
+for service_name in ("oauth2-proxy-frontend", "oauth2-proxy-frontend-admin"):
+    command = compose["services"][service_name]["command"]
+    command_set = set(command)
+    missing = sorted(required_flags - command_set)
+    assert not missing, (service_name, missing, command)
+
+print("validated 2 public stack12 auth landing-page configs")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 2 public stack12 auth landing-page configs"* ]]
+}
+
 @test "docker compose Dex demo credentials are pinned to password123" {
   local hashes_file="${BATS_TEST_TMPDIR}/dex-hashes.txt"
   local htpasswd_file="${BATS_TEST_TMPDIR}/dex.htpasswd"

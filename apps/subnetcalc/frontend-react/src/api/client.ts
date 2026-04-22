@@ -7,7 +7,6 @@ import { TokenManager } from '@subnetcalc/shared-frontend'
 import type { IApiClient } from '@subnetcalc/shared-frontend/api'
 import { getApiPrefix, handleFetchError, isIpv6, parseJsonResponse } from '@subnetcalc/shared-frontend/api'
 import { getEasyAuthAccessToken } from '../auth/easyAuthProvider'
-import { getOidcAccessToken } from '../auth/oidcAuthProvider'
 import { APP_CONFIG } from '../config'
 import type {
   ApiCallTiming,
@@ -22,6 +21,18 @@ import type {
 
 // Error message constants
 const AUTH_REQUIRED_ERROR = 'Please log in to use the calculator'
+
+async function getOidcAuthHeaders(): Promise<Record<string, string>> {
+  const { getOidcAccessToken } = await import('../auth/oidcAuthProvider')
+  const token = await getOidcAccessToken()
+  if (!token) {
+    return {}
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  }
+}
 
 class ApiClient implements IApiClient {
   private baseUrl: string
@@ -55,13 +66,7 @@ class ApiClient implements IApiClient {
   private async getAuthHeaders(): Promise<Record<string, string>> {
     // OIDC authentication
     if (APP_CONFIG.auth.method === 'oidc') {
-      const token = await getOidcAccessToken()
-      if (token) {
-        return {
-          Authorization: `Bearer ${token}`,
-        }
-      }
-      return {}
+      return getOidcAuthHeaders()
     }
 
     // JWT authentication with token manager

@@ -592,8 +592,19 @@ def _default_config_from_env() -> GatewayConfig:
 
     subscription_key = os.getenv("APIM_SUBSCRIPTION_KEY", "")
     keys: dict[str, SubscriptionIdentity] = {}
+    subscriptions: dict[str, Subscription] = {}
     if subscription_key:
-        keys[subscription_key] = SubscriptionIdentity(id="sub-default", name="default")
+        default_subscription = Subscription(
+            id="sub-default",
+            name="default",
+            keys=SubscriptionKeyPair(
+                primary=subscription_key,
+                secondary=f"{subscription_key}-secondary",
+            ),
+            products=["default"],
+        )
+        subscriptions[default_subscription.id] = default_subscription
+        keys[subscription_key] = default_subscription.identity()
 
     admin_token = os.getenv("APIM_ADMIN_TOKEN", "").strip() or None
 
@@ -606,7 +617,7 @@ def _default_config_from_env() -> GatewayConfig:
         allow_anonymous=allow_anonymous,
         oidc=OIDCConfig(issuer=oidc_issuer, audience=oidc_audience, jwks_uri=oidc_jwks_uri),
         products={"default": ProductConfig(name="Default", require_subscription=bool(subscription_key))},
-        subscription=SubscriptionConfig(required=bool(subscription_key), keys=keys),
+        subscription=SubscriptionConfig(required=bool(subscription_key), keys=keys, subscriptions=subscriptions),
         admin_token=admin_token,
         tenant_access=TenantAccessConfig(
             enabled=tenant_enabled,

@@ -6,6 +6,7 @@ import '../../shared-frontend/src/styles.css'
 import { apiClient } from './api'
 import { getAuthMethod, getStackDescription } from './config'
 import { getCurrentUser } from './entraid-auth'
+import { initializeOidcSession } from './oidc-auth'
 import { renderResults, showApiStatus, showError, showLoading, showUserInfo } from './ui'
 
 // Theme management
@@ -119,12 +120,14 @@ async function init(): Promise<void> {
 
   // Check authentication and show user info
   const authMethod = getAuthMethod()
-  if (authMethod === 'entraid') {
-    // Fetch and display Entra ID user
-    const user = await getCurrentUser()
+  if (authMethod === 'entraid' || authMethod === 'gateway' || authMethod === 'oidc') {
+    const user = authMethod === 'oidc' ? await initializeOidcSession() : await getCurrentUser()
     showUserInfo(user, authMethod)
+
+    if (authMethod === 'oidc' && !user) {
+      return
+    }
   } else {
-    // For JWT or no auth, just update UI accordingly
     showUserInfo(null, authMethod)
   }
 

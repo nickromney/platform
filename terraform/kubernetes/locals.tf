@@ -173,7 +173,7 @@ locals {
     var.prefer_external_workload_images &&
     lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "") != "" &&
     lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "") != "" &&
-    lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "") != ""
+    lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "") != ""
   )
   # External image refs choose where workload images come from, but they should
   # not advance the teaching-stage rollout on their own. Stage files remain the

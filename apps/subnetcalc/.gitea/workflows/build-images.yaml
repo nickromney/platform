@@ -7,7 +7,6 @@ on:
       - "api-fastapi-container-app/**"
       - "apim-simulator/**"
       - "frontend-typescript-vite/**"
-      - "frontend-react/**"
       - "shared-frontend/**"
       - "scripts/**"
       - ".gitea/workflows/**"
@@ -79,20 +78,6 @@ jobs:
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:latest"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:${TAG}"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:latest"
-
-      - name: Build and push frontend-react
-        run: |
-          set -e
-          cd "${WORKDIR}"
-          TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false \
-            --build-arg VITE_API_PROXY_ENABLED=true \
-            --build-arg VITE_AUTH_METHOD=easyauth \
-            -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-react:${TAG}" \
-            -f ./frontend-react/Dockerfile .
-          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-react:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-react:latest"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-react:${TAG}"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-react:latest"
 
       - name: Stamp manifests with new subnetcalc tags
         run: |

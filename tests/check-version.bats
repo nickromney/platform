@@ -6,10 +6,39 @@ setup() {
   export SCRIPT="${REPO_ROOT}/scripts/check-version.sh"
   export FIXTURE_ROOT="${BATS_TEST_TMPDIR}/repo"
   export GITHUB_FIXTURES="${BATS_TEST_TMPDIR}/github"
+  export FAKE_BIN="${BATS_TEST_TMPDIR}/bin"
 
   mkdir -p "${FIXTURE_ROOT}/.github/workflows"
   mkdir -p "${FIXTURE_ROOT}/apps/demo"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist/assets"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist/assets"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/node_modules"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/node_modules"
+  mkdir -p "${FAKE_BIN}"
+
+  cat >"${FAKE_BIN}/bun" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "pm" && "${2:-}" == "ls" ]]; then
+  if [[ ! -f .package-count ]]; then
+    echo "missing .package-count in ${PWD}" >&2
+    exit 1
+  fi
+
+  count="$(tr -d '[:space:]' < .package-count)"
+  printf '%s node_modules (%s)\n' "${PWD}" "${count}"
+  exit 0
+fi
+
+echo "unsupported fake bun command: $*" >&2
+exit 1
+EOF
+  chmod +x "${FAKE_BIN}/bun"
+  export PATH="${FAKE_BIN}:${PATH}"
 
   cat >"${FIXTURE_ROOT}/.github/workflows/release.yml" <<'EOF'
 name: Release
@@ -56,6 +85,66 @@ EOF
 }
 EOF
 
+  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-budgets.json" <<'EOF'
+{
+  "frontends": [
+    {
+      "name": "frontend-react",
+      "path": "apps/subnetcalc/frontend-react",
+      "max_installed_packages": 240,
+      "max_dist_asset_raw_bytes": 4096,
+      "max_dist_asset_gzip_bytes": 1024,
+      "max_initial_asset_raw_bytes": 4096,
+      "max_initial_asset_gzip_bytes": 1024
+    },
+    {
+      "name": "frontend-typescript-vite",
+      "path": "apps/subnetcalc/frontend-typescript-vite",
+      "max_installed_packages": 124,
+      "max_dist_asset_raw_bytes": 4096,
+      "max_dist_asset_gzip_bytes": 1024,
+      "max_initial_asset_raw_bytes": 4096,
+      "max_initial_asset_gzip_bytes": 1024
+    }
+  ]
+}
+EOF
+
+  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist/index.html" <<'EOF'
+<!doctype html>
+<html>
+  <head>
+    <script type="module" src="/assets/index.js"></script>
+  </head>
+</html>
+EOF
+
+  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist/index.html" <<'EOF'
+<!doctype html>
+<html>
+  <head>
+    <script type="module" src="/assets/index.js"></script>
+  </head>
+</html>
+EOF
+
+  printf '240\n' >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/.package-count"
+  printf '124\n' >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/.package-count"
+
+  python3 - <<'PY' "${FIXTURE_ROOT}"
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+payload = bytes(range(256)) * 4
+
+for rel in (
+    "apps/subnetcalc/frontend-react/dist/assets/index.js",
+    "apps/subnetcalc/frontend-typescript-vite/dist/assets/index.js",
+):
+    (root / rel).write_bytes(payload)
+PY
+
   mkdir -p "${GITHUB_FIXTURES}/repos/actions/checkout/commits"
   mkdir -p "${GITHUB_FIXTURES}/repos/actions/setup-node/commits"
   printf '{"sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd"}\n' >"${GITHUB_FIXTURES}/repos/actions/checkout/commits/v6.0.2"
@@ -91,5 +180,47 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *".npmrc min-release-age gates are not synchronized"* ]]
+  [[ "${output}" == *"version check(s) failed."* ]]
+}
+
+@test "check-version reports frontend package and bundle budgets" {
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"frontend-react: installed packages 240 <= 240"* ]]
+  [[ "${output}" == *"frontend-typescript-vite: installed packages 124 <= 124"* ]]
+  [[ "${output}" == *"frontend-react: initial asset raw bytes"* ]]
+  [[ "${output}" == *"All frontend package and bundle budgets passed."* ]]
+}
+
+@test "check-version fails when a frontend package budget regresses" {
+  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-budgets.json" <<'EOF'
+{
+  "frontends": [
+    {
+      "name": "frontend-react",
+      "path": "apps/subnetcalc/frontend-react",
+      "max_installed_packages": 200,
+      "max_dist_asset_raw_bytes": 4096,
+      "max_dist_asset_gzip_bytes": 1024,
+      "max_initial_asset_raw_bytes": 4096,
+      "max_initial_asset_gzip_bytes": 1024
+    }
+  ]
+}
+EOF
+
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"frontend-react: installed packages 240 exceed budget 200"* ]]
   [[ "${output}" == *"version check(s) failed."* ]]
 }

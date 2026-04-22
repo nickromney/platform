@@ -484,7 +484,7 @@ wait_for_policies_tag() {
     decoded="$(
       git -C "$${POLICIES_REPO_DIR}" show "FETCH_HEAD:$${file}" 2>/dev/null || true
     )"
-    if [ -n "$${decoded}" ] && echo "$${decoded}" | grep -q "subnetcalc-frontend-react:$${TAG}"; then
+    if [ -n "$${decoded}" ] && echo "$${decoded}" | grep -q "subnetcalc-frontend-typescript-vite:$${TAG}"; then
       echo "Policies updated in $${file}"
       return 0
     fi
@@ -575,7 +575,6 @@ fi
 TAG="$${sha:0:12}"
 echo "Waiting for subnetcalc images and policies to reach tag $${TAG}..."
 
-wait_for_tag "subnetcalc-frontend-react"
 wait_for_tag "subnetcalc-frontend-typescript-vite"
 wait_for_policies_tag "apps/workloads/base/all.yaml"
 

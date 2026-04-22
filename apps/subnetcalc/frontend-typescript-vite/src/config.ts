@@ -3,8 +3,15 @@ declare global {
   interface Window {
     RUNTIME_CONFIG?: {
       API_BASE_URL?: string
-      AUTH_METHOD?: 'none' | 'jwt' | 'entraid' | 'oidc'
+      AUTH_METHOD?: 'none' | 'jwt' | 'entraid' | 'gateway' | 'oidc'
       AUTH_ENABLED?: string | boolean
+      APIM_SUBSCRIPTION_KEY?: string
+      OIDC_AUTHORITY?: string
+      OIDC_CLIENT_ID?: string
+      OIDC_REDIRECT_URI?: string
+      OIDC_AUTO_LOGIN?: string | boolean
+      OIDC_PROMPT?: string
+      OIDC_FORCE_REAUTH?: string | boolean
       JWT_USERNAME?: string
       JWT_PASSWORD?: string
       SHOW_NETWORK_PATH?: string | boolean
@@ -16,6 +23,7 @@ declare global {
       API_INGRESS_STATUS_LABEL?: string
       BACKEND_PATH_STATUS_LABEL?: string
       BACKEND_PATH_STATUS_DETAIL?: string
+      STACK_DESCRIPTION?: string
     }
     API_BASE_URL?: string
     AUTH_ENABLED?: string
@@ -42,6 +50,8 @@ function getRuntimeConfig() {
 }
 
 const runtimeConfig = getRuntimeConfig()
+const authEnabledFlag =
+  `${runtimeConfig?.AUTH_ENABLED ?? import.meta.env.VITE_AUTH_ENABLED ?? 'false'}`.toLowerCase() === 'true'
 
 export interface NetworkHop {
   label: string
@@ -49,16 +59,33 @@ export interface NetworkHop {
   role?: string
 }
 
+export interface OidcConfig {
+  authority: string
+  clientId: string
+  redirectUri: string
+  autoLogin: boolean
+  prompt?: string
+  forceReauth: boolean
+}
+
+function parseBooleanFlag(value: unknown, fallback = false): boolean {
+  if (value === undefined || value === null || value === '') {
+    return fallback
+  }
+
+  return `${value}`.toLowerCase() === 'true'
+}
+
 export const API_CONFIG = {
   // Priority: Runtime config (window) > Build-time env (import.meta.env) > Default (empty for SWA proxy)
   baseUrl: runtimeConfig?.API_BASE_URL || import.meta.env.VITE_API_URL || '',
+  apimSubscriptionKey: runtimeConfig?.APIM_SUBSCRIPTION_KEY || import.meta.env.VITE_APIM_SUBSCRIPTION_KEY || '',
   auth: {
-    enabled: `${runtimeConfig?.AUTH_ENABLED ?? import.meta.env.VITE_AUTH_ENABLED ?? 'false'}`.toLowerCase() === 'true',
+    enabled: getAuthMethod() === 'jwt',
     username: runtimeConfig?.JWT_USERNAME || import.meta.env.VITE_JWT_USERNAME || '',
     password: runtimeConfig?.JWT_PASSWORD || import.meta.env.VITE_JWT_PASSWORD || '',
   },
-  showNetworkPath:
-    `${runtimeConfig?.SHOW_NETWORK_PATH ?? import.meta.env.VITE_SHOW_NETWORK_PATH ?? 'false'}`.toLowerCase() === 'true',
+  showNetworkPath: parseBooleanFlag(runtimeConfig?.SHOW_NETWORK_PATH ?? import.meta.env.VITE_SHOW_NETWORK_PATH),
   networkDiagnostics: {
     primaryLabel:
       runtimeConfig?.NETWORK_DIAGNOSTICS_LABEL || import.meta.env.VITE_NETWORK_DIAGNOSTICS_LABEL || 'Live Diagnostics',
@@ -149,15 +176,16 @@ export function isRunningInSWA(): boolean {
 /**
  * Determine which auth method is active
  */
-export function getAuthMethod(): 'none' | 'jwt' | 'entraid' | 'oidc' {
+export function getAuthMethod(): 'none' | 'jwt' | 'entraid' | 'gateway' | 'oidc' {
   const explicitMethod =
-    runtimeConfig?.AUTH_METHOD || (import.meta.env.VITE_AUTH_METHOD as 'none' | 'jwt' | 'entraid' | 'oidc' | undefined)
+    runtimeConfig?.AUTH_METHOD ||
+    (import.meta.env.VITE_AUTH_METHOD as 'none' | 'jwt' | 'entraid' | 'gateway' | 'oidc' | undefined)
   if (explicitMethod) {
     return explicitMethod
   }
 
   // Fallback to legacy detection for backwards compatibility
-  if (!API_CONFIG.auth.enabled) {
+  if (!authEnabledFlag) {
     return 'none'
   }
 
@@ -170,10 +198,26 @@ export function getAuthMethod(): 'none' | 'jwt' | 'entraid' | 'oidc' {
   return 'oidc'
 }
 
+export function getOidcConfig(): OidcConfig {
+  return {
+    authority: runtimeConfig?.OIDC_AUTHORITY || import.meta.env.VITE_OIDC_AUTHORITY || '',
+    clientId: runtimeConfig?.OIDC_CLIENT_ID || import.meta.env.VITE_OIDC_CLIENT_ID || '',
+    redirectUri: runtimeConfig?.OIDC_REDIRECT_URI || import.meta.env.VITE_OIDC_REDIRECT_URI || window.location.origin,
+    autoLogin: parseBooleanFlag(runtimeConfig?.OIDC_AUTO_LOGIN ?? import.meta.env.VITE_OIDC_AUTO_LOGIN),
+    prompt: runtimeConfig?.OIDC_PROMPT || import.meta.env.VITE_OIDC_PROMPT || undefined,
+    forceReauth: parseBooleanFlag(runtimeConfig?.OIDC_FORCE_REAUTH ?? import.meta.env.VITE_OIDC_FORCE_REAUTH),
+  }
+}
+
 /**
  * Get stack description based on API URL and auth configuration
  */
 export function getStackDescription(): string {
+  const configuredDescription = runtimeConfig?.STACK_DESCRIPTION || import.meta.env.VITE_STACK_DESCRIPTION
+  if (configuredDescription) {
+    return configuredDescription
+  }
+
   const authMethod = getAuthMethod()
   const apiUrl = API_CONFIG.baseUrl
 
@@ -181,8 +225,20 @@ export function getStackDescription(): string {
   const isAzureFunction = apiUrl === '' || apiUrl === '/' || apiUrl.includes(':7071') || apiUrl.includes(':8080')
 
   // When running in SWA with Entra ID
-  if (authMethod === 'entraid') {
+  if (authMethod === 'entraid' && isRunningInSWA()) {
     return 'TypeScript + Vite + SWA (Entra ID)'
+  }
+
+  if (authMethod === 'gateway') {
+    return 'TypeScript + Vite + OAuth2 Proxy'
+  }
+
+  if (authMethod === 'oidc') {
+    return 'TypeScript + Vite + OIDC'
+  }
+
+  if (authMethod === 'entraid') {
+    return 'TypeScript + Vite + Entra ID'
   }
 
   if (isAzureFunction && authMethod === 'jwt') {

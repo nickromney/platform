@@ -6,7 +6,12 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/integration.spec.ts', '**/swa.spec.ts'], // Exclude opt-in suites with their own configs
+  testIgnore: [
+    '**/integration.spec.ts',
+    '**/swa.spec.ts',
+    '**/stack12-gateway.spec.ts',
+    '**/easyauth-mock.spec.ts',
+  ], // Exclude opt-in suites with their own configs
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

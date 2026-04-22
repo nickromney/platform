@@ -74,6 +74,36 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "subnetcalc full compose teardown includes the profiled services" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" test-bruno-compose-full OAUTH2_PROXY_COOKIE_SECRET=fake-secret
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"--profile function-family --profile oidc --profile mock-easyauth up -d --build"* ]]
+  [[ "${output}" == *"--profile function-family --profile oidc --profile mock-easyauth down"* ]]
+
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" down OAUTH2_PROXY_COOKIE_SECRET=fake-secret
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"--profile function-family --profile oidc --profile mock-easyauth down --remove-orphans"* ]]
+}
+
+@test "subnetcalc function-family compose path chooses the right function dockerfile for the host arch" {
+  host_arch="$(uname -m)"
+
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" test-bruno-compose-full OAUTH2_PROXY_COOKIE_SECRET=fake-secret
+
+  [ "${status}" -eq 0 ]
+  if [[ "${host_arch}" == "arm64" || "${host_arch}" == "aarch64" ]]; then
+    [[ "${output}" == *"SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=Dockerfile.uvicorn"* ]]
+  else
+    [[ "${output}" == *"SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=Dockerfile"* ]]
+  fi
+
+  run bash -lc "cd '${REPO_ROOT}' && [ \"\$(rg -c 'dockerfile: \\$\\{SUBNETCALC_AZURE_FUNCTION_DOCKERFILE:-Dockerfile\\}' apps/subnetcalc/compose.yml)\" = '2' ]"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "subnetcalc compose prereqs fails cleanly when the repo env file is missing" {
   missing_env="${BATS_TEST_TMPDIR}/missing.env"
 

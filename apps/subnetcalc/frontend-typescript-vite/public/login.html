@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - IPv4 Subnet Calculator</title>
+  <script src="/runtime-config.js"></script>
   <style>
     * {
       margin: 0;
@@ -130,7 +131,7 @@
   <div class="login-container">
     <div class="icon">🔐</div>
     <h1>IPv4 Subnet Calculator</h1>
-    <p class="subtitle">Enterprise Edition with Entra ID Authentication</p>
+    <p class="subtitle" id="auth-subtitle">Enterprise Edition with Entra ID Authentication</p>
 
     <div class="info-box">
       <h2>About This Application</h2>
@@ -143,11 +144,11 @@
       </ul>
     </div>
 
-    <button class="login-button" type="button" onclick="login()">
-      Login with Entra ID (Microsoft)
+    <button class="login-button" id="login-button" type="button" onclick="login()">
+      Login with Entra ID
     </button>
 
-    <div class="security-note">
+    <div class="security-note" id="security-note">
       <strong>🔒 Secure Authentication</strong><br>
       This application uses Microsoft Entra ID (formerly Azure AD) for authentication.
       You will be redirected to Microsoft's secure login page.
@@ -155,13 +156,69 @@
   </div>
 
   <script>
+    function getAuthMethod() {
+      const runtimeConfig = window.RUNTIME_CONFIG || {};
+      return runtimeConfig.AUTH_METHOD || 'entraid';
+    }
+
+    function getLoginPath() {
+      return getAuthMethod() === 'gateway' ? '/.auth/login/sso' : '/.auth/login/aad';
+    }
+
+    function normalizePrincipal(data) {
+      if (!data || typeof data !== 'object') {
+        return null;
+      }
+
+      if (data.clientPrincipal) {
+        return data.clientPrincipal;
+      }
+
+      if (!Array.isArray(data) || data.length === 0) {
+        return null;
+      }
+
+      const session = data[0] || {};
+      const claims = session.claims || session.user_claims || [];
+      const userId = session.user_id || '';
+      const nameClaim = claims.find((claim) => claim.typ === 'name');
+
+      if (!userId && !nameClaim?.val) {
+        return null;
+      }
+
+      return session;
+    }
+
+    function updateCopy() {
+      const authMethod = getAuthMethod();
+      const gatewayMode = authMethod === 'gateway';
+      const oidcMode = authMethod === 'oidc';
+      const subtitle = document.getElementById('auth-subtitle');
+      const loginButton = document.getElementById('login-button');
+      const securityNote = document.getElementById('security-note');
+
+      if (gatewayMode || oidcMode) {
+        subtitle.textContent = 'Enterprise Edition with Gateway SSO Authentication';
+        loginButton.textContent = oidcMode ? 'Continue to sign in' : 'Login with SSO';
+        securityNote.innerHTML =
+          '<strong>🔒 Secure Authentication</strong><br>This application uses an upstream SSO gateway. You will be redirected to your identity provider before the browser-visible API calls are allowed.';
+        return;
+      }
+
+      subtitle.textContent = 'Enterprise Edition with Entra ID Authentication';
+      loginButton.textContent = 'Login with Entra ID';
+      securityNote.innerHTML =
+        "<strong>🔒 Secure Authentication</strong><br>This application uses Microsoft Entra ID (formerly Azure AD) for authentication. You will be redirected to Microsoft's secure login page.";
+    }
+
     async function checkAuthAndRender() {
       try {
         // Check if user is already authenticated
         const response = await fetch('/.auth/me');
         const data = await response.json();
 
-        if (data.clientPrincipal) {
+        if (normalizePrincipal(data)) {
           // User is already logged in - redirect to app
           const urlParams = new URLSearchParams(window.location.search);
           const returnUrl = urlParams.get('return_url') || '/';
@@ -180,10 +237,15 @@
       const urlParams = new URLSearchParams(window.location.search);
       const returnUrl = urlParams.get('return_url') || '/';
 
-      // Redirect to Entra ID login with post-login redirect
-      window.location.href = `/.auth/login/aad?post_login_redirect_uri=${encodeURIComponent(returnUrl)}`;
+      if (getAuthMethod() === 'oidc') {
+        window.location.href = returnUrl;
+        return;
+      }
+
+      window.location.href = `${getLoginPath()}?post_login_redirect_uri=${encodeURIComponent(returnUrl)}`;
     }
 
+    updateCopy();
     // Check auth status on page load
     checkAuthAndRender();
 

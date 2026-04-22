@@ -156,3 +156,32 @@ setup() {
   ! grep -Fq '$$((SECONDS + 180))' "${file}"
   ! grep -Fq '$$(kubectl' "${file}"
 }
+
+@test "cert-manager config app retries through webhook warmup before gateway TLS is required" {
+  cert_manager_tf="${REPO_ROOT}/terraform/kubernetes/cert-manager.tf"
+  app_manifest="${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/10-cert-manager-config.application.yaml"
+
+  grep -Fq 'retry:' "${cert_manager_tf}"
+  grep -Fq 'limit: 20' "${cert_manager_tf}"
+  grep -Fq 'backoff:' "${cert_manager_tf}"
+  grep -Fq 'duration: 15s' "${cert_manager_tf}"
+  grep -Fq 'maxDuration: 5m' "${cert_manager_tf}"
+  grep -Fq 'retry:' "${app_manifest}"
+  grep -Fq 'limit: 20' "${app_manifest}"
+}
+
+@test "kind oidc bootstrap waits for platform gateway TLS readiness instead of racing Argo reconciliation" {
+  sso_tf="${REPO_ROOT}/terraform/kubernetes/sso.tf"
+  wait_script="${REPO_ROOT}/terraform/kubernetes/scripts/wait-for-platform-gateway-tls.sh"
+
+  grep -Fq 'resource "null_resource" "wait_for_platform_gateway_tls"' "${sso_tf}"
+  grep -Fq 'wait-for-platform-gateway-tls.sh' "${sso_tf}"
+  grep -Fq 'null_resource.wait_for_platform_gateway_tls' "${sso_tf}"
+  grep -Fq 'kubectl_manifest.argocd_app_cert_manager_config' "${sso_tf}"
+  grep -Fq 'kubectl_manifest.argocd_app_platform_gateway' "${sso_tf}"
+  grep -Fq 'kubectl_manifest.argocd_app_platform_gateway_routes' "${sso_tf}"
+  grep -Fq 'argocd.argoproj.io/refresh=hard' "${wait_script}"
+  grep -Fq 'CERT_MANAGER_CONFIG_APP="${CERT_MANAGER_CONFIG_APP:-cert-manager-config}"' "${wait_script}"
+  grep -Fq 'PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"' "${wait_script}"
+  grep -Fq 'gateway listener programmed' "${wait_script}"
+}

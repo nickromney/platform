@@ -3,7 +3,8 @@
  */
 
 import { API_CONFIG, getNetworkHops } from './config'
-import type { ClientPrincipal } from './entraid-auth'
+import { type ClientPrincipal, getUserDisplayName, login, logout } from './entraid-auth'
+import { loginWithOidc, logoutFromOidc } from './oidc-auth'
 import type { ApiResults, NetworkDiagnosticsResponse } from './types'
 
 export function showElement(id: string): void {
@@ -351,19 +352,20 @@ export function renderResults(
 /**
  * Show user authentication status
  */
-export function showUserInfo(user: ClientPrincipal | null, authMethod: 'none' | 'jwt' | 'entraid' | 'oidc'): void {
+export function showUserInfo(
+  user: ClientPrincipal | null,
+  authMethod: 'none' | 'jwt' | 'entraid' | 'gateway' | 'oidc'
+): void {
   const userInfoDiv = document.getElementById('user-info')
   if (!userInfoDiv) return
 
-  if (authMethod === 'none' || authMethod === 'jwt' || authMethod === 'oidc') {
-    // No authentication configured
+  if (authMethod === 'none' || authMethod === 'jwt') {
     hideElement('user-info')
     return
   }
 
-  if (authMethod === 'entraid' && user) {
-    // Show Entra ID user info
-    const displayName = user.userDetails || user.userId
+  if (user) {
+    const displayName = getUserDisplayName(user)
     userInfoDiv.innerHTML = `
       <div class="user-display">
         <span class="user-icon">👤</span>
@@ -377,15 +379,21 @@ export function showUserInfo(user: ClientPrincipal | null, authMethod: 'none' | 
     const logoutBtn = document.getElementById('logout-btn')
     if (logoutBtn) {
       logoutBtn.addEventListener('click', () => {
-        // Azure SWA logout - redirect route defined in staticwebapp.config.json
-        window.location.href = '/logout'
+        if (authMethod === 'oidc') {
+          void logoutFromOidc(`${window.location.origin}/logged-out.html`)
+          return
+        }
+
+        logout('/logged-out.html')
       })
     }
-  } else if (authMethod === 'entraid') {
-    // Entra ID configured but user not logged in (shouldn't happen with required auth)
+  } else {
+    const loginLabel =
+      authMethod === 'entraid' ? 'Login with Entra ID' : authMethod === 'oidc' ? 'Login with OIDC' : 'Login with SSO'
+
     userInfoDiv.innerHTML = `
       <div class="user-display">
-        <button id="login-btn" class="login-btn">Login with Entra ID</button>
+        <button id="login-btn" class="login-btn">${loginLabel}</button>
       </div>
     `
     showElement('user-info')
@@ -394,7 +402,12 @@ export function showUserInfo(user: ClientPrincipal | null, authMethod: 'none' | 
     const loginBtn = document.getElementById('login-btn')
     if (loginBtn) {
       loginBtn.addEventListener('click', () => {
-        window.location.href = '/.auth/login/aad'
+        if (authMethod === 'oidc') {
+          void loginWithOidc(window.location.pathname || '/')
+          return
+        }
+
+        login(authMethod, window.location.pathname || '/')
       })
     }
   }
