@@ -115,8 +115,8 @@ services:
     profiles: ["function-family"]
     build:
       context: ./api-fastapi-azure-function
-      dockerfile: Dockerfile
-    platform: linux/amd64
+      dockerfile: ${SUBNETCALC_AZURE_FUNCTION_DOCKERFILE:-Dockerfile}
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-api-fastapi-azure-function:latest
     init: true
     ports:
@@ -136,8 +136,10 @@ services:
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null || curl -fsS http://[::1]:8080/api/v1/health >/dev/null",
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v1/health')",
         ]
       interval: 10s
       timeout: 5s
@@ -165,7 +167,7 @@ services:
     build:
       context: ./api-fastapi-container-app
       dockerfile: Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-api-fastapi-container-app:latest
     ports:
       - "8090:8000"
@@ -222,7 +224,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-typescript-vite:latest
     ports:
       - "8003:8080"
@@ -238,7 +240,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-typescript-vite-jwt:latest
     ports:
       - "3001:8080"
@@ -256,7 +258,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-react:latest
     ports:
       - "8004:8080"
@@ -272,7 +274,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-react-jwt:latest
     ports:
       - "3002:8080"
@@ -290,7 +292,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-react-msal:latest
     ports:
       - "3003:8080"
@@ -310,7 +312,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile.server
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-react-server-jwt:latest
     ports:
       - "3004:8080"
@@ -331,7 +333,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile.server
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-react-proxy:latest
     ports:
       - "3005:8080"
@@ -396,8 +398,8 @@ services:
     profiles: ["oidc"]
     build:
       context: ./api-fastapi-azure-function
-      dockerfile: Dockerfile
-    platform: linux/amd64
+      dockerfile: ${SUBNETCALC_AZURE_FUNCTION_DOCKERFILE:-Dockerfile}
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-api-fastapi-keycloak:latest
     init: true
     ports:
@@ -415,8 +417,10 @@ services:
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null || curl -fsS http://[::1]:8080/api/v1/health >/dev/null",
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v1/health')",
         ]
       interval: 10s
       timeout: 5s
@@ -430,7 +434,7 @@ services:
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-react-keycloak:latest
     ports:
       - "3006:8080"
@@ -453,13 +457,13 @@ services:
   # -----------------------------------------------------------------------------
 
   # Frontend (not directly exposed - only accessible through OAuth2 Proxy)
-  frontend-react-keycloak-protected:
+  frontend-typescript-vite-gateway:
     profiles: ["oidc"]
     build:
       context: .
-      dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
-    image: subnetcalc-frontend-react-protected:latest
+      dockerfile: ./frontend-typescript-vite/Dockerfile
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
+    image: subnetcalc-frontend-typescript-vite-gateway:latest
     # No ports exposed - only accessible through oauth2-proxy
     expose:
       - "8080"
@@ -467,12 +471,9 @@ services:
       # API calls go directly to APIM simulator on :8302 (proxy mode disabled)
       API_BASE_URL: http://localhost:8302
       API_PROXY_ENABLED: "false"
-      AUTH_METHOD: "oidc"
-      OIDC_AUTHORITY: "http://localhost:8300/realms/subnetcalc"
-      OIDC_CLIENT_ID: "frontend-app"
-      OIDC_REDIRECT_URI: "http://localhost:3007"
-      OIDC_AUTO_LOGIN: "true"
+      AUTH_METHOD: "gateway"
       APIM_SUBSCRIPTION_KEY: ${STACK12_APIM_SUBSCRIPTION_KEY:-dev-subscription-key}
+      STACK_DESCRIPTION: "TypeScript + Vite + OAuth2 Proxy"
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -482,26 +483,21 @@ services:
         condition: service_started
 
   # Admin frontend (separate "app") that calls the admin APIM surface (/admin/api/*)
-  frontend-react-keycloak-protected-admin:
+  frontend-typescript-vite-gateway-admin:
     profiles: ["oidc"]
     build:
       context: .
-      dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
-    image: subnetcalc-frontend-react-protected-admin:latest
+      dockerfile: ./frontend-typescript-vite/Dockerfile
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
+    image: subnetcalc-frontend-typescript-vite-gateway-admin:latest
     expose:
       - "8080"
     environment:
       API_BASE_URL: http://localhost:8302/admin
       API_PROXY_ENABLED: "false"
-      AUTH_METHOD: "oidc"
-      OIDC_AUTHORITY: "http://localhost:8300/realms/subnetcalc"
-      OIDC_CLIENT_ID: "frontend-app"
-      OIDC_REDIRECT_URI: "http://localhost:3008"
-      OIDC_AUTO_LOGIN: "true"
+      AUTH_METHOD: "gateway"
       APIM_SUBSCRIPTION_KEY: ${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY:-dev-admin-subscription-key}
-      OIDC_PROMPT: "login"
-      OIDC_FORCE_REAUTH: "true"
+      STACK_DESCRIPTION: "TypeScript + Vite + OAuth2 Proxy (Admin)"
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -514,7 +510,7 @@ services:
   oauth2-proxy-frontend:
     profiles: ["oidc"]
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     ports:
       - "3007:4180"
     command:
@@ -549,16 +545,16 @@ services:
       # Upstream (frontend only - API traffic now flows through apim-simulator:8302)
       #
       # OAuth2 Proxy protects access to the static assets and injects user headers.
-      # The React SPA then talks directly to the APIM simulator on port 8302.
+      # The TypeScript/Vite SPA then talks directly to the APIM simulator on port 8302.
       #
       # ROUTING BEHAVIOR:
-      # - All browser requests -> Routed to frontend-react-keycloak-protected:8080
+      # - All browser requests -> Routed to frontend-typescript-vite-gateway:8080
       # - API requests → Sent from the SPA to http://localhost:8302 (APIM simulator)
       #
       # This mirrors the Azure pattern of having Easy Auth in front of the frontend
       # while Application Gateway/API Management sit in front of the backend APIs.
       # ---------------------------------------------------------------------------------
-      - --upstream=http://frontend-react-keycloak-protected:8080
+      - --upstream=http://frontend-typescript-vite-gateway:8080
 
       # Listen address
       - --http-address=0.0.0.0:4180
@@ -589,6 +585,8 @@ services:
       - --pass-user-headers=true
       - --set-authorization-header=true
       - --set-xauthrequest=true
+      - --skip-auth-regex=^/login\.html$
+      - --skip-auth-regex=^/logged-out\.html$
 
       # Logging
       - --standard-logging=true
@@ -596,7 +594,7 @@ services:
       - --request-logging=true
 
     depends_on:
-      frontend-react-keycloak-protected:
+      frontend-typescript-vite-gateway:
         condition: service_started
       keycloak:
         condition: service_healthy
@@ -605,7 +603,7 @@ services:
   oauth2-proxy-frontend-admin:
     profiles: ["oidc"]
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     ports:
       - "3008:4180"
     command:
@@ -623,7 +621,7 @@ services:
       - --oidc-jwks-url=http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs
       - --validate-url=http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/userinfo
 
-      - --upstream=http://frontend-react-keycloak-protected-admin:8080
+      - --upstream=http://frontend-typescript-vite-gateway-admin:8080
       - --http-address=0.0.0.0:4180
 
       - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
@@ -641,13 +639,15 @@ services:
       - --pass-user-headers=true
       - --set-authorization-header=true
       - --set-xauthrequest=true
+      - --skip-auth-regex=^/login\.html$
+      - --skip-auth-regex=^/logged-out\.html$
 
       - --standard-logging=true
       - --auth-logging=true
       - --request-logging=true
 
     depends_on:
-      frontend-react-keycloak-protected-admin:
+      frontend-typescript-vite-gateway-admin:
         condition: service_started
       keycloak:
         condition: service_healthy
@@ -658,12 +658,19 @@ services:
     build:
       context: ./apim-simulator
       dockerfile: Dockerfile
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-apim-simulator:latest
     ports:
       - "8302:8000"
     environment:
-      - APIM_CONFIG_PATH=/app/config/stack12.json
+      - BACKEND_BASE_URL=http://api-fastapi-keycloak:8080
+      - BACKEND_PATH_PREFIX=/api
+      - OIDC_ISSUER=http://localhost:8300/realms/subnetcalc
+      - OIDC_AUDIENCE=api-app
+      - OIDC_JWKS_URI=http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs
+      - APIM_SUBSCRIPTION_KEY=${STACK12_APIM_SUBSCRIPTION_KEY:-dev-subscription-key}
+      - ALLOWED_ORIGINS=http://localhost:3007,http://localhost:3008
+      - ALLOW_ANONYMOUS=false
     depends_on:
       api-fastapi-keycloak:
         condition: service_healthy
@@ -675,28 +682,29 @@ services:
   # Demonstrates the "empty principal still returns 200" edge-case.
   # -----------------------------------------------------------------------------
 
-  frontend-react-easyauth-mock:
+  frontend-typescript-vite-easyauth-mock:
     profiles: ["mock-easyauth"]
     build:
       context: .
-      dockerfile: ./frontend-react/Dockerfile
-    platform: linux/amd64
-    image: subnetcalc-frontend-react-easyauth-mock:latest
+      dockerfile: ./frontend-typescript-vite/Dockerfile
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
+    image: subnetcalc-frontend-typescript-vite-easyauth-mock:latest
     expose:
       - "8080"
     environment:
       API_BASE_URL: ""
       API_PROXY_ENABLED: "true"
-      AUTH_METHOD: "easyauth"
+      AUTH_METHOD: "gateway"
+      STACK_DESCRIPTION: "TypeScript + Vite + Gateway SSO (Mock Easy Auth)"
 
   easyauth-router:
     profiles: ["mock-easyauth"]
     image: dhi.io/nginx:1.29.5-debian13
-    platform: linux/amd64
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     ports:
       - "3012:8080"
     volumes:
       - ./easyauth-mock/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      frontend-react-easyauth-mock:
+      frontend-typescript-vite-easyauth-mock:
         condition: service_started

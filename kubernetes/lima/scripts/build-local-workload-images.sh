@@ -111,10 +111,3 @@ build_and_push \
   "subnetcalc-frontend-typescript-vite" \
   "${REPO_ROOT}/apps/subnetcalc" \
   "${REPO_ROOT}/apps/subnetcalc/frontend-typescript-vite/Dockerfile"
-
-build_and_push \
-  "subnetcalc-frontend-react" \
-  "${REPO_ROOT}/apps/subnetcalc" \
-  "${REPO_ROOT}/apps/subnetcalc/frontend-react/Dockerfile" \
-  --build-arg VITE_API_PROXY_ENABLED=true \
-  --build-arg VITE_AUTH_METHOD=easyauth

@@ -13,6 +13,11 @@
 
 import { expect, type Page, test } from '@playwright/test'
 
+function createJwt(payload: Record<string, unknown>): string {
+  const encode = (value: Record<string, unknown>) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode(payload)}.signature`
+}
+
 /**
  * Mock JWT login endpoint if authentication is enabled
  * Call this before any test that makes API requests when VITE_AUTH_ENABLED=true
@@ -109,6 +114,272 @@ test.describe('Frontend Tests', () => {
     await expect(page.locator('form')).toBeVisible()
     // TypeScript Vite frontend has 1 label (IP address input only)
     await expect(page.locator('label')).toHaveCount(1)
+  })
+
+  test('05a - router managed auth uses /.auth endpoints without JWT login', async ({ page }) => {
+    let jwtLoginCalled = false
+
+    await page.addInitScript(() => {
+      window.RUNTIME_CONFIG = {
+        ...(window.RUNTIME_CONFIG || {}),
+        AUTH_METHOD: 'gateway',
+        STACK_DESCRIPTION: 'TypeScript + Vite + OAuth2 Proxy',
+      }
+    })
+
+    await page.route('**/.auth/me', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            provider_name: 'oauth2-proxy',
+            user_id: 'dev@example.com',
+            claims: [
+              { typ: 'name', val: 'Dev User' },
+              { typ: 'email', val: 'dev@example.com' },
+              { typ: 'preferred_username', val: 'dev@example.com' },
+            ],
+          },
+        ]),
+      })
+    )
+
+    await page.route('**/api/v1/auth/login', (route) => {
+      jwtLoginCalled = true
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'JWT login should not run for router-managed auth' }),
+      })
+    })
+
+    await page.route('**/api/v1/health', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          service: 'subnetcalc-api',
+          version: '1.0.0',
+        }),
+      })
+    )
+
+    await page.route('**/.auth/logout**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<html><body><h1>Logged out</h1></body></html>',
+      })
+    )
+
+    await page.goto('/')
+
+    await expect(page.locator('#stack-description')).toContainText('OAuth2 Proxy')
+    await expect(page.locator('#user-info')).toContainText('Dev User')
+    await expect(page.locator('#api-status')).toContainText('healthy')
+    expect(jwtLoginCalled).toBe(false)
+
+    await page.click('#logout-btn')
+    await page.waitForURL('**/.auth/logout**')
+    expect(page.url()).toContain('/.auth/logout')
+  })
+
+  test('05b - gateway auth shows generic SSO login UI', async ({ page }) => {
+    let jwtLoginCalled = false
+
+    await page.addInitScript(() => {
+      window.RUNTIME_CONFIG = {
+        ...(window.RUNTIME_CONFIG || {}),
+        AUTH_METHOD: 'gateway',
+        STACK_DESCRIPTION: 'TypeScript + Vite + OAuth2 Proxy',
+      }
+    })
+
+    await page.route('**/.auth/me', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+    )
+
+    await page.route('**/api/v1/auth/login', (route) => {
+      jwtLoginCalled = true
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'JWT login should not run for gateway auth' }),
+      })
+    })
+
+    await page.route('**/api/v1/health', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          service: 'subnetcalc-api',
+          version: '1.0.0',
+        }),
+      })
+    )
+
+    await page.route('**/.auth/login/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<html><body><h1>SSO Login</h1></body></html>',
+      })
+    )
+
+    await page.goto('/')
+
+    await expect(page.locator('#stack-description')).toContainText('OAuth2 Proxy')
+    await expect(page.locator('#login-btn')).toContainText('Login with SSO')
+    expect(jwtLoginCalled).toBe(false)
+
+    await page.click('#login-btn')
+    await page.waitForURL('**/.auth/login/sso**')
+    expect(page.url()).toContain('/.auth/login/sso')
+  })
+
+  test('05c - gateway auth refuses to reuse an ID token as API bearer', async ({ page }) => {
+    const idToken = createJwt({ aud: 'frontend-app', typ: 'ID' })
+
+    await page.addInitScript(() => {
+      window.RUNTIME_CONFIG = {
+        ...(window.RUNTIME_CONFIG || {}),
+        AUTH_METHOD: 'gateway',
+        STACK_DESCRIPTION: 'TypeScript + Vite + OAuth2 Proxy',
+      }
+    })
+
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch.bind(window)
+      ;(window as typeof window & { __capturedApiAuthorization?: string | null }).__capturedApiAuthorization = null
+
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const requestUrl = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input)
+        if (requestUrl.includes('/api/v1/health')) {
+          const capturedHeaders = init?.headers
+          let authorization: string | null = null
+
+          if (capturedHeaders instanceof Headers) {
+            authorization = capturedHeaders.get('authorization')
+          } else if (Array.isArray(capturedHeaders)) {
+            authorization = capturedHeaders.find(([key]) => key.toLowerCase() === 'authorization')?.[1] ?? null
+          } else if (capturedHeaders && typeof capturedHeaders === 'object') {
+            authorization =
+              (capturedHeaders as Record<string, string>).authorization ||
+              (capturedHeaders as Record<string, string>).Authorization ||
+              null
+          }
+
+          if (authorization) {
+            ;(window as typeof window & { __capturedApiAuthorization?: string | null }).__capturedApiAuthorization =
+              authorization
+          }
+        }
+
+        return originalFetch(input, init)
+      }
+    })
+
+    await page.route('**/.auth/me', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            provider_name: 'oauth2-proxy',
+            user_id: 'dev@example.com',
+            access_token: idToken,
+            claims: [
+              { typ: 'name', val: 'Dev User' },
+              { typ: 'email', val: 'dev@example.com' },
+            ],
+          },
+        ]),
+      })
+    )
+
+    await page.route('**/api/v1/health', (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Missing authorization header' }),
+      })
+    )
+
+    await page.goto('/')
+
+    await expect(page.locator('#api-status')).toContainText('API Unavailable')
+    const authHeader = await page.evaluate(
+      () => (window as typeof window & { __capturedApiAuthorization?: string | null }).__capturedApiAuthorization
+    )
+    expect(authHeader).toBeNull()
+  })
+
+  test('05d - explicit entraid mode keeps Azure login UI', async ({ page }) => {
+    let jwtLoginCalled = false
+
+    await page.addInitScript(() => {
+      window.RUNTIME_CONFIG = {
+        ...(window.RUNTIME_CONFIG || {}),
+        AUTH_METHOD: 'entraid',
+      }
+    })
+
+    await page.route('**/.auth/me', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          clientPrincipal: null,
+        }),
+      })
+    )
+
+    await page.route('**/api/v1/auth/login', (route) => {
+      jwtLoginCalled = true
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'JWT login should not run for Entra auth' }),
+      })
+    })
+
+    await page.route('**/api/v1/health', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          service: 'subnetcalc-api',
+          version: '1.0.0',
+        }),
+      })
+    )
+
+    await page.route('**/.auth/login/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<html><body><h1>Entra Login</h1></body></html>',
+      })
+    )
+
+    await page.goto('/')
+
+    await expect(page.locator('#stack-description')).toContainText('Entra ID')
+    await expect(page.locator('#login-btn')).toContainText('Login with Entra ID')
+    expect(jwtLoginCalled).toBe(false)
+
+    await page.click('#login-btn')
+    await page.waitForURL('**/.auth/login/aad**')
+    expect(page.url()).toContain('/.auth/login/aad')
   })
 
   // Group 2: Input Validation (3 tests)

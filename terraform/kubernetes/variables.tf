@@ -1077,11 +1077,11 @@ check "enable_app_repo_subnetcalc_requires_gitea_and_actions_runner" {
           var.prefer_external_workload_images &&
           lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "") != "" &&
           lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "") != "" &&
-          lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "") != ""
+          lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "") != ""
         )
       )
     )
-    error_message = "enable_app_repo_subnetcalc requires enable_gitea=true and either enable_actions_runner=true or explicit external subnetcalc image refs when prefer_external_workload_images=true."
+    error_message = "enable_app_repo_subnetcalc requires enable_gitea=true and either enable_actions_runner=true or explicit external subnetcalc API/APIM/TypeScript frontend image refs when prefer_external_workload_images=true."
   }
 }
 

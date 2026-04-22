@@ -249,6 +249,36 @@ __YAML__
   ]
 }
 
+resource "null_resource" "wait_for_platform_gateway_tls" {
+  count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
+
+  triggers = {
+    wait_script_sha              = filesha256(abspath("${local.stack_dir}/scripts/wait-for-platform-gateway-tls.sh"))
+    gateway_name                 = "platform-gateway"
+    tls_secret_name              = "platform-gateway-tls"
+    cert_manager_config_app_name = "cert-manager-config"
+  }
+
+  provisioner "local-exec" {
+    command     = "bash \"${local.stack_dir}/scripts/wait-for-platform-gateway-tls.sh\" --execute"
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG           = local.kubeconfig_path_expanded
+      WAIT_TIMEOUT_SECONDS = "900"
+    }
+  }
+
+  depends_on = [
+    null_resource.ensure_kind_kubeconfig,
+    null_resource.argocd_refresh_gitops_repo_apps,
+    kubectl_manifest.argocd_app_cert_manager,
+    kubectl_manifest.argocd_app_cert_manager_config,
+    kubectl_manifest.argocd_app_nginx_gateway_fabric,
+    kubectl_manifest.argocd_app_platform_gateway,
+    kubectl_manifest.argocd_app_platform_gateway_routes,
+  ]
+}
+
 resource "null_resource" "configure_kind_apiserver_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
@@ -283,6 +313,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     null_resource.ensure_kind_kubeconfig,
     kubernetes_service_v1.platform_gateway_nginx_internal,
     null_resource.argocd_refresh_gitops_repo_apps,
+    null_resource.wait_for_platform_gateway_tls,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.argocd_app_oauth2_proxy_argocd,
     kubectl_manifest.argocd_app_oauth2_proxy_gitea,

@@ -144,7 +144,6 @@ check_registry_images() {
 	echo "=== Docker Registry Images ==="
 
 	local images=(
-		"subnetcalc-frontend-react:latest"
 		"subnetcalc-frontend-typescript-vite:latest"
 		"subnetcalc-api-fastapi-container-app:latest"
 		"subnetcalc-apim-simulator:latest"

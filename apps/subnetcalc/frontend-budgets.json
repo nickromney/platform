@@ -1,0 +1,22 @@
+{
+  "frontends": [
+    {
+      "name": "frontend-react",
+      "path": "apps/subnetcalc/frontend-react",
+      "max_installed_packages": 240,
+      "max_dist_asset_raw_bytes": 515390,
+      "max_dist_asset_gzip_bytes": 144402,
+      "max_initial_asset_raw_bytes": 219104,
+      "max_initial_asset_gzip_bytes": 68783
+    },
+    {
+      "name": "frontend-typescript-vite",
+      "path": "apps/subnetcalc/frontend-typescript-vite",
+      "max_installed_packages": 124,
+      "max_dist_asset_raw_bytes": 25581,
+      "max_dist_asset_gzip_bytes": 7475,
+      "max_initial_asset_raw_bytes": 28953,
+      "max_initial_asset_gzip_bytes": 8658
+    }
+  ]
+}

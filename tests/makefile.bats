@@ -27,6 +27,7 @@ setup() {
   [[ "${output}" == *"make kubernetes"* ]]
   [[ "${output}" == *"make docker"* ]]
   [[ "${output}" == *"make apps"* ]]
+  [[ "${output}" == *"make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1]"* ]]
   [[ "${output}" == *"make sdwan"* ]]
 }
 
@@ -150,6 +151,35 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'tui --execute' ]
+}
+
+@test "root clean-local-state delegates to the reset helper with dry-run and opt-in scopes" {
+  reset_stub="${BATS_TEST_TMPDIR}/reset-local-state.sh"
+  log_file="${BATS_TEST_TMPDIR}/reset-local-state.log"
+
+  cat >"${reset_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'reset %s\n' "\$*" >>"${log_file}"
+printf 'reset local state\n'
+EOF
+  chmod +x "${reset_stub}"
+
+  run make -C "${REPO_ROOT}" clean-local-state \
+    RESET_LOCAL_STATE_SCRIPT="${reset_stub}" \
+    DRY_RUN=1 \
+    INCLUDE_HOST_CACHES=1 \
+    INCLUDE_KUBECONFIGS=1 \
+    INCLUDE_DOCKER=1 \
+    INCLUDE_DOCKER_VOLUMES=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"reset local state"* ]]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'reset --dry-run --include-host-caches --include-kubeconfigs --include-docker --include-docker-volumes' ]
 }
 
 @test "root prereqs and test are informational entrypoints" {

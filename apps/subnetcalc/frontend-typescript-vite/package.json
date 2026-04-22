@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "type-check": "(cd ../shared-frontend && bun run build) && tsc --noEmit",
     "test": "playwright test",
+    "test:stack12": "playwright test tests/stack12-gateway.spec.ts -c playwright.stack12.config.ts",
+    "test:easyauth-mock": "playwright test tests/easyauth-mock.spec.ts -c playwright.easyauth-mock.config.ts",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:integration": "BASE_URL=http://localhost:3001 playwright test --config=playwright.integration.config.ts",
@@ -27,7 +29,8 @@
   },
   "dependencies": {
     "@picocss/pico": "^2.1.1",
-    "@subnetcalc/shared-frontend": "file:../shared-frontend"
+    "@subnetcalc/shared-frontend": "file:../shared-frontend",
+    "oidc-client-ts": "^3.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",

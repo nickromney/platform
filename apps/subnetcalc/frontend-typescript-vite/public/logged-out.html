@@ -6,6 +6,7 @@
     <title>Logged Out - IPv4 Subnet Calculator</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="/runtime-config.js"></script>
     <style>
         body {
             display: flex;
@@ -46,34 +47,73 @@
     </main>
 
     <script>
+        function getAuthMethod() {
+            const runtimeConfig = window.RUNTIME_CONFIG || {};
+            return runtimeConfig.AUTH_METHOD || 'entraid';
+        }
+
+        function normalizePrincipal(data) {
+            if (!data || typeof data !== 'object') {
+                return null;
+            }
+
+            if (data.clientPrincipal) {
+                return data.clientPrincipal;
+            }
+
+            if (!Array.isArray(data) || data.length === 0) {
+                return null;
+            }
+
+            const session = data[0] || {};
+            const claims = session.claims || session.user_claims || [];
+            const userId = session.user_id || '';
+            const nameClaim = claims.find((claim) => claim.typ === 'name');
+
+            if (!userId && !nameClaim?.val) {
+                return null;
+            }
+
+            return session;
+        }
+
+        function renderLoggedOut(content) {
+            const authMethod = getAuthMethod();
+            const loginLabel =
+                authMethod === 'gateway' ? 'Sign in again with SSO' :
+                authMethod === 'oidc' ? 'Return to app' :
+                'Log in again';
+            const loginHref = authMethod === 'oidc' ? '/' : '/login.html';
+
+            content.innerHTML = `
+                <div class="logout-icon">👋</div>
+                <h1>You've been logged out</h1>
+                <p>Thank you for using the IPv4 Subnet Calculator.</p>
+                <a href="${loginHref}" role="button">${loginLabel}</a>
+            `;
+        }
+
         async function checkAuthAndRender() {
             const content = document.getElementById('content');
+
+            if (getAuthMethod() === 'oidc') {
+                renderLoggedOut(content);
+                return;
+            }
 
             try {
                 // Check if user is still authenticated
                 const response = await fetch('/.auth/me');
                 const data = await response.json();
 
-                if (data.clientPrincipal) {
+                if (normalizePrincipal(data)) {
                     // User is still logged in - redirect to app
                     window.location.href = '/';
                 } else {
-                    // User is logged out - show logged out message
-                    content.innerHTML = `
-                        <div class="logout-icon">👋</div>
-                        <h1>You've been logged out</h1>
-                        <p>Thank you for using the IPv4 Subnet Calculator.</p>
-                        <a href="/login.html" role="button">Log in again</a>
-                    `;
+                    renderLoggedOut(content);
                 }
             } catch (_error) {
-                // Error checking auth - show logged out message anyway
-                content.innerHTML = `
-                    <div class="logout-icon">👋</div>
-                    <h1>You've been logged out</h1>
-                    <p>Thank you for using the IPv4 Subnet Calculator.</p>
-                    <a href="/login.html" role="button">Log in again</a>
-                `;
+                renderLoggedOut(content);
             }
         }
 

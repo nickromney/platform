@@ -72,6 +72,7 @@ func renderRuntimeConfig(outputPath string) error {
 		{Key: "API_INGRESS_STATUS_LABEL", EnvNames: []string{"API_INGRESS_STATUS_LABEL", "VITE_API_INGRESS_STATUS_LABEL"}},
 		{Key: "BACKEND_PATH_STATUS_LABEL", EnvNames: []string{"BACKEND_PATH_STATUS_LABEL", "VITE_BACKEND_PATH_STATUS_LABEL"}},
 		{Key: "BACKEND_PATH_STATUS_DETAIL", EnvNames: []string{"BACKEND_PATH_STATUS_DETAIL", "VITE_BACKEND_PATH_STATUS_DETAIL"}},
+		{Key: "STACK_DESCRIPTION", EnvNames: []string{"STACK_DESCRIPTION", "VITE_STACK_DESCRIPTION"}},
 	}
 
 	values := make(map[string]string, len(fields))

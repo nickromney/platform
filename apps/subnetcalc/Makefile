@@ -19,6 +19,17 @@ REPO_ROOT := $(abspath $(CURDIR)/../..)
 PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
 PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
 OAUTH2_PROXY_COOKIE_SECRET ?=
+HOST_ARCH := $(shell uname -m)
+ifeq ($(HOST_ARCH),arm64)
+SUBNETCALC_LOCAL_PLATFORM ?= linux/arm64
+SUBNETCALC_AZURE_FUNCTION_DOCKERFILE ?= Dockerfile.uvicorn
+else ifeq ($(HOST_ARCH),aarch64)
+SUBNETCALC_LOCAL_PLATFORM ?= linux/arm64
+SUBNETCALC_AZURE_FUNCTION_DOCKERFILE ?= Dockerfile.uvicorn
+else
+SUBNETCALC_LOCAL_PLATFORM ?= linux/amd64
+SUBNETCALC_AZURE_FUNCTION_DOCKERFILE ?= Dockerfile
+endif
 PLATFORM_REQUIRED_ENV_VARS := OAUTH2_PROXY_COOKIE_SECRET
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
@@ -38,7 +49,8 @@ endif
 DEFAULT_STACK_URL := http://localhost:8003
 DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
 CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/docs
-DEFAULT_COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
+DEFAULT_COMPOSE_ENV := SUBNETCALC_LOCAL_PLATFORM=$(SUBNETCALC_LOCAL_PLATFORM) SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=$(SUBNETCALC_AZURE_FUNCTION_DOCKERFILE) OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
+FULL_COMPOSE_PROFILES := --profile function-family --profile oidc --profile mock-easyauth
 VENDOR_APIM_SIMULATOR_SCRIPT := ./scripts/vendor-apim-simulator.sh
 VENDOR_APIM_SIMULATOR_ARGS = \
 	$(if $(APIM_SIMULATOR_SOURCE_REPO),--source "$(APIM_SIMULATOR_SOURCE_REPO)") \
@@ -49,6 +61,8 @@ VENDOR_APIM_SIMULATOR_ARGS = \
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
 export OAUTH2_PROXY_COOKIE_SECRET
+export SUBNETCALC_LOCAL_PLATFORM
+export SUBNETCALC_AZURE_FUNCTION_DOCKERFILE
 
 ##@ Prerequisites
 prereqs: ## Check local prerequisites
@@ -109,7 +123,7 @@ ps: check-prerequisites ## Show compose container status
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) ps
 
 down: check-prerequisites ## Stop the compose stack
-	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) down --remove-orphans
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) $(FULL_COMPOSE_PROFILES) down --remove-orphans
 
 ##@ Cleanup
 clean-ports: ## Stop local services and clear the shared demo ports
@@ -231,7 +245,7 @@ start-compose-frontend-react: start-compose-backend-container ## Swap in the Rea
 start-compose-full: check-prerequisites ## Start the full demo/integration topology with function, OIDC, and mock-easyauth profiles
 	@echo "Starting full subnetcalc compose topology..."
 	@echo "  baseline container-app family + function family + OIDC/APIM + mock-easyauth"
-	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) --profile function-family --profile oidc --profile mock-easyauth up -d
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) $(FULL_COMPOSE_PROFILES) up -d
 
 start-compose-all: start-compose-full ## Alias for the full demo/integration topology
 
@@ -428,7 +442,7 @@ test-bruno-direct-full: clean-ports start-direct-all-bg wait-direct-services tes
 
 test-bruno-compose-full: check-prerequisites ## Start, test, and clean up the compose stacks
 	@echo "Starting compose services..."
-	$(COMPOSE_CMD) up -d
+	$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) $(FULL_COMPOSE_PROFILES) up -d --build
 	@echo "Waiting for compose services to be ready..."
 	@sleep 10
 	@echo "Running compose tests..."
@@ -437,8 +451,12 @@ test-bruno-compose-full: check-prerequisites ## Start, test, and clean up the co
 		bun x @usebruno/cli@latest run compose-02 --env local && \
 		bun x @usebruno/cli@latest run compose-03 --env local && \
 		bun x @usebruno/cli@latest run compose-04 --env local
+	@echo "Running browser auth regression tests against the lightweight frontend..."
+	cd frontend-typescript-vite && \
+		bun run test:stack12 && \
+		bun run test:easyauth-mock
 	@echo "Stopping compose services..."
-	$(COMPOSE_CMD) down
+	$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) $(FULL_COMPOSE_PROFILES) down --remove-orphans
 	@echo "✓ Compose testing complete"
 
 test-bruno-swa-full: clean-ports check-prerequisites ## Start, test, and clean up the SWA stacks

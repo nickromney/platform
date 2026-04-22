@@ -564,8 +564,13 @@ spec:
         - name: gitea-registry-creds
       containers:
         - name: ui
-          image: localhost:30090/platform/subnetcalc-frontend-react:latest
+          image: localhost:30090/platform/subnetcalc-frontend-typescript-vite:latest
           imagePullPolicy: Always
+          env:
+            - name: AUTH_METHOD
+              value: "gateway"
+            - name: STACK_DESCRIPTION
+              value: "TypeScript + Vite + OAuth2 Proxy"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

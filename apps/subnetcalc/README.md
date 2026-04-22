@@ -11,8 +11,10 @@ A full-stack IPv4/IPv6 subnet calculator with multiple backend and frontend impl
 ## Quick Start
 
 Compose workflows in this directory now read `OAUTH2_PROXY_COOKIE_SECRET` from
-the repo root `.env`. Copy the template before using the `make` or raw Compose
-commands below:
+the repo root `.env`. On Apple Silicon, the repo-local `make` targets also set
+`SUBNETCALC_LOCAL_PLATFORM=linux/arm64` so the local compose stack runs natively
+instead of forcing `linux/amd64` emulation. Copy the template before using the
+`make` or raw Compose commands below:
 
 ```bash
 cp ../../.env.example ../../.env
@@ -361,7 +363,7 @@ See individual project READMEs for local development and detailed information:
 
 The main `compose.yml` runs all six services (2 backends + 4 frontends):
 
-- **Platform**: linux/amd64 (for deployment compatibility)
+- **Platform**: defaults to `linux/amd64` for deployment compatibility, but the local `make` workflow switches to native `linux/arm64` on Apple Silicon
 - **Health checks**: Configured for both API services
 - **Networking**: Services communicate via Docker/Podman network
 - **Port Mappings**:

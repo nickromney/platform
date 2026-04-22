@@ -160,6 +160,11 @@ run "gateway_tls_enabled" {
   }
 
   assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_cert_manager_config[0].yaml_body, "retry:") && strcontains(kubectl_manifest.argocd_app_cert_manager_config[0].yaml_body, "limit: 20") && strcontains(kubectl_manifest.argocd_app_cert_manager_config[0].yaml_body, "maxDuration: 5m")
+    error_message = "Expected cert-manager-config ArgoCD Application YAML to retry through cert-manager webhook startup"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.argocd_app_nginx_gateway_fabric) == 1
     error_message = "Expected kubectl_manifest.argocd_app_nginx_gateway_fabric to exist when enable_gateway_tls=true"
   }
@@ -182,6 +187,26 @@ run "gateway_tls_enabled" {
   assert {
     condition     = length(kubernetes_secret_v1.argocd_repo_creds_gitea_ssh) == 1
     error_message = "Expected ArgoCD repo-creds secret for Gitea SSH to exist when enable_gateway_tls=true"
+  }
+}
+
+run "gateway_tls_sso_enabled" {
+  command = plan
+
+  variables {
+    cni_provider           = "none"
+    enable_hubble          = false
+    enable_argocd          = true
+    enable_gitea           = true
+    enable_signoz          = false
+    enable_gateway_tls     = true
+    enable_sso             = true
+    provision_kind_cluster = true
+  }
+
+  assert {
+    condition     = length(null_resource.wait_for_platform_gateway_tls) == 1
+    error_message = "Expected null_resource.wait_for_platform_gateway_tls to exist when enable_gateway_tls=true and enable_sso=true on kind"
   }
 }
 

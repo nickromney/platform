@@ -1,15 +1,13 @@
 import { getAuthMethod } from './config'
 
 /**
- * Azure Static Web Apps Entra ID Authentication
+ * Browser-visible auth gateway helpers
  *
- * Handles authentication via SWA's built-in Entra ID integration.
- * This module only activates when:
- * 1. VITE_AUTH_ENABLED=true
- * 2. Running in Azure Static Web Apps context (detected by hostname)
+ * Handles authentication via SWA's built-in Entra ID integration or any
+ * frontend gateway that exposes the same `/.auth/*` surface.
  *
- * SWA provides these endpoints automatically:
- * - /.auth/login/aad - Login with Entra ID
+ * These endpoints are expected:
+ * - /.auth/login/aad (or another /.auth/login/* alias) - Login
  * - /.auth/logout - Logout
  * - /.auth/me - Get current user info
  */
@@ -29,6 +27,138 @@ export interface AuthResponse {
   clientPrincipal: ClientPrincipal | null
 }
 
+type TokenLike =
+  | string
+  | {
+      value?: string
+      token?: string
+      expires_on?: string | number
+      expiresOn?: string | number
+    }
+
+interface EasyAuthPrincipal {
+  provider_name?: string
+  user_id?: string
+  user_roles?: string[]
+  userRoles?: string[]
+  access_token?: TokenLike
+  authentication_token?: TokenLike
+  id_token?: TokenLike
+  claims?: ClientPrincipal['claims']
+  user_claims?: ClientPrincipal['claims']
+}
+
+let cachedAuthPayload: unknown
+
+function normalizeToken(input?: TokenLike): string | null {
+  if (!input) {
+    return null
+  }
+
+  if (typeof input === 'string') {
+    return input
+  }
+
+  return input.token || input.value || null
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length < 2) {
+    return null
+  }
+
+  try {
+    const payload = parts[1]
+    if (!payload) {
+      return null
+    }
+
+    const normalized = payload.replaceAll('-', '+').replaceAll('_', '/')
+    const padding = (4 - (normalized.length % 4)) % 4
+    const base64 = normalized.padEnd(normalized.length + padding, '=')
+    return JSON.parse(atob(base64)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function isIdentityToken(token: string): boolean {
+  const payload = decodeJwtPayload(token)
+  return payload?.typ === 'ID'
+}
+
+function selectGatewayApiToken(session: EasyAuthPrincipal): string | null {
+  const candidates = [normalizeToken(session.authentication_token), normalizeToken(session.access_token)]
+
+  for (const token of candidates) {
+    if (!token || isIdentityToken(token)) {
+      continue
+    }
+
+    return token
+  }
+
+  return null
+}
+
+function normalizeClientPrincipal(payload: unknown): ClientPrincipal | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  if ('clientPrincipal' in payload) {
+    const principal = (payload as AuthResponse).clientPrincipal
+    return principal ?? null
+  }
+
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return null
+  }
+
+  const session = payload[0] as EasyAuthPrincipal | undefined
+  if (!session) {
+    return null
+  }
+
+  const claims = session.claims || session.user_claims || []
+  const emailClaim = claims.find((claim) => claim.typ === 'email' || claim.typ === 'preferred_username')
+  const nameClaim = claims.find((claim) => claim.typ === 'name')
+  const userId = session.user_id || emailClaim?.val || ''
+
+  if (!userId && !nameClaim?.val) {
+    return null
+  }
+
+  return {
+    identityProvider: session.provider_name || 'proxy',
+    userId,
+    userDetails: emailClaim?.val || nameClaim?.val || userId,
+    userRoles: session.userRoles || session.user_roles || [],
+    claims,
+  }
+}
+
+async function fetchAuthPayload(forceRefresh = false): Promise<unknown> {
+  if (!forceRefresh && cachedAuthPayload !== undefined) {
+    return cachedAuthPayload
+  }
+
+  const response = await fetch('/.auth/me', {
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user info: ${response.status}`)
+  }
+
+  const data = await response.json()
+  cachedAuthPayload = data
+  return data
+}
+
 /**
  * Check if we're running in Azure Static Web Apps (legacy detection)
  *
@@ -45,11 +175,8 @@ export function isRunningInSWA(): boolean {
  * Prefer explicit runtime configuration, then fall back to hostname detection.
  */
 export function useEntraIdAuth(): boolean {
-  if (getAuthMethod() === 'entraid') {
-    return true
-  }
-
-  return false
+  const authMethod = getAuthMethod()
+  return authMethod === 'entraid' || authMethod === 'gateway'
 }
 
 /**
@@ -61,32 +188,39 @@ export async function getCurrentUser(): Promise<ClientPrincipal | null> {
   }
 
   try {
-    const response = await fetch('/.auth/me', {
-      headers: {
-        Accept: 'application/json',
-      },
-    })
-
-    if (!response.ok) {
-      console.error('Failed to fetch user info:', response.status)
-      return null
-    }
-
-    const data: AuthResponse = await response.json()
-    return data.clientPrincipal
+    const data = await fetchAuthPayload()
+    return normalizeClientPrincipal(data)
   } catch (error) {
     console.error('Error fetching user info:', error)
     return null
   }
 }
 
+export async function getGatewayAccessToken(forceRefresh = false): Promise<string | null> {
+  if (getAuthMethod() !== 'gateway') {
+    return null
+  }
+
+  try {
+    const payload = await fetchAuthPayload(forceRefresh)
+    if (!Array.isArray(payload) || payload.length === 0) {
+      return null
+    }
+
+    const session = payload[0] as EasyAuthPrincipal
+    return selectGatewayApiToken(session)
+  } catch (error) {
+    console.error('Error fetching gateway access token:', error)
+    return null
+  }
+}
+
 /**
- * Redirect to Entra ID login
+ * Redirect to login using the auth surface for the active frontend mode.
  */
-export function login(returnUrl?: string): void {
-  const loginUrl = returnUrl
-    ? `/.auth/login/aad?post_login_redirect_uri=${encodeURIComponent(returnUrl)}`
-    : '/.auth/login/aad'
+export function login(authMethod: 'entraid' | 'gateway', returnUrl?: string): void {
+  const loginPath = authMethod === 'gateway' ? '/.auth/login/sso' : '/.auth/login/aad'
+  const loginUrl = returnUrl ? `${loginPath}?post_login_redirect_uri=${encodeURIComponent(returnUrl)}` : loginPath
 
   window.location.href = loginUrl
 }
@@ -95,6 +229,7 @@ export function login(returnUrl?: string): void {
  * Logout from SWA
  */
 export function logout(returnUrl?: string): void {
+  cachedAuthPayload = undefined
   const logoutUrl = returnUrl
     ? `/.auth/logout?post_logout_redirect_uri=${encodeURIComponent(returnUrl)}`
     : '/.auth/logout'

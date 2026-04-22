@@ -5,17 +5,16 @@ WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 RUN bun install --frozen-lockfile
 
-# Guardrail: this UI must remain a static SPA (no React Server Components / Flight protocol).
-# Fail the build if someone accidentally introduces Next.js or react-server-dom-* packages.
+# Guardrail: this UI must remain a small static SPA without React/Next baggage.
 RUN bun pm ls >/tmp/deps.txt && \
-    for pkg in next react-server-dom-webpack react-server-dom-turbopack react-server-dom-parcel react-server-dom-vite; do \
+    for pkg in react react-dom @vitejs/plugin-react next react-server-dom-webpack react-server-dom-turbopack react-server-dom-parcel react-server-dom-vite; do \
       if grep -Eq "^${pkg}@" /tmp/deps.txt; then \
-        echo "ERROR: Disallowed dependency detected: $pkg (RSC/Flight-related)." >&2; \
+        echo "ERROR: Disallowed dependency detected: $pkg." >&2; \
         exit 1; \
       fi; \
     done
 
-COPY index.html vite.config.js ./
+COPY index.html vite.config.js tsconfig.json ./
 COPY src ./src
 
 ARG VITE_KEYCLOAK_BASE_URL

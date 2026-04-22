@@ -6,7 +6,9 @@ import type { IApiClient } from '@subnetcalc/shared-frontend/api'
 import { handleFetchError, isIpv6, parseJsonResponse } from '@subnetcalc/shared-frontend/api'
 import type { CloudMode } from '@subnetcalc/shared-frontend/types'
 import { TokenManager } from './auth'
-import { API_CONFIG } from './config'
+import { API_CONFIG, getAuthMethod } from './config'
+import { getGatewayAccessToken } from './entraid-auth'
+import { getOidcAccessToken } from './oidc-auth'
 import type {
   ApiResults,
   CloudflareCheckResponse,
@@ -38,13 +40,46 @@ class ApiClient implements IApiClient {
     return this.baseUrl
   }
 
+  private getBaseHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {}
+
+    if (API_CONFIG.apimSubscriptionKey) {
+      headers['Ocp-Apim-Subscription-Key'] = API_CONFIG.apimSubscriptionKey
+    }
+
+    return headers
+  }
+
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    if (this.tokenManager) {
+      return this.tokenManager.getAuthHeaders()
+    }
+
+    const authMethod = getAuthMethod()
+    const token =
+      authMethod === 'gateway'
+        ? await getGatewayAccessToken()
+        : authMethod === 'oidc'
+          ? await getOidcAccessToken()
+          : null
+
+    if (!token) {
+      return {}
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    }
+  }
+
   async checkHealth(): Promise<HealthResponse> {
     try {
       // Get auth headers if enabled
-      const authHeaders = this.tokenManager ? await this.tokenManager.getAuthHeaders() : {}
+      const authHeaders = await this.getAuthHeaders()
 
       const response = await fetch(`${this.baseUrl}${API_CONFIG.paths.health}`, {
         headers: {
+          ...this.getBaseHeaders(),
           ...authHeaders,
         },
         signal: AbortSignal.timeout(5000), // 5 second timeout
@@ -63,12 +98,13 @@ class ApiClient implements IApiClient {
   async validateAddress(address: string): Promise<ValidateResponse> {
     try {
       // Get auth headers if enabled
-      const authHeaders = this.tokenManager ? await this.tokenManager.getAuthHeaders() : {}
+      const authHeaders = await this.getAuthHeaders()
 
       const response = await fetch(`${this.baseUrl}${API_CONFIG.paths.validate}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getBaseHeaders(),
           ...authHeaders,
         },
         body: JSON.stringify({ address }),
@@ -89,12 +125,13 @@ class ApiClient implements IApiClient {
   async checkPrivate(address: string): Promise<PrivateCheckResponse> {
     try {
       // Get auth headers if enabled
-      const authHeaders = this.tokenManager ? await this.tokenManager.getAuthHeaders() : {}
+      const authHeaders = await this.getAuthHeaders()
 
       const response = await fetch(`${this.baseUrl}${API_CONFIG.paths.checkPrivate}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getBaseHeaders(),
           ...authHeaders,
         },
         body: JSON.stringify({ address }),
@@ -115,12 +152,13 @@ class ApiClient implements IApiClient {
   async checkCloudflare(address: string): Promise<CloudflareCheckResponse> {
     try {
       // Get auth headers if enabled
-      const authHeaders = this.tokenManager ? await this.tokenManager.getAuthHeaders() : {}
+      const authHeaders = await this.getAuthHeaders()
 
       const response = await fetch(`${this.baseUrl}${API_CONFIG.paths.checkCloudflare}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getBaseHeaders(),
           ...authHeaders,
         },
         body: JSON.stringify({ address }),
@@ -141,12 +179,13 @@ class ApiClient implements IApiClient {
   async getSubnetInfo(network: string, mode: CloudMode): Promise<SubnetInfoResponse> {
     try {
       // Get auth headers if enabled
-      const authHeaders = this.tokenManager ? await this.tokenManager.getAuthHeaders() : {}
+      const authHeaders = await this.getAuthHeaders()
 
       const response = await fetch(`${this.baseUrl}${API_CONFIG.paths.subnetInfo}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getBaseHeaders(),
           ...authHeaders,
         },
         body: JSON.stringify({ network, mode }),
@@ -166,10 +205,11 @@ class ApiClient implements IApiClient {
 
   async getNetworkDiagnostics(): Promise<NetworkDiagnosticsResponse> {
     try {
-      const authHeaders = this.tokenManager ? await this.tokenManager.getAuthHeaders() : {}
+      const authHeaders = await this.getAuthHeaders()
 
       const response = await fetch(`${this.baseUrl}${API_CONFIG.paths.networkDiagnostics}`, {
         headers: {
+          ...this.getBaseHeaders(),
           ...authHeaders,
         },
         signal: AbortSignal.timeout(15000),

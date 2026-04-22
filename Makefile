@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -17,13 +17,14 @@ SONAR_SCAN_REPO ?= $(CURDIR)
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 PLATFORM_STATUS_SCRIPT ?= scripts/platform-status.sh
 PLATFORM_TUI_SCRIPT ?= scripts/platform-tui.sh
+RESET_LOCAL_STATE_SCRIPT ?= scripts/reset-local-state.sh
 STATUS_FORMAT ?= text
 
 .DEFAULT_GOAL := default
 
 include mk/common.mk
 
-.PHONY: default help prereqs test status tui lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+.PHONY: default help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -41,6 +42,7 @@ help:
 	@printf '%b\n' \
 		'make apps\tShow the app/frontend Makefiles' \
 		'make check-version\tVerify repo-level dependency/version guardrails' \
+		'make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1]\tPreview or clear repo-generated local state plus optional host caches' \
 		'make docker\tShow the Docker/Compose Makefiles' \
 		'make fmt\tApply repo-level auto-formatters' \
 		'make kubernetes\tShow the staged Kubernetes Makefiles' \
@@ -136,6 +138,14 @@ status:
 
 tui:
 	@"$(PLATFORM_TUI_SCRIPT)" --execute
+
+clean-local-state:
+	@"$(RESET_LOCAL_STATE_SCRIPT)" \
+		$(if $(filter 1,$(DRY_RUN)),--dry-run,--execute) \
+		$(if $(filter 1,$(INCLUDE_HOST_CACHES)),--include-host-caches) \
+		$(if $(filter 1,$(INCLUDE_KUBECONFIGS)),--include-kubeconfigs) \
+		$(if $(filter 1,$(INCLUDE_DOCKER)),--include-docker) \
+		$(if $(filter 1,$(INCLUDE_DOCKER_VOLUMES)),--include-docker-volumes)
 
 lint:
 	@$(MAKE) --no-print-directory lint-yaml

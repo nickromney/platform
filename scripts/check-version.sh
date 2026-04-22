@@ -12,6 +12,8 @@ CHECK_VERSION_TIMEOUT_SECONDS="${CHECK_VERSION_TIMEOUT_SECONDS:-15}"
 CHECK_VERSION_NPM_MIN_RELEASE_AGE="${CHECK_VERSION_NPM_MIN_RELEASE_AGE:-7}"
 CHECK_VERSION_BUN_MIN_RELEASE_AGE="${CHECK_VERSION_BUN_MIN_RELEASE_AGE:-604800}"
 CHECK_VERSION_UV_EXCLUDE_NEWER="${CHECK_VERSION_UV_EXCLUDE_NEWER:-7 days}"
+CHECK_VERSION_FRONTEND_BUDGETS_FILE="${CHECK_VERSION_FRONTEND_BUDGETS_FILE:-${REPO_ROOT}/apps/subnetcalc/frontend-budgets.json}"
+CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS="${CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS:-0}"
 FAILURES=0
 EXECUTE=0
 DRY_RUN=0
@@ -42,6 +44,7 @@ Checks:
   - the vendored apim-simulator tag and commit SHA are recorded
   - repo-local dependency age gates stay aligned across .npmrc, bunfig.toml,
     and uv-managed pyproject.toml files outside the vendored apim-simulator tree
+  - optional frontend package-count, initial-page, and shipped-asset budgets when local artifacts exist
 
 Options:
   --dry-run   Accepted for parity with other repo scripts. This command is read-only.
@@ -58,6 +61,10 @@ Environment:
   CHECK_VERSION_SKIP_UPSTREAM=1         Skip network-backed upstream resolution.
   CHECK_VERSION_GITHUB_API_BASE=...     Override the GitHub API base URL.
   CHECK_VERSION_TIMEOUT_SECONDS=...     HTTP timeout in seconds. Default: 15.
+  CHECK_VERSION_FRONTEND_BUDGETS_FILE=...
+                                        Override the frontend budget definition file.
+  CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS=1
+                                        Fail instead of warn when node_modules or dist/assets are missing.
 EOF
 }
 
@@ -415,11 +422,265 @@ PY
   ok "All uv-managed pyproject.toml files set exclude-newer='${CHECK_VERSION_UV_EXCLUDE_NEWER}'"
 }
 
+emit_frontend_budget_lines() {
+  local output="$1"
+  local kind="" message=""
+
+  while IFS=$'\t' read -r kind message; do
+    [[ -n "${kind}" ]] || continue
+    case "${kind}" in
+      OK)
+        ok "${message}"
+        ;;
+      WARN)
+        warn "${message}"
+        ;;
+      FAIL)
+        fail_note "${message}"
+        ;;
+      *)
+        printf '%s\n' "${kind}${message:+	${message}}"
+        ;;
+    esac
+  done <<< "${output}"
+}
+
+check_frontend_budgets() {
+  section "Frontend Budgets"
+
+  if [[ ! -f "${CHECK_VERSION_FRONTEND_BUDGETS_FILE}" ]]; then
+    warn "No frontend budget file found at ${CHECK_VERSION_FRONTEND_BUDGETS_FILE}"
+    return
+  fi
+
+  local output status=0
+  if output="$(
+    python3 - "${REPO_ROOT}" "${CHECK_VERSION_FRONTEND_BUDGETS_FILE}" "${CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS}" <<'PY'
+import gzip
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+budget_path = Path(sys.argv[2])
+require_artifacts = sys.argv[3] == "1"
+
+try:
+    payload = json.loads(budget_path.read_text(encoding="utf-8"))
+except FileNotFoundError:
+    print(f"WARN\tNo frontend budget file found at {budget_path}")
+    raise SystemExit(0)
+
+frontends = payload.get("frontends", [])
+if not frontends:
+    print(f"WARN\tFrontend budget file {budget_path} defines no frontends")
+    raise SystemExit(0)
+
+html_asset_pattern = re.compile(r'''(?:src|href)=["'](/?assets/[^"']+)["']''')
+static_import_pattern = re.compile(r'''(?<![\w$])import(?:(?:[\s\w{},*]+?)from\s*)?["']([^"']+)["']''')
+
+def measure_files(files: set[Path]) -> tuple[int, int]:
+    raw_bytes = 0
+    gzip_bytes = 0
+    for file_path in sorted(files):
+        data = file_path.read_bytes()
+        raw_bytes += len(data)
+        gzip_bytes += len(gzip.compress(data))
+    return raw_bytes, gzip_bytes
+
+def resolve_dist_asset(dist_dir: Path, spec: str, base_path: Path | None = None) -> Path | None:
+    if spec.startswith("/assets/"):
+        candidate = dist_dir / spec.removeprefix("/")
+    elif spec.startswith("assets/"):
+        candidate = dist_dir / spec
+    elif base_path is not None and (spec.startswith("./") or spec.startswith("../")):
+        candidate = (base_path.parent / spec).resolve()
+    else:
+        return None
+
+    if candidate.is_file() and candidate.is_relative_to(dist_dir.resolve()):
+        return candidate
+    return None
+
+def measure_initial_assets(dist_dir: Path) -> tuple[tuple[int, int] | None, str | None]:
+    index_html = dist_dir / "index.html"
+    if not index_html.is_file():
+        return None, "dist/index.html missing; cannot measure initial page assets"
+
+    files = {index_html}
+    queue: list[Path] = []
+
+    for spec in html_asset_pattern.findall(index_html.read_text(encoding="utf-8")):
+        candidate = resolve_dist_asset(dist_dir, spec)
+        if candidate is not None:
+            queue.append(candidate)
+
+    while queue:
+        current = queue.pop()
+        if current in files:
+            continue
+
+        files.add(current)
+        if current.suffix != ".js":
+            continue
+
+        try:
+            source = current.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        for spec in static_import_pattern.findall(source):
+            candidate = resolve_dist_asset(dist_dir, spec, current)
+            if candidate is not None and candidate not in files:
+                queue.append(candidate)
+
+    return measure_files(files), None
+
+failures = 0
+for frontend in frontends:
+    name = frontend["name"]
+    app_dir = repo_root / frontend["path"]
+    if not app_dir.is_dir():
+        print(f"FAIL\t{name}: app path missing at {app_dir}")
+        failures += 1
+        continue
+
+    node_modules_dir = app_dir / "node_modules"
+    bun_path = shutil.which("bun")
+    if not node_modules_dir.is_dir():
+        line = f"{name}: node_modules missing; cannot measure installed package count"
+        if require_artifacts:
+            print(f"FAIL\t{line}")
+            failures += 1
+        else:
+            print(f"WARN\t{line}")
+    elif bun_path is None:
+        line = f"{name}: bun not found in PATH; cannot measure installed package count"
+        if require_artifacts:
+            print(f"FAIL\t{line}")
+            failures += 1
+        else:
+            print(f"WARN\t{line}")
+    else:
+        result = subprocess.run(
+            [bun_path, "pm", "ls"],
+            cwd=app_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        first_line = result.stdout.splitlines()[0] if result.stdout else ""
+        match = re.search(r"\((\d+)\)", first_line)
+        if result.returncode != 0 or not match:
+            detail = result.stderr.strip() or result.stdout.strip() or "unable to parse bun pm ls output"
+            print(f"FAIL\t{name}: failed to measure installed packages ({detail})")
+            failures += 1
+        else:
+            installed_packages = int(match.group(1))
+            budget = frontend.get("max_installed_packages")
+            if budget is not None:
+                if installed_packages <= int(budget):
+                    print(f"OK\t{name}: installed packages {installed_packages} <= {budget}")
+                else:
+                    print(f"FAIL\t{name}: installed packages {installed_packages} exceed budget {budget}")
+                    failures += 1
+
+    assets_dir = app_dir / "dist" / "assets"
+    if not assets_dir.is_dir():
+        line = f"{name}: dist/assets missing; cannot measure shipped asset bytes"
+        if require_artifacts:
+            print(f"FAIL\t{line}")
+            failures += 1
+        else:
+            print(f"WARN\t{line}")
+        continue
+
+    files = sorted(
+        path for path in assets_dir.rglob("*")
+        if path.is_file() and not path.name.endswith(".map")
+    )
+    if not files:
+        line = f"{name}: dist/assets contains no shipped files after excluding source maps"
+        if require_artifacts:
+            print(f"FAIL\t{line}")
+            failures += 1
+        else:
+            print(f"WARN\t{line}")
+        continue
+
+    raw_bytes, gzip_bytes = measure_files(set(files))
+
+    raw_budget = frontend.get("max_dist_asset_raw_bytes")
+    gzip_budget = frontend.get("max_dist_asset_gzip_bytes")
+
+    if raw_budget is not None:
+        if raw_bytes <= int(raw_budget):
+            print(f"OK\t{name}: shipped asset raw bytes {raw_bytes} <= {raw_budget}")
+        else:
+            print(f"FAIL\t{name}: shipped asset raw bytes {raw_bytes} exceed budget {raw_budget}")
+            failures += 1
+
+    if gzip_budget is not None:
+        if gzip_bytes <= int(gzip_budget):
+            print(f"OK\t{name}: shipped asset gzip bytes {gzip_bytes} <= {gzip_budget}")
+        else:
+            print(f"FAIL\t{name}: shipped asset gzip bytes {gzip_bytes} exceed budget {gzip_budget}")
+            failures += 1
+
+    initial_metrics, initial_error = measure_initial_assets(app_dir / "dist")
+    if initial_metrics is None:
+        line = f"{name}: {initial_error}"
+        if require_artifacts:
+            print(f"FAIL\t{line}")
+            failures += 1
+        else:
+            print(f"WARN\t{line}")
+        continue
+
+    initial_raw_bytes, initial_gzip_bytes = initial_metrics
+    initial_raw_budget = frontend.get("max_initial_asset_raw_bytes")
+    initial_gzip_budget = frontend.get("max_initial_asset_gzip_bytes")
+
+    if initial_raw_budget is not None:
+        if initial_raw_bytes <= int(initial_raw_budget):
+            print(f"OK\t{name}: initial asset raw bytes {initial_raw_bytes} <= {initial_raw_budget}")
+        else:
+            print(f"FAIL\t{name}: initial asset raw bytes {initial_raw_bytes} exceed budget {initial_raw_budget}")
+            failures += 1
+
+    if initial_gzip_budget is not None:
+        if initial_gzip_bytes <= int(initial_gzip_budget):
+            print(f"OK\t{name}: initial asset gzip bytes {initial_gzip_bytes} <= {initial_gzip_budget}")
+        else:
+            print(f"FAIL\t{name}: initial asset gzip bytes {initial_gzip_bytes} exceed budget {initial_gzip_budget}")
+            failures += 1
+
+raise SystemExit(1 if failures else 0)
+PY
+  )"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  emit_frontend_budget_lines "${output}"
+  if [[ "${status}" -ne 0 ]]; then
+    return
+  fi
+
+  ok "All frontend package and bundle budgets passed."
+}
+
 check_action_pins
 check_apim_simulator_vendor
 check_npm_age_gates
 check_bun_age_gates
 check_uv_age_gates
+check_frontend_budgets
 
 printf '\n'
 if [[ "${FAILURES}" -gt 0 ]]; then

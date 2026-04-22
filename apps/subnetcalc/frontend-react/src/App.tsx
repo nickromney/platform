@@ -1,15 +1,30 @@
-import { PublicClientApplication } from '@azure/msal-browser'
-import { MsalProvider } from '@azure/msal-react'
-import { useEffect, useState } from 'react'
-import { AuthProvider } from './auth/AuthContext'
-import { msalConfig } from './auth/msalConfig'
+import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { SubnetCalculator } from './components/SubnetCalculator'
 import { APP_CONFIG } from './config'
 import '../../shared-frontend/src/styles.css'
 
-// Initialize MSAL instance only if using MSAL auth
-const msalInstance =
-  APP_CONFIG.auth.method === 'msal' && APP_CONFIG.auth.clientId ? new PublicClientApplication(msalConfig) : null
+type AuthWrapperProps = {
+  children: ReactNode
+}
+
+type AuthWrapperModule = {
+  default: ComponentType<AuthWrapperProps>
+}
+
+function loadAuthWrapper(): Promise<AuthWrapperModule> {
+  switch (APP_CONFIG.auth.method) {
+    case 'jwt':
+      return import('./auth/jwtAuthWrapper')
+    case 'msal':
+      return import('./auth/msalAuthWrapper')
+    case 'oidc':
+      return import('./auth/oidcAuthWrapper')
+    default:
+      return import('./auth/basicAuthWrapper')
+  }
+}
+
+const AuthWrapper = lazy(loadAuthWrapper)
 
 function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
@@ -44,24 +59,19 @@ function App() {
     />
   )
 
-  // Wrap with MsalProvider only if using MSAL
-  if (APP_CONFIG.auth.method === 'msal' && msalInstance) {
-    return (
-      <MsalProvider instance={msalInstance}>
-        <AuthProvider>
-          <SubnetCalculator theme={theme} onToggleTheme={toggleTheme} />
-          {debugMetadata}
-        </AuthProvider>
-      </MsalProvider>
-    )
-  }
-
-  // For Easy Auth, SWA, or no auth - use AuthProvider directly
   return (
-    <AuthProvider>
-      <SubnetCalculator theme={theme} onToggleTheme={toggleTheme} />
-      {debugMetadata}
-    </AuthProvider>
+    <Suspense
+      fallback={
+        <div className="container loading-center">
+          <div aria-busy="true">Loading...</div>
+        </div>
+      }
+    >
+      <AuthWrapper>
+        <SubnetCalculator theme={theme} onToggleTheme={toggleTheme} />
+        {debugMetadata}
+      </AuthWrapper>
+    </Suspense>
   )
 }
 
