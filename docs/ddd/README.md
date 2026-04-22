@@ -16,6 +16,8 @@ automatically the same thing as the ubiquitous language.
 
 - [Ubiquitous Language](./ubiquitous-language.md) — The canonical vocabulary.
 - [Context Map](./context-map.md) — Relationship between domains and services.
+- [Retrospective ADRs](../adr/README.md) — Historical decisions recovered from
+  the repo lineage.
 - [Contracts Between Contexts](./contracts.md) — Frozen wire-visible interfaces.
 - [Consistency Plan](./consistency-plan.md) — The roadmap used to align code and docs.
 - [Solution Variant Comparison](./solution-variant-comparison.md) — Implementation differences.
