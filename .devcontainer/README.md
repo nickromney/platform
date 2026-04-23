@@ -162,20 +162,23 @@ The devcontainer now follows a Linux-first toolchain split:
 
 - `apt`: base Linux packages such as `bats`, `neovim`, `shellcheck`, and
   `yamllint`
-- devcontainer features: Docker socket integration and Node.js 24
-- upstream installers: `bun`, `starship`, `step`, `kyverno`, `lima`, and the
-  pinned OpenTofu `1.11.6` standalone install
+- pinned devcontainer features: Docker socket integration with Docker `29.4.1`
+  and Buildx `0.33.0`, plus Node.js `24.15.0` with `nvm 0.40.4` and
+  `pnpm 10.33.1`
+- pinned direct release assets: `arkade`, `bun`, `starship`, `step`,
+  `kyverno`, `lima`, `mkcert`, and the pinned OpenTofu `1.11.6` standalone
+  install
 - direct binary copy: `uv`
-- `arkade`: Kubernetes-facing tools such as `kubectl`, `kind`, `helm`,
-  `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, and the local `slicer`
-  helper
+- pinned `arkade` installs: Kubernetes-facing tools such as `kubectl`, `kind`,
+  `helm`, `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, and the local
+  `slicer` helper
 
 `make -C .devcontainer check-version` validates that surface in a read-only
-way. It checks the pinned OpenTofu and `uv` definitions, reports floating
-inputs such as `arkade` and installer-based tools, checks the workspace
+way. It checks the pinned feature refs plus the version matrix in
+[`toolchain-versions.sh`](./toolchain-versions.sh), checks the workspace
 container/image age against the default 14-day limit, and confirms the live
-OpenTofu/`uv` versions still match the definition when a running devcontainer
-is available. Override the freshness threshold with
+toolchain still matches the definition when a running devcontainer is
+available. Override the freshness threshold with
 `DEVCONTAINER_CHECK_STALE_DAYS=<days>`.
 
 The repo-level `make lint` entrypoint works inside the devcontainer too, and

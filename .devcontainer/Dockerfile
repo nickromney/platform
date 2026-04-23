@@ -8,6 +8,7 @@ ARG USERNAME=vscode
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH=/usr/local/bin:${PATH}
 
+COPY toolchain-versions.sh /tmp/devcontainer/toolchain-versions.sh
 COPY install-toolchain.sh /tmp/devcontainer/install-toolchain.sh
 
 RUN apt-get update \
@@ -40,9 +41,11 @@ RUN apt-get update \
         yamllint \
         zip \
     && locale-gen en_GB.UTF-8 \
-    && chmod +x /tmp/devcontainer/install-toolchain.sh \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN chmod +x /tmp/devcontainer/install-toolchain.sh \
     && /tmp/devcontainer/install-toolchain.sh --execute "${USERNAME}" \
-    && rm -rf /var/lib/apt/lists/* /tmp/devcontainer
+    && rm -rf /tmp/devcontainer
 
 ENV LANG=en_GB.UTF-8
 ENV LC_ALL=en_GB.UTF-8

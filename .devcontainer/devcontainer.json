@@ -8,13 +8,16 @@
     "dockerfile": "Dockerfile"
   },
   "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "version": "latest",
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1.9.1": {
+      "version": "29.4.1",
+      "mobyBuildxVersion": "0.33.0",
       "moby": true,
       "dockerDashComposeVersion": "v2"
     },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "24"
+    "ghcr.io/devcontainers/features/node:1.7.1": {
+      "version": "24.15.0",
+      "pnpmVersion": "10.33.1",
+      "nvmVersion": "0.40.4"
     }
   },
   "remoteUser": "vscode",

@@ -6,6 +6,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 DEVCONTAINER_CONFIG="${DEVCONTAINER_CONFIG:-${REPO_ROOT}/.devcontainer/devcontainer.json}"
 DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/.devcontainer/Dockerfile}"
 INSTALL_TOOLCHAIN_SCRIPT="${INSTALL_TOOLCHAIN_SCRIPT:-${REPO_ROOT}/.devcontainer/install-toolchain.sh}"
+TOOLCHAIN_VERSIONS_FILE="${TOOLCHAIN_VERSIONS_FILE:-${REPO_ROOT}/.devcontainer/toolchain-versions.sh}"
 DEVCONTAINER_CHECK_STALE_DAYS="${DEVCONTAINER_CHECK_STALE_DAYS:-14}"
 DEVCONTAINER_REMOTE_USER="${DEVCONTAINER_REMOTE_USER:-vscode}"
 
@@ -76,10 +77,6 @@ run_inline_python() {
   uv run --isolated python - "$@"
 }
 
-parse_expected_opentofu_version() {
-  sed -nE 's/^OPENTOFU_VERSION="\$\{OPENTOFU_VERSION:-([^}]*)\}".*/\1/p' "${INSTALL_TOOLCHAIN_SCRIPT}" | head -n 1
-}
-
 parse_expected_uv_version() {
   sed -nE 's#^COPY --from=ghcr\.io/astral-sh/uv:([^[:space:]]+) /uv /usr/local/bin/uv#\1#p' "${DOCKERFILE_PATH}" | head -n 1
 }
@@ -88,7 +85,7 @@ parse_base_image() {
   sed -nE 's/^FROM[[:space:]]+([^[:space:]]+).*/\1/p' "${DOCKERFILE_PATH}" | head -n 1
 }
 
-parse_devcontainer_feature_versions() {
+parse_devcontainer_features() {
   run_inline_python "${DEVCONTAINER_CONFIG}" <<'PY'
 import json
 import sys
@@ -97,27 +94,101 @@ with open(sys.argv[1], encoding="utf-8") as handle:
     payload = json.load(handle)
 
 features = payload.get("features") or {}
-for feature_name, config in features.items():
-    if isinstance(config, dict):
-        version = str(config.get("version", "")).strip()
-    else:
-        version = str(config).strip()
-    print(f"{feature_name}\t{version}")
+for feature_ref in features:
+    feature_id, feature_tag = feature_ref.rsplit(":", 1)
+    print(f"{feature_id}\t{feature_tag}")
 PY
 }
 
-parse_arkade_tools() {
-  awk '
-    /^arkade_tools=\(/ { in_list=1; next }
-    in_list && /^\)/ { in_list=0; exit }
-    in_list {
-      line=$0
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
-      if (line != "") {
-        print line
-      }
-    }
-  ' "${INSTALL_TOOLCHAIN_SCRIPT}" | paste -sd ',' - | sed 's/,/, /g'
+strip_v_prefix() {
+  printf '%s\n' "${1#v}"
+}
+
+arkade_tool_version() {
+  local tool_name="$1"
+  local entry=""
+
+  for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
+    if [[ "${entry%%=*}" == "${tool_name}" ]]; then
+      printf '%s\n' "${entry#*=}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+find_feature_definition() {
+  local feature_id="$1"
+  awk -F $'\t' -v feature_id="${feature_id}" '$1 == feature_id { print; exit }' <<< "${DEVCONTAINER_FEATURES}"
+}
+
+feature_option_value() {
+  local feature_ref="$1"
+  local option_name="$2"
+
+  run_inline_python "${DEVCONTAINER_CONFIG}" "${feature_ref%:*}" "${option_name}" <<'PY'
+import json
+import sys
+
+config_path, target_feature_id, option_name = sys.argv[1:4]
+
+with open(config_path, encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+features = payload.get("features") or {}
+for feature_ref, config in features.items():
+    feature_id, _ = feature_ref.rsplit(":", 1)
+    if feature_id != target_feature_id:
+        continue
+    if not isinstance(config, dict):
+        break
+    value = config.get(option_name)
+    if isinstance(value, bool):
+        print(str(value).lower())
+    elif value is not None:
+        print(str(value).strip())
+    break
+PY
+}
+
+check_feature_definition() {
+  local feature_ref="$1"
+  local feature_id expected_tag definition actual_tag
+
+  feature_id="${feature_ref%:*}"
+  expected_tag="${feature_ref##*:}"
+  definition="$(find_feature_definition "${feature_id}")"
+
+  if [[ -z "${definition}" ]]; then
+    fail_note "devcontainer feature ${feature_id} is missing"
+    return 0
+  fi
+
+  IFS=$'\t' read -r _ actual_tag <<< "${definition}"
+
+  if [[ "${actual_tag}" == "${expected_tag}" ]]; then
+    ok "devcontainer feature ${feature_id} is pinned to ${actual_tag}"
+  else
+    fail_note "devcontainer feature ${feature_id} resolves to ${actual_tag}, expected ${expected_tag}"
+  fi
+}
+
+check_feature_option() {
+  local feature_ref="$1"
+  local option_name="$2"
+  local expected_value="$3"
+  local feature_id actual_value
+
+  feature_id="${feature_ref%:*}"
+  actual_value="$(feature_option_value "${feature_ref}" "${option_name}" 2>/dev/null || true)"
+  actual_value="$(trim "${actual_value}")"
+
+  if [[ "${actual_value}" == "${expected_value}" ]]; then
+    ok "devcontainer feature ${feature_id} option ${option_name} is pinned to ${actual_value}"
+  else
+    fail_note "devcontainer feature ${feature_id} option ${option_name} is ${actual_value:-unset}, expected ${expected_value}"
+  fi
 }
 
 select_workspace_container_id() {
@@ -231,17 +302,19 @@ report_live_tool_version() {
 require_file "${DEVCONTAINER_CONFIG}"
 require_file "${DOCKERFILE_PATH}"
 require_file "${INSTALL_TOOLCHAIN_SCRIPT}"
+require_file "${TOOLCHAIN_VERSIONS_FILE}"
+
+# shellcheck source=/dev/null
+source "${TOOLCHAIN_VERSIONS_FILE}"
 
 if ! [[ "${DEVCONTAINER_CHECK_STALE_DAYS}" =~ ^[0-9]+$ ]]; then
   printf 'DEVCONTAINER_CHECK_STALE_DAYS must be an integer, got: %s\n' "${DEVCONTAINER_CHECK_STALE_DAYS}" >&2
   exit 1
 fi
 
-EXPECTED_OPENTOFU_VERSION="$(parse_expected_opentofu_version)"
 EXPECTED_UV_VERSION="$(parse_expected_uv_version)"
 BASE_IMAGE="$(parse_base_image)"
-DEVCONTAINER_FEATURE_VERSIONS="$(parse_devcontainer_feature_versions 2>/dev/null || true)"
-ARKADE_TOOLS="$(parse_arkade_tools)"
+DEVCONTAINER_FEATURES="$(parse_devcontainer_features 2>/dev/null || true)"
 
 section "Definition"
 
@@ -251,18 +324,17 @@ else
   fail_note "could not resolve the devcontainer base image from ${DOCKERFILE_PATH}"
 fi
 
-if [[ -n "${DEVCONTAINER_FEATURE_VERSIONS}" ]]; then
-  while IFS=$'\t' read -r feature_name feature_version; do
-    [[ -n "${feature_name}" ]] || continue
-
-    if [[ -z "${feature_version}" || "${feature_version}" == "latest" ]]; then
-      warn "devcontainer feature ${feature_name} tracks ${feature_version:-its default version}"
-    else
-      ok "devcontainer feature ${feature_name} is pinned to ${feature_version}"
-    fi
-  done <<< "${DEVCONTAINER_FEATURE_VERSIONS}"
+if [[ -n "${DEVCONTAINER_FEATURES}" ]]; then
+  check_feature_definition "${DEVCONTAINER_DOCKER_FEATURE_REF}"
+  check_feature_option "${DEVCONTAINER_DOCKER_FEATURE_REF}" "version" "${DEVCONTAINER_DOCKER_CLI_VERSION}"
+  check_feature_option "${DEVCONTAINER_DOCKER_FEATURE_REF}" "mobyBuildxVersion" "${DEVCONTAINER_DOCKER_BUILDX_VERSION}"
+  check_feature_option "${DEVCONTAINER_DOCKER_FEATURE_REF}" "dockerDashComposeVersion" "${DEVCONTAINER_DOCKER_COMPOSE_CHANNEL}"
+  check_feature_definition "${DEVCONTAINER_NODE_FEATURE_REF}"
+  check_feature_option "${DEVCONTAINER_NODE_FEATURE_REF}" "version" "${DEVCONTAINER_NODE_VERSION}"
+  check_feature_option "${DEVCONTAINER_NODE_FEATURE_REF}" "nvmVersion" "${DEVCONTAINER_NODE_NVM_VERSION}"
+  check_feature_option "${DEVCONTAINER_NODE_FEATURE_REF}" "pnpmVersion" "${DEVCONTAINER_NODE_PNPM_VERSION}"
 else
-  warn "could not resolve any devcontainer feature versions from ${DEVCONTAINER_CONFIG}"
+  warn "could not resolve any devcontainer feature definitions from ${DEVCONTAINER_CONFIG}"
 fi
 
 if [[ -n "${EXPECTED_UV_VERSION}" ]]; then
@@ -271,21 +343,18 @@ else
   fail_note "could not resolve the pinned uv version from ${DOCKERFILE_PATH}"
 fi
 
-if [[ -n "${EXPECTED_OPENTOFU_VERSION}" ]]; then
-  ok "OpenTofu is pinned to ${EXPECTED_OPENTOFU_VERSION} in install-toolchain.sh"
-else
-  fail_note "could not resolve the pinned OpenTofu version from ${INSTALL_TOOLCHAIN_SCRIPT}"
-fi
-
-warn "bun resolves from the upstream install script at build time"
-warn "Lima resolves from the latest GitHub release at build time"
-warn "Kyverno resolves from the latest GitHub release at build time"
-if [[ -n "${ARKADE_TOOLS}" ]]; then
-  warn "arkade-managed tools resolve at build time: ${ARKADE_TOOLS}"
-else
-  warn "arkade-managed tool list could not be resolved from install-toolchain.sh"
-fi
-warn "slicer resolves from ghcr.io/openfaasltd/slicer:latest at build time"
+ok "OpenTofu is pinned to ${OPENTOFU_VERSION} in toolchain-versions.sh"
+ok "Bun is pinned to ${BUN_VERSION}"
+ok "Starship is pinned to ${STARSHIP_VERSION}"
+ok "step is pinned to ${STEP_VERSION}"
+ok "Kyverno is pinned to ${KYVERNO_VERSION}"
+ok "Lima is pinned to ${LIMA_VERSION}"
+ok "arkade is pinned to ${ARKADE_VERSION}"
+ok "mkcert is pinned to ${MKCERT_VERSION}"
+ok "slicer is pinned to ${SLICER_IMAGE_REF}"
+ok "Node feature subtools are pinned: nvm ${DEVCONTAINER_NODE_NVM_VERSION}, pnpm ${DEVCONTAINER_NODE_PNPM_VERSION}"
+ok "Docker feature subtools are pinned: buildx ${DEVCONTAINER_DOCKER_BUILDX_VERSION}, docker-compose channel ${DEVCONTAINER_DOCKER_COMPOSE_CHANNEL}"
+ok "arkade-managed tools are pinned: $(printf '%s, ' "${DEVCONTAINER_ARKADE_TOOLS[@]}" | sed 's/, $//')"
 
 WORKSPACE_CONTAINER_ID=""
 WORKSPACE_CONTAINER_STATUS=""
@@ -349,20 +418,30 @@ fi
 section "Live Toolchain"
 
 if inside_devcontainer || [[ "${WORKSPACE_CONTAINER_STATUS:-}" == "running" ]]; then
-  check_pinned_tool_version "OpenTofu" "${EXPECTED_OPENTOFU_VERSION}" "tofu -version 2>/dev/null | sed -n '1s/^OpenTofu v//p'"
+  check_pinned_tool_version "docker" "${DEVCONTAINER_DOCKER_CLI_VERSION}" "docker --version 2>/dev/null | sed -nE 's/^Docker version ([0-9.]+).*/\\1/p'"
+  check_pinned_tool_version "docker buildx" "${DEVCONTAINER_DOCKER_BUILDX_VERSION}" "docker buildx version 2>/dev/null | sed -nE 's/.* v?([0-9][^[:space:]]*).*/\\1/p' | sed -E 's/-[0-9]+$//' | head -n 1"
+  check_pinned_tool_version "node" "${DEVCONTAINER_NODE_VERSION}" "node --version 2>/dev/null | sed 's/^v//'"
+  check_pinned_tool_version "pnpm" "${DEVCONTAINER_NODE_PNPM_VERSION}" "pnpm --version 2>/dev/null | head -n 1"
+  check_pinned_tool_version "nvm" "${DEVCONTAINER_NODE_NVM_VERSION}" "export NVM_DIR=\"\${NVM_DIR:-/usr/local/share/nvm}\"; [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\" && nvm --version 2>/dev/null | head -n 1"
+  check_pinned_tool_version "OpenTofu" "${OPENTOFU_VERSION}" "tofu -version 2>/dev/null | sed -n '1s/^OpenTofu v//p'"
   check_pinned_tool_version "uv" "${EXPECTED_UV_VERSION}" "uv --version 2>/dev/null | awk 'NR==1 { print \$2; exit }'"
-  report_live_tool_version "terragrunt" "terragrunt --version 2>/dev/null | sed -E 's/.* v?([0-9][^[:space:]]*).*/\\1/' | head -n 1"
-  report_live_tool_version "kind" "kind version 2>/dev/null | awk 'NR==1 { print \$2; exit }'"
-  report_live_tool_version "kubectl" "kubectl version --client --output=yaml 2>/dev/null | sed -n 's/^  gitVersion: v//p' | head -n 1"
-  report_live_tool_version "helm" "helm version --short 2>/dev/null | sed -E 's/^v//; s/[+].*$//'"
-  report_live_tool_version "bun" "bun --version 2>/dev/null | head -n 1"
-  report_live_tool_version "cilium" "cilium version --client 2>/dev/null | awk '/cilium-cli:/ { sub(/^v/, \"\", \$2); print \$2; exit }'"
-  report_live_tool_version "hubble" "hubble version 2>&1 | sed -nE '1s/^hubble v?([^[:space:]]+).*/\\1/p'"
-  report_live_tool_version "k3sup" "k3sup version 2>&1 | tr -d '\\033' | sed -E 's/\\[[0-9;]*[[:alpha:]]//g' | sed -nE 's/^Version:[[:space:]]+([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
-  report_live_tool_version "kubie" "kubie --version 2>/dev/null | sed -E 's/^kubie[[:space:]]+v?//' | head -n 1"
-  report_live_tool_version "kyverno" "kyverno version 2>/dev/null | awk '/Version:/ { sub(/^v/, \"\", \$2); print \$2; exit }'"
-  report_live_tool_version "limactl" "limactl --version 2>&1 | sed -E 's/^limactl version v?//' | head -n 1"
-  report_live_tool_version "mkcert" "mkcert -version 2>/dev/null | sed 's/^v//'"
+  check_pinned_tool_version "bun" "${BUN_VERSION#bun-v}" "bun --version 2>/dev/null | head -n 1"
+  check_pinned_tool_version "starship" "$(strip_v_prefix "${STARSHIP_VERSION}")" "starship --version 2>/dev/null | awk 'NR==1 { print \$2; exit }'"
+  check_pinned_tool_version "step" "$(strip_v_prefix "${STEP_VERSION}")" "step version 2>/dev/null | sed -nE 's/^Smallstep CLI\\/([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
+  check_pinned_tool_version "arkade" "$(strip_v_prefix "${ARKADE_VERSION}")" "arkade version 2>/dev/null | tr -d '\\033' | sed -E 's/\\[[0-9;]*[[:alpha:]]//g' | sed -nE 's/^Version:[[:space:]]*([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
+  check_pinned_tool_version "terragrunt" "$(strip_v_prefix "$(arkade_tool_version terragrunt)")" "terragrunt --version 2>/dev/null | sed -E 's/.* v?([0-9][^[:space:]]*).*/\\1/' | head -n 1"
+  check_pinned_tool_version "kind" "$(arkade_tool_version kind)" "kind version 2>/dev/null | awk 'NR==1 { print \$2; exit }'"
+  check_pinned_tool_version "kubectl" "$(strip_v_prefix "$(arkade_tool_version kubectl)")" "kubectl version --client --output=yaml 2>/dev/null | sed -n 's/^  gitVersion: v//p' | head -n 1"
+  check_pinned_tool_version "helm" "$(strip_v_prefix "$(arkade_tool_version helm)")" "helm version --short 2>/dev/null | sed -E 's/^v//; s/[+].*$//'"
+  check_pinned_tool_version "cilium" "$(strip_v_prefix "$(arkade_tool_version cilium)")" "cilium version --client 2>/dev/null | awk '/cilium-cli:/ { sub(/^v/, \"\", \$2); print \$2; exit }'"
+  check_pinned_tool_version "hubble" "$(strip_v_prefix "$(arkade_tool_version hubble)")" "hubble version 2>&1 | sed -nE '1s/^hubble v?([^[:space:]]+).*/\\1/p' | sed 's/@.*$//'"
+  check_pinned_tool_version "k3sup" "$(arkade_tool_version k3sup)" "k3sup version 2>&1 | tr -d '\\033' | sed -E 's/\\[[0-9;]*[[:alpha:]]//g' | sed -nE 's/^Version:[[:space:]]+([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
+  check_pinned_tool_version "kubie" "$(strip_v_prefix "$(arkade_tool_version kubie)")" "kubie --version 2>/dev/null | sed -E 's/^kubie[[:space:]]+v?//' | head -n 1"
+  check_pinned_tool_version "kyverno" "$(strip_v_prefix "${KYVERNO_VERSION}")" "kyverno version 2>/dev/null | awk '/Version:/ { sub(/^v/, \"\", \$2); print \$2; exit }'"
+  check_pinned_tool_version "limactl" "$(strip_v_prefix "${LIMA_VERSION}")" "limactl --version 2>&1 | sed -E 's/^limactl version v?//' | head -n 1"
+  check_pinned_tool_version "mkcert" "$(strip_v_prefix "${MKCERT_VERSION}")" "mkcert -version 2>/dev/null | sed 's/^v//'"
+  check_pinned_tool_version "yq" "$(strip_v_prefix "$(arkade_tool_version yq)")" "yq --version 2>/dev/null | sed -nE 's/^.* version v?([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
+  check_pinned_tool_version "jq" "$(arkade_tool_version jq)" "jq --version 2>/dev/null | head -n 1"
 else
   warn "live tool-version checks were skipped because no running devcontainer is available"
 fi

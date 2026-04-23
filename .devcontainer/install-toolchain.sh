@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SHELL_CLI_SOURCE="${REPO_ROOT}/scripts/lib/shell-cli.sh"
+TOOLCHAIN_VERSIONS_FILE="${TOOLCHAIN_VERSIONS_FILE:-${SCRIPT_DIR}/toolchain-versions.sh}"
 
 if [[ -f "${SHELL_CLI_SOURCE}" ]]; then
   # shellcheck source=/dev/null
@@ -91,6 +92,14 @@ EOF
   }
 fi
 
+if [[ ! -f "${TOOLCHAIN_VERSIONS_FILE}" ]]; then
+  printf 'missing required toolchain version file: %s\n' "${TOOLCHAIN_VERSIONS_FILE}" >&2
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+source "${TOOLCHAIN_VERSIONS_FILE}"
+
 usage() {
   cat <<EOF
 Usage: install-toolchain.sh [--username NAME] [--dry-run] [--execute]
@@ -149,7 +158,6 @@ if [[ "${#positional[@]}" -gt 1 ]]; then
   exit 1
 fi
 
-OPENTOFU_VERSION="${OPENTOFU_VERSION:-1.11.6}"
 OPENTOFU_INSTALL_DIR="${OPENTOFU_INSTALL_DIR:-/usr/local/lib/opentofu/${OPENTOFU_VERSION}}"
 OPENTOFU_INSTALLER_URL="${OPENTOFU_INSTALLER_URL:-https://get.opentofu.org/install-opentofu.sh}"
 
@@ -163,7 +171,9 @@ run_as_user() {
 
 install_arkade_tool() {
   local tool="$1"
-  arkade get "${tool}" --path /usr/local/bin
+  local version="$2"
+
+  arkade get "${tool}" --version "${version}" --path /usr/local/bin
 }
 
 arch_for_go_tools() {
@@ -196,49 +206,154 @@ arch_for_kyverno() {
   esac
 }
 
+linux_arch_for_bun() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'x64\n'
+      ;;
+    aarch64|arm64)
+      printf 'aarch64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+linux_arch_for_lima() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'x86_64\n'
+      ;;
+    aarch64|arm64)
+      printf 'aarch64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+linux_arch_for_mkcert() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'amd64\n'
+      ;;
+    aarch64|arm64)
+      printf 'arm64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+starship_release_asset() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'starship-x86_64-unknown-linux-gnu.tar.gz\n'
+      ;;
+    aarch64|arm64)
+      printf 'starship-aarch64-unknown-linux-musl.tar.gz\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+arkade_release_asset() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'arkade\n'
+      ;;
+    aarch64|arm64)
+      printf 'arkade-arm64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+install_arkade() {
+  local asset
+
+  asset="$(arkade_release_asset)"
+  curl -fsSL "https://github.com/alexellis/arkade/releases/download/${ARKADE_VERSION}/${asset}" -o /usr/local/bin/arkade
+  chmod +x /usr/local/bin/arkade
+}
+
+install_bun() {
+  local arch_name tmp_dir
+
+  arch_name="$(linux_arch_for_bun)"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/bun-linux-${arch_name}.zip" -o "${tmp_dir}/bun.zip"
+  unzip -q "${tmp_dir}/bun.zip" -d "${tmp_dir}"
+  install "${tmp_dir}/bun-linux-${arch_name}/bun" /usr/local/bin/bun
+  ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+  mkdir -p "/home/${username}/.bun/bin"
+  ln -sf /usr/local/bin/bun "/home/${username}/.bun/bin/bun"
+  ln -sf /usr/local/bin/bunx "/home/${username}/.bun/bin/bunx"
+  chown -R "${username}:${username}" "/home/${username}/.bun"
+  rm -rf "${tmp_dir}"
+}
+
 install_lima() {
-  local version=""
+  local arch_name
 
-  version="$(curl -fsSL https://api.github.com/repos/lima-vm/lima/releases/latest | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-
-  if [[ -z "${version}" ]]; then
-    echo "failed to resolve latest Lima release" >&2
-    exit 1
-  fi
-
-  curl -fsSL "https://github.com/lima-vm/lima/releases/download/${version}/lima-${version#v}-$(uname -s)-$(uname -m).tar.gz" | tar -C /usr/local -xz
-  curl -fsSL "https://github.com/lima-vm/lima/releases/download/${version}/lima-additional-guestagents-${version#v}-$(uname -s)-$(uname -m).tar.gz" | tar -C /usr/local -xz
+  arch_name="$(linux_arch_for_lima)"
+  curl -fsSL "https://github.com/lima-vm/lima/releases/download/${LIMA_VERSION}/lima-${LIMA_VERSION#v}-Linux-${arch_name}.tar.gz" | tar -C /usr/local -xz
+  curl -fsSL "https://github.com/lima-vm/lima/releases/download/${LIMA_VERSION}/lima-additional-guestagents-${LIMA_VERSION#v}-Linux-${arch_name}.tar.gz" | tar -C /usr/local -xz
 }
 
 install_starship() {
-  if command -v starship >/dev/null 2>&1; then
-    return 0
-  fi
+  local asset tmp_dir
 
-  curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /usr/local/bin
+  asset="$(starship_release_asset)"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/starship/starship/releases/download/${STARSHIP_VERSION}/${asset}" -o "${tmp_dir}/starship.tgz"
+  tar -xzf "${tmp_dir}/starship.tgz" -C "${tmp_dir}"
+  install "${tmp_dir}/starship" /usr/local/bin/starship
+  rm -rf "${tmp_dir}"
 }
 
 install_step() {
-  local os_name arch_name tmp_dir
+  local arch_name tmp_dir package_name
 
-  os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
-  arch_name="$(arch_for_go_tools)"
+  arch_name="$(linux_arch_for_mkcert)"
   tmp_dir="$(mktemp -d)"
-  curl -fsSL "https://dl.smallstep.com/cli/docs-cli-install/latest/step_${os_name}_${arch_name}.tar.gz" | tar -xz -C "${tmp_dir}"
-  install "${tmp_dir}"/*/bin/step /usr/local/bin/step
+  package_name="step-cli_${STEP_VERSION#v}-1_${arch_name}.deb"
+  curl -fsSL "https://github.com/smallstep/cli/releases/download/v${STEP_VERSION#v}/${package_name}" -o "${tmp_dir}/${package_name}"
+  apt-get install -y "${tmp_dir}/${package_name}"
   rm -rf "${tmp_dir}"
 }
 
 install_kyverno() {
-  local os_name arch_name version archive tmp_dir
+  local os_name arch_name archive tmp_dir
 
   os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
   arch_name="$(arch_for_kyverno)"
-  version="$(curl -fsSL https://api.github.com/repos/kyverno/kyverno/releases/latest | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
-  archive="kyverno-cli_${version}_${os_name}_${arch_name}.tar.gz"
+  archive="kyverno-cli_${KYVERNO_VERSION}_${os_name}_${arch_name}.tar.gz"
   tmp_dir="$(mktemp -d)"
-  curl -fsSL "https://github.com/kyverno/kyverno/releases/download/${version}/${archive}" | tar -xz -C "${tmp_dir}" kyverno
+  curl -fsSL "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/${archive}" | tar -xz -C "${tmp_dir}" kyverno
   install "${tmp_dir}/kyverno" /usr/local/bin/kyverno
+  rm -rf "${tmp_dir}"
+}
+
+install_mkcert() {
+  local arch_name tmp_dir
+
+  arch_name="$(linux_arch_for_mkcert)"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-${arch_name}" -o "${tmp_dir}/mkcert"
+  install "${tmp_dir}/mkcert" /usr/local/bin/mkcert
   rm -rf "${tmp_dir}"
 }
 
@@ -262,51 +377,26 @@ install_playwright_chromium() {
   run_as_user "bun x playwright install --with-deps chromium"
 }
 
-if ! command -v arkade >/dev/null 2>&1; then
-  curl -fsSL https://get.arkade.dev | sh
-fi
-
+install_arkade
+install_bun
 install_starship
 install_step
 install_kyverno
 install_lima
-run_as_user "curl -fsSL https://bun.sh/install | bash"
+install_mkcert
 
-arkade_tools=(
-  cilium
-  helm
-  hubble
-  jq
-  k3sup
-  kind
-  kubectl
-  kubie
-  kubectx
-  mkcert
-  terragrunt
-  yq
-)
-
-for tool in "${arkade_tools[@]}"; do
-  install_arkade_tool "${tool}"
+for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
+  install_arkade_tool "${entry%%=*}" "${entry#*=}"
 done
 
 install_opentofu
 
-arkade oci install ghcr.io/openfaasltd/slicer:latest --path /usr/local/bin
+arkade oci install "${SLICER_IMAGE_REF}" --path /usr/local/bin
 
 cat >/usr/local/bin/compose <<'EOF'
 #!/usr/bin/env bash
 exec docker compose "$@"
 EOF
 chmod +x /usr/local/bin/compose
-
-if [[ -x "/home/${username}/.bun/bin/bun" ]]; then
-  ln -sf "/home/${username}/.bun/bin/bun" /usr/local/bin/bun
-fi
-
-if [[ -x "/home/${username}/.bun/bin/bunx" ]]; then
-  ln -sf "/home/${username}/.bun/bin/bunx" /usr/local/bin/bunx
-fi
 
 install_playwright_chromium
