@@ -13,7 +13,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --link-mode=copy --no-dev --no-install-project
 
 FROM ${PYTHON_RUNTIME_IMAGE}
 

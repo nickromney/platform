@@ -8,14 +8,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 allowed_python_execution=(
-  ".devcontainer/check-version.sh"
   "sd-wan/lima/provision/common.sh"
   "sd-wan/lima/provision/cloud2.sh"
-  "kubernetes/kind/scripts/ensure-kind-kubeconfig.sh"
-  "terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh"
-  "apps/subnetcalc/scripts/vendor-apim-simulator.sh"
-  "scripts/check-version.sh"
-  "terraform/kubernetes/scripts/check-version.sh"
 )
 
 bash4_feature_patterns=(

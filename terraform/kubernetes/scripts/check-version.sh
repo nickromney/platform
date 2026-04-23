@@ -298,12 +298,8 @@ require() {
 }
 
 run_inline_python() {
-  if command -v uv >/dev/null 2>&1; then
-    uv run --isolated python - "$@"
-    return 0
-  fi
-
-  python3 - "$@"
+  require uv
+  uv run --isolated python - "$@"
 }
 
 cluster_reachable() {
@@ -3220,6 +3216,8 @@ main() {
   CODE_PROMETHEUS=$(tf_default_from_variables "prometheus_chart_version")
   CODE_GRAFANA=$(tf_default_from_variables "grafana_chart_version")
   CODE_GRAFANA_IMAGE_TAG=$(tf_default_from_variables "grafana_image_tag")
+  CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_VERSION=$(tf_default_from_variables "grafana_victoria_logs_plugin_version")
+  CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_SHA256=$(tf_default_from_variables "grafana_victoria_logs_plugin_sha256")
   CODE_LOKI=$(tf_default_from_variables "loki_chart_version")
   CODE_VICTORIA_LOGS=$(tf_default_from_variables "victoria_logs_chart_version")
   CODE_TEMPO=$(tf_default_from_variables "tempo_chart_version")
@@ -3496,12 +3494,15 @@ main() {
   preferred_image_rows_sorted="$(printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1 || true)"
 
   INSTALLED_KIND="$(kind_installed_version)"
+  progress "Checking latest Grafana VictoriaLogs plugin release tag"
+  LATEST_GRAFANA_VICTORIA_LOGS_PLUGIN_TAG="$(github_latest_release_tag "VictoriaMetrics/victorialogs-datasource")"
   progress "Checking latest kind release tag"
   LATEST_KIND_RELEASE_TAG="$(github_latest_release_tag "kubernetes-sigs/kind")"
   progress "Checking latest kindest/node tag"
   LATEST_KIND_NODE_TAG="$(kindest_node_latest_tag)"
 
   kind_rows=()
+  kind_rows+=("$(print_observed_latest_row "grafana victorialogs plugin" "${CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_VERSION}" "${LATEST_GRAFANA_VICTORIA_LOGS_PLUGIN_TAG}" "codebase" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind release tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${LATEST_KIND_RELEASE_TAG}" "installed cli" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind node tag" "${CODE_KIND_NODE_TAG}" "${LATEST_KIND_NODE_TAG}" "codebase" "node tag")")
   kind_rows_sorted="$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)"

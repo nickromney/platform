@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "dependabot updates GitHub Actions weekly with a seven day cooldown" {
-  run python3 - "${REPO_ROOT}/.github/dependabot.yml" <<'PY'
+  run uv run --isolated python - "${REPO_ROOT}/.github/dependabot.yml" <<'PY'
 import re
 import sys
 from pathlib import Path

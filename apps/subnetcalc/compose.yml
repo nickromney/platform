@@ -147,6 +147,7 @@ services:
 
   frontend-python-flask:
     profiles: ["function-family"]
+    <<: *app-runtime-hardening
     build:
       context: ./frontend-python-flask
       dockerfile: Dockerfile
@@ -194,6 +195,7 @@ services:
       start_period: 5s
 
   frontend-html-static:
+    <<: *nginx-runtime-hardening
     build:
       context: ./frontend-html-static
       dockerfile: Dockerfile
@@ -205,6 +207,7 @@ services:
         condition: service_healthy
 
   frontend-python-flask-container-app:
+    <<: *app-runtime-hardening
     build:
       context: ./frontend-python-flask
       dockerfile: Dockerfile
@@ -237,6 +240,7 @@ services:
 
   frontend-typescript-vite-jwt:
     profiles: ["function-family"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
@@ -271,6 +275,7 @@ services:
 
   frontend-react-jwt:
     profiles: ["function-family"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -289,6 +294,7 @@ services:
 
   frontend-react-msal:
     profiles: ["function-family"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -309,6 +315,7 @@ services:
 
   frontend-react-server-jwt:
     profiles: ["function-family"]
+    <<: *app-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile.server
@@ -330,6 +337,7 @@ services:
 
   frontend-react-proxy:
     profiles: ["function-family"]
+    <<: *app-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile.server
@@ -431,6 +439,7 @@ services:
 
   frontend-react-keycloak:
     profiles: ["oidc"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-react/Dockerfile
@@ -459,6 +468,7 @@ services:
   # Frontend (not directly exposed - only accessible through OAuth2 Proxy)
   frontend-typescript-vite-gateway:
     profiles: ["oidc"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
@@ -485,6 +495,7 @@ services:
   # Admin frontend (separate "app") that calls the admin APIM surface (/admin/api/*)
   frontend-typescript-vite-gateway-admin:
     profiles: ["oidc"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
@@ -655,6 +666,7 @@ services:
   # API Management simulator - validates tokens then forwards to the FastAPI backend
   apim-simulator:
     profiles: ["oidc"]
+    <<: *app-runtime-hardening
     build:
       context: ./apim-simulator
       dockerfile: Dockerfile
@@ -684,6 +696,7 @@ services:
 
   frontend-typescript-vite-easyauth-mock:
     profiles: ["mock-easyauth"]
+    <<: *nginx-runtime-hardening
     build:
       context: .
       dockerfile: ./frontend-typescript-vite/Dockerfile
@@ -699,8 +712,10 @@ services:
 
   easyauth-router:
     profiles: ["mock-easyauth"]
+    <<: *nginx-runtime-hardening
     image: dhi.io/nginx:1.29.5-debian13
     platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
+    user: "65532:65532"
     ports:
       - "3012:8080"
     volumes:

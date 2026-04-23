@@ -19,7 +19,7 @@ clusters:
   name: kind-kind-local
 EOF
 
-  run python3 "${HELPER}" "${kubeconfig}" host.docker.internal localhost
+  run uv run --isolated python "${HELPER}" "${kubeconfig}" host.docker.internal localhost
 
   [ "${status}" -eq 0 ]
   run cat "${kubeconfig}"

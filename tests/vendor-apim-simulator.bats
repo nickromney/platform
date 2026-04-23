@@ -86,7 +86,7 @@ EOF
   [[ "${output}" == *"Vendored apim-simulator ${SOURCE_COMMIT} (tag v0.1.0, runtime profile)"* ]]
   [[ "${output}" == *"Recorded vendoring metadata in ${METADATA_FILE}"* ]]
 
-  run python3 - "${METADATA_FILE}" "${SOURCE_COMMIT}" <<'PY'
+  run uv run --isolated python - "${METADATA_FILE}" "${SOURCE_COMMIT}" <<'PY'
 import json
 import sys
 from pathlib import Path

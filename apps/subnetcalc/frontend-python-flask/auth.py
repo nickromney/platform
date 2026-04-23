@@ -13,6 +13,19 @@ import msal
 from flask import Flask, redirect, request, session, url_for
 
 
+def _minimal_user_claims(claims: dict[str, Any] | None) -> dict[str, Any]:
+    """Store only the claims the UI actually uses in the signed cookie session."""
+    claims = claims or {}
+    user: dict[str, Any] = {}
+
+    for key in ("name", "email", "preferred_username", "sub", "oid", "tid"):
+        value = claims.get(key)
+        if value:
+            user[key] = value
+
+    return user
+
+
 class EntraIDAuth:
     """Manages Entra ID authentication for Flask applications"""
 
@@ -106,10 +119,9 @@ class EntraIDAuth:
                 error_description = token_result.get("error_description", "Unknown error")
                 return f"Token acquisition failed: {error} - {error_description}", 401
 
-            # Store token and user info in session
-            session["access_token"] = token_result.get("access_token")
-            session["id_token"] = token_result.get("id_token")
-            session["user"] = token_result.get("id_token_claims", {})
+            # Keep the cookie-backed session small by storing only the
+            # user fields the frontend actually renders.
+            session["user"] = _minimal_user_claims(token_result.get("id_token_claims"))
 
             # Redirect to originally requested page or home
             return redirect(request.args.get("redirect_uri", url_for("index")))

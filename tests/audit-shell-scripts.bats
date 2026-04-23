@@ -79,11 +79,11 @@ EOF
   [[ "${output}" == *"INFO dry-run: would do the safe thing"* ]]
 }
 
-@test "shell audit ignores printed Python install hints" {
+@test "shell audit ignores printed install hints" {
   write_tracked_file "scripts/install-hints.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' 'python3 -m pip install --user yamllint'
+printf '%s\n' 'uv tool install yamllint'
 EOF
 
   run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
@@ -108,11 +108,11 @@ EOF
   [[ "${output}" == *"scripts/bad.sh"* ]]
 }
 
-@test "shell audit allows approved shell wrappers that execute Python" {
-  write_tracked_file "kubernetes/kind/scripts/ensure-kind-kubeconfig.sh" <<'EOF'
+@test "shell audit allows approved provisioning wrappers that execute Python" {
+  write_tracked_file "sd-wan/lima/provision/common.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-python3 "${SCRIPT_DIR}/rewrite-devcontainer-kubeconfig.py" config host tls
+python3 -m venv /opt/app-venv
 EOF
 
   run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute

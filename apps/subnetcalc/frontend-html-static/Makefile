@@ -27,4 +27,4 @@ update: ## Update uv lockfile and sync dev dependencies
 
 ##@ Run
 serve: ## Serve static files (requires Python http.server or nginx)
-	@python3 -m http.server 8001
+	@uv run --isolated python -m http.server 8001

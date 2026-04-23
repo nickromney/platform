@@ -10,7 +10,6 @@ import requests
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory
 
 from auth import init_auth
-from flask_session import Session
 
 app = Flask(__name__)
 
@@ -34,13 +33,9 @@ def get_flask_secret_key() -> str:
 
 # Configure session
 app.secret_key = get_flask_secret_key()
-app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("FLASK_ENV", "development") == "production"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-Session(app)
 
 # Detect authentication method: Easy Auth (Azure) or MSAL (local)
 # WEBSITE_HOSTNAME is set by Azure App Service and Container Apps
@@ -164,7 +159,6 @@ def get_jwt_token() -> str | None:
             timeout=5,
         )
         login_response.raise_for_status()
-
         token_data = login_response.json()
         _jwt_token = token_data["access_token"]
 

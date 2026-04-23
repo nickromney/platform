@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "version audit workflow pins GitHub Actions by SHA and runs lightweight audits" {
-  run python3 - "${REPO_ROOT}/.github/workflows/version-audit.yml" <<'PY'
+  run uv run --isolated python - "${REPO_ROOT}/.github/workflows/version-audit.yml" <<'PY'
 import re
 import sys
 from pathlib import Path

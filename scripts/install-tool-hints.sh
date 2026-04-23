@@ -248,7 +248,7 @@ curl_hint() {
       return 0
       ;;
     yamllint)
-      printf '%s\n' 'python3 -m pip install --user yamllint'
+      printf '%s\n' 'uv tool install yamllint'
       return 0
       ;;
   esac

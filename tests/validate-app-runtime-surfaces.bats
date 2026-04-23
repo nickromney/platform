@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "repo-owned app Dockerfiles pin numeric runtime users" {
-  run python3 - <<'PY'
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -42,7 +42,7 @@ PY
 }
 
 @test "compose app services use hardened runtime settings and sentiment model build args" {
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -214,7 +214,7 @@ PY
 }
 
 @test "subnetcalc function-style compose healthchecks do not require /bin/sh" {
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -241,7 +241,7 @@ PY
 }
 
 @test "stack12 lightweight frontends stay in gateway mode behind oauth2-proxy" {
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -268,7 +268,7 @@ PY
 }
 
 @test "gateway auth shim only falls back to Authorization when no forwarded access token exists" {
-  run python3 - <<'PY'
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -291,7 +291,7 @@ PY
 }
 
 @test "stack12 oauth2-proxy frontends expose public login and logout landing pages" {
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -324,7 +324,7 @@ PY
   local hashes_file="${BATS_TEST_TMPDIR}/dex-hashes.txt"
   local htpasswd_file="${BATS_TEST_TMPDIR}/dex.htpasswd"
 
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -365,7 +365,7 @@ PY
 }
 
 @test "kubernetes app workloads pin numeric runtime users for hardened deployments" {
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -407,7 +407,7 @@ PY
 }
 
 @test "local workload image builders forward custom sentiment model ids" {
-  run python3 - <<'PY'
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -436,7 +436,7 @@ PY
 }
 
 @test "runtime-config frontends render into tmpfs-backed paths for read-only roots" {
-  run python3 - <<'PY'
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -463,7 +463,7 @@ PY
 }
 
 @test "external runtime image refs stay aligned across dockerfiles, compose, and kubernetes manifests" {
-  run uv run python - <<'PY'
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -485,7 +485,7 @@ expected_counts = {
     },
     "apps/subnetcalc/frontend-react/Dockerfile.server": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS deps": 1,
+        "FROM --platform=$TARGETPLATFORM dhi.io/node:22-alpine3.22": 1,
     },
     "apps/subnetcalc/frontend-typescript-vite/Dockerfile": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
@@ -542,7 +542,7 @@ PY
 }
 
 @test "preload image artifacts track the current external runtime bump set" {
-  run uv run python - <<'PY'
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os

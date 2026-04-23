@@ -11,9 +11,10 @@ Cloudflare publishes their IP ranges at:
 """
 
 import logging
+import socket
 from ipaddress import IPv4Network, IPv6Network, ip_network
-
-import httpx
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -72,28 +73,27 @@ def _fetch_ip_ranges(url: str) -> list[str] | None:
         List of IP range strings, or None if fetch failed
     """
     try:
-        with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            response = client.get(url)
-            response.raise_for_status()
+        request = Request(url, headers={"User-Agent": "subnetcalc-api/1.0"})
+        with urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+            content = response.read().decode("utf-8").strip()
 
-            # Parse the response - one CIDR per line
-            content = response.text.strip()
-            ranges = [line.strip() for line in content.split("\n") if line.strip()]
+        # Parse the response - one CIDR per line
+        ranges = [line.strip() for line in content.split("\n") if line.strip()]
 
-            if not ranges:
-                logger.warning("Empty response from %s", url)
-                return None
+        if not ranges:
+            logger.warning("Empty response from %s", url)
+            return None
 
-            logger.info("Successfully fetched %d IP ranges from %s", len(ranges), url)
-            return ranges
+        logger.info("Successfully fetched %d IP ranges from %s", len(ranges), url)
+        return ranges
 
-    except httpx.TimeoutException:
+    except (socket.timeout, TimeoutError):
         logger.warning("Timeout fetching Cloudflare IP ranges from %s", url)
         return None
-    except httpx.HTTPStatusError as e:
+    except HTTPError as e:
         logger.warning("HTTP error fetching Cloudflare IP ranges from %s: %s", url, e)
         return None
-    except httpx.RequestError as e:
+    except URLError as e:
         logger.warning("Request error fetching Cloudflare IP ranges from %s: %s", url, e)
         return None
 

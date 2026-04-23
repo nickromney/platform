@@ -67,6 +67,15 @@ inside_devcontainer() {
   [[ "${PLATFORM_DEVCONTAINER:-}" == "1" ]] || [[ -f "/.dockerenv" ]]
 }
 
+run_inline_python() {
+  command -v uv >/dev/null 2>&1 || {
+    printf 'uv not found in PATH\n' >&2
+    exit 1
+  }
+
+  uv run --isolated python - "$@"
+}
+
 parse_expected_opentofu_version() {
   sed -nE 's/^OPENTOFU_VERSION="\$\{OPENTOFU_VERSION:-([^}]*)\}".*/\1/p' "${INSTALL_TOOLCHAIN_SCRIPT}" | head -n 1
 }
@@ -80,7 +89,7 @@ parse_base_image() {
 }
 
 parse_devcontainer_feature_versions() {
-  python3 - "${DEVCONTAINER_CONFIG}" <<'PY'
+  run_inline_python "${DEVCONTAINER_CONFIG}" <<'PY'
 import json
 import sys
 
@@ -134,7 +143,7 @@ select_workspace_container_id() {
 }
 
 age_days_from_iso() {
-  python3 - "$1" <<'PY'
+  run_inline_python "$1" <<'PY'
 from datetime import datetime, timezone
 import re
 import sys

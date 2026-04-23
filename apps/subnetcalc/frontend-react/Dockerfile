@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: Build
 FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder
 
@@ -7,20 +9,15 @@ ARG BUILDPLATFORM
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=1024
 
-# Build shared-frontend (required for file:../shared-frontend dependency)
-WORKDIR /shared-frontend
-COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./shared-frontend/bunfig.toml ./
-RUN bun install --frozen-lockfile
-COPY ./shared-frontend ./
-RUN bun run build
-
-WORKDIR /app
-
 # Copy package files for dependency installation
 COPY ./frontend-react/package.json ./frontend-react/bun.lock ./frontend-react/bunfig.toml ./
 
 # Install dependencies (uses lock file for reproducible builds)
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
+
+# Copy shared source used via TypeScript/Vite aliases
+COPY ./shared-frontend/src /shared-frontend/src
 
 # Copy source code
 COPY ./frontend-react .
@@ -34,7 +31,9 @@ WORKDIR /src
 ARG TARGETOS
 ARG TARGETARCH
 COPY ./scripts/runtime-config-entrypoint.go ./
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/runtime-config-entrypoint runtime-config-entrypoint.go
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/runtime-config-entrypoint runtime-config-entrypoint.go
 
 # Stage 2: Production
 FROM dhi.io/nginx:1.29.5-debian13

@@ -108,10 +108,14 @@ require() {
   }
 }
 
-require python3
+run_inline_python() {
+  uv run --isolated python - "$@"
+}
+
+require uv
 
 github_commit_sha() {
-  python3 - "$CHECK_VERSION_GITHUB_API_BASE" "$1" "$2" "$CHECK_VERSION_TIMEOUT_SECONDS" <<'PY'
+  run_inline_python "$CHECK_VERSION_GITHUB_API_BASE" "$1" "$2" "$CHECK_VERSION_TIMEOUT_SECONDS" <<'PY'
 import json
 import sys
 import urllib.parse
@@ -155,7 +159,7 @@ check_action_pins() {
     [[ -n "${workflow_file}" ]] || continue
     workflow_file_found=1
     pins="$(
-      python3 - "$workflow_file" <<'PY'
+      run_inline_python "$workflow_file" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -228,7 +232,7 @@ check_apim_simulator_vendor() {
 
   local output
   if ! output="$(
-    python3 - "${APIM_SIMULATOR_VENDOR_METADATA_FILE}" "${APIM_SIMULATOR_VENDOR_DIR}/pyproject.toml" <<'PY'
+    run_inline_python "${APIM_SIMULATOR_VENDOR_METADATA_FILE}" "${APIM_SIMULATOR_VENDOR_DIR}/pyproject.toml" <<'PY'
 import json
 import re
 import sys
@@ -284,7 +288,7 @@ check_npm_age_gates() {
 
   local output
   if ! output="$(
-    python3 - "${REPO_ROOT}" "${CHECK_VERSION_NPM_MIN_RELEASE_AGE}" "${APIM_SIMULATOR_VENDOR_DIR}" <<'PY'
+    run_inline_python "${REPO_ROOT}" "${CHECK_VERSION_NPM_MIN_RELEASE_AGE}" "${APIM_SIMULATOR_VENDOR_DIR}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -327,7 +331,7 @@ check_bun_age_gates() {
 
   local output
   if ! output="$(
-    python3 - "${REPO_ROOT}" "${CHECK_VERSION_BUN_MIN_RELEASE_AGE}" "${APIM_SIMULATOR_VENDOR_DIR}" <<'PY'
+    run_inline_python "${REPO_ROOT}" "${CHECK_VERSION_BUN_MIN_RELEASE_AGE}" "${APIM_SIMULATOR_VENDOR_DIR}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -372,7 +376,7 @@ check_uv_age_gates() {
 
   local output
   if ! output="$(
-    python3 - "${REPO_ROOT}" "${CHECK_VERSION_UV_EXCLUDE_NEWER}" "${APIM_SIMULATOR_VENDOR_DIR}" <<'PY'
+    run_inline_python "${REPO_ROOT}" "${CHECK_VERSION_UV_EXCLUDE_NEWER}" "${APIM_SIMULATOR_VENDOR_DIR}" <<'PY'
 import sys
 import re
 from pathlib import Path
@@ -455,7 +459,7 @@ check_frontend_budgets() {
 
   local output status=0
   if output="$(
-    python3 - "${REPO_ROOT}" "${CHECK_VERSION_FRONTEND_BUDGETS_FILE}" "${CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS}" <<'PY'
+    run_inline_python "${REPO_ROOT}" "${CHECK_VERSION_FRONTEND_BUDGETS_FILE}" "${CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS}" <<'PY'
 import gzip
 import json
 import re

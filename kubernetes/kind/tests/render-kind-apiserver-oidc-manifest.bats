@@ -21,7 +21,7 @@ spec:
   hostNetwork: true
 EOF
 
-  run python3 \
+  run uv run --isolated python \
     "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
@@ -60,7 +60,7 @@ spec:
   hostNetwork: true
 EOF
 
-  run python3 \
+  run uv run --isolated python \
     "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \

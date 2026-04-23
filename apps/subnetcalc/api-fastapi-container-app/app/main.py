@@ -65,7 +65,6 @@ def configure_opentelemetry(app: FastAPI) -> None:
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -92,7 +91,6 @@ def configure_opentelemetry(app: FastAPI) -> None:
         trace.set_tracer_provider(tracer_provider)
 
         FastAPIInstrumentor().instrument_app(app)
-        HTTPXClientInstrumentor().instrument()
     except Exception as exc:  # pragma: no cover
         logger.warning("OpenTelemetry exporter init failed; tracing disabled: %s", exc)
         return
