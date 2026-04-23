@@ -2,7 +2,7 @@
 
 # Dockerfile for Azure Web App simulation with node server.js
 # This simulates the Azure Web App deployment with runtime config injection
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM

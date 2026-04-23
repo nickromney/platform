@@ -11,7 +11,7 @@ enable_cilium_node_encryption = false
 gitea_local_access_mode       = "port-forward"
 
 argocd_image_repository = "quay.io/argoproj/argocd"
-argocd_image_tag        = "v3.3.6"
+argocd_image_tag        = "v3.3.8"
 
 hardened_image_registry         = "dhi.io"
 prefer_external_workload_images = true

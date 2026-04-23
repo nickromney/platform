@@ -473,22 +473,22 @@ repo_root = Path(os.environ["REPO_ROOT"])
 
 expected_counts = {
     "apps/sentiment/api-sentiment/Dockerfile": {
-        "FROM oven/bun:1.3.12 AS deps": 1,
-        "FROM oven/bun:1.3.12 AS preload": 1,
+        "FROM oven/bun:1.3.13 AS deps": 1,
+        "FROM oven/bun:1.3.13 AS preload": 1,
     },
     "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS build": 1,
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS build": 1,
     },
     "apps/subnetcalc/frontend-react/Dockerfile": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
         "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
     },
     "apps/subnetcalc/frontend-react/Dockerfile.server": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
         "FROM --platform=$TARGETPLATFORM dhi.io/node:22-alpine3.22": 1,
     },
     "apps/subnetcalc/frontend-typescript-vite/Dockerfile": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder": 1,
+        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
         "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
     },
     "apps/sentiment/compose.yml": {
@@ -509,8 +509,8 @@ expected_counts = {
         "FROM quay.io/keycloak/keycloak:26.6.1": 1,
     },
     "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
-        "image: docker:29.4.0-cli": 1,
-        "image: gitea/act_runner:0.4.0": 2,
+        "image: docker:29.4.1-cli": 1,
+        "image: gitea/act_runner:0.4.1": 2,
     },
     "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
         "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
@@ -561,8 +561,8 @@ preload_files = [
 required_lines = [
     "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
     "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
-    "docker:29.4.0-cli",
-    "gitea/act_runner:0.4.0",
+    "docker:29.4.1-cli",
+    "gitea/act_runner:0.4.1",
     "python:3.12.13-alpine3.23",
     "docker.io/curlimages/curl:8.19.0",
     "curlimages/curl:8.19.0",
@@ -576,13 +576,13 @@ for relative_path in preload_files:
 lock_file = (repo_root / "terraform/kubernetes/scripts/preload-images.linux-arm64.lock").read_text(encoding="utf-8")
 lock_expectations = [
     "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
-    "docker:29.4.0-cli",
-    "gitea/act_runner:0.4.0",
+    "docker:29.4.1-cli",
+    "gitea/act_runner:0.4.1",
     "python:3.12.13-alpine3.23",
     "docker.io/curlimages/curl:8.19.0",
     "curlimages/curl:8.19.0",
-    "oven/bun:1.3.12",
-    "oven/bun:1.3.12-alpine",
+    "oven/bun:1.3.13",
+    "oven/bun:1.3.13-alpine",
     "golang:1.26.2-alpine3.23",
 ]
 

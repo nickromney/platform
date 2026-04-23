@@ -18,9 +18,9 @@ spec:
     spec:
       initContainers:
         # Download Docker CLI and buildx plugin for the runner to use
-        # Pinned to 29.4.0-cli for reproducibility (buildx at /usr/local/libexec/docker/cli-plugins/)
+        # Pinned to 29.4.1-cli for reproducibility (buildx at /usr/local/libexec/docker/cli-plugins/)
         - name: install-docker-cli
-          image: docker:29.4.0-cli
+          image: docker:29.4.1-cli
           command:
             - sh
             - -c
@@ -42,7 +42,7 @@ spec:
               mountPath: /tools
         # Register runner with Gitea before starting daemon
         - name: register
-          image: gitea/act_runner:0.4.0
+          image: gitea/act_runner:0.4.1
           command:
             - sh
             - -c
@@ -99,7 +99,7 @@ spec:
               mountPath: /var/run/docker.sock
       containers:
         - name: runner
-          image: gitea/act_runner:0.4.0
+          image: gitea/act_runner:0.4.1
           command:
             - sh
             - -c

@@ -198,7 +198,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     if image_ref_is_internal 'localhost:30090/platform/subnetcalc-api:latest'; then echo internal; else echo external; fi; \
     if image_ref_is_internal 'ghcr.io/nginx/nginx-gateway-fabric:2.5.1'; then echo internal; else echo external; fi; \
-    printf '%s\n' \"\$(image_ref_registry 'gitea/act_runner:0.4.0')\" \"\$(image_ref_repository 'gitea/act_runner:0.4.0')\""
+    printf '%s\n' \"\$(image_ref_registry 'gitea/act_runner:0.4.1')\" \"\$(image_ref_repository 'gitea/act_runner:0.4.1')\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'internal\nexternal\ndocker.io\ngitea/act_runner')" ]
@@ -221,14 +221,14 @@ EOF
 }
 
 @test "check-version renders long tags with aligned spacing" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.7-debian13\tv3.3.7\tok' \$'cert-manager\tv1.20.1\tv1.20.1\tok' | render_tsv_table"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.8-debian13\tv3.3.8\tok' \$'cert-manager\tv1.20.2\tv1.20.2\tok' | render_tsv_table"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.7-debian13[[:space:]][[:space:]]+v3\.3\.7[[:space:]][[:space:]]+ok ]]
+  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.8-debian13[[:space:]][[:space:]]+v3\.3\.8[[:space:]][[:space:]]+ok ]]
 }
 
 @test "check-version converts TSV rows into JSON objects without ANSI codes" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%b\n' \$'argo-cd chart\t9.5.1\t9.5.2\t\033[1;33mupdate available\033[0m' | tsv_rows_to_json_array '[\"component\",\"codebase\",\"latest\",\"status\"]'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%b\n' \$'argo-cd chart\t9.5.2\t9.5.4\t\033[1;33mupdate available\033[0m' | tsv_rows_to_json_array '[\"component\",\"codebase\",\"latest\",\"status\"]'"
 
   [ "${status}" -eq 0 ]
 

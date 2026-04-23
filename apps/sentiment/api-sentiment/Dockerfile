@@ -1,11 +1,11 @@
-FROM oven/bun:1.3.12 AS deps
+FROM oven/bun:1.3.13 AS deps
 
 WORKDIR /app
 
 COPY package.json bun.lock bunfig.toml ./
 RUN bun install --frozen-lockfile --production
 
-FROM oven/bun:1.3.12 AS preload
+FROM oven/bun:1.3.13 AS preload
 
 WORKDIR /app
 
