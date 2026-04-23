@@ -5,7 +5,7 @@ quay.io/cilium/hubble-ui-backend:v0.13.3	quay.io/cilium/hubble-ui-backend@sha256
 quay.io/cilium/hubble-ui:v0.13.3	quay.io/cilium/hubble-ui@sha256:97984d00bbd7fb233a71255b98c83ef203efae43be9a268d0e9e0483c30c0256
 ghcr.io/nginx/nginx-gateway-fabric:2.5.1	ghcr.io/nginx/nginx-gateway-fabric@sha256:30172fc9bdebd145c250e81500b6112f989afd9956e0e7606f504bf16de28f88
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1	ghcr.io/nginx/nginx-gateway-fabric/nginx@sha256:908376c8bc6b99e48312a212116f3a548805a94619484640617d89ff79514989
-dhi.io/argocd:3.3.7-debian13	dhi.io/argocd@sha256:305f093aaa7bc1217668dd2d01257bda4672ac964dd15d255652873348a61aae
+dhi.io/argocd:3.3.8-debian13	dhi.io/argocd@sha256:85e3efad850f12a2d8bc4d0aad39fba78b78a25b3ec1b8fcc8d40a843c65dc51
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine	-
 docker.gitea.com/gitea:1.25.5-rootless	docker.gitea.com/gitea@sha256:fc9a63f855efc6733d79262a50003845f092b01d169bcb81c3683263368120d0
 dhi.io/kyverno:1.17.1-debian13	dhi.io/kyverno@sha256:e86d512362c533455e8c3384703f481ab85039f27a1553900e29cd58656e3117
@@ -18,7 +18,7 @@ quay.io/jetstack/cert-manager-controller:v1.20.2	quay.io/jetstack/cert-manager-c
 quay.io/jetstack/cert-manager-webhook:v1.20.2	quay.io/jetstack/cert-manager-webhook@sha256:678cf2fab4580a3b9d540a1d27ee969006c83c4a5fe9834475c585073d360897
 quay.io/jetstack/cert-manager-cainjector:v1.20.2	quay.io/jetstack/cert-manager-cainjector@sha256:982e7e7caf9cb7e44117cdd73aa81de4b4ccb4d5df9e6ac984d59632644278c4
 quay.io/jetstack/cert-manager-startupapicheck:v1.20.2	quay.io/jetstack/cert-manager-startupapicheck@sha256:3a247ed94abb5ee53a55f9f2acbbe3caf0dceb1729f9f0cb5e9b867fbea5187a
-docker.io/signoz/signoz:v0.119.0	docker.io/signoz/signoz@sha256:af932477b13097905312a4dc1f51a3602f2c6698218619842f546a63de403800
+docker.io/signoz/signoz:v0.120.0	docker.io/signoz/signoz@sha256:aa6c28705752a9794655c9b1e781ddb3845bf22bc58dd1f2dc4fc12b52e886a5
 docker.io/signoz/signoz-otel-collector:v0.144.2	docker.io/signoz/signoz-otel-collector@sha256:fc0f64666fb1670e0eaeafcfd34dc25e23679469d04b22951ea577ace5d3a82a
 docker.io/signoz/signoz-schema-migrator:v0.144.2	docker.io/signoz/signoz-schema-migrator@sha256:fd22466a92dbfbee94580ea5f056192af32545ac21a3ab06752eb69649b39278
 docker.io/clickhouse/clickhouse-server:25.5.6	docker.io/clickhouse/clickhouse-server@sha256:03c712ef372eb30e5fdefca184b0ff54ff5bea5456638ea349f42fbfcd4043f9
@@ -44,9 +44,9 @@ ghcr.io/headlamp-k8s/headlamp:v0.41.0	ghcr.io/headlamp-k8s/headlamp@sha256:ae9cc
 node:lts-alpine	node@sha256:693101c77e947e45e001910202dcb37a659c0b1a4c27619848f1b8b7eaee0def
 dhi.io/dex:2.44.0-debian13	dhi.io/dex@sha256:c97ba8a35c1d618f8cfc6c41256836cdf6945d25d77554d951639819125b49b1
 dhi.io/oauth2-proxy:7.15.2-debian13	dhi.io/oauth2-proxy@sha256:5585e678ef10e3f2984c7be0968ef0b6dd1d3e37239c202e765d1db2faeefab7
-otel/opentelemetry-collector-contrib:0.149.0	otel/opentelemetry-collector-contrib@sha256:c975bfc3619140f95ee6699a4b5fcc472b3ab82dffafd6e7b88463447de36b5b
-docker:29.4.0-cli	docker@sha256:9d3f67fe1f4cf51c084744dec419b466b7075f5b365ef4b9b791187d9c2d4127
-gitea/act_runner:0.4.0	gitea/act_runner@sha256:80a12e8ac0a54bf2d3eb85b60353d7f5d365705be8885bd201b62b3d23e1f79b
+otel/opentelemetry-collector-contrib:0.150.1	otel/opentelemetry-collector-contrib@sha256:23bc3f594ca26df26a6daa572861b21ef2f88c9c1336f11f4c1ed69078cb0642
+docker:29.4.1-cli	docker@sha256:24b137d1441b41c4aa60cd5a38d069feb70e191d8c4340bcf9a7ad9b86aefb23
+gitea/act_runner:0.4.1	gitea/act_runner@sha256:56cc968b104b34c72bf7a564d78b60fb2e5a531a9c0783e03ef6328a5d33bb45
 ghcr.io/astral-sh/uv:0.10.4	ghcr.io/astral-sh/uv@sha256:2c51f61a7cfbd85154b74cd3466bcd2aa2a382c08585c1c4bae0ca311cbab7fe
 python:3.13-slim	python@sha256:ee541b6a5c74b5efe7068193261709b73fef081b61514a76d55e0ecd143d0ed7
 node:22-alpine	node@sha256:17d4748a1004bd443c82171cc6642a7e741ce0bd6e97f98fddc299b8add1e44d
@@ -59,5 +59,5 @@ dhi.io/node:22-debian13	dhi.io/node@sha256:5155467bc6a196aa563ea76d1a35dc9471848
 dhi.io/python:3.13-debian13	dhi.io/python@sha256:515c8c7e833cfc63c553ff94f032450457e8c5e0eb3f8f23d1b643c434e9276b
 dhi.io/python:3.13-debian13-dev	dhi.io/python@sha256:31026f0956838c849e80a88806592fb8a5ed80ecca83e725f753c68ba4adbf95
 golang:1.26.2-alpine3.23	golang@sha256:cd092644fdf413d14a09baf952d5851dfe5d423983fe1bbbd19595f70fb939e1
-oven/bun:1.3.12	oven/bun@sha256:bbaf3972244dc22d83c8685843e95e2c2a1d7ce8a169c372c9a7ac29fedfddcf
-oven/bun:1.3.12-alpine	oven/bun@sha256:eeb45d705f56dc0ceea4bbe793f9386ae07d47e695424f0b1fd2b5a8feccd431
+oven/bun:1.3.13	oven/bun@sha256:7e06b148ea46613dc8434fd11fafa49cc98e764367ead42e9f424356fce0fdfa
+oven/bun:1.3.13-alpine	oven/bun@sha256:588e1fb0d80ee1c09cc6e2d7d1ff8e3502191fba9cad12a4a77cb93d4d7f84f9

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Stage 1: Build
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM

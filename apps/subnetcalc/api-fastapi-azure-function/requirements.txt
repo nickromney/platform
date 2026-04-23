@@ -117,7 +117,7 @@ pyjwt==2.12.1
     # via subnetcalc-python-api
 python-jose==3.5.0
     # via subnetcalc-python-api
-python-multipart==0.0.24
+python-multipart==0.0.26
     # via subnetcalc-python-api
 requests==2.33.1
     # via opentelemetry-exporter-otlp-proto-http

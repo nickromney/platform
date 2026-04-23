@@ -18,7 +18,7 @@ setup() {
   run bash -lc "source '${SCRIPT}'; resolve_string SIGNOZ_CHART_VERSION signoz_chart_version \"\$(tf_default_from_variables signoz_chart_version)\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "0.119.0" ]
+  [ "${output}" = "0.120.0" ]
 }
 
 @test "sync-gitea.sh falls back to Terraform variable defaults when tfvars are absent" {
@@ -27,5 +27,5 @@ setup() {
   run bash -lc "export GITEA_SYNC_TFVARS_FILE='${missing_tfvars}'; source '${SCRIPT}'; resolve_string SIGNOZ_CHART_VERSION signoz_chart_version \"\$(tf_default_from_variables signoz_chart_version)\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "0.119.0" ]
+  [ "${output}" = "0.120.0" ]
 }

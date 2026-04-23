@@ -381,7 +381,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.5.2"
+  default     = "9.5.4"
 }
 
 variable "argocd_image_repository" {
@@ -393,7 +393,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.3.7-debian13"
+  default     = "3.3.8-debian13"
 }
 
 variable "provision_argocd" {
@@ -513,7 +513,7 @@ variable "loki_image_tag" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.12.0"
+  default     = "0.12.2"
 }
 
 variable "tempo_chart_version" {
@@ -525,7 +525,7 @@ variable "tempo_chart_version" {
 variable "signoz_chart_version" {
   description = "SigNoz chart version."
   type        = string
-  default     = "0.119.0"
+  default     = "0.120.0"
 }
 
 variable "headlamp_chart_version" {
@@ -573,7 +573,7 @@ variable "oauth2_proxy_chart_version" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.150.1"
+  default     = "0.152.0"
 }
 
 # -----------------------------------------------------------------------------
