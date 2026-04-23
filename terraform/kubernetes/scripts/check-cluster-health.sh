@@ -26,6 +26,7 @@ RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
 NC=$'\033[0m'
+APP_REFRESH_INTERVAL_SECONDS="${APP_REFRESH_INTERVAL_SECONDS:-30}"
 
 fail() { echo "${RED}✖${NC} $*" >&2; exit 1; }
 FAILURES=0
@@ -93,6 +94,43 @@ argocd_app_allows_outofsync_if_healthy() {
   argocd_app_has_only_future_stage_namespace_gaps "${ns}" "${app}"
 }
 
+argocd_refresh_app() {
+  local ns="$1"
+  local app="$2"
+
+  kubectl -n "${ns}" annotate app "${app}" \
+    argocd.argoproj.io/refresh=hard \
+    --overwrite >/dev/null 2>&1 || true
+}
+
+argocd_app_needs_hard_refresh() {
+  local ns="$1"
+  local app="$2"
+
+  if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local sync health comparison
+  sync=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
+  health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+  comparison=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || echo "")
+
+  if [[ -n "${comparison}" ]]; then
+    return 0
+  fi
+
+  if [[ "${health}" != "Healthy" ]]; then
+    return 0
+  fi
+
+  if [[ "${sync}" != "Synced" ]] && ! argocd_app_allows_outofsync_if_healthy "${ns}" "${app}"; then
+    return 0
+  fi
+
+  return 1
+}
+
 argocd_app_is_settled() {
   local ns="$1"
   local app="$2"
@@ -120,6 +158,7 @@ wait_for_argocd_apps_settled() {
   local ns="$1"
   local timeout_seconds="${2:-60}"
   local end=$((SECONDS + timeout_seconds))
+  local next_refresh=0
 
   while (( SECONDS < end )); do
     local apps unsettled
@@ -133,12 +172,20 @@ wait_for_argocd_apps_settled() {
       [[ -n "${app}" ]] || continue
       if ! argocd_app_is_settled "${ns}" "${app}"; then
         unsettled=1
-        break
+        if (( SECONDS >= next_refresh )) && argocd_app_needs_hard_refresh "${ns}" "${app}"; then
+          # Kind's control-plane restart can leave Argo app health/sync state stale
+          # even after workloads are ready; a hard refresh converges the cache.
+          argocd_refresh_app "${ns}" "${app}"
+        fi
       fi
     done <<< "${apps}"
 
     if [[ "${unsettled}" -eq 0 ]]; then
       return 0
+    fi
+
+    if (( SECONDS >= next_refresh )); then
+      next_refresh=$((SECONDS + APP_REFRESH_INTERVAL_SECONDS))
     fi
 
     sleep 5
@@ -152,11 +199,18 @@ wait_for_argocd_app_settled() {
   local app="$2"
   local timeout_seconds="${3:-60}"
   local end=$((SECONDS + timeout_seconds))
+  local next_refresh=0
 
   while (( SECONDS < end )); do
     if argocd_app_is_settled "${ns}" "${app}"; then
       return 0
     fi
+
+    if (( SECONDS >= next_refresh )) && argocd_app_needs_hard_refresh "${ns}" "${app}"; then
+      argocd_refresh_app "${ns}" "${app}"
+      next_refresh=$((SECONDS + APP_REFRESH_INTERVAL_SECONDS))
+    fi
+
     sleep 5
   done
 

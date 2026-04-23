@@ -7,7 +7,7 @@ requires-python = ">=3.13"
 
 dependencies = [
     "azure-functions>=2.0.0",
-    "fastapi[standard]>=0.118.0",
+    "fastapi>=0.118.0",
     # The cooldown-eligible FastAPI line still requires httpx<1.0, so the
     # httpx 1.0 prerelease track is not solvable here yet without bypassing
     # the repo's 7-day age gate on FastAPI itself.
@@ -15,6 +15,7 @@ dependencies = [
     "pyjwt>=2.10.1",
     "python-jose[cryptography]>=3.3.0",
     "httpx>=0.28.1",
+    "python-multipart>=0.0.20",
     # Teaching repo policy still follows cooled-off latest, but the current
     # OpenTelemetry exporter line caps protobuf below 7.x, so this app stays on
     # the highest compatible 5.x line until that upstream constraint moves.

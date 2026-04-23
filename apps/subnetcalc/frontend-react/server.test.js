@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import { startServer } from './server.js';
@@ -63,6 +66,19 @@ async function withProxyPair(options, run) {
   }
 }
 
+function createFixtureDist() {
+  const distDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frontend-react-dist-'));
+  fs.mkdirSync(path.join(distDir, 'assets'), { recursive: true });
+  fs.writeFileSync(
+    path.join(distDir, 'index.html'),
+    '<!doctype html><html><head><title>fixture</title></head><body><div id="app"></div></body></html>',
+    'utf8',
+  );
+  fs.writeFileSync(path.join(distDir, 'logged-out.html'), '<html><body>logged out</body></html>', 'utf8');
+  fs.writeFileSync(path.join(distDir, 'assets', 'app.js'), 'console.log("fixture");', 'utf8');
+  return distDir;
+}
+
 test('server proxy preserves the /api path and forwards Easy Auth headers when enabled', async () => {
   await withProxyPair({ forwardEasyAuthHeaders: true }, async ({ baseUrl, backendRequests }) => {
     const response = await fetch(`${baseUrl}/api/v1/ping?source=test`, {
@@ -106,4 +122,56 @@ test('server proxy can suppress Easy Auth headers while keeping normal request h
     assert.equal(backendRequests[0].headers.authorization, undefined);
     assert.equal(backendRequests[0].headers.cookie, undefined);
   });
+});
+
+test('server serves built assets from an injected dist directory', async () => {
+  const distDir = createFixtureDist();
+  const frontend = await startServer({
+    port: 0,
+    distDir,
+    proxyTarget: '',
+    useManagedIdentity: false,
+  });
+
+  try {
+    const frontendAddress = frontend.server.address();
+    const response = await fetch(`http://127.0.0.1:${frontendAddress.port}/assets/app.js`);
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /javascript/);
+    assert.equal(await response.text(), 'console.log("fixture");');
+  } finally {
+    await close(frontend.server);
+    fs.rmSync(distDir, { recursive: true, force: true });
+  }
+});
+
+test('server injects runtime config into the SPA shell from an injected dist directory', async () => {
+  const distDir = createFixtureDist();
+  const frontend = await startServer({
+    port: 0,
+    distDir,
+    proxyTarget: '',
+    useManagedIdentity: false,
+    env: {
+      ...process.env,
+      API_BASE_URL: 'https://api.example.test',
+      AUTH_METHOD: 'oidc',
+    },
+  });
+
+  try {
+    const frontendAddress = frontend.server.address();
+    const response = await fetch(`http://127.0.0.1:${frontendAddress.port}/nested/route`);
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(html, /window\.RUNTIME_CONFIG/);
+    assert.match(html, /https:\/\/api\.example\.test/);
+    assert.match(html, /"AUTH_METHOD":"oidc"/);
+  } finally {
+    await close(frontend.server);
+    fs.rmSync(distDir, { recursive: true, force: true });
+  }
 });

@@ -127,9 +127,9 @@ test.describe('Entra ID Logout Flow', () => {
   test('06 - logged-out page has correct styling and layout', async ({ page }) => {
     await page.goto(`${BASE_URL}/logged-out.html`)
 
-    // Should use Pico CSS
-    const picoLink = page.locator('link[href*="picocss"]')
-    await expect(picoLink).toHaveCount(1)
+    // Should be self-contained and not pull CSS from a CDN
+    const externalCssLink = page.locator('link[href*="cdn.jsdelivr.net"]')
+    await expect(externalCssLink).toHaveCount(0)
 
     // Should have container class
     const container = page.locator('main.container')

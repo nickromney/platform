@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "repo-owned app workloads apply the hardened container baseline" {
-  run python3 - <<'PY'
+  run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os

@@ -76,7 +76,7 @@ EOF
 }
 
 @test "restarts the on-device daemon when the local slicer socket is stale" {
-  python3 - <<'PY'
+  uv run --isolated python - <<'PY'
 import os
 import socket
 

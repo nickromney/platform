@@ -55,6 +55,10 @@ require_cmd() {
   }
 }
 
+run_inline_python() {
+  uv run --isolated python - "$@"
+}
+
 resolve_ref_kind() {
   local source_repo="$1"
   local source_ref="$2"
@@ -135,7 +139,7 @@ fi
 require_cmd git
 require_cmd rsync
 require_cmd tar
-require_cmd python3
+require_cmd uv
 
 if [[ ! -d "${SOURCE_REPO}/.git" ]]; then
   echo "${script_name}: source is not a git checkout: ${SOURCE_REPO}" >&2
@@ -167,7 +171,7 @@ case "${VENDOR_PROFILE}" in
         )
       fi
     done
-    python3 - "${tmp_dir}/vendor/Dockerfile" <<'PY'
+    run_inline_python "${tmp_dir}/vendor/Dockerfile" <<'PY'
 import sys
 from pathlib import Path
 
@@ -195,7 +199,7 @@ esac
 mkdir -p "${TARGET_DIR}"
 rsync -a --delete "${tmp_dir}/vendor"/ "${TARGET_DIR}/"
 mkdir -p "$(dirname "${METADATA_FILE}")"
-python3 - "${METADATA_FILE}" "${REPO_ROOT}" "${TARGET_DIR}" "${source_ref_kind}" "${SOURCE_REF}" "${source_commit}" "${source_origin}" "${VENDOR_PROFILE}" "${RUNTIME_INCLUDE_PATHS[@]}" -- "${RUNTIME_EXCLUDE_PATHS[@]}" <<'PY'
+run_inline_python "${METADATA_FILE}" "${REPO_ROOT}" "${TARGET_DIR}" "${source_ref_kind}" "${SOURCE_REF}" "${source_commit}" "${source_origin}" "${VENDOR_PROFILE}" "${RUNTIME_INCLUDE_PATHS[@]}" -- "${RUNTIME_EXCLUDE_PATHS[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path

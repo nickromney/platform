@@ -119,6 +119,23 @@ setup() {
   grep -Fq "Kyverno admin gateway URL" "${script}"
 }
 
+@test "cluster health script hard-refreshes stale Argo apps while waiting for them to settle" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'APP_REFRESH_INTERVAL_SECONDS="${APP_REFRESH_INTERVAL_SECONDS:-30}"' "${script}"
+  grep -Fq 'argocd_app_needs_hard_refresh()' "${script}"
+  grep -Fq 'argocd_refresh_app()' "${script}"
+  grep -Fq 'argocd.argoproj.io/refresh=hard' "${script}"
+  grep -Fq 'argocd_refresh_app "${ns}" "${app}"' "${script}"
+}
+
+@test "deployment health customization avoids Lua string library helpers in Argo health sandbox" {
+  file="${REPO_ROOT}/terraform/kubernetes/locals.tf"
+
+  grep -Fq 'Deployment rollout in progress (updated=' "${file}"
+  ! grep -Fq 'string.format(' "${file}"
+}
+
 @test "gateway stack check supports direct Argo CD mode without app-of-apps" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-gateway-stack.sh"
 

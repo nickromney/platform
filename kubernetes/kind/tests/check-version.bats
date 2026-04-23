@@ -87,6 +87,17 @@ kind_argocd_app_synced_healthy() {
   [ "${output}" = "$(printf '3.3.5-debian13\nv3.3.5-debian13')" ]
 }
 
+@test "check-version reports the Grafana VictoriaLogs plugin version from Terraform defaults" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.26.3' 'codebase' 'release tag'"
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[0]}" = "0.26.3" ]
+  [[ "${lines[1]}" =~ ^[0-9a-f]{64}$ ]]
+  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.26.3\tv0.26.3\t'* ]]
+  [[ "${lines[2]}" == *"latest release tag (v0.26.3)"* ]]
+}
+
 @test "check-version classifies docker manifest probe results" {
   local stub_bin="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${stub_bin}"

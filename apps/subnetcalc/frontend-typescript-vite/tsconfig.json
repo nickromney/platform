@@ -1,15 +1,30 @@
 {
-  "extends": "../shared-frontend/tsconfig.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
     "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
     "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "skipLibCheck": true,
     "paths": {
       "@subnetcalc/shared-frontend": ["../shared-frontend/src/index.ts"],
       "@subnetcalc/shared-frontend/*": ["../shared-frontend/src/*"]
     }
   },
-  "include": ["src/**/*", "src/**/*.ts"],
-  "references": [{ "path": "../shared-frontend" }]
+  "include": ["src/**/*", "src/**/*.ts"]
 }

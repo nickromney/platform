@@ -32,7 +32,7 @@ case "${1:-} ${2:-} ${3:-}" in
     exit 1
     ;;
   "vm pause"*)
-    python3 - <<'PY'
+    uv run --isolated python - <<'PY'
 import json, os
 path = os.environ["STATE_FILE"]
 with open(path, "r", encoding="utf-8") as fh:

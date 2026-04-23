@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Dockerfile for Azure Web App simulation with node server.js
 # This simulates the Azure Web App deployment with runtime config injection
 FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS builder
@@ -7,45 +9,26 @@ ARG BUILDPLATFORM
 
 WORKDIR /app
 
-# Build shared-frontend (required for file:../shared-frontend dependency)
-WORKDIR /shared-frontend
-COPY ./shared-frontend/package.json ./shared-frontend/bun.lock ./shared-frontend/bunfig.toml ./
-RUN bun install --frozen-lockfile
-COPY ./shared-frontend ./
-RUN bun run build
-
-WORKDIR /app
-
 # Copy package files for dependency installation
 COPY ./frontend-react/package.json ./frontend-react/bun.lock ./frontend-react/bunfig.toml ./
 
 # Install ALL dependencies (need devDependencies for build: typescript, vite, etc.)
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
+
+# Copy shared source used via TypeScript/Vite aliases
+COPY ./shared-frontend/src /shared-frontend/src
 
 # Copy source code
 COPY ./frontend-react .
 RUN bun run build
 
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.12-alpine AS deps
-
-WORKDIR /app
-
-# Make the local file dependency available for the production install.
-WORKDIR /shared-frontend
-COPY ./shared-frontend ./
-
-WORKDIR /app
-
-COPY ./frontend-react/package.json ./frontend-react/bun.lock ./frontend-react/bunfig.toml ./
-RUN bun install --frozen-lockfile --production
-
-# Stage 3: runtime (target platform)
+# Stage 2: runtime (target platform)
 FROM --platform=$TARGETPLATFORM dhi.io/node:22-alpine3.22
 
 WORKDIR /app
 
 # Copy server + built assets
-COPY --chown=1000:1000 --from=deps /app/node_modules ./node_modules
 COPY --chown=1000:1000 ./frontend-react/package.json ./
 COPY --chown=1000:1000 ./frontend-react/server.js ./server.js
 COPY --chown=1000:1000 --from=builder /app/dist ./dist
@@ -54,6 +37,7 @@ COPY --chown=1000:1000 --from=builder /app/dist ./dist
 EXPOSE 8080
 
 ENV HOME=/tmp
+ENV NODE_ENV=production
 
 USER 1000:1000
 

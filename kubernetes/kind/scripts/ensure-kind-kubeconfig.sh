@@ -106,12 +106,12 @@ rewrite_for_devcontainer_host_socket() {
     echo "Missing helper: ${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" >&2
     return 1
   }
-  have_cmd python3 || {
-    echo "python3 not found in PATH" >&2
+  have_cmd uv || {
+    echo "uv not found in PATH" >&2
     return 1
   }
 
-  python3 \
+  uv run --isolated python \
     "${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" \
     "${kubeconfig_path}" \
     "${DEVCONTAINER_HOST_ALIAS}" \

@@ -43,6 +43,7 @@ services:
       - ./dex/config.yaml:/etc/dex/config.docker.yaml:ro
 
   apim-simulator:
+    <<: *app-runtime-hardening
     build:
       context: ../../apps/subnetcalc/apim-simulator
       dockerfile: Dockerfile

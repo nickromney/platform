@@ -16,7 +16,7 @@ teardown() {
 }
 
 @test "release workflow pins GitHub Actions by SHA" {
-  run python3 - "${REPO_ROOT}/.github/workflows/release.yml" <<'PY'
+  run uv run --isolated python - "${REPO_ROOT}/.github/workflows/release.yml" <<'PY'
 import re
 import sys
 from pathlib import Path

@@ -543,13 +543,7 @@ locals {
             end
 
             hs.status = "Progressing"
-            hs.message = string.format(
-              "Deployment rollout in progress (updated=%d ready=%d available=%d desired=%d)",
-              updated,
-              ready,
-              available,
-              desired
-            )
+            hs.message = "Deployment rollout in progress (updated=" .. updated .. " ready=" .. ready .. " available=" .. available .. " desired=" .. desired .. ")"
             return hs
           EOT
           )

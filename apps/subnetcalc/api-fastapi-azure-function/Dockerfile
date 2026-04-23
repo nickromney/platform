@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: Builder - Install dependencies
 FROM mcr.microsoft.com/azure-functions/python:4-python3.13 AS builder
 
@@ -10,7 +12,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Create virtual environment and install dependencies with uv (production only)
-RUN uv sync --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --link-mode=copy --no-dev --no-install-project
 
 # Stage 2: Runtime - Copy only what's needed
 FROM mcr.microsoft.com/azure-functions/python:4-python3.13
@@ -20,6 +23,7 @@ ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
     WEBSITES_PORT=8080 \
     ASPNETCORE_URLS=http://+:8080 \
     HOME=/tmp \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 

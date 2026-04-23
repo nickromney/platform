@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: Build dependencies
 FROM dhi.io/python:3.13-debian13-dev AS builder
 
@@ -11,7 +13,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies to /app/.venv
-RUN uv sync --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --link-mode=copy --no-dev --no-install-project
 
 # Stage 2: Runtime
 FROM dhi.io/python:3.13-debian13
@@ -21,6 +24,7 @@ WORKDIR /app
 
 ENV PATH="/app/.venv/bin:/opt/python/bin:$PATH"
 ENV HOME=/tmp
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Copy virtual environment from builder

@@ -21,11 +21,8 @@
     "test:easyauth-mock": "playwright test tests/easyauth-mock-logout.spec.ts -c playwright.easyauth-mock.config.ts"
   },
   "dependencies": {
-    "@azure/identity": "^4.13.1",
     "@azure/msal-browser": "^5.7.0",
     "@azure/msal-react": "^5.3.0",
-    "@subnetcalc/shared-frontend": "file:../shared-frontend",
-    "express": "^5.2.1",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"

@@ -131,7 +131,7 @@ EOF
   printf '240\n' >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/.package-count"
   printf '124\n' >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/.package-count"
 
-  python3 - <<'PY' "${FIXTURE_ROOT}"
+  uv run --isolated python - <<'PY' "${FIXTURE_ROOT}"
 from pathlib import Path
 import sys
 

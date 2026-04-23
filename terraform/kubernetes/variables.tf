@@ -474,8 +474,20 @@ variable "grafana_sidecar_image_tag" {
   default     = "2.5.0"
 }
 
+variable "grafana_victoria_logs_plugin_version" {
+  description = "VictoriaLogs Grafana datasource plugin release version used for prebaked local Grafana images."
+  type        = string
+  default     = "0.26.3"
+}
+
+variable "grafana_victoria_logs_plugin_sha256" {
+  description = "SHA-256 checksum for the VictoriaLogs Grafana datasource plugin archive used for prebaked local Grafana images."
+  type        = string
+  default     = "e9a452b866427f0de23e466b1af8228fbb1344267f929fb6b354f830279c748a"
+}
+
 variable "grafana_victoria_logs_plugin_url" {
-  description = "VictoriaLogs Grafana datasource plugin bundle URL. Leave empty when the plugin is already baked into the Grafana image."
+  description = "VictoriaLogs Grafana datasource plugin bundle URL for chart-managed runtime installs. Leave empty when the plugin is already baked into the Grafana image."
   type        = string
   default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.26.3/victoriametrics-logs-datasource-v0.26.3.zip;victoriametrics-logs-datasource"
 }
