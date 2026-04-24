@@ -283,6 +283,21 @@ check_pinned_tool_version() {
   fi
 }
 
+check_tool_absent() {
+  local label="$1"
+  local command="$2"
+  local actual=""
+
+  actual="$(run_in_live_env "${command}" 2>/dev/null || true)"
+  actual="$(trim "${actual}")"
+
+  if [[ -z "${actual}" ]]; then
+    ok "${label} is intentionally absent from the live devcontainer environment"
+  else
+    fail_note "${label} should be absent from the live devcontainer environment, found ${actual}"
+  fi
+}
+
 report_live_tool_version() {
   local label="$1"
   local command="$2"
@@ -351,8 +366,9 @@ ok "Kyverno is pinned to ${KYVERNO_VERSION}"
 ok "Lima is pinned to ${LIMA_VERSION}"
 ok "arkade is pinned to ${ARKADE_VERSION}"
 ok "mkcert is pinned to ${MKCERT_VERSION}"
-ok "slicer is pinned to ${SLICER_IMAGE_REF}"
-ok "Node feature subtools are pinned: nvm ${DEVCONTAINER_NODE_NVM_VERSION}, pnpm ${DEVCONTAINER_NODE_PNPM_VERSION}"
+ok "pnpm is disabled in the Node feature via ${DEVCONTAINER_NODE_PNPM_VERSION}"
+ok "slicer is intentionally omitted from the devcontainer toolchain"
+ok "Node feature subtools are pinned: nvm ${DEVCONTAINER_NODE_NVM_VERSION}, pnpm disabled"
 ok "Docker feature subtools are pinned: buildx ${DEVCONTAINER_DOCKER_BUILDX_VERSION}, docker-compose channel ${DEVCONTAINER_DOCKER_COMPOSE_CHANNEL}"
 ok "arkade-managed tools are pinned: $(printf '%s, ' "${DEVCONTAINER_ARKADE_TOOLS[@]}" | sed 's/, $//')"
 
@@ -421,7 +437,7 @@ if inside_devcontainer || [[ "${WORKSPACE_CONTAINER_STATUS:-}" == "running" ]]; 
   check_pinned_tool_version "docker" "${DEVCONTAINER_DOCKER_CLI_VERSION}" "docker --version 2>/dev/null | sed -nE 's/^Docker version ([0-9.]+).*/\\1/p'"
   check_pinned_tool_version "docker buildx" "${DEVCONTAINER_DOCKER_BUILDX_VERSION}" "docker buildx version 2>/dev/null | sed -nE 's/.* v?([0-9][^[:space:]]*).*/\\1/p' | sed -E 's/-[0-9]+$//' | head -n 1"
   check_pinned_tool_version "node" "${DEVCONTAINER_NODE_VERSION}" "node --version 2>/dev/null | sed 's/^v//'"
-  check_pinned_tool_version "pnpm" "${DEVCONTAINER_NODE_PNPM_VERSION}" "pnpm --version 2>/dev/null | head -n 1"
+  check_tool_absent "pnpm" "command -v pnpm 2>/dev/null | head -n 1"
   check_pinned_tool_version "nvm" "${DEVCONTAINER_NODE_NVM_VERSION}" "export NVM_DIR=\"\${NVM_DIR:-/usr/local/share/nvm}\"; [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\" && nvm --version 2>/dev/null | head -n 1"
   check_pinned_tool_version "OpenTofu" "${OPENTOFU_VERSION}" "tofu -version 2>/dev/null | sed -n '1s/^OpenTofu v//p'"
   check_pinned_tool_version "uv" "${EXPECTED_UV_VERSION}" "uv --version 2>/dev/null | awk 'NR==1 { print \$2; exit }'"
@@ -440,6 +456,7 @@ if inside_devcontainer || [[ "${WORKSPACE_CONTAINER_STATUS:-}" == "running" ]]; 
   check_pinned_tool_version "kyverno" "$(strip_v_prefix "${KYVERNO_VERSION}")" "kyverno version 2>/dev/null | awk '/Version:/ { sub(/^v/, \"\", \$2); print \$2; exit }'"
   check_pinned_tool_version "limactl" "$(strip_v_prefix "${LIMA_VERSION}")" "limactl --version 2>&1 | sed -E 's/^limactl version v?//' | head -n 1"
   check_pinned_tool_version "mkcert" "$(strip_v_prefix "${MKCERT_VERSION}")" "mkcert -version 2>/dev/null | sed 's/^v//'"
+  check_tool_absent "slicer" "command -v slicer 2>/dev/null | head -n 1"
   check_pinned_tool_version "yq" "$(strip_v_prefix "$(arkade_tool_version yq)")" "yq --version 2>/dev/null | sed -nE 's/^.* version v?([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
   check_pinned_tool_version "jq" "$(arkade_tool_version jq)" "jq --version 2>/dev/null | head -n 1"
 else

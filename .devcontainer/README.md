@@ -14,6 +14,7 @@ make -C .devcontainer build
 make -C .devcontainer run
 make -C .devcontainer exec
 make -C .devcontainer check-version
+make -C .devcontainer check-toolchain-surface
 ```
 
 Those targets use the Dev Container CLI against the repo root. They exist so
@@ -29,9 +30,23 @@ login shell. `run`, `exec`, and `up` are host-side entrypoints. If you are
 already inside the devcontainer, use the current shell rather than calling them
 again.
 
+`build`, `run`, and `exec` all start with a tiny host-side smoke preflight:
+`docker build` plus `docker buildx build --load` against a scratch image. They
+also use bounded waits for stale-container cleanup, `devcontainer build`, and
+`devcontainer up`. If Docker wedges, the wrapper exits with Docker diagnostics
+instead of waiting indefinitely. Override the defaults with
+`DEVCONTAINER_DOCKER_SMOKE_TIMEOUT_SECONDS`, `DEVCONTAINER_DOCKER_RM_TIMEOUT_SECONDS`,
+`DEVCONTAINER_BUILD_TIMEOUT_SECONDS`, `DEVCONTAINER_UP_TIMEOUT_SECONDS`, or
+`DEVCONTAINER_DIAGNOSTIC_TIMEOUT_SECONDS`.
+
 `check-version` inspects the devcontainer definition plus any existing
 workspace container/image, then flags stale builds, floating version sources,
 and pinned-tool drift.
+`check-toolchain-surface` validates the resolved devcontainer feature surface
+without requiring a successful workspace image load. It resolves the cached
+Node feature installer, confirms the pinned Node/nvm/pnpm settings, and runs
+that installer inside a disposable base-image container to prove that `pnpm`
+stays absent.
 
 ## What It Depends On
 
@@ -93,11 +108,15 @@ make -C .devcontainer build
 make -C .devcontainer run
 make -C .devcontainer exec
 make -C .devcontainer check-version
+make -C .devcontainer check-toolchain-surface
 ```
 
 `build` is the clean-image path. It evicts the existing workspace container
 first, then builds the image. `run` starts the devcontainer without attaching a
-shell. `exec` and `up` are the “ensure running, then enter it” paths.
+shell. `exec` and `up` are the “ensure running, then enter it” paths. The
+wrapper now fails fast if the local Docker build path is broken and prints
+Docker diagnostics instead of hanging inside `devcontainer build` or
+`devcontainer up`.
 
 The VS Code extension check is informational for this CLI-only path. If you
 want the raw commands instead, use the Dev Container CLI directly:
@@ -164,14 +183,13 @@ The devcontainer now follows a Linux-first toolchain split:
   `yamllint`
 - pinned devcontainer features: Docker socket integration with Docker `29.4.1`
   and Buildx `0.33.0`, plus Node.js `24.15.0` with `nvm 0.40.4` and
-  `pnpm 10.33.1`
+  `pnpm` explicitly disabled
 - pinned direct release assets: `arkade`, `bun`, `starship`, `step`,
   `kyverno`, `lima`, `mkcert`, and the pinned OpenTofu `1.11.6` standalone
   install
 - direct binary copy: `uv`
 - pinned `arkade` installs: Kubernetes-facing tools such as `kubectl`, `kind`,
-  `helm`, `cilium`, `hubble`, `k3sup`, `kubie`, `terragrunt`, and the local
-  `slicer` helper
+  `helm`, `cilium`, `hubble`, `k3sup`, `kubie`, and `terragrunt`
 
 `make -C .devcontainer check-version` validates that surface in a read-only
 way. It checks the pinned feature refs plus the version matrix in
@@ -180,6 +198,11 @@ container/image age against the default 14-day limit, and confirms the live
 toolchain still matches the definition when a running devcontainer is
 available. Override the freshness threshold with
 `DEVCONTAINER_CHECK_STALE_DAYS=<days>`.
+
+If the workspace image load path itself is what is broken, run
+`make -C .devcontainer check-toolchain-surface`. That fallback path validates
+the resolved feature payloads and the Node feature install surface without
+depending on a successful `devcontainer up`.
 
 The repo-level `make lint` entrypoint works inside the devcontainer too, and
 the image includes both `yamllint` and `kyverno` for the recursive YAML and
@@ -201,10 +224,11 @@ It also seeds:
   [`starship.toml`](./starship.toml)
 - managed shell includes sourced from `~/.bashrc` and `~/.zshrc`
 
-For editing inside the container, the image installs `neovim`, and post-create
-installs a pinned checkout of [`vim-sensible`](https://github.com/tpope/vim-sensible/tree/master)
-into both the Vim and Neovim native package paths so the same default behavior
-applies in either editor.
+For editing inside the container, the image installs `neovim` and pre-seeds a
+pinned checkout of [`vim-sensible`](https://github.com/tpope/vim-sensible/tree/master).
+Post-create links that local checkout into both the Vim and Neovim native
+package paths so the same default behavior applies in either editor without a
+network clone on first start.
 
 `kubie` is included because the repo keeps split kubeconfigs such as
 `~/.kube/kind-kind-local.yaml`, `~/.kube/limavm-k3s.yaml`, and

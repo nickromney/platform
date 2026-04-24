@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 USE_COMMON_HELP := 1
 MAKE_HELP_WIDTH := 16
-MAKE_KNOWN_GOALS := help prereqs build run up exec check-version
+MAKE_KNOWN_GOALS := help prereqs build run up exec check-version check-toolchain-surface
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 REPO_ROOT := $(abspath $(CURDIR)/..)
@@ -19,7 +19,7 @@ CONTAINER_SHELL ?= zsh -l
 
 include ../mk/common.mk
 
-.PHONY: prereqs build run up exec check-version
+.PHONY: prereqs build run up exec check-version check-toolchain-surface
 
 ##@ Setup
 prereqs: ## Check Docker, devcontainer CLI, VS Code extension state, and host mount dirs
@@ -67,40 +67,18 @@ prereqs: ## Check Docker, devcontainer CLI, VS Code extension state, and host mo
 
 ##@ Lifecycle
 build: prereqs ## Build the devcontainer image with the devcontainer CLI
-	@set -euo pipefail; \
-	if [ "$${PLATFORM_DEVCONTAINER:-}" = "1" ] && [ -f "$(CONTAINER_MARKER_FILE)" ]; then \
-		echo "make -C .devcontainer build must be run from the host, not from inside the devcontainer." >&2; \
-		exit 1; \
-	fi; \
-	existing_ids="$$( \
-		"$(DOCKER_BIN)" ps -aq \
-			--filter "label=devcontainer.local_folder=$(REPO_ROOT)" \
-			--filter "label=devcontainer.config_file=$(DEVCONTAINER_CONFIG)" \
-	)"; \
-	if [ -n "$$existing_ids" ]; then \
-		echo "Removing existing devcontainer container(s): $$existing_ids"; \
-		"$(DOCKER_BIN)" rm -f $$existing_ids >/dev/null; \
-	fi; \
-	"$(DEVCONTAINER_CLI)" build --workspace-folder "$(REPO_ROOT)"
+	@"$(REPO_ROOT)/.devcontainer/host-lifecycle.sh" --action build --execute
 
 run: prereqs ## Create or start the devcontainer without attaching a shell
-	@set -euo pipefail; \
-	if [ "$${PLATFORM_DEVCONTAINER:-}" = "1" ] && [ -f "$(CONTAINER_MARKER_FILE)" ]; then \
-		echo "make -C .devcontainer run must be run from the host. You are already inside the devcontainer." >&2; \
-		exit 1; \
-	fi; \
-	"$(DEVCONTAINER_CLI)" up --workspace-folder "$(REPO_ROOT)"
+	@"$(REPO_ROOT)/.devcontainer/host-lifecycle.sh" --action run --execute
 
 up: exec ## Ensure the devcontainer is running, then attach a shell
 
 exec: prereqs ## Ensure the devcontainer is running, then attach a shell
-	@set -euo pipefail; \
-	if [ "$${PLATFORM_DEVCONTAINER:-}" = "1" ] && [ -f "$(CONTAINER_MARKER_FILE)" ]; then \
-		echo "make -C .devcontainer exec must be run from the host. You are already inside the devcontainer." >&2; \
-		exit 1; \
-	fi; \
-	"$(DEVCONTAINER_CLI)" up --workspace-folder "$(REPO_ROOT)"; \
-	"$(DEVCONTAINER_CLI)" exec --workspace-folder "$(REPO_ROOT)" $(CONTAINER_SHELL)
+	@"$(REPO_ROOT)/.devcontainer/host-lifecycle.sh" --action exec --execute
 
 check-version: ## Inspect devcontainer tool versions and flag stale workspace images
 	@"$(REPO_ROOT)/.devcontainer/check-version.sh" --execute
+
+check-toolchain-surface: ## Validate the devcontainer toolchain surface without loading the workspace image
+	@"$(REPO_ROOT)/.devcontainer/check-toolchain-surface.sh" --execute
