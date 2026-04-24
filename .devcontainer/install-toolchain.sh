@@ -160,6 +160,7 @@ fi
 
 OPENTOFU_INSTALL_DIR="${OPENTOFU_INSTALL_DIR:-/usr/local/lib/opentofu/${OPENTOFU_VERSION}}"
 OPENTOFU_INSTALLER_URL="${OPENTOFU_INSTALLER_URL:-https://get.opentofu.org/install-opentofu.sh}"
+VIM_SENSIBLE_INSTALL_DIR="${VIM_SENSIBLE_INSTALL_DIR:-/usr/local/share/platform-devcontainer/vendor/vim-sensible}"
 
 shell_cli_maybe_execute_or_preview_summary usage \
   "would install the devcontainer toolchain for ${username}"
@@ -372,9 +373,37 @@ install_opentofu() {
   rm -rf "${tmp_dir}"
 }
 
-install_playwright_chromium() {
-  # Bake the browser runtime dependencies that the stage-900 SSO harness needs.
-  run_as_user "bun x playwright install --with-deps chromium"
+install_vim_sensible_source() {
+  local tmp_dir archive_path
+
+  tmp_dir="$(mktemp -d)"
+  archive_path="${tmp_dir}/vim-sensible.tar.gz"
+  curl -fsSL "https://github.com/tpope/vim-sensible/archive/${VIM_SENSIBLE_REF}.tar.gz" -o "${archive_path}"
+  rm -rf "${VIM_SENSIBLE_INSTALL_DIR}"
+  mkdir -p "${VIM_SENSIBLE_INSTALL_DIR}"
+  tar -xzf "${archive_path}" --strip-components=1 -C "${VIM_SENSIBLE_INSTALL_DIR}"
+  chmod -R a+rX "${VIM_SENSIBLE_INSTALL_DIR}"
+  rm -rf "${tmp_dir}"
+}
+
+install_playwright_runtime_deps() {
+  # Bake the Linux runtime packages only; tests still install the browser binary on demand.
+  HOME="/home/${username}" XDG_CACHE_HOME="/home/${username}/.cache" bun x playwright install-deps chromium
+}
+
+cleanup_toolchain_caches() {
+  apt-get clean
+  rm -rf \
+    /var/lib/apt/lists/* \
+    /var/cache/apt/archives/* \
+    /var/cache/apt/*.bin \
+    "/home/${username}/.arkade" \
+    "/home/${username}/.bun/install/cache" \
+    "/home/${username}/.cache" \
+    "/home/${username}/.npm" \
+    /root/.arkade \
+    /root/.cache \
+    /root/.npm
 }
 
 install_arkade
@@ -384,6 +413,7 @@ install_step
 install_kyverno
 install_lima
 install_mkcert
+install_vim_sensible_source
 
 for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
   install_arkade_tool "${entry%%=*}" "${entry#*=}"
@@ -391,12 +421,11 @@ done
 
 install_opentofu
 
-arkade oci install "${SLICER_IMAGE_REF}" --path /usr/local/bin
-
 cat >/usr/local/bin/compose <<'EOF'
 #!/usr/bin/env bash
 exec docker compose "$@"
 EOF
 chmod +x /usr/local/bin/compose
 
-install_playwright_chromium
+install_playwright_runtime_deps
+cleanup_toolchain_caches

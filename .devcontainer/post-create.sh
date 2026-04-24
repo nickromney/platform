@@ -2,6 +2,7 @@
 set -euo pipefail
 
 workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+toolchain_versions_file="${workspace_root}/.devcontainer/toolchain-versions.sh"
 starship_source="${workspace_root}/.devcontainer/starship.toml"
 starship_target="${HOME}/.config/starship.toml"
 managed_bashrc_source="${workspace_root}/.devcontainer/bashrc"
@@ -12,9 +13,15 @@ managed_zshrc_target="${platform_config_dir}/zshrc"
 bashrc_path="${HOME}/.bashrc"
 zshrc_path="${HOME}/.zshrc"
 completion_root="${HOME}/.local/share/platform-devcontainer/completions"
+normalize_node_toolchain_script="${workspace_root}/.devcontainer/normalize-node-toolchain.sh"
 vim_sensible_repo_url="https://github.com/tpope/vim-sensible.git"
+if [[ -f "${toolchain_versions_file}" ]]; then
+  # shellcheck source=/dev/null
+  source "${toolchain_versions_file}"
+fi
 vim_sensible_ref="${VIM_SENSIBLE_REF:-0ce2d843d6f588bb0c8c7eec6449171615dc56d9}"
-vim_sensible_vendor_dir="${HOME}/.local/share/platform-devcontainer/vendor/vim-sensible"
+vim_sensible_source_dir="${VIM_SENSIBLE_SOURCE_DIR:-/usr/local/share/platform-devcontainer/vendor/vim-sensible}"
+vim_sensible_checkout_dir="${HOME}/.local/share/platform-devcontainer/vendor/vim-sensible"
 
 ensure_source_line() {
   local shell_rc="$1"
@@ -93,25 +100,30 @@ generate_completions() {
 
 install_vim_sensible() {
   local current_ref=""
+  local source_dir="${vim_sensible_source_dir}"
   local vim_pack_dir="${HOME}/.vim/pack/tpope/start"
   local nvim_pack_dir="${HOME}/.local/share/nvim/site/pack/tpope/start"
 
-  mkdir -p "$(dirname "${vim_sensible_vendor_dir}")"
+  if [[ ! -d "${source_dir}" ]]; then
+    mkdir -p "$(dirname "${vim_sensible_checkout_dir}")"
 
-  if [[ ! -d "${vim_sensible_vendor_dir}/.git" ]]; then
-    rm -rf "${vim_sensible_vendor_dir}"
-    git clone "${vim_sensible_repo_url}" "${vim_sensible_vendor_dir}"
-  fi
+    if [[ ! -d "${vim_sensible_checkout_dir}/.git" ]]; then
+      rm -rf "${vim_sensible_checkout_dir}"
+      git clone "${vim_sensible_repo_url}" "${vim_sensible_checkout_dir}"
+    fi
 
-  current_ref="$(git -C "${vim_sensible_vendor_dir}" rev-parse HEAD 2>/dev/null || true)"
-  if [[ "${current_ref}" != "${vim_sensible_ref}" ]]; then
-    git -C "${vim_sensible_vendor_dir}" fetch --depth 1 origin "${vim_sensible_ref}"
-    git -C "${vim_sensible_vendor_dir}" checkout --detach "${vim_sensible_ref}"
+    current_ref="$(git -C "${vim_sensible_checkout_dir}" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "${current_ref}" != "${vim_sensible_ref}" ]]; then
+      git -C "${vim_sensible_checkout_dir}" fetch --depth 1 origin "${vim_sensible_ref}"
+      git -C "${vim_sensible_checkout_dir}" checkout --detach "${vim_sensible_ref}"
+    fi
+
+    source_dir="${vim_sensible_checkout_dir}"
   fi
 
   mkdir -p "${vim_pack_dir}" "${nvim_pack_dir}"
-  ln -sfn "${vim_sensible_vendor_dir}" "${vim_pack_dir}/sensible"
-  ln -sfn "${vim_sensible_vendor_dir}" "${nvim_pack_dir}/sensible"
+  ln -sfn "${source_dir}" "${vim_pack_dir}/sensible"
+  ln -sfn "${source_dir}" "${nvim_pack_dir}/sensible"
 }
 
 git config --global --add safe.directory "${workspace_root}"
@@ -122,10 +134,13 @@ install -m 0644 "${managed_bashrc_source}" "${managed_bashrc_target}"
 install -m 0644 "${managed_zshrc_source}" "${managed_zshrc_target}"
 touch "${bashrc_path}" "${zshrc_path}"
 
-remove_exact_line "${bashrc_path}" 'eval "$(starship init bash)"'
-remove_exact_line "${zshrc_path}" 'eval "$(starship init zsh)"'
-ensure_source_line "${bashrc_path}" '[ -f "${HOME}/.config/platform-devcontainer/bashrc" ] && . "${HOME}/.config/platform-devcontainer/bashrc"'
-ensure_source_line "${zshrc_path}" '[ -f "${HOME}/.config/platform-devcontainer/zshrc" ] && . "${HOME}/.config/platform-devcontainer/zshrc"'
+remove_exact_line "${bashrc_path}" "eval \"\$(starship init bash)\""
+remove_exact_line "${zshrc_path}" "eval \"\$(starship init zsh)\""
+ensure_source_line "${bashrc_path}" "[ -f \"\${HOME}/.config/platform-devcontainer/bashrc\" ] && . \"\${HOME}/.config/platform-devcontainer/bashrc\""
+ensure_source_line "${zshrc_path}" "[ -f \"\${HOME}/.config/platform-devcontainer/zshrc\" ] && . \"\${HOME}/.config/platform-devcontainer/zshrc\""
 
 generate_completions
+if [[ -x "${normalize_node_toolchain_script}" ]]; then
+  "${normalize_node_toolchain_script}"
+fi
 install_vim_sensible
