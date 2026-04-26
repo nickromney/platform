@@ -437,7 +437,7 @@ async function sentimentSamplePositiveAndAnalyze(page: Page) {
 
 async function subnetcalcRfc1918Lookup(page: Page) {
   const maxAttempts = Number(process.env.SSO_E2E_SUBNETCALC_LOOKUP_RETRIES || 3)
-  const errors: Array<{ attempt: number; body: string }> = []
+  const errors: Array<{ attempt: number; message: string; body: string }> = []
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const rfcBtn = page.getByRole('button', { name: /RFC1918:\s*10\.0\.0\.0\/24/i })
@@ -457,40 +457,39 @@ async function subnetcalcRfc1918Lookup(page: Page) {
       // Validate a few stable fields (use table structure; the rendered text has no whitespace boundaries).
       const validation = results.locator('article').filter({ has: page.getByRole('heading', { name: /^Validation$/i }) })
       await expect(validation).toBeVisible({ timeout: 60_000 })
-      await expect(validation.locator('tr', { hasText: 'Valid' }).locator('td').nth(1)).toHaveText(/Yes/i)
-      await expect(validation.locator('tr', { hasText: 'Address' }).locator('td').nth(1)).toHaveText(/10\.0\.0\.0\/24/i)
+      await expect(validation.locator('tr', { hasText: 'Valid' }).locator('td').nth(0)).toHaveText(/Yes/i)
+      await expect(validation.locator('tr', { hasText: 'Address' }).locator('td').nth(0)).toHaveText(/10\.0\.0\.0\/24/i)
 
       const rfc1918 = results
         .locator('article')
-        .filter({ has: page.getByRole('heading', { name: /^RFC1918 Private Address Check$/i }) })
+        .filter({ has: page.getByRole('heading', { name: /^(RFC1918 )?Private Address Check$/i }) })
       await expect(rfc1918).toBeVisible({ timeout: 60_000 })
-      await expect(rfc1918.locator('tr', { hasText: 'Is RFC1918' }).locator('td').nth(1)).toHaveText(/Yes/i)
+      await expect(rfc1918.locator('tr', { hasText: /RFC1918/i }).locator('td').nth(0)).toHaveText(/Yes/i)
 
       const performanceTiming = results
         .locator('article')
-        .filter({ has: page.getByRole('heading', { name: /^Performance Timing$/i }) })
+        .filter({ has: page.getByRole('heading', { name: /^Performance( Timing| - Overall)$/i }) })
       await expect(performanceTiming).toBeVisible({ timeout: 60_000 })
-      await expect(performanceTiming.locator('tr', { hasText: 'Total Response Time' }).locator('td').nth(1)).toContainText(
+      await expect(performanceTiming.locator('tr', { hasText: 'Total Response Time' }).locator('td').nth(0)).toContainText(
         /\d+ms\s+\(\d+\.\d{3}s\)/i,
       )
 
-      const apiCallDetails = performanceTiming.locator('details')
-      await expect(apiCallDetails).toBeVisible({ timeout: 60_000 })
-      await apiCallDetails.locator('summary').click()
-
-      const expectedCalls = ['validate', 'checkPrivate', 'checkCloudflare', 'subnetInfo']
-      for (const call of expectedCalls) {
-        const row = apiCallDetails.locator('tbody tr').filter({ hasText: new RegExp(`^\\s*${escapeRegExp(call)}\\s*`, 'i') })
-        await expect(row, `Missing subnetcalc API call row for ${call}`).toHaveCount(1, { timeout: 60_000 })
-        await expect(row.locator('td').nth(1)).toContainText(/\d+ms/i)
-        await expect(row.locator('td').nth(2)).not.toHaveText(/^$/)
-        await expect(row.locator('td').nth(3)).not.toHaveText(/^$/)
+      const expectedTimedArticles = ['Validation', 'Private Address Check', 'Cloudflare Check', /^Subnet Information/i]
+      for (const heading of expectedTimedArticles) {
+        const article = results.locator('article').filter({ has: page.getByRole('heading', { name: heading }) })
+        const apiCallDetails = article.locator('details').filter({ hasText: /API Call Timing/i })
+        await expect(apiCallDetails, `Missing subnetcalc API call timing for ${heading.toString()}`).toBeVisible({ timeout: 60_000 })
+        await apiCallDetails.locator('summary').click()
+        await expect(apiCallDetails.locator('tr', { hasText: 'Duration' }).locator('td').nth(0)).toContainText(/\d+ms/i)
+        await expect(apiCallDetails.locator('tr', { hasText: 'Request (UTC)' }).locator('td').nth(0)).not.toHaveText(/^$/)
+        await expect(apiCallDetails.locator('tr', { hasText: 'Response (UTC)' }).locator('td').nth(0)).not.toHaveText(/^$/)
       }
 
       return
-    } catch {
+    } catch (error) {
       errors.push({
         attempt,
+        message: error instanceof Error ? error.message : String(error),
         body: (((await page.locator('body').textContent()) ?? '').replace(/\s+/g, ' ')).slice(0, 2000),
       })
       if (attempt === maxAttempts) {

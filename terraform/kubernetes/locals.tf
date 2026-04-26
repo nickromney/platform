@@ -1,20 +1,20 @@
 locals {
   # Terragrunt runs this module from a cache copy. Keep generated files and
   # content hashes anchored to the real checkout path instead of that cache.
-  stack_dir                         = trimspace(var.kind_stack_dir) != "" ? abspath(pathexpand(var.kind_stack_dir)) : abspath(path.module)
-  repo_root_from_stack             = abspath("${local.stack_dir}/../..")
-  module_repo_root                 = abspath("${path.module}/../..")
+  stack_dir            = trimspace(var.kind_stack_dir) != "" ? abspath(pathexpand(var.kind_stack_dir)) : abspath(path.module)
+  repo_root_from_stack = abspath("${local.stack_dir}/../..")
+  module_repo_root     = abspath("${path.module}/../..")
   # Tests may point kind_stack_dir at a synthetic location that is useful for
   # output-path assertions but does not contain the repo helper scripts.
-  repo_root                        = fileexists("${local.repo_root_from_stack}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh") ? local.repo_root_from_stack : local.module_repo_root
+  repo_root                         = fileexists("${local.repo_root_from_stack}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh") ? local.repo_root_from_stack : local.module_repo_root
   kind_workers                      = range(var.worker_count)
   kind_control_plane_container_name = "${var.cluster_name}-control-plane"
   kind_config_path_expanded         = abspath(pathexpand(var.kind_config_path))
   kubeconfig_path_expanded          = abspath(pathexpand(var.kubeconfig_path))
   preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${local.repo_root}/kubernetes/kind/preload-images.txt")
-  monorepo_apps_dir      = abspath("${local.repo_root}/apps")
-  runtime_artifact_scope = trimspace(var.runtime_artifact_scope)
-  run_dir                = local.runtime_artifact_scope != "" ? abspath("${local.stack_dir}/.run/${local.runtime_artifact_scope}") : abspath("${local.stack_dir}/.run")
+  monorepo_apps_dir                 = abspath("${local.repo_root}/apps")
+  runtime_artifact_scope            = trimspace(var.runtime_artifact_scope)
+  run_dir                           = local.runtime_artifact_scope != "" ? abspath("${local.stack_dir}/.run/${local.runtime_artifact_scope}") : abspath("${local.stack_dir}/.run")
 
   gitea_http_host_local             = "127.0.0.1"
   gitea_ssh_host_local              = "127.0.0.1"
@@ -491,8 +491,12 @@ locals {
         "reposerver.metrics.listen.address" = "0.0.0.0"
       }
       rbac = {
-        "policy.csv"       = ""
-        "policy.default"   = "role:admin"
+        "policy.csv" = local.argocd_oidc_enabled ? trimspace(<<-EOT
+          g, platform-admins, role:admin
+          g, platform-viewers, role:readonly
+        EOT
+        ) : ""
+        "policy.default"   = local.argocd_oidc_enabled ? "role:readonly" : "role:admin"
         "policy.matchMode" = "glob"
         "scopes"           = "[groups]"
       }
@@ -665,6 +669,7 @@ locals {
               - openid
               - profile
               - email
+              - groups
           EOT
           )
 

@@ -288,7 +288,7 @@ EOF
 
   cat >"${stub_bin}/curl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' '{"dist-tags":{"latest":"1.1.0"},"time":{"created":"2026-04-01T00:00:00.000Z","modified":"2026-04-17T00:00:00.000Z","1.0.0":"2026-04-01T00:00:00.000Z","1.1.0":"2026-04-15T00:00:00.000Z"}}'
+printf '%s\n' '{"dist-tags":{"latest":"1.1.0"},"time":{"created":"2026-04-01T00:00:00.000Z","modified":"2099-04-17T00:00:00.000Z","1.0.0":"2026-04-01T00:00:00.000Z","1.1.0":"2099-04-15T00:00:00.000Z"}}'
 EOF
   chmod +x "${stub_bin}/curl"
 

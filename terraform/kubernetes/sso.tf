@@ -189,16 +189,22 @@ spec:
               hash: "${terraform_data.dex_demo_password_hash[0].output}"
               username: "demo-admin"
               userID: "0a1f0e7f-75fa-40cc-90bc-9e876c0919dc"
+              groups:
+                - platform-admins
             - email: "demo@dev.test"
               emailVerified: true
               hash: "${terraform_data.dex_demo_password_hash[0].output}"
               username: "demo@dev.test"
               userID: "cfe2f539-3972-4310-bc7e-8579af6c4b20"
+              groups:
+                - platform-viewers
             - email: "demo@uat.test"
               emailVerified: true
               hash: "${terraform_data.dex_demo_password_hash[0].output}"
               username: "demo@uat.test"
               userID: "e3bbece5-a293-47d9-9d7d-3d8cb218fc23"
+              groups:
+                - platform-viewers
 
           staticClients:
             - id: oauth2-proxy

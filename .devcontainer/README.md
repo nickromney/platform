@@ -179,8 +179,8 @@ the container reuse the host CA when available.
 
 The devcontainer now follows a Linux-first toolchain split:
 
-- `apt`: base Linux packages such as `bats`, `neovim`, `shellcheck`, and
-  `yamllint`
+- `apt`: base Linux packages such as `bats`, `neovim`, `ripgrep`,
+  `shellcheck`, and `yamllint`
 - pinned devcontainer features: Docker socket integration with Docker `29.4.1`
   and Buildx `0.33.0`, plus Node.js `24.15.0` with `nvm 0.40.4` and
   `pnpm` explicitly disabled
