@@ -4,11 +4,11 @@ metadata:
   name: sso-hardened
 spec:
   description: >-
-    Hardened policy for sso namespace (Dex IdP + oauth2-proxy instances).
-    Dex is the IdP -- treat it like you would Azure EntraID.
+    Hardened policy for sso namespace (Keycloak IdP + oauth2-proxy instances).
+    Keycloak is the Kubernetes IdP for the representative RBAC journey.
     Ingress: kubelet probes plus intra-namespace traffic. Shared workload bridge
-    policies add Dex ingress, auth-proxy ingress, and external IdP egress.
-    Egress: DNS, kube-apiserver (Dex stores state in k8s), upstream services
+    policies add IdP ingress, auth-proxy ingress, and external IdP egress.
+    Egress: DNS, upstream services
     that oauth2-proxy reverse-proxies to.
   endpointSelector:
     matchLabels:

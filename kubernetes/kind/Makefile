@@ -94,11 +94,11 @@ include $(STAGE_LADDER_MK)
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_ACTIONS := plan apply
-VALID_STAGE_HELPERS := check-health check-security
+VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -169,12 +169,13 @@ help:
 	@echo "  make audit-bootstrap                         Post-bootstrap audit: apps, pods, events, restarts, previous logs"
 	@echo "  make build-local-platform-images             Build host-side platform shortcut images into 127.0.0.1:5002"
 	@echo "  make build-local-workload-images             Build host-side workload shortcut images into 127.0.0.1:5002"
-	@echo "  make check-app  APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
+	@echo "  make check-app  APP=grafana [EXTENDED=1]"
 	@echo "  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals"
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
 	@echo "  make check-lima-stopped"
 	@echo "  make check-provider-version [CHECK_VERSION_FORMAT=text|json]"
+	@echo "  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i"
 	@echo "  make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity"
 	@echo "  make check-slicer-stopped"
 	@echo "  make check-sso"
@@ -736,6 +737,12 @@ check-security: workflow-validate-stage
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
+.PHONY: check-rbac
+check-rbac: workflow-validate-stage
+	@$(MAKE) ensure-kind-kubeconfig >/dev/null
+	@$(MAKE) assert-kind-active >/dev/null
+	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-rbac.sh" $(READONLY_MODE_FLAG)
+
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
@@ -769,7 +776,7 @@ check-app: workflow-validate-stage
 	@$(MAKE) assert-kind-active >/dev/null
 	@$(MAKE) render-operator-overrides >/dev/null
 	@set -euo pipefail; \
-	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
+	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=grafana)"; exit 1; fi; \
 	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \

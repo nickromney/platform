@@ -249,9 +249,20 @@ variable "enable_cert_manager" {
 }
 
 variable "enable_sso" {
-  description = "Enable SSO for the platform UIs by deploying Dex (OIDC IdP) and protecting UI routes via oauth2-proxy (small-footprint demo)."
+  description = "Enable SSO for the platform UIs by deploying the selected OIDC IdP and protecting UI routes via oauth2-proxy."
   type        = bool
   default     = false
+}
+
+variable "sso_provider" {
+  description = "OIDC provider for Kubernetes SSO. Kubernetes stage 900 defaults to Keycloak; Dex is retained for lightweight/local compatibility paths."
+  type        = string
+  default     = "keycloak"
+
+  validation {
+    condition     = contains(["dex", "keycloak"], lower(trimspace(var.sso_provider)))
+    error_message = "sso_provider must be one of: dex, keycloak."
+  }
 }
 
 variable "enable_app_of_apps" {
@@ -333,7 +344,7 @@ variable "public_demo_acknowledged" {
 }
 
 variable "enable_demo_cluster_admin_binding" {
-  description = "Bind the demo@admin.test Dex identity to cluster-admin for learning-cluster convenience."
+  description = "Bind the platform admin OIDC group to cluster-admin for learning-cluster convenience."
   type        = bool
   default     = true
 }
@@ -345,13 +356,13 @@ variable "headlamp_cluster_role_binding_create" {
 }
 
 variable "headlamp_oidc_skip_tls_verify" {
-  description = "Pass -oidc-skip-tls-verify to Headlamp when talking to Dex."
+  description = "Pass -oidc-skip-tls-verify to Headlamp when talking to the local OIDC issuer."
   type        = bool
   default     = true
 }
 
 variable "public_demo_allow_demo_cluster_admin" {
-  description = "Explicitly allow the demo Dex admin identity to remain cluster-admin when public_demo_mode=true."
+  description = "Explicitly allow the platform admin OIDC group to remain cluster-admin when public_demo_mode=true."
   type        = bool
   default     = false
 }
@@ -562,6 +573,24 @@ variable "dex_chart_version" {
   description = "Dex chart version (charts.dexidp.io)."
   type        = string
   default     = "0.24.0"
+}
+
+variable "keycloak_image" {
+  description = "Keycloak image used for the Kubernetes stage-900 IdP."
+  type        = string
+  default     = "quay.io/keycloak/keycloak:26.6.1"
+}
+
+variable "keycloak_postgres_image" {
+  description = "Postgres image used by the local Keycloak persistence slice."
+  type        = string
+  default     = "docker.io/postgres:17.6"
+}
+
+variable "keycloak_realm" {
+  description = "Keycloak realm used for the local platform identity journey."
+  type        = string
+  default     = "platform"
 }
 
 variable "oauth2_proxy_chart_version" {
@@ -994,7 +1023,7 @@ check "private_admin_nodeports_require_gitea_port_forward" {
 check "public_demo_mode_requires_demo_cluster_admin_ack" {
   assert {
     condition     = !var.public_demo_mode || !var.enable_demo_cluster_admin_binding || var.public_demo_allow_demo_cluster_admin
-    error_message = "public_demo_mode=true requires public_demo_allow_demo_cluster_admin=true before the demo Dex admin user can stay cluster-admin."
+    error_message = "public_demo_mode=true requires public_demo_allow_demo_cluster_admin=true before the platform admin OIDC group can stay cluster-admin."
   }
 }
 

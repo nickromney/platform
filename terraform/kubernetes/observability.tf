@@ -430,7 +430,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.grafana_public_url}/d/platform-app-overview/platform-app-golden-signals",
+                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -478,7 +478,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Platform App Golden Signals",
-                          "url": "${local.grafana_public_url}/d/platform-app-overview/platform-app-golden-signals"
+                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals"
                         }
                       ],
                       "options": {
@@ -496,7 +496,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.grafana_public_url}/d/platform-namespace-health/platform-namespace-health",
+                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-namespace-health/platform-namespace-health",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -544,7 +544,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Platform Namespace Health",
-                          "url": "${local.grafana_public_url}/d/platform-namespace-health/platform-namespace-health"
+                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-namespace-health/platform-namespace-health"
                         }
                       ],
                       "options": {
@@ -562,7 +562,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.argocd_public_url}",
+                      "description": "https://argocd.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -610,7 +610,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Argo CD",
-                          "url": "${local.argocd_public_url}"
+                          "url": "https://argocd.admin.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -628,7 +628,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.dex_public_url}",
+                      "description": "https://gitea.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -675,8 +675,8 @@ ${local.grafana_plugins_values_yaml}
                       "links": [
                         {
                           "targetBlank": true,
-                          "title": "Open Dex",
-                          "url": "${local.dex_public_url}"
+                          "title": "Open Gitea",
+                          "url": "https://gitea.admin.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -685,16 +685,16 @@ ${local.grafana_plugins_values_yaml}
                       },
                       "targets": [
                         {
-                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"dex\"}) > bool 0) or vector(0))",
+                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"gitea\",deployment=\"gitea\"}) > bool 0) or max(argocd_app_info{name=\"gitea\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
                       ],
-                      "title": "Dex",
+                      "title": "Gitea",
                       "type": "stat"
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.gitea_public_url}",
+                      "description": "https://headlamp.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -741,8 +741,8 @@ ${local.grafana_plugins_values_yaml}
                       "links": [
                         {
                           "targetBlank": true,
-                          "title": "Open Gitea",
-                          "url": "${local.gitea_public_url}"
+                          "title": "Open Headlamp",
+                          "url": "https://headlamp.admin.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -751,16 +751,16 @@ ${local.grafana_plugins_values_yaml}
                       },
                       "targets": [
                         {
-                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"gitea\",deployment=\"gitea\"}) > bool 0) or max(argocd_app_info{name=\"gitea\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
+                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"headlamp\",deployment=\"headlamp\"}) > bool 0) or max(argocd_app_info{name=\"headlamp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
                       ],
-                      "title": "Gitea",
+                      "title": "Headlamp",
                       "type": "stat"
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.headlamp_public_url}",
+                      "description": "https://hubble.admin.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -807,8 +807,8 @@ ${local.grafana_plugins_values_yaml}
                       "links": [
                         {
                           "targetBlank": true,
-                          "title": "Open Headlamp",
-                          "url": "${local.headlamp_public_url}"
+                          "title": "Open Hubble",
+                          "url": "https://hubble.admin.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -817,16 +817,16 @@ ${local.grafana_plugins_values_yaml}
                       },
                       "targets": [
                         {
-                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"headlamp\",deployment=\"headlamp\"}) > bool 0) or max(argocd_app_info{name=\"headlamp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
+                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-hubble\"}) > bool 0) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
                           "refId": "A"
                         }
                       ],
-                      "title": "Headlamp",
+                      "title": "Hubble",
                       "type": "stat"
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.hubble_public_url}",
+                      "description": "https://keycloak.127.0.0.1.sslip.io/admin/",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -873,8 +873,8 @@ ${local.grafana_plugins_values_yaml}
                       "links": [
                         {
                           "targetBlank": true,
-                          "title": "Open Hubble",
-                          "url": "${local.hubble_public_url}"
+                          "title": "Open Keycloak",
+                          "url": "https://keycloak.127.0.0.1.sslip.io/admin/"
                         }
                       ],
                       "options": {
@@ -883,16 +883,16 @@ ${local.grafana_plugins_values_yaml}
                       },
                       "targets": [
                         {
-                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-hubble\"}) > bool 0) or max(argocd_app_info{name=\"platform-gateway-routes\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
+                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))",
                           "refId": "A"
                         }
                       ],
-                      "title": "Hubble",
+                      "title": "Keycloak",
                       "type": "stat"
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.kyverno_public_url}/",
+                      "description": "https://kyverno.admin.127.0.0.1.sslip.io/",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -940,7 +940,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Kyverno Policy UI",
-                          "url": "${local.kyverno_public_url}/"
+                          "url": "https://kyverno.admin.127.0.0.1.sslip.io/"
                         }
                       ],
                       "options": {
@@ -958,7 +958,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.sentiment_dev_public_url}",
+                      "description": "https://sentiment.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1006,7 +1006,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Sentiment DEV",
-                          "url": "${local.sentiment_dev_public_url}"
+                          "url": "https://sentiment.dev.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -1024,7 +1024,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.subnetcalc_dev_public_url}",
+                      "description": "https://subnetcalc.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1072,7 +1072,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open SubnetCalc DEV",
-                          "url": "${local.subnetcalc_dev_public_url}"
+                          "url": "https://subnetcalc.dev.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -1090,7 +1090,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.sentiment_uat_public_url}",
+                      "description": "https://sentiment.uat.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1138,7 +1138,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Sentiment UAT",
-                          "url": "${local.sentiment_uat_public_url}"
+                          "url": "https://sentiment.uat.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {
@@ -1156,7 +1156,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "${local.subnetcalc_uat_public_url}",
+                      "description": "https://subnetcalc.uat.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1204,7 +1204,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open SubnetCalc UAT",
-                          "url": "${local.subnetcalc_uat_public_url}"
+                          "url": "https://subnetcalc.uat.127.0.0.1.sslip.io"
                         }
                       ],
                       "options": {

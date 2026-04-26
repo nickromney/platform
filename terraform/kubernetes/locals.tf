@@ -34,6 +34,9 @@ locals {
   argocd_oidc_enabled                   = var.enable_sso && var.enable_argocd_oidc
   cni_provider_effective                = lower(var.cni_provider)
   enable_cilium_effective               = local.cni_provider_effective == "cilium"
+  sso_provider_effective                = lower(trimspace(var.sso_provider))
+  sso_provider_is_dex                   = local.sso_provider_effective == "dex"
+  sso_provider_is_keycloak              = local.sso_provider_effective == "keycloak"
   platform_base_domain_effective        = lower(trimspace(var.platform_base_domain))
   platform_admin_base_domain_effective  = trimspace(var.platform_admin_base_domain) != "" ? lower(trimspace(var.platform_admin_base_domain)) : local.platform_base_domain_effective
   separate_admin_domain_enabled         = trimspace(var.platform_admin_base_domain) != ""
@@ -48,6 +51,24 @@ locals {
   argocd_public_url                     = "https://${local.argocd_public_host}${local.gateway_https_host_port_suffix}"
   dex_public_host                       = "dex.${local.platform_admin_base_domain_effective}"
   dex_public_url                        = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
+  keycloak_public_host                  = "keycloak.${local.platform_admin_base_domain_effective}"
+  keycloak_public_url                   = "https://${local.keycloak_public_host}${local.gateway_https_host_port_suffix}"
+  keycloak_realm                        = trimspace(var.keycloak_realm)
+  keycloak_realm_public_url             = "${local.keycloak_public_url}/realms/${local.keycloak_realm}"
+  keycloak_realm_internal_url           = "http://keycloak.sso.svc.cluster.local:8080/realms/${local.keycloak_realm}"
+  sso_public_host                       = local.sso_provider_is_keycloak ? local.keycloak_public_host : local.dex_public_host
+  sso_public_url                        = local.sso_provider_is_keycloak ? local.keycloak_realm_public_url : local.dex_public_url
+  sso_internal_url                      = local.sso_provider_is_keycloak ? local.keycloak_realm_internal_url : "http://dex.sso.svc.cluster.local:5556/dex"
+  sso_auth_url                          = local.sso_provider_is_keycloak ? "${local.keycloak_realm_public_url}/protocol/openid-connect/auth" : "${local.dex_public_url}/auth"
+  sso_login_url                         = local.sso_provider_is_keycloak ? local.sso_auth_url : "${local.dex_public_url}/auth?prompt=login"
+  sso_token_url                         = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/token" : "http://dex.sso.svc.cluster.local:5556/dex/token"
+  sso_userinfo_url                      = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/userinfo" : "http://dex.sso.svc.cluster.local:5556/dex/userinfo"
+  sso_jwks_url                          = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/certs" : "http://dex.sso.svc.cluster.local:5556/dex/keys"
+  sso_groups_claim                      = "groups"
+  sso_username_claim                    = "email"
+  sso_admin_group                       = "platform-admins"
+  sso_viewer_group                      = "platform-viewers"
+  sso_app_groups                        = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat"]
   gitea_public_host                     = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
   gitea_public_url                      = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"
   grafana_public_host                   = local.separate_admin_domain_enabled ? "grafana.${local.platform_admin_base_domain_effective}" : "grafana.admin.${local.platform_base_domain_effective}"
@@ -236,7 +257,7 @@ locals {
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
     var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["dex", "oauth2-proxy-argocd", "oauth2-proxy-gitea"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
     var.enable_sso && var.enable_hubble && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hubble"] : [],
     var.enable_sso && var.enable_argocd && var.enable_grafana && !var.enable_app_of_apps ? ["oauth2-proxy-grafana"] : [],
     var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
@@ -262,6 +283,8 @@ locals {
     repo_is_org                            = local.gitea_repo_owner_is_org
     platform_base_domain                   = local.platform_base_domain_effective
     platform_admin_base_domain             = local.platform_admin_base_domain_effective
+    sso_provider                           = local.sso_provider_effective
+    keycloak_realm                         = local.keycloak_realm
     enable_hubble                          = var.enable_hubble
     enable_policies                        = var.enable_policies
     enable_gateway_tls                     = var.enable_gateway_tls
@@ -492,8 +515,8 @@ locals {
       }
       rbac = {
         "policy.csv" = local.argocd_oidc_enabled ? trimspace(<<-EOT
-          g, platform-admins, role:admin
-          g, platform-viewers, role:readonly
+          g, ${local.sso_admin_group}, role:admin
+          g, ${local.sso_viewer_group}, role:readonly
         EOT
         ) : ""
         "policy.default"   = local.argocd_oidc_enabled ? "role:readonly" : "role:admin"
@@ -661,10 +684,10 @@ locals {
           url = local.argocd_public_url
           }, local.argocd_oidc_enabled ? {
           "oidc.config" = trimspace(<<-EOT
-            name: Dex
-            issuer: ${local.dex_public_url}
+            name: ${local.sso_provider_is_keycloak ? "Keycloak" : "Dex"}
+            issuer: ${local.sso_public_url}
             clientID: argocd
-            clientSecret: $oidc.dex.clientSecret
+            clientSecret: $oidc.platform.clientSecret
             requestedScopes:
               - openid
               - profile
@@ -680,7 +703,7 @@ locals {
 
       secret = {
         extra = local.argocd_oidc_enabled ? tomap({
-          "oidc.dex.clientSecret" = random_password.dex_argocd_client_secret[0].result
+          "oidc.platform.clientSecret" = random_password.dex_argocd_client_secret[0].result
         }) : tomap({})
       }
     }
@@ -735,7 +758,7 @@ locals {
       hostAliases = var.enable_sso ? [
         {
           ip        = kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip
-          hostnames = [local.dex_public_host]
+          hostnames = [local.sso_public_host]
         }
       ] : []
 
@@ -778,7 +801,7 @@ locals {
       oidc = {
         clientID     = "headlamp"
         clientSecret = random_password.dex_headlamp_client_secret[0].result
-        issuerURL    = local.dex_public_url
+        issuerURL    = local.sso_public_url
         scopes       = "openid profile email groups"
         callbackURL  = "${local.headlamp_public_url}/oidc-callback"
       }

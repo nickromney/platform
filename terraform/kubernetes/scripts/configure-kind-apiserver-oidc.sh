@@ -19,10 +19,10 @@ usage() {
 Usage: configure-kind-apiserver-oidc.sh [--dry-run] [--execute]
 
 Configures the kind control-plane kube-apiserver static manifest for OIDC auth
-against the local Dex instance so Headlamp OIDC tokens work against the K8s API.
+against the configured SSO issuer so Headlamp OIDC tokens work against the K8s API.
 
 This step is the explicit static-manifest bootstrap boundary. It prepares the
-Gateway/Dex prerequisites, patches the kube-apiserver manifest, and waits for
+Gateway/SSO prerequisites, patches the kube-apiserver manifest, and waits for
 the API server to become ready again. Runtime controller recovery is handled by
 the separate recover-kind-cluster-after-apiserver-restart.sh step.
 EOF
@@ -112,21 +112,21 @@ if (( SECONDS >= gw_prog_end )); then
   fail "gateway ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME} never became programmed"
 fi
 
-ok "waiting for Dex deployment (${DEX_NAMESPACE}/dex)"
+ok "waiting for ${SSO_DESCRIPTION} deployment (${SSO_NAMESPACE}/${SSO_DEPLOYMENT_NAME})"
 if ! wait_for_deployment_rollout \
-  "${DEX_NAMESPACE}" \
-  "dex" \
+  "${SSO_NAMESPACE}" \
+  "${SSO_DEPLOYMENT_NAME}" \
   "${OIDC_DISCOVERY_WAIT_SECONDS}" \
-  "Dex deployment (${DEX_NAMESPACE}/dex)"; then
-  kubectl -n "${DEX_NAMESPACE}" get all -o wide 2>/dev/null || true
-  fail "Dex deployment never became ready"
+  "${SSO_DESCRIPTION} deployment (${SSO_NAMESPACE}/${SSO_DEPLOYMENT_NAME})"; then
+  kubectl -n "${SSO_NAMESPACE}" get all -o wide 2>/dev/null || true
+  fail "${SSO_DESCRIPTION} deployment never became ready"
 fi
 
 if ! wait_for_service_endpoints \
-  "${DEX_NAMESPACE}" \
-  "dex" \
+  "${SSO_NAMESPACE}" \
+  "${SSO_SERVICE_NAME}" \
   "${OIDC_DISCOVERY_WAIT_SECONDS}"; then
-  fail "Dex service endpoints never became ready"
+  fail "${SSO_DESCRIPTION} service endpoints never became ready"
 fi
 
 ok "waiting for OIDC issuer discovery endpoint from kind control-plane node"

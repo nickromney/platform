@@ -146,7 +146,7 @@ flowchart LR
 | `600` | Add Kyverno and Cilium policy controls. | `enable_policies=true`, `enable_cert_manager=true`, `enable_cilium_wireguard=true` |
 | `700` | Make app repos available to GitOps. | `enable_actions_runner=true`, app repo flags enabled |
 | `800` | Add observability, including HTTPS routes and Headlamp. | `enable_gateway_tls=true`, `enable_headlamp=true`, `enable_prometheus=true`, `enable_grafana=true`, `enable_loki=true` |
-| `900` | Add SSO with Dex and `oauth2-proxy`. | `enable_sso=true` |
+| `900` | Add SSO with Keycloak and `oauth2-proxy`. | `enable_sso=true` |
 
 ## Stage-by-stage control knobs
 
@@ -326,19 +326,20 @@ flowchart LR
 
 ### Stage 900: SSO
 
-Stage 900 adds [Dex](https://dexidp.io/) and `oauth2-proxy`, then swaps the
+Stage 900 adds [Keycloak](https://www.keycloak.org/) and `oauth2-proxy`, then swaps the
 gateway routes to the SSO-protected set. From here on, the platform is not
 just encrypted; it is also fronted by a login flow.
 
 ```mermaid
 flowchart LR
     user["user"] --> proxy["oauth2-proxy"]
-    proxy --> dex["Dex"]
+    proxy --> keycloak["Keycloak"]
     proxy --> app["protected app"]
-    dex --> id["identity store"]
+    keycloak --> id["users, groups, clients"]
 ```
 
-- `enable_sso = true` enables Dex and the `oauth2-proxy` layer.
+- `enable_sso = true` enables Keycloak and the `oauth2-proxy` layer.
+- `enable_argocd_oidc = true` lets Argo CD enforce the `platform-admins` and `platform-viewers` group mapping.
 - `platform_gateway_routes_path = "apps/platform-gateway-routes-sso"` switches the ingress routes to the protected variant.
 - The earlier TLS and gateway work from stage 800 remains in place; stage 900 adds authentication on top.
 

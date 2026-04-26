@@ -19,13 +19,13 @@
       "expr": "((max(kube_deployment_status_replicas_available{namespace=\"argocd\",deployment=\"argocd-server\"}) > bool 0) or (sum(argocd_app_info{health_status=\"Healthy\"}) > bool 0) or vector(0))"
     },
     {
-      "title": "Dex",
-      "url": "https://dex.127.0.0.1.sslip.io/dex",
-      "sort_key": "admin/dex",
+      "title": "Keycloak",
+      "url": "https://keycloak.127.0.0.1.sslip.io/admin/",
+      "sort_key": "admin/keycloak",
       "requires": [
         "ENABLE_SSO"
       ],
-      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"dex\"}) > bool 0) or vector(0))"
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))"
     },
     {
       "title": "Gitea",

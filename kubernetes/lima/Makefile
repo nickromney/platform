@@ -91,9 +91,9 @@ endif
 include $(STAGE_LADDER_MK)
 
 VALID_ACTIONS := plan apply
-VALID_STAGE_HELPERS := check-health check-security
+VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -158,7 +158,7 @@ help:
 	@echo "  make bootstrap-k3s"
 	@echo "  make build-workload-images"
 	@echo "  make build-local-platform-images"
-	@echo "  make check-app    APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
+	@echo "  make check-app    APP=grafana [EXTENDED=1]"
 	@echo "  make check-cluster"
 	@echo "  make check-gateway-stack"
 	@echo "  make check-gateway-urls"
@@ -166,7 +166,8 @@ help:
 	@echo "  make check-kind-stopped"
 	@echo "  make check-slicer-stopped"
 	@echo "  make check-provider-version"
-	@echo "  make check-security"
+	@echo "  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i"
+	 "  make check-security"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e"
 	@echo "  make check-stage-monotonicity"
@@ -520,8 +521,10 @@ configure-k3s-apiserver-oidc: workflow-validate-stage
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	LIMA_NODE_NAME="$(LIMA_INSTANCE_PREFIX)-1" \
 	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
-		PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
-		"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
+	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
+	SSO_PROVIDER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute sso_provider keycloak "$${tfvar_files[@]}" )" \
+	KEYCLOAK_REALM="$$( "$(RESOLVE_TFVAR_VALUE)" --execute keycloak_realm platform "$${tfvar_files[@]}" )" \
+	"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
 
 .PHONY: exercise-k3s-oidc-recovery
 exercise-k3s-oidc-recovery: workflow-validate-stage
@@ -767,6 +770,12 @@ check-security: workflow-validate-stage
 	)"; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
+.PHONY: check-rbac
+check-rbac: workflow-validate-stage
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-lima-active >/dev/null
+	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-rbac.sh" $(READONLY_MODE_FLAG)
+
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) check-kubeconfig >/dev/null
@@ -817,7 +826,7 @@ check-app: workflow-validate-stage
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac
 	@set -euo pipefail; \
-	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
+	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=grafana)"; exit 1; fi; \
 	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \

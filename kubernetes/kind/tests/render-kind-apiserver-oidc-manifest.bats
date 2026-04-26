@@ -36,9 +36,81 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"--oidc-issuer-url=https://dex.example.test/dex"* ]]
   [[ "${output}" == *"--oidc-client-id=headlamp"* ]]
+  [[ "${output}" == *"--oidc-username-claim=email"* ]]
+  [[ "${output}" == *"--oidc-groups-claim=groups"* ]]
   [[ "${output}" == *"--oidc-ca-file=/etc/kubernetes/pki/mkcert-rootCA.pem"* ]]
   [[ "${output}" == *'  - ip: "10.0.0.25"'* ]]
   [[ "${output}" == *"    - dex.example.test"* ]]
+}
+
+@test "render-kind-apiserver-oidc-manifest accepts Keycloak issuer and host alias" {
+  source_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.yaml"
+  rendered_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.rendered.yaml"
+
+  cat >"${source_manifest}" <<'EOF'
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --service-cluster-ip-range=10.96.0.0/12
+  hostNetwork: true
+EOF
+
+  run uv run --isolated python \
+    "${HELPER}" \
+    "${source_manifest}" \
+    "${rendered_manifest}" \
+    "https://keycloak.example.test/realms/platform" \
+    "headlamp" \
+    "/etc/kubernetes/pki/mkcert-rootCA.pem" \
+    "keycloak.example.test" \
+    "10.0.0.25"
+
+  [ "${status}" -eq 0 ]
+  run cat "${rendered_manifest}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"--oidc-issuer-url=https://keycloak.example.test/realms/platform"* ]]
+  [[ "${output}" == *"--oidc-groups-claim=groups"* ]]
+  [[ "${output}" == *"    - keycloak.example.test"* ]]
+}
+
+@test "render-kind-apiserver-oidc-manifest replaces managed Dex host alias with Keycloak" {
+  source_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.yaml"
+  rendered_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.rendered.yaml"
+
+  cat >"${source_manifest}" <<'EOF'
+apiVersion: v1
+kind: Pod
+spec:
+  hostAliases:
+  - ip: "10.0.0.10"
+    hostnames:
+    - dex.example.test
+  containers:
+  - command:
+    - kube-apiserver
+    - --service-cluster-ip-range=10.96.0.0/12
+  hostNetwork: true
+EOF
+
+  run uv run --isolated python \
+    "${HELPER}" \
+    "${source_manifest}" \
+    "${rendered_manifest}" \
+    "https://keycloak.example.test/realms/platform" \
+    "headlamp" \
+    "/etc/kubernetes/pki/mkcert-rootCA.pem" \
+    "keycloak.example.test" \
+    "10.0.0.25"
+
+  [ "${status}" -eq 0 ]
+  run cat "${rendered_manifest}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'  - ip: "10.0.0.25"'* ]]
+  [[ "${output}" == *"    - keycloak.example.test"* ]]
+  [[ "${output}" != *"dex.example.test"* ]]
 }
 
 @test "render-kind-apiserver-oidc-manifest refuses unrelated existing host aliases" {

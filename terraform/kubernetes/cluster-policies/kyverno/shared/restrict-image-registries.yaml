@@ -68,6 +68,7 @@ spec:
                       - "docker.io/curlimages/*"
                       - "docker.io/grafana/*"
                       - "docker.io/groundnuty/*"
+                      - "docker.io/postgres:*"
                       - "docker.io/signoz/*"
                       - "docker.io/victoriametrics/*"
                       # Some upstream Helm charts omit the explicit docker.io prefix.

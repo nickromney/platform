@@ -1,10 +1,10 @@
-# SSO Triage Notes (Dex + oauth2-proxy + Gateway API)
+# SSO Triage Notes (OIDC provider + oauth2-proxy + Gateway API)
 
-This doc captures a practical "debug loop" for when Dex SSO was working and then "something changed".
+This doc captures a practical "debug loop" for when platform SSO was working and then "something changed".
 
 Scope: kind-local cluster with:
 
-- Dex (IdP)
+- Keycloak or Dex (IdP)
 - oauth2-proxy in front of UIs
 - Gateway API `HTTPRoute` objects routing hostnames to the oauth2-proxy services
 - Admin UIs: Gitea, ArgoCD, Hubble, SigNoz
@@ -15,7 +15,7 @@ Scope: kind-local cluster with:
 1. Browser hits `https://<app>.127.0.0.1.sslip.io/...`
 2. `HTTPRoute` sends **all paths** for that hostname to an oauth2-proxy `Service` (usually in `sso`)
 3. oauth2-proxy either:
-   - redirects to Dex (no session), or
+   - redirects to the OIDC provider (no session), or
    - forwards to its configured `--upstream` (session ok), optionally injecting headers
 4. Some apps have an additional "bridge" upstream (e.g. SigNoz auth proxy) to translate OIDC into app-native auth.
 
@@ -178,10 +178,8 @@ kubectl -n argocd annotate application platform-gateway-routes argocd.argoproj.i
 ### 7) Logs to grab (in order)
 
 ```bash
-kubectl -n sso logs deploy/dex --tail=200
+kubectl -n sso logs deploy/keycloak --tail=200
 kubectl -n sso logs deploy/oauth2-proxy-gitea --tail=200
-kubectl -n sso logs deploy/oauth2-proxy-signoz --tail=200
-kubectl -n observability logs deploy/signoz-auth-proxy --tail=200
 ```
 
 ## Handy automation

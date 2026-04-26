@@ -65,12 +65,12 @@ replicaCount: 1
 clusterRoleBinding:
   create: true
 
-# OIDC integration (for Dex SSO)
+# OIDC integration
 config:
   oidc:
     clientID: "headlamp"
-    clientSecret: "<from-dex-config>"
-    issuerURL: "https://dex.127.0.0.1.sslip.io/dex"
+    clientSecret: "<from-oidc-provider-config>"
+    issuerURL: "https://keycloak.127.0.0.1.sslip.io/realms/platform"
     scopes: "openid profile email groups"
 
 # Or use service account token auth (simpler, no SSO)

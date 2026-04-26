@@ -730,6 +730,8 @@ EXPECT_TEMPO=$(expected_from_tfvars enable_tempo)
 EXPECT_HEADLAMP=$(expected_from_tfvars enable_headlamp)
 EXPECT_GATEWAY_TLS=$(expected_from_tfvars enable_gateway_tls)
 EXPECT_SSO=$(expected_from_tfvars enable_sso)
+SSO_PROVIDER=$(tfvar_get sso_provider)
+[[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="dex"
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
@@ -780,6 +782,10 @@ admin_host() {
 
 dex_host() {
   printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+}
+
+keycloak_host() {
+  printf 'keycloak.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
 }
 
 GITEA_ADMIN_PWD_EFFECTIVE="${GITEA_ADMIN_PWD:-}"
@@ -866,9 +872,13 @@ print_gateway_urls() {
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
     echo ""
-    echo "SSO (Dex + oauth2-proxy):"
-    echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
-    echo "  • Users:    demo@admin.test, demo@dev.test, demo@uat.test"
+    echo "SSO (${SSO_PROVIDER} + oauth2-proxy):"
+    if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
+      echo "  • Keycloak: https://$(keycloak_host)${port_suffix}/realms/platform"
+    else
+      echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
+    fi
+    echo "  • Users:    demo@admin.test, demo@viewer.test, demo@dev.test, demo@uat.test"
     echo "  • Password: set via PLATFORM_DEMO_PASSWORD in .env"
   fi
   if [[ "${ADMIN_ROUTE_ALLOWLIST_ENABLED}" == "1" ]]; then
@@ -1340,7 +1350,17 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
-    sso_apps=(dex oauth2-proxy-argocd oauth2-proxy-gitea)
+    sso_apps=(oauth2-proxy-argocd oauth2-proxy-gitea)
+    if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
+      if ! kubectl -n sso get deploy keycloak >/dev/null 2>&1; then
+        fail_soft "Keycloak deployment missing (sso_provider=keycloak${tfvars_hint})"
+      fi
+      if ! kubectl -n sso get statefulset keycloak-postgres >/dev/null 2>&1; then
+        fail_soft "Keycloak Postgres statefulset missing (sso_provider=keycloak${tfvars_hint})"
+      fi
+    else
+      sso_apps+=(dex)
+    fi
     if [[ "${EXPECT_HUBBLE}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-hubble)
     fi

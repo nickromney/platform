@@ -118,10 +118,10 @@ include $(STAGE_LADDER_MK)
 
 VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
-VALID_STAGE_HELPERS := check-health check-security
+VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file readiness prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file readiness prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -204,7 +204,7 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  make apply        100|200|300|...|900 [AUTO_APPROVE=1]"
-	@echo "  make check-app    APP=signoz [APP_PATH=/metrics-explorer/summary] [EXTENDED=1]"
+	@echo "  make check-app    APP=grafana [EXTENDED=1]"
 	@echo "  make check-cluster"
 	@echo "  make check-gateway-stack"
 	@echo "  make check-gateway-urls"
@@ -213,7 +213,8 @@ help:
 	@echo "  make check-kind-stopped"
 	@echo "  make check-lima-stopped"
 	@echo "  make check-provider-version"
-	@echo "  make check-security"
+	@echo "  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i"
+	 "  make check-security"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e"
 	@echo "  make check-stage-monotonicity"
@@ -749,6 +750,8 @@ configure-k3s-apiserver-oidc: workflow-validate-stage
 	GATEWAY_HTTPS_HOST_PORT="$$( "$(RESOLVE_TFVAR_VALUE)" --execute gateway_https_host_port 443 "$${tfvar_files[@]}" )" \
 	PLATFORM_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_base_domain 127.0.0.1.sslip.io "$${tfvar_files[@]}" )" \
 	PLATFORM_ADMIN_BASE_DOMAIN="$$( "$(RESOLVE_TFVAR_VALUE)" --execute platform_admin_base_domain "" "$${tfvar_files[@]}" )" \
+	SSO_PROVIDER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute sso_provider keycloak "$${tfvar_files[@]}" )" \
+	KEYCLOAK_REALM="$$( "$(RESOLVE_TFVAR_VALUE)" --execute keycloak_realm platform "$${tfvar_files[@]}" )" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	"$(CONFIGURE_K3S_APISERVER_OIDC)" $(READONLY_MODE_FLAG)
 
@@ -1002,6 +1005,13 @@ check-security:
 	fi; \
 	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-security.sh" $(READONLY_MODE_FLAG) $$vf
 
+.PHONY: check-rbac
+check-rbac:
+	@$(MAKE) check-kubeconfig >/dev/null
+	@$(MAKE) assert-slicer-active >/dev/null
+	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
+	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-rbac.sh" $(READONLY_MODE_FLAG)
+
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) check-kubeconfig >/dev/null
@@ -1057,7 +1067,7 @@ check-app:
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
 	@$(MAKE) ensure-host-forwards >/dev/null
 	@set -euo pipefail; \
-	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=signoz)"; exit 1; fi; \
+	if [ -z "$${APP:-}" ]; then echo "Missing APP=... (e.g., APP=grafana)"; exit 1; fi; \
 	vf=""; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		vf="--var-file $(stage_var_file)"; \

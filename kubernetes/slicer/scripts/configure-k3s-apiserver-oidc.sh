@@ -31,14 +31,30 @@ SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 SLICER_URL="${SLICER_URL:-${SLICER_SOCKET:-}}"
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
 PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
-DEX_HOST="${DEX_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
-DEX_NAMESPACE="${DEX_NAMESPACE:-sso}"
 GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
 DEX_PORT_SUFFIX=""
 if [[ "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
   DEX_PORT_SUFFIX=":${GATEWAY_HTTPS_HOST_PORT}"
 fi
-OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${DEX_HOST}${DEX_PORT_SUFFIX}/dex}"
+SSO_PROVIDER="${SSO_PROVIDER:-keycloak}"
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-platform}"
+case "${SSO_PROVIDER}" in
+  keycloak)
+    OIDC_HOST="${OIDC_HOST:-keycloak.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+    OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}${DEX_PORT_SUFFIX}/realms/${KEYCLOAK_REALM}}"
+    OIDC_DEPLOYMENT="${OIDC_DEPLOYMENT:-keycloak}"
+    ;;
+  dex)
+    OIDC_HOST="${OIDC_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+    OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}${DEX_PORT_SUFFIX}/dex}"
+    OIDC_DEPLOYMENT="${OIDC_DEPLOYMENT:-dex}"
+    ;;
+  *)
+    fail "unsupported SSO_PROVIDER: ${SSO_PROVIDER}"
+    ;;
+esac
+DEX_HOST="${DEX_HOST:-${OIDC_HOST}}"
+DEX_NAMESPACE="${DEX_NAMESPACE:-sso}"
 OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-headlamp}"
 MKCERT_CA_DEST="${MKCERT_CA_DEST:-/etc/rancher/k3s/mkcert-rootCA.pem}"
 K3S_CONFIG_FRAGMENT="${K3S_CONFIG_FRAGMENT:-/etc/rancher/k3s/config.yaml.d/90-headlamp-oidc.yaml}"
@@ -122,14 +138,14 @@ usage() {
   cat <<EOF
 Usage: configure-k3s-apiserver-oidc.sh [--dry-run] [--execute]
 
-Configures the Slicer-backed k3s server so Dex-issued Headlamp OIDC tokens are
+Configures the Slicer-backed k3s server so OIDC-issued Headlamp tokens are
 accepted by the Kubernetes API. This mutates the guest VM.
 
 $(shell_cli_standard_options)
 EOF
 }
 
-shell_cli_handle_standard_no_args usage "would configure the Slicer k3s API server for Dex-issued OIDC tokens" "$@"
+shell_cli_handle_standard_no_args usage "would configure the Slicer k3s API server for OIDC-issued tokens" "$@"
 
 [ -n "${SLICER_URL}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
 
@@ -203,10 +219,10 @@ if (( SECONDS >= gw_prog_end )); then
   fail "gateway ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME} never became programmed"
 fi
 
-ok "waiting for Dex deployment (${DEX_NAMESPACE}/dex)"
-kubectl -n "$DEX_NAMESPACE" rollout status deploy/dex --timeout=10m >/dev/null 2>&1 || true
+ok "waiting for OIDC deployment (${DEX_NAMESPACE}/${OIDC_DEPLOYMENT})"
+kubectl -n "$DEX_NAMESPACE" rollout status "deploy/${OIDC_DEPLOYMENT}" --timeout=10m >/dev/null 2>&1 || true
 
-ok "ensuring ${DEX_HOST} resolves inside Slicer VM"
+ok "ensuring ${OIDC_HOST} resolves inside Slicer VM"
 hosts_changed="$(ensure_remote_host_alias "$GATEWAY_IP" || true)"
 
 ok "copying mkcert root CA into Slicer VM: ${MKCERT_CA_DEST}"

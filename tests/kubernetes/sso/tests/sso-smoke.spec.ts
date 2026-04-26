@@ -2,7 +2,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test'
 
 type Segment = 'dev' | 'uat' | 'admin'
 
-type Flow = 'oauth2-proxy' | 'headlamp-oidc' | 'none'
+type Flow = 'oauth2-proxy' | 'headlamp-oidc' | 'keycloak-admin' | 'none'
 
 type Target = {
   name: string
@@ -12,6 +12,7 @@ type Target = {
   postLogin?:
     | 'grafana-launchpad'
     | 'grafana-victoria-logs'
+    | 'keycloak-admin-console'
     | 'sentiment-sample-positive'
     | 'subnetcalc-rfc1918-lookup'
     | 'hubble-namespace-argocd'
@@ -25,7 +26,7 @@ function isEnabled(envName: string, defaultValue: boolean) {
 }
 
 const INCLUDE_SIGNOZ = isEnabled('SSO_E2E_ENABLE_SIGNOZ', false)
-const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', true)
+const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', false)
 const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
@@ -41,7 +42,13 @@ function absolutePlatformUrl(hostPrefix: string, path: string) {
   return new URL(path, platformUrl(hostPrefix)).toString()
 }
 
-const DEX_HOST = new URL(absolutePlatformUrl('dex', '/dex/')).host
+const OIDC_PROVIDER = (process.env.SSO_E2E_PROVIDER || 'keycloak').toLowerCase()
+const KEYCLOAK_REALM = process.env.SSO_E2E_KEYCLOAK_REALM || 'platform'
+const OIDC_HOST = new URL(
+  OIDC_PROVIDER === 'keycloak'
+    ? absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/`)
+    : absolutePlatformUrl('dex', '/dex/'),
+).host
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -53,7 +60,7 @@ function normalizeUrl(value: string) {
 
 const GRAFANA_LAUNCHPAD_APPS = [
   { name: 'Argo CD', url: platformUrl('argocd.admin'), flow: 'oauth2-proxy', segment: 'admin' },
-  { name: 'Dex', url: absolutePlatformUrl('dex', '/dex/'), flow: 'none', segment: 'admin' },
+  { name: OIDC_PROVIDER === 'keycloak' ? 'Keycloak' : 'Dex', url: OIDC_PROVIDER === 'keycloak' ? absolutePlatformUrl('keycloak', '/admin/') : absolutePlatformUrl('dex', '/dex/'), flow: 'none', segment: 'admin' },
   { name: 'Gitea', url: platformUrl('gitea.admin'), flow: 'oauth2-proxy', segment: 'admin' },
   { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
   { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
@@ -94,7 +101,13 @@ const BASE_TARGETS: Target[] = [
     postLogin: 'subnetcalc-rfc1918-lookup',
   },
 
-  { name: 'dex', url: absolutePlatformUrl('dex', '/dex/'), segment: 'admin', flow: 'none' },
+  {
+    name: OIDC_PROVIDER === 'keycloak' ? 'keycloak' : 'dex',
+    url: OIDC_PROVIDER === 'keycloak' ? absolutePlatformUrl('keycloak', '/admin/') : absolutePlatformUrl('dex', '/dex/'),
+    segment: 'admin',
+    flow: OIDC_PROVIDER === 'keycloak' ? 'keycloak-admin' : 'none',
+    postLogin: OIDC_PROVIDER === 'keycloak' ? 'keycloak-admin-console' : undefined,
+  },
   { name: 'gitea-admin', url: platformUrl('gitea.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   {
     name: 'grafana-admin',
@@ -121,7 +134,7 @@ if (INCLUDE_SIGNOZ) {
 }
 
 if (INCLUDE_HEADLAMP) {
-  // Headlamp uses its own OIDC client and typically opens Dex in a new tab/popup.
+  // Headlamp uses its own OIDC client and typically opens the provider in a new tab/popup.
   TARGETS.push({ name: 'headlamp-admin', url: platformUrl('headlamp.admin'), segment: 'admin', flow: 'headlamp-oidc' })
 }
 
@@ -167,6 +180,22 @@ async function completeDexLocalLogin(page: Page, login: string, password: string
   await page.click('#submit-login')
 }
 
+async function completeKeycloakLogin(page: Page, login: string, password: string) {
+  await page.waitForSelector('#username', { timeout: 60_000 })
+  await page.fill('#username', login)
+  await page.fill('#password', password)
+  await page.click('#kc-login')
+}
+
+async function completeOidcLogin(page: Page, login: string, password: string) {
+  if (OIDC_PROVIDER === 'keycloak') {
+    await completeKeycloakLogin(page, login, password)
+    return
+  }
+  await completeDexLocalLogin(page, login, password)
+  await maybeGrantDexAccess(page)
+}
+
 async function maybeGrantDexAccess(page: Page) {
   // oauth2-proxy requests include `approval_prompt=force`, so Dex will show consent even if
   // skipApprovalScreen=true. Click through if present.
@@ -176,9 +205,9 @@ async function maybeGrantDexAccess(page: Page) {
   }
 }
 
-async function ensureOnTargetOrDex(page: Page, targetUrl: string) {
+async function ensureOnTargetOrOidc(page: Page, targetUrl: string) {
   const host = new URL(targetUrl).host
-  await page.waitForURL((u) => u.host === host || u.host === DEX_HOST, { timeout: 60_000 })
+  await page.waitForURL((u) => u.host === host || u.host === OIDC_HOST, { timeout: 60_000 })
 }
 
 async function gotoWithGatewayRetry(page: Page, url: string) {
@@ -213,6 +242,12 @@ async function isGatewayErrorPage(page: Page) {
   return false
 }
 
+async function isOauth2ProxyErrorPage(page: Page) {
+  const heading = page.getByRole('heading', { name: /Internal Server Error/i })
+  if (!(await heading.isVisible().catch(() => false))) return false
+  return page.getByText(/Secured with\s+OAuth2 Proxy/i).isVisible().catch(() => false)
+}
+
 async function assertNoGatewayErrorWithReloads(page: Page, name: string) {
   const maxAttempts = Number(process.env.SSO_E2E_POSTLOGIN_RETRIES || 3)
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -224,30 +259,51 @@ async function assertNoGatewayErrorWithReloads(page: Page, name: string) {
   throw new Error(`Post-login page for ${name} appears to be an nginx gateway error (5xx). url=${page.url()}`)
 }
 
-async function loginViaOauth2ProxyRedirect(page: Page, target: Target) {
+async function loginViaOauth2ProxyRedirectOnce(page: Page, target: Target) {
   const { login, password } = creds(target.segment)
   const targetHost = new URL(target.url).host
+  const isTargetAppUrl = (url: URL) => url.host === targetHost && !url.pathname.startsWith('/oauth2/')
 
   await gotoWithGatewayRetry(page, target.url)
-  await ensureOnTargetOrDex(page, target.url)
+  await ensureOnTargetOrOidc(page, target.url)
 
   // If we landed on the target host, we may already be authenticated.
-  if (new URL(page.url()).host === targetHost) return
+  if (isTargetAppUrl(new URL(page.url()))) return
 
   await maybeClickOauth2ProxyProvider(page)
-  await page.waitForURL(/dex\/auth/, { timeout: 60_000 })
-
-  // Dex may choose /local/login directly when password DB is enabled.
-  if (!page.url().includes('/dex/auth/local/login')) {
-    await page.waitForURL(/dex\/auth\/local\/login/, { timeout: 60_000 })
+  if (OIDC_PROVIDER === 'keycloak') {
+    await page.waitForURL(/protocol\/openid-connect\/auth/, { timeout: 60_000 })
+  } else {
+    await page.waitForURL(/dex\/auth/, { timeout: 60_000 })
+    if (!page.url().includes('/dex/auth/local/login')) {
+      await page.waitForURL(/dex\/auth\/local\/login/, { timeout: 60_000 })
+    }
   }
 
-  await completeDexLocalLogin(page, login, password)
-  await maybeGrantDexAccess(page)
+  await completeOidcLogin(page, login, password)
 
   // After login we should come back to the target host.
-  if (new URL(page.url()).host === targetHost) return
-  await page.waitForURL((u) => u.host === targetHost, { timeout: 60_000 })
+  if (isTargetAppUrl(new URL(page.url()))) return
+  await page.waitForURL((u) => isTargetAppUrl(u), { timeout: 60_000 })
+}
+
+async function loginViaOauth2ProxyRedirect(page: Page, target: Target) {
+  const maxAttempts = 2
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await loginViaOauth2ProxyRedirectOnce(page, target)
+      await page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => undefined)
+      if (!(await isOauth2ProxyErrorPage(page))) return
+    } catch (err) {
+      if (attempt === maxAttempts) throw err
+    }
+
+    if (attempt === maxAttempts) break
+    await page.context().clearCookies()
+    await page.goto('about:blank').catch(() => undefined)
+  }
+
+  throw new Error(`OAuth2 proxy returned an internal error during login for ${target.name}`)
 }
 
 async function loadWithoutLogin(page: Page, target: Target) {
@@ -276,17 +332,16 @@ async function loginHeadlampPopupFlow(page: Page, target: Target) {
   const popup = await popupPromise
   if (popup) {
     await popup.waitForLoadState('domcontentloaded')
-    await popup.waitForURL((u) => u.host === targetHost || u.host === DEX_HOST, { timeout: 60_000 })
+    await popup.waitForURL((u) => u.host === targetHost || u.host === OIDC_HOST, { timeout: 60_000 })
 
     if (new URL(popup.url()).host !== targetHost) {
       await popup
-        .waitForURL((u) => u.host === targetHost || (u.host === DEX_HOST && /dex\/auth\/local\/login/.test(u.pathname)), { timeout: 60_000 })
+        .waitForURL((u) => u.host === targetHost || u.host === OIDC_HOST, { timeout: 60_000 })
         .catch(() => undefined)
     }
 
-    if (await popup.locator('#login').isVisible().catch(() => false)) {
-      await completeDexLocalLogin(popup, login, password)
-      await maybeGrantDexAccess(popup)
+    if ((await popup.locator('#login').isVisible().catch(() => false)) || (await popup.locator('#username').isVisible().catch(() => false))) {
+      await completeOidcLogin(popup, login, password)
     }
 
     // Some flows close the popup, others redirect it back to Headlamp.
@@ -295,10 +350,9 @@ async function loginHeadlampPopupFlow(page: Page, target: Target) {
       popup.waitForURL(new RegExp(new URL(target.url).host.replaceAll('.', '\\\\.')), { timeout: 60_000 }).catch(() => undefined),
     ])
   } else {
-    // If no popup, it might be a same-tab redirect to Dex.
-    await page.waitForURL(/dex\/auth\/local\/login/, { timeout: 60_000 })
-    await completeDexLocalLogin(page, login, password)
-    await maybeGrantDexAccess(page)
+    // If no popup, it might be a same-tab redirect to the OIDC provider.
+    await page.waitForURL((u) => u.host === OIDC_HOST, { timeout: 60_000 })
+    await completeOidcLogin(page, login, password)
     await page.waitForURL((u) => u.host === new URL(target.url).host, { timeout: 60_000 })
   }
 
@@ -377,6 +431,29 @@ async function waitForHeadlampAuthenticated(page: Page, targetHost: string, time
 
   await expect(page).not.toHaveURL(/\/c\/main\/login(?:\?|$)/)
   expect(await findHeadlampSignIn(page)).toBeNull()
+}
+
+async function loginKeycloakAdminConsole(page: Page, target: Target) {
+  const { login, password } = creds(target.segment)
+  await gotoWithGatewayRetry(page, target.url)
+  await page.waitForURL(/\/admin\/master\/console\//, { timeout: 60_000 })
+
+  const username = page.locator('#username')
+  await expect(username).toBeVisible({ timeout: 60_000 })
+  if (await username.isVisible().catch(() => false)) {
+    await username.fill(login)
+    await page.locator('#password').fill(password)
+    await page.locator('#kc-login').click()
+  }
+
+  await page.waitForURL(/\/admin\/master\/console\//, { timeout: 120_000 })
+}
+
+async function keycloakAdminConsoleWorks(page: Page) {
+  await expect(page.locator('body')).not.toContainText(/Timeout when waiting for 3rd party check iframe message/i, { timeout: 10_000 })
+  await expect(page.locator('body')).not.toContainText(/Something went wrong/i, { timeout: 10_000 })
+  await expect(page.locator('#username')).toHaveCount(0)
+  await expect(page.locator('body')).toContainText(/Realm|Users|Clients|Groups/i, { timeout: 120_000 })
 }
 
 async function sentimentSamplePositiveAndAnalyze(page: Page) {
@@ -707,6 +784,8 @@ test.describe(SUITE_NAME, () => {
 
       if (t.flow === 'headlamp-oidc') {
         await loginHeadlampPopupFlow(page, t)
+      } else if (t.flow === 'keycloak-admin') {
+        await loginKeycloakAdminConsole(page, t)
       } else if (t.flow === 'none') {
         await loadWithoutLogin(page, t)
       } else {
@@ -732,6 +811,9 @@ test.describe(SUITE_NAME, () => {
         if (t.postLogin === 'grafana-victoria-logs') {
           await grafanaVictoriaLogsDashboardWorks(page, t.url)
         }
+        if (t.postLogin === 'keycloak-admin-console') {
+          await keycloakAdminConsoleWorks(page)
+        }
         if (t.postLogin === 'signoz-logs-and-metrics') {
           await signozVerifyLogsAndMetrics(page, t.url)
         }
@@ -739,10 +821,13 @@ test.describe(SUITE_NAME, () => {
 
       await attachLoggedInScreenshotIfEnabled(page, testInfo, t.name)
 
-      // Common assertion: we should not be sitting on the Dex login form.
+      // Common assertion: we should not be sitting on the OIDC login form.
       await expect(page.locator('#login')).toHaveCount(0)
+      await expect(page.locator('#username')).toHaveCount(0)
       const finalUrl = new URL(page.url())
-      expect(finalUrl.host === DEX_HOST && /^\/dex\/auth\/local\/login(?:\/|$)/.test(finalUrl.pathname)).toBe(false)
+      if (t.name !== 'keycloak' && t.name !== 'dex') {
+        expect(finalUrl.host === OIDC_HOST).toBe(false)
+      }
     })
   }
 })

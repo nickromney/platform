@@ -4,10 +4,10 @@ metadata:
   name: shared-identity-provider-ingress
 spec:
   description: >-
-    Reusable ingress policy for in-cluster OIDC providers such as Dex running
-    in namespace-role=shared. Application, shared, and platform namespaces can
-    use the same OIDC discovery, token, JWKS, and telemetry ports without
-    baking the current sso namespace name into every policy.
+    Reusable ingress policy for in-cluster OIDC providers in namespace-role=shared.
+    Application, shared, and platform namespaces can use the same OIDC discovery,
+    token, JWKS, and userinfo ports without baking the current sso namespace name
+    into every policy.
   endpointSelector:
     matchExpressions:
       - key: "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
@@ -18,6 +18,7 @@ spec:
         operator: In
         values:
           - dex
+          - keycloak
   ingress:
     - fromEndpoints:
         - matchLabels:
@@ -26,7 +27,7 @@ spec:
         - ports:
             - port: "5556"
               protocol: TCP
-            - port: "5558"
+            - port: "8080"
               protocol: TCP
     - fromEndpoints:
         - matchLabels:
@@ -35,7 +36,7 @@ spec:
         - ports:
             - port: "5556"
               protocol: TCP
-            - port: "5558"
+            - port: "8080"
               protocol: TCP
     - fromEndpoints:
         - matchLabels:
@@ -44,5 +45,5 @@ spec:
         - ports:
             - port: "5556"
               protocol: TCP
-            - port: "5558"
+            - port: "8080"
               protocol: TCP

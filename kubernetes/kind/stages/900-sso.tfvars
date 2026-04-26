@@ -28,6 +28,8 @@ enable_headlamp                 = true
 enable_gateway_tls              = true
 enable_cert_manager             = true
 enable_sso                      = true
+sso_provider                    = "keycloak"
+enable_argocd_oidc             = true
 enable_app_of_apps              = false
 
 enable_apps_dir_mount      = true

@@ -279,6 +279,22 @@ run "prometheus_observability_enabled" {
   }
 
   assert {
+    condition = one([
+      for tile in jsondecode(file("${path.module}/config/platform-launchpad.apps.json")).tiles : tile
+      if tile.title == "Keycloak"
+      ]).url == "https://keycloak.127.0.0.1.sslip.io/admin/" && one([
+      for tile in jsondecode(file("${path.module}/config/platform-launchpad.apps.json")).tiles : tile
+      if tile.title == "Keycloak"
+    ]).expr == "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))"
+    error_message = "Expected Grafana launchpad inventory to link to the Keycloak admin console and track Keycloak readiness"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "https://keycloak.127.0.0.1.sslip.io/admin/") && strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"keycloak\\\"") && !strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"dex\\\"")
+    error_message = "Expected rendered Grafana launchpad dashboard to link to the Keycloak admin console and track Keycloak readiness"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.argocd_app_otel_collector_prometheus) == 1
     error_message = "Expected kubectl_manifest.argocd_app_otel_collector_prometheus to exist when enable_prometheus=true"
   }

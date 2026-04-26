@@ -13,7 +13,7 @@ spec:
       hostAliases:
         - ip: ${kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
           hostnames:
-            - ${local.dex_public_host}
+            - ${local.sso_public_host}
 __YAML__
 
   wait              = true
@@ -42,7 +42,7 @@ spec:
       hostAliases:
         - ip: ${kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
           hostnames:
-            - ${local.dex_public_host}
+            - ${local.sso_public_host}
 __YAML__
 
   wait              = true
