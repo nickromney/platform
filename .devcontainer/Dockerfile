@@ -33,6 +33,7 @@ RUN apt-get update \
         procps \
         python3 \
         python3-venv \
+        ripgrep \
         rsync \
         shellcheck \
         sudo \

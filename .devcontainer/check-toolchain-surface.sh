@@ -123,6 +123,22 @@ check_file_lacks_slicer_install() {
   fi
 }
 
+check_dockerfile_base_packages() {
+  local missing=0
+  local package
+
+  for package in bats ripgrep shellcheck yamllint; do
+    if grep -Eq "^[[:space:]]*${package}[[:space:]]*\\\\" "${DOCKERFILE_PATH}"; then
+      ok "Dockerfile installs ${package}"
+    else
+      fail_note "Dockerfile does not install required package: ${package}"
+      missing=1
+    fi
+  done
+
+  return "${missing}"
+}
+
 check_node_feature_resolution() {
   if [[ -n "${RESOLVED_NODE_FEATURE_CACHE_PATH}" ]] && [[ -f "${RESOLVED_NODE_FEATURE_CACHE_PATH}/install.sh" ]]; then
     ok "resolved node feature cache is available at ${RESOLVED_NODE_FEATURE_CACHE_PATH}"
@@ -206,6 +222,7 @@ else
 fi
 
 check_file_lacks_slicer_install
+check_dockerfile_base_packages
 
 if [[ -z "${RESOLVED_CONFIG_JSON}" ]]; then
   fail_note "could not resolve the devcontainer feature configuration with ${DEVCONTAINER_CLI} read-configuration"
