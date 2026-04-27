@@ -21,7 +21,6 @@ state already combined two concerns:
 From there, the repo kept expanding around operator workflows:
 
 - more local variants under `kubernetes/`
-- `sd-wan/lima` as a second top-level solution
 - root `make`, `status`, and `tui` surfaces that route operators into the
   right local workflow
 

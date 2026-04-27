@@ -5,7 +5,7 @@ description: Orientation and workflow guide for the `platform` repository. Use w
 
 # Use Platform
 
-Confirm the workspace root is the repository checkout that contains `Makefile`, `mk/`, `apps/`, `kubernetes/`, and `sd-wan/`.
+Confirm the workspace root is the repository checkout that contains `Makefile`, `mk/`, `apps/`, and `kubernetes/`.
 
 Start with the repo-local guidance and entrypoints, not the top-level README:
 
@@ -19,11 +19,10 @@ Choose the focused Makefile before reading deeper docs:
 - Local kind cluster work: `make -C kubernetes/kind help`.
 - Local Lima cluster work: `make -C kubernetes/lima help`.
 - Local Slicer cluster work: `make -C kubernetes/slicer help`.
-- SD-WAN work: `make -C sd-wan/lima help`.
 
 Read the nearest subtree `README.md` only after selecting the relevant path. Prefer the local `Makefile`, tests, and scripts over broad repo exploration.
 
-Expect most stack workflows to require a platform env file. Run the subtree `prereqs` target before `plan` or `apply` when working under `kubernetes/*` or `sd-wan/*`. Bare root `make` should stay informational and should not fail on `PLATFORM_ENV_FILE`.
+Expect most stack workflows to require a platform env file. Run the subtree `prereqs` target before `plan` or `apply` when working under `kubernetes/*`. Bare root `make` should stay informational and should not fail on `PLATFORM_ENV_FILE`.
 
 For non-interactive stack runs, use `AUTO_APPROVE=1`. `AUTO_APPLY` is not a supported flag in this repo.
 

@@ -38,7 +38,7 @@ domain language.
 | Term | Current meaning in the solution | Aliases or ambiguity |
 | --- | --- | --- |
 | platform | the repo/theme word for patterns that platform engineers may reuse | Useful broad label, but not a sharp path taxonomy term. |
-| solution | the first-level grouping such as `kubernetes` or `sd-wan` | The repo is grouped by what you want to run. |
+| solution | the first-level grouping, currently `kubernetes` | The repo is grouped by what you want to run. |
 | variant | the concrete operable path beneath a solution | Examples: `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`. |
 | target | a Makefile and workflow noun | Implementation-facing term for `make` goals. |
 | stack | the whole collection of apps realized for a solution variant | A full deployment shape. |

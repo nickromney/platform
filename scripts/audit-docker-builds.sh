@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUT_ROOT="${DOCKER_AUDIT_OUT_ROOT:-${REPO_ROOT}/.run/docker-build-audit}"
 FAIL_ON_WARNINGS="${DOCKER_AUDIT_FAIL_ON_WARNINGS:-1}"
+SELECTED_TARGETS=()
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 TARGET_SPECS=(
   "frontend-typescript-vite|${REPO_ROOT}/apps/subnetcalc|${REPO_ROOT}/apps/subnetcalc/frontend-typescript-vite/Dockerfile|platform-docker-audit/subnetcalc-frontend-typescript-vite:audit|"
@@ -18,13 +22,34 @@ TARGET_SPECS=(
 )
 
 usage() {
-  cat <<'EOF'
-Usage: scripts/audit-docker-builds.sh [target-name ...]
+  cat <<EOF
+Usage: audit-docker-builds.sh [--dry-run] [--execute] [target-name ...]
 
 Builds the selected Docker targets with plain progress output, saves the raw logs,
 captures image sizes and layer histories, and fails if build logs contain warning
 or error lines.
 EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
+}
+
+preview() {
+  local spec name context dockerfile image platform
+
+  shell_cli_print_dry_run_summary "would audit selected Docker builds and write reports under ${OUT_ROOT}"
+  printf 'Selected Docker build targets:\n'
+  for spec in "${TARGET_SPECS[@]}"; do
+    IFS='|' read -r name context dockerfile image platform <<<"${spec}"
+    if ! matches_selection "${name}" "${SELECTED_TARGETS[@]}"; then
+      continue
+    fi
+    printf '  %s\n' "${name}"
+    printf '    context: %s\n' "${context}"
+    printf '    dockerfile: %s\n' "${dockerfile}"
+    printf '    image: %s\n' "${image}"
+    if [[ -n "${platform}" ]]; then
+      printf '    platform: %s\n' "${platform}"
+    fi
+  done
 }
 
 format_bytes() {
@@ -55,10 +80,10 @@ matches_selection() {
 }
 
 main() {
-  if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    usage
-    exit 0
-  fi
+  shell_cli_parse_standard_only usage "$@" || exit 1
+  SELECTED_TARGETS=("${SHELL_CLI_ARGS[@]}")
+  set -- "${SELECTED_TARGETS[@]}"
+  shell_cli_maybe_execute_or_preview usage preview
 
   command -v docker >/dev/null 2>&1 || {
     echo "audit-docker-builds: docker not found in PATH" >&2

@@ -141,6 +141,6 @@ ensure_source_line "${zshrc_path}" "[ -f \"\${HOME}/.config/platform-devcontaine
 
 generate_completions
 if [[ -x "${normalize_node_toolchain_script}" ]]; then
-  "${normalize_node_toolchain_script}"
+  "${normalize_node_toolchain_script}" --execute
 fi
 install_vim_sensible

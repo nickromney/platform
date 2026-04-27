@@ -97,6 +97,7 @@ parse_args() {
     build|run|exec)
       ;;
     "")
+      shell_cli_maybe_execute_or_preview_summary usage "would run a devcontainer lifecycle with smoke preflights and bounded waits after --action is set"
       fail "host-lifecycle.sh: missing required flag: --action"
       ;;
     *)

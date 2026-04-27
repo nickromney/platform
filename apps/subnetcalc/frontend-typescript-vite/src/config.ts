@@ -154,7 +154,7 @@ export function getNetworkHops(): NetworkHop[] | null {
     { label: 'Browser', detail: 'localhost:8081' },
     { label: 'cloud1 nginx', detail: '127.0.0.1:8080 (Lima guest target)', role: 'Frontend + reverse proxy' },
     {
-      label: 'WireGuard SD-WAN',
+      label: 'WireGuard overlay',
       detail: '172.16.11.2:443 (mTLS)',
       role: 'Encrypted cross-cloud tunnel (wg0: 192.168.1.1 ↔ 192.168.1.2)',
     },

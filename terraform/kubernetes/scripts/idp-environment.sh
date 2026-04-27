@@ -89,6 +89,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "${ACTION}" || -z "${APP}" || -z "${ENV_NAME}" ]]; then
+  shell_cli_maybe_execute_or_preview_summary usage "would manage a local IDP environment request after --action, --app, and --env are set"
+fi
+
 [[ -n "${ACTION}" ]] || fail "Set ACTION or pass --action"
 [[ -n "${APP}" ]] || fail "Set APP or pass --app"
 [[ -n "${ENV_NAME}" ]] || fail "Set ENV or pass --env"

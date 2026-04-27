@@ -57,6 +57,7 @@ fi
 
 yaml_files=()
 while IFS= read -r -d '' file; do
+  [[ -e "${REPO_ROOT}/${file}" ]] || continue
   yaml_files+=("${file}")
 done < <(list_yaml_files)
 

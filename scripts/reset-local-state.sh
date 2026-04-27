@@ -283,7 +283,7 @@ print_docker_plan() {
   fi
 }
 
-preview() {
+preview_body() {
   collect_repo_paths
   collect_host_paths
 
@@ -307,6 +307,11 @@ preview() {
   fi
 }
 
+preview() {
+  shell_cli_print_dry_run_summary "would preview repo-generated local state cleanup"
+  preview_body
+}
+
 remove_paths() {
   local array_name="${1}"
   local path=""
@@ -321,7 +326,7 @@ run_execute() {
   collect_repo_paths
   collect_host_paths
 
-  preview
+  preview_body
   printf '\n'
   remove_paths repo_paths
   remove_paths host_paths

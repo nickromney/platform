@@ -183,7 +183,7 @@ verify_node_feature_install_surface() {
       set -euo pipefail
       cp -R /tmp/platform-devcontainer-node-feature /tmp/platform-devcontainer-node-feature-work
       bash /tmp/platform-devcontainer-node-feature-work/install.sh
-      bash /tmp/platform-devcontainer-normalize-node-toolchain.sh
+      bash /tmp/platform-devcontainer-normalize-node-toolchain.sh --execute
       export NVM_DIR=/usr/local/share/nvm
       . "${NVM_DIR}/nvm.sh"
       nvm use default >/dev/null

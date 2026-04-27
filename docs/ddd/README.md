@@ -23,7 +23,6 @@ automatically the same thing as the ubiquitous language.
 - [Solution Variant Comparison](./solution-variant-comparison.md) — Implementation differences.
 - [Subnetcalc Analysis](./subnetcalc-analysis.md) — Subnetcalc domain model.
 - [Sentiment Analysis](./sentiment-analysis.md) — Sentiment domain model.
-- [SD-WAN Analysis](./sd-wan-analysis.md) — SD-WAN domain model.
 
 ## Current State Of The Solution
 
@@ -38,7 +37,7 @@ automatically the same thing as the ubiquitous language.
   ownership, and variant readiness.
 
 The term `platform` remains the repo/theme word. The sharp path taxonomy is
-`solution` first (e.g., `kubernetes`, `sd-wan`), then `variant` (e.g., `kind`,
+`solution` first (currently `kubernetes`), then `variant` (e.g., `kind`,
 `lima`, `slicer`).
 
 ## Implementation Principles

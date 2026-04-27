@@ -92,7 +92,7 @@ EOF
     "${fake_nvm_dir}/versions/node/v24.15.0/bin/pnpm" \
     "${fake_nvm_dir}/versions/node/v24.15.0/bin/pnpx"
 
-  run env NVM_DIR="${fake_nvm_dir}" bash "${REPO_ROOT}/.devcontainer/normalize-node-toolchain.sh"
+  run env NVM_DIR="${fake_nvm_dir}" bash "${REPO_ROOT}/.devcontainer/normalize-node-toolchain.sh" --execute
 
   [ "${status}" -eq 0 ]
   [ ! -e "${fake_nvm_dir}/current/bin/pnpm" ]

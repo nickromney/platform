@@ -33,7 +33,6 @@ flowchart LR
     SubnetAPI["subnetcalc API<br/>(Open Host Service)"]
     SentFE["sentiment frontend"]
     SentAPI["sentiment API<br/>(Open Host Service)"]
-    SDWAN["sd-wan cloud edge<br/>(Conformist to subnetcalc)"]
     StackOps["Local Stack Operations"]
     Catalog["Application catalog"]
     Portal["Portal/status surfaces"]
@@ -45,7 +44,6 @@ flowchart LR
     SubnetFE --> APIM
     APIM --> SubnetAPI
     SentFE --> SentAPI
-    SDWAN --> SubnetAPI
     StackOps -. provisions .-> OAuth
     StackOps -. provisions .-> Hello
     StackOps -. provisions .-> APIM
@@ -130,7 +128,7 @@ outside the request path above.
   - `POST /api/v1/ipv4/check-private`
   - `POST /api/v1/ipv4/check-cloudflare`, `POST /api/v1/ipv6/check-cloudflare`
   - `POST /api/v1/ipv4/subnet-info`, `POST /api/v1/ipv6/subnet-info`
-  - `GET /api/v1/network/diagnostics` (SD-WAN viewpoint)
+  - `GET /api/v1/network/diagnostics` (routed deployment diagnostics)
 - **Shared types:** the React and TypeScript-Vite frontends both consume
   `@subnetcalc/shared-frontend`, which holds the wire types. That package is a
   deliberate Shared Kernel between frontends, not between a frontend and the
@@ -184,20 +182,6 @@ outside the request path above.
 - **Breaking changes:** changing the subscription-key header name, altering
   how version routing resolves, or removing a contract ID that shipped as
   `supported`.
-
-### sd-wan Cloud Edge to `subnetcalc`
-
-- **Shape:** HTTP over WireGuard with mTLS termination at the cloud2 nginx
-  edge; reached by vanity name (`api1.vanity.test`) that resolves to a VIP.
-- **Class:** Conformist. `sd-wan/lima` does not negotiate the `subnetcalc`
-  API shape.
-- **Edge headers:** `X-Ingress-Cloud`, `X-Egress-Cloud`, `X-Client-CN`,
-  `X-Client-Verify` are the mTLS attribution contract.
-- **Safe pre-launch changes:** adding optional attribution headers;
-  publishing additional vanity names that resolve to the same VIP.
-- **Breaking changes:** changing the header names above, changing the VIP
-  allocation in a way that existing DNS answers no longer cover, or altering
-  the expected mTLS client CN.
 
 ### Stack Operations to Apps
 
@@ -260,9 +244,8 @@ ones pre-launch:
   appears only in `subnetcalc` today. Sentiment does not define it. Promoting
   it to a shared package now would require renaming at the consumer and is a
   breaking change.
-- `/network/diagnostics` exists in both `subnetcalc` and in
-  `sd-wan/lima/api/main.py`. Extracting a shared payload is tempting but
-  post-launch.
+- `/network/diagnostics` is an app-level routed-deployment diagnostic surface.
+  Extracting a broader shared payload is tempting but post-launch.
 
 ## What Is Safe To Change Pre-Launch
 
@@ -297,8 +280,6 @@ surface.
 - Renaming Makefile stage targets even if the ratified label differs.
 - Changing auth-method enum values or the headers each method implies.
 - Changing APIM subscription-key header name.
-- Changing the four sd-wan edge headers (`X-Ingress-Cloud`,
-  `X-Egress-Cloud`, `X-Client-CN`, `X-Client-Verify`).
 - Collapsing the two `subnetcalc` API delivery shapes
   (`api-fastapi-azure-function` and `api-fastapi-container-app`). They share a
   domain core but ship as separate artifacts today.

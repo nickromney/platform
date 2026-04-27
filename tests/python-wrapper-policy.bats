@@ -17,14 +17,12 @@ repo_root = Path(os.environ["REPO_ROOT"])
 needle = "python" "3"
 allowed = {
     ".devcontainer/Dockerfile",
+    ".devcontainer/check-toolchain-surface.sh",
     "apps/subnetcalc/api-fastapi-azure-function/Dockerfile",
     "apps/subnetcalc/frontend-html-static/serve.py",
     "kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.py",
     "kubernetes/kind/tests/check-version.bats",
     "scripts/audit-shell-scripts.sh",
-    "sd-wan/lima/provision/cloud2.sh",
-    "sd-wan/lima/provision/common.sh",
-    "sd-wan/lima/tests/makefile.bats",
     "terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.py",
     "tests/audit-shell-scripts.bats",
 }
@@ -48,5 +46,5 @@ print(f"validated {len(allowed)} approved bare-python reference file(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 11 approved bare-python reference file(s)"* ]]
+  [[ "${output}" == *"validated 9 approved bare-python reference file(s)"* ]]
 }

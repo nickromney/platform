@@ -8,8 +8,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 allowed_python_execution=(
-  "sd-wan/lima/provision/common.sh"
-  "sd-wan/lima/provision/cloud2.sh"
+  ".devcontainer/check-toolchain-surface.sh"
 )
 
 bash4_feature_patterns=(
@@ -40,6 +39,7 @@ is_allowed_python_script() {
   local candidate="$1"
   local allowed
 
+  [ "${#allowed_python_execution[@]}" -gt 0 ] || return 1
   for allowed in "${allowed_python_execution[@]}"; do
     if [[ "${candidate}" == "${allowed}" ]]; then
       return 0
@@ -269,6 +269,7 @@ while IFS= read -r -d '' rel; do
   else
     file="${REPO_ROOT}/${rel}"
   fi
+  [[ -e "${file}" ]] || continue
   count=$((count + 1))
 
   if [[ "${rel}" == "scripts/lib/"* && -x "${file}" ]]; then

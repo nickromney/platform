@@ -14,8 +14,7 @@ SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 output_format="human"
 PLATFORM_SHARED_PORTS="${PLATFORM_STATUS_SHARED_PORTS:-443 30022 30080 30090 31235 3301 3302}"
 PLATFORM_VARIANT_PORTS="${PLATFORM_STATUS_VARIANT_PORTS:-${PLATFORM_STATUS_PROVIDER_PORTS:-6443 ${PLATFORM_SHARED_PORTS}}}"
-PLATFORM_SDWAN_PORTS="${PLATFORM_STATUS_SDWAN_PORTS:-58081}"
-PLATFORM_PROBE_PORTS="${PLATFORM_STATUS_PROBE_PORTS:-${PLATFORM_VARIANT_PORTS} ${PLATFORM_SDWAN_PORTS}}"
+PLATFORM_PROBE_PORTS="${PLATFORM_STATUS_PROBE_PORTS:-${PLATFORM_VARIANT_PORTS}}"
 PLATFORM_STATUS_PORTS_WRAP_WIDTH="${PLATFORM_STATUS_PORTS_WRAP_WIDTH:-20}"
 PLATFORM_STATUS_CELL_WRAP_SENTINEL="__PLATFORM_CELL_WRAP__"
 
@@ -27,7 +26,6 @@ Summarises local variant runtime status across:
   - kubernetes/kind
   - kubernetes/lima
   - kubernetes/slicer
-  - sd-wan/lima
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -894,22 +892,6 @@ if [ "${slicer_endpoint_reachable}" -eq 1 ]; then
   fi
 fi
 
-sdwan_present_count=0
-sdwan_running_count=0
-for cloud in cloud1 cloud2 cloud3; do
-  cloud_state="$(limactl_state_for "${limactl_list_output}" "${cloud}")"
-  if [ -n "${cloud_state}" ]; then
-    sdwan_present_count=$((sdwan_present_count + 1))
-  fi
-  if [ "${cloud_state}" = "Running" ]; then
-    sdwan_running_count=$((sdwan_running_count + 1))
-  fi
-done
-sdwan_runtime_present=0
-if [ "${sdwan_present_count}" -gt 0 ]; then
-  sdwan_runtime_present=1
-fi
-
 lima_ports=""
 if [ "${lima_running}" -eq 1 ]; then
   lima_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
@@ -921,12 +903,6 @@ if [ "${slicer_running}" -eq 1 ]; then
   slicer_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
 fi
 slicer_ports="$(unique_sorted_lines "${slicer_ports}")"
-
-sdwan_ports=""
-if [ "${sdwan_runtime_present}" -eq 1 ] || [ -n "$(listener_addresses_for_ports "${PLATFORM_SDWAN_PORTS}" || true)" ]; then
-  sdwan_ports="$(listener_addresses_for_ports "${PLATFORM_SDWAN_PORTS}" || true)"
-fi
-sdwan_ports="$(unique_sorted_lines "${sdwan_ports}")"
 
 kind_serving=0
 if ports_include_number "${kind_ports}" 443; then
@@ -943,15 +919,9 @@ if ports_include_number "${slicer_ports}" 443; then
   slicer_serving=1
 fi
 
-sdwan_serving=0
-if [ "${sdwan_running_count}" -eq 3 ] && ports_include_number "${sdwan_ports}" 58081; then
-  sdwan_serving=1
-fi
-
 kind_version="$(kube_version_for "${KIND_KUBECONFIG_PATH}" 'kind-kind-local')"
 lima_version="$(kube_version_for "${LIMA_KUBECONFIG_PATH}" 'limavm-k3s')"
 slicer_version="$(kube_version_for "${SLICER_KUBECONFIG_PATH}" 'slicer-k3s')"
-sdwan_version=""
 
 kind_state="absent"
 if [ "${kind_runtime_present}" -eq 1 ]; then
@@ -988,31 +958,17 @@ if [ "${slicer_runtime_present}" -eq 1 ]; then
   fi
 fi
 
-sdwan_state="absent"
-if [ "${sdwan_runtime_present}" -eq 1 ]; then
-  if [ "${sdwan_running_count}" -eq 0 ]; then
-    sdwan_state="stopped"
-  elif [ "${sdwan_running_count}" -lt 3 ]; then
-    sdwan_state="degraded"
-  elif [ "${sdwan_serving}" -eq 1 ]; then
-    sdwan_state="running"
-  else
-    sdwan_state="degraded"
-  fi
-fi
-
 all_project_ports=""
 append_lines all_project_ports "${kind_ports}"
 append_lines all_project_ports "${lima_ports}"
 append_lines all_project_ports "${slicer_ports}"
-append_lines all_project_ports "${sdwan_ports}"
 all_project_ports="$(unique_sorted_lines "${all_project_ports}")"
 
 probe_listener_ports="$(listener_addresses_for_ports "${PLATFORM_PROBE_PORTS}" || true)"
 foreign_ports="$(line_set_difference "${probe_listener_ports}" "${all_project_ports}")"
 
 lima_platform_running=0
-if [ "${lima_running}" -eq 1 ] || [ "${sdwan_running_count}" -gt 0 ]; then
+if [ "${lima_running}" -eq 1 ]; then
   lima_platform_running=1
 fi
 lima_platform_detail=""
@@ -1063,8 +1019,6 @@ kind_docker_hub_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${do
 kind_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
 lima_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
 slicer_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
-sdwan_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_SDWAN_PORTS}")"
-
 kind_blockers=""
 if [ "${docker_available}" -ne 1 ]; then
   append_line kind_blockers 'docker not found in PATH'
@@ -1106,9 +1060,6 @@ fi
 if [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
   append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 fi
-if [ "${sdwan_state}" = "running" ] || [ "${sdwan_state}" = "degraded" ]; then
-  append_line lima_blockers "$(lima_vms_claimed_by 'sd-wan/lima')"
-fi
 append_foreign_port_blockers lima_blockers "${lima_foreign_ports}"
 
 slicer_blockers=""
@@ -1133,15 +1084,6 @@ if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
   append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
 fi
 append_foreign_port_blockers slicer_blockers "${slicer_foreign_ports}"
-
-sdwan_blockers=""
-if [ "${limactl_available}" -ne 1 ]; then
-  append_line sdwan_blockers 'limactl not found in PATH'
-fi
-if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
-  append_line sdwan_blockers "$(lima_vms_claimed_by 'kubernetes/lima')"
-fi
-append_foreign_port_blockers sdwan_blockers "${sdwan_foreign_ports}"
 
 docker_runtime_json="$(build_runtime_json docker "${docker_available}" "${docker_daemon}" "${docker_runtime_detail}")"
 colima_runtime_json="$(build_runtime_json colima "${colima_available}" "${colima_running}" "${colima_runtime_detail}")"
@@ -1202,18 +1144,9 @@ slicer_readiness_json="$(jq -cn \
     bootstrap_client_name: (if $bootstrap_client_name == "" then null else $bootstrap_client_name end)
   }')"
 
-sdwan_readiness_json="$(jq -cn \
-  --argjson limactl_available "$(bool_json "${limactl_available}")" \
-  --argjson listener_58081 "$(bool_json "$( ports_include_number "${sdwan_ports}" 58081 && printf 1 || printf 0 )")" \
-  '{
-    limactl_available: $limactl_available,
-    listener_58081: $listener_58081
-  }')"
-
 kind_project_json="$(build_project_json kind kubernetes/kind 'Kind local cluster' docker "${kind_state}" "${kind_serving}" "${kind_runtime_present}" "${KIND_KUBECONFIG_PATH}" "${kind_version}" "${kind_ports}" "${kind_blockers}" "${kind_readiness_json}")"
 lima_project_json="$(build_project_json lima kubernetes/lima 'Kubernetes Lima cluster' lima "${lima_state}" "${lima_serving}" "${lima_runtime_present}" "${LIMA_KUBECONFIG_PATH}" "${lima_version}" "${lima_ports}" "${lima_blockers}" "${lima_readiness_json}")"
 slicer_project_json="$(build_project_json slicer kubernetes/slicer 'Slicer local cluster' slicer "${slicer_state}" "${slicer_serving}" "${slicer_runtime_present}" "${SLICER_KUBECONFIG_PATH}" "${slicer_version}" "${slicer_ports}" "${slicer_blockers}" "${slicer_readiness_json}")"
-sdwan_project_json="$(build_project_json sdwan_lima sd-wan/lima 'SD-WAN Lima lab' lima "${sdwan_state}" "${sdwan_serving}" "${sdwan_runtime_present}" "" "${sdwan_version}" "${sdwan_ports}" "${sdwan_blockers}" "${sdwan_readiness_json}")"
 
 active_cluster_variant=""
 active_cluster_variant_path=""
@@ -1244,12 +1177,10 @@ if [ -n "${active_cluster_variant}" ]; then
     lima) active_cluster_variant_path="kubernetes/lima" ;;
     slicer) active_cluster_variant_path="kubernetes/slicer" ;;
   esac
-elif [ "${sdwan_serving}" -eq 1 ]; then
-  overall_state="running"
 fi
 
 if [ "${overall_state}" != "conflict" ] && [ "${overall_state}" != "running" ]; then
-  if [ "${kind_runtime_present}" -eq 1 ] || [ "${lima_runtime_present}" -eq 1 ] || [ "${slicer_runtime_present}" -eq 1 ] || [ "${sdwan_runtime_present}" -eq 1 ]; then
+  if [ "${kind_runtime_present}" -eq 1 ] || [ "${lima_runtime_present}" -eq 1 ] || [ "${slicer_runtime_present}" -eq 1 ]; then
     overall_state="running"
   fi
 fi
@@ -1259,9 +1190,6 @@ active_variant_path=""
 if [ -n "${active_cluster_variant}" ]; then
   active_variant="${active_cluster_variant}"
   active_variant_path="${active_cluster_variant_path}"
-elif [ "${sdwan_serving}" -eq 1 ]; then
-  active_variant="sdwan_lima"
-  active_variant_path="sd-wan/lima"
 fi
 
 kind_apply_100_enabled=1
@@ -1317,9 +1245,6 @@ elif [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
 elif [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
-elif [ "${sdwan_state}" = "running" ] || [ "${sdwan_state}" = "degraded" ]; then
-  lima_apply_100_enabled=0
-  lima_apply_100_reason="$(lima_vms_claimed_by 'sd-wan/lima')"
 elif [ -n "${lima_foreign_ports}" ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason="$(first_non_empty_line "${lima_foreign_ports}") is already in use by another process"
@@ -1390,12 +1315,6 @@ actions_json="$(
     build_action_json slicer-apply-100 'Slicer stage 100 apply' slicer kubernetes/slicer "${slicer_apply_100_enabled}" "${slicer_apply_100_reason}" 'make -C kubernetes/slicer 100 apply AUTO_APPROVE=1' 1
     build_action_json slicer-apply-900 'Slicer stage 900 apply' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "${slicer_apply_900_reason}" 'make -C kubernetes/slicer 900 apply AUTO_APPROVE=1' 1
     build_action_json slicer-switch 'Switch to Slicer' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "$( [ "${slicer_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${slicer_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/slicer reset && make -C kubernetes/slicer 100 apply && make -C kubernetes/slicer 900 apply' 1
-
-    build_action_json sdwan-status 'SD-WAN Lima status' sdwan_lima sd-wan/lima 1 '' 'make -C sd-wan/lima status' 0
-    build_action_json sdwan-show-urls 'SD-WAN Lima URLs' sdwan_lima sd-wan/lima "$( [ "${sdwan_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${sdwan_runtime_present}" -eq 1 ] && printf '' || printf 'sd-wan/lima is not present' )" 'make -C sd-wan/lima show-urls' 0
-    build_action_json sdwan-prereqs 'SD-WAN Lima prereqs' sdwan_lima sd-wan/lima 1 '' 'make -C sd-wan/lima prereqs' 0
-    build_action_json sdwan-up 'Bring up SD-WAN Lima' sdwan_lima sd-wan/lima "$( [ "${limactl_available}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${limactl_available}" -eq 1 ] && printf '' || printf 'limactl not found in PATH' )" 'make -C sd-wan/lima up' 1
-    build_action_json sdwan-down 'Stop SD-WAN Lima' sdwan_lima sd-wan/lima "$( [ "${sdwan_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${sdwan_runtime_present}" -eq 1 ] && printf '' || printf 'sd-wan/lima is not present' )" 'make -C sd-wan/lima down' 0
   } | jq -s '.'
 )"
 
@@ -1417,7 +1336,6 @@ status_json="$(jq -cn \
   --argjson kind "${kind_project_json}" \
   --argjson lima "${lima_project_json}" \
   --argjson slicer "${slicer_project_json}" \
-  --argjson sdwan_lima "${sdwan_project_json}" \
   --argjson actions "${actions_json}" \
   '{
     generated_at: $generated_at,
@@ -1455,10 +1373,9 @@ status_json="$(jq -cn \
     variants: {
       kind: $kind,
       lima: $lima,
-      slicer: $slicer,
-      sdwan_lima: $sdwan_lima
+      slicer: $slicer
     },
-    variants_order: ["kind", "lima", "slicer", "sdwan_lima"],
+    variants_order: ["kind", "lima", "slicer"],
     actions: $actions
   }')"
 
