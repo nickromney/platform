@@ -46,6 +46,8 @@ locals {
   dev_whitelist_domains                = var.gateway_https_host_port == 443 ? local.dev_cookie_domain : "${local.dev_cookie_domain},${local.dev_cookie_domain}:${var.gateway_https_host_port}"
   uat_cookie_domain                    = ".uat.${local.platform_base_domain_effective}"
   uat_whitelist_domains                = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
+  portal_cookie_domain                 = ".${local.platform_base_domain_effective}"
+  portal_whitelist_domains             = var.gateway_https_host_port == 443 ? local.portal_cookie_domain : "${local.portal_cookie_domain},${local.portal_cookie_domain}:${var.gateway_https_host_port}"
   oauth2_proxy_session_store_service   = "oauth2-proxy-session-store"
   oauth2_proxy_redis_url               = "redis://${local.oauth2_proxy_session_store_service}.sso.svc.cluster.local:6379"
   gateway_https_host_port_suffix       = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
@@ -96,6 +98,10 @@ locals {
   hello_platform_dev_public_url        = "https://${local.hello_platform_dev_public_host}${local.gateway_https_host_port_suffix}"
   hello_platform_uat_public_host       = "hello-platform.uat.${local.platform_base_domain_effective}"
   hello_platform_uat_public_url        = "https://${local.hello_platform_uat_public_host}${local.gateway_https_host_port_suffix}"
+  idp_portal_public_host               = "portal.${local.platform_base_domain_effective}"
+  idp_portal_public_url                = "https://${local.idp_portal_public_host}${local.gateway_https_host_port_suffix}"
+  idp_api_public_host                  = "portal-api.${local.platform_base_domain_effective}"
+  idp_api_public_url                   = "https://${local.idp_api_public_host}${local.gateway_https_host_port_suffix}"
   sso_hello_platform_proxy_apps = {
     dev = {
       name             = "oauth2-proxy-hello-platform-dev"
@@ -114,6 +120,26 @@ locals {
       cookie_name      = "kind-sso-uat"
       cookie_domain    = local.uat_cookie_domain
       whitelist_domain = local.uat_whitelist_domains
+    }
+  }
+  sso_idp_proxy_apps = {
+    portal = {
+      name             = "oauth2-proxy-idp-portal"
+      public_url       = local.idp_portal_public_url
+      upstream         = "http://idp-portal.idp.svc.cluster.local:8080"
+      group            = local.sso_viewer_group
+      cookie_name      = "kind-sso-portal"
+      cookie_domain    = local.portal_cookie_domain
+      whitelist_domain = local.portal_whitelist_domains
+    }
+    api = {
+      name             = "oauth2-proxy-idp-core"
+      public_url       = local.idp_api_public_url
+      upstream         = "http://idp-core.idp.svc.cluster.local:8080"
+      group            = local.sso_viewer_group
+      cookie_name      = "kind-sso-portal-api"
+      cookie_domain    = local.portal_cookie_domain
+      whitelist_domain = local.portal_whitelist_domains
     }
   }
   admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
@@ -283,6 +309,7 @@ locals {
     local.enable_otel_gateway_effective && var.enable_argocd && !var.enable_app_of_apps ? ["otel-collector-prometheus"] : [],
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["idp"] : [],
     var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
     var.enable_sso && var.enable_hubble && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hubble"] : [],
@@ -290,7 +317,7 @@ locals {
     var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat", "oauth2-proxy-idp-portal", "oauth2-proxy-idp-core"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(

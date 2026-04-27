@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP deployment record",
+  "type": "object",
+  "required": ["app", "environment"],
+  "properties": {
+    "app": { "type": "string" },
+    "environment": { "type": "string" },
+    "image": { "type": ["string", "null"] },
+    "health": { "type": ["string", "null"] },
+    "sync": { "type": ["string", "null"] }
+  }
+}

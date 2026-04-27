@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP scorecard",
+  "type": "object",
+  "properties": {
+    "runtime_profile": { "type": "string" },
+    "has_health_endpoint": { "type": "boolean" },
+    "has_network_policy": { "type": "boolean" },
+    "has_owner": { "type": "boolean" }
+  }
+}

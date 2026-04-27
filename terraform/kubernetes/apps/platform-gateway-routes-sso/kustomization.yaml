@@ -16,6 +16,8 @@ resources:
   - httproute-subnetcalc-uat.yaml
   - httproute-hello-platform-dev.yaml
   - httproute-hello-platform-uat.yaml
+  - httproute-portal.yaml
+  - httproute-portal-api.yaml
   - httproute-keycloak.yaml
   - referencegrant-headlamp.yaml
   - referencegrant-sso.yaml

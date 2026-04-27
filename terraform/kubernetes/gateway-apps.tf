@@ -137,5 +137,6 @@ __YAML__
     kubectl_manifest.argocd_app_oauth2_proxy_sentiment,
     kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc,
     kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat,
+    kubectl_manifest.argocd_app_oauth2_proxy_idp,
   ]
 }

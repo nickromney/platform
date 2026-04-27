@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP audit event",
+  "type": "object",
+  "required": ["request_id", "actor", "action", "runtime", "dry_run", "result"],
+  "properties": {
+    "request_id": { "type": "string" },
+    "actor": { "type": "string" },
+    "action": { "type": "string" },
+    "runtime": { "type": "string" },
+    "dry_run": { "type": "boolean" },
+    "result": { "type": "string" }
+  }
+}

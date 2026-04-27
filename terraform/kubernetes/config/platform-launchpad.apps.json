@@ -28,6 +28,32 @@
       "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))"
     },
     {
+      "title": "Developer Portal",
+      "url": "https://portal.127.0.0.1.sslip.io",
+      "sort_key": "admin/portal",
+      "service": "idp-portal",
+      "owner": "platform",
+      "environment": "local",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-idp-portal\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"idp-portal\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Portal API",
+      "url": "https://portal-api.127.0.0.1.sslip.io",
+      "sort_key": "admin/portal-api",
+      "service": "idp-core",
+      "owner": "platform",
+      "environment": "local",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-idp-core\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"idp-core\"}) > bool 0)) or vector(0))"
+    },
+    {
       "title": "Gitea",
       "url": "https://gitea.admin.127.0.0.1.sslip.io",
       "sort_key": "admin/gitea",

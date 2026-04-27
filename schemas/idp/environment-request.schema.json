@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP environment request",
+  "type": "object",
+  "required": ["app", "environment", "dry_run"],
+  "properties": {
+    "app": { "type": "string" },
+    "environment": { "type": "string" },
+    "environment_type": { "type": "string" },
+    "dry_run": { "type": "boolean" }
+  }
+}

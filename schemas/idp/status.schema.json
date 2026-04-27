@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP status",
+  "type": "object",
+  "properties": {
+    "overall_state": { "type": "string" },
+    "active_variant_path": { "type": ["string", "null"] },
+    "actions": { "type": "array" }
+  }
+}
