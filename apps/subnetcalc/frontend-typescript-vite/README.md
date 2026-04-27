@@ -214,7 +214,7 @@ VITE_SHOW_NETWORK_PATH=true \
 VITE_FRONTEND_STATUS_LABEL='Frontend origin' \
 VITE_API_INGRESS_STATUS_LABEL='Cloud1 ingress' \
 VITE_BACKEND_PATH_STATUS_LABEL='Backend path' \
-VITE_BACKEND_PATH_STATUS_DETAIL='cloud1 nginx -> WireGuard SD-WAN -> cloud2 nginx -> cloud2 FastAPI' \
+VITE_BACKEND_PATH_STATUS_DETAIL='cloud1 nginx -> WireGuard overlay -> cloud2 nginx -> cloud2 FastAPI' \
 VITE_NETWORK_DIAGNOSTICS_LABEL='Backend Diagnostics' \
 VITE_SECONDARY_NETWORK_DIAGNOSTICS_LABEL='Frontend Diagnostics (cloud1 viewpoint)' \
 VITE_SECONDARY_NETWORK_DIAGNOSTICS_PATH='/cloud1-diagnostics/network/diagnostics' \
@@ -226,7 +226,7 @@ VITE_NETWORK_HOPS='[
 bun run build
 ```
 
-This keeps the feature reusable in non-SD-WAN deployments: the frontend only needs a primary diagnostics endpoint, and optionally a second endpoint that returns the same response shape from a different network viewpoint.
+This keeps the feature reusable across routed deployments: the frontend only needs a primary diagnostics endpoint, and optionally a second endpoint that returns the same response shape from a different network viewpoint.
 
 The optional status-banner variables keep the host-facing ingress URL separate from the actual backend path. That is useful when the frontend talks to a local reverse proxy which then crosses some other transport layer before reaching the real API.
 

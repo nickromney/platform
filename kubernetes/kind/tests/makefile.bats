@@ -369,7 +369,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -427,7 +427,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -483,7 +483,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"},"sdwan_lima":{"path":"sd-wan/lima","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 

@@ -45,6 +45,5 @@ In practice:
 - [docs/ddd/context-map.md](../ddd/context-map.md)
 - [docs/ddd/subnetcalc-analysis.md](../ddd/subnetcalc-analysis.md)
 - [docs/ddd/sentiment-analysis.md](../ddd/sentiment-analysis.md)
-- [docs/ddd/sd-wan-analysis.md](../ddd/sd-wan-analysis.md)
 - [apps/subnetcalc/README.md](../../apps/subnetcalc/README.md)
 - [apps/sentiment/README.md](../../apps/sentiment/README.md)

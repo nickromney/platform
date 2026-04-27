@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -24,7 +24,7 @@ STATUS_FORMAT ?= text
 
 include mk/common.mk
 
-.PHONY: default help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sdwan sonar-scan
+.PHONY: default help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -56,9 +56,8 @@ help:
 		'make release VERSION=0.3.0\tBump VERSION, run checks, and create a release commit' \
 		'make release-dry-run VERSION=0.3.0\tPreview the release commit flow' \
 		'make release-tag VERSION=0.3.0\tCreate an annotated v-version tag from main' \
-		'make sdwan\tShow the SD-WAN Makefiles' \
 		'make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator\tRun SonarQube on any local repo' \
-		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer/SD-WAN' \
+		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer' \
 		'make test\tShow the focused test entrypoints' \
 		'make tui\tOpen the Gum-based local runtime chooser when available' \
 	| while IFS=$$'\t' read -r command description; do \
@@ -96,16 +95,6 @@ docker:
 	@echo "  make -C docker/compose urls"
 	@echo "  make -C docker/compose test"
 
-sdwan:
-	@echo "SD-WAN Makefiles:"
-	@$(MAKE) --no-print-directory makefiles | sed '1d;/^  sd-wan\//!d'
-	@echo ""
-	@echo "Common workflow:"
-	@echo "  make -C sd-wan/<stack> prereqs"
-	@echo "  make -C sd-wan/<stack> up"
-	@echo "  make -C sd-wan/<stack> show-urls"
-	@echo "  make -C sd-wan/<stack> test"
-
 prereqs:
 	@echo "Root prereqs is informational."
 	@echo ""
@@ -118,7 +107,6 @@ prereqs:
 	@echo "  make -C kubernetes/kind prereqs"
 	@echo "  make -C kubernetes/lima prereqs"
 	@echo "  make -C kubernetes/slicer prereqs"
-	@echo "  make -C sd-wan/lima prereqs"
 
 test:
 	@echo "Root test is informational."
@@ -131,7 +119,6 @@ test:
 	@echo "  make -C kubernetes/kind test"
 	@echo "  make -C kubernetes/lima test"
 	@echo "  make -C kubernetes/slicer test"
-	@echo "  make -C sd-wan/lima test"
 
 status:
 	@"$(PLATFORM_STATUS_SCRIPT)" --execute --output "$(STATUS_FORMAT)"

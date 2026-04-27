@@ -63,7 +63,6 @@ Use the repository structure as a guide when deciding where work belongs:
 - `apps/` contains application and reference implementation work.
 - `kubernetes/` contains local cluster setup and operational helpers.
 - `terraform/` contains infrastructure definitions and supporting docs.
-- `sd-wan/` contains network lab work and validation flows.
 - `tests/` contains smoke, integration, and end-to-end coverage.
 
 If your change introduces a new workflow, document it close to the code it

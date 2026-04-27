@@ -74,7 +74,6 @@ The stage ladder is cumulative:
 | The same stack on Slicer microVMs | [`kubernetes/slicer`](kubernetes/slicer) | `make -C kubernetes/slicer help` |
 | App and frontend work | [`apps`](apps) | `make -C apps help` |
 | Docker Compose experiments | [`docker/compose`](docker/compose) | `make -C docker/compose help` |
-| The SD-WAN lab | [`sd-wan/lima`](sd-wan/lima) | `make -C sd-wan/lima help` |
 
 The most important secondary app path is
 [`apps/subnetcalc`](apps/subnetcalc), which supplies the sample

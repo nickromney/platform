@@ -108,19 +108,6 @@ EOF
   [[ "${output}" == *"scripts/bad.sh"* ]]
 }
 
-@test "shell audit allows approved provisioning wrappers that execute Python" {
-  write_tracked_file "sd-wan/lima/provision/common.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-python3 -m venv /opt/app-venv
-EOF
-
-  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"OK   shell audit"* ]]
-}
-
 @test "shell audit can scope validation to selected paths" {
   write_tracked_executable_file "scripts/good.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -221,16 +208,6 @@ EOF
   [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
   [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
   [[ "${output}" == *"INFO dry-run: would print the first supported compose backend command"* ]]
-}
-
-@test "fix-hostname supports dry-run-by-default interface output" {
-  run "${REPO_ROOT}/sd-wan/lima/provision/fix-hostname.sh"
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Usage: fix-hostname.sh [--dry-run] [--execute]"* ]]
-  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
-  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
-  [[ "${output}" == *"INFO dry-run: would repair /etc/hosts for target-hostname mapping"* ]]
 }
 
 @test "sync-gitea-repo supports standard no-op interface" {

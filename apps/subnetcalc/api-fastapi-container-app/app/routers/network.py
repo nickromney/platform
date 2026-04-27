@@ -1,4 +1,4 @@
-"""Network diagnostics endpoints for SD-WAN deployments."""
+"""Network diagnostics endpoints for routed deployments."""
 
 from __future__ import annotations
 

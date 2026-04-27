@@ -7,8 +7,8 @@ Local Kubernetes fallback cluster on Lima VMs.
 `200+` apply the shared [`../../terraform/kubernetes`](../../terraform/kubernetes)
 stack against that existing kubeconfig-backed cluster.
 
-This path is intentionally separate from the SD-WAN lab in
-[`../../sd-wan/lima`](../../sd-wan/lima/README.md).
+This path shares the same Kubernetes stack shape as the kind reference path,
+but runs it on local Lima VMs.
 The current Kind stage ladder and `terraform/kubernetes` inputs are the
 canonical shape; the earlier Lima path was used only as bootstrap reference.
 

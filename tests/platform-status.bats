@@ -196,10 +196,10 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.overall_state + "|" + (.active_variant // "null") + "|" + .variants.kind.state + "|" + .variants.lima.state + "|" + .variants.slicer.state + "|" + .variants.sdwan_lima.state' <<<"${output}"
+  run jq -r '.overall_state + "|" + (.active_variant // "null") + "|" + .variants.kind.state + "|" + .variants.lima.state + "|" + .variants.slicer.state + "|" + (.variants_order | join(","))' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'idle|null|absent|absent|absent|absent' ]
+  [ "${output}" = 'idle|null|absent|absent|absent|kind,lima,slicer' ]
 }
 
 @test "the reference variant owns the machine when kind is serving traffic" {
@@ -300,31 +300,29 @@ EOF
   [ "${output}" = 'context=desktop-linux|running|true' ]
 }
 
-@test "platform status reports kubernetes lima as active and sd-wan lima as another running project" {
-  export MOCK_LSOF_58081=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:58081 (LISTEN)'
+@test "platform status reports kubernetes lima as active" {
   export MOCK_LSOF_443=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:443 (LISTEN)'
   export MOCK_LSOF_30022=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 13u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:30022 (LISTEN)'
   export MOCK_LSOF_30080=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 14u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:30080 (LISTEN)'
   export MOCK_LSOF_30090=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 15u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:30090 (LISTEN)'
   export MOCK_LSOF_31235=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 16u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:31235 (LISTEN)'
   export MOCK_LSOF_3301=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nlimactl 123 nick 17u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:3301 (LISTEN)'
-  export MOCK_LIMACTL_LIST=$'NAME STATUS SSH CPUS MEMORY DISK DIR\nk3s-node-1 Running 127.0.0.1:60022 4 8GiB 25GiB ~/.lima/k3s-node-1\ncloud1 Running 127.0.0.1:60031 2 4GiB 20GiB ~/.lima/cloud1\ncloud2 Running 127.0.0.1:60032 2 4GiB 20GiB ~/.lima/cloud2\ncloud3 Running 127.0.0.1:60033 2 4GiB 20GiB ~/.lima/cloud3'
+  export MOCK_LIMACTL_LIST=$'NAME STATUS SSH CPUS MEMORY DISK DIR\nk3s-node-1 Running 127.0.0.1:60022 4 8GiB 25GiB ~/.lima/k3s-node-1'
   touch "${HOME}/.kube/limavm-k3s.yaml"
 
   run "${SCRIPT}" --execute --output json
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.active_cluster_variant + "|" + .variants.lima.state + "|" + .variants.sdwan_lima.state + "|" + (.variants.sdwan_lima.serving|tostring)' <<<"${output}"
+  run jq -r '.active_cluster_variant + "|" + .variants.lima.state + "|" + (.variants_order | join(","))' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'lima|running|running|true' ]
+  [ "${output}" = 'lima|running|kind,lima,slicer' ]
 
   run "${SCRIPT}" --execute --output text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Active cluster variant: kubernetes/lima"* ]]
-  [[ "${output}" == *"sd-wan/lima"* ]]
   [[ "${output}" == *"30022,30080,30090"* ]]
   [[ "${output}" == *"31235,3301,443"* ]]
   [[ "${output}" != *"127.0.0.1:30022"* ]]
@@ -401,7 +399,6 @@ EOF
 
 @test "platform status keeps the legacy provider ports env alias working" {
   export PLATFORM_STATUS_SHARED_PORTS=""
-  export PLATFORM_STATUS_SDWAN_PORTS=""
   export PLATFORM_STATUS_PROVIDER_PORTS="5555"
   export MOCK_LSOF_5555=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nnginx 321 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:5555 (LISTEN)'
 

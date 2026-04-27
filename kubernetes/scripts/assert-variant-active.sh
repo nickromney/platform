@@ -53,9 +53,6 @@ stop_hint_for_variant_path() {
     kubernetes/slicer)
       printf 'make -C kubernetes/slicer stop-slicer'
       ;;
-    sd-wan/lima)
-      printf 'make -C sd-wan/lima down'
-      ;;
     *)
       printf ''
       ;;

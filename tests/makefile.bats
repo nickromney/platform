@@ -28,7 +28,7 @@ setup() {
   [[ "${output}" == *"make docker"* ]]
   [[ "${output}" == *"make apps"* ]]
   [[ "${output}" == *"make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1]"* ]]
-  [[ "${output}" == *"make sdwan"* ]]
+  [[ "${output}" != *"make kubernetes-old-network-lab"* ]]
 }
 
 @test "root make help prints aligned alphabetised shortcuts" {
@@ -37,7 +37,7 @@ setup() {
   [ "${status}" -eq 0 ]
 
   printf '%s\n' "${output}" | grep -Eq '^  make apps[[:space:]]+Show the app/frontend Makefiles$'
-  printf '%s\n' "${output}" | grep -Eq '^  make status \[STATUS_FORMAT=text\|json\][[:space:]]+Show root local-runtime status across kind/Lima/Slicer/SD-WAN$'
+  printf '%s\n' "${output}" | grep -Eq '^  make status \[STATUS_FORMAT=text\|json\][[:space:]]+Show root local-runtime status across kind/Lima/Slicer$'
 
   apps_line="$(printf '%s\n' "${output}" | grep -n '^  make apps' | cut -d: -f1)"
   check_version_line="$(printf '%s\n' "${output}" | grep -n '^  make check-version' | cut -d: -f1)"
@@ -196,7 +196,7 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Root test is informational."* ]]
   [[ "${output}" == *"make -C docker/compose test"* ]]
-  [[ "${output}" == *"make -C sd-wan/lima test"* ]]
+  [[ "${output}" == *"make -C kubernetes/slicer test"* ]]
 }
 
 @test "docker compose test resolves the backend helper in execute mode" {

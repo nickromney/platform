@@ -32,7 +32,6 @@ Scope for this plan:
 
 Out of scope for this plan:
 
-- `sd-wan/lima`
 - redesigning the whole Terragrunt layout
 - replacing shell broadly just to reduce shell line count
 - changing validated cluster/bootstrap flows without evidence

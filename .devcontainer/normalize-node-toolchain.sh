@@ -1,7 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 NVM_DIR="${NVM_DIR:-/usr/local/share/nvm}"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: normalize-node-toolchain.sh [--dry-run] [--execute]
+
+Remove Corepack pnpm shims from the devcontainer Node install so Bun remains
+the package-manager entrypoint for this repo.
+
+$(shell_cli_standard_options)
+
+Environment:
+  NVM_DIR=/usr/local/share/nvm  Node feature nvm directory to normalize.
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would remove Corepack pnpm shims from ${NVM_DIR}" "$@"
 
 if [[ ! -d "${NVM_DIR}" ]]; then
   exit 0

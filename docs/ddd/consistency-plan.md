@@ -69,8 +69,7 @@ These stay out of scope until a version bump is planned.
 - Collapsing `api-fastapi-azure-function` and `api-fastapi-container-app`.
 - Adding `POST /api/v1/lookup` (additive but adds wire surface area; defer).
 - Promoting `AuthMethod` to a shared package.
-- Extracting a shared `/network/diagnostics` payload between `subnetcalc` and
-  `sd-wan`.
+- Extracting a shared `/network/diagnostics` payload beyond `subnetcalc`.
 
 ## Execution Order
 
