@@ -6,8 +6,9 @@ This target stays smaller than [`../../kubernetes/kind`](../../kubernetes/kind/R
 
 - HTTPS at the shared edge
 - lightweight Dex plus `oauth2-proxy` for browser-facing SSO
+- Backstage as the developer portal with local SQLite
 
-It still focuses on `subnetcalc`, because that app exercises the hard parts: environment split, auth gating, and the APIM hop.
+It keeps `subnetcalc` because that app exercises the hard parts of environment split, auth gating, and the APIM hop. It also starts Backstage so the developer portal is proved in Compose before the Kubernetes stage adds Keycloak, Gitea, Gateway API, and policy controllers.
 
 ## Why This Exists
 
@@ -16,9 +17,11 @@ The first Compose iteration proved the app path. This iteration narrows the gap 
 ```mermaid
 flowchart LR
     user["Browser"] --> edge["compose-edge :8443"]
+    edge --> ssoPortal["oauth2-proxy portal"]
     edge --> ssoDev["oauth2-proxy dev"]
     edge --> ssoUat["oauth2-proxy uat"]
     edge --> dex["Dex"]
+    ssoPortal --> portal["Backstage"]
     ssoDev --> routerDev["subnetcalc-router-dev"]
     ssoUat --> routerUat["subnetcalc-router-uat"]
     routerDev --> feDev["subnetcalc-frontend-dev"]
@@ -42,6 +45,7 @@ So the Compose target now defaults to its own hostname namespace and TLS port:
 
 - `subnetcalc.dev.compose.127.0.0.1.sslip.io:8443`
 - `subnetcalc.uat.compose.127.0.0.1.sslip.io:8443`
+- `portal.compose.127.0.0.1.sslip.io:8443`
 - `dex.compose.127.0.0.1.sslip.io:8443`
 
 That is the cleanest way to let `kind` and Compose exist in parallel without lying to the browser.
@@ -80,6 +84,15 @@ make -C docker/compose up-dev
 make -C docker/compose up-uat
 ```
 
+For the portal-only red/green path, use:
+
+```bash
+make -C docker/compose test
+make -C docker/compose test-backstage
+```
+
+`test` is the fast contract: it checks the Backstage compose topology and renders the compose graph. `test-backstage` starts the `portal` profile, proves Backstage reaches its backend health endpoint, checks the public route redirects through Dex and `oauth2-proxy`, then runs a browser login through Dex and verifies the Backstage catalog API after the callback.
+
 Tear it down with:
 
 ```bash
@@ -97,6 +110,7 @@ make -C docker/compose check-https-443-available
 
 - `DEV`: <https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443>
 - `UAT`: <https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443>
+- `Portal`: <https://portal.compose.127.0.0.1.sslip.io:8443>
 - `Dex`: <https://dex.compose.127.0.0.1.sslip.io:8443/dex>
 - `Dex debug`: <http://localhost:8300/dex/.well-known/openid-configuration>
 - `APIM health`: <http://localhost:8302/apim/health>
@@ -151,8 +165,18 @@ The Compose stack intentionally keeps Dex as the lightweight proof path while Ku
 - Dex publishes the public issuer at `https://dex.compose...:8443/dex`
 - `oauth2-proxy` uses the public Dex issuer/login URL and the internal Dex token/JWKS/userinfo endpoints
 - the frontend stays in `easyauth` mode against `/.auth/me` and `/.auth/logout`
+- Backstage uses the same edge-auth shape as Kubernetes: browser traffic reaches Backstage only after `oauth2-proxy` injects proxied identity headers
 
 That keeps the app-serving path comparable without making Compose carry the heavier identity-provider lifecycle.
+
+### Backstage
+
+Backstage is the portal proof in Compose.
+
+- `backstage` runs from `apps/backstage/Dockerfile`
+- `BACKSTAGE_BASE_URL` is `https://portal.compose.127.0.0.1.sslip.io:8443`
+- the runtime uses local SQLite at `/tmp/backstage`
+- the compose profile does not start Gitea; the scaffolder catalog and form render locally, while repository publishing is proved in the Kubernetes path where Gitea credentials exist
 
 ## What Is Intentionally Missing
 
@@ -183,5 +207,6 @@ The next observability iteration should stay small. The adjacent `apim-simulator
 - [`gateway/default.conf`](./gateway/default.conf) is the shared TLS edge and host-based front door.
 - [`dex/config.yaml`](./dex/config.yaml) is the Dex static-user and client config.
 - [`pki/gen-certs.sh`](./pki/gen-certs.sh) generates the mkcert-backed edge certificate.
+- [`scripts/check-backstage.sh`](./scripts/check-backstage.sh) smoke-checks the Backstage compose portal profile.
 - [`subnetcalc/router-dev.conf`](./subnetcalc/router-dev.conf) and [`subnetcalc/router-uat.conf`](./subnetcalc/router-uat.conf) mirror the `kind` router pattern.
 - [`subnetcalc/apim/config.json`](./subnetcalc/apim/config.json) is the shared APIM host-routing config.

@@ -1,0 +1,2 @@
+[     301ms] [ERROR] Failed to load resource: the server responded with a status of 502 () @ https://portal.127.0.0.1.sslip.io/:0
+[     330ms] [ERROR] Failed to load resource: the server responded with a status of 502 () @ https://portal.127.0.0.1.sslip.io/favicon.ico:0

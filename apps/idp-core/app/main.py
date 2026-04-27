@@ -5,11 +5,12 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.adapters import get_adapter, list_adapters
+from app.adapters import StatusProvider, get_adapter, list_adapters
 from app.audit import AuditWriter
 from app.models import DeploymentRequest, EnvironmentRequest, ScaffoldRequest, SecretRequest, WorkflowResponse
+from app.paths import discover_repo_root
 
-DEFAULT_AUDIT_PATH = Path(".run/idp-core/audit.jsonl")
+DEFAULT_AUDIT_PATH = Path("/tmp/idp-core/audit.jsonl")
 DEFAULT_PUBLIC_PORTAL_URL = "https://portal.127.0.0.1.sslip.io"
 DEFAULT_PUBLIC_API_URL = "https://portal-api.127.0.0.1.sslip.io"
 DEFAULT_CORS_ORIGINS = [
@@ -18,16 +19,21 @@ DEFAULT_CORS_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
 ]
-REPO_ROOT = Path(__file__).resolve().parents[3]
-CATALOG_PATH = REPO_ROOT / "catalog/platform-apps.json"
+REPO_ROOT = discover_repo_root(Path(__file__))
+DEFAULT_CATALOG_PATH = REPO_ROOT / "catalog/platform-apps.json"
 
 
-def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH) -> FastAPI:
+def catalog_path() -> Path:
+    return Path(os.environ.get("IDP_CATALOG_PATH") or DEFAULT_CATALOG_PATH).expanduser()
+
+
+def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH, status_provider: StatusProvider | None = None) -> FastAPI:
     audit = AuditWriter(audit_path)
     app = FastAPI(title="IDP Core", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=DEFAULT_CORS_ORIGINS,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -42,7 +48,10 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH) -> FastAPI:
         return adapter_for(os.environ.get("IDP_RUNTIME", "kind"))
 
     def catalog() -> dict:
-        return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        return json.loads(catalog_path().read_text(encoding="utf-8"))
+
+    def optional_string(value) -> str | None:
+        return value if isinstance(value, str) else None
 
     def workflow_response(action: str, runtime: str, plan, request: dict[str, object]) -> dict[str, object]:
         audit_record = audit.write(
@@ -76,11 +85,7 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH) -> FastAPI:
 
     @app.get("/api/v1/status")
     def status() -> dict[str, object]:
-        return {
-            "runtime": active_adapter().name,
-            "overall_state": "unknown",
-            "source": "idp-core",
-        }
+        return active_adapter().status_projection(status_provider)
 
     @app.get("/api/v1/catalog/apps")
     def catalog_apps() -> dict[str, object]:
@@ -98,13 +103,18 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH) -> FastAPI:
     def deployments() -> dict[str, object]:
         records = []
         for app_spec in catalog().get("applications", []):
+            deployment = app_spec.get("deployment", {})
             for environment in app_spec.get("environments", []):
+                environment_deployment = environment.get("deployment", {})
                 records.append(
                     {
                         "app": app_spec.get("name"),
                         "environment": environment.get("name"),
                         "route": environment.get("route"),
-                        "controller": app_spec.get("deployment", {}).get("controller"),
+                        "controller": deployment.get("controller"),
+                        "image": optional_string(environment_deployment.get("image") or deployment.get("image")),
+                        "health": optional_string(environment.get("health") or app_spec.get("health")),
+                        "sync": optional_string(environment.get("sync") or deployment.get("sync")),
                     }
                 )
         return {"deployments": records}
@@ -114,17 +124,33 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH) -> FastAPI:
         records = []
         for app_spec in catalog().get("applications", []):
             for secret in app_spec.get("secrets", []):
-                records.append({"app": app_spec.get("name"), **secret})
+                records.append(
+                    {
+                        "app": app_spec.get("name"),
+                        "name": secret.get("name"),
+                        "binding": secret.get("binding", "unknown"),
+                        "rotation": secret.get("rotation", "unknown"),
+                        **secret,
+                    }
+                )
         return {"secrets": records}
 
     @app.get("/api/v1/scorecards")
     def scorecards() -> dict[str, object]:
-        return {
-            "scorecards": [
-                {"app": app_spec.get("name"), **app_spec.get("scorecard", {})}
-                for app_spec in catalog().get("applications", [])
-            ]
-        }
+        records = []
+        for app_spec in catalog().get("applications", []):
+            scorecard = app_spec.get("scorecard", {})
+            records.append(
+                {
+                    "app": app_spec.get("name"),
+                    "runtime_profile": scorecard.get("runtime_profile", "unknown"),
+                    "has_health_endpoint": scorecard.get("has_health_endpoint", False),
+                    "has_network_policy": scorecard.get("has_network_policy", False),
+                    "has_owner": scorecard.get("has_owner", bool(app_spec.get("owner"))),
+                    **scorecard,
+                }
+            )
+        return {"scorecards": records}
 
     @app.get("/api/v1/actions")
     def actions() -> dict[str, object]:

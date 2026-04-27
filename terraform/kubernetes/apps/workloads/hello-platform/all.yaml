@@ -119,6 +119,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
           securityContext:
+            privileged: false
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -156,6 +157,7 @@ spec:
     app.kubernetes.io/component: frontend
   ports:
     - name: http
+      appProtocol: http
       port: 8080
       targetPort: http
 ---

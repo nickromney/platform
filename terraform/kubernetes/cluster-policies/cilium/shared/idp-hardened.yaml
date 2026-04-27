@@ -1,0 +1,42 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: idp-hardened
+spec:
+  description: >-
+    Hardened policy for the local Internal Developer Platform portal namespace.
+    Kyverno applies namespace default-deny policies, so the shared SSO
+    oauth2-proxy instances need explicit ingress to the portal frontend and API
+    upstreams on HTTP.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": idp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": oauth2-proxy
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "7007"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": gitea
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP

@@ -14,6 +14,27 @@ resource "kubernetes_secret_v1" "gitea_admin" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret_v1" "backstage_gitea_credentials" {
+  count = local.enable_backstage_effective && var.enable_gitea ? 1 : 0
+
+  metadata {
+    name      = "backstage-gitea-credentials"
+    namespace = "idp"
+  }
+
+  data = {
+    username = var.gitea_admin_username
+    password = var.gitea_admin_pwd
+  }
+
+  type = "Opaque"
+
+  depends_on = [
+    kubectl_manifest.namespace_idp,
+    kubernetes_secret_v1.gitea_admin,
+  ]
+}
+
 resource "kubernetes_config_map_v1" "gitea_custom_templates" {
   count = var.enable_gitea ? 1 : 0
 

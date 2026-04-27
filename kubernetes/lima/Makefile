@@ -95,7 +95,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api idp-portal idp-sdk idp-mcp show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -180,7 +180,7 @@ help:
 	@echo "  make env"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
 	@echo "  make idp-api                                  Start or preview the FastAPI IDP core"
-	@echo "  make idp-portal                               Start or preview the local developer portal"
+	@echo "  make backstage                                Start or preview the Backstage developer portal"
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
 	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
 	@echo "  make init"
@@ -1010,12 +1010,12 @@ idp-api:
 		echo "Run: cd $(REPO_ROOT)/apps/idp-core && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) uv run uvicorn app.main:app --host 127.0.0.1 --port 8080"; \
 	fi
 
-.PHONY: idp-portal
-idp-portal:
+.PHONY: backstage
+backstage:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose local developer portal for lima at $(IDP_PUBLIC_URL)"; \
+		echo "INFO dry-run: would expose Backstage developer portal for lima at $(IDP_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-portal && VITE_IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) npm run dev"; \
+		echo "Run: cd $(REPO_ROOT)/apps/backstage && docker build -t platform/backstage:dev -f Dockerfile . && docker run --rm -p 7007:7007 -e BACKSTAGE_BASE_URL=http://127.0.0.1:7007 platform/backstage:dev"; \
 	fi
 
 .PHONY: idp-sdk

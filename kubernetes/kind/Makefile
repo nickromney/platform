@@ -54,6 +54,8 @@ KIND_WORKER_COUNT ?= 1
 KIND_PRELOAD_IMAGES_MODE ?= off
 KIND_IMAGE_DISTRIBUTION_MODE ?= registry
 KIND_BAKED_NODE_IMAGE ?=
+KIND_ENABLE_BACKSTAGE ?= auto
+KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES ?= 10737418240
 KIND_LOCAL_IMAGE_CACHE_HOST ?= host.docker.internal:5002
 ifeq ($(PLATFORM_DEVCONTAINER),1)
 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST ?= host.docker.internal:5002
@@ -93,16 +95,16 @@ endif
 
 include $(STAGE_LADDER_MK)
 
-VALID_TARGETS := kind
+VALID_TARGETS := kind idp-lite
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-sso-e2e
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api idp-portal idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
-STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
+STAGE_WORKFLOW_USAGE := make [kind|idp-lite] <stage> <plan|apply> [AUTO_APPROVE=1]
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 
@@ -144,6 +146,9 @@ endif
 
 stage_file = $(STAGE_FILE_REL_$(STAGE))
 target_profile_file = targets/kind.tfvars
+IDP_LITE_PROFILE_TFVARS := $(abspath profiles/idp-lite.tfvars)
+KIND_PROFILE_TFVARS ?=
+kind_profile_tfvar_arg = $(if $(strip $(KIND_PROFILE_TFVARS)),--optional-file "$(KIND_PROFILE_TFVARS)")
 stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
@@ -164,6 +169,7 @@ help:
 	@echo "Accepted variants:"
 	@echo "  make apply 100"
 	@echo "  make kind 100 apply"
+	@echo "  make idp-lite plan"
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Targets (workflow syntax above is preferred):"
@@ -192,12 +198,13 @@ help:
 	@echo "  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
 	@echo "  make gitea-repo-lifecycle-demo [REPO_NAME=hello-platform] [DRY_RUN=1]"
+	@echo "  make idp-lite plan                         Resource-conscious stage-900 local IDP profile"
 	@echo "  make idp-catalog                              Show the local IDP service catalog"
 	@echo "  make idp-env ACTION=create APP=hello-platform ENV=preview-nr [DRY_RUN=1]"
 	@echo "  make idp-deployments                          Show the app/environment deployment read model"
 	@echo "  make idp-secrets                              Show app secret bindings and rotation posture"
 	@echo "  make idp-api                                  Start or preview the FastAPI IDP core"
-	@echo "  make idp-portal                               Start or preview the local developer portal"
+	@echo "  make backstage                                Start or preview the Backstage developer portal"
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
 	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
 	@echo "  make init"
@@ -247,6 +254,7 @@ help:
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
 	@echo "  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked"
+	@echo "  KIND_ENABLE_BACKSTAGE=auto|on|off                    -> Backstage portal gate (auto requires >=10GiB Docker memory)"
 	@echo "  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)"
 	@echo "  OIDC_RECOVERY_FORCE_MODE=nginx-rollout               -> controlled perturbation used to force the explicit recovery branch (default: nginx-rollout)"
@@ -273,6 +281,8 @@ render-operator-overrides:
 	@KIND_OPERATOR_OVERRIDES_FILE="$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	KIND_IMAGE_DISTRIBUTION_MODE="$(KIND_IMAGE_DISTRIBUTION_MODE)" \
 	KIND_WORKER_COUNT="$(KIND_WORKER_COUNT)" \
+	KIND_ENABLE_BACKSTAGE="$(KIND_ENABLE_BACKSTAGE)" \
+	KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES="$(KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES)" \
 	KIND_LOCAL_IMAGE_CACHE_HOST="$(KIND_LOCAL_IMAGE_CACHE_HOST)" \
 	KIND_BAKED_NODE_IMAGE="$(KIND_BAKED_NODE_IMAGE)" \
 	"$(RENDER_OPERATOR_OVERRIDES)" $(READONLY_MODE_FLAG) >/dev/null
@@ -295,6 +305,7 @@ sync-image-cache: workflow-validate-stage
 		"$(BUILD_TFVAR_ARGS)" --execute \
 			--optional-file "$(stage_var_file)" \
 			--optional-file "$(target_var_file)" \
+			$(kind_profile_tfvar_arg) \
 			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 			--optional-file "$${PLATFORM_TFVARS:-}" \
 			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -425,6 +436,7 @@ check-kind-host-ports: workflow-validate-stage
 		"$(BUILD_TFVAR_ARGS)" --execute \
 			--optional-file "$(stage_var_file)" \
 			--optional-file "$(target_var_file)" \
+			$(kind_profile_tfvar_arg) \
 			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 			--optional-file "$${PLATFORM_TFVARS:-}" \
 			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -461,6 +473,19 @@ kind: workflow-validate
 		exit 1; \
 	fi; \
 	$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
+
+.PHONY: idp-lite
+idp-lite: workflow-validate
+	@set -euo pipefail; \
+	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
+		echo "Usage: make idp-lite <plan|apply> [STAGE=900] [AUTO_APPROVE=1]"; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$(IDP_LITE_PROFILE_TFVARS)" ]; then \
+		echo "Missing $(IDP_LITE_PROFILE_TFVARS)"; \
+		exit 1; \
+	fi; \
+	make $(KIND_DISPATCH_TARGET) STAGE="$(if $(filter 1,$(STAGE_SPECIFIED)),$(STAGE),900)" AUTO_APPROVE="$(AUTO_APPROVE)" KIND_PROFILE_TFVARS="$(IDP_LITE_PROFILE_TFVARS)"
 
 .PHONY: init
 init: WORKFLOW_REQUIRE_STAGE_FILE=1
@@ -533,6 +558,7 @@ plan: workflow-validate-stage
 	plan_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
 		--optional-file "$(stage_var_file)" \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -619,6 +645,7 @@ apply: workflow-validate-stage
 		"$(BUILD_TFVAR_ARGS)" --execute \
 			--optional-file "$(stage_var_file)" \
 			--optional-file "$(target_var_file)" \
+			$(kind_profile_tfvar_arg) \
 			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 			--optional-file "$${PLATFORM_TFVARS:-}" \
 			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -627,6 +654,7 @@ apply: workflow-validate-stage
 	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
 	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
+	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
 	cache_ensured=0; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 200 ]; then \
 		run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
@@ -638,7 +666,7 @@ apply: workflow-validate-stage
 			run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \
 			cache_ensured=1; \
 		fi; \
-		run_step "build-local-platform-images" $(MAKE) build-local-platform-images; \
+		run_step "build-local-platform-images" env ENABLE_BACKSTAGE="$$enable_backstage" $(MAKE) build-local-platform-images; \
 	fi; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 700 ]; then \
 		run_step "build-local-workload-images" $(MAKE) build-local-workload-images; \
@@ -651,6 +679,7 @@ apply: workflow-validate-stage
 	apply_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
 		--optional-file "$(stage_var_file)" \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -728,6 +757,7 @@ check-health: workflow-validate-stage
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -742,6 +772,7 @@ check-security: workflow-validate-stage
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -784,12 +815,12 @@ idp-api:
 		echo "Run: cd $(REPO_ROOT)/apps/idp-core && IDP_RUNTIME=kind IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) uv run uvicorn app.main:app --host 127.0.0.1 --port 8080"; \
 	fi
 
-.PHONY: idp-portal
-idp-portal:
+.PHONY: backstage
+backstage:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose local developer portal for kind at $(IDP_PUBLIC_URL)"; \
+		echo "INFO dry-run: would expose Backstage developer portal for kind at $(IDP_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-portal && VITE_IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) npm run dev"; \
+		echo "Run: cd $(REPO_ROOT)/apps/backstage && docker build -t platform/backstage:dev -f Dockerfile . && docker run --rm -p 7007:7007 -e BACKSTAGE_BASE_URL=http://127.0.0.1:7007 platform/backstage:dev"; \
 	fi
 
 .PHONY: idp-sdk
@@ -834,6 +865,7 @@ check-gateway-urls: workflow-validate-stage
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -850,6 +882,7 @@ check-app: workflow-validate-stage
 	vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -870,6 +903,7 @@ check-sso: workflow-validate-stage
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -881,11 +915,26 @@ check-sso-e2e: workflow-validate-stage
 	@set -euo pipefail; \
 	$(MAKE) ensure-kind-kubeconfig >/dev/null; \
 	$(MAKE) assert-kind-active >/dev/null; \
+	$(MAKE) render-operator-overrides >/dev/null; \
 	stage_tfvars="$(abspath $(STAGE_FILE_REL_900))"; \
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
-	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+	tfvar_files=(); \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		tfvar_files+=("$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			--optional-file "$$stage_tfvars" \
+			--optional-file "$(target_var_file)" \
+			$(kind_profile_tfvar_arg) \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	); \
+	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
+	SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: exercise-oidc-recovery
 exercise-oidc-recovery:
@@ -937,6 +986,7 @@ show-urls: workflow-validate-stage
 	@vf="$$( "$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file \
 		$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)") \
 		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \

@@ -9,13 +9,13 @@
   },
   "applications": [
     {
-      "name": "idp-portal",
+      "name": "backstage",
       "display_name": "Developer Portal",
       "owner": "platform",
       "lifecycle": "platform",
       "source": {
         "repo": "platform",
-        "path": "apps/idp-portal"
+        "path": "apps/backstage"
       },
       "deployment": {
         "strategy": "gitops",

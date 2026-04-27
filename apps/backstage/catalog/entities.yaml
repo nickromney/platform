@@ -1,0 +1,205 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: local-idp
+  description: Local internal developer platform running on kind, Lima, or Slicer.
+spec:
+  owner: group:default/platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage
+  title: Developer Portal
+  description: Backstage portal for catalog, templates, and local platform self-service.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/backstage/
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-label-selector: app=backstage
+  links:
+    - url: https://portal.127.0.0.1.sslip.io
+      title: Portal
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/idp-core
+  consumesApis:
+    - idp-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: idp-core
+  title: Portal API
+  description: FastAPI product API for catalog, runtime, environment, deployment, secret, and action contracts.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/idp-core/
+    backstage.io/kubernetes-label-selector: app=idp-core
+  links:
+    - url: https://portal-api.127.0.0.1.sslip.io
+      title: Portal API
+      icon: api
+spec:
+  type: service
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  providesApis:
+    - idp-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: idp-api
+  title: IDP API
+  description: HTTP API used by Backstage, SDKs, MCP, and automation clients.
+spec:
+  type: openapi
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Local IDP API
+      version: 0.1.0
+    paths:
+      /api/v1/runtime:
+        get:
+          responses:
+            '200':
+              description: Runtime status
+      /api/v1/catalog/apps:
+        get:
+          responses:
+            '200':
+              description: Application catalog
+      /api/v1/environments:
+        post:
+          responses:
+            '200':
+              description: Environment dry-run or request result
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: hello-platform
+  title: Hello Platform
+  description: Minimal workload proving the platform golden path across dev and UAT.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/hello-platform/
+    backstage.io/kubernetes-label-selector: app=hello-platform
+  links:
+    - url: https://hello-platform.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://hello-platform.uat.127.0.0.1.sslip.io
+      title: UAT
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: example
+  owner: group:default/team-dolphin
+  system: local-idp
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: subnetcalc
+  title: SubnetCalc
+  description: Demo app used to exercise API, frontend, APIM, routing, and SSO.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/subnetcalc/
+    backstage.io/kubernetes-label-selector: app=subnetcalc
+  links:
+    - url: https://subnetcalc.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://subnetcalc.uat.127.0.0.1.sslip.io
+      title: UAT
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  providesApis:
+    - subnetcalc-api
+  consumesApis:
+    - subnetcalc-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: subnetcalc-api
+  title: SubnetCalc API
+  description: HTTP API for subnet validation, private address checks, and subnet metadata lookups.
+spec:
+  type: openapi
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: SubnetCalc API
+      version: 0.1.0
+    paths:
+      /api/v1/lookup:
+        post:
+          responses:
+            '200':
+              description: Subnet lookup result
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: sentiment
+  title: Sentiment
+  description: Demo app used to exercise multi-component service routing and SSO.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/sentiment/
+    backstage.io/kubernetes-label-selector: app=sentiment
+  links:
+    - url: https://sentiment.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://sentiment.uat.127.0.0.1.sslip.io
+      title: UAT
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  providesApis:
+    - sentiment-api
+  consumesApis:
+    - sentiment-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: sentiment-api
+  title: Sentiment API
+  description: HTTP API for storing comments and returning sentiment classification results.
+spec:
+  type: openapi
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Sentiment API
+      version: 0.1.0
+    paths:
+      /api/v1/comments:
+        post:
+          responses:
+            '200':
+              description: Sentiment classification result

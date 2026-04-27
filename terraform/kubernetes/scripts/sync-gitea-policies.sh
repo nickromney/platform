@@ -74,6 +74,7 @@ ENABLE_SIGNOZ="${ENABLE_SIGNOZ:-false}"
 ENABLE_OTEL_GATEWAY="${ENABLE_OTEL_GATEWAY:-false}"
 ENABLE_OBSERVABILITY_AGENT="${ENABLE_OBSERVABILITY_AGENT:-false}"
 ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-false}"
+ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
 PREFER_EXTERNAL_WORKLOAD_IMAGES="${PREFER_EXTERNAL_WORKLOAD_IMAGES:-false}"
 EXTERNAL_IMAGE_SENTIMENT_API="${EXTERNAL_IMAGE_SENTIMENT_API:-}"
 EXTERNAL_IMAGE_SENTIMENT_AUTH_UI="${EXTERNAL_IMAGE_SENTIMENT_AUTH_UI:-}"
@@ -83,6 +84,8 @@ EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_R
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
 PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
 EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
+EXTERNAL_PLATFORM_IMAGE_IDP_CORE="${EXTERNAL_PLATFORM_IMAGE_IDP_CORE:-}"
+EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE:-}"
 EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
 SIGNOZ_AUTH_PROXY_IMAGE="${SIGNOZ_AUTH_PROXY_IMAGE:-ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest}"
@@ -456,6 +459,8 @@ patch_vendored_headlamp_chart() {
   [[ -f "${deployment_file}" ]] || return 0
 
   perl -0pi -e 's/\{\{- if hasKey \.Values\.config "sessionTTL" \}\}\n            - "-session-ttl=\{\{ \.Values\.config\.sessionTTL \}\}"\n            \{\{- end \}\}/{{- with .Values.config.sessionTTL }}\n            - "-session-ttl={{ . }}"\n            {{- end }}/g' "${deployment_file}"
+  perl -0pi -e 's{(          livenessProbe:\n            httpGet:\n              path: "\{\{ \.Values\.config\.baseURL \}\}/"\n              port: http\n)(?!            initialDelaySeconds:)}{$1            initialDelaySeconds: 20\n            periodSeconds: 10\n            timeoutSeconds: 5\n            failureThreshold: 6\n}g' "${deployment_file}"
+  perl -0pi -e 's{(          readinessProbe:\n            httpGet:\n              path: "\{\{ \.Values\.config\.baseURL \}\}/"\n              port: http\n)(?!            initialDelaySeconds:)}{$1            initialDelaySeconds: 10\n            periodSeconds: 10\n            timeoutSeconds: 5\n            failureThreshold: 6\n}g' "${deployment_file}"
 
   if [[ -f "${schema_file}" ]]; then
     perl -0pi -e 's/("sessionTTL":\s*\{\s*"type":\s*"integer",\s*"description":\s*"The time in seconds for the session to be valid",\s*"default":\s*86400,\s*"minimum":\s*)1,/${1}0,/s' "${schema_file}"
@@ -556,8 +561,19 @@ apply_external_workload_images() {
   replace_image_ref "${workload_file}" "subnetcalc-frontend-typescript-vite" "${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT}"
 }
 
+infer_external_platform_cache_ref() {
+  local image_name="$1"
+
+  case "${EXTERNAL_PLATFORM_IMAGE_GRAFANA}" in
+    */platform/grafana-victorialogs:*)
+      printf '%s/platform/%s:latest\n' "${EXTERNAL_PLATFORM_IMAGE_GRAFANA%%/platform/grafana-victorialogs:*}" "${image_name}"
+      ;;
+  esac
+}
+
 apply_external_platform_images() {
   local root_dir="$1"
+  local idp_manifest="${root_dir}/apps/idp/all.yaml"
   local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
 
   if ! is_true "${PREFER_EXTERNAL_PLATFORM_IMAGES}"; then
@@ -573,6 +589,15 @@ apply_external_platform_images() {
     SIGNOZ_AUTH_PROXY_IMAGE="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY}"
   fi
 
+  if [[ -z "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}" ]]; then
+    EXTERNAL_PLATFORM_IMAGE_IDP_CORE="$(infer_external_platform_cache_ref idp-core)"
+  fi
+  if [[ -z "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}" ]]; then
+    EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="$(infer_external_platform_cache_ref backstage)"
+  fi
+
+  replace_image_ref "${idp_manifest}" "idp-core" "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}"
+  replace_image_ref "${idp_manifest}" "backstage" "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}"
   replace_image_ref "${signoz_manifest}" "signoz-auth-proxy" "${SIGNOZ_AUTH_PROXY_IMAGE}"
 }
 
@@ -657,6 +682,75 @@ remove_referencegrant_service() {
     { print }
   ' "${file}" > "${tmp_file}"
   mv "${tmp_file}" "${file}"
+}
+
+remove_yaml_document() {
+  local file="$1"
+  local kind="$2"
+  local name="$3"
+
+  [[ -f "${file}" ]] || return 0
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk -v wanted_kind="${kind}" -v wanted_name="${name}" '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function flush_doc() {
+      if (doc != "" && !(doc_kind == wanted_kind && doc_name == wanted_name)) {
+        if (printed) {
+          print "---"
+        }
+        printf "%s", doc
+        printed = 1
+      }
+      doc = ""
+      doc_kind = ""
+      doc_name = ""
+      in_metadata = 0
+    }
+    /^[[:space:]]*---[[:space:]]*$/ {
+      flush_doc()
+      next
+    }
+    {
+      doc = doc $0 "\n"
+      if ($0 ~ /^kind:[[:space:]]*/) {
+        value = $0
+        sub(/^kind:[[:space:]]*/, "", value)
+        doc_kind = trim(value)
+      }
+      if ($0 ~ /^metadata:[[:space:]]*$/) {
+        in_metadata = 1
+        next
+      }
+      if (in_metadata && $0 ~ /^[^[:space:]]/) {
+        in_metadata = 0
+      }
+      if (in_metadata && $0 ~ /^[[:space:]]+name:[[:space:]]*/) {
+        value = $0
+        sub(/^[[:space:]]+name:[[:space:]]*/, "", value)
+        doc_name = trim(value)
+      }
+    }
+    END {
+      flush_doc()
+    }
+  ' "${file}" > "${tmp_file}"
+  mv "${tmp_file}" "${file}"
+}
+
+remove_backstage_idp_resources() {
+  local idp_manifest="$1"
+
+  remove_yaml_document "${idp_manifest}" "ServiceAccount" "backstage"
+  remove_yaml_document "${idp_manifest}" "ClusterRole" "backstage-kubernetes-reader"
+  remove_yaml_document "${idp_manifest}" "ClusterRoleBinding" "backstage-kubernetes-reader"
+  remove_yaml_document "${idp_manifest}" "Deployment" "backstage"
+  remove_yaml_document "${idp_manifest}" "Service" "backstage"
 }
 
 remove_observability_targetref_route() {
@@ -1070,6 +1164,12 @@ prune_gateway_routes_manifests() {
   local routes_dir="$1"
   local kustomization_file="${routes_dir}/kustomization.yaml"
 
+  if ! is_true "${ENABLE_BACKSTAGE}"; then
+    remove_if_present "${routes_dir}/httproute-portal.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-portal.yaml"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-backstage"
+  fi
+
   if ! is_true "${ENABLE_HUBBLE}"; then
     remove_if_present "${routes_dir}/httproute-hubble.yaml"
     remove_if_present "${routes_dir}/referencegrant-hubble.yaml"
@@ -1383,6 +1483,9 @@ render_repo() {
   apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
   apply_external_platform_images "${repo_dir}"
+  if ! is_true "${ENABLE_BACKSTAGE}"; then
+    remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
+  fi
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"

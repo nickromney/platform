@@ -23,8 +23,10 @@ setup() {
   [[ "${output}" == *"split by default"* ]]
   [[ "${output}" == *"KIND_WORKER_COUNT=1|2|..."* ]]
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked"* ]]
+  [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=auto|on|off"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
+  [[ "${output}" == *"make idp-lite plan"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
   [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
@@ -34,6 +36,33 @@ setup() {
   [[ "${output}" == *"~/.kube/kind-kind-local.yaml"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
   [[ "${output}" != *"${HOME}"* ]]
+}
+
+@test "kind idp-lite plan dispatches to stage 900 with the lite profile" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" idp-lite plan
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'make plan STAGE="900"'* ]]
+  [[ "${output}" == *'KIND_PROFILE_TFVARS="'*"kubernetes/kind/profiles/idp-lite.tfvars"* ]]
+}
+
+@test "kind idp-lite profile keeps IDP essentials and disables heavy optional components" {
+  profile="${REPO_ROOT}/kubernetes/kind/profiles/idp-lite.tfvars"
+
+  run test -f "${profile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -E '^(enable_gateway_tls|enable_gitea|enable_argocd|enable_sso)[[:space:]]*=[[:space:]]*true$' "${profile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -E '^(enable_loki|enable_tempo|enable_signoz|enable_victoria_logs|enable_prometheus|enable_grafana|enable_actions_runner|enable_app_repo_subnetcalc)[[:space:]]*=[[:space:]]*false$' "${profile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -E '^(enable_app_repo_sentiment|prefer_external_workload_images|prefer_external_platform_images)[[:space:]]*=[[:space:]]*true$' "${profile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -E '"idp-core"|backstage|sentiment-api|sentiment-auth-ui' "${profile}"
+  [ "${status}" -eq 0 ]
 }
 
 @test "kind run_step helper preserves shell arguments instead of invoking macOS apply" {
@@ -76,10 +105,10 @@ setup() {
 }
 
 @test "kind keeps the target-prefixed positional workflow syntax" {
-  run make -n -C "${REPO_ROOT}/kubernetes/kind" kind 100 apply
+  run sed -n '/^kind:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'make plan STAGE="100"'* ]]
+  [[ "${output}" == *'$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"'* || "${output}" == *'make $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"'* ]]
 }
 
 @test "kind check-health forwards PLATFORM_TFVARS to the health script" {
@@ -203,6 +232,13 @@ setup() {
 
 @test "kind stage 900 apply runs browser SSO E2E verification after a successful apply" {
   run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind check-sso-e2e forwards the rendered Backstage gate to Playwright" {
+  run grep -Fn 'SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars"' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

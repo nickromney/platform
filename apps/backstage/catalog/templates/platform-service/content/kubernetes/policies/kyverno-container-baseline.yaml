@@ -1,0 +1,43 @@
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: ${{ values.name }}-container-baseline
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-drop-all-capabilities
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              selector:
+                matchLabels:
+                  app: ${{ values.name }}
+      validate:
+        message: Containers must drop all Linux capabilities.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
+    - name: require-read-only-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              selector:
+                matchLabels:
+                  app: ${{ values.name }}
+      validate:
+        message: Containers must use a read-only root filesystem.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+

@@ -1,0 +1,18 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: platform-gateway-oauth-response-buffers
+  namespace: platform-gateway
+  labels:
+    app.kubernetes.io/name: platform-gateway-oauth-response-buffers
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: platform-gateway
+  buffering:
+    bufferSize: 32k
+    buffers:
+      number: 8
+      size: 32k
+    busyBuffersSize: 64k

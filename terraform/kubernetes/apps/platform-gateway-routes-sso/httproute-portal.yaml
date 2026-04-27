@@ -20,7 +20,7 @@ spec:
       backendRefs:
         - group: ""
           kind: Service
-          name: oauth2-proxy-idp-portal
+          name: oauth2-proxy-backstage
           namespace: sso
           port: 4180
           weight: 1

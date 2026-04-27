@@ -1,0 +1,17 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t localhost:30090/platform/${{ values.name }}-backend:latest apps/backend
+      - name: Build frontend image
+        run: docker build -t localhost:30090/platform/${{ values.name }}-frontend:latest apps/frontend
+

@@ -44,24 +44,24 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "kind and lima expose Portal API portal SDK and MCP targets" {
+@test "kind and lima expose Portal API Backstage SDK and MCP targets" {
   run make -C "${REPO_ROOT}/kubernetes/kind" help
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make idp-api"* ]]
-  [[ "${output}" == *"make idp-portal"* ]]
+  [[ "${output}" == *"make backstage"* ]]
   [[ "${output}" == *"make idp-sdk"* ]]
   [[ "${output}" == *"make idp-mcp"* ]]
 
   run make -C "${REPO_ROOT}/kubernetes/lima" help
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make idp-api"* ]]
-  [[ "${output}" == *"make idp-portal"* ]]
+  [[ "${output}" == *"make backstage"* ]]
   [[ "${output}" == *"make idp-sdk"* ]]
   [[ "${output}" == *"make idp-mcp"* ]]
 }
 
 @test "IDP Make targets are dry-run friendly and do not apply infrastructure" {
-  for target in idp-api idp-portal idp-sdk idp-mcp; do
+  for target in idp-api backstage idp-sdk idp-mcp; do
     run make -C "${REPO_ROOT}/kubernetes/kind" "${target}" DRY_RUN=1
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"would"* ]]
@@ -77,7 +77,7 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" idp-portal DRY_RUN=1
+  run make -C "${REPO_ROOT}/kubernetes/kind" backstage DRY_RUN=1
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"https://portal.127.0.0.1.sslip.io"* ]]
 
@@ -85,27 +85,20 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
 
-  run make -C "${REPO_ROOT}/kubernetes/lima" idp-portal DRY_RUN=1
+  run make -C "${REPO_ROOT}/kubernetes/lima" backstage DRY_RUN=1
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"https://portal.127.0.0.1.sslip.io"* ]]
 }
 
 @test "new IDP packages follow dependency cooldown and pinning guardrails" {
-  for path in \
-    apps/idp-portal/.npmrc \
-    apps/idp-sdk/.npmrc
-  do
-    run rg -n '^min-release-age=7$' "${REPO_ROOT}/${path}"
-    [ "${status}" -eq 0 ]
-  done
-
-  run jq -e '
-    .packageManager == "npm@11.12.1" and
-    ([.dependencies // {}, .devDependencies // {}]
-      | map(to_entries[])
-      | all(.value | test("^[0-9]")))
-  ' "${REPO_ROOT}/apps/idp-portal/package.json"
+  run rg -n '^min-release-age=7$' "${REPO_ROOT}/apps/idp-sdk/.npmrc"
   [ "${status}" -eq 0 ]
+
+  run jq -e '.packageManager == "yarn@4.4.1"' "${REPO_ROOT}/apps/backstage/package.json"
+  [ "${status}" -eq 0 ]
+
+  [ -f "${REPO_ROOT}/apps/backstage/.yarn/releases/yarn-4.4.1.cjs" ]
+  [ -f "${REPO_ROOT}/apps/backstage/yarn.lock" ]
 
   run jq -e '.packageManager == "npm@11.12.1"' "${REPO_ROOT}/apps/idp-sdk/package.json"
   [ "${status}" -eq 0 ]

@@ -194,7 +194,36 @@ run "app_repo_subnetcalc_allows_external_images_without_runner" {
     external_workload_image_refs = {
       "subnetcalc-api-fastapi-container-app" = "host.lima.internal:5002/platform/subnetcalc-api-fastapi-container-app:latest"
       "subnetcalc-apim-simulator"            = "host.lima.internal:5002/platform/subnetcalc-apim-simulator:latest"
-      "subnetcalc-frontend-react"            = "host.lima.internal:5002/platform/subnetcalc-frontend-react:latest"
+      "subnetcalc-frontend-typescript-vite"  = "host.lima.internal:5002/platform/subnetcalc-frontend-typescript-vite:latest"
     }
+  }
+}
+
+run "external_platform_images_accepts_idp_refs" {
+  command = plan
+
+  variables {
+    cni_provider                    = "none"
+    enable_hubble                   = false
+    enable_argocd                   = false
+    provision_kind_cluster          = true
+    enable_host_local_registry      = true
+    host_local_registry_host        = "host.docker.internal:5002"
+    prefer_external_platform_images = true
+    external_platform_image_refs = {
+      backstage   = "host.docker.internal:5002/platform/backstage:latest"
+      grafana      = "host.docker.internal:5002/platform/grafana-victorialogs:latest"
+      "idp-core"   = "host.docker.internal:5002/platform/idp-core:latest"
+    }
+  }
+
+  assert {
+    condition     = local.external_platform_idp_core == "host.docker.internal:5002/platform/idp-core:latest"
+    error_message = "Expected idp-core external platform image ref to be accepted and exposed through locals"
+  }
+
+  assert {
+    condition     = local.external_platform_backstage == "host.docker.internal:5002/platform/backstage:latest"
+    error_message = "Expected backstage external platform image ref to be accepted and exposed through locals"
   }
 }

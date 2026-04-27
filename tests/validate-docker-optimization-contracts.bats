@@ -240,3 +240,120 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated grafana plugin archive mirroring contract"* ]]
 }
+
+@test "local platform image build and sync contracts include IDP images" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+sync_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea.sh").read_text(encoding="utf-8")
+policies_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh").read_text(encoding="utf-8")
+gitops_tf = (repo_root / "terraform/kubernetes/gitops.tf").read_text(encoding="utf-8")
+variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
+locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
+
+for image_name, dockerfile_path in {
+    "idp-core": "apps/idp-core/Dockerfile",
+    "backstage": "apps/backstage/Dockerfile",
+}.items():
+    assert f'"{image_name}"' in build_script, image_name
+    assert dockerfile_path in build_script, dockerfile_path
+    if image_name == "idp-core":
+        assert f'"${{REPO_ROOT}}" \\\n  "${{REPO_ROOT}}/{dockerfile_path}"' in build_script, dockerfile_path
+    else:
+        assert '"${REPO_ROOT}/apps/backstage"' in build_script
+        assert '"${REPO_ROOT}/apps/backstage/Dockerfile"' in build_script
+    assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
+    assert image_name in variables_tf, image_name
+
+assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in sync_script
+assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in sync_script
+assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in policies_script
+assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in policies_script
+assert 'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")' in gitops_tf
+assert 'EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")' in gitops_tf
+assert 'replace_image_ref "${idp_manifest}" "backstage" "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}"' in policies_script
+assert 'replace_image_ref "${idp_manifest}" "idp-core" "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}"' in policies_script
+assert "external_platform_backstage" in locals_tf
+assert "external_platform_idp_core" in locals_tf
+
+print("validated local platform IDP image build and sync contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local platform IDP image build and sync contract"* ]]
+}
+
+@test "local platform IDP image cache keys include source fingerprints" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+
+assert "source_fingerprint_tag()" in build_script
+assert "idp_core_source_tag=" in build_script
+assert "backstage_source_tag=" in build_script
+assert '"idp-core" \\' in build_script and '"${idp_core_source_tag}"' in build_script
+assert '"backstage" \\' in build_script and '"${backstage_source_tag}"' in build_script
+assert 'tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in build_script
+
+print("validated local platform IDP source fingerprint cache keys")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local platform IDP source fingerprint cache keys"* ]]
+}
+
+@test "Lima and Slicer targets route local platform IDP images through their host cache" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+expectations = {
+    "kubernetes/lima/targets/lima.tfvars": "host.lima.internal:5002",
+    "kubernetes/slicer/targets/slicer.tfvars": "192.168.64.1:5002",
+}
+
+for relative_path, registry_host in expectations.items():
+    content = (repo_root / relative_path).read_text(encoding="utf-8")
+    assert "prefer_external_platform_images = true" in content, relative_path
+    assert f'"idp-core"   = "{registry_host}/platform/idp-core:latest"' in content, relative_path
+    assert f'backstage   = "{registry_host}/platform/backstage:latest"' in content, relative_path
+
+print("validated Lima and Slicer IDP image cache refs")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Lima and Slicer IDP image cache refs"* ]]
+}
+
+@test "local platform IDP cache hits are not invalidated by unrelated git commits" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+
+skip_start = build_script.index('if [ "${FORCE_REBUILD}" != "1" ]')
+skip_end = build_script.index('echo "OK   cached ${version_ref}"', skip_start)
+skip_condition = build_script[skip_start:skip_end]
+
+assert "${fingerprint_tag}" in skip_condition
+assert "${commit_tag}" not in skip_condition
+assert 'docker_push_local_registry "${commit_ref}"' in build_script
+
+print("validated local platform IDP cache hits ignore unrelated git commits")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local platform IDP cache hits ignore unrelated git commits"* ]]
+}

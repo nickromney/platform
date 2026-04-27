@@ -320,6 +320,76 @@ EOF
   [ ! -f "${apps_dir}/002-nginx-gateway-fabric.application.yaml" ]
 }
 
+@test "Backstage resource gate prunes portal workload route and SSO grant" {
+  repo_dir="${BATS_TEST_TMPDIR}/repo"
+  idp_manifest="${repo_dir}/apps/idp/all.yaml"
+  routes_dir="${repo_dir}/apps/platform-gateway-routes-sso"
+  mkdir -p "$(dirname "${idp_manifest}")" "${routes_dir}"
+
+  cat >"${idp_manifest}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idp-core
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backstage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backstage-kubernetes-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backstage-kubernetes-reader
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage
+EOF
+
+  cat >"${routes_dir}/kustomization.yaml" <<'EOF'
+resources:
+  - httproute-portal.yaml
+  - httproute-portal-api.yaml
+  - referencegrant-sso.yaml
+EOF
+  touch "${routes_dir}/httproute-portal.yaml" "${routes_dir}/httproute-portal-api.yaml"
+  cat >"${routes_dir}/referencegrant-sso.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+spec:
+  to:
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-backstage
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-idp-core
+EOF
+
+  run bash -lc "export ENABLE_BACKSTAGE=false; source '${SCRIPT}'; remove_backstage_idp_resources '${idp_manifest}'; prune_gateway_routes_manifests '${routes_dir}'"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq "name: idp-core" "${idp_manifest}"
+  ! grep -Fq "name: backstage" "${idp_manifest}"
+  [ ! -f "${routes_dir}/httproute-portal.yaml" ]
+  [ -f "${routes_dir}/httproute-portal-api.yaml" ]
+  ! grep -Fq "httproute-portal.yaml" "${routes_dir}/kustomization.yaml"
+  ! grep -Fq "oauth2-proxy-backstage" "${routes_dir}/referencegrant-sso.yaml"
+  grep -Fq "oauth2-proxy-idp-core" "${routes_dir}/referencegrant-sso.yaml"
+}
+
 @test "apply_external_platform_images rewrites signoz auth proxy when explicitly enabled" {
   repo_dir="${BATS_TEST_TMPDIR}/repo"
   mkdir -p "${repo_dir}/apps/platform-gateway-routes-sso"

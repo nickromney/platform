@@ -25,6 +25,50 @@ setup() {
   grep -Fq 'add_header X-Content-Type-Options "nosniff" always;' "${hardening_manifest}"
 }
 
+@test "platform gateway certificate covers every declared gateway route hostname" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from pathlib import Path
+import os
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+cert_manifest = repo_root / "terraform/kubernetes/apps/cert-manager-config/platform-gateway-cert.yaml"
+route_dirs = [
+    repo_root / "terraform/kubernetes/apps/platform-gateway-routes",
+    repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso",
+]
+
+certificate = yaml.safe_load(cert_manifest.read_text(encoding="utf-8"))
+dns_names = set(certificate["spec"]["dnsNames"])
+
+def covered_by_dns_name(hostname: str, dns_name: str) -> bool:
+    if hostname == dns_name:
+        return True
+    if not dns_name.startswith("*."):
+        return False
+    suffix = dns_name[1:]
+    if not hostname.endswith(suffix):
+        return False
+    prefix = hostname[: -len(suffix)]
+    return prefix and "." not in prefix
+
+missing = []
+for route_dir in route_dirs:
+    for route_manifest in sorted(route_dir.glob("httproute-*.yaml")):
+        route = yaml.safe_load(route_manifest.read_text(encoding="utf-8"))
+        for hostname in route["spec"].get("hostnames", []):
+            if not any(covered_by_dns_name(hostname, dns_name) for dns_name in dns_names):
+                missing.append(f"{hostname} ({route_manifest.relative_to(repo_root)})")
+
+assert not missing, "missing gateway cert SAN coverage:\n" + "\n".join(missing)
+print("validated gateway certificate SAN coverage for every HTTPRoute hostname")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated gateway certificate SAN coverage for every HTTPRoute hostname"* ]]
+}
+
 @test "check-security verifies rendered platform gateway nginx directives" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-security.sh"
 
@@ -128,6 +172,16 @@ setup() {
   grep -Fq "Grafana admin gateway URL" "${script}"
   grep -Fq "Headlamp admin gateway URL" "${script}"
   grep -Fq "Kyverno admin gateway URL" "${script}"
+}
+
+@test "gateway URL check verifies SNI certificate hostname coverage" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-gateway-urls.sh"
+
+  grep -Fq "TLS certificate hostname checks" "${script}"
+  grep -Fq "probe_route_certificates()" "${script}"
+  grep -Fq 'openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${host}"' "${script}"
+  grep -Fq 'openssl x509 -noout -checkhost "${host}"' "${script}"
+  grep -Fq "TLS certificate hostnames not ready yet" "${script}"
 }
 
 @test "cluster health script hard-refreshes stale Argo apps while waiting for them to settle" {

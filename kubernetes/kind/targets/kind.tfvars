@@ -8,7 +8,10 @@ enable_host_local_registry = true
 
 hardened_image_registry         = "dhi.io"
 prefer_external_platform_images = true
+keycloak_image = "host.docker.internal:5002/platform/keycloak:latest"
 
 external_platform_image_refs = {
-  grafana = "host.docker.internal:5002/platform/grafana-victorialogs:latest"
+  backstage   = "host.docker.internal:5002/platform/backstage:latest"
+  grafana      = "host.docker.internal:5002/platform/grafana-victorialogs:latest"
+  "idp-core"   = "host.docker.internal:5002/platform/idp-core:latest"
 }

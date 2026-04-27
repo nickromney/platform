@@ -16,6 +16,7 @@ resources:
   - platform-baseline.yaml
   - argocd-hardened.yaml
   - observability-hardened.yaml
+  - idp-hardened.yaml
   - sso-hardened.yaml
   - gitea-hardened.yaml
   - gitea-runner-hardened.yaml

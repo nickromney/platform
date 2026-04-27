@@ -14,9 +14,12 @@ gitea_local_access_mode       = "port-forward"
 hardened_image_registry         = "dhi.io"
 prefer_external_platform_images = true
 prefer_external_workload_images = true
+keycloak_image = "host.lima.internal:5002/platform/keycloak:latest"
 
 external_platform_image_refs = {
-  grafana = "host.lima.internal:5002/platform/grafana-victorialogs:latest"
+  backstage   = "host.lima.internal:5002/platform/backstage:latest"
+  grafana      = "host.lima.internal:5002/platform/grafana-victorialogs:latest"
+  "idp-core"   = "host.lima.internal:5002/platform/idp-core:latest"
 }
 
 external_workload_image_refs = {

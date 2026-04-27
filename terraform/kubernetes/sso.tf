@@ -340,6 +340,196 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
       )
       clientScopes = [
         {
+          name        = "web-origins"
+          protocol    = "openid-connect"
+          description = "Allow OIDC clients to receive configured web origins"
+          attributes = {
+            "consent.screen.text"       = ""
+            "display.on.consent.screen" = "false"
+            "include.in.token.scope"    = "false"
+          }
+          protocolMappers = [
+            {
+              name            = "allowed web origins"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-allowed-origins-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "introspection.token.claim" = "true"
+              }
+            }
+          ]
+        },
+        {
+          name        = "acr"
+          protocol    = "openid-connect"
+          description = "Expose authentication context class references"
+          attributes = {
+            "display.on.consent.screen" = "false"
+            "include.in.token.scope"    = "false"
+          }
+          protocolMappers = [
+            {
+              name            = "acr loa level"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-acr-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+              }
+            }
+          ]
+        },
+        {
+          name        = "basic"
+          protocol    = "openid-connect"
+          description = "Expose basic OpenID Connect session claims"
+          attributes = {
+            "display.on.consent.screen" = "false"
+            "include.in.token.scope"    = "false"
+          }
+          protocolMappers = [
+            {
+              name            = "auth_time"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-usersessionmodel-note-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "claim.name"                = "auth_time"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "jsonType.label"            = "long"
+                "user.session.note"         = "AUTH_TIME"
+              }
+            },
+            {
+              name            = "sub"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-sub-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "introspection.token.claim" = "true"
+              }
+            }
+          ]
+        },
+        {
+          name        = "email"
+          protocol    = "openid-connect"
+          description = "Expose email claims"
+          attributes = {
+            "consent.screen.text"       = "$${emailScopeConsentText}"
+            "display.on.consent.screen" = "true"
+            "include.in.token.scope"    = "true"
+          }
+          protocolMappers = [
+            {
+              name            = "email verified"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-usermodel-property-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "claim.name"                = "email_verified"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "jsonType.label"            = "boolean"
+                "user.attribute"            = "emailVerified"
+                "userinfo.token.claim"      = "true"
+              }
+            },
+            {
+              name            = "email"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-usermodel-attribute-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "claim.name"                = "email"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "jsonType.label"            = "String"
+                "user.attribute"            = "email"
+                "userinfo.token.claim"      = "true"
+              }
+            }
+          ]
+        },
+        {
+          name        = "profile"
+          protocol    = "openid-connect"
+          description = "Expose profile claims"
+          attributes = {
+            "consent.screen.text"       = "$${profileScopeConsentText}"
+            "display.on.consent.screen" = "true"
+            "include.in.token.scope"    = "true"
+          }
+          protocolMappers = [
+            {
+              name            = "username"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-usermodel-attribute-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "claim.name"                = "preferred_username"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "jsonType.label"            = "String"
+                "user.attribute"            = "username"
+                "userinfo.token.claim"      = "true"
+              }
+            },
+            {
+              name            = "given name"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-usermodel-attribute-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "claim.name"                = "given_name"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "jsonType.label"            = "String"
+                "user.attribute"            = "firstName"
+                "userinfo.token.claim"      = "true"
+              }
+            },
+            {
+              name            = "family name"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-usermodel-attribute-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "claim.name"                = "family_name"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "jsonType.label"            = "String"
+                "user.attribute"            = "lastName"
+                "userinfo.token.claim"      = "true"
+              }
+            },
+            {
+              name            = "full name"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-full-name-mapper"
+              consentRequired = false
+              config = {
+                "access.token.claim"        = "true"
+                "id.token.claim"            = "true"
+                "introspection.token.claim" = "true"
+                "userinfo.token.claim"      = "true"
+              }
+            }
+          ]
+        },
+        {
           name        = local.sso_groups_claim
           protocol    = "openid-connect"
           description = "Expose Keycloak group memberships in OIDC tokens"
@@ -601,6 +791,13 @@ spec:
                   key: password
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
           securityContext:
             runAsNonRoot: true
             runAsUser: 999
@@ -687,6 +884,7 @@ spec:
           image: ${var.keycloak_image}
           args:
             - start
+            - --optimized
             - --import-realm
             - --http-enabled=true
             - --hostname=${local.keycloak_public_host}
@@ -725,6 +923,17 @@ spec:
                 secretKeyRef:
                   name: keycloak-postgres
                   key: password
+            - name: KC_CACHE
+              value: local
+            - name: JAVA_OPTS_KC_HEAP
+              value: "-XX:InitialRAMPercentage=10 -XX:MaxRAMPercentage=40"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 768Mi
+            limits:
+              cpu: "750m"
+              memory: 1280Mi
           readinessProbe:
             httpGet:
               path: /realms/${local.keycloak_realm}/.well-known/openid-configuration
@@ -1025,6 +1234,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     kubernetes_service_v1.platform_gateway_nginx_internal,
     null_resource.argocd_refresh_gitops_repo_apps,
     null_resource.wait_for_platform_gateway_tls,
+    null_resource.reconcile_keycloak_realm,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1789,35 +1999,36 @@ spec:
           failureThreshold: 10
 
         extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.sentiment_dev_public_url}/oauth2/callback
-          upstream: http://sentiment-router.dev.svc.cluster.local:8080
-          upstream-timeout: 180s
-          allowed-group: app-sentiment-dev
-          cookie-domain: ${local.dev_cookie_domain}
-          whitelist-domain: ${local.dev_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-access-token: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
+          - --provider=oidc
+          - --scope=openid email profile groups
+          - --oidc-issuer-url=${local.sso_public_url}
+          - --profile-url=${local.sso_userinfo_url}
+          - --oidc-email-claim=email
+          - --oidc-groups-claim=${local.sso_groups_claim}
+          - --insecure-oidc-allow-unverified-email=true
+          - --user-id-claim=email
+          - --skip-oidc-discovery=true
+          - --ssl-insecure-skip-verify=true
+          - --login-url=${local.sso_login_url}
+          - --redeem-url=${local.sso_token_url}
+          - --oidc-jwks-url=${local.sso_jwks_url}
+          - --redirect-url=${local.sentiment_dev_public_url}/oauth2/callback
+          - --upstream=http://sentiment-router.dev.svc.cluster.local:8080
+          - --upstream-timeout=180s
+          - --allowed-group=app-sentiment-dev
+          - --allowed-group=${local.sso_admin_group}
+          - --cookie-domain=${local.dev_cookie_domain}
+          - --whitelist-domain=${local.dev_whitelist_domains}
+          - --cookie-secure=true
+          - --session-store-type=redis
+          - --redis-connection-url=${local.oauth2_proxy_redis_url}
+          - --show-debug-on-error=true
+          - --pass-access-token=true
+          - --pass-user-headers=true
+          - --set-xauthrequest=true
+          - --set-authorization-header=true
+          - --reverse-proxy=true
+          - --skip-provider-button=true
   syncPolicy:
     automated:
       prune: true
@@ -1900,36 +2111,36 @@ spec:
           failureThreshold: 10
 
         extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.sentiment_uat_public_url}/oauth2/callback
-          upstream: http://sentiment-router.uat.svc.cluster.local:8080
-          upstream-timeout: 180s
-          # UAT apps should only accept identities in the app/environment group.
-          allowed-group: app-sentiment-uat
-          cookie-domain: ${local.uat_cookie_domain}
-          whitelist-domain: ${local.uat_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-access-token: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
+          - --provider=oidc
+          - --scope=openid email profile groups
+          - --oidc-issuer-url=${local.sso_public_url}
+          - --profile-url=${local.sso_userinfo_url}
+          - --oidc-email-claim=email
+          - --oidc-groups-claim=${local.sso_groups_claim}
+          - --insecure-oidc-allow-unverified-email=true
+          - --user-id-claim=email
+          - --skip-oidc-discovery=true
+          - --ssl-insecure-skip-verify=true
+          - --login-url=${local.sso_login_url}
+          - --redeem-url=${local.sso_token_url}
+          - --oidc-jwks-url=${local.sso_jwks_url}
+          - --redirect-url=${local.sentiment_uat_public_url}/oauth2/callback
+          - --upstream=http://sentiment-router.uat.svc.cluster.local:8080
+          - --upstream-timeout=180s
+          - --allowed-group=app-sentiment-uat
+          - --allowed-group=${local.sso_admin_group}
+          - --cookie-domain=${local.uat_cookie_domain}
+          - --whitelist-domain=${local.uat_whitelist_domains}
+          - --cookie-secure=true
+          - --session-store-type=redis
+          - --redis-connection-url=${local.oauth2_proxy_redis_url}
+          - --show-debug-on-error=true
+          - --pass-access-token=true
+          - --pass-user-headers=true
+          - --set-xauthrequest=true
+          - --set-authorization-header=true
+          - --reverse-proxy=true
+          - --skip-provider-button=true
   syncPolicy:
     automated:
       prune: true
@@ -2012,37 +2223,36 @@ spec:
           failureThreshold: 10
 
         extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.subnetcalc_dev_public_url}/oauth2/callback
-          upstream: http://subnetcalc-router.dev.svc.cluster.local:8080
-          allowed-group: app-subnetcalc-dev
-          cookie-domain: ${local.dev_cookie_domain}
-          whitelist-domain: ${local.dev_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          # Only allow the logout landing page + favicon unauthenticated.
-          # /.auth/* should stay protected so the frontend "whoami" endpoint isn't silently unauthenticated.
-          skip-auth-regex: "^/(logged-out\\.html|favicon\\.svg)$"
-          pass-access-token: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
+          - --provider=oidc
+          - --scope=openid email profile groups
+          - --oidc-issuer-url=${local.sso_public_url}
+          - --profile-url=${local.sso_userinfo_url}
+          - --oidc-email-claim=email
+          - --oidc-groups-claim=${local.sso_groups_claim}
+          - --insecure-oidc-allow-unverified-email=true
+          - --user-id-claim=email
+          - --skip-oidc-discovery=true
+          - --ssl-insecure-skip-verify=true
+          - --login-url=${local.sso_login_url}
+          - --redeem-url=${local.sso_token_url}
+          - --oidc-jwks-url=${local.sso_jwks_url}
+          - --redirect-url=${local.subnetcalc_dev_public_url}/oauth2/callback
+          - --upstream=http://subnetcalc-router.dev.svc.cluster.local:8080
+          - --allowed-group=app-subnetcalc-dev
+          - --allowed-group=${local.sso_admin_group}
+          - --cookie-domain=${local.dev_cookie_domain}
+          - --whitelist-domain=${local.dev_whitelist_domains}
+          - --cookie-secure=true
+          - --session-store-type=redis
+          - --redis-connection-url=${local.oauth2_proxy_redis_url}
+          - --show-debug-on-error=true
+          - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+          - --pass-access-token=true
+          - --pass-user-headers=true
+          - --set-xauthrequest=true
+          - --set-authorization-header=true
+          - --reverse-proxy=true
+          - --skip-provider-button=true
   syncPolicy:
     automated:
       prune: true
@@ -2125,38 +2335,36 @@ spec:
           failureThreshold: 10
 
         extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.subnetcalc_uat_public_url}/oauth2/callback
-          upstream: http://subnetcalc-router.uat.svc.cluster.local:8080
-          # UAT apps should only accept identities in the app/environment group.
-          allowed-group: app-subnetcalc-uat
-          cookie-domain: ${local.uat_cookie_domain}
-          whitelist-domain: ${local.uat_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          # Only allow the logout landing page + favicon unauthenticated.
-          # /.auth/* should stay protected so the frontend "whoami" endpoint isn't silently unauthenticated.
-          skip-auth-regex: "^/(logged-out\\.html|favicon\\.svg)$"
-          pass-access-token: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
+          - --provider=oidc
+          - --scope=openid email profile groups
+          - --oidc-issuer-url=${local.sso_public_url}
+          - --profile-url=${local.sso_userinfo_url}
+          - --oidc-email-claim=email
+          - --oidc-groups-claim=${local.sso_groups_claim}
+          - --insecure-oidc-allow-unverified-email=true
+          - --user-id-claim=email
+          - --skip-oidc-discovery=true
+          - --ssl-insecure-skip-verify=true
+          - --login-url=${local.sso_login_url}
+          - --redeem-url=${local.sso_token_url}
+          - --oidc-jwks-url=${local.sso_jwks_url}
+          - --redirect-url=${local.subnetcalc_uat_public_url}/oauth2/callback
+          - --upstream=http://subnetcalc-router.uat.svc.cluster.local:8080
+          - --allowed-group=app-subnetcalc-uat
+          - --allowed-group=${local.sso_admin_group}
+          - --cookie-domain=${local.uat_cookie_domain}
+          - --whitelist-domain=${local.uat_whitelist_domains}
+          - --cookie-secure=true
+          - --session-store-type=redis
+          - --redis-connection-url=${local.oauth2_proxy_redis_url}
+          - --show-debug-on-error=true
+          - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+          - --pass-access-token=true
+          - --pass-user-headers=true
+          - --set-xauthrequest=true
+          - --set-authorization-header=true
+          - --reverse-proxy=true
+          - --skip-provider-button=true
   syncPolicy:
     automated:
       prune: true
@@ -2239,34 +2447,35 @@ spec:
           failureThreshold: 10
 
         extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${each.value.public_url}/oauth2/callback
-          upstream: ${each.value.upstream}
-          allowed-group: ${each.value.group}
-          cookie-domain: ${each.value.cookie_domain}
-          whitelist-domain: ${each.value.whitelist_domain}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-access-token: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          set-authorization-header: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
+          - --provider=oidc
+          - --scope=openid email profile groups
+          - --oidc-issuer-url=${local.sso_public_url}
+          - --profile-url=${local.sso_userinfo_url}
+          - --oidc-email-claim=email
+          - --oidc-groups-claim=${local.sso_groups_claim}
+          - --insecure-oidc-allow-unverified-email=true
+          - --user-id-claim=email
+          - --skip-oidc-discovery=true
+          - --ssl-insecure-skip-verify=true
+          - --login-url=${local.sso_login_url}
+          - --redeem-url=${local.sso_token_url}
+          - --oidc-jwks-url=${local.sso_jwks_url}
+          - --redirect-url=${each.value.public_url}/oauth2/callback
+          - --upstream=${each.value.upstream}
+          - --allowed-group=${each.value.group}
+          - --allowed-group=${local.sso_admin_group}
+          - --cookie-domain=${each.value.cookie_domain}
+          - --whitelist-domain=${each.value.whitelist_domain}
+          - --cookie-secure=true
+          - --session-store-type=redis
+          - --redis-connection-url=${local.oauth2_proxy_redis_url}
+          - --show-debug-on-error=true
+          - --pass-access-token=true
+          - --pass-user-headers=true
+          - --set-xauthrequest=true
+          - --set-authorization-header=true
+          - --reverse-proxy=true
+          - --skip-provider-button=true
   syncPolicy:
     automated:
       prune: true

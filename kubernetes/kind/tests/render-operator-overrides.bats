@@ -39,6 +39,77 @@ setup() {
   grep -F 'sentiment-api                        = "host.docker.internal:5002/platform/sentiment-api:latest"' "${OUTPUT_FILE}"
 }
 
+@test "render-operator-overrides auto disables Backstage below the Docker memory floor" {
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  cat >"${BATS_TEST_TMPDIR}/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "info" ]; then
+  printf '%s\n' 8589934592
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/bin/docker"
+
+  run env \
+    PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=registry \
+    KIND_ENABLE_BACKSTAGE=auto \
+    KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES=10737418240 \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -F 'enable_backstage = false' "${OUTPUT_FILE}"
+  grep -F 'Docker MemTotal=8589934592' "${OUTPUT_FILE}"
+}
+
+@test "render-operator-overrides auto enables Backstage at or above the Docker memory floor" {
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  cat >"${BATS_TEST_TMPDIR}/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "info" ]; then
+  printf '%s\n' 10737418240
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/bin/docker"
+
+  run env \
+    PATH="${BATS_TEST_TMPDIR}/bin:${PATH}" \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=registry \
+    KIND_ENABLE_BACKSTAGE=auto \
+    KIND_BACKSTAGE_MIN_DOCKER_MEMORY_BYTES=10737418240 \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -F 'enable_backstage = true' "${OUTPUT_FILE}"
+}
+
+@test "render-operator-overrides accepts explicit Backstage on and off modes" {
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=load \
+    KIND_ENABLE_BACKSTAGE=off \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -F 'enable_backstage = false' "${OUTPUT_FILE}"
+
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=load \
+    KIND_ENABLE_BACKSTAGE=on \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  grep -F 'enable_backstage = true' "${OUTPUT_FILE}"
+}
+
 @test "render-operator-overrides requires a baked node image for baked mode" {
   run env \
     KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \

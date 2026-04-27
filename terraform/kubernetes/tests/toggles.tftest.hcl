@@ -51,6 +51,11 @@ run "argocd_enabled" {
     condition     = helm_release.argocd[0].version == var.argocd_chart_version
     error_message = "Expected helm_release.argocd version to match var.argocd_chart_version"
   }
+
+  assert {
+    condition     = local.argocd_values.dex.enabled == false
+    error_message = "Expected Argo CD bundled Dex to stay disabled in the local platform stack"
+  }
 }
 
 run "gitea_enabled" {
