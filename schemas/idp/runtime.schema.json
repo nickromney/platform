@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP runtime metadata",
+  "type": "object",
+  "required": ["name", "kind", "portable"],
+  "properties": {
+    "name": { "type": "string" },
+    "kind": { "type": "string" },
+    "portable": { "type": "boolean" }
+  }
+}

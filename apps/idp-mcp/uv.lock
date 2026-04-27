@@ -1,0 +1,12 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[options]
+exclude-newer = "2026-04-20T10:30:16.476853Z"
+exclude-newer-span = "P7D"
+
+[[package]]
+name = "platform-idp-mcp"
+version = "0.1.0"
+source = { virtual = "." }

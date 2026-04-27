@@ -56,6 +56,39 @@ setup() {
   done
 }
 
+@test "developer portal and API have public portal gateway routes" {
+  for path in \
+    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal.yaml \
+    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal-api.yaml
+  do
+    [ -f "${REPO_ROOT}/${path}" ]
+  done
+
+  run rg -n 'httproute-portal.yaml|httproute-portal-api.yaml' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'portal\.127\.0\.0\.1\.sslip\.io' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal.yaml"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'portal-api\.127\.0\.0\.1\.sslip\.io' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-portal-api.yaml"
+  [ "${status}" -eq 0 ]
+}
+
+@test "developer portal gateway routes are permitted by the sso namespace ReferenceGrant" {
+  grant="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/referencegrant-sso.yaml"
+
+  for service in \
+    oauth2-proxy-idp-portal \
+    oauth2-proxy-idp-core
+  do
+    run rg -n "name: ${service}" "${grant}"
+    [ "${status}" -eq 0 ]
+  done
+}
+
 @test "app and environment authorization uses Keycloak groups instead of email-domain shortcuts" {
   for group in \
     app-subnetcalc-dev \
@@ -87,13 +120,32 @@ setup() {
     'name        = local.sso_groups_claim' \
     'optionalClientScopes = [local.sso_groups_claim]' \
     '${local.hello_platform_dev_public_url}/oauth2/callback' \
-    '${local.hello_platform_uat_public_url}/oauth2/callback'
+    '${local.hello_platform_uat_public_url}/oauth2/callback' \
+    '${local.idp_portal_public_url}/oauth2/callback' \
+    '${local.idp_api_public_url}/oauth2/callback'
   do
     run rg -n -F "${expected}" "${realm_tf}"
     [ "${status}" -eq 0 ]
   done
 
   run rg -n 'resource "null_resource" "reconcile_keycloak_realm"' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "launchpad and IDP catalog use portal public FQDNs" {
+  launchpad="${REPO_ROOT}/terraform/kubernetes/config/platform-launchpad.apps.json"
+  catalog="${REPO_ROOT}/catalog/platform-apps.json"
+
+  run jq -e '.tiles[] | select(.title == "Developer Portal") | .url == "https://portal.127.0.0.1.sslip.io"' "${launchpad}"
+  [ "${status}" -eq 0 ]
+
+  run jq -e '.tiles[] | select(.title == "Portal API") | .url == "https://portal-api.127.0.0.1.sslip.io"' "${launchpad}"
+  [ "${status}" -eq 0 ]
+
+  run jq -e '
+    any(.applications[]; .name == "idp-portal" and any(.environments[]; .route == "https://portal.127.0.0.1.sslip.io")) and
+    any(.applications[]; .name == "idp-core" and any(.environments[]; .route == "https://portal-api.127.0.0.1.sslip.io"))
+  ' "${catalog}"
   [ "${status}" -eq 0 ]
 }
 

@@ -1,0 +1,33 @@
+[project]
+name = "idp-core"
+version = "0.1.0"
+description = "FastAPI IDP core dry-run workflow service"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.118.0",
+    "pydantic>=2.13.1",
+    "uvicorn>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.3.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers"

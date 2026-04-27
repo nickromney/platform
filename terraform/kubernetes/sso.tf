@@ -400,6 +400,8 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
             "${local.subnetcalc_uat_public_url}/oauth2/callback",
             "${local.hello_platform_dev_public_url}/oauth2/callback",
             "${local.hello_platform_uat_public_url}/oauth2/callback",
+            "${local.idp_portal_public_url}/oauth2/callback",
+            "${local.idp_api_public_url}/oauth2/callback",
           ]
           webOrigins           = ["+"]
           defaultClientScopes  = ["web-origins", "acr", "profile", "basic", "email"]
@@ -915,6 +917,8 @@ spec:
                 - ${local.subnetcalc_uat_public_url}/oauth2/callback
                 - ${local.hello_platform_dev_public_url}/oauth2/callback
                 - ${local.hello_platform_uat_public_url}/oauth2/callback
+                - ${local.idp_portal_public_url}/oauth2/callback
+                - ${local.idp_api_public_url}/oauth2/callback
             - id: argocd
               name: "argocd"
               secret: ${random_password.dex_argocd_client_secret[0].result}
@@ -2186,6 +2190,115 @@ __YAML__
 
 resource "kubectl_manifest" "argocd_app_oauth2_proxy_hello_platform" {
   for_each = var.enable_sso && var.enable_argocd ? local.sso_hello_platform_proxy_apps : {}
+
+  yaml_body = <<__YAML__
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${each.value.name}
+  namespace: ${var.argocd_namespace}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: sso
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
+    helm:
+      releaseName: ${each.value.name}
+      values: |
+        image:
+          registry: ${local.hardened_image_registry_effective}
+          repository: oauth2-proxy
+          tag: 7.15.2-debian13
+        config:
+          existingSecret: oauth2-proxy-oidc
+          cookieName: ${each.value.cookie_name}
+          configFile: ""
+
+        service:
+          portNumber: 4180
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+
+        livenessProbe:
+          initialDelaySeconds: 10
+          timeoutSeconds: 15
+          failureThreshold: 10
+
+        readinessProbe:
+          initialDelaySeconds: 5
+          timeoutSeconds: 15
+          failureThreshold: 10
+
+        extraArgs:
+          provider: oidc
+          scope: "openid email profile groups"
+          oidc-issuer-url: ${local.sso_public_url}
+          profile-url: ${local.sso_userinfo_url}
+          oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
+          insecure-oidc-allow-unverified-email: "true"
+          user-id-claim: email
+          skip-oidc-discovery: "true"
+          ssl-insecure-skip-verify: "true"
+          login-url: ${local.sso_login_url}
+          redeem-url: ${local.sso_token_url}
+          oidc-jwks-url: ${local.sso_jwks_url}
+          redirect-url: ${each.value.public_url}/oauth2/callback
+          upstream: ${each.value.upstream}
+          allowed-group: ${each.value.group}
+          cookie-domain: ${each.value.cookie_domain}
+          whitelist-domain: ${each.value.whitelist_domain}
+          cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
+          show-debug-on-error: "true"
+          pass-access-token: "true"
+          pass-user-headers: "true"
+          set-xauthrequest: "true"
+          set-authorization-header: "true"
+          reverse-proxy: "true"
+          skip-provider-button: "true"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = false
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
+    kubectl_manifest.argocd_app_dex,
+    kubectl_manifest.keycloak,
+    kubectl_manifest.keycloak_service,
+    kubectl_manifest.argocd_app_of_apps,
+  ]
+}
+
+resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
+  for_each = var.enable_sso && var.enable_argocd ? local.sso_idp_proxy_apps : {}
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1

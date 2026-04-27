@@ -38,6 +38,7 @@ domain language.
 | Term | Current meaning in the solution | Aliases or ambiguity |
 | --- | --- | --- |
 | platform | the repo/theme word for patterns that platform engineers may reuse | Useful broad label, but not a sharp path taxonomy term. |
+| internal developer platform | the whole local platform product assembled by this repo | The developer portal is only one surface over the IDP, not the IDP itself. |
 | solution | the first-level grouping, currently `kubernetes` | The repo is grouped by what you want to run. |
 | variant | the concrete operable path beneath a solution | Examples: `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`. |
 | target | a Makefile and workflow noun | Implementation-facing term for `make` goals. |
@@ -55,6 +56,9 @@ domain language.
 | blocker | a concrete reason an operation should stop | Technical debt or safety gate. |
 | ownership | which variant currently owns shared local ingress | Expressed in `platform status` output. |
 | portal surface | browser-facing navigation or admin UI for platform operators | Current examples: Grafana Launchpad, Argo CD, Headlamp, Gitea, Keycloak, Hubble, and Policy Reporter. |
+| developer portal | the Backstage/Port-like browser UI over the local IDP | Public host: `portal.127.0.0.1.sslip.io`; this is a surface, not the whole platform. |
+| portal API | the FastAPI product API consumed by the developer portal, SDK, MCP, and TUI | Public host: `portal-api.127.0.0.1.sslip.io`; it exposes IDP contracts and dry-run workflows, not Terraform internals. |
+| runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `kind`, `lima`, and `generic_kubernetes`; future adapters may include Slicer, AKS, EKS, and bare-metal Kubernetes. |
 | status surface | CLI or dashboard view that summarizes current state | Current examples: `platform status`, variant `status` targets, Argo CD Applications, and Grafana Launchpad health tiles. |
 
 ## Ratified Stage Labels

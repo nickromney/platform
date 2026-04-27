@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local IDP action",
+  "type": "object",
+  "required": ["id", "label", "enabled", "command", "dangerous"],
+  "properties": {
+    "id": { "type": "string" },
+    "label": { "type": "string" },
+    "enabled": { "type": "boolean" },
+    "command": { "type": "string" },
+    "dangerous": { "type": "boolean" }
+  }
+}

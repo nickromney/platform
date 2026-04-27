@@ -32,6 +32,8 @@ DRY_RUN ?= 0
 OIDC_RECOVERY_FORMAT ?= text
 OIDC_RECOVERY_FORCE_MODE ?= k3s-restart
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
+IDP_PUBLIC_URL ?= https://portal.127.0.0.1.sslip.io
+IDP_API_PUBLIC_URL ?= https://portal-api.127.0.0.1.sslip.io
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
@@ -93,7 +95,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api idp-portal idp-sdk idp-mcp show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -177,6 +179,10 @@ help:
 	@echo "  make ensure-host-gateway-proxy"
 	@echo "  make env"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
+	@echo "  make idp-api                                  Start or preview the FastAPI IDP core"
+	@echo "  make idp-portal                               Start or preview the local developer portal"
+	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
+	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
 	@echo "  make init"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
 	@echo "  make lima-vms-up"
@@ -995,6 +1001,38 @@ reset:
 .PHONY: env
 env:
 	@$(MAKE) prereqs
+
+.PHONY: idp-api
+idp-api:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would expose FastAPI IDP core for lima at $(IDP_API_PUBLIC_URL)"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-core && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) uv run uvicorn app.main:app --host 127.0.0.1 --port 8080"; \
+	fi
+
+.PHONY: idp-portal
+idp-portal:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would expose local developer portal for lima at $(IDP_PUBLIC_URL)"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-portal && VITE_IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) npm run dev"; \
+	fi
+
+.PHONY: idp-sdk
+idp-sdk:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would generate IDP SDK from FastAPI OpenAPI for lima"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-sdk && npm test"; \
+	fi
+
+.PHONY: idp-mcp
+idp-mcp:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would start IDP MCP server for lima against $(IDP_API_PUBLIC_URL)"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) uv run python -m idp_mcp.server"; \
+	fi
 
 .PHONY: test
 test:

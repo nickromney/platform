@@ -42,3 +42,9 @@ spec:
     - group: ""
       kind: Service
       name: oauth2-proxy-hello-platform-uat
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-idp-portal
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-idp-core

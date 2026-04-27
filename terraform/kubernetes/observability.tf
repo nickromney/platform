@@ -958,7 +958,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://hello-platform.dev.127.0.0.1.sslip.io",
+                      "description": "https://portal.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1002,6 +1002,138 @@ ${local.grafana_plugins_values_yaml}
                         "y": 13
                       },
                       "id": 10,
+                      "links": [
+                        {
+                          "targetBlank": true,
+                          "title": "Open Developer Portal",
+                          "url": "https://portal.127.0.0.1.sslip.io"
+                        }
+                      ],
+                      "options": {
+                        "colorMode": "background",
+                        "graphMode": "none"
+                      },
+                      "targets": [
+                        {
+                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-idp-portal\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"idp-portal\"}) > bool 0)) or vector(0))",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Developer Portal",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "description": "https://portal-api.127.0.0.1.sslip.io",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {
+                            "mode": "thresholds"
+                          },
+                          "mappings": [
+                            {
+                              "options": {
+                                "0": {
+                                  "text": "Down"
+                                },
+                                "1": {
+                                  "text": "Healthy"
+                                }
+                              },
+                              "type": "value"
+                            }
+                          ],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "red",
+                                "value": 0
+                              },
+                              {
+                                "color": "green",
+                                "value": 1
+                              }
+                            ]
+                          },
+                          "unit": "short"
+                        }
+                      },
+                      "gridPos": {
+                        "h": 5,
+                        "w": 6,
+                        "x": 6,
+                        "y": 13
+                      },
+                      "id": 11,
+                      "links": [
+                        {
+                          "targetBlank": true,
+                          "title": "Open Portal API",
+                          "url": "https://portal-api.127.0.0.1.sslip.io"
+                        }
+                      ],
+                      "options": {
+                        "colorMode": "background",
+                        "graphMode": "none"
+                      },
+                      "targets": [
+                        {
+                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-idp-core\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"idp-core\"}) > bool 0)) or vector(0))",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Portal API",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "description": "https://hello-platform.dev.127.0.0.1.sslip.io",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {
+                            "mode": "thresholds"
+                          },
+                          "mappings": [
+                            {
+                              "options": {
+                                "0": {
+                                  "text": "Down"
+                                },
+                                "1": {
+                                  "text": "Healthy"
+                                }
+                              },
+                              "type": "value"
+                            }
+                          ],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "red",
+                                "value": 0
+                              },
+                              {
+                                "color": "green",
+                                "value": 1
+                              }
+                            ]
+                          },
+                          "unit": "short"
+                        }
+                      },
+                      "gridPos": {
+                        "h": 5,
+                        "w": 6,
+                        "x": 12,
+                        "y": 13
+                      },
+                      "id": 12,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1064,10 +1196,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 18,
                         "y": 13
                       },
-                      "id": 11,
+                      "id": 13,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1130,10 +1262,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
-                        "y": 13
+                        "x": 0,
+                        "y": 18
                       },
-                      "id": 12,
+                      "id": 14,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1196,10 +1328,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 13
+                        "x": 6,
+                        "y": 18
                       },
-                      "id": 13,
+                      "id": 15,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1262,10 +1394,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
+                        "x": 12,
                         "y": 18
                       },
-                      "id": 14,
+                      "id": 16,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1328,10 +1460,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 18,
                         "y": 18
                       },
-                      "id": 15,
+                      "id": 17,
                       "links": [
                         {
                           "targetBlank": true,

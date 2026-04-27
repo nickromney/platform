@@ -43,6 +43,8 @@ CHECK_VERSION_FORMAT ?= text
 OIDC_RECOVERY_FORMAT ?= text
 OIDC_RECOVERY_FORCE_MODE ?= nginx-rollout
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
+IDP_PUBLIC_URL ?= https://portal.127.0.0.1.sslip.io
+IDP_API_PUBLIC_URL ?= https://portal-api.127.0.0.1.sslip.io
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
@@ -98,7 +100,7 @@ VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-ss
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api idp-portal idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -194,6 +196,10 @@ help:
 	@echo "  make idp-env ACTION=create APP=hello-platform ENV=preview-nr [DRY_RUN=1]"
 	@echo "  make idp-deployments                          Show the app/environment deployment read model"
 	@echo "  make idp-secrets                              Show app secret bindings and rotation posture"
+	@echo "  make idp-api                                  Start or preview the FastAPI IDP core"
+	@echo "  make idp-portal                               Start or preview the local developer portal"
+	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
+	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
 	@echo "  make init"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
 	@echo "  make merge-default-kubeconfig"
@@ -769,6 +775,38 @@ idp-deployments:
 .PHONY: idp-secrets
 idp-secrets:
 	@"$(STACK_DIR)/scripts/idp-secrets.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: idp-api
+idp-api:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would expose FastAPI IDP core for kind at $(IDP_API_PUBLIC_URL)"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-core && IDP_RUNTIME=kind IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) uv run uvicorn app.main:app --host 127.0.0.1 --port 8080"; \
+	fi
+
+.PHONY: idp-portal
+idp-portal:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would expose local developer portal for kind at $(IDP_PUBLIC_URL)"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-portal && VITE_IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) npm run dev"; \
+	fi
+
+.PHONY: idp-sdk
+idp-sdk:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would generate IDP SDK from FastAPI OpenAPI for kind"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-sdk && npm test"; \
+	fi
+
+.PHONY: idp-mcp
+idp-mcp:
+	@if [ "$(DRY_RUN)" = "1" ]; then \
+		echo "INFO dry-run: would start IDP MCP server for kind against $(IDP_API_PUBLIC_URL)"; \
+	else \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) uv run python -m idp_mcp.server"; \
+	fi
 
 .PHONY: gitea-repo-lifecycle-demo
 gitea-repo-lifecycle-demo:
