@@ -29,7 +29,7 @@ data:
       "allow_anonymous": false,
       "oidc": {
         "issuer": "https://keycloak.127.0.0.1.sslip.io/realms/platform",
-        "audience": "oauth2-proxy",
+        "audience": "apim-simulator",
         "jwks_uri": "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs"
       },
       "subscription": {

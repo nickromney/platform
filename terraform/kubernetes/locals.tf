@@ -70,6 +70,7 @@ locals {
   sso_username_claim                   = "email"
   sso_admin_group                      = "platform-admins"
   sso_viewer_group                     = "platform-viewers"
+  sso_apim_audience                    = "apim-simulator"
   sso_app_groups                       = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat", "app-hello-platform-dev", "app-hello-platform-uat"]
   gitea_public_host                    = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
   gitea_public_url                     = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"

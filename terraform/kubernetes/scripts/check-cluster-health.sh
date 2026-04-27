@@ -914,8 +914,10 @@ print_gateway_urls() {
     echo ""
     echo "SSO (${SSO_PROVIDER} + oauth2-proxy):"
     if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
-      echo "  • Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/"
+      echo "  • Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/platform/console/#/platform/users"
       echo "  • Keycloak realm: https://$(keycloak_host)${port_suffix}/realms/platform"
+      echo "  • Console admin: demo@admin.test"
+      echo "  • Break-glass admin: keycloak-admin"
     else
       echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
     fi

@@ -826,7 +826,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://keycloak.127.0.0.1.sslip.io/admin/",
+                      "description": "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -874,7 +874,7 @@ ${local.grafana_plugins_values_yaml}
                         {
                           "targetBlank": true,
                           "title": "Open Keycloak",
-                          "url": "https://keycloak.127.0.0.1.sslip.io/admin/"
+                          "url": "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users"
                         }
                       ],
                       "options": {

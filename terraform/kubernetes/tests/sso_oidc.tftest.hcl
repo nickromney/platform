@@ -42,6 +42,58 @@ run "sso_enabled_argocd_oidc_disabled" {
   }
 
   assert {
+    condition = alltrue([
+      length(kubernetes_secret_v1.keycloak_bootstrap_admin) == 1,
+      length(kubernetes_secret_v1.keycloak_admin) == 1,
+      kubernetes_secret_v1.keycloak_bootstrap_admin[0].data.username == "keycloak-bootstrap-admin",
+      kubernetes_secret_v1.keycloak_admin[0].data.username == "keycloak-admin",
+      strcontains(kubectl_manifest.keycloak[0].yaml_body, "name: keycloak-bootstrap-admin"),
+    ])
+    error_message = "Expected Keycloak to separate the temporary bootstrap admin from the permanent console admin"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(file("${path.module}/sso.tf"), "email         = \"demo@admin.test\""),
+      strcontains(file("${path.module}/sso.tf"), "email         = \"demo@dev.test\""),
+      strcontains(file("${path.module}/sso.tf"), "email         = \"demo@uat.test\""),
+      strcontains(file("${path.module}/sso.tf"), "emailVerified = true"),
+    ])
+    error_message = "Expected all rendered platform realm demo users to have verified email addresses"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(file("${path.module}/scripts/reconcile-keycloak-realm.sh"), "KEYCLOAK_PERMANENT_ADMIN_EMAIL:-keycloak-admin@platform.local"),
+      strcontains(file("${path.module}/scripts/reconcile-keycloak-realm.sh"), "ensure_group_client_role \"platform-admins\" \"realm-management\" \"realm-admin\""),
+      strcontains(file("${path.module}/scripts/reconcile-keycloak-realm.sh"), "delete_bootstrap_admins_from_master"),
+      strcontains(file("${path.module}/scripts/reconcile-keycloak-realm.sh"), "reconcile_client_scope_attachments"),
+      strcontains(file("${path.module}/scripts/reconcile-keycloak-realm.sh"), "detach_client_scope_attachment"),
+    ])
+    error_message = "Expected Keycloak reconcile to give platform-admins realm admin rights, email the break-glass admin, delete bootstrap admins, and prune oversized client scopes"
+  }
+
+  assert {
+    condition = alltrue([
+      length(regexall("fullScopeAllowed\\s*=\\s*false", file("${path.module}/sso.tf"))) >= 3,
+      length(regexall("defaultClientScopes\\s*=\\s*\\[\"web-origins\", \"acr\", \"profile\", \"basic\", \"email\"\\]", file("${path.module}/sso.tf"))) >= 3,
+      length(regexall("defaultClientScopes\\s*=\\s*\\[[^\\]]*\"roles\"", file("${path.module}/sso.tf"))) == 0,
+    ])
+    error_message = "Expected Keycloak app clients to expose groups without inheriting role-heavy default scopes"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(file("${path.module}/locals.tf"), "sso_apim_audience                    = \"apim-simulator\""),
+      strcontains(file("${path.module}/sso.tf"), "clientId                  = local.sso_apim_audience"),
+      strcontains(file("${path.module}/sso.tf"), "\"included.client.audience\" = local.sso_apim_audience"),
+      strcontains(file("${path.module}/apps/apim/all.yaml"), "\"audience\": \"apim-simulator\""),
+      strcontains(file("${path.module}/scripts/check-sso.sh"), "EXPECTED_APIM_AUDIENCE"),
+    ])
+    error_message = "Expected APIM to use a dedicated Keycloak resource audience rather than the oauth2-proxy browser client"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_argocd) == 1
     error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_argocd to exist when enable_sso=true"
   }
@@ -116,6 +168,17 @@ run "sso_enabled_argocd_oidc_enabled" {
   assert {
     condition     = length(null_resource.reconcile_keycloak_realm) == 1
     error_message = "Expected an imperative Keycloak realm reconcile step so existing Postgres-backed realms receive client/group changes"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(file("${path.module}/scripts/check-rbac.sh"), "keycloak_id_token"),
+      strcontains(file("${path.module}/scripts/check-rbac.sh"), ".id_token // empty"),
+      strcontains(file("${path.module}/scripts/check-rbac.sh"), "real OIDC token kubectl auth can-i"),
+      strcontains(file("${path.module}/scripts/check-rbac.sh"), "KUBECONFIG=/dev/null"),
+      strcontains(file("${path.module}/scripts/check-sso.sh"), "EXPECTED_CLUSTER_NAME=\"$${KUBECONFIG_CONTEXT#kind-}\""),
+    ])
+    error_message = "Expected SSO/RBAC checkers to exercise isolated real tokens and resolve kind context names to kind cluster names"
   }
 }
 

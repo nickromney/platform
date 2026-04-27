@@ -20,7 +20,7 @@
     },
     {
       "title": "Keycloak",
-      "url": "https://keycloak.127.0.0.1.sslip.io/admin/",
+      "url": "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users",
       "sort_key": "admin/keycloak",
       "requires": [
         "ENABLE_SSO"

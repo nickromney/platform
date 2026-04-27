@@ -2,10 +2,10 @@
 
 Repo-level Docker Compose experiment for the local platform.
 
-This target stays smaller than [`../../kubernetes/kind`](../../kubernetes/kind/README.md), but it now follows the same two platform decisions that matter most:
+This target stays smaller than [`../../kubernetes/kind`](../../kubernetes/kind/README.md), but it keeps the same app-serving decisions that matter most:
 
 - HTTPS at the shared edge
-- Dex plus `oauth2-proxy` for browser-facing SSO
+- lightweight Dex plus `oauth2-proxy` for browser-facing SSO
 
 It still focuses on `subnetcalc`, because that app exercises the hard parts: environment split, auth gating, and the APIM hop.
 
@@ -146,13 +146,13 @@ That last point is still one of the most important fold-back results. The router
 
 ### Dex plus `oauth2-proxy`
 
-The Compose stack now mirrors the `kind` IdP choice instead of carrying a separate Keycloak-specific path.
+The Compose stack intentionally keeps Dex as the lightweight proof path while Kubernetes stage `900` uses Keycloak for the fuller RBAC journey.
 
 - Dex publishes the public issuer at `https://dex.compose...:8443/dex`
 - `oauth2-proxy` uses the public Dex issuer/login URL and the internal Dex token/JWKS/userinfo endpoints
 - the frontend stays in `easyauth` mode against `/.auth/me` and `/.auth/logout`
 
-That means the app-serving path is closer to the Kubernetes demo, which makes the comparison more honest.
+That keeps the app-serving path comparable without making Compose carry the heavier identity-provider lifecycle.
 
 ## What Is Intentionally Missing
 
@@ -171,7 +171,7 @@ The next observability iteration should stay small. The adjacent `apim-simulator
 
 - If Compose and `kind` should coexist, they need separate browser-facing hostnames or ports.
 - HTTPS matters earlier than expected because browsers remember HSTS state.
-- The `kind` Dex plus `oauth2-proxy` model ports cleanly to Compose.
+- Dex plus `oauth2-proxy` is the Compose proof path; Keycloak belongs to the Kubernetes stage-900 RBAC path.
 - The router-owned APIM bypass header is cleaner than browser-owned APIM keys.
 - The environment split for app demos is mostly hostnames, cookies, and upstream wiring.
 - Compose startup should preflight host ports and fail before Docker reports a bind error.
@@ -185,4 +185,3 @@ The next observability iteration should stay small. The adjacent `apim-simulator
 - [`pki/gen-certs.sh`](./pki/gen-certs.sh) generates the mkcert-backed edge certificate.
 - [`subnetcalc/router-dev.conf`](./subnetcalc/router-dev.conf) and [`subnetcalc/router-uat.conf`](./subnetcalc/router-uat.conf) mirror the `kind` router pattern.
 - [`subnetcalc/apim/config.json`](./subnetcalc/apim/config.json) is the shared APIM host-routing config.
-- [`keycloak/Dockerfile`](./keycloak/Dockerfile) keeps the Keycloak alternative present in-tree even though Dex is the active provider for this target.

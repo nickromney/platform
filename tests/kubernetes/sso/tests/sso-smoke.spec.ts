@@ -49,6 +49,7 @@ const OIDC_HOST = new URL(
     ? absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/`)
     : absolutePlatformUrl('dex', '/dex/'),
 ).host
+const KEYCLOAK_ADMIN_CONSOLE_URL = absolutePlatformUrl('keycloak', '/admin/platform/console/#/platform/users')
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -60,7 +61,7 @@ function normalizeUrl(value: string) {
 
 const GRAFANA_LAUNCHPAD_APPS = [
   { name: 'Argo CD', url: platformUrl('argocd.admin'), flow: 'oauth2-proxy', segment: 'admin' },
-  { name: OIDC_PROVIDER === 'keycloak' ? 'Keycloak' : 'Dex', url: OIDC_PROVIDER === 'keycloak' ? absolutePlatformUrl('keycloak', '/admin/') : absolutePlatformUrl('dex', '/dex/'), flow: 'none', segment: 'admin' },
+  { name: OIDC_PROVIDER === 'keycloak' ? 'Keycloak' : 'Dex', url: OIDC_PROVIDER === 'keycloak' ? KEYCLOAK_ADMIN_CONSOLE_URL : absolutePlatformUrl('dex', '/dex/'), flow: 'none', segment: 'admin' },
   { name: 'Gitea', url: platformUrl('gitea.admin'), flow: 'oauth2-proxy', segment: 'admin' },
   { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
   { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
@@ -117,7 +118,7 @@ const BASE_TARGETS: Target[] = [
 
   {
     name: OIDC_PROVIDER === 'keycloak' ? 'keycloak' : 'dex',
-    url: OIDC_PROVIDER === 'keycloak' ? absolutePlatformUrl('keycloak', '/admin/') : absolutePlatformUrl('dex', '/dex/'),
+    url: OIDC_PROVIDER === 'keycloak' ? KEYCLOAK_ADMIN_CONSOLE_URL : absolutePlatformUrl('dex', '/dex/'),
     segment: 'admin',
     flow: OIDC_PROVIDER === 'keycloak' ? 'keycloak-admin' : 'none',
     postLogin: OIDC_PROVIDER === 'keycloak' ? 'keycloak-admin-console' : undefined,
@@ -172,8 +173,18 @@ function creds(segment: Segment) {
   }
 }
 
+function keycloakConsoleCreds() {
+  return {
+    login: process.env.KEYCLOAK_CONSOLE_ADMIN_LOGIN || process.env.KEYCLOAK_ADMIN_LOGIN || 'demo@admin.test',
+    password: process.env.KEYCLOAK_CONSOLE_ADMIN_PASSWORD || process.env.PLATFORM_DEMO_PASSWORD || '',
+  }
+}
+
 if (!creds('admin').password || !creds('dev').password || !creds('uat').password) {
   throw new Error('Set PLATFORM_DEMO_PASSWORD, OIDC_*_PASSWORD, KEYCLOAK_*_PASSWORD, or DEX_*_PASSWORD before running the SSO smoke tests')
+}
+if (OIDC_PROVIDER === 'keycloak' && !keycloakConsoleCreds().password) {
+  throw new Error('Set PLATFORM_DEMO_PASSWORD or KEYCLOAK_CONSOLE_ADMIN_PASSWORD before running the Keycloak admin console smoke test')
 }
 
 async function maybeClickOauth2ProxyProvider(page: Page) {
@@ -448,9 +459,9 @@ async function waitForHeadlampAuthenticated(page: Page, targetHost: string, time
 }
 
 async function loginKeycloakAdminConsole(page: Page, target: Target) {
-  const { login, password } = creds(target.segment)
+  const { login, password } = keycloakConsoleCreds()
   await gotoWithGatewayRetry(page, target.url)
-  await page.waitForURL(/\/admin\/master\/console\//, { timeout: 60_000 })
+  await page.waitForURL(/\/admin\/platform\/console\//, { timeout: 60_000 })
 
   const username = page.locator('#username')
   await expect(username).toBeVisible({ timeout: 60_000 })
@@ -460,13 +471,15 @@ async function loginKeycloakAdminConsole(page: Page, target: Target) {
     await page.locator('#kc-login').click()
   }
 
-  await page.waitForURL(/\/admin\/master\/console\//, { timeout: 120_000 })
+  await page.waitForURL(/\/admin\/platform\/console\//, { timeout: 120_000 })
 }
 
 async function keycloakAdminConsoleWorks(page: Page) {
   await expect(page.locator('body')).not.toContainText(/Timeout when waiting for 3rd party check iframe message/i, { timeout: 10_000 })
   await expect(page.locator('body')).not.toContainText(/Something went wrong/i, { timeout: 10_000 })
+  await expect(page.locator('body')).not.toContainText(/temporary admin user/i, { timeout: 10_000 })
   await expect(page.locator('#username')).toHaveCount(0)
+  await expect(page).toHaveURL(/\/admin\/platform\/console\/#\/platform\/users/)
   await expect(page.locator('body')).toContainText(/Realm|Users|Clients|Groups/i, { timeout: 120_000 })
 }
 

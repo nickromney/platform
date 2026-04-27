@@ -269,6 +269,22 @@ resource "kubernetes_secret_v1" "headlamp_mkcert_ca" {
   ]
 }
 
+resource "kubernetes_secret_v1" "keycloak_bootstrap_admin" {
+  count = var.enable_sso && local.sso_provider_is_keycloak ? 1 : 0
+
+  metadata {
+    name      = "keycloak-bootstrap-admin"
+    namespace = kubernetes_namespace_v1.sso[0].metadata[0].name
+  }
+
+  type = "Opaque"
+
+  data = {
+    username = "keycloak-bootstrap-admin"
+    password = var.gitea_member_user_pwd
+  }
+}
+
 resource "kubernetes_secret_v1" "keycloak_admin" {
   count = var.enable_sso && local.sso_provider_is_keycloak ? 1 : 0
 
@@ -280,7 +296,7 @@ resource "kubernetes_secret_v1" "keycloak_admin" {
   type = "Opaque"
 
   data = {
-    username = "demo@admin.test"
+    username = "keycloak-admin"
     password = var.gitea_member_user_pwd
   }
 }
@@ -350,12 +366,27 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
       ]
       clients = [
         {
+          clientId                  = local.sso_apim_audience
+          name                      = "APIM Simulator"
+          enabled                   = true
+          bearerOnly                = true
+          publicClient              = false
+          protocol                  = "openid-connect"
+          fullScopeAllowed          = false
+          standardFlowEnabled       = false
+          directAccessGrantsEnabled = false
+          serviceAccountsEnabled    = false
+          defaultClientScopes       = []
+          optionalClientScopes      = []
+        },
+        {
           clientId                  = "oauth2-proxy"
           name                      = "oauth2-proxy"
           enabled                   = true
           publicClient              = false
           protocol                  = "openid-connect"
           secret                    = random_password.dex_oauth2_proxy_client_secret[0].result
+          fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
           redirectUris = [
@@ -371,6 +402,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
             "${local.hello_platform_uat_public_url}/oauth2/callback",
           ]
           webOrigins           = ["+"]
+          defaultClientScopes  = ["web-origins", "acr", "profile", "basic", "email"]
           optionalClientScopes = [local.sso_groups_claim]
           protocolMappers = [
             {
@@ -396,6 +428,17 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
                 "id.token.claim"           = "false"
                 "access.token.claim"       = "true"
               }
+            },
+            {
+              name            = "${local.sso_apim_audience}-audience"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-audience-mapper"
+              consentRequired = false
+              config = {
+                "included.client.audience" = local.sso_apim_audience
+                "id.token.claim"           = "false"
+                "access.token.claim"       = "true"
+              }
             }
           ]
         },
@@ -406,10 +449,12 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           publicClient              = false
           protocol                  = "openid-connect"
           secret                    = random_password.dex_argocd_client_secret[0].result
+          fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
           redirectUris              = ["${local.argocd_public_url}/auth/callback"]
           webOrigins                = ["+"]
+          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email"]
           optionalClientScopes      = [local.sso_groups_claim]
           protocolMappers = [
             {
@@ -434,10 +479,12 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           publicClient              = false
           protocol                  = "openid-connect"
           secret                    = random_password.dex_headlamp_client_secret[0].result
+          fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
           redirectUris              = ["${local.headlamp_public_url}/oidc-callback"]
           webOrigins                = ["+"]
+          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email"]
           optionalClientScopes      = [local.sso_groups_claim]
           protocolMappers = [
             {
@@ -650,12 +697,12 @@ spec:
             - name: KC_BOOTSTRAP_ADMIN_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: keycloak-admin
+                  name: keycloak-bootstrap-admin
                   key: username
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: keycloak-admin
+                  name: keycloak-bootstrap-admin
                   key: password
             - name: KC_DB
               value: postgres
@@ -720,6 +767,7 @@ __YAML__
 
   depends_on = [
     kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.keycloak_bootstrap_admin,
     kubernetes_secret_v1.keycloak_admin,
     kubernetes_secret_v1.keycloak_postgres,
     kubernetes_config_map_v1.keycloak_realm,
@@ -761,19 +809,23 @@ resource "null_resource" "reconcile_keycloak_realm" {
   count = var.enable_sso && local.sso_provider_is_keycloak ? 1 : 0
 
   triggers = {
-    realm_config_sha = sha256(kubernetes_config_map_v1.keycloak_realm[0].data["platform-realm.json"])
-    script_sha       = filesha256(abspath("${local.stack_dir}/scripts/reconcile-keycloak-realm.sh"))
+    realm_config_sha       = sha256(kubernetes_config_map_v1.keycloak_realm[0].data["platform-realm.json"])
+    script_sha             = filesha256(abspath("${local.stack_dir}/scripts/reconcile-keycloak-realm.sh"))
+    bootstrap_admin_secret = sha256(jsonencode(kubernetes_secret_v1.keycloak_bootstrap_admin[0].data))
+    permanent_admin_secret = sha256(jsonencode(kubernetes_secret_v1.keycloak_admin[0].data))
   }
 
   provisioner "local-exec" {
     command = "bash \"${local.stack_dir}/scripts/reconcile-keycloak-realm.sh\" --execute"
     environment = {
-      KUBECONFIG                = local.kubeconfig_path_expanded
-      KEYCLOAK_NAMESPACE        = kubernetes_namespace_v1.sso[0].metadata[0].name
-      KEYCLOAK_REALM            = local.keycloak_realm
-      KEYCLOAK_REALM_CONFIGMAP  = kubernetes_config_map_v1.keycloak_realm[0].metadata[0].name
-      KEYCLOAK_REALM_CONFIG_KEY = "platform-realm.json"
-      REPO_ROOT                 = local.repo_root
+      KUBECONFIG                      = local.kubeconfig_path_expanded
+      KEYCLOAK_NAMESPACE              = kubernetes_namespace_v1.sso[0].metadata[0].name
+      KEYCLOAK_REALM                  = local.keycloak_realm
+      KEYCLOAK_REALM_CONFIGMAP        = kubernetes_config_map_v1.keycloak_realm[0].metadata[0].name
+      KEYCLOAK_REALM_CONFIG_KEY       = "platform-realm.json"
+      KEYCLOAK_BOOTSTRAP_ADMIN_SECRET = kubernetes_secret_v1.keycloak_bootstrap_admin[0].metadata[0].name
+      KEYCLOAK_PERMANENT_ADMIN_SECRET = kubernetes_secret_v1.keycloak_admin[0].metadata[0].name
+      REPO_ROOT                       = local.repo_root
     }
   }
 

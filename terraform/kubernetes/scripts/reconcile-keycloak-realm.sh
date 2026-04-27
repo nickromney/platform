@@ -46,7 +46,8 @@ KEYCLOAK_DEPLOYMENT="${KEYCLOAK_DEPLOYMENT:-keycloak}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-platform}"
 KEYCLOAK_REALM_CONFIGMAP="${KEYCLOAK_REALM_CONFIGMAP:-keycloak-realm}"
 KEYCLOAK_REALM_CONFIG_KEY="${KEYCLOAK_REALM_CONFIG_KEY:-platform-realm.json}"
-KEYCLOAK_ADMIN_SECRET="${KEYCLOAK_ADMIN_SECRET:-keycloak-admin}"
+KEYCLOAK_BOOTSTRAP_ADMIN_SECRET="${KEYCLOAK_BOOTSTRAP_ADMIN_SECRET:-keycloak-bootstrap-admin}"
+KEYCLOAK_PERMANENT_ADMIN_SECRET="${KEYCLOAK_PERMANENT_ADMIN_SECRET:-keycloak-admin}"
 KEYCLOAK_ADMIN_SERVER="${KEYCLOAK_ADMIN_SERVER:-http://127.0.0.1:8080}"
 
 require_cmd kubectl
@@ -74,8 +75,13 @@ if [[ -z "${keycloak_pod}" ]]; then
   exit 1
 fi
 
-admin_user="$(kubectl -n "${KEYCLOAK_NAMESPACE}" get secret "${KEYCLOAK_ADMIN_SECRET}" -o jsonpath='{.data.username}' | decode_b64)"
-admin_password="$(kubectl -n "${KEYCLOAK_NAMESPACE}" get secret "${KEYCLOAK_ADMIN_SECRET}" -o jsonpath='{.data.password}' | decode_b64)"
+secret_field() {
+  local secret_name="$1"
+  local field_name="$2"
+
+  kubectl -n "${KEYCLOAK_NAMESPACE}" get secret "${secret_name}" -o "jsonpath={.data.${field_name}}" 2>/dev/null |
+    decode_b64 || true
+}
 
 kcadm() {
   kubectl -n "${KEYCLOAK_NAMESPACE}" exec "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@"
@@ -85,11 +91,31 @@ kcadm_stdin() {
   kubectl -n "${KEYCLOAK_NAMESPACE}" exec -i "${keycloak_pod}" -- /opt/keycloak/bin/kcadm.sh "$@"
 }
 
-kcadm config credentials \
-  --server "${KEYCLOAK_ADMIN_SERVER}" \
-  --realm master \
-  --user "${admin_user}" \
-  --password "${admin_password}" >/dev/null
+permanent_admin_user="$(secret_field "${KEYCLOAK_PERMANENT_ADMIN_SECRET}" username)"
+permanent_admin_password="$(secret_field "${KEYCLOAK_PERMANENT_ADMIN_SECRET}" password)"
+bootstrap_admin_user="$(secret_field "${KEYCLOAK_BOOTSTRAP_ADMIN_SECRET}" username)"
+bootstrap_admin_password="$(secret_field "${KEYCLOAK_BOOTSTRAP_ADMIN_SECRET}" password)"
+
+login_keycloak_admin() {
+  local username="$1"
+  local password="$2"
+
+  [[ -n "${username}" && -n "${password}" ]] || return 1
+  kcadm config credentials \
+    --server "${KEYCLOAK_ADMIN_SERVER}" \
+    --realm master \
+    --user "${username}" \
+    --password "${password}" >/dev/null 2>&1
+}
+
+if login_keycloak_admin "${permanent_admin_user}" "${permanent_admin_password}"; then
+  echo "Keycloak admin authenticated with permanent admin: ${permanent_admin_user}"
+elif login_keycloak_admin "${bootstrap_admin_user}" "${bootstrap_admin_password}"; then
+  echo "Keycloak admin authenticated with bootstrap admin: ${bootstrap_admin_user}"
+else
+  echo "Could not authenticate to Keycloak with either permanent or bootstrap admin credentials" >&2
+  exit 1
+fi
 
 group_id_for_name() {
   local group_name="$1"
@@ -100,7 +126,13 @@ group_id_for_name() {
 
 client_id_for_client_id() {
   local client_id="$1"
-  kcadm get clients -r "${KEYCLOAK_REALM}" -q "clientId=${client_id}" --fields id,clientId |
+  client_id_for_client_id_in_realm "${KEYCLOAK_REALM}" "${client_id}"
+}
+
+client_id_for_client_id_in_realm() {
+  local realm="$1"
+  local client_id="$2"
+  kcadm get clients -r "${realm}" -q "clientId=${client_id}" --fields id,clientId |
     jq -r --arg clientId "${client_id}" '.[] | select(.clientId == $clientId) | .id' |
     head -n 1
 }
@@ -123,10 +155,89 @@ client_scope_is_attached() {
 
 user_id_for_username() {
   local username="$1"
-  kcadm get users -r "${KEYCLOAK_REALM}" -q "username=${username}" --fields id,username |
+  user_id_for_username_in_realm "${KEYCLOAK_REALM}" "${username}"
+}
+
+user_id_for_username_in_realm() {
+  local realm="$1"
+  local username="$2"
+
+  kcadm get users -r "${realm}" -q "username=${username}" --fields id,username |
     jq -r --arg username "${username}" '.[] | select(.username == $username) | .id' |
     head -n 1
 }
+
+user_has_realm_role() {
+  local realm="$1"
+  local user_id="$2"
+  local role_name="$3"
+
+  kcadm get "users/${user_id}/role-mappings/realm" -r "${realm}" --fields name |
+    jq -e --arg name "${role_name}" 'any(.[]?; .name == $name)' >/dev/null
+}
+
+group_has_client_role() {
+  local realm="$1"
+  local group_id="$2"
+  local client_uuid="$3"
+  local role_name="$4"
+
+  kcadm get "groups/${group_id}/role-mappings/clients/${client_uuid}" -r "${realm}" --fields name |
+    jq -e --arg name "${role_name}" 'any(.[]?; .name == $name)' >/dev/null
+}
+
+ensure_master_admin() {
+  local username="${permanent_admin_user}"
+  local password="${permanent_admin_password}"
+  local email="${KEYCLOAK_PERMANENT_ADMIN_EMAIL:-keycloak-admin@platform.local}"
+  local user_id
+
+  [[ -n "${username}" && -n "${password}" ]] || {
+    echo "Permanent Keycloak admin secret is missing username/password" >&2
+    exit 1
+  }
+
+  user_id="$(user_id_for_username_in_realm master "${username}")"
+  if [[ -z "${user_id}" ]]; then
+    kcadm create users -r master \
+      -s "username=${username}" \
+      -s "email=${email}" \
+      -s "enabled=true" \
+      -s "emailVerified=true" >/dev/null
+    user_id="$(user_id_for_username_in_realm master "${username}")"
+    echo "Keycloak permanent master admin created: ${username}"
+  else
+    kcadm update "users/${user_id}" -r master \
+      -s "email=${email}" \
+      -s "enabled=true" \
+      -s "emailVerified=true" >/dev/null
+    echo "Keycloak permanent master admin reconciled: ${username}"
+  fi
+
+  kcadm set-password -r master --userid "${user_id}" --new-password "${password}" >/dev/null
+
+  if ! user_has_realm_role master "${user_id}" admin; then
+    kcadm add-roles -r master --uusername "${username}" --rolename admin >/dev/null
+  fi
+}
+
+delete_bootstrap_admins_from_master() {
+  local username user_id
+  local candidates=("${bootstrap_admin_user}" "demo@admin.test")
+
+  for username in "${candidates[@]}"; do
+    [[ -n "${username}" ]] || continue
+    [[ "${username}" != "${permanent_admin_user}" ]] || continue
+
+    user_id="$(user_id_for_username_in_realm master "${username}")"
+    [[ -n "${user_id}" ]] || continue
+
+    kcadm delete "users/${user_id}" -r master >/dev/null
+    echo "Keycloak bootstrap admin deleted from master realm: ${username}"
+  done
+}
+
+ensure_master_admin
 
 ensure_client_scope() {
   local scope_json="$1"
@@ -172,6 +283,49 @@ ensure_client_scope_attachment() {
     -n >/dev/null
 }
 
+detach_client_scope_attachment() {
+  local client_uuid="$1"
+  local scope_kind="$2"
+  local scope_name="$3"
+  local scope_id
+
+  scope_id="$(client_scope_id_for_name "${scope_name}")"
+  [[ -n "${scope_id}" ]] || return 0
+
+  if ! client_scope_is_attached "${client_uuid}" "${scope_kind}" "${scope_name}"; then
+    return 0
+  fi
+
+  kcadm delete "clients/${client_uuid}/${scope_kind}-client-scopes/${scope_id}" \
+    -r "${KEYCLOAK_REALM}" >/dev/null
+  echo "Keycloak client scope detached: ${scope_kind}:${scope_name}"
+}
+
+json_array_contains() {
+  local json_array="$1"
+  local value="$2"
+
+  jq -e --arg value "${value}" 'any(.[]?; . == $value)' <<<"${json_array}" >/dev/null
+}
+
+reconcile_client_scope_attachments() {
+  local client_uuid="$1"
+  local scope_kind="$2"
+  local desired_scopes_json="$3"
+  local scope_name
+
+  while IFS= read -r scope_name; do
+    ensure_client_scope_attachment "${client_uuid}" "${scope_kind}" "${scope_name}"
+  done < <(jq -r '.[]? // empty' <<<"${desired_scopes_json}")
+
+  while IFS= read -r scope_name; do
+    [[ -n "${scope_name}" ]] || continue
+    if ! json_array_contains "${desired_scopes_json}" "${scope_name}"; then
+      detach_client_scope_attachment "${client_uuid}" "${scope_kind}" "${scope_name}"
+    fi
+  done < <(kcadm get "clients/${client_uuid}/${scope_kind}-client-scopes" -r "${KEYCLOAK_REALM}" --fields name | jq -r '.[].name')
+}
+
 ensure_group() {
   local group_name="$1"
   local group_id
@@ -184,6 +338,33 @@ ensure_group() {
 
   kcadm create groups -r "${KEYCLOAK_REALM}" -s "name=${group_name}" >/dev/null
   echo "Keycloak group created: ${group_name}"
+}
+
+ensure_group_client_role() {
+  local group_name="$1"
+  local client_id="$2"
+  local role_name="$3"
+  local group_id client_uuid
+
+  ensure_group "${group_name}" >/dev/null
+  group_id="$(group_id_for_name "${group_name}")"
+  client_uuid="$(client_id_for_client_id_in_realm "${KEYCLOAK_REALM}" "${client_id}")"
+
+  if [[ -z "${group_id}" || -z "${client_uuid}" ]]; then
+    echo "Could not resolve group ${group_name} or client ${client_id} for role mapping" >&2
+    exit 1
+  fi
+
+  if group_has_client_role "${KEYCLOAK_REALM}" "${group_id}" "${client_uuid}" "${role_name}"; then
+    echo "Keycloak group client role present: ${group_name} -> ${client_id}:${role_name}"
+    return 0
+  fi
+
+  kcadm add-roles -r "${KEYCLOAK_REALM}" \
+    --gid "${group_id}" \
+    --cclientid "${client_id}" \
+    --rolename "${role_name}" >/dev/null
+  echo "Keycloak group client role added: ${group_name} -> ${client_id}:${role_name}"
 }
 
 ensure_client() {
@@ -203,13 +384,21 @@ ensure_client() {
     echo "Keycloak client reconciled: ${client_name}"
   fi
 
-  while IFS= read -r scope_name; do
-    ensure_client_scope_attachment "${client_uuid}" "default" "${scope_name}"
-  done < <(jq -r '.defaultClientScopes[]? // empty' <<<"${client_json}")
+  if jq -e 'has("defaultClientScopes")' <<<"${client_json}" >/dev/null; then
+    reconcile_client_scope_attachments "${client_uuid}" "default" "$(jq -c '.defaultClientScopes // []' <<<"${client_json}")"
+  else
+    while IFS= read -r scope_name; do
+      ensure_client_scope_attachment "${client_uuid}" "default" "${scope_name}"
+    done < <(jq -r '.defaultClientScopes[]? // empty' <<<"${client_json}")
+  fi
 
-  while IFS= read -r scope_name; do
-    ensure_client_scope_attachment "${client_uuid}" "optional" "${scope_name}"
-  done < <(jq -r '.optionalClientScopes[]? // empty' <<<"${client_json}")
+  if jq -e 'has("optionalClientScopes")' <<<"${client_json}" >/dev/null; then
+    reconcile_client_scope_attachments "${client_uuid}" "optional" "$(jq -c '.optionalClientScopes // []' <<<"${client_json}")"
+  else
+    while IFS= read -r scope_name; do
+      ensure_client_scope_attachment "${client_uuid}" "optional" "${scope_name}"
+    done < <(jq -r '.optionalClientScopes[]? // empty' <<<"${client_json}")
+  fi
 }
 
 ensure_user() {
@@ -269,9 +458,13 @@ while IFS= read -r client_json; do
   ensure_client "${client_json}"
 done < <(jq -c '.clients[]?' "${realm_file}")
 
+ensure_group_client_role "platform-admins" "realm-management" "realm-admin"
+
 while IFS= read -r user_json; do
   [[ -n "${user_json}" ]] || continue
   ensure_user "${user_json}"
 done < <(jq -c '.users[]?' "${realm_file}")
+
+delete_bootstrap_admins_from_master
 
 echo "Keycloak realm reconciled: ${KEYCLOAK_REALM}"

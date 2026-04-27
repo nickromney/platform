@@ -73,6 +73,9 @@ outside the request path above.
 - **Identity products underneath:** Keycloak is the current local stage-900
   identity provider. Dex remains a supported provider shape behind
   `sso_provider`. Both are supporting detail behind the `oauth2-proxy` surface.
+- **API resource audience:** browser clients use `oauth2-proxy`, but mediated
+  API calls should validate a resource audience owned by the API mediation
+  layer. The Kubernetes stage uses `apim-simulator` as that audience.
 - **Safe pre-launch changes:** adding claims that are already in the token,
   tightening cookie flags.
 - **Breaking changes:** renaming the proxy path prefix, changing
@@ -86,7 +89,7 @@ outside the request path above.
 - **Class:** Open Host Service from the identity provider; platform tools are
   Conformists.
 - **Published language:** issuer URL, JWKS URL, userinfo URL, client IDs
-  (`oauth2-proxy`, `argocd`, `headlamp`), `groups` claim,
+  (`oauth2-proxy`, `argocd`, `headlamp`, `apim-simulator`), `groups` claim,
   `platform-admins`, `platform-viewers`, and app groups such as
   `app-subnetcalc-dev` and `app-hello-platform-dev`.
 - **Secret lifecycle:** client secrets, the `oauth2-proxy` cookie secret, and
@@ -165,12 +168,19 @@ outside the request path above.
   forwards a narrower shape to the backend.
 - **Published language toward clients:** `Ocp-Apim-Subscription-Key` header,
   host-based routing, version routing by header/query/segment.
+- **Identity input:** APIM consumes configured OIDC issuer, JWKS URI, and
+  audience values. In the Kubernetes stage, those values point to Keycloak and
+  the `apim-simulator` resource audience. In Compose or another platform, the
+  same APIM runtime can be configured with a different issuer or no identity
+  provider at all.
 - **Contract evidence:**
   [`apps/subnetcalc/apim-simulator/contracts/contract_matrix.yml`](../../apps/subnetcalc/apim-simulator/contracts/contract_matrix.yml)
   is the canonical record of APIM contract IDs (`GW-HEALTH`,
   `ROUTE-HOST-MATCH`, `ROUTE-VERSION-HEADER`, and so on).
 - **Safe pre-launch changes:** adding new contract IDs with
-  `status: supported`; adding optional policies that pass through unchanged.
+  `status: supported`; adding optional policies that pass through unchanged;
+  changing the stage-specific issuer/JWKS/audience configuration without
+  changing APIM's own contract language.
 - **Breaking changes:** changing the subscription-key header name, altering
   how version routing resolves, or removing a contract ID that shipped as
   `supported`.

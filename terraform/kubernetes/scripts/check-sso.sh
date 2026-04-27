@@ -172,6 +172,7 @@ print_http_head() {
 }
 
 require_cmd kubectl
+require_cmd jq
 
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT=$(tfvar_get "" gateway_https_host_port)
@@ -200,6 +201,7 @@ SSO_PROVIDER="$(tfvar_get "" sso_provider)"
 [[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"
 KEYCLOAK_REALM="$(tfvar_get "" keycloak_realm)"
 [[ -n "${KEYCLOAK_REALM}" ]] || KEYCLOAK_REALM="platform"
+EXPECTED_APIM_AUDIENCE="${PLATFORM_APIM_OIDC_AUDIENCE:-apim-simulator}"
 if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
   OIDC_DEPLOYMENT="keycloak"
   EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/realms/${KEYCLOAK_REALM}"
@@ -217,7 +219,14 @@ fi
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
 if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
-  EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT:-}"
+  EXPECTED_CLUSTER_NAME="${TARGET_CLUSTER_NAME:-${CLUSTER_NAME:-}}"
+fi
+if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
+  if [[ "${KUBECONFIG_CONTEXT:-}" == kind-* ]]; then
+    EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT#kind-}"
+  else
+    EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT:-}"
+  fi
 fi
 if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
   EXPECTED_CLUSTER_NAME="$(kubectl config current-context 2>/dev/null || true)"
@@ -300,6 +309,35 @@ if kubectl -n sso get deploy oauth2-proxy-gitea >/dev/null 2>&1; then
   warn_if_deploy_arg_present sso oauth2-proxy-gitea "--email-domain=admin.test" "oauth2-proxy-gitea still uses email-domain instead of group RBAC"
 else
   fail_soft "deploy sso/oauth2-proxy-gitea missing"
+fi
+
+echo ""
+echo "APIM OIDC resource-server config (in-cluster):"
+if kubectl -n apim get configmap subnetcalc-apim-simulator-config >/dev/null 2>&1; then
+  apim_config_json="$(kubectl -n apim get configmap subnetcalc-apim-simulator-config -o json)"
+  apim_issuer="$(jq -r '.data["config.json"] | fromjson | .oidc.issuer // ""' <<<"${apim_config_json}")"
+  apim_audience="$(jq -r '.data["config.json"] | fromjson | .oidc.audience // ""' <<<"${apim_config_json}")"
+  apim_jwks_uri="$(jq -r '.data["config.json"] | fromjson | .oidc.jwks_uri // ""' <<<"${apim_config_json}")"
+
+  if [[ "${apim_issuer}" == "${EXPECTED_OIDC_ISSUER_URL}" ]]; then
+    ok "APIM validates issuer ${apim_issuer}"
+  else
+    fail_soft "APIM issuer ${apim_issuer:-<empty>} does not match ${EXPECTED_OIDC_ISSUER_URL}"
+  fi
+
+  if [[ "${apim_audience}" == "${EXPECTED_APIM_AUDIENCE}" ]]; then
+    ok "APIM validates dedicated audience ${apim_audience}"
+  else
+    fail_soft "APIM audience ${apim_audience:-<empty>} does not match ${EXPECTED_APIM_AUDIENCE}"
+  fi
+
+  if [[ "${apim_jwks_uri}" == "${EXPECTED_JWKS_URL}" ]]; then
+    ok "APIM validates JWKS ${apim_jwks_uri}"
+  else
+    fail_soft "APIM JWKS ${apim_jwks_uri:-<empty>} does not match ${EXPECTED_JWKS_URL}"
+  fi
+else
+  warn "configmap apim/subnetcalc-apim-simulator-config missing"
 fi
 
 echo ""

@@ -1,3 +1,8 @@
+variables {
+  gitea_admin_pwd       = "test-admin-password"
+  gitea_member_user_pwd = "test-member-password"
+}
+
 run "actions_runner_enabled" {
   command = plan
 
@@ -282,7 +287,7 @@ run "prometheus_observability_enabled" {
     condition = one([
       for tile in jsondecode(file("${path.module}/config/platform-launchpad.apps.json")).tiles : tile
       if tile.title == "Keycloak"
-      ]).url == "https://keycloak.127.0.0.1.sslip.io/admin/" && one([
+      ]).url == "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users" && one([
       for tile in jsondecode(file("${path.module}/config/platform-launchpad.apps.json")).tiles : tile
       if tile.title == "Keycloak"
     ]).expr == "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))"
@@ -290,7 +295,7 @@ run "prometheus_observability_enabled" {
   }
 
   assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "https://keycloak.127.0.0.1.sslip.io/admin/") && strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"keycloak\\\"") && !strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"dex\\\"")
+    condition     = strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users") && strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"keycloak\\\"") && !strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"dex\\\"")
     error_message = "Expected rendered Grafana launchpad dashboard to link to the Keycloak admin console and track Keycloak readiness"
   }
 

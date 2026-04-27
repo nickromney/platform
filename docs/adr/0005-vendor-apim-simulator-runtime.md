@@ -36,6 +36,13 @@ Treat the vendored subtree as:
   tests, UI, or examples.
 - DDD-wise, APIM stays a supporting context instead of becoming confused with
   the `subnetcalc` domain core.
+- Stage-specific identity wiring belongs in the platform manifests that run
+  APIM, not in the APIM simulator domain. For example, Kubernetes stage `900`
+  configures the Keycloak issuer and `apim-simulator` resource audience, while
+  other deployments can supply different OIDC values or run without Keycloak.
+- The env-driven APIM fallback config is provider-neutral: anonymous local
+  mode needs no identity provider, and non-anonymous OIDC mode requires an
+  explicit issuer, audience, and JWKS URI.
 
 ## Evidence
 

@@ -97,6 +97,76 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "APIM uses a dedicated stage-900 resource audience without owning subnetcalc or compose auth" {
+  realm_tf="${REPO_ROOT}/terraform/kubernetes/sso.tf"
+  apim_manifest="${REPO_ROOT}/terraform/kubernetes/apps/apim/all.yaml"
+  compose_stack="${REPO_ROOT}/docker/compose/compose.yml"
+  subnetcalc_compose="${REPO_ROOT}/apps/subnetcalc/compose.yml"
+  contracts="${REPO_ROOT}/docs/ddd/contracts.md"
+  glossary="${REPO_ROOT}/docs/ddd/ubiquitous-language.md"
+
+  run rg -n 'sso_apim_audience\s*=\s*"apim-simulator"' "${REPO_ROOT}/terraform/kubernetes/locals.tf"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'clientId\s*=\s*local\.sso_apim_audience|included\.client\.audience.*local\.sso_apim_audience' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n '"audience": "apim-simulator"' "${apim_manifest}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'oidc-issuer-url=https://dex\.compose\.127\.0\.0\.1\.sslip\.io:8443/dex' "${compose_stack}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'AUTH_METHOD=none' "${subnetcalc_compose}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'profiles: \["oidc"\]' "${subnetcalc_compose}"
+  [ "${status}" -eq 0 ]
+
+  for term in \
+    "resource audience" \
+    "portable auth mode" \
+    "apim-simulator"
+  do
+    run rg -n "${term}" "${contracts}" "${glossary}"
+    [ "${status}" -eq 0 ]
+  done
+}
+
+@test "Keycloak admin console lands on the platform realm and uses a permanent admin lifecycle" {
+  realm_tf="${REPO_ROOT}/terraform/kubernetes/sso.tf"
+  reconcile_script="${REPO_ROOT}/terraform/kubernetes/scripts/reconcile-keycloak-realm.sh"
+  launchpad="${REPO_ROOT}/terraform/kubernetes/config/platform-launchpad.apps.json"
+  e2e="${REPO_ROOT}/tests/kubernetes/sso/tests/sso-smoke.spec.ts"
+
+  run rg -n 'resource "kubernetes_secret_v1" "keycloak_bootstrap_admin"' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'resource "kubernetes_secret_v1" "keycloak_admin"' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'name: keycloak-bootstrap-admin' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'KEYCLOAK_PERMANENT_ADMIN_SECRET|ensure_master_admin|delete_bootstrap_admins_from_master' "${reconcile_script}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'ensure_group_client_role "platform-admins" "realm-management" "realm-admin"' "${reconcile_script}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'defaultClientScopes\s*=\s*\["web-origins", "acr", "profile", "basic", "email"\]' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'reconcile_client_scope_attachments|detach_client_scope_attachment' "${reconcile_script}"
+  [ "${status}" -eq 0 ]
+
+  run jq -e '.tiles[] | select(.title == "Keycloak") | .url == "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users"' "${launchpad}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n "KEYCLOAK_CONSOLE_ADMIN_LOGIN.*'demo@admin.test'" "${e2e}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "Keycloak realm reconcile explicitly attaches rendered client scopes" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/reconcile-keycloak-realm.sh"
 
