@@ -3,26 +3,21 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - snippetsfilter-admin-allowlist.yaml
+  - snippetsfilter-keycloak-admin.yaml
   - httproute-argocd.yaml
   - httproute-gitea.yaml
   - httproute-headlamp.yaml
   - httproute-hubble.yaml
   - httproute-grafana.yaml
   - httproute-kyverno.yaml
-  - httproute-signoz.yaml
   - httproute-sentiment-dev.yaml
   - httproute-sentiment-uat.yaml
   - httproute-subnetcalc-dev.yaml
   - httproute-subnetcalc-uat.yaml
-  - httproute-dex.yaml
+  - httproute-hello-platform-dev.yaml
+  - httproute-hello-platform-uat.yaml
+  - httproute-keycloak.yaml
   - referencegrant-headlamp.yaml
   - referencegrant-sso.yaml
-  - referencegrant-signoz-sso.yaml
   - referencegrant-policy-reporter.yaml
   - observabilitypolicy-tracing.yaml
-  - observabilitypolicy-tracing-signoz.yaml
-  - rbac-signoz-bootstrap.yaml
-  - job-signoz-bootstrap.yaml
-  - signoz-auth-proxy-configmap.yaml
-  - signoz-auth-proxy-deployment.yaml
-  - signoz-auth-proxy-service.yaml

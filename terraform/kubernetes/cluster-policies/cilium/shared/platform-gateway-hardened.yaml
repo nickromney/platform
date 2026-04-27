@@ -8,7 +8,7 @@ spec:
     point (NGINX Gateway Fabric). All external traffic enters here.
     Ingress: external clients via host/remote-node on :443 only.
     Egress: argocd-server on :8080, gitea on :3000, shared auth proxies on
-    :4180, shared Dex on :5556, headlamp on :4466, policy-reporter UI on
+    :4180, shared Keycloak on :5556, headlamp on :4466, policy-reporter UI on
     :8080, DNS, kube-apiserver, and the nginx-gateway control-plane.
   endpointSelector:
     matchLabels:
@@ -89,11 +89,11 @@ spec:
     - toEndpoints:
         - matchLabels:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
-            "k8s:app.kubernetes.io/name": dex
+            "k8s:app.kubernetes.io/name": keycloak
       toPorts:
         - ports:
-            # Dex OIDC endpoints proxied via httproute-dex.yaml
-            - port: "5556"
+            # Keycloak OIDC endpoints proxied via httproute-keycloak.yaml
+            - port: "8080"
               protocol: TCP
     - toEndpoints:
         - matchLabels:

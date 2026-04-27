@@ -1,0 +1,3 @@
+{"id":"positive-001","text":"The release notes are clear and the deployment worked first time.","expected_label":"positive","expected_reason":"expresses satisfaction with documentation and deployment"}
+{"id":"negative-001","text":"The login flow timed out and the service kept returning gateway errors.","expected_label":"negative","expected_reason":"describes failed authentication and service errors"}
+{"id":"neutral-001","text":"The team promoted the same image from dev to UAT after the smoke test.","expected_label":"neutral","expected_reason":"states a deployment fact without sentiment"}

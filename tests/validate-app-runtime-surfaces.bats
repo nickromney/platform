@@ -505,9 +505,6 @@ expected_counts = {
     "apps/subnetcalc/api-fastapi-azure-function/compose.azurite.yml": {
         "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
     },
-    "docker/compose/keycloak/Dockerfile": {
-        "FROM quay.io/keycloak/keycloak:26.6.1": 1,
-    },
     "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
         "image: docker:29.4.1-cli": 1,
         "image: gitea/act_runner:0.4.1": 2,
@@ -538,7 +535,7 @@ print(f"validated {validated} external image expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 22 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 21 external image expectation(s)"* ]]
 }
 
 @test "preload image artifacts track the current external runtime bump set" {

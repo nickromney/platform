@@ -1,0 +1,33 @@
+apiVersion: platform.publiccloudexperiments.net/v1alpha1
+kind: ApiProduct
+metadata:
+  name: subnetcalc
+  labels:
+    app.kubernetes.io/name: subnetcalc
+    app.kubernetes.io/component: api-product
+    app: subnetcalc
+    owner: team-dolphin
+spec:
+  owner: team-dolphin
+  environments:
+    - name: dev
+      route: https://subnetcalc.dev.127.0.0.1.sslip.io
+      rbacGroup: app-subnetcalc-dev
+    - name: uat
+      route: https://subnetcalc.uat.127.0.0.1.sslip.io
+      rbacGroup: app-subnetcalc-uat
+  gateway:
+    simulator: subnetcalc-apim-simulator
+    namespace: apim
+  policies:
+    authentication: oidc-jwt
+    rateLimit: local-demo
+    requiredHeaders:
+      - Authorization
+  operations:
+    - name: subnet-info
+      method: GET
+      path: /api/v1/subnet
+    - name: ipv4-calculate
+      method: POST
+      path: /api/v1/ipv4/*

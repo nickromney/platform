@@ -65,12 +65,12 @@ replicaCount: 1
 clusterRoleBinding:
   create: true
 
-# OIDC integration (for Dex SSO)
+# OIDC integration
 config:
   oidc:
     clientID: "headlamp"
-    clientSecret: "<from-dex-config>"
-    issuerURL: "https://dex.127.0.0.1.sslip.io/dex"
+    clientSecret: "<from-oidc-provider-config>"
+    issuerURL: "https://keycloak.127.0.0.1.sslip.io/realms/platform"
     scopes: "openid profile email groups"
 
 # Or use service account token auth (simpler, no SSO)
@@ -101,20 +101,23 @@ spec:
 
 ### 4. SSO Integration Options
 
-#### Option A: Dex OIDC (recommended)
+#### Option A: Keycloak OIDC (stage `900` default)
 
-Add Headlamp as a client in Dex config:
+Terraform renders a Keycloak `headlamp` client in the local `platform` realm:
 
 ```yaml
-staticClients:
-  - id: headlamp
-    name: Headlamp
-    secret: <generate-secret>
-    redirectURIs:
-      - https://headlamp.admin.127.0.0.1.sslip.io/oidc-callback
+clientId: headlamp
+redirectUris:
+  - https://headlamp.admin.127.0.0.1.sslip.io/oidc-callback
+protocolMappers:
+  - name: groups
 ```
 
-Configure Headlamp with OIDC settings pointing to Dex.
+Headlamp points at the selected provider via Terraform locals. Kubernetes API
+authorization is group-based: `platform-admins` receives the local demo admin
+role, and `platform-viewers` receives read-only bindings for selected
+namespaces. Dex remains available only when the explicit compatibility provider
+is selected.
 
 #### Option B: Service Account Token
 

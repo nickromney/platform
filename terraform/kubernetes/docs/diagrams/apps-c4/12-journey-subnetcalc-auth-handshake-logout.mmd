@@ -4,14 +4,14 @@ sequenceDiagram
     participant Browser as Browser
     participant Gateway as platform-gateway
     participant OAuth as oauth2-proxy
-    participant Dex as Dex
+    participant IdP as Keycloak / selected IdP
     participant Router as subnetcalc-router
 
     Browser->>Gateway: GET /
     Gateway->>OAuth: Route host to oauth2-proxy
-    OAuth-->>Browser: 302 to Dex via /oauth2/start
-    Browser->>Dex: Authenticate
-    Dex-->>OAuth: Callback with auth code
+    OAuth-->>Browser: 302 to IdP via /oauth2/start
+    Browser->>IdP: Authenticate
+    IdP-->>OAuth: Callback with auth code
     OAuth->>OAuth: Create session cookie
     OAuth->>Router: Forward authenticated request with user headers
     Router-->>Browser: SPA shell

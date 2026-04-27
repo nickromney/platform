@@ -139,6 +139,7 @@ run "sso_enabled" {
     enable_gateway_tls = true
     enable_headlamp    = true
     enable_sso         = true
+    sso_provider       = "keycloak"
 
     dex_chart_version          = "0.24.0"
     oauth2_proxy_chart_version = "10.1.4"
@@ -157,8 +158,8 @@ run "sso_enabled" {
   }
 
   assert {
-    condition     = length(kubectl_manifest.argocd_app_dex) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_dex to exist when enable_sso=true"
+    condition     = length(kubectl_manifest.keycloak) == 1 && length(kubectl_manifest.argocd_app_dex) == 0
+    error_message = "Expected Keycloak direct manifests and no Dex Argo CD app when enable_sso=true and sso_provider=keycloak"
   }
 
   assert {
@@ -167,8 +168,18 @@ run "sso_enabled" {
   }
 
   assert {
-    condition     = contains(local.argocd_gitops_repo_app_names, "dex")
-    error_message = "Expected dex to be included in the Git-backed Argo refresh list when enable_sso=true"
+    condition     = !contains(local.argocd_gitops_repo_app_names, "dex")
+    error_message = "Did not expect dex in the Git-backed Argo refresh list for the Keycloak SSO path"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_hubble[0].yaml_body, "allowed-group: platform-admins"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_signoz[0].yaml_body, "allowed-group: platform-admins"),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_hubble[0].yaml_body, "email-domain: \"admin.test\""),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_signoz[0].yaml_body, "email-domain: \"admin.test\""),
+    ])
+    error_message = "Expected optional admin SSO proxies to use Keycloak org groups rather than admin email-domain shortcuts"
   }
 
   assert {

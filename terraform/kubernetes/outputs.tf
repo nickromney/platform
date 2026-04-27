@@ -39,6 +39,6 @@ output "gitea_ssh" {
 }
 
 output "signoz_url" {
-  description = "SigNoz UI URL (hostPort mapped to NodePort)."
-  value       = "http://localhost:${var.signoz_ui_host_port}"
+  description = "SigNoz UI URL when the optional SigNoz path is enabled."
+  value       = var.enable_signoz ? "http://localhost:${var.signoz_ui_host_port}" : null
 }

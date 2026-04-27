@@ -1,0 +1,173 @@
+{
+  "schema_version": "platform.idp/v1",
+  "core_components": {
+    "application_configuration_management": "App intent is declared here and rendered through Kustomize, Terraform, and GitOps-managed manifests.",
+    "infrastructure_orchestration": "Kind, Terragrunt/OpenTofu, Gateway API, Cilium, Argo CD, and Gitea are composed by staged Make targets.",
+    "environment_management": "Developers request local app environments through the IDP environment command; platform-owned profiles decide namespace, route, policy, and RBAC.",
+    "deployment_management": "Argo CD and Gitea provide the desired-state loop; deployment commands expose the app/version/environment read model.",
+    "role_based_access_control": "Keycloak groups model org roles and app/environment roles consumed by oauth2-proxy, Argo CD, Headlamp, and Kubernetes RBAC."
+  },
+  "applications": [
+    {
+      "name": "hello-platform",
+      "display_name": "Hello Platform",
+      "owner": "team-dolphin",
+      "lifecycle": "example",
+      "source": {
+        "repo": "platform",
+        "path": "terraform/kubernetes/apps/workloads/hello-platform"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["dev", "uat"],
+        "image_patch_files": {
+          "dev": "terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml",
+          "uat": "terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml"
+        }
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://hello-platform.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "app-hello-platform-dev",
+            "viewer": true,
+            "mutator": false
+          }
+        },
+        {
+          "name": "uat",
+          "type": "acceptance",
+          "namespace": "uat",
+          "route": "https://hello-platform.uat.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "app-hello-platform-uat",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "hello-platform-demo-message",
+          "binding": "environment",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
+      "name": "subnetcalc",
+      "display_name": "SubnetCalc",
+      "owner": "team-dolphin",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/subnetcalc"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["apim", "dev", "uat"]
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://subnetcalc.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "app-subnetcalc-dev",
+            "viewer": true,
+            "mutator": false
+          }
+        },
+        {
+          "name": "uat",
+          "type": "acceptance",
+          "namespace": "uat",
+          "route": "https://subnetcalc.uat.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "app-subnetcalc-uat",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "subnetcalc-apim-signing-key",
+          "binding": "apim",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
+      "name": "sentiment",
+      "display_name": "Sentiment",
+      "owner": "team-dolphin",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/sentiment"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["dev", "uat"]
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://sentiment.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "app-sentiment-dev",
+            "viewer": true,
+            "mutator": false
+          }
+        },
+        {
+          "name": "uat",
+          "type": "acceptance",
+          "namespace": "uat",
+          "route": "https://sentiment.uat.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "app-sentiment-uat",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "sentiment-model-cache",
+          "binding": "pvc",
+          "rotation": "not-applicable"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true,
+        "has_model_card": true
+      }
+    }
+  ]
+}

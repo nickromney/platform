@@ -28,9 +28,9 @@ data:
       "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io"],
       "allow_anonymous": false,
       "oidc": {
-        "issuer": "https://dex.127.0.0.1.sslip.io/dex",
-        "audience": "oauth2-proxy",
-        "jwks_uri": "http://dex.sso.svc.cluster.local:5556/dex/keys"
+        "issuer": "https://keycloak.127.0.0.1.sslip.io/realms/platform",
+        "audience": "apim-simulator",
+        "jwks_uri": "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs"
       },
       "subscription": {
         "required": false,

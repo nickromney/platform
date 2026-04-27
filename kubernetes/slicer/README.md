@@ -67,7 +67,7 @@ example:
 
 - `https://gitea.admin.127.0.0.1.sslip.io/`
 - `https://grafana.admin.127.0.0.1.sslip.io/`
-- `https://dex.127.0.0.1.sslip.io/dex`
+- `https://keycloak.127.0.0.1.sslip.io/realms/platform`
 
 Useful follow-ups while debugging:
 
@@ -157,7 +157,7 @@ Then use:
 - Stages `200+` reuse the shared Terraform platform root. The Slicer target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
   mounts, and the in-cluster actions runner.
-- Stage `900` now also configures the Slicer k3s apiserver to trust Dex-issued
+- Stage `900` now also configures the Slicer k3s apiserver to trust OIDC-issued
   Headlamp tokens, so a fresh `900 apply` leaves Headlamp login-ready without a
   separate repair step.
 - Stage `900` is the confidence path when you drive it through `make`. A

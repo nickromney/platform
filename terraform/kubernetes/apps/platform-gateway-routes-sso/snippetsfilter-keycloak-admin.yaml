@@ -1,0 +1,18 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: keycloak-admin
+  namespace: gateway-routes
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        allow all;
+
+        # Keycloak admin uses same-origin iframes for browser storage checks.
+        # Keep the global gateway default at DENY, but preserve Keycloak's required framing scope.
+        proxy_hide_header X-Frame-Options;
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;

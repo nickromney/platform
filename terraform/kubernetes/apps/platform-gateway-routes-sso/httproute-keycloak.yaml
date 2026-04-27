@@ -1,0 +1,32 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: keycloak
+  namespace: gateway-routes
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: platform-gateway
+      namespace: platform-gateway
+      sectionName: https
+  hostnames:
+    - keycloak.127.0.0.1.sslip.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: keycloak-admin
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: keycloak
+          namespace: sso
+          port: 8080
+          weight: 1

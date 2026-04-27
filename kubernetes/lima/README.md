@@ -66,7 +66,7 @@ fails fast unless a compatible registry is already reachable.
 operator drill for the stage-900 k3s OIDC restart path. It first converges the
 guest OIDC config with `configure-k3s-apiserver-oidc`, then forces a `k3s`
 restart, proves the API outage was observed, and verifies that API readiness,
-Gateway programming, and in-VM Dex issuer reachability all recover. Set
+Gateway programming, and in-VM OIDC issuer reachability all recover. Set
 `OIDC_RECOVERY_FORMAT=json` for a single machine-readable result object.
 
 The Lima target profile now sets `gitea_local_access_mode = "port-forward"`.
@@ -97,7 +97,7 @@ Then use:
 - The repo-owned kubeconfig stays split by default. Use `kubie` across
   `~/.kube/*.yaml`, and only run `make -C kubernetes/lima merge-default-kubeconfig`
   if you intentionally want `limavm-k3s` copied into `~/.kube/config`.
-- Stage `900` now also configures the Lima k3s apiserver to trust Dex-issued
+- Stage `900` now also configures the Lima k3s apiserver to trust OIDC-issued
   Headlamp tokens, so a fresh `900 apply` leaves Headlamp login-ready without a
   separate repair step.
 - Stage `900` is the confidence path when you drive it through `make`. A

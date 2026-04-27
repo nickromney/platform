@@ -19,13 +19,13 @@
       "expr": "((max(kube_deployment_status_replicas_available{namespace=\"argocd\",deployment=\"argocd-server\"}) > bool 0) or (sum(argocd_app_info{health_status=\"Healthy\"}) > bool 0) or vector(0))"
     },
     {
-      "title": "Dex",
-      "url": "https://dex.127.0.0.1.sslip.io/dex",
-      "sort_key": "admin/dex",
+      "title": "Keycloak",
+      "url": "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users",
+      "sort_key": "admin/keycloak",
       "requires": [
         "ENABLE_SSO"
       ],
-      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"dex\"}) > bool 0) or vector(0))"
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"keycloak\"}) > bool 0) or vector(0))"
     },
     {
       "title": "Gitea",
@@ -61,6 +61,10 @@
       "title": "Sentiment DEV",
       "url": "https://sentiment.dev.127.0.0.1.sslip.io",
       "sort_key": "dev/sentiment",
+      "service": "sentiment",
+      "owner": "team-dolphin",
+      "environment": "dev",
+      "rbac_group": "app-sentiment-dev",
       "requires": [
         "ENABLE_APP_REPO_SENTIMENT"
       ],
@@ -70,15 +74,33 @@
       "title": "SubnetCalc DEV",
       "url": "https://subnetcalc.dev.127.0.0.1.sslip.io",
       "sort_key": "dev/subnetcalc",
+      "service": "subnetcalc",
+      "owner": "team-dolphin",
+      "environment": "dev",
+      "rbac_group": "app-subnetcalc-dev",
       "requires": [
         "ENABLE_APP_REPO_SUBNETCALC"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
     },
     {
+      "title": "Hello Platform DEV",
+      "url": "https://hello-platform.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/hello-platform",
+      "service": "hello-platform",
+      "owner": "team-dolphin",
+      "environment": "dev",
+      "rbac_group": "app-hello-platform-dev",
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-hello-platform-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"hello-platform\"}) > bool 0)) or vector(0))"
+    },
+    {
       "title": "Sentiment UAT",
       "url": "https://sentiment.uat.127.0.0.1.sslip.io",
       "sort_key": "uat/sentiment",
+      "service": "sentiment",
+      "owner": "team-dolphin",
+      "environment": "uat",
+      "rbac_group": "app-sentiment-uat",
       "requires": [
         "ENABLE_APP_REPO_SENTIMENT"
       ],
@@ -88,10 +110,24 @@
       "title": "SubnetCalc UAT",
       "url": "https://subnetcalc.uat.127.0.0.1.sslip.io",
       "sort_key": "uat/subnetcalc",
+      "service": "subnetcalc",
+      "owner": "team-dolphin",
+      "environment": "uat",
+      "rbac_group": "app-subnetcalc-uat",
       "requires": [
         "ENABLE_APP_REPO_SUBNETCALC"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Hello Platform UAT",
+      "url": "https://hello-platform.uat.127.0.0.1.sslip.io",
+      "sort_key": "uat/hello-platform",
+      "service": "hello-platform",
+      "owner": "team-dolphin",
+      "environment": "uat",
+      "rbac_group": "app-hello-platform-uat",
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-hello-platform-uat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"uat\",deployment=\"hello-platform\"}) > bool 0)) or vector(0))"
     }
   ]
 }

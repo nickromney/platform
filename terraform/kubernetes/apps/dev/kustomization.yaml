@@ -1,3 +1,6 @@
 namespace: dev
 resources:
   - ../workloads/base
+  - ../workloads/hello-platform
+patches:
+  - path: hello-platform-image-patch.yaml

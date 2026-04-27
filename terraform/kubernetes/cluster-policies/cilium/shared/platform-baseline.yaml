@@ -9,8 +9,8 @@ spec:
     exist this policy harmlessly matches nothing -- Cilium ignores selectors
     with zero matching endpoints.
     Ingress: shared platform-gateway data plane on :4466, kubelet health probes.
-    Egress: kube-apiserver, DNS, shared Dex (OIDC), platform gateway HTTPS
-    (for Dex public issuer URL), and FQDN-pinned HTTPS
+    Egress: kube-apiserver, DNS, shared Keycloak (OIDC), platform gateway HTTPS
+    (for OIDC public issuer URL), and FQDN-pinned HTTPS
     for plugin sidecar (registry.npmjs.org, artifacthub.io).
   endpointSelector:
     matchLabels:
@@ -55,18 +55,16 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
-    # Dex (OIDC authentication)
+    # Keycloak (OIDC authentication)
     - toEndpoints:
         - matchLabels:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
-            "k8s:app.kubernetes.io/name": dex
+            "k8s:app.kubernetes.io/name": keycloak
       toPorts:
         - ports:
-            - port: "5556"
+            - port: "8080"
               protocol: TCP
-            - port: "5558"
-              protocol: TCP
-    # Headlamp resolves dex.127.0.0.1.sslip.io to the internal gateway VIP via hostAliases.
+    # Headlamp resolves keycloak.127.0.0.1.sslip.io to the internal gateway VIP via hostAliases.
     # Allow HTTPS egress to the platform gateway data plane for OIDC discovery/auth redirects.
     - toEndpoints:
         - matchLabels:

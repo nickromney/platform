@@ -18,7 +18,7 @@ usage() {
   cat <<'EOF'
 Usage: check-sso.sh [--var-file PATH] [--host-port PORT] [--extended]
 
-Checks the Dex + oauth2-proxy SSO plumbing with an emphasis on Gitea.
+Checks the selected OIDC provider + oauth2-proxy SSO plumbing with an emphasis on Gitea.
 This is a read-only diagnostic script.
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
@@ -64,7 +64,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-shell_cli_maybe_execute_or_preview_summary usage "would check the Dex and oauth2-proxy SSO plumbing"
+shell_cli_maybe_execute_or_preview_summary usage "would check the OIDC provider and oauth2-proxy SSO plumbing"
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
@@ -75,12 +75,16 @@ done
 tfvar_get() {
   local key="$2"
   local file value=""
-  for file in "${TFVARS_FILES[@]}"; do
+  local i=0
+  for (( i=${#TFVARS_FILES[@]}-1; i>=0; i-- )); do
+    file="${TFVARS_FILES[$i]}"
     [[ -n "${file}" && -f "${file}" ]] || continue
     value="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true)"
     [[ -n "${value}" ]] || continue
+    echo "${value}"
+    return 0
   done
-  echo "${value}"
+  echo ""
 }
 
 admin_host() {
@@ -92,8 +96,12 @@ admin_host() {
   fi
 }
 
-dex_host() {
-  printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+oidc_host() {
+  if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
+    printf 'keycloak.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  else
+    printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+  fi
 }
 
 expect_deploy_arg() {
@@ -164,6 +172,7 @@ print_http_head() {
 }
 
 require_cmd kubectl
+require_cmd jq
 
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT=$(tfvar_get "" gateway_https_host_port)
@@ -188,12 +197,36 @@ port_suffix=""
 if [[ "${HOST_PORT}" != "443" ]]; then
   port_suffix=":${HOST_PORT}"
 fi
-EXPECTED_DEX_ISSUER_URL="https://$(dex_host)${port_suffix}/dex"
+SSO_PROVIDER="$(tfvar_get "" sso_provider)"
+[[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"
+KEYCLOAK_REALM="$(tfvar_get "" keycloak_realm)"
+[[ -n "${KEYCLOAK_REALM}" ]] || KEYCLOAK_REALM="platform"
+EXPECTED_APIM_AUDIENCE="${PLATFORM_APIM_OIDC_AUDIENCE:-apim-simulator}"
+if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
+  OIDC_DEPLOYMENT="keycloak"
+  EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/realms/${KEYCLOAK_REALM}"
+  EXPECTED_PROFILE_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/userinfo"
+  EXPECTED_TOKEN_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
+  EXPECTED_JWKS_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
+else
+  OIDC_DEPLOYMENT="dex"
+  EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/dex"
+  EXPECTED_PROFILE_URL="http://dex.sso.svc.cluster.local:5556/dex/userinfo"
+  EXPECTED_TOKEN_URL="http://dex.sso.svc.cluster.local:5556/dex/token"
+  EXPECTED_JWKS_URL="http://dex.sso.svc.cluster.local:5556/dex/keys"
+fi
 
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
 if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
-  EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT:-}"
+  EXPECTED_CLUSTER_NAME="${TARGET_CLUSTER_NAME:-${CLUSTER_NAME:-}}"
+fi
+if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
+  if [[ "${KUBECONFIG_CONTEXT:-}" == kind-* ]]; then
+    EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT#kind-}"
+  else
+    EXPECTED_CLUSTER_NAME="${KUBECONFIG_CONTEXT:-}"
+  fi
 fi
 if [[ -z "${EXPECTED_CLUSTER_NAME}" ]]; then
   EXPECTED_CLUSTER_NAME="$(kubectl config current-context 2>/dev/null || true)"
@@ -229,7 +262,7 @@ done
 echo ""
 echo "Argo CD apps (if present):"
 if kubectl -n argocd get applications.argoproj.io >/dev/null 2>&1; then
-  for app in dex oauth2-proxy-gitea; do
+  for app in "${OIDC_DEPLOYMENT}" oauth2-proxy-gitea; do
     if kubectl -n argocd get app "${app}" >/dev/null 2>&1; then
       sync=$(kubectl -n argocd get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
       health=$(kubectl -n argocd get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
@@ -238,6 +271,9 @@ if kubectl -n argocd get applications.argoproj.io >/dev/null 2>&1; then
       else
         warn "app ${app} sync=${sync:-?} health=${health:-?}"
       fi
+    elif [[ "${app}" == "${OIDC_DEPLOYMENT}" && "${SSO_PROVIDER}" == "keycloak" ]] &&
+      kubectl -n sso get deploy keycloak >/dev/null 2>&1; then
+      ok "app keycloak not required; Keycloak is managed directly in the sso namespace"
     else
       warn "app ${app} missing"
     fi
@@ -247,11 +283,11 @@ else
 fi
 
 echo ""
-echo "Dex (in-cluster):"
-if kubectl -n sso get deploy dex >/dev/null 2>&1; then
-  ok "deploy sso/dex present"
+echo "OIDC provider (in-cluster):"
+if kubectl -n sso get deploy "${OIDC_DEPLOYMENT}" >/dev/null 2>&1; then
+  ok "deploy sso/${OIDC_DEPLOYMENT} present"
 else
-  fail_soft "deploy sso/dex missing"
+  fail_soft "deploy sso/${OIDC_DEPLOYMENT} missing"
 fi
 
 echo ""
@@ -259,17 +295,49 @@ echo "oauth2-proxy for Gitea (in-cluster):"
 if kubectl -n sso get deploy oauth2-proxy-gitea >/dev/null 2>&1; then
   ok "deploy sso/oauth2-proxy-gitea present"
   expect_deploy_arg sso oauth2-proxy-gitea "--provider=oidc"
-  expect_deploy_arg sso oauth2-proxy-gitea "--scope=openid email profile"
-  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-issuer-url=${EXPECTED_DEX_ISSUER_URL}"
-  expect_deploy_arg sso oauth2-proxy-gitea "--profile-url=http://dex.sso.svc.cluster.local:5556/dex/userinfo"
-  expect_deploy_arg sso oauth2-proxy-gitea "--redeem-url=http://dex.sso.svc.cluster.local:5556/dex/token"
-  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-jwks-url=http://dex.sso.svc.cluster.local:5556/dex/keys"
+  expect_deploy_arg sso oauth2-proxy-gitea "--scope=openid email profile groups"
+  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-issuer-url=${EXPECTED_OIDC_ISSUER_URL}"
+  expect_deploy_arg sso oauth2-proxy-gitea "--profile-url=${EXPECTED_PROFILE_URL}"
+  expect_deploy_arg sso oauth2-proxy-gitea "--redeem-url=${EXPECTED_TOKEN_URL}"
+  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-jwks-url=${EXPECTED_JWKS_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--skip-oidc-discovery=true"
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-email-claim=email"
+  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-groups-claim=groups"
+  expect_deploy_arg sso oauth2-proxy-gitea "--allowed-group=platform-admins"
   expect_deploy_arg sso oauth2-proxy-gitea "--user-id-claim=email"
   expect_deploy_arg sso oauth2-proxy-gitea "--pass-user-headers=true"
+  warn_if_deploy_arg_present sso oauth2-proxy-gitea "--email-domain=admin.test" "oauth2-proxy-gitea still uses email-domain instead of group RBAC"
 else
   fail_soft "deploy sso/oauth2-proxy-gitea missing"
+fi
+
+echo ""
+echo "APIM OIDC resource-server config (in-cluster):"
+if kubectl -n apim get configmap subnetcalc-apim-simulator-config >/dev/null 2>&1; then
+  apim_config_json="$(kubectl -n apim get configmap subnetcalc-apim-simulator-config -o json)"
+  apim_issuer="$(jq -r '.data["config.json"] | fromjson | .oidc.issuer // ""' <<<"${apim_config_json}")"
+  apim_audience="$(jq -r '.data["config.json"] | fromjson | .oidc.audience // ""' <<<"${apim_config_json}")"
+  apim_jwks_uri="$(jq -r '.data["config.json"] | fromjson | .oidc.jwks_uri // ""' <<<"${apim_config_json}")"
+
+  if [[ "${apim_issuer}" == "${EXPECTED_OIDC_ISSUER_URL}" ]]; then
+    ok "APIM validates issuer ${apim_issuer}"
+  else
+    fail_soft "APIM issuer ${apim_issuer:-<empty>} does not match ${EXPECTED_OIDC_ISSUER_URL}"
+  fi
+
+  if [[ "${apim_audience}" == "${EXPECTED_APIM_AUDIENCE}" ]]; then
+    ok "APIM validates dedicated audience ${apim_audience}"
+  else
+    fail_soft "APIM audience ${apim_audience:-<empty>} does not match ${EXPECTED_APIM_AUDIENCE}"
+  fi
+
+  if [[ "${apim_jwks_uri}" == "${EXPECTED_JWKS_URL}" ]]; then
+    ok "APIM validates JWKS ${apim_jwks_uri}"
+  else
+    fail_soft "APIM JWKS ${apim_jwks_uri:-<empty>} does not match ${EXPECTED_JWKS_URL}"
+  fi
+else
+  warn "configmap apim/subnetcalc-apim-simulator-config missing"
 fi
 
 echo ""
@@ -299,8 +367,7 @@ if have_cmd curl; then
   echo ""
   echo "External HTTPS checks (host port ${HOST_PORT}):"
 
-  print_http_head "https://$(dex_host)${port_suffix}/dex/.well-known/openid-configuration" 5
-  print_http_head "https://$(dex_host)${port_suffix}/dex/keys" 5
+  print_http_head "${EXPECTED_OIDC_ISSUER_URL}/.well-known/openid-configuration" 5
   print_http_head "https://$(admin_host gitea)${port_suffix}/" 5
   print_http_head "https://$(admin_host headlamp)${port_suffix}/" 5
 

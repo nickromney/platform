@@ -13,18 +13,25 @@ flowchart LR
     StackOps["Local Stack Operations"]
     Identity["Identity And Access Edge"]
     Presentation["Presentation And Routing"]
+    Catalog["Application Catalog And Environment Lifecycle"]
+    ReadModel["Deployment Read Model"]
     APIM["API Mediation"]
     Subnet["Subnetcalc Analysis"]
     Sentiment["Sentiment Classification"]
 
     StackOps --> Identity
     StackOps --> Presentation
+    StackOps --> Catalog
+    StackOps --> ReadModel
     StackOps --> APIM
     StackOps --> Subnet
     StackOps --> Sentiment
 
     Identity --> Presentation
+    Catalog --> Presentation
+    Catalog --> ReadModel
     Presentation --> APIM
+    Presentation --> ReadModel
     APIM --> Subnet
     Presentation --> Sentiment
 ```
@@ -38,7 +45,7 @@ readiness, and variant shape explicit.
 Current language:
 platform, solution, variant, target, status, stage, environment, stack,
 apply, reset, prereqs, check-health, readiness, blocker, claimed by, shared
-host ports.
+host ports, application catalog, deployment read model.
 
 What it owns:
 
@@ -47,12 +54,16 @@ What it owns:
 - cumulative stage progression such as `100` through `900`
 - environment and route wiring such as `dev`, `sit`, `uat`, and `admin`
 - deployment of supporting services and workloads
+- publication of app/environment intent into Argo CD, GitOps repos, routes,
+  and portal/status projections
 
 What it should not own:
 
 - subnet-calculation rules
 - sentiment rules
 - business meaning hidden behind technical variant names
+- product-specific authorization rules beyond wiring identity groups and
+  downstream RBAC mappings
 
 Current evidence:
 
@@ -69,21 +80,55 @@ rest of the solution.
 
 Current language:
 OIDC, SSO, realm, issuer, JWKS, login, logout, userinfo, token, session,
-cookie, oauth2-proxy, Dex, Keycloak, Easy Auth.
+cookie, SSO session store, oauth2-proxy, Dex, Keycloak, Easy Auth.
 
 What it owns:
 
 - browser login and logout
 - session cookies
+- server-side session storage for Keycloak-backed `oauth2-proxy` sessions
 - token validation and issuer configuration
 - user identity at the edge of the app
+- OIDC clients, demo users, platform groups, app groups, and group claims
+- generated identity secrets and their Kubernetes Secret projections
 
 Important note:
-This context is implemented with more than one product. Dex is the in-cluster
-identity service. Keycloak is the compose-time identity service. The browser
-gate should simply be called `oauth2-proxy` in this repo.
+This context is implemented with more than one product. Keycloak is now the
+local stage-900 identity provider. Dex remains a supported provider shape behind
+the `sso_provider` switch. The browser gate should simply be called
+`oauth2-proxy` in this repo.
 
-## 3. Presentation And Routing
+## 3. Application Catalog And Environment Lifecycle
+
+Purpose:
+Describe which application and platform surfaces should exist in each
+environment, then turn that intent into GitOps and routing inputs.
+
+Current language:
+service catalog, application spec, app repo, app/environment surface,
+environment request, environment namespace, namespace role, app/environment
+RBAC, public hostname, Launchpad tile, deployment record, secret binding,
+scorecard.
+
+What it owns:
+
+- app/environment names such as `hello-platform-dev`, `hello-platform-uat`,
+  `sentiment-dev`, `sentiment-uat`, `subnetcalc-dev`, and `subnetcalc-uat`
+- the first-class service catalog at `catalog/platform-apps.json`
+- application namespaces labeled as `application`, shared-service namespaces
+  labeled as `shared`, and platform namespaces labeled as `platform`
+- the Argo CD app list and seeded GitOps paths that make the catalog concrete
+- environment request rendering for self-service preview paths
+- portal projections such as the Grafana Launchpad tile inventory
+- deployment record, secret binding, and scorecard evidence projected from the
+  catalog into operator-facing checks
+
+What it should not own:
+
+- app business rules
+- raw Kubernetes rollout condition interpretation
+
+## 4. Presentation And Routing
 
 Purpose:
 Receive browser traffic, serve UI assets, and route API traffic to the right
@@ -104,7 +149,29 @@ application-layer or delivery-layer concern rather than a core business domain.
 Its technical file and service names should not automatically become business
 terms.
 
-## 4. API Mediation
+## 5. Deployment Read Model
+
+Purpose:
+Expose the current reconciled state of applications and platform surfaces
+without becoming the source of desired state.
+
+Current language:
+deployment readiness, Argo CD sync status, Argo CD health, Prometheus metric,
+Grafana Launchpad health tile, `platform status`, variant status.
+
+What it owns:
+
+- read-side status assembled from Kubernetes readiness, Argo CD Applications,
+  Prometheus expressions, and local status helpers
+- operator-facing health vocabulary for portal and CLI surfaces
+
+What it should not own:
+
+- application catalog intent
+- identity policy decisions
+- app-domain success criteria beyond health/readiness signals
+
+## 6. API Mediation
 
 Purpose:
 Apply policy and forwarding rules between the exposed API surface and the
@@ -124,7 +191,7 @@ Current scope:
 This context appears clearly on the `subnetcalc` path and does not
 currently sit on the main shipped `sentiment` path.
 
-## 5. Subnetcalc Analysis
+## 7. Subnetcalc Analysis
 
 Purpose:
 Analyze addresses and networks, then calculate subnet details and cloud-mode
@@ -153,7 +220,7 @@ Current rules already visible in code:
 
 This is the clearest current candidate for a richer domain model.
 
-## 6. Sentiment Classification
+## 8. Sentiment Classification
 
 Purpose:
 Classify submitted comments and keep a recent history of classification

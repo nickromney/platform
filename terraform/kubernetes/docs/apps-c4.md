@@ -72,8 +72,8 @@ What this view is trying to make obvious:
 
 - a subnetcalc request has two distinct runtime branches after authentication:
   frontend content or APIM-mediated API traffic
-- the backend path is not reachable until the request crosses APIM and Dex
-  validation
+- the backend path is not reachable until the request crosses APIM and the
+  selected IdP/OIDC validation path
 - the APIM hop is part of the state machine, not just a box in a topology
 
 ### Sentiment Backend Mode State Diagram

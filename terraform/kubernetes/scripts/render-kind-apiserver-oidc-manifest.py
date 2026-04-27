@@ -30,6 +30,8 @@ def main() -> int:
     service_cluster_ip_range = re.compile(r"^\s*-\s*--service-cluster-ip-range=")
     top_level_spec_key = re.compile(r"^  [A-Za-z0-9_-]+:")
     host_network = re.compile(r"^  hostNetwork:\s*(true|false)\s*$")
+    hostname_line = re.compile(r"^\s*-\s+([^\"'\s]+)\s*$")
+    managed_sso_hostname = re.compile(r"^(dex|keycloak)\.")
 
     index = 0
     while index < len(source_lines):
@@ -45,7 +47,15 @@ def main() -> int:
             while index < len(source_lines) and not top_level_spec_key.match(source_lines[index]):
                 block_lines.append(source_lines[index])
                 index += 1
-            if any(dex_host in block_line for block_line in block_lines):
+            hostnames = []
+            for block_line in block_lines:
+                match = hostname_line.match(block_line)
+                if match:
+                    hostnames.append(match.group(1).strip("\"'"))
+            if hostnames and all(
+                hostname == dex_host or managed_sso_hostname.match(hostname)
+                for hostname in hostnames
+            ):
                 continue
             raise SystemExit(
                 f"unexpected existing kube-apiserver hostAliases block unrelated to {dex_host}; "

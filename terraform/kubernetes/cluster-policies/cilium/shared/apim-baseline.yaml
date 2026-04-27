@@ -8,7 +8,7 @@ spec:
     Traffic flow (verified via APIM config.json):
       Ingress: subnetcalc-router (dev/uat, tier=gateway) -> :8000
       Egress:  -> subnetcalc-api (dev/uat, tier=backend) :8000  (host-header routed)
-      Egress:  -> dex (sso) :5556  (JWKS fetch for JWT validation)
+      Egress:  -> keycloak (sso) :8080  (JWKS fetch for JWT validation)
       Egress:  -> DNS, kube-apiserver
     Any namespace labeled namespace-role=application can inherit the same
     subnetcalc flow without duplicating this policy. A namespace-local override
@@ -51,14 +51,14 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # apim-simulator -> dex (JWKS fetch for JWT validation)
+    # apim-simulator -> keycloak (JWKS fetch for JWT validation)
     - toEndpoints:
         - matchLabels:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
-            "k8s:app.kubernetes.io/name": dex
+            "k8s:app.kubernetes.io/name": keycloak
       toPorts:
         - ports:
-            - port: "5556"
+            - port: "8080"
               protocol: TCP
     - toEndpoints:
         - matchLabels:

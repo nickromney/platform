@@ -13,7 +13,7 @@ This stack is a reproducible, local "platform-in-a-box" demo that shows:
 - **Argo CD** using the **app-of-apps** GitOps pattern
 - **NGINX Gateway Fabric** (Gateway API) for ingress
 - **TLS everywhere** via **cert-manager** + a locally bootstrapped **mkcert CA**
-- **Instrumentation/Monitoring** with **SigNoz** (local, open-source "Datadog-like" observability)
+- **Instrumentation/Monitoring** with **Prometheus, Grafana, VictoriaLogs, and Tempo** by default; SigNoz remains an optional heavier observability path
 
 ## GitOps Chart Sources
 

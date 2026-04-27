@@ -8,7 +8,7 @@ C4Context
 
     Enterprise_Boundary(platform, "Local platform demo") {
         System(gateway, "platform-gateway", "Cluster entrypoint and shared routing")
-        System(sso, "SSO stack", "oauth2-proxy and Dex")
+        System(sso, "SSO stack", "oauth2-proxy and Keycloak")
         System(subnetcalc, "subnetcalc", "Authenticated CIDR and Cloudflare range demo")
         System(sentiment, "sentiment", "Authenticated sentiment analysis demo")
         System(observability, "otel-collector", "Shared telemetry sink")

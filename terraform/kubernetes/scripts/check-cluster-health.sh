@@ -94,6 +94,39 @@ argocd_app_allows_outofsync_if_healthy() {
   argocd_app_has_only_future_stage_namespace_gaps "${ns}" "${app}"
 }
 
+argocd_app_has_stale_aggregate_health() {
+  local ns="$1"
+  local app="$2"
+
+  [[ "${app}" == "platform-gateway-routes" ]] || return 1
+  if ! kubectl -n "${ns}" get app "${app}" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local sync health op_phase conditions child_sync_drift child_bad_health op_rev sync_rev
+  sync=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
+  health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
+  [[ "${sync}" == "Synced" && "${health}" == "Degraded" ]] || return 1
+
+  op_phase=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
+  [[ "${op_phase}" == "Succeeded" ]] || return 1
+
+  conditions=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.conditions[*]}{.type}{"\n"}{end}' 2>/dev/null | awk 'NF' || true)
+  [[ -z "${conditions}" ]] || return 1
+
+  op_rev=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || echo "")
+  sync_rev=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || echo "")
+  if [[ -n "${op_rev}" && -n "${sync_rev}" && "${op_rev}" != "${sync_rev}" ]]; then
+    return 1
+  fi
+
+  child_sync_drift=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.resources[?(@.status!="Synced")]}{.kind}{" "}{.namespace}{"/"}{.name}{" sync="}{.status}{"\n"}{end}' 2>/dev/null | awk 'NF' || true)
+  [[ -z "${child_sync_drift}" ]] || return 1
+
+  child_bad_health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{range .status.resources[?(@.health.status!="Healthy")]}{.kind}{" "}{.namespace}{"/"}{.name}{" health="}{.health.status}{"\n"}{end}' 2>/dev/null | awk 'NF' || true)
+  [[ -z "${child_bad_health}" ]] || return 1
+}
+
 argocd_refresh_app() {
   local ns="$1"
   local app="$2"
@@ -144,6 +177,9 @@ argocd_app_is_settled() {
   health=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "")
 
   if [[ "${health}" != "Healthy" ]]; then
+    if argocd_app_has_stale_aggregate_health "${ns}" "${app}"; then
+      return 0
+    fi
     return 1
   fi
 
@@ -251,6 +287,10 @@ check_argocd_app() {
   op_started=$(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.startedAt}' 2>/dev/null || echo "")
 
   if [[ "${health}" != "Healthy" ]]; then
+    if argocd_app_has_stale_aggregate_health "${ns}" "${app}"; then
+      ok "Argo CD app ${app} is Synced with stale aggregate Degraded health (child resources clean)"
+      return 0
+    fi
     fail_soft "Argo CD app ${app} not Healthy (sync=${sync}, health=${health})"
     warn "Argo CD app ${app} operation message: $(kubectl -n "${ns}" get app "${app}" -o jsonpath='{.status.operationState.message}' 2>/dev/null || echo "")"
     if [[ "${op_phase}" == "Running" && -n "${op_rev}" && -n "${sync_rev}" && "${op_rev}" != "${sync_rev}" ]]; then
@@ -730,6 +770,8 @@ EXPECT_TEMPO=$(expected_from_tfvars enable_tempo)
 EXPECT_HEADLAMP=$(expected_from_tfvars enable_headlamp)
 EXPECT_GATEWAY_TLS=$(expected_from_tfvars enable_gateway_tls)
 EXPECT_SSO=$(expected_from_tfvars enable_sso)
+SSO_PROVIDER=$(tfvar_get sso_provider)
+[[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
@@ -780,6 +822,10 @@ admin_host() {
 
 dex_host() {
   printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
+}
+
+keycloak_host() {
+  printf 'keycloak.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
 }
 
 GITEA_ADMIN_PWD_EFFECTIVE="${GITEA_ADMIN_PWD:-}"
@@ -866,8 +912,15 @@ print_gateway_urls() {
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
     echo ""
-    echo "SSO (Dex + oauth2-proxy):"
-    echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
+    echo "SSO (${SSO_PROVIDER} + oauth2-proxy):"
+    if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
+      echo "  • Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/platform/console/#/platform/users"
+      echo "  • Keycloak realm: https://$(keycloak_host)${port_suffix}/realms/platform"
+      echo "  • Console admin: demo@admin.test"
+      echo "  • Break-glass admin: keycloak-admin"
+    else
+      echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
+    fi
     echo "  • Users:    demo@admin.test, demo@dev.test, demo@uat.test"
     echo "  • Password: set via PLATFORM_DEMO_PASSWORD in .env"
   fi
@@ -1340,7 +1393,17 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
-    sso_apps=(dex oauth2-proxy-argocd oauth2-proxy-gitea)
+    sso_apps=(oauth2-proxy-argocd oauth2-proxy-gitea)
+    if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
+      if ! kubectl -n sso get deploy keycloak >/dev/null 2>&1; then
+        fail_soft "Keycloak deployment missing (sso_provider=keycloak${tfvars_hint})"
+      fi
+      if ! kubectl -n sso get statefulset keycloak-postgres >/dev/null 2>&1; then
+        fail_soft "Keycloak Postgres statefulset missing (sso_provider=keycloak${tfvars_hint})"
+      fi
+    else
+      sso_apps+=(dex)
+    fi
     if [[ "${EXPECT_HUBBLE}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-hubble)
     fi

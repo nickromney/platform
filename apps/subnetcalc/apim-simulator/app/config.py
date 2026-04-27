@@ -579,16 +579,29 @@ class ApiConfig(BaseModel):
 def _default_config_from_env() -> GatewayConfig:
     backend_base_url = os.getenv("BACKEND_BASE_URL", http_url("mock-backend:8080"))
     backend_path_prefix = os.getenv("BACKEND_PATH_PREFIX", "/api")
-    oidc_issuer = os.getenv("OIDC_ISSUER", http_url("localhost:8180/realms/subnetcalc"))
-    oidc_audience = os.getenv("OIDC_AUDIENCE", "api-app")
-    oidc_jwks_uri = os.getenv(
-        "OIDC_JWKS_URI", http_url("keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs")
-    )
+    oidc_issuer = os.getenv("OIDC_ISSUER", "").strip()
+    oidc_audience = os.getenv("OIDC_AUDIENCE", "").strip()
+    oidc_jwks_uri = os.getenv("OIDC_JWKS_URI", "").strip()
     default_allowed_origins = ",".join([http_url("localhost:3000"), http_url("localhost:8000")])
     allowed_origins = [
         origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", default_allowed_origins).split(",") if origin.strip()
     ]
     allow_anonymous = os.getenv("ALLOW_ANONYMOUS", "true").lower() == "true"
+    oidc_values = {
+        "OIDC_ISSUER": oidc_issuer,
+        "OIDC_AUDIENCE": oidc_audience,
+        "OIDC_JWKS_URI": oidc_jwks_uri,
+    }
+    missing_oidc = [name for name, value in oidc_values.items() if not value]
+    if len(missing_oidc) != len(oidc_values) and missing_oidc:
+        raise ValueError(f"incomplete OIDC configuration; missing {', '.join(missing_oidc)}")
+    if not allow_anonymous and missing_oidc:
+        raise ValueError("OIDC_ISSUER, OIDC_AUDIENCE, and OIDC_JWKS_URI are required when ALLOW_ANONYMOUS=false")
+    oidc_config = (
+        OIDCConfig(issuer=oidc_issuer, audience=oidc_audience, jwks_uri=oidc_jwks_uri)
+        if not missing_oidc
+        else None
+    )
 
     subscription_key = os.getenv("APIM_SUBSCRIPTION_KEY", "")
     keys: dict[str, SubscriptionIdentity] = {}
@@ -615,7 +628,7 @@ def _default_config_from_env() -> GatewayConfig:
     return GatewayConfig(
         allowed_origins=allowed_origins or ["*"],
         allow_anonymous=allow_anonymous,
-        oidc=OIDCConfig(issuer=oidc_issuer, audience=oidc_audience, jwks_uri=oidc_jwks_uri),
+        oidc=oidc_config,
         products={"default": ProductConfig(name="Default", require_subscription=bool(subscription_key))},
         subscription=SubscriptionConfig(required=bool(subscription_key), keys=keys, subscriptions=subscriptions),
         admin_token=admin_token,

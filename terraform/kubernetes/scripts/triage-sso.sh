@@ -38,6 +38,7 @@ require kubectl
 
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
 PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
+SSO_PROVIDER="${SSO_PROVIDER:-keycloak}"
 DEVCONTAINER_HOST_ALIAS="${PLATFORM_DEVCONTAINER_HOST_ALIAS:-${KIND_DEVCONTAINER_HOST_ALIAS:-host.docker.internal}}"
 SEPARATE_ADMIN_DOMAIN=0
 if [[ "${PLATFORM_ADMIN_BASE_DOMAIN}" != "${PLATFORM_BASE_DOMAIN}" ]]; then
@@ -55,7 +56,7 @@ admin_host() {
 
 oauth2_proxy_arg_of_interest() {
   case "$1" in
-    --cookie-name*|--cookie-domain*|--email-domain*|--redirect-url*|--upstream*|--skip-auth-regex*|--set-authorization-header*|--pass-access-token*|--set-xauthrequest*|--pass-user-headers*|--login-url*|--oidc-issuer-url*)
+    --cookie-name*|--cookie-domain*|--email-domain*|--allowed-group*|--oidc-groups-claim*|--redirect-url*|--upstream*|--skip-auth-regex*|--set-authorization-header*|--pass-access-token*|--set-xauthrequest*|--pass-user-headers*|--login-url*|--oidc-issuer-url*)
       return 0
       ;;
     *)
@@ -118,7 +119,7 @@ kubectl -n argocd get application -o name | grep -E 'application.argoproj.io/oau
 done
 
 section "Signoz auth-bridge smoke checks (avoid printing tokens)"
-kubectl -n observability get deploy signoz-auth-proxy >/dev/null 2>&1 && {
+if kubectl -n observability get deploy signoz-auth-proxy >/dev/null 2>&1; then
   curl_in_cluster curlsignozprecheck default \
     "set -euo pipefail; \
      echo '-- signoz-auth-proxy /api/v1/loginPrecheck'; \
@@ -126,7 +127,9 @@ kubectl -n observability get deploy signoz-auth-proxy >/dev/null 2>&1 && {
      echo; \
      echo '-- signoz-auth-proxy /api/v1/version'; \
      curl -sS --max-time 10 -o /dev/null -D - http://signoz-auth-proxy.observability.svc.cluster.local:3000/api/v1/version | sed -n '1,15p'"
-} || echo "observability/signoz-auth-proxy deployment not found; skipping."
+else
+  echo "observability/signoz-auth-proxy deployment not found; optional SigNoz path is inactive."
+fi
 
 section "Sentiment LLM smoke checks (dev/uat) - latency + llama.cpp model readiness"
 # These checks bypass oauth2-proxy (auth) and measure pure upstream performance, which is useful when
@@ -155,14 +158,18 @@ done
 
 section "Local HTTPS smoke checks (optional; uses 127.0.0.1:443 or the devcontainer host alias)"
 if have curl; then
-  for host in \
-    "$(admin_host gitea)" \
-    "$(admin_host argocd)" \
-    "$(admin_host signoz)" \
-    "$(admin_host kyverno)" \
-    "subnetcalc.uat.${PLATFORM_BASE_DOMAIN}" \
-  ; do
-    echo "-- ${host} / (expect 302 to dex when unauthenticated)"
+  hosts=(
+    "$(admin_host gitea)"
+    "$(admin_host argocd)"
+    "$(admin_host kyverno)"
+    "subnetcalc.uat.${PLATFORM_BASE_DOMAIN}"
+  )
+  if kubectl -n observability get deploy signoz >/dev/null 2>&1 || kubectl -n observability get deploy signoz-auth-proxy >/dev/null 2>&1; then
+    hosts+=("$(admin_host signoz)")
+  fi
+
+  for host in "${hosts[@]}"; do
+    echo "-- ${host} / (expect 302 to ${SSO_PROVIDER} when unauthenticated)"
     if devcontainer_enabled; then
       curl -skI --max-time 5 --connect-to "${host}:443:${DEVCONTAINER_HOST_ALIAS}:443" "https://${host}/" | sed -n '1,12p' || true
     else
