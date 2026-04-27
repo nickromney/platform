@@ -1,0 +1,10 @@
+**
+
+!apps/
+!apps/idp-core/
+!apps/idp-core/app/
+!apps/idp-core/app/**
+!apps/idp-core/pyproject.toml
+!apps/idp-core/uv.lock
+!catalog/
+!catalog/platform-apps.json

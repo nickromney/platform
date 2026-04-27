@@ -17,6 +17,7 @@ BASE_IMAGE_NAMESPACE="${BASE_IMAGE_NAMESPACE:-platform-cache}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-platform}"
 TAG="${TAG:-latest}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
+ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
 GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-12.3.1}"
 GRAFANA_BASE_IMAGE_SOURCE="${GRAFANA_BASE_IMAGE_SOURCE:-docker.io/grafana/grafana:${GRAFANA_IMAGE_TAG}}"
 PLUGIN_FETCH_IMAGE_SOURCE="${PLUGIN_FETCH_IMAGE_SOURCE:-docker.io/library/alpine:3.22}"
@@ -115,23 +116,28 @@ build_and_push() {
   local build_context="$2"
   local dockerfile_path="$3"
   local version_tag="$4"
-  shift 4
+  local fingerprint_tag="$5"
+  shift 5
 
   local repo="${IMAGE_NAMESPACE}/${image_name}"
   local build_ref="build-${image_name}:${version_tag}"
   local latest_ref="${CACHE_PUSH_HOST}/${repo}:${TAG}"
   local version_ref="${CACHE_PUSH_HOST}/${repo}:${version_tag}"
   local commit_ref=""
+  local fingerprint_ref=""
   local cmd=()
 
   if [ -n "${commit_tag}" ]; then
     commit_ref="${CACHE_PUSH_HOST}/${repo}:${commit_tag}"
   fi
+  if [ -n "${fingerprint_tag}" ]; then
+    fingerprint_ref="${CACHE_PUSH_HOST}/${repo}:${fingerprint_tag}"
+  fi
 
   if [ "${FORCE_REBUILD}" != "1" ] \
     && tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${version_tag}" \
     && tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${TAG}" \
-    && { [ -z "${commit_tag}" ] || tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${commit_tag}"; }; then
+    && { [ -z "${fingerprint_tag}" ] || tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"; }; then
     echo "OK   cached ${version_ref}"
     return 0
   fi
@@ -156,8 +162,29 @@ build_and_push() {
     docker tag "${build_ref}" "${commit_ref}"
     docker_push_local_registry "${commit_ref}"
   fi
+  if [ -n "${fingerprint_ref}" ]; then
+    docker tag "${build_ref}" "${fingerprint_ref}"
+    docker_push_local_registry "${fingerprint_ref}"
+  fi
 
   echo "PUSH  ${version_ref}"
+}
+
+source_fingerprint_tag() {
+  local digest
+
+  digest="$(
+    cd "${REPO_ROOT}"
+    find "$@" -type f -print |
+      LC_ALL=C sort |
+      while IFS= read -r source_file; do
+        printf '%s\n' "${source_file}"
+        shasum -a 256 "${source_file}"
+      done |
+      shasum -a 256 |
+      awk '{print $1}'
+  )"
+  printf 'src-%s' "${digest:0:20}"
 }
 
 grafana_version_tag="${GRAFANA_IMAGE_TAG}-v${VICTORIA_LOGS_PLUGIN_VERSION}"
@@ -190,6 +217,67 @@ build_and_push \
   "${grafana_build_context}" \
   "${grafana_build_context}/Dockerfile" \
   "${grafana_version_tag}" \
+  "" \
   --build-arg GRAFANA_BASE_IMAGE="${grafana_base_ref}" \
   --build-arg PLUGIN_FETCH_IMAGE="${plugin_fetch_ref}" \
   --build-arg GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG}"
+
+idp_core_source_tag="$(
+  source_fingerprint_tag \
+    apps/idp-core/.dockerignore \
+    apps/idp-core/Dockerfile \
+    apps/idp-core/Dockerfile.dockerignore \
+    apps/idp-core/app \
+    apps/idp-core/pyproject.toml \
+    apps/idp-core/uv.lock \
+    catalog/platform-apps.json
+)"
+backstage_source_tag="$(
+  if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
+    source_fingerprint_tag \
+      apps/backstage/.dockerignore \
+      apps/backstage/.yarnrc.yml \
+      apps/backstage/.yarn \
+      apps/backstage/Dockerfile \
+      apps/backstage/app-config.production.yaml \
+      apps/backstage/app-config.yaml \
+      apps/backstage/backstage.json \
+      apps/backstage/catalog \
+      apps/backstage/catalog-info.yaml \
+      apps/backstage/package.json \
+      apps/backstage/packages \
+      apps/backstage/plugins \
+      apps/backstage/tsconfig.json \
+      apps/backstage/yarn.lock
+  fi
+)"
+keycloak_source_tag="$(
+  source_fingerprint_tag \
+    apps/keycloak/.dockerignore \
+    apps/keycloak/Dockerfile
+)"
+
+build_and_push \
+  "idp-core" \
+  "${REPO_ROOT}" \
+  "${REPO_ROOT}/apps/idp-core/Dockerfile" \
+  "${TAG}" \
+  "${idp_core_source_tag}"
+
+if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
+  build_and_push \
+    "backstage" \
+    "${REPO_ROOT}/apps/backstage" \
+    "${REPO_ROOT}/apps/backstage/Dockerfile" \
+    "${TAG}" \
+    "${backstage_source_tag}"
+else
+  echo "SKIP backstage (ENABLE_BACKSTAGE=false)"
+fi
+
+build_and_push \
+  "keycloak" \
+  "${REPO_ROOT}/apps/keycloak" \
+  "${REPO_ROOT}/apps/keycloak/Dockerfile" \
+  "${TAG}" \
+  "${keycloak_source_tag}"

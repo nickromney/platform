@@ -602,7 +602,7 @@ variable "oauth2_proxy_chart_version" {
 variable "oauth2_proxy_session_store_image" {
   description = "Redis-compatible image used for oauth2-proxy server-side session storage."
   type        = string
-  default     = "docker.io/redis:8.2.3-alpine"
+  default     = "ecr-public.aws.com/docker/library/redis:8.2.3-alpine"
 }
 
 variable "opentelemetry_collector_chart_version" {
@@ -1192,8 +1192,22 @@ variable "prefer_external_platform_images" {
   default     = false
 }
 
+variable "enable_backstage" {
+  description = "Deploy the Backstage developer portal. Kind writes this through an operator override after checking local Docker memory."
+  type        = bool
+  default     = true
+}
+
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: grafana, hardened-registry, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, grafana, hardened-registry, idp-core, signoz-auth-proxy."
   type        = map(string)
   default     = {}
+
+  validation {
+    condition = alltrue([
+      for key in keys(var.external_platform_image_refs) :
+      contains(["backstage", "grafana", "hardened-registry", "idp-core", "signoz-auth-proxy"], key)
+    ])
+    error_message = "external_platform_image_refs supports only: backstage, grafana, hardened-registry, idp-core, signoz-auth-proxy."
+  }
 }

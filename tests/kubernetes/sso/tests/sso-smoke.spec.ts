@@ -15,6 +15,8 @@ type Target = {
     | 'keycloak-admin-console'
     | 'sentiment-sample-positive'
     | 'subnetcalc-rfc1918-lookup'
+    | 'developer-portal'
+    | 'developer-portal-api-json'
     | 'hubble-namespace-argocd'
     | 'signoz-logs-and-metrics'
 }
@@ -28,11 +30,14 @@ function isEnabled(envName: string, defaultValue: boolean) {
 const INCLUDE_SIGNOZ = isEnabled('SSO_E2E_ENABLE_SIGNOZ', false)
 const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', false)
 const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
+const INCLUDE_BACKSTAGE = isEnabled('SSO_E2E_ENABLE_BACKSTAGE', true)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
 const BASE_DOMAIN = process.env.SSO_E2E_BASE_DOMAIN || '127.0.0.1.sslip.io'
 const BASE_PORT = process.env.SSO_E2E_BASE_PORT ? `:${process.env.SSO_E2E_BASE_PORT}` : ''
 const SUITE_NAME = process.env.SSO_E2E_SUITE_NAME || 'platform SSO endpoints: smoke'
+const PORTAL_HOSTNAME = `portal.${BASE_DOMAIN}`.toLowerCase()
+const PORTAL_API_HOSTNAME = `portal-api.${BASE_DOMAIN}`.toLowerCase()
 
 function platformUrl(hostPrefix: string) {
   return `${BASE_SCHEME}://${hostPrefix}.${BASE_DOMAIN}${BASE_PORT}/`
@@ -134,9 +139,26 @@ const BASE_TARGETS: Target[] = [
   { name: 'argocd-admin', url: platformUrl('argocd.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   { name: 'hubble-admin', url: platformUrl('hubble.admin'), segment: 'admin', flow: 'oauth2-proxy', postLogin: 'hubble-namespace-argocd' },
   { name: 'kyverno-admin', url: platformUrl('kyverno.admin'), segment: 'admin', flow: 'none' },
+  {
+    name: 'developer-portal-api',
+    url: absolutePlatformUrl('portal-api', '/api/v1/runtime'),
+    segment: 'dev',
+    flow: 'oauth2-proxy',
+    postLogin: 'developer-portal-api-json',
+  },
 ]
 
 const TARGETS: Target[] = [...BASE_TARGETS]
+
+if (INCLUDE_BACKSTAGE) {
+  TARGETS.push({
+    name: 'developer-portal',
+    url: platformUrl('portal'),
+    segment: 'dev',
+    flow: 'oauth2-proxy',
+    postLogin: 'developer-portal',
+  })
+}
 
 if (INCLUDE_SIGNOZ) {
   TARGETS.push({
@@ -271,6 +293,11 @@ async function isOauth2ProxyErrorPage(page: Page) {
   const heading = page.getByRole('heading', { name: /Internal Server Error/i })
   if (!(await heading.isVisible().catch(() => false))) return false
   return page.getByText(/Secured with\s+OAuth2 Proxy/i).isVisible().catch(() => false)
+}
+
+async function isOauth2ProxyForbiddenPage(page: Page) {
+  const body = page.locator('body')
+  return body.getByText(/Forbidden|Invalid authentication via OAuth2|unauthorized/i).isVisible().catch(() => false)
 }
 
 async function assertNoGatewayErrorWithReloads(page: Page, name: string) {
@@ -793,6 +820,135 @@ async function signozVerifyLogsAndMetrics(page: Page, baseUrl: string) {
   await signozMetricsExplorerSummaryHasContent(page, baseUrl)
 }
 
+type BrowserApiTraffic = {
+  requestUrls: string[]
+  responses: Array<{ url: string; status: number }>
+}
+
+function isBrowserApiUrl(value: string) {
+  try {
+    return new URL(value).pathname.startsWith('/api/')
+  } catch {
+    return false
+  }
+}
+
+function isLoopbackApiTarget(value: string) {
+  const hostname = new URL(value).hostname.toLowerCase()
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+function usesPortalApiHost(value: string) {
+  return new URL(value).hostname === PORTAL_API_HOSTNAME
+}
+
+function isBackstageCatalogApiResponse(response: { url: string; status: number }) {
+  const url = new URL(response.url)
+  return url.hostname === PORTAL_HOSTNAME && url.pathname.startsWith('/api/catalog/') && response.status >= 200 && response.status < 400
+}
+
+function watchBrowserApiTraffic(page: Page): BrowserApiTraffic {
+  const traffic: BrowserApiTraffic = {
+    requestUrls: [],
+    responses: [],
+  }
+
+  page.on('request', (request) => {
+    const url = request.url()
+    if (isBrowserApiUrl(url)) {
+      traffic.requestUrls.push(url)
+    }
+  })
+
+  page.on('response', (response) => {
+    const url = response.url()
+    if (isBrowserApiUrl(url)) {
+      traffic.responses.push({ url, status: response.status() })
+    }
+  })
+
+  return traffic
+}
+
+async function bodyText(page: Page) {
+  return ((await page.locator('body').textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim()
+}
+
+async function expectBodyToContain(page: Page, pattern: RegExp, message: string) {
+  await expect.poll(() => bodyText(page), { message, timeout: 120_000 }).toMatch(pattern)
+}
+
+async function developerPortalWorks(page: Page, traffic: BrowserApiTraffic) {
+  await expect(page).toHaveURL((u) => u.hostname === PORTAL_HOSTNAME && !u.pathname.startsWith('/oauth2/'))
+  await expect(page).toHaveURL((u) => u.pathname === '/' || u.pathname.startsWith('/catalog'))
+
+  const body = page.locator('body')
+  await expect(body).not.toContainText(/sign in as guest|continue as guest|guest sign[- ]?in/i, { timeout: 10_000 })
+  await expect(page.getByRole('button', { name: /guest/i })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /guest/i })).toHaveCount(0)
+
+  await expectBodyToContain(page, /Platform Engineering Catalog|Catalog/i, 'Backstage catalog shell did not render after edge SSO login')
+  const allComponentsFilter = page.getByRole('menuitem', { name: /All\s+5/i })
+  await expect(allComponentsFilter, 'Backstage catalog did not expose the full platform catalog filter').toBeVisible({ timeout: 30_000 })
+  await allComponentsFilter.click()
+  await expectBodyToContain(page, /Developer Portal/i, 'Backstage catalog did not expose the Backstage portal component')
+  await expectBodyToContain(page, /Portal API/i, 'Backstage catalog did not expose the IDP API component')
+  await expectBodyToContain(page, /Hello Platform/i, 'Backstage catalog did not expose workload catalog content')
+
+  await expect
+    .poll(() => traffic.responses.some(isBackstageCatalogApiResponse), {
+      message: 'Developer portal did not load Backstage catalog content through the portal host',
+      timeout: 60_000,
+    })
+    .toBe(true)
+
+  const loopbackApiUrls = traffic.requestUrls.filter(isLoopbackApiTarget)
+  expect(loopbackApiUrls, 'Developer portal browser API calls must not target localhost or raw loopback').toEqual([])
+}
+
+async function fetchJsonThroughBrowser(page: Page, path: string) {
+  const result = await page.evaluate(async (resourcePath) => {
+    const response = await fetch(resourcePath, {
+      credentials: 'include',
+      headers: { accept: 'application/json' },
+    })
+    const text = await response.text()
+    let json: any = null
+    try {
+      json = JSON.parse(text)
+    } catch {
+      // Return the raw body below so the assertion explains non-JSON responses.
+    }
+
+    return {
+      body: text.slice(0, 2000),
+      contentType: response.headers.get('content-type') ?? '',
+      json,
+      status: response.status,
+      url: response.url,
+    }
+  }, path)
+
+  expect(result.status, result.body).toBe(200)
+  expect(result.contentType).toMatch(/application\/json/i)
+  expect(result.json, result.body).not.toBeNull()
+  expect(usesPortalApiHost(result.url), `Portal API response URL should use ${PORTAL_API_HOSTNAME}: ${result.url}`).toBe(true)
+
+  return result.json
+}
+
+async function portalApiJsonWorks(page: Page) {
+  const runtime = await fetchJsonThroughBrowser(page, '/api/v1/runtime')
+  expect(typeof runtime?.active_runtime?.name).toBe('string')
+  expect(['generic_kubernetes', 'kind', 'lima']).toContain(runtime.active_runtime.name)
+
+  const catalog = await fetchJsonThroughBrowser(page, '/api/v1/catalog/apps')
+  expect(Array.isArray(catalog?.applications)).toBe(true)
+  expect(catalog.applications.some((app: any) => app?.name === 'backstage')).toBe(true)
+  expect(catalog.applications.some((app: any) => app?.name === 'idp-core')).toBe(true)
+  expect(catalog.applications.some((app: any) => app?.name === 'hello-platform')).toBe(true)
+}
+
 async function attachLoggedInScreenshotIfEnabled(page: Page, testInfo: TestInfo, name: string) {
   if (process.env.SSO_E2E_CAPTURE !== '1') return
 
@@ -808,6 +964,7 @@ test.describe(SUITE_NAME, () => {
   for (const t of TARGETS) {
     test(`${t.name}: load and login`, async ({ page }, testInfo) => {
       test.setTimeout(180_000)
+      const browserApiTraffic = t.postLogin === 'developer-portal' ? watchBrowserApiTraffic(page) : undefined
 
       if (t.flow === 'headlamp-oidc') {
         await loginHeadlampPopupFlow(page, t)
@@ -821,6 +978,7 @@ test.describe(SUITE_NAME, () => {
 
       // If the upstream is broken, we want a hard failure (e.g. SigNoz 502 after login).
       await assertNoGatewayErrorWithReloads(page, t.name)
+      expect(await isOauth2ProxyForbiddenPage(page), `OAuth2 proxy rejected post-login access for ${t.name}; url=${page.url()}`).toBe(false)
 
       if (VERIFY_APP_ACTIONS) {
         if (t.postLogin === 'sentiment-sample-positive') {
@@ -828,6 +986,12 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'subnetcalc-rfc1918-lookup') {
           await subnetcalcRfc1918Lookup(page)
+        }
+        if (t.postLogin === 'developer-portal') {
+          await developerPortalWorks(page, browserApiTraffic ?? watchBrowserApiTraffic(page))
+        }
+        if (t.postLogin === 'developer-portal-api-json') {
+          await portalApiJsonWorks(page)
         }
         if (t.postLogin === 'hubble-namespace-argocd') {
           await hubbleChooseNamespaceArgocd(page, t.url)

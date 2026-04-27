@@ -1015,7 +1015,7 @@ ${local.grafana_plugins_values_yaml}
                       },
                       "targets": [
                         {
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-idp-portal\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"idp-portal\"}) > bool 0)) or vector(0))",
+                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-backstage\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0)) or vector(0))",
                           "refId": "A"
                         }
                       ],

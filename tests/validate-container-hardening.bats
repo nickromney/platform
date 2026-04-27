@@ -59,10 +59,26 @@ manifests = {
             "mounts": {"/config/config.json": "configMap", "/tmp": "emptyDir"},
         },
     },
+    "terraform/kubernetes/apps/workloads/hello-platform/all.yaml": {
+        "hello-platform": {
+            "container": "app",
+            "mounts": {"/etc/hello-platform": "secret", "/tmp": "emptyDir"},
+        },
+    },
     "terraform/kubernetes/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml": {
         "signoz-auth-proxy": {
             "container": "signoz-auth-proxy",
             "mounts": {"/app/proxy.mjs": "configMap", "/tmp": "emptyDir"},
+        },
+    },
+    "terraform/kubernetes/apps/idp/all.yaml": {
+        "idp-core": {
+            "container": "api",
+            "mounts": {"/tmp": "emptyDir"},
+        },
+        "backstage": {
+            "container": "backstage",
+            "mounts": {"/tmp": "emptyDir"},
         },
     },
 }
@@ -90,6 +106,8 @@ def volume_type(spec: dict, volume_name: str) -> str:
             return "persistentVolumeClaim"
         if "configMap" in volume:
             return "configMap"
+        if "secret" in volume:
+            return "secret"
         return "other"
     raise AssertionError(f"missing volume {volume_name}")
 
@@ -132,5 +150,40 @@ print(f"validated {len(manifests)} manifest file(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 3 manifest file(s)"* ]]
+  [[ "${output}" == *"validated 5 manifest file(s)"* ]]
+}
+
+@test "rendered UAT workloads explicitly satisfy the privileged-container policy" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+rendered = subprocess.check_output(
+    ["kubectl", "kustomize", str(repo_root / "terraform/kubernetes/apps/uat")],
+    text=True,
+)
+
+checked = 0
+for doc in yaml.safe_load_all(rendered):
+    if not doc or doc.get("kind") != "Deployment":
+        continue
+    name = doc["metadata"]["name"]
+    containers = doc["spec"]["template"]["spec"].get("containers", [])
+    for container in containers:
+        security = container.get("securityContext", {})
+        assert security.get("privileged") is False, (name, container.get("name"), security)
+        checked += 1
+
+assert checked > 0
+print(f"validated {checked} UAT container privileged=false setting(s)")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"UAT container privileged=false"* ]]
 }

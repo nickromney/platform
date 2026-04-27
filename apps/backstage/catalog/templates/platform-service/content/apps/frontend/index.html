@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${{ values.name }}</title>
+  </head>
+  <body>
+    <main>
+      <h1>${{ values.name }}</h1>
+      <p>${{ values.description }}</p>
+      <pre id="status">Loading backend status...</pre>
+    </main>
+    <script>
+      fetch('/api/health')
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('status').textContent = JSON.stringify(data, null, 2);
+        })
+        .catch(error => {
+          document.getElementById('status').textContent = String(error);
+        });
+    </script>
+  </body>
+</html>
+

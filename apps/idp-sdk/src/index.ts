@@ -80,7 +80,7 @@ export class IdpClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, init)
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { credentials: "include", ...init })
     if (!response.ok) {
       const body = await response.text().catch(() => "")
       throw new Error(`Portal API ${response.status}: ${body || response.statusText}`)

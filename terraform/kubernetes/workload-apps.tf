@@ -50,6 +50,31 @@ __YAML__
   ]
 }
 
+resource "kubectl_manifest" "namespace_idp" {
+  count = var.enable_sso && var.enable_argocd ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: idp
+  labels:
+    platform.publiccloudexperiments.net/namespace-role: platform
+    platform.publiccloudexperiments.net/sensitivity: internal
+    kyverno.io/isolate: "true"
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = true
+
+  depends_on = [
+    kind_cluster.local,
+    null_resource.ensure_kind_kubeconfig,
+  ]
+}
+
 resource "kubectl_manifest" "argocd_app_idp" {
   count = var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
@@ -94,6 +119,8 @@ __YAML__
   server_side_apply = false
 
   depends_on = [
+    kubectl_manifest.namespace_idp,
+    kubernetes_secret_v1.backstage_gitea_credentials,
     kubernetes_secret_v1.argocd_repo_policies,
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,

@@ -1,0 +1,101 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: platform-service-request
+  title: Create a Platform App
+  description: Create a Gitea-backed frontend/backend platform app with policy and dashboard starter files.
+spec:
+  owner: group:default/platform
+  type: service
+  parameters:
+    - title: Service
+      required:
+        - name
+        - owner
+      properties:
+        name:
+          title: Name
+          type: string
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          description: DNS-safe service name.
+        owner:
+          title: Owner
+          type: string
+          default: group:default/team-dolphin
+        team:
+          title: Team Label
+          type: string
+          default: dolphin
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+        description:
+          title: Description
+          type: string
+          default: A platform app created from Backstage.
+    - title: Environments
+      required:
+        - environments
+      properties:
+        environments:
+          title: Environments
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - dev
+              - uat
+          default:
+            - dev
+    - title: Runtime
+      required:
+        - frontendPort
+        - backendPort
+      properties:
+        frontendPort:
+          title: Frontend Port
+          type: integer
+          default: 8080
+          minimum: 1024
+          maximum: 65535
+        backendPort:
+          title: Backend Port
+          type: integer
+          default: 8080
+          minimum: 1024
+          maximum: 65535
+  steps:
+    - id: fetch-request
+      name: Render App
+      action: fetch:template
+      input:
+        url: ./content
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          team: ${{ parameters.team }}
+          description: ${{ parameters.description }}
+          environments: ${{ parameters.environments }}
+          frontendPort: ${{ parameters.frontendPort }}
+          backendPort: ${{ parameters.backendPort }}
+    - id: publish
+      name: Create Gitea Repository
+      action: gitea:repo:publish
+      input:
+        repoName: ${{ parameters.name }}
+        description: ${{ parameters.description }}
+        sourcePath: .
+        defaultBranch: main
+        private: true
+    - id: log-request
+      name: Log Result
+      action: debug:log
+      input:
+        message: Created local platform app repository for ${{ parameters.name }} at ${{ steps.publish.output.repoUrl }}
+  output:
+    links:
+      - title: Gitea Repository
+        url: ${{ steps.publish.output.repoUrl }}
+      - title: Catalog Descriptor
+        url: ${{ steps.publish.output.catalogInfoUrl }}
+      - title: Grafana Golden Signals
+        url: https://grafana.admin.127.0.0.1.sslip.io/d/${{ parameters.name }}-golden-signals/${{ parameters.name }}-golden-signals

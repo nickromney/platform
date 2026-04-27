@@ -1,0 +1,2 @@
+[   30137ms] [ERROR] Failed to load resource: the server responded with a status of 502 () @ https://hello-platform.uat.127.0.0.1.sslip.io/:0
+[   60298ms] [ERROR] Failed to load resource: the server responded with a status of 502 () @ https://hello-platform.uat.127.0.0.1.sslip.io/favicon.ico:0

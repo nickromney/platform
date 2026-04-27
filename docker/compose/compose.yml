@@ -42,6 +42,34 @@ services:
     volumes:
       - ./dex/config.yaml:/etc/dex/config.docker.yaml:ro
 
+  backstage:
+    profiles: ["portal"]
+    <<: *app-runtime-hardening
+    build:
+      context: ../../apps/backstage
+      dockerfile: Dockerfile
+    image: platform-backstage:compose
+    environment:
+      BACKSTAGE_BASE_URL: https://portal.compose.127.0.0.1.sslip.io:8443
+      GITEA_BASE_URL: http://gitea-not-present.compose.invalid
+      GITEA_PUBLIC_BASE_URL: https://gitea.admin.127.0.0.1.sslip.io
+      GITEA_OWNER: platform
+      GITEA_OWNER_IS_ORG: "true"
+      GITEA_USERNAME: compose
+      GITEA_PASSWORD: compose
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7007/api/app/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+
   apim-simulator:
     <<: *app-runtime-hardening
     build:
@@ -245,4 +273,48 @@ services:
       dex:
         condition: service_started
       subnetcalc-router-uat:
+        condition: service_started
+
+  oauth2-proxy-backstage:
+    profiles: ["portal"]
+    <<: *app-runtime-hardening
+    image: dhi.io/oauth2-proxy:7.15.2-debian13
+    platform: linux/amd64
+    command:
+      - --provider=oidc
+      - --oidc-issuer-url=https://dex.compose.127.0.0.1.sslip.io:8443/dex
+      - --client-id=oauth2-proxy
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-compose-oauth2-proxy-secret}
+      - --redirect-url=https://portal.compose.127.0.0.1.sslip.io:8443/oauth2/callback
+      - --code-challenge-method=S256
+      - --skip-oidc-discovery=true
+      - --login-url=https://dex.compose.127.0.0.1.sslip.io:8443/dex/auth?prompt=login
+      - --redeem-url=http://dex:5556/dex/token
+      - --oidc-jwks-url=http://dex:5556/dex/keys
+      - --profile-url=http://dex:5556/dex/userinfo
+      - --oidc-email-claim=email
+      - --user-id-claim=email
+      - --insecure-oidc-allow-unverified-email=true
+      - --upstream=http://backstage:7007
+      - --http-address=0.0.0.0:4180
+      - --cookie-name=compose-sso-portal
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:?Set OAUTH2_PROXY_COOKIE_SECRET in the repo .env or export it before running docker compose}
+      - --cookie-secure=true
+      - --cookie-httponly=true
+      - --cookie-expire=4h
+      - --cookie-refresh=1h
+      - --email-domain=*
+      - --scope=openid email profile
+      - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+      - --pass-access-token=true
+      - --pass-user-headers=true
+      - --set-xauthrequest=true
+      - --set-authorization-header=true
+      - --reverse-proxy=true
+      - --skip-provider-button=true
+      - --show-debug-on-error=true
+    depends_on:
+      dex:
+        condition: service_started
+      backstage:
         condition: service_started

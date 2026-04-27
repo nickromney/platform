@@ -1,0 +1,48 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  description: ${{ values.description }}
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/${{ values.name }}/
+    backstage.io/source-template: template:default/platform-service
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-label-selector: app=${{ values.name }}
+  links:
+    - url: https://gitea.admin.127.0.0.1.sslip.io/platform/${{ values.name }}
+      title: Gitea Repository
+      icon: github
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/${{ values.name }}-golden-signals/${{ values.name }}-golden-signals
+      title: Grafana Golden Signals
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: experimental
+  owner: ${{ values.owner }}
+  system: local-idp
+  providesApis:
+    - ${{ values.name }}-api
+  consumesApis:
+    - ${{ values.name }}-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{ values.name }}-api
+  description: HTTP API provided by ${{ values.name }}.
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: ${{ values.owner }}
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: ${{ values.name }} API
+      version: 0.1.0
+    paths:
+      /health:
+        get:
+          responses:
+            '200':
+              description: Service health

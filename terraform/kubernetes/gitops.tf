@@ -78,6 +78,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       ENABLE_SIGNOZ                                 = tostring(var.enable_signoz)
       ENABLE_OTEL_GATEWAY                           = tostring(var.enable_otel_gateway)
       ENABLE_HEADLAMP                               = tostring(var.enable_headlamp)
+      ENABLE_BACKSTAGE                              = tostring(var.enable_backstage)
       ENABLE_OBSERVABILITY_AGENT                    = tostring(var.enable_observability_agent)
       PREFER_EXTERNAL_WORKLOAD_IMAGES               = tostring(var.prefer_external_workload_images)
       EXTERNAL_IMAGE_SENTIMENT_API                  = lookup(var.external_workload_image_refs, "sentiment-api", "")
@@ -87,7 +88,9 @@ resource "null_resource" "sync_gitea_policies_repo" {
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT      = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
       PREFER_EXTERNAL_PLATFORM_IMAGES               = tostring(var.prefer_external_platform_images)
+      EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")
       EXTERNAL_PLATFORM_IMAGE_GRAFANA               = lookup(var.external_platform_image_refs, "grafana", "")
+      EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")
       EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY     = lookup(var.external_platform_image_refs, "signoz-auth-proxy", "")
       HARDENED_IMAGE_REGISTRY                       = local.hardened_image_registry_effective
       POLICIES_REPO_URL_CLUSTER                     = local.policies_repo_url_cluster
@@ -1297,7 +1300,7 @@ resource "null_resource" "argocd_refresh_gitops_repo_apps" {
     gitops_repo_hash   = local.policies_repo_render_hash
     known_hosts_hash   = local.argocd_gitops_repo_trust_hash
     gitops_repo_apps   = sha1(join(",", sort(local.argocd_gitops_repo_app_names)))
-    refresh_script_ver = "9"
+    refresh_script_ver = "10"
   }
 
   provisioner "local-exec" {
@@ -1455,7 +1458,7 @@ needs_refresh() {
   # the child resources have all become ready. Only treat that as stale cache
   # when the live managed workloads are actually ready; some Argo versions leave
   # child resource sync/health empty while the workloads are still converging.
-  if [[ "$sync_status" == "Unknown" && "$health_status" == "Healthy" ]] && managed_workloads_ready "$app"; then
+  if [[ "$sync_status" == "Unknown" && -z "$comparison_msg" ]] && managed_workloads_ready "$app"; then
     needs_refresh_reason="managed-workloads-ready"
     return 0
   fi
@@ -1484,7 +1487,7 @@ done <<< "$app_list"
 # deciding whether any app is still stale.
 sleep 15
 
-end=$((SECONDS + 180))
+end=$((SECONDS + 300))
 stable_passes=0
 soft_only_stable_passes=0
 last_pending_summary=""

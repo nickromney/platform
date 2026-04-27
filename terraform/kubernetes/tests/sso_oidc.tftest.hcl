@@ -166,8 +166,18 @@ run "sso_enabled_argocd_oidc_enabled" {
   }
 
   assert {
+    condition     = local.argocd_values.dex.enabled == false
+    error_message = "Expected Argo CD's bundled Dex deployment to be disabled when the platform uses Keycloak OIDC"
+  }
+
+  assert {
     condition     = length(null_resource.reconcile_keycloak_realm) == 1
     error_message = "Expected an imperative Keycloak realm reconcile step so existing Postgres-backed realms receive client/group changes"
+  }
+
+  assert {
+    condition     = strcontains(file("${path.module}/sso.tf"), "    null_resource.wait_for_platform_gateway_tls,\n    null_resource.reconcile_keycloak_realm,\n    kubectl_manifest.argocd_app_dex,")
+    error_message = "Expected kind apiserver OIDC configuration to wait for Keycloak realm reconciliation before restarting the apiserver"
   }
 
   assert {
@@ -217,12 +227,14 @@ run "sso_with_subnetcalc_apps" {
 
   assert {
     condition = alltrue([
-      length(regexall("allowed-group: app-subnetcalc-dev", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) > 0,
-      length(regexall("allowed-group: app-subnetcalc-uat", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0,
+      length(regexall("--allowed-group=app-subnetcalc-dev", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) > 0,
+      length(regexall("--allowed-group=platform-admins", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) > 0,
+      length(regexall("--allowed-group=app-subnetcalc-uat", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0,
+      length(regexall("--allowed-group=platform-admins", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0,
       length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) == 0,
       length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) == 0,
     ])
-    error_message = "Expected subnetcalc oauth2-proxy to enforce app/environment groups instead of dev/uat email domains"
+    error_message = "Expected subnetcalc oauth2-proxy to enforce app/environment groups plus platform-admins break-glass access instead of dev/uat email domains"
   }
 
   assert {
@@ -232,10 +244,11 @@ run "sso_with_subnetcalc_apps" {
 
   assert {
     condition = alltrue([
-      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("allowed-group: app-hello-platform-dev", app.yaml_body)) > 0]) == 1,
-      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("allowed-group: app-hello-platform-uat", app.yaml_body)) > 0]) == 1,
+      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("--allowed-group=app-hello-platform-dev", app.yaml_body)) > 0]) == 1,
+      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("--allowed-group=app-hello-platform-uat", app.yaml_body)) > 0]) == 1,
+      alltrue([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : length(regexall("--allowed-group=platform-admins", app.yaml_body)) > 0]),
       alltrue([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", app.yaml_body)) == 0]),
     ])
-    error_message = "Expected hello-platform oauth2-proxy apps to enforce app/environment groups instead of dev/uat email domains"
+    error_message = "Expected hello-platform oauth2-proxy apps to enforce app/environment groups plus platform-admins break-glass access instead of dev/uat email domains"
   }
 }

@@ -7,4 +7,5 @@ resources:
   - gateway.yaml
   - gateway-service.yaml
   - nginxproxy.yaml
+  - proxysettingspolicy-oauth-response-buffers.yaml
   - tls-hardening.yaml

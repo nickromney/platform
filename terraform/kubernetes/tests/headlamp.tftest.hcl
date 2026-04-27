@@ -31,6 +31,21 @@ run "headlamp_enabled" {
     condition     = strcontains(kubectl_manifest.argocd_app_headlamp[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_headlamp[0].yaml_body, "path: ${local.vendored_chart_paths.headlamp}")
     error_message = "Expected Headlamp ArgoCD Application YAML to track the vendored chart on main"
   }
+
+  assert {
+    condition     = local.headlamp_config.watchPlugins == false
+    error_message = "Expected local Headlamp to avoid live plugin watching on laptop clusters"
+  }
+
+  assert {
+    condition     = try(local.headlamp_values.resources.requests.cpu, "") == "100m" && try(local.headlamp_values.resources.requests.memory, "") == "128Mi"
+    error_message = "Expected local Headlamp to have non-BestEffort CPU and memory requests"
+  }
+
+  assert {
+    condition     = try(local.headlamp_values.resources.limits.cpu, "") == "500m" && try(local.headlamp_values.resources.limits.memory, "") == "256Mi"
+    error_message = "Expected local Headlamp to have bounded CPU and memory limits"
+  }
 }
 
 run "headlamp_sso_uses_selected_oidc_provider" {

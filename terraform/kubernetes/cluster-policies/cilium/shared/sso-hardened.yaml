@@ -8,8 +8,7 @@ spec:
     Keycloak is the Kubernetes IdP for the representative RBAC journey.
     Ingress: kubelet probes plus intra-namespace traffic. Shared workload bridge
     policies add IdP ingress, auth-proxy ingress, and external IdP egress.
-    Egress: DNS, upstream services
-    that oauth2-proxy reverse-proxies to.
+    Egress: DNS, upstream services that oauth2-proxy reverse-proxies to.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": sso
@@ -52,6 +51,8 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+            - port: "7007"
+              protocol: TCP
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": gitea
@@ -86,4 +87,34 @@ spec:
       toPorts:
         - ports:
             - port: "4466"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": idp
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "7007"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+          matchExpressions:
+            - key: "k8s:tier"
+              operator: In
+              values:
+                - frontend
+                - gateway
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": uat
+          matchExpressions:
+            - key: "k8s:tier"
+              operator: In
+              values:
+                - frontend
+                - gateway
+      toPorts:
+        - ports:
+            - port: "8080"
               protocol: TCP

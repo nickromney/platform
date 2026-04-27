@@ -117,6 +117,16 @@ else
   exit 1
 fi
 
+login_permanent_keycloak_admin() {
+  if login_keycloak_admin "${permanent_admin_user}" "${permanent_admin_password}"; then
+    echo "Keycloak admin re-authenticated with permanent admin: ${permanent_admin_user}"
+    return 0
+  fi
+
+  echo "Could not re-authenticate to Keycloak with permanent admin credentials" >&2
+  exit 1
+}
+
 group_id_for_name() {
   local group_name="$1"
   kcadm get groups -r "${KEYCLOAK_REALM}" -q "search=${group_name}" --fields id,name |
@@ -238,6 +248,7 @@ delete_bootstrap_admins_from_master() {
 }
 
 ensure_master_admin
+login_permanent_keycloak_admin
 
 ensure_client_scope() {
   local scope_json="$1"

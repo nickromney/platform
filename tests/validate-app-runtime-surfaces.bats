@@ -213,6 +213,35 @@ PY
   [[ "${output}" == *"validated 13 compose service(s)"* ]]
 }
 
+@test "model-backed sentiment workload has a bounded laptop runtime profile" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8")))
+deployment = next(doc for doc in docs if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "sentiment-api")
+container = deployment["spec"]["template"]["spec"]["containers"][0]
+env = {item["name"]: str(item.get("value", "")) for item in container.get("env", [])}
+resources = container["resources"]
+
+assert env["MALLOC_ARENA_MAX"] == "2", env
+assert env["OMP_NUM_THREADS"] == "1", env
+assert resources["requests"]["memory"] == "768Mi", resources
+assert resources["limits"]["memory"] == "2048Mi", resources
+assert resources["limits"]["cpu"] == "1", resources
+
+print("validated model-backed sentiment runtime profile")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated model-backed sentiment runtime profile"* ]]
+}
+
 @test "subnetcalc function-style compose healthchecks do not require /bin/sh" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
@@ -487,6 +516,9 @@ expected_counts = {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
         "FROM --platform=$TARGETPLATFORM dhi.io/node:22-alpine3.22": 1,
     },
+    "apps/backstage/Dockerfile": {
+        "FROM dhi.io/node:22-debian13 AS runtime": 1,
+    },
     "apps/subnetcalc/frontend-typescript-vite/Dockerfile": {
         "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
         "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
@@ -535,7 +567,37 @@ print(f"validated {validated} external image expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 21 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 22 external image expectation(s)"* ]]
+}
+
+@test "subnetcalc frontend stays single-replica for local laptop clusters" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8")))
+
+frontend = next(
+    doc
+    for doc in docs
+    if doc
+    and doc.get("kind") == "Deployment"
+    and doc.get("metadata", {}).get("name") == "subnetcalc-frontend"
+)
+
+assert frontend["spec"]["replicas"] == 1, frontend["spec"].get("replicas")
+assert "topologySpreadConstraints" not in frontend["spec"]["template"]["spec"]
+
+print("validated single-replica subnetcalc frontend")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated single-replica subnetcalc frontend"* ]]
 }
 
 @test "preload image artifacts track the current external runtime bump set" {

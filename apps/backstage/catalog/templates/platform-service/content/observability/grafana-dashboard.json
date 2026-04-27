@@ -1,0 +1,31 @@
+{
+  "uid": "${{ values.name }}-golden-signals",
+  "title": "${{ values.name }} Golden Signals",
+  "tags": ["platform-app", "${{ values.name }}"],
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Request Rate",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{app=\"${{ values.name }}\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Pod Restarts",
+      "targets": [
+        {
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{pod=~\"${{ values.name }}-.*\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

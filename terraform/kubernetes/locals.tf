@@ -122,26 +122,30 @@ locals {
       whitelist_domain = local.uat_whitelist_domains
     }
   }
-  sso_idp_proxy_apps = {
-    portal = {
-      name             = "oauth2-proxy-idp-portal"
-      public_url       = local.idp_portal_public_url
-      upstream         = "http://idp-portal.idp.svc.cluster.local:8080"
-      group            = local.sso_viewer_group
-      cookie_name      = "kind-sso-portal"
-      cookie_domain    = local.portal_cookie_domain
-      whitelist_domain = local.portal_whitelist_domains
-    }
-    api = {
-      name             = "oauth2-proxy-idp-core"
-      public_url       = local.idp_api_public_url
-      upstream         = "http://idp-core.idp.svc.cluster.local:8080"
-      group            = local.sso_viewer_group
-      cookie_name      = "kind-sso-portal-api"
-      cookie_domain    = local.portal_cookie_domain
-      whitelist_domain = local.portal_whitelist_domains
-    }
-  }
+  sso_idp_proxy_apps = merge(
+    local.enable_backstage_effective ? {
+      portal = {
+        name             = "oauth2-proxy-backstage"
+        public_url       = local.idp_portal_public_url
+        upstream         = "http://backstage.idp.svc.cluster.local:7007"
+        group            = local.sso_viewer_group
+        cookie_name      = "kind-sso-portal"
+        cookie_domain    = local.portal_cookie_domain
+        whitelist_domain = local.portal_whitelist_domains
+      }
+    } : {},
+    {
+      api = {
+        name             = "oauth2-proxy-idp-core"
+        public_url       = local.idp_api_public_url
+        upstream         = "http://idp-core.idp.svc.cluster.local:8080"
+        group            = local.sso_viewer_group
+        cookie_name      = "kind-sso-portal"
+        cookie_domain    = local.portal_cookie_domain
+        whitelist_domain = local.portal_whitelist_domains
+      }
+    },
+  )
   admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
   admin_route_allowlist_enabled         = length(local.admin_route_allowlist_cidrs_effective) > 0
   gateway_trusted_proxy_cidrs_effective = [for cidr in var.gateway_trusted_proxy_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
@@ -154,6 +158,7 @@ locals {
   enable_tempo_effective                = var.enable_tempo
   enable_otel_gateway_effective         = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_victoria_logs_effective || local.enable_tempo_effective || var.enable_signoz
   enable_observability_effective        = local.enable_otel_gateway_effective || var.enable_observability_agent
+  enable_backstage_effective            = var.enable_backstage && var.enable_sso && var.enable_argocd
   gitea_admin_promote_users_effective = var.enable_gitea ? distinct(compact(concat(
     [var.gitea_admin_username],
     var.gitea_admin_promote_users,
@@ -169,6 +174,8 @@ locals {
   ]) : toset([])
   external_platform_grafana_image      = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
   external_platform_hardened_registry  = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
+  external_platform_idp_core           = trimspace(lookup(var.external_platform_image_refs, "idp-core", ""))
+  external_platform_backstage          = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
   external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
@@ -317,7 +324,7 @@ locals {
     var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat", "oauth2-proxy-idp-portal", "oauth2-proxy-idp-core"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat"], local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(
@@ -358,6 +365,7 @@ locals {
     enable_signoz                          = var.enable_signoz
     enable_otel_gateway                    = var.enable_otel_gateway
     enable_headlamp                        = var.enable_headlamp
+    enable_backstage                       = var.enable_backstage
     enable_observability_agent             = var.enable_observability_agent
     prefer_external_images                 = var.prefer_external_workload_images
     external_sentiment_api                 = lookup(var.external_workload_image_refs, "sentiment-api", "")
@@ -370,6 +378,8 @@ locals {
     host_local_registry_enabled            = local.host_local_registry_enabled
     host_local_registry_host               = local.host_local_registry_host_effective
     external_platform_grafana              = local.external_platform_grafana_image
+    external_platform_idp_core             = local.external_platform_idp_core
+    external_platform_backstage            = local.external_platform_backstage
     hardened_image_registry                = local.hardened_image_registry_effective
     external_platform_hardened             = local.external_platform_hardened_registry
     external_platform_signoz_auth          = local.external_platform_signoz_auth_proxy
@@ -560,6 +570,10 @@ locals {
         repository = var.argocd_image_repository
         tag        = var.argocd_image_tag
       }
+    }
+
+    dex = {
+      enabled = false
     }
 
     configs = {
@@ -849,7 +863,7 @@ locals {
 
   headlamp_config = merge(
     {
-      watchPlugins = true
+      watchPlugins = false
       sessionTTL   = 0
     },
     var.enable_sso ? {
@@ -878,6 +892,10 @@ locals {
       create = var.headlamp_cluster_role_binding_create
     }
     config = local.headlamp_config
+    resources = {
+      limits   = { cpu = "500m", memory = "256Mi" }
+      requests = { cpu = "100m", memory = "128Mi" }
+    }
     env = var.enable_sso ? [
       {
         name  = "SSL_CERT_FILE"

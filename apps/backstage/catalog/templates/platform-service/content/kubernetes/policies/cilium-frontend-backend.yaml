@@ -1,0 +1,47 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${{ values.name }}-backend-ingress
+spec:
+  endpointSelector:
+    matchLabels:
+      app: ${{ values.name }}
+      tier: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: ${{ values.name }}
+            tier: frontend
+      toPorts:
+        - ports:
+            - port: "${{ values.backendPort }}"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${{ values.name }}-frontend-egress
+spec:
+  endpointSelector:
+    matchLabels:
+      app: ${{ values.name }}
+      tier: frontend
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: ${{ values.name }}
+            tier: backend
+      toPorts:
+        - ports:
+            - port: "${{ values.backendPort }}"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

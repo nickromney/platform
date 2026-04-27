@@ -1,10 +1,86 @@
+import json
+import subprocess
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Protocol, Sequence
 
 from app.models import DeploymentRequest, DryRunPlan, EnvironmentRequest, RuntimeInfo, SecretRequest
+from app.paths import discover_repo_root
+
+REPO_ROOT = discover_repo_root(Path(__file__))
 
 
 def _namespace(app: str, environment: str) -> str:
     return f"{app}-{environment}"
+
+
+class StatusProvider(Protocol):
+    def collect_status(self) -> dict[str, object]:
+        ...
+
+
+class UnavailableStatusProvider(StatusProvider):
+    def collect_status(self) -> dict[str, object]:
+        return {
+            "overall_state": "unknown",
+            "active_variant_path": None,
+            "actions": [],
+            "source": "unavailable",
+            "source_status": "unconfigured",
+            "detail": "no status provider configured",
+        }
+
+
+class PlatformStatusScriptProvider(StatusProvider):
+    def __init__(
+        self,
+        command: Sequence[str] | None = None,
+        *,
+        cwd: Path = REPO_ROOT,
+        timeout_seconds: float = 15,
+    ) -> None:
+        self.command = list(command or [str(REPO_ROOT / "scripts/platform-status.sh"), "--execute", "--output", "json"])
+        self.cwd = cwd
+        self.timeout_seconds = timeout_seconds
+
+    def collect_status(self) -> dict[str, object]:
+        try:
+            result = subprocess.run(
+                self.command,
+                cwd=self.cwd,
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return self._unavailable(str(exc))
+
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+            return self._unavailable(detail)
+
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            return self._unavailable(f"invalid json: {exc}")
+
+        if not isinstance(payload, dict):
+            return self._unavailable("status script did not return a JSON object")
+
+        payload.setdefault("source", "platform-status-script")
+        payload.setdefault("source_status", "available")
+        return payload
+
+    def _unavailable(self, detail: str) -> dict[str, object]:
+        return {
+            "overall_state": "unknown",
+            "active_variant_path": None,
+            "actions": [],
+            "source": "platform-status-script",
+            "source_status": "unavailable",
+            "detail": detail,
+        }
 
 
 class RuntimeAdapter(ABC):
@@ -13,6 +89,16 @@ class RuntimeAdapter(ABC):
 
     def info(self) -> RuntimeInfo:
         return RuntimeInfo(name=self.name, description=self.description)
+
+    def status_projection(self, status_provider: StatusProvider | None = None) -> dict[str, object]:
+        payload = dict((status_provider or UnavailableStatusProvider()).collect_status())
+        payload["runtime"] = self.name
+        payload.setdefault("overall_state", "unknown")
+        payload.setdefault("active_variant_path", None)
+        payload.setdefault("actions", [])
+        payload.setdefault("source", "status-provider")
+        payload.setdefault("source_status", "available")
+        return payload
 
     @abstractmethod
     def plan_environment(self, request: EnvironmentRequest) -> DryRunPlan:

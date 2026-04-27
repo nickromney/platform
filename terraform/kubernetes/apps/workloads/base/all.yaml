@@ -84,6 +84,10 @@ spec:
               value: "http/protobuf"
             - name: HOME
               value: /tmp
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+            - name: OMP_NUM_THREADS
+              value: "1"
           ports:
             - name: http
               containerPort: 8080
@@ -119,10 +123,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 768Mi
             limits:
-              cpu: 750m
-              memory: 1280Mi
+              cpu: "1"
+              memory: 2048Mi
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -149,8 +153,9 @@ spec:
     app.kubernetes.io/component: backend
   ports:
     - name: http
+      appProtocol: http
       port: 8080
-      targetPort: 8080
+      targetPort: http
 
 ---
 apiVersion: apps/v1
@@ -246,8 +251,9 @@ spec:
     app.kubernetes.io/component: frontend
   ports:
     - name: http
+      appProtocol: http
       port: 8080
-      targetPort: 8080
+      targetPort: http
 
 ---
 apiVersion: v1
@@ -391,8 +397,9 @@ spec:
     app.kubernetes.io/component: gateway
   ports:
     - name: http
+      appProtocol: http
       port: 8080
-      targetPort: 8080
+      targetPort: http
 
 ---
 # SubnetCalc API
@@ -509,8 +516,9 @@ spec:
     app.kubernetes.io/component: backend
   ports:
     - name: http
+      appProtocol: http
       port: 8000
-      targetPort: 8000
+      targetPort: http
 
 ---
 # SubnetCalc Frontend
@@ -527,7 +535,7 @@ metadata:
     tier: frontend
     role: frontend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: subnetcalc-frontend
@@ -550,16 +558,6 @@ spec:
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
-          nodeAffinityPolicy: Honor
-          nodeTaintsPolicy: Honor
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: subnetcalc-frontend
-              app.kubernetes.io/component: frontend
       imagePullSecrets:
         - name: gitea-registry-creds
       containers:
@@ -623,8 +621,9 @@ spec:
     app.kubernetes.io/component: frontend
   ports:
     - name: http
+      appProtocol: http
       port: 8080
-      targetPort: 8080
+      targetPort: http
 
 ---
 # SubnetCalc Router NGINX Config
@@ -831,5 +830,6 @@ spec:
     app.kubernetes.io/component: gateway
   ports:
     - name: http
+      appProtocol: http
       port: 8080
-      targetPort: 8080
+      targetPort: http

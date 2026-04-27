@@ -11,6 +11,8 @@ spec:
   dnsNames:
     - '*.127.0.0.1.sslip.io'
     - '*.admin.127.0.0.1.sslip.io'
+    - '*.dev.127.0.0.1.sslip.io'
+    - '*.uat.127.0.0.1.sslip.io'
     - argocd.admin.127.0.0.1.sslip.io
     - gitea.admin.127.0.0.1.sslip.io
     - hubble.admin.127.0.0.1.sslip.io

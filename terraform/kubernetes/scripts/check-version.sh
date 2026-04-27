@@ -3217,7 +3217,6 @@ main() {
   CODE_GRAFANA=$(tf_default_from_variables "grafana_chart_version")
   CODE_GRAFANA_IMAGE_TAG=$(tf_default_from_variables "grafana_image_tag")
   CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_VERSION=$(tf_default_from_variables "grafana_victoria_logs_plugin_version")
-  CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_SHA256=$(tf_default_from_variables "grafana_victoria_logs_plugin_sha256")
   CODE_LOKI=$(tf_default_from_variables "loki_chart_version")
   CODE_VICTORIA_LOGS=$(tf_default_from_variables "victoria_logs_chart_version")
   CODE_TEMPO=$(tf_default_from_variables "tempo_chart_version")

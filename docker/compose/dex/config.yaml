@@ -35,3 +35,4 @@ staticClients:
     redirectURIs:
       - https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443/oauth2/callback
       - https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443/oauth2/callback
+      - https://portal.compose.127.0.0.1.sslip.io:8443/oauth2/callback

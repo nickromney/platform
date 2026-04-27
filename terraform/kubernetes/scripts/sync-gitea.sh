@@ -31,13 +31,21 @@ tfvar_bool_or_default() {
   local key="$1"
   local default_value="$2"
 
-  if [[ ! -f "${GITEA_SYNC_TFVARS_FILE}" ]]; then
+  tfvar_bool_from_file_or_default "${GITEA_SYNC_TFVARS_FILE}" "${key}" "${default_value}"
+}
+
+tfvar_bool_from_file_or_default() {
+  local file="$1"
+  local key="$2"
+  local default_value="$3"
+
+  if [[ ! -f "${file}" ]]; then
     printf '%s\n' "${default_value}"
     return 0
   fi
 
   local value
-  value="$(sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(true|false).*/\\1/p" "${GITEA_SYNC_TFVARS_FILE}" | tail -n 1)"
+  value="$(sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(true|false).*/\\1/p" "${file}" | tail -n 1)"
   if [[ -n "${value}" ]]; then
     printf '%s\n' "${value}"
   else
@@ -63,6 +71,84 @@ tfvar_string_or_default() {
     printf '%s\n' "${value}"
   else
     printf '%s\n' "${default_value}"
+  fi
+}
+
+tfvar_map_string_or_default() {
+  local file="$1"
+  local key="$2"
+  local map_key="$3"
+  local default_value="$4"
+
+  if [[ ! -f "${file}" ]]; then
+    printf '%s\n' "${default_value}"
+    return 0
+  fi
+
+  local value
+  value="$(awk -v key="${key}" -v map_key="${map_key}" '
+    BEGIN { in_map = 0 }
+    {
+      line = $0
+      sub(/[[:space:]]*#.*/, "", line)
+      if (!in_map) {
+        pattern = "^[[:space:]]*" key "[[:space:]]*="
+        if (line ~ pattern && line ~ /\{/) {
+          in_map = 1
+        }
+        next
+      }
+      if (line ~ /^[[:space:]]*}/) {
+        in_map = 0
+        next
+      }
+      equals = index(line, "=")
+      if (equals == 0) {
+        next
+      }
+      found_key = substr(line, 1, equals - 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_key)
+      gsub(/^"|"$/, "", found_key)
+      if (found_key != map_key) {
+        next
+      }
+      found_value = substr(line, equals + 1)
+      sub(/[[:space:]]*#.*/, "", found_value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_value)
+      sub(/,$/, "", found_value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", found_value)
+      gsub(/^"|"$/, "", found_value)
+      print found_value
+    }
+  ' "${file}" | tail -n 1)"
+
+  if [[ -n "${value}" ]]; then
+    printf '%s\n' "${value}"
+  else
+    printf '%s\n' "${default_value}"
+  fi
+}
+
+target_tfvars_file_or_empty() {
+  if [[ -n "${GITEA_SYNC_TARGET_TFVARS_FILE:-}" ]]; then
+    printf '%s\n' "${GITEA_SYNC_TARGET_TFVARS_FILE}"
+    return 0
+  fi
+
+  if [[ ! -f "${GITEA_SYNC_TFVARS_FILE}" ]]; then
+    return 0
+  fi
+
+  local target_root
+  local target_name
+  local candidate
+
+  target_root="$(cd "$(dirname "${GITEA_SYNC_TFVARS_FILE}")/.." && pwd)"
+  target_name="$(basename "${target_root}")"
+  candidate="${target_root}/targets/${target_name}.tfvars"
+
+  if [[ -f "${candidate}" ]]; then
+    printf '%s\n' "${candidate}"
   fi
 }
 
@@ -94,6 +180,55 @@ resolve_string() {
   tfvar_string_or_default "${tfvar_key}" "${default_value}"
 }
 
+resolve_bool_target_or_stage() {
+  local env_name="$1"
+  local tfvar_key="$2"
+  local default_value="$3"
+  local current="${!env_name:-}"
+  local target_file
+  local value
+
+  if [[ -n "${current}" ]]; then
+    printf '%s\n' "${current}"
+    return 0
+  fi
+
+  target_file="$(target_tfvars_file_or_empty)"
+  if [[ -n "${target_file}" ]]; then
+    value="$(tfvar_bool_from_file_or_default "${target_file}" "${tfvar_key}" "")"
+    if [[ -n "${value}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  fi
+
+  tfvar_bool_or_default "${tfvar_key}" "${default_value}"
+}
+
+resolve_external_platform_image() {
+  local env_name="$1"
+  local map_key="$2"
+  local current="${!env_name:-}"
+  local target_file
+  local value
+
+  if [[ -n "${current}" ]]; then
+    printf '%s\n' "${current}"
+    return 0
+  fi
+
+  target_file="$(target_tfvars_file_or_empty)"
+  if [[ -n "${target_file}" ]]; then
+    value="$(tfvar_map_string_or_default "${target_file}" external_platform_image_refs "${map_key}" "")"
+    if [[ -n "${value}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  fi
+
+  tfvar_map_string_or_default "${GITEA_SYNC_TFVARS_FILE}" external_platform_image_refs "${map_key}" ""
+}
+
 export_resolved_bool() {
   local env_name="$1"
   local tfvar_key="$2"
@@ -112,6 +247,27 @@ export_resolved_string() {
   local resolved_value=""
 
   resolved_value="$(resolve_string "${env_name}" "${tfvar_key}" "${default_value}")"
+  printf -v "${env_name}" '%s' "${resolved_value}"
+  export "${env_name?}"
+}
+
+export_resolved_bool_target_or_stage() {
+  local env_name="$1"
+  local tfvar_key="$2"
+  local default_value="$3"
+  local resolved_value=""
+
+  resolved_value="$(resolve_bool_target_or_stage "${env_name}" "${tfvar_key}" "${default_value}")"
+  printf -v "${env_name}" '%s' "${resolved_value}"
+  export "${env_name?}"
+}
+
+export_external_platform_image() {
+  local env_name="$1"
+  local map_key="$2"
+  local resolved_value=""
+
+  resolved_value="$(resolve_external_platform_image "${env_name}" "${map_key}")"
   printf -v "${env_name}" '%s' "${resolved_value}"
   export "${env_name?}"
 }
@@ -204,6 +360,11 @@ main() {
   export_resolved_bool ENABLE_OTEL_GATEWAY enable_otel_gateway false
   export_resolved_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
   export_resolved_bool ENABLE_HEADLAMP enable_headlamp true
+  export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_GRAFANA grafana
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_IDP_CORE idp-core
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_BACKSTAGE backstage
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"

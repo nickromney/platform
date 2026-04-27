@@ -238,7 +238,7 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'backend --print --execute\nbackend --print --execute\ncompose -f compose.yml --profile dev --profile uat config -q' ]
+  [ "${output}" = $'backend --print --execute\nbackend --print --execute\ncompose -f compose.yml --profile dev --profile uat --profile portal config -q' ]
 }
 
 @test "docker compose prereqs fails cleanly when the repo env file is missing" {

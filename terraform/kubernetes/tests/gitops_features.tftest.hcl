@@ -81,6 +81,16 @@ run "policies_enabled" {
   }
 
   assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "            image:\n              registry: ${local.hardened_image_registry_effective}\n              repository: kyverno\n              tag: 1.17.1-debian13")
+    error_message = "Expected Kyverno admission controller image to use the hardened image value path consumed by the chart"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "            securityContext:\n              runAsNonRoot: true\n              runAsUser: 65534\n              runAsGroup: 65534")
+    error_message = "Expected Kyverno admission controller container security context to pin a numeric non-root user for hardened images"
+  }
+
+  assert {
     condition     = contains(local.argocd_gitops_repo_app_names, "kyverno")
     error_message = "Expected kyverno to be included in the Git-backed Argo refresh list when enable_policies=true"
   }

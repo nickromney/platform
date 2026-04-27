@@ -1,0 +1,51 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform
+  description: Platform engineering team
+spec:
+  type: team
+  profile:
+    displayName: Platform Engineering
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: team-dolphin
+  description: Example product team that owns the demo workloads
+spec:
+  type: team
+  profile:
+    displayName: Team Dolphin
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: demo-admin
+spec:
+  profile:
+    displayName: Demo Admin
+    email: demo@admin.test
+  memberOf: [platform]
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: demo-dev
+spec:
+  profile:
+    displayName: Demo Dev
+    email: demo@dev.test
+  memberOf: [team-dolphin]
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: demo-uat
+spec:
+  profile:
+    displayName: Demo UAT
+    email: demo@uat.test
+  memberOf: [team-dolphin]

@@ -1,0 +1,13 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: "502"
+    - heading "Bad Gateway" [level=1] [ref=e6]
+    - generic [ref=e8]:
+      - paragraph [ref=e9]: More Info
+      - generic [ref=e11] [cursor=pointer]: 
+  - contentinfo [ref=e12]:
+    - paragraph [ref=e14]:
+      - text: Secured with
+      - link "OAuth2 Proxy" [ref=e15] [cursor=pointer]:
+        - /url: https://github.com/oauth2-proxy/oauth2-proxy#oauth2_proxy
+      - text: version 7.15.2

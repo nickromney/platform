@@ -1,0 +1,6 @@
+resources:
+  - backend.yaml
+  - frontend.yaml
+  - ../policies/cilium-frontend-backend.yaml
+  - ../policies/kyverno-container-baseline.yaml
+

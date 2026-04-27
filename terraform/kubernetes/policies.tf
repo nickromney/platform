@@ -148,13 +148,27 @@ spec:
           container:
             resources:
               limits:
+                cpu: 500m
                 memory: 256Mi
               requests:
+                cpu: 100m
                 memory: 128Mi
-          image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: kyverno
-            tag: 1.17.1-debian13
+            image:
+              registry: ${local.hardened_image_registry_effective}
+              repository: kyverno
+              tag: 1.17.1-debian13
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+              runAsGroup: 65534
+              privileged: false
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                  - ALL
+              seccompProfile:
+                type: RuntimeDefault
           initContainer:
             image:
               registry: ${local.hardened_image_registry_effective}

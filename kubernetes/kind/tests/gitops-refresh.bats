@@ -35,3 +35,15 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "gitops refresh allows Lima-length Argo comparison settling" {
+  run grep -Fn 'end=$((SECONDS + 300))' "${GITOPS_FILE}"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "gitops refresh soft-waits unknown sync when managed workloads are ready" {
+  run grep -Fn 'if [[ "$sync_status" == "Unknown" && -z "$comparison_msg" ]] && managed_workloads_ready "$app"; then' "${GITOPS_FILE}"
+
+  [ "${status}" -eq 0 ]
+}

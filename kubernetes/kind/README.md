@@ -116,6 +116,12 @@ Kind now also has an operator-facing image distribution knob. The default is the
 
 The registry path is intentionally the portable cache model. The same host-side registry can be reused by other targets; `kind` just consumes it through `host.docker.internal:5002`.
 
+Backstage is gated in the kind happy path by local Docker memory:
+
+- `KIND_ENABLE_BACKSTAGE=auto` is the default and enables Backstage only when `docker info` reports at least `10GiB` (`10737418240` bytes) of daemon memory.
+- `KIND_ENABLE_BACKSTAGE=on` forces the portal on.
+- `KIND_ENABLE_BACKSTAGE=off` keeps the Portal API but skips the Backstage deployment, route, proxy, and image build.
+
 The full Kind path remains the reference/default shape. Its target profile pins
 `gitea_local_access_mode = "nodeport"`, so host-side automation continues to
 use the stable localhost NodePorts that Kind already owns.

@@ -229,6 +229,7 @@ print_debug_context() {
 
 require_cmd kubectl
 require_cmd curl
+require_cmd openssl
 
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT=$(tfvar_get "" gateway_https_host_port)
@@ -335,6 +336,70 @@ probe_route_urls() {
     else
       HTTPS_RESULTS+=("FAIL|${url}|${PROBE_DETAIL}")
       HTTPS_FAILURE_COUNT=$((HTTPS_FAILURE_COUNT + 1))
+    fi
+  done
+}
+
+probe_tls_certificate() {
+  local host="$1"
+  local tmp_err cert_pem check_output rc check_rc err connect_host
+
+  TLS_CERT_OK=0
+  TLS_CERT_DETAIL=""
+
+  connect_host="$(probe_host_for_local_https)"
+  tmp_err="$(mktemp)"
+
+  set +e
+  cert_pem="$(openssl s_client -connect "${connect_host}:${HOST_PORT}" -servername "${host}" </dev/null 2>"${tmp_err}" | openssl x509 2>>"${tmp_err}")"
+  rc=$?
+  set -e
+
+  if [[ "${rc}" -ne 0 || -z "${cert_pem}" ]]; then
+    err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+    rm -f "${tmp_err}"
+    TLS_CERT_DETAIL="certificate read failed${err:+: ${err}}"
+    return 0
+  fi
+
+  set +e
+  check_output="$(printf '%s\n' "${cert_pem}" | openssl x509 -noout -checkhost "${host}" 2>>"${tmp_err}")"
+  check_rc=$?
+  set -e
+  err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  rm -f "${tmp_err}"
+
+  if [[ "${check_rc}" -eq 0 ]]; then
+    TLS_CERT_OK=1
+    TLS_CERT_DETAIL="${check_output}"
+  else
+    TLS_CERT_DETAIL="${check_output:-hostname mismatch}${err:+ (${err})}"
+  fi
+}
+
+probe_route_certificates() {
+  TLS_CERT_FAILURE_COUNT=0
+  TLS_CERT_RESULTS=()
+
+  if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  local entry host
+  local -a seen_hosts=()
+  for entry in "${ROUTE_ENTRIES[@]}"; do
+    host="${entry%%|*}"
+    if array_contains "${host}" "${seen_hosts[@]}"; then
+      continue
+    fi
+    seen_hosts+=("${host}")
+
+    probe_tls_certificate "${host}"
+    if [[ "${TLS_CERT_OK}" == "1" ]]; then
+      TLS_CERT_RESULTS+=("OK|${host}|${TLS_CERT_DETAIL}")
+    else
+      TLS_CERT_RESULTS+=("FAIL|${host}|${TLS_CERT_DETAIL}")
+      TLS_CERT_FAILURE_COUNT=$((TLS_CERT_FAILURE_COUNT + 1))
     fi
   done
 }
@@ -513,6 +578,33 @@ else
         ok "HTTPS ${url} -> ${detail}"
       else
         fail_soft "HTTPS ${url} -> ${detail}"
+      fi
+    done
+  fi
+fi
+
+echo ""
+echo "TLS certificate hostname checks (host port ${HOST_PORT}):"
+if [[ "${#ROUTE_ENTRIES[@]}" -eq 0 ]]; then
+  fail_soft "No gateway route hostnames available to check certificate SAN coverage"
+else
+  probe_route_certificates
+  while [[ "${TLS_CERT_FAILURE_COUNT}" -gt 0 && "${SECONDS}" -lt "${deadline}" ]]; do
+    warn "TLS certificate hostnames not ready yet (${TLS_CERT_FAILURE_COUNT} failing); retrying in ${RETRY_INTERVAL_SECONDS}s"
+    sleep "${RETRY_INTERVAL_SECONDS}"
+    probe_route_certificates
+  done
+
+  if [[ "${#TLS_CERT_RESULTS[@]}" -gt 0 ]]; then
+    for result in "${TLS_CERT_RESULTS[@]}"; do
+      status="${result%%|*}"
+      rest="${result#*|}"
+      host="${rest%%|*}"
+      detail="${rest#*|}"
+      if [[ "${status}" == "OK" ]]; then
+        ok "TLS certificate ${host} -> ${detail}"
+      else
+        fail_soft "TLS certificate ${host} -> ${detail}"
       fi
     done
   fi
