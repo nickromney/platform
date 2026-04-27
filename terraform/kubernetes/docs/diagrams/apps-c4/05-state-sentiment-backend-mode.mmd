@@ -4,7 +4,7 @@ stateDiagram-v2
 
     IncomingRequest --> OAuthRedirect : no oauth2-proxy session
     IncomingRequest --> AuthenticatedRequest : valid oauth2-proxy session
-    OAuthRedirect --> AuthenticatedRequest : Dex callback accepted
+    OAuthRedirect --> AuthenticatedRequest : Keycloak callback accepted
 
     AuthenticatedRequest --> RouterDispatch
     RouterDispatch --> FrontendResponse : non-/api path

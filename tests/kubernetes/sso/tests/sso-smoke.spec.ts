@@ -65,13 +65,21 @@ const GRAFANA_LAUNCHPAD_APPS = [
   { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
   { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
   { name: 'Kyverno Policy UI', url: platformUrl('kyverno.admin'), flow: 'none', segment: 'admin' },
+  { name: 'Hello Platform DEV', url: platformUrl('hello-platform.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'Sentiment DEV', url: platformUrl('sentiment.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'SubnetCalc DEV', url: platformUrl('subnetcalc.dev'), flow: 'oauth2-proxy', segment: 'dev' },
+  { name: 'Hello Platform UAT', url: platformUrl('hello-platform.uat'), flow: 'oauth2-proxy', segment: 'uat' },
   { name: 'Sentiment UAT', url: platformUrl('sentiment.uat'), flow: 'oauth2-proxy', segment: 'uat' },
   { name: 'SubnetCalc UAT', url: platformUrl('subnetcalc.uat'), flow: 'oauth2-proxy', segment: 'uat' },
 ] as const
 
 const BASE_TARGETS: Target[] = [
+  {
+    name: 'hello-platform-uat',
+    url: platformUrl('hello-platform.uat'),
+    segment: 'uat',
+    flow: 'oauth2-proxy',
+  },
   {
     name: 'subnetcalc-uat',
     url: platformUrl('subnetcalc.uat'),
@@ -92,6 +100,12 @@ const BASE_TARGETS: Target[] = [
     segment: 'dev',
     flow: 'oauth2-proxy',
     postLogin: 'sentiment-sample-positive',
+  },
+  {
+    name: 'hello-platform-dev',
+    url: platformUrl('hello-platform.dev'),
+    segment: 'dev',
+    flow: 'oauth2-proxy',
   },
   {
     name: 'subnetcalc-dev',
@@ -142,24 +156,24 @@ function creds(segment: Segment) {
   const sharedPassword = process.env.PLATFORM_DEMO_PASSWORD || ''
   if (segment === 'dev') {
     return {
-      login: process.env.DEX_DEV_LOGIN || 'demo@dev.test',
-      password: process.env.DEX_DEV_PASSWORD || sharedPassword,
+      login: process.env.OIDC_DEV_LOGIN || process.env.KEYCLOAK_DEV_LOGIN || process.env.DEX_DEV_LOGIN || 'demo@dev.test',
+      password: process.env.OIDC_DEV_PASSWORD || process.env.KEYCLOAK_DEV_PASSWORD || process.env.DEX_DEV_PASSWORD || sharedPassword,
     }
   }
   if (segment === 'uat') {
     return {
-      login: process.env.DEX_UAT_LOGIN || 'demo@uat.test',
-      password: process.env.DEX_UAT_PASSWORD || sharedPassword,
+      login: process.env.OIDC_UAT_LOGIN || process.env.KEYCLOAK_UAT_LOGIN || process.env.DEX_UAT_LOGIN || 'demo@uat.test',
+      password: process.env.OIDC_UAT_PASSWORD || process.env.KEYCLOAK_UAT_PASSWORD || process.env.DEX_UAT_PASSWORD || sharedPassword,
     }
   }
   return {
-    login: process.env.DEX_ADMIN_LOGIN || 'demo@admin.test',
-    password: process.env.DEX_ADMIN_PASSWORD || sharedPassword,
+    login: process.env.OIDC_ADMIN_LOGIN || process.env.KEYCLOAK_ADMIN_LOGIN || process.env.DEX_ADMIN_LOGIN || 'demo@admin.test',
+    password: process.env.OIDC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD || process.env.DEX_ADMIN_PASSWORD || sharedPassword,
   }
 }
 
 if (!creds('admin').password || !creds('dev').password || !creds('uat').password) {
-  throw new Error('Set PLATFORM_DEMO_PASSWORD or the DEX_*_PASSWORD variables before running the SSO smoke tests')
+  throw new Error('Set PLATFORM_DEMO_PASSWORD, OIDC_*_PASSWORD, KEYCLOAK_*_PASSWORD, or DEX_*_PASSWORD before running the SSO smoke tests')
 }
 
 async function maybeClickOauth2ProxyProvider(page: Page) {

@@ -1,4 +1,4 @@
-# Stage 900 - Add SSO (Dex + oauth2-proxy) and switch HTTPS routes to require login
+# Stage 900 - Add SSO (Keycloak + oauth2-proxy) and switch HTTPS routes to require login
 
 cluster_name       = "limavm-k3s"
 kubeconfig_path    = "~/.kube/limavm-k3s.yaml"

@@ -1,0 +1,174 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hello-platform
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app.kubernetes.io/component: frontend
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hello-platform-demo-message
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app.kubernetes.io/component: configuration
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+type: Opaque
+stringData:
+  message: hello from the platform
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-platform
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app.kubernetes.io/component: frontend
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello-platform
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hello-platform
+        app.kubernetes.io/component: frontend
+        app: hello-platform
+        project: kindlocal
+        team: dolphin
+        tier: frontend
+    spec:
+      serviceAccountName: hello-platform
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: python:3.13-slim
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              import os
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+
+              message_path = "/etc/hello-platform/message"
+              with open(message_path, "r", encoding="utf-8") as handle:
+                  message = handle.read().strip()
+
+              env_name = os.environ.get("PLATFORM_ENVIRONMENT", "unknown")
+
+              class Handler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      if self.path == "/healthz":
+                          self.send_response(200)
+                          self.send_header("content-type", "text/plain")
+                          self.end_headers()
+                          self.wfile.write(b"ok\n")
+                          return
+                      if self.path == "/":
+                          self.send_response(200)
+                          self.send_header("content-type", "text/plain")
+                          self.end_headers()
+                          self.wfile.write(f"{message} ({env_name})\n".encode("utf-8"))
+                          return
+                      self.send_response(404)
+                      self.end_headers()
+
+              HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+          env:
+            - name: PLATFORM_ENVIRONMENT
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: message
+              mountPath: /etc/hello-platform
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: message
+          secret:
+            secretName: hello-platform-demo-message
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-platform
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app.kubernetes.io/component: frontend
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: hello-platform
+    app.kubernetes.io/component: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gateway-routes-hello-platform
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: gateway-routes
+  to:
+    - group: ""
+      kind: Service
+      name: hello-platform

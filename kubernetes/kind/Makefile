@@ -94,11 +94,11 @@ include $(STAGE_LADDER_MK)
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_ACTIONS := plan apply
-VALID_STAGE_HELPERS := check-health check-security check-rbac
+VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-sso-e2e
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync launchpad-render show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -189,6 +189,11 @@ help:
 	@echo "  make env                                     Show local tool versions + Docker daemon status"
 	@echo "  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
+	@echo "  make gitea-repo-lifecycle-demo [REPO_NAME=hello-platform] [DRY_RUN=1]"
+	@echo "  make idp-catalog                              Show the local IDP service catalog"
+	@echo "  make idp-env ACTION=create APP=hello-platform ENV=preview-nr [DRY_RUN=1]"
+	@echo "  make idp-deployments                          Show the app/environment deployment read model"
+	@echo "  make idp-secrets                              Show app secret bindings and rotation posture"
 	@echo "  make init"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
 	@echo "  make merge-default-kubeconfig"
@@ -743,6 +748,33 @@ check-rbac: workflow-validate-stage
 	@$(MAKE) assert-kind-active >/dev/null
 	@KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-rbac.sh" $(READONLY_MODE_FLAG)
 
+.PHONY: idp-catalog
+idp-catalog:
+	@"$(STACK_DIR)/scripts/idp-catalog.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: idp-env
+idp-env:
+	@"$(STACK_DIR)/scripts/idp-environment.sh" $(READONLY_MODE_FLAG) \
+		--action "$(ACTION)" \
+		--app "$(APP)" \
+		--env "$(ENV)" \
+		$(if $(strip $(ENV_TYPE)),--env-type "$(ENV_TYPE)") \
+		$(if $(strip $(IMAGE)),--image "$(IMAGE)") \
+		$(if $(strip $(TARGET_ENV)),--target-env "$(TARGET_ENV)")
+
+.PHONY: idp-deployments
+idp-deployments:
+	@"$(STACK_DIR)/scripts/idp-deployments.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: idp-secrets
+idp-secrets:
+	@"$(STACK_DIR)/scripts/idp-secrets.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: gitea-repo-lifecycle-demo
+gitea-repo-lifecycle-demo:
+	@"$(STACK_DIR)/scripts/gitea-repo-lifecycle-demo.sh" $(READONLY_MODE_FLAG) \
+		$(if $(strip $(REPO_NAME)),--repo "$(REPO_NAME)")
+
 .PHONY: check-gateway-stack
 check-gateway-stack:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
@@ -804,7 +836,7 @@ check-sso: workflow-validate-stage
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	)"; \
-	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $(READONLY_MODE_FLAG) $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-sso.sh" $(READONLY_MODE_FLAG) $$vf
 
 .PHONY: check-sso-e2e
 check-sso-e2e: workflow-validate-stage

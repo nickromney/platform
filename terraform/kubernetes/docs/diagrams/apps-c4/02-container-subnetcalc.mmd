@@ -5,7 +5,7 @@ C4Container
     Person(browser, "Browser", "Interactive user agent")
     Container_Ext(gateway, "platform-gateway", "Ingress / reverse proxy", "Cluster entrypoint for the demo hosts")
     Container_Ext(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Applies login and session checks for subnetcalc")
-    Container_Ext(dex, "Dex", "OIDC provider", "Publishes issuer and JWKS metadata")
+    Container_Ext(keycloak, "Keycloak", "OIDC provider", "Publishes issuer and JWKS metadata")
     Container_Ext(otel, "otel-collector", "OpenTelemetry Collector", "Receives traces from the app")
     Container_Ext(cloudflare, "www.cloudflare.com", "HTTPS endpoint", "Serves /ips-v4 and /ips-v6")
 
@@ -21,7 +21,7 @@ C4Container
     Rel(oauth, router, "Forwards authenticated traffic to")
     Rel(router, frontend, "Serves UI routes from")
     Rel(router, apim, "Forwards /api/* to")
-    Rel(apim, dex, "Validates issuer and JWKS against")
+    Rel(apim, keycloak, "Validates issuer and JWKS against")
     Rel(apim, api, "Forwards validated API calls to")
     Rel(api, otel, "Exports traces to")
     Rel(api, cloudflare, "dev only: fetches live range files from")

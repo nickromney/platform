@@ -599,6 +599,12 @@ variable "oauth2_proxy_chart_version" {
   default     = "10.4.3"
 }
 
+variable "oauth2_proxy_session_store_image" {
+  description = "Redis-compatible image used for oauth2-proxy server-side session storage."
+  type        = string
+  default     = "docker.io/redis:8.2.3-alpine"
+}
+
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string

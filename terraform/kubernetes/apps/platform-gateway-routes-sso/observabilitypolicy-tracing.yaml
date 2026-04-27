@@ -16,7 +16,7 @@ spec:
       name: hubble
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
-      name: dex
+      name: keycloak
   tracing:
     context: propagate
     ratio: 100

@@ -1,4 +1,4 @@
-# Kind platform context: Cilium (+ Hubble) + Argo CD + Gitea + SigNoz
+# Kind platform context: Cilium (+ Hubble) + Argo CD + Gitea + Keycloak SSO
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")

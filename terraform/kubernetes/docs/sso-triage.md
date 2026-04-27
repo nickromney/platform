@@ -4,10 +4,10 @@ This doc captures a practical "debug loop" for when platform SSO was working and
 
 Scope: kind-local cluster with:
 
-- Keycloak or Dex (IdP)
+- Keycloak as the stage `900` IdP, with Dex retained as an explicit compatibility provider
 - oauth2-proxy in front of UIs
 - Gateway API `HTTPRoute` objects routing hostnames to the oauth2-proxy services
-- Admin UIs: Gitea, ArgoCD, Hubble, SigNoz
+- Admin UIs: Gitea, ArgoCD, Grafana, Headlamp, Hubble, Kyverno
 - Example app: subnetcalc (static frontend + API behind a router)
 
 ## Mental model (keep this in your head)
@@ -17,12 +17,12 @@ Scope: kind-local cluster with:
 3. oauth2-proxy either:
    - redirects to the OIDC provider (no session), or
    - forwards to its configured `--upstream` (session ok), optionally injecting headers
-4. Some apps have an additional "bridge" upstream (e.g. SigNoz auth proxy) to translate OIDC into app-native auth.
+4. Some optional apps can have product-specific bridges, but the active RBAC proof should stay at Keycloak groups, oauth2-proxy, native product RBAC, and Kubernetes API RBAC.
 
 When behavior is weird, identify which hop is misconfigured:
 
 - Route points to wrong backend service
-- oauth2-proxy args wrong (cookie domain/name, redirect URL, upstream, email-domain, skip-auth-regex)
+- oauth2-proxy args wrong (cookie domain/name, redirect URL, upstream, allowed group, skip-auth-regex)
 - ArgoCD Application overrides the Helm values (parameters can silently override values)
 - Upstream app expects different auth headers / tokens than oauth2-proxy is sending
 
@@ -47,7 +47,7 @@ The following flags are the usual "one wrong value breaks everything" set:
 
 - `--redirect-url` (must match hostname and `/oauth2/callback`)
 - `--cookie-name` + `--cookie-domain` (must match the host you browse)
-- `--email-domain` (allowlist; should match the Dex user's email domain)
+- `--allowed-group` and `--oidc-groups-claim` (app routes should check `app-*-dev` / `app-*-uat` groups)
 - `--upstream` (where the UI actually is)
 - `--skip-auth-regex` (paths that bypass auth; a common footgun)
 - `--set-authorization-header` (can break apps if it overwrites Authorization)
@@ -67,7 +67,7 @@ Using a one-off curl pod avoids local DNS/cert/port-forward issues.
 Examples:
 
 ```bash
-# Does oauth2-proxy redirect to Dex when unauthenticated?
+# Does oauth2-proxy redirect to Keycloak when unauthenticated?
 kubectl -n default run curltest --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- \
   sh -lc "curl -sS -D - -o /dev/null -H 'Host: subnetcalc.uat.127.0.0.1.sslip.io' http://oauth2-proxy-subnetcalc-uat.sso.svc.cluster.local:80/ | sed -n '1,30p'"
 
@@ -109,9 +109,11 @@ curl -skD - -o /dev/null 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_
 curl -skD - -o /dev/null -H 'Cookie: kind-sso-dev=foo' 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/logged-out.html' | rg -n 'set-cookie|location'
 ```
 
-### 5) SigNoz-specific: oauth2-proxy Authorization header + upstream choice
+### 5) Optional SigNoz path: oauth2-proxy Authorization header + upstream choice
 
-In this setup, SigNoz is typically fronted by a small auth-bridge service (`signoz-auth-proxy`) that:
+SigNoz is not part of the active stage-900 RBAC proof. If you explicitly enable
+it, it is typically fronted by a small auth-bridge service (`signoz-auth-proxy`)
+that:
 
 - logs into SigNoz via `/api/v1/login`
 - injects `AUTH_TOKEN` (etc) into the frontend bundle response
@@ -121,7 +123,7 @@ Note: because SigNoz is authenticated via a service-user JWT, the email SigNoz s
 
 ### 6) Gitea-specific: forced "Change Password" after SSO
 
-Symptom: after authenticating via Dex, Gitea immediately lands on:
+Symptom: after authenticating via Keycloak, Gitea immediately lands on:
 
 - `/user/settings/change_password`
 
@@ -137,13 +139,14 @@ Bootstrap fix (this repo):
 
 - `terraform/kubernetes/scripts/ensure-gitea-org.sh` creates users with `must_change_password: false`
 - `terraform/kubernetes/scripts/unset-gitea-must-change-password.sh` clears the flag for all users (belt-and-suspenders for local dev)
-In this repo we rewrite the `/api/v1/user` response in `signoz-auth-proxy` to prefer the upstream OIDC email forwarded by oauth2-proxy
-(`X-Auth-Request-Email` / `X-Forwarded-Email`) so the UI matches the Dex identity.
+In the optional SigNoz path, this repo rewrites the `/api/v1/user` response in
+`signoz-auth-proxy` to prefer the upstream OIDC email forwarded by oauth2-proxy
+(`X-Auth-Request-Email` / `X-Forwarded-Email`) so the UI matches the IdP identity.
 
 Common failure modes:
 
 1) oauth2-proxy is pointing upstream directly to `signoz:8080` instead of `signoz-auth-proxy:3000`.
-   - Symptom: Dex login works, but SigNoz still shows its own login screen or "apps" UI is broken.
+   - Symptom: Keycloak login works, but SigNoz still shows its own login screen or "apps" UI is broken.
 
 2) oauth2-proxy is configured to set an `Authorization: Bearer <OIDC access token>` header.
    - Symptom: Signoz auth proxy receives the wrong Authorization header and SigNoz API calls break.

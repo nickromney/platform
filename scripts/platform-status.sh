@@ -1365,6 +1365,11 @@ actions_json="$(
     build_action_json kind-apply-100 'Kind stage 100 apply' kind kubernetes/kind "${kind_apply_100_enabled}" "${kind_apply_100_reason}" 'make -C kubernetes/kind 100 apply AUTO_APPROVE=1' 1
     build_action_json kind-apply-900 'Kind stage 900 apply' kind kubernetes/kind "${kind_apply_900_enabled}" "${kind_apply_900_reason}" 'make -C kubernetes/kind 900 apply AUTO_APPROVE=1' 1
     build_action_json kind-switch 'Switch to kind' kind kubernetes/kind "${kind_apply_900_enabled}" "$( [ "${kind_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${kind_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/kind reset && make -C kubernetes/kind 100 apply && make -C kubernetes/kind 900 apply' 1
+    build_action_json kind-idp-catalog 'IDP catalog' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-catalog' 0
+    build_action_json kind-idp-env-create 'IDP environment request' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-env ACTION=create APP=hello-platform ENV=preview-nr' 0
+    build_action_json kind-idp-deployments 'IDP deployments' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-deployments' 0
+    build_action_json kind-idp-secrets 'IDP secrets' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-secrets' 0
+    build_action_json kind-gitea-repo-lifecycle-demo 'Gitea repo lifecycle demo' kind kubernetes/kind 1 '' 'make -C kubernetes/kind gitea-repo-lifecycle-demo REPO_NAME=hello-platform' 0
 
     build_action_json lima-status 'Kubernetes Lima status' lima kubernetes/lima 1 '' 'make -C kubernetes/lima status' 0
     build_action_json lima-prereqs 'Kubernetes Lima prereqs' lima kubernetes/lima 1 '' 'make -C kubernetes/lima prereqs' 0

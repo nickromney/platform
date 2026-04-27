@@ -167,7 +167,7 @@ help:
 	@echo "  make check-slicer-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i"
-	 "  make check-security"
+	@echo "  make check-security"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e"
 	@echo "  make check-stage-monotonicity"

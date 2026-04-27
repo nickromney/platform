@@ -75,12 +75,16 @@ done
 tfvar_get() {
   local key="$2"
   local file value=""
-  for file in "${TFVARS_FILES[@]}"; do
+  local i=0
+  for (( i=${#TFVARS_FILES[@]}-1; i>=0; i-- )); do
+    file="${TFVARS_FILES[$i]}"
     [[ -n "${file}" && -f "${file}" ]] || continue
     value="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "${file}" 2>/dev/null | tail -n 1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"?([^\"#]+)\"?.*$/\1/" | xargs || true)"
     [[ -n "${value}" ]] || continue
+    echo "${value}"
+    return 0
   done
-  echo "${value}"
+  echo ""
 }
 
 admin_host() {
@@ -258,6 +262,9 @@ if kubectl -n argocd get applications.argoproj.io >/dev/null 2>&1; then
       else
         warn "app ${app} sync=${sync:-?} health=${health:-?}"
       fi
+    elif [[ "${app}" == "${OIDC_DEPLOYMENT}" && "${SSO_PROVIDER}" == "keycloak" ]] &&
+      kubectl -n sso get deploy keycloak >/dev/null 2>&1; then
+      ok "app keycloak not required; Keycloak is managed directly in the sso namespace"
     else
       warn "app ${app} missing"
     fi
@@ -279,15 +286,18 @@ echo "oauth2-proxy for Gitea (in-cluster):"
 if kubectl -n sso get deploy oauth2-proxy-gitea >/dev/null 2>&1; then
   ok "deploy sso/oauth2-proxy-gitea present"
   expect_deploy_arg sso oauth2-proxy-gitea "--provider=oidc"
-  expect_deploy_arg sso oauth2-proxy-gitea "--scope=openid email profile"
+  expect_deploy_arg sso oauth2-proxy-gitea "--scope=openid email profile groups"
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-issuer-url=${EXPECTED_OIDC_ISSUER_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--profile-url=${EXPECTED_PROFILE_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--redeem-url=${EXPECTED_TOKEN_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-jwks-url=${EXPECTED_JWKS_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--skip-oidc-discovery=true"
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-email-claim=email"
+  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-groups-claim=groups"
+  expect_deploy_arg sso oauth2-proxy-gitea "--allowed-group=platform-admins"
   expect_deploy_arg sso oauth2-proxy-gitea "--user-id-claim=email"
   expect_deploy_arg sso oauth2-proxy-gitea "--pass-user-headers=true"
+  warn_if_deploy_arg_present sso oauth2-proxy-gitea "--email-domain=admin.test" "oauth2-proxy-gitea still uses email-domain instead of group RBAC"
 else
   fail_soft "deploy sso/oauth2-proxy-gitea missing"
 fi

@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hello-platform-ingress
+spec:
+  description: >-
+    Allow the SSO auth proxy to reach the hello-platform HTTP service and keep
+    the sample workload isolated from direct cross-namespace traffic.
+  endpointSelector:
+    matchLabels:
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": hello-platform
+      "k8s:tier": frontend
+      "k8s:app.kubernetes.io/name": hello-platform
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": oauth2-proxy
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/.*"
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

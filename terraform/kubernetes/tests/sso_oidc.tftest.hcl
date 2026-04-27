@@ -27,6 +27,16 @@ run "sso_enabled_argocd_oidc_disabled" {
   }
 
   assert {
+    condition = alltrue([
+      length(kubectl_manifest.oauth2_proxy_session_store_deployment) == 1,
+      length(kubectl_manifest.oauth2_proxy_session_store_service) == 1,
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "session-store-type: redis"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "redis-connection-url: ${local.oauth2_proxy_redis_url}"),
+    ])
+    error_message = "Expected oauth2-proxy to use an internal Redis session store for Keycloak token sessions"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.keycloak) == 1
     error_message = "Expected kubectl_manifest.keycloak to exist when enable_sso=true and sso_provider=keycloak"
   }
@@ -39,6 +49,16 @@ run "sso_enabled_argocd_oidc_disabled" {
   assert {
     condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_gitea) == 1
     error_message = "Expected kubectl_manifest.argocd_app_oauth2_proxy_gitea to exist when enable_sso=true"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "allowed-group: platform-viewers"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "allowed-group: platform-admins"),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "email-domain: \"admin.test\""),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "email-domain: \"admin.test\""),
+    ])
+    error_message = "Expected admin SSO proxies to use Keycloak org groups rather than admin email-domain shortcuts"
   }
 
   assert {
@@ -92,6 +112,11 @@ run "sso_enabled_argocd_oidc_enabled" {
     condition     = length(kubectl_manifest.keycloak) == 1 && length(kubectl_manifest.argocd_app_dex) == 0
     error_message = "Expected Keycloak to be present and Dex Argo CD app to be absent when sso_provider=keycloak"
   }
+
+  assert {
+    condition     = length(null_resource.reconcile_keycloak_realm) == 1
+    error_message = "Expected an imperative Keycloak realm reconcile step so existing Postgres-backed realms receive client/group changes"
+  }
 }
 
 run "sso_with_subnetcalc_apps" {
@@ -128,7 +153,26 @@ run "sso_with_subnetcalc_apps" {
   }
 
   assert {
-    condition     = length(regexall("email-domain: \\\"uat\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0
-    error_message = "Expected subnetcalc UAT oauth2-proxy to restrict logins to uat.test"
+    condition = alltrue([
+      length(regexall("allowed-group: app-subnetcalc-dev", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) > 0,
+      length(regexall("allowed-group: app-subnetcalc-uat", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) > 0,
+      length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body)) == 0,
+      length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) == 0,
+    ])
+    error_message = "Expected subnetcalc oauth2-proxy to enforce app/environment groups instead of dev/uat email domains"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_hello_platform) == 2
+    error_message = "Expected hello-platform dev and UAT oauth2-proxy Argo CD applications to exist"
+  }
+
+  assert {
+    condition = alltrue([
+      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("allowed-group: app-hello-platform-dev", app.yaml_body)) > 0]) == 1,
+      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("allowed-group: app-hello-platform-uat", app.yaml_body)) > 0]) == 1,
+      alltrue([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", app.yaml_body)) == 0]),
+    ])
+    error_message = "Expected hello-platform oauth2-proxy apps to enforce app/environment groups instead of dev/uat email domains"
   }
 }

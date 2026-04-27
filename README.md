@@ -63,7 +63,7 @@ The stage ladder is cumulative:
 - `600`: Kyverno, cert-manager, and Cilium policy controls
 - `700`: app repos and the in-cluster Actions runner
 - `800`: gateway TLS, Headlamp, Grafana, Prometheus, and Loki
-- `900`: Dex and `oauth2-proxy` single sign-on
+- `900`: Keycloak and `oauth2-proxy` single sign-on
 
 ## Choose A Path
 

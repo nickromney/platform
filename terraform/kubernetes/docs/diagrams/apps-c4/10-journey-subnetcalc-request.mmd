@@ -6,7 +6,7 @@ sequenceDiagram
     participant OAuth as oauth2-proxy
     participant Router as subnetcalc-router
     participant APIM as subnetcalc-apim-simulator
-    participant Dex as Dex
+    participant Keycloak as Keycloak
     participant API as subnetcalc-api
     participant OTel as otel-collector
 
@@ -22,8 +22,8 @@ sequenceDiagram
     else API path
         Router->>APIM: Forward /api/*
         Note over Router,APIM: Cilium: subnetcalc-router-http-routes
-        APIM->>Dex: JWKS / issuer validation
-        Note over APIM,Dex: Cilium: apim-baseline + sso-hardened
+        APIM->>Keycloak: JWKS / issuer validation
+        Note over APIM,Keycloak: Cilium: apim-baseline + sso-hardened
         APIM->>API: Forward validated API request
         Note over APIM,API: Cilium: apim-baseline + subnetcalc-api-http-routes
         API->>OTel: Emit traces

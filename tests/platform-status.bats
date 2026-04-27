@@ -264,6 +264,25 @@ EOF
   [[ "${output}" != *"Active provider:"* ]]
 }
 
+@test "platform status exposes IDP core component actions" {
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '
+    [
+      (.actions | any(.id == "kind-idp-catalog" and .command == "make -C kubernetes/kind idp-catalog")),
+      (.actions | any(.id == "kind-idp-env-create" and (.command | contains("idp-env ACTION=create APP=hello-platform ENV=preview-nr")))),
+      (.actions | any(.id == "kind-idp-deployments" and .command == "make -C kubernetes/kind idp-deployments")),
+      (.actions | any(.id == "kind-idp-secrets" and .command == "make -C kubernetes/kind idp-secrets")),
+      (.actions | any(.id == "kind-gitea-repo-lifecycle-demo" and (.command | contains("gitea-repo-lifecycle-demo"))))
+    ] | map(tostring) | join("|")
+  ' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = 'true|true|true|true|true' ]
+}
+
 @test "platform status falls back to docker ps when docker info is unavailable" {
   export MOCK_DOCKER_INFO_EXIT=1
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'

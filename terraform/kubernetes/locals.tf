@@ -26,69 +26,95 @@ locals {
     local.gitea_registry_port != "" ? "${local.kind_control_plane_container_name}:${local.gitea_registry_port}" : local.kind_control_plane_container_name
   ) : var.gitea_registry_host
 
-  gitea_ssh_host_cluster                = "gitea-ssh.gitea.svc.cluster.local"
-  gitea_ssh_port_cluster                = 22
-  gitea_repo_owner                      = var.gitea_repo_owner != "" ? var.gitea_repo_owner : var.gitea_admin_username
-  gitea_repo_owner_is_org               = var.gitea_repo_owner_is_org
-  gitea_repo_owner_fallback             = var.gitea_repo_owner_is_org ? var.gitea_admin_username : ""
-  argocd_oidc_enabled                   = var.enable_sso && var.enable_argocd_oidc
-  cni_provider_effective                = lower(var.cni_provider)
-  enable_cilium_effective               = local.cni_provider_effective == "cilium"
-  sso_provider_effective                = lower(trimspace(var.sso_provider))
-  sso_provider_is_dex                   = local.sso_provider_effective == "dex"
-  sso_provider_is_keycloak              = local.sso_provider_effective == "keycloak"
-  platform_base_domain_effective        = lower(trimspace(var.platform_base_domain))
-  platform_admin_base_domain_effective  = trimspace(var.platform_admin_base_domain) != "" ? lower(trimspace(var.platform_admin_base_domain)) : local.platform_base_domain_effective
-  separate_admin_domain_enabled         = trimspace(var.platform_admin_base_domain) != ""
-  admin_cookie_domain                   = ".${local.platform_admin_base_domain_effective}"
-  admin_whitelist_domains               = var.gateway_https_host_port == 443 ? local.admin_cookie_domain : "${local.admin_cookie_domain},${local.admin_cookie_domain}:${var.gateway_https_host_port}"
-  dev_cookie_domain                     = ".dev.${local.platform_base_domain_effective}"
-  dev_whitelist_domains                 = var.gateway_https_host_port == 443 ? local.dev_cookie_domain : "${local.dev_cookie_domain},${local.dev_cookie_domain}:${var.gateway_https_host_port}"
-  uat_cookie_domain                     = ".uat.${local.platform_base_domain_effective}"
-  uat_whitelist_domains                 = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
-  gateway_https_host_port_suffix        = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
-  argocd_public_host                    = local.separate_admin_domain_enabled ? "argocd.${local.platform_admin_base_domain_effective}" : "argocd.admin.${local.platform_base_domain_effective}"
-  argocd_public_url                     = "https://${local.argocd_public_host}${local.gateway_https_host_port_suffix}"
-  dex_public_host                       = "dex.${local.platform_admin_base_domain_effective}"
-  dex_public_url                        = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
-  keycloak_public_host                  = "keycloak.${local.platform_admin_base_domain_effective}"
-  keycloak_public_url                   = "https://${local.keycloak_public_host}${local.gateway_https_host_port_suffix}"
-  keycloak_realm                        = trimspace(var.keycloak_realm)
-  keycloak_realm_public_url             = "${local.keycloak_public_url}/realms/${local.keycloak_realm}"
-  keycloak_realm_internal_url           = "http://keycloak.sso.svc.cluster.local:8080/realms/${local.keycloak_realm}"
-  sso_public_host                       = local.sso_provider_is_keycloak ? local.keycloak_public_host : local.dex_public_host
-  sso_public_url                        = local.sso_provider_is_keycloak ? local.keycloak_realm_public_url : local.dex_public_url
-  sso_internal_url                      = local.sso_provider_is_keycloak ? local.keycloak_realm_internal_url : "http://dex.sso.svc.cluster.local:5556/dex"
-  sso_auth_url                          = local.sso_provider_is_keycloak ? "${local.keycloak_realm_public_url}/protocol/openid-connect/auth" : "${local.dex_public_url}/auth"
-  sso_login_url                         = local.sso_provider_is_keycloak ? local.sso_auth_url : "${local.dex_public_url}/auth?prompt=login"
-  sso_token_url                         = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/token" : "http://dex.sso.svc.cluster.local:5556/dex/token"
-  sso_userinfo_url                      = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/userinfo" : "http://dex.sso.svc.cluster.local:5556/dex/userinfo"
-  sso_jwks_url                          = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/certs" : "http://dex.sso.svc.cluster.local:5556/dex/keys"
-  sso_groups_claim                      = "groups"
-  sso_username_claim                    = "email"
-  sso_admin_group                       = "platform-admins"
-  sso_viewer_group                      = "platform-viewers"
-  sso_app_groups                        = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat"]
-  gitea_public_host                     = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
-  gitea_public_url                      = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"
-  grafana_public_host                   = local.separate_admin_domain_enabled ? "grafana.${local.platform_admin_base_domain_effective}" : "grafana.admin.${local.platform_base_domain_effective}"
-  grafana_public_url                    = "https://${local.grafana_public_host}${local.gateway_https_host_port_suffix}"
-  headlamp_public_host                  = local.separate_admin_domain_enabled ? "headlamp.${local.platform_admin_base_domain_effective}" : "headlamp.admin.${local.platform_base_domain_effective}"
-  headlamp_public_url                   = "https://${local.headlamp_public_host}${local.gateway_https_host_port_suffix}"
-  hubble_public_host                    = local.separate_admin_domain_enabled ? "hubble.${local.platform_admin_base_domain_effective}" : "hubble.admin.${local.platform_base_domain_effective}"
-  hubble_public_url                     = "https://${local.hubble_public_host}${local.gateway_https_host_port_suffix}"
-  kyverno_public_host                   = local.separate_admin_domain_enabled ? "kyverno.${local.platform_admin_base_domain_effective}" : "kyverno.admin.${local.platform_base_domain_effective}"
-  kyverno_public_url                    = "https://${local.kyverno_public_host}${local.gateway_https_host_port_suffix}"
-  signoz_public_host                    = local.separate_admin_domain_enabled ? "signoz.${local.platform_admin_base_domain_effective}" : "signoz.admin.${local.platform_base_domain_effective}"
-  signoz_public_url                     = "https://${local.signoz_public_host}${local.gateway_https_host_port_suffix}"
-  sentiment_dev_public_host             = "sentiment.dev.${local.platform_base_domain_effective}"
-  sentiment_dev_public_url              = "https://${local.sentiment_dev_public_host}${local.gateway_https_host_port_suffix}"
-  sentiment_uat_public_host             = "sentiment.uat.${local.platform_base_domain_effective}"
-  sentiment_uat_public_url              = "https://${local.sentiment_uat_public_host}${local.gateway_https_host_port_suffix}"
-  subnetcalc_dev_public_host            = "subnetcalc.dev.${local.platform_base_domain_effective}"
-  subnetcalc_dev_public_url             = "https://${local.subnetcalc_dev_public_host}${local.gateway_https_host_port_suffix}"
-  subnetcalc_uat_public_host            = "subnetcalc.uat.${local.platform_base_domain_effective}"
-  subnetcalc_uat_public_url             = "https://${local.subnetcalc_uat_public_host}${local.gateway_https_host_port_suffix}"
+  gitea_ssh_host_cluster               = "gitea-ssh.gitea.svc.cluster.local"
+  gitea_ssh_port_cluster               = 22
+  gitea_repo_owner                     = var.gitea_repo_owner != "" ? var.gitea_repo_owner : var.gitea_admin_username
+  gitea_repo_owner_is_org              = var.gitea_repo_owner_is_org
+  gitea_repo_owner_fallback            = var.gitea_repo_owner_is_org ? var.gitea_admin_username : ""
+  argocd_oidc_enabled                  = var.enable_sso && var.enable_argocd_oidc
+  cni_provider_effective               = lower(var.cni_provider)
+  enable_cilium_effective              = local.cni_provider_effective == "cilium"
+  sso_provider_effective               = lower(trimspace(var.sso_provider))
+  sso_provider_is_dex                  = local.sso_provider_effective == "dex"
+  sso_provider_is_keycloak             = local.sso_provider_effective == "keycloak"
+  platform_base_domain_effective       = lower(trimspace(var.platform_base_domain))
+  platform_admin_base_domain_effective = trimspace(var.platform_admin_base_domain) != "" ? lower(trimspace(var.platform_admin_base_domain)) : local.platform_base_domain_effective
+  separate_admin_domain_enabled        = trimspace(var.platform_admin_base_domain) != ""
+  admin_cookie_domain                  = ".${local.platform_admin_base_domain_effective}"
+  admin_whitelist_domains              = var.gateway_https_host_port == 443 ? local.admin_cookie_domain : "${local.admin_cookie_domain},${local.admin_cookie_domain}:${var.gateway_https_host_port}"
+  dev_cookie_domain                    = ".dev.${local.platform_base_domain_effective}"
+  dev_whitelist_domains                = var.gateway_https_host_port == 443 ? local.dev_cookie_domain : "${local.dev_cookie_domain},${local.dev_cookie_domain}:${var.gateway_https_host_port}"
+  uat_cookie_domain                    = ".uat.${local.platform_base_domain_effective}"
+  uat_whitelist_domains                = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
+  oauth2_proxy_session_store_service   = "oauth2-proxy-session-store"
+  oauth2_proxy_redis_url               = "redis://${local.oauth2_proxy_session_store_service}.sso.svc.cluster.local:6379"
+  gateway_https_host_port_suffix       = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
+  argocd_public_host                   = local.separate_admin_domain_enabled ? "argocd.${local.platform_admin_base_domain_effective}" : "argocd.admin.${local.platform_base_domain_effective}"
+  argocd_public_url                    = "https://${local.argocd_public_host}${local.gateway_https_host_port_suffix}"
+  dex_public_host                      = "dex.${local.platform_admin_base_domain_effective}"
+  dex_public_url                       = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
+  keycloak_public_host                 = "keycloak.${local.platform_admin_base_domain_effective}"
+  keycloak_public_url                  = "https://${local.keycloak_public_host}${local.gateway_https_host_port_suffix}"
+  keycloak_realm                       = trimspace(var.keycloak_realm)
+  keycloak_realm_public_url            = "${local.keycloak_public_url}/realms/${local.keycloak_realm}"
+  keycloak_realm_internal_url          = "http://keycloak.sso.svc.cluster.local:8080/realms/${local.keycloak_realm}"
+  sso_public_host                      = local.sso_provider_is_keycloak ? local.keycloak_public_host : local.dex_public_host
+  sso_public_url                       = local.sso_provider_is_keycloak ? local.keycloak_realm_public_url : local.dex_public_url
+  sso_internal_url                     = local.sso_provider_is_keycloak ? local.keycloak_realm_internal_url : "http://dex.sso.svc.cluster.local:5556/dex"
+  sso_auth_url                         = local.sso_provider_is_keycloak ? "${local.keycloak_realm_public_url}/protocol/openid-connect/auth" : "${local.dex_public_url}/auth"
+  sso_login_url                        = local.sso_provider_is_keycloak ? local.sso_auth_url : "${local.dex_public_url}/auth?prompt=login"
+  sso_token_url                        = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/token" : "http://dex.sso.svc.cluster.local:5556/dex/token"
+  sso_userinfo_url                     = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/userinfo" : "http://dex.sso.svc.cluster.local:5556/dex/userinfo"
+  sso_jwks_url                         = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/certs" : "http://dex.sso.svc.cluster.local:5556/dex/keys"
+  sso_groups_claim                     = "groups"
+  sso_username_claim                   = "email"
+  sso_admin_group                      = "platform-admins"
+  sso_viewer_group                     = "platform-viewers"
+  sso_app_groups                       = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat", "app-hello-platform-dev", "app-hello-platform-uat"]
+  gitea_public_host                    = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
+  gitea_public_url                     = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"
+  grafana_public_host                  = local.separate_admin_domain_enabled ? "grafana.${local.platform_admin_base_domain_effective}" : "grafana.admin.${local.platform_base_domain_effective}"
+  grafana_public_url                   = "https://${local.grafana_public_host}${local.gateway_https_host_port_suffix}"
+  headlamp_public_host                 = local.separate_admin_domain_enabled ? "headlamp.${local.platform_admin_base_domain_effective}" : "headlamp.admin.${local.platform_base_domain_effective}"
+  headlamp_public_url                  = "https://${local.headlamp_public_host}${local.gateway_https_host_port_suffix}"
+  hubble_public_host                   = local.separate_admin_domain_enabled ? "hubble.${local.platform_admin_base_domain_effective}" : "hubble.admin.${local.platform_base_domain_effective}"
+  hubble_public_url                    = "https://${local.hubble_public_host}${local.gateway_https_host_port_suffix}"
+  kyverno_public_host                  = local.separate_admin_domain_enabled ? "kyverno.${local.platform_admin_base_domain_effective}" : "kyverno.admin.${local.platform_base_domain_effective}"
+  kyverno_public_url                   = "https://${local.kyverno_public_host}${local.gateway_https_host_port_suffix}"
+  signoz_public_host                   = local.separate_admin_domain_enabled ? "signoz.${local.platform_admin_base_domain_effective}" : "signoz.admin.${local.platform_base_domain_effective}"
+  signoz_public_url                    = "https://${local.signoz_public_host}${local.gateway_https_host_port_suffix}"
+  sentiment_dev_public_host            = "sentiment.dev.${local.platform_base_domain_effective}"
+  sentiment_dev_public_url             = "https://${local.sentiment_dev_public_host}${local.gateway_https_host_port_suffix}"
+  sentiment_uat_public_host            = "sentiment.uat.${local.platform_base_domain_effective}"
+  sentiment_uat_public_url             = "https://${local.sentiment_uat_public_host}${local.gateway_https_host_port_suffix}"
+  subnetcalc_dev_public_host           = "subnetcalc.dev.${local.platform_base_domain_effective}"
+  subnetcalc_dev_public_url            = "https://${local.subnetcalc_dev_public_host}${local.gateway_https_host_port_suffix}"
+  subnetcalc_uat_public_host           = "subnetcalc.uat.${local.platform_base_domain_effective}"
+  subnetcalc_uat_public_url            = "https://${local.subnetcalc_uat_public_host}${local.gateway_https_host_port_suffix}"
+  hello_platform_dev_public_host       = "hello-platform.dev.${local.platform_base_domain_effective}"
+  hello_platform_dev_public_url        = "https://${local.hello_platform_dev_public_host}${local.gateway_https_host_port_suffix}"
+  hello_platform_uat_public_host       = "hello-platform.uat.${local.platform_base_domain_effective}"
+  hello_platform_uat_public_url        = "https://${local.hello_platform_uat_public_host}${local.gateway_https_host_port_suffix}"
+  sso_hello_platform_proxy_apps = {
+    dev = {
+      name             = "oauth2-proxy-hello-platform-dev"
+      public_url       = local.hello_platform_dev_public_url
+      upstream         = "http://hello-platform.dev.svc.cluster.local:8080"
+      group            = "app-hello-platform-dev"
+      cookie_name      = "kind-sso-dev"
+      cookie_domain    = local.dev_cookie_domain
+      whitelist_domain = local.dev_whitelist_domains
+    }
+    uat = {
+      name             = "oauth2-proxy-hello-platform-uat"
+      public_url       = local.hello_platform_uat_public_url
+      upstream         = "http://hello-platform.uat.svc.cluster.local:8080"
+      group            = "app-hello-platform-uat"
+      cookie_name      = "kind-sso-uat"
+      cookie_domain    = local.uat_cookie_domain
+      whitelist_domain = local.uat_whitelist_domains
+    }
+  }
   admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
   admin_route_allowlist_enabled         = length(local.admin_route_allowlist_cidrs_effective) > 0
   gateway_trusted_proxy_cidrs_effective = [for cidr in var.gateway_trusted_proxy_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
@@ -263,6 +289,7 @@ locals {
     var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(

@@ -79,6 +79,126 @@ resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
   }
 }
 
+resource "kubectl_manifest" "oauth2_proxy_session_store_deployment" {
+  count = var.enable_sso ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${local.oauth2_proxy_session_store_service}
+  namespace: sso
+  labels:
+    app.kubernetes.io/name: ${local.oauth2_proxy_session_store_service}
+    app.kubernetes.io/component: session-store
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${local.oauth2_proxy_session_store_service}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${local.oauth2_proxy_session_store_service}
+        app.kubernetes.io/component: session-store
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: ${var.oauth2_proxy_session_store_image}
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --protected-mode
+            - "no"
+            - --dir
+            - /data
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = true
+
+  depends_on = [
+    kubernetes_namespace_v1.sso,
+  ]
+}
+
+resource "kubectl_manifest" "oauth2_proxy_session_store_service" {
+  count = var.enable_sso ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${local.oauth2_proxy_session_store_service}
+  namespace: sso
+  labels:
+    app.kubernetes.io/name: ${local.oauth2_proxy_session_store_service}
+    app.kubernetes.io/component: session-store
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ${local.oauth2_proxy_session_store_service}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = true
+
+  depends_on = [
+    kubectl_manifest.oauth2_proxy_session_store_deployment,
+  ]
+}
+
 resource "kubernetes_secret_v1" "signoz_auth_proxy_credentials" {
   count = var.enable_sso && var.enable_signoz ? 1 : 0
 
@@ -202,6 +322,32 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
         ],
         [for group_name in local.sso_app_groups : { name = group_name }]
       )
+      clientScopes = [
+        {
+          name        = local.sso_groups_claim
+          protocol    = "openid-connect"
+          description = "Expose Keycloak group memberships in OIDC tokens"
+          attributes = {
+            "display.on.consent.screen" = "false"
+            "include.in.token.scope"    = "true"
+          }
+          protocolMappers = [
+            {
+              name            = local.sso_groups_claim
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-group-membership-mapper"
+              consentRequired = false
+              config = {
+                "claim.name"           = local.sso_groups_claim
+                "full.path"            = "false"
+                "id.token.claim"       = "true"
+                "access.token.claim"   = "true"
+                "userinfo.token.claim" = "true"
+              }
+            }
+          ]
+        }
+      ]
       clients = [
         {
           clientId                  = "oauth2-proxy"
@@ -221,8 +367,11 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
             "${local.sentiment_uat_public_url}/oauth2/callback",
             "${local.subnetcalc_dev_public_url}/oauth2/callback",
             "${local.subnetcalc_uat_public_url}/oauth2/callback",
+            "${local.hello_platform_dev_public_url}/oauth2/callback",
+            "${local.hello_platform_uat_public_url}/oauth2/callback",
           ]
-          webOrigins = ["+"]
+          webOrigins           = ["+"]
+          optionalClientScopes = [local.sso_groups_claim]
           protocolMappers = [
             {
               name            = "groups"
@@ -261,6 +410,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           directAccessGrantsEnabled = true
           redirectUris              = ["${local.argocd_public_url}/auth/callback"]
           webOrigins                = ["+"]
+          optionalClientScopes      = [local.sso_groups_claim]
           protocolMappers = [
             {
               name            = "groups"
@@ -288,6 +438,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           directAccessGrantsEnabled = true
           redirectUris              = ["${local.headlamp_public_url}/oidc-callback"]
           webOrigins                = ["+"]
+          optionalClientScopes      = [local.sso_groups_claim]
           protocolMappers = [
             {
               name            = "groups"
@@ -313,7 +464,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           lastName      = "Admin"
           enabled       = true
           emailVerified = true
-          groups        = [local.sso_admin_group]
+          groups        = [local.sso_admin_group, local.sso_viewer_group]
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
@@ -327,7 +478,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           lastName      = "Dev"
           enabled       = true
           emailVerified = true
-          groups        = [local.sso_viewer_group, "app-subnetcalc-dev", "app-sentiment-dev"]
+          groups        = [local.sso_viewer_group, "app-subnetcalc-dev", "app-sentiment-dev", "app-hello-platform-dev"]
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
@@ -341,7 +492,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           lastName      = "UAT"
           enabled       = true
           emailVerified = true
-          groups        = [local.sso_viewer_group, "app-subnetcalc-uat", "app-sentiment-uat"]
+          groups        = [local.sso_viewer_group, "app-subnetcalc-uat", "app-sentiment-uat", "app-hello-platform-uat"]
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
@@ -606,6 +757,32 @@ __YAML__
   ]
 }
 
+resource "null_resource" "reconcile_keycloak_realm" {
+  count = var.enable_sso && local.sso_provider_is_keycloak ? 1 : 0
+
+  triggers = {
+    realm_config_sha = sha256(kubernetes_config_map_v1.keycloak_realm[0].data["platform-realm.json"])
+    script_sha       = filesha256(abspath("${local.stack_dir}/scripts/reconcile-keycloak-realm.sh"))
+  }
+
+  provisioner "local-exec" {
+    command = "bash \"${local.stack_dir}/scripts/reconcile-keycloak-realm.sh\" --execute"
+    environment = {
+      KUBECONFIG                = local.kubeconfig_path_expanded
+      KEYCLOAK_NAMESPACE        = kubernetes_namespace_v1.sso[0].metadata[0].name
+      KEYCLOAK_REALM            = local.keycloak_realm
+      KEYCLOAK_REALM_CONFIGMAP  = kubernetes_config_map_v1.keycloak_realm[0].metadata[0].name
+      KEYCLOAK_REALM_CONFIG_KEY = "platform-realm.json"
+      REPO_ROOT                 = local.repo_root
+    }
+  }
+
+  depends_on = [
+    kubectl_manifest.keycloak,
+    kubectl_manifest.keycloak_service,
+  ]
+}
+
 resource "kubectl_manifest" "argocd_app_dex" {
   count = var.enable_sso && local.sso_provider_is_dex && var.enable_argocd ? 1 : 0
 
@@ -684,6 +861,8 @@ spec:
                 - ${local.sentiment_uat_public_url}/oauth2/callback
                 - ${local.subnetcalc_dev_public_url}/oauth2/callback
                 - ${local.subnetcalc_uat_public_url}/oauth2/callback
+                - ${local.hello_platform_dev_public_url}/oauth2/callback
+                - ${local.hello_platform_uat_public_url}/oauth2/callback
             - id: argocd
               name: "argocd"
               secret: ${random_password.dex_argocd_client_secret[0].result}
@@ -770,6 +949,8 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     environment = {
       KUBECONFIG                  = local.kubeconfig_path_expanded
       CLUSTER_NAME                = var.cluster_name
+      SSO_PROVIDER                = local.sso_provider_effective
+      KEYCLOAK_REALM              = local.keycloak_realm
       DEX_HOST                    = local.sso_public_host
       DEX_NAMESPACE               = "sso"
       SSO_NAMESPACE               = "sso"
@@ -1009,10 +1190,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1022,10 +1204,12 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.argocd_public_url}/oauth2/callback
           upstream: http://argocd-server.argocd.svc.cluster.local:8080
-          email-domain: "admin.test"
+          allowed-group: ${local.sso_viewer_group}
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-access-token: "true"
           pass-user-headers: "true"
@@ -1055,6 +1239,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1113,10 +1298,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1126,10 +1312,12 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.gitea_public_url}/oauth2/callback
           upstream: http://gitea-http.gitea.svc.cluster.local:3000
-          email-domain: "admin.test"
+          allowed-group: ${local.sso_admin_group}
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-access-token: "true"
           pass-user-headers: "true"
@@ -1159,6 +1347,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1217,10 +1406,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1230,10 +1420,12 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.hubble_public_url}/oauth2/callback
           upstream: http://hubble-ui.kube-system.svc.cluster.local:80
-          email-domain: "admin.test"
+          allowed-group: ${local.sso_admin_group}
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-user-headers: "true"
           set-xauthrequest: "true"
@@ -1262,6 +1454,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1320,10 +1513,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1333,10 +1527,12 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.grafana_public_url}/oauth2/callback
           upstream: http://grafana.observability.svc.cluster.local:3000
-          email-domain: "admin.test"
+          allowed-group: ${local.sso_admin_group}
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-user-headers: "true"
           set-xauthrequest: "true"
@@ -1364,6 +1560,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1431,10 +1628,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1444,10 +1642,12 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.signoz_public_url}/oauth2/callback
           upstream: http://signoz-auth-proxy.observability.svc.cluster.local:3000
-          email-domain: "admin.test"
+          allowed-group: ${local.sso_admin_group}
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-user-headers: "true"
           set-xauthrequest: "true"
@@ -1475,6 +1675,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1533,10 +1734,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1547,10 +1749,12 @@ spec:
           redirect-url: ${local.sentiment_dev_public_url}/oauth2/callback
           upstream: http://sentiment-router.dev.svc.cluster.local:8080
           upstream-timeout: 180s
-          email-domain: "dev.test"
+          allowed-group: app-sentiment-dev
           cookie-domain: ${local.dev_cookie_domain}
           whitelist-domain: ${local.dev_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-access-token: "true"
           pass-user-headers: "true"
@@ -1580,6 +1784,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1640,10 +1845,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1654,11 +1860,13 @@ spec:
           redirect-url: ${local.sentiment_uat_public_url}/oauth2/callback
           upstream: http://sentiment-router.uat.svc.cluster.local:8080
           upstream-timeout: 180s
-          # UAT apps should only accept demo@uat.test (not demo@admin.test).
-          email-domain: "uat.test"
+          # UAT apps should only accept identities in the app/environment group.
+          allowed-group: app-sentiment-uat
           cookie-domain: ${local.uat_cookie_domain}
           whitelist-domain: ${local.uat_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           pass-access-token: "true"
           pass-user-headers: "true"
@@ -1688,6 +1896,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1748,10 +1957,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1761,10 +1971,12 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.subnetcalc_dev_public_url}/oauth2/callback
           upstream: http://subnetcalc-router.dev.svc.cluster.local:8080
-          email-domain: "dev.test"
+          allowed-group: app-subnetcalc-dev
           cookie-domain: ${local.dev_cookie_domain}
           whitelist-domain: ${local.dev_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           # Only allow the logout landing page + favicon unauthenticated.
           # /.auth/* should stay protected so the frontend "whoami" endpoint isn't silently unauthenticated.
@@ -1797,6 +2009,7 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
@@ -1857,10 +2070,11 @@ spec:
 
         extraArgs:
           provider: oidc
-          scope: "openid email profile"
+          scope: "openid email profile groups"
           oidc-issuer-url: ${local.sso_public_url}
           profile-url: ${local.sso_userinfo_url}
           oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
           insecure-oidc-allow-unverified-email: "true"
           user-id-claim: email
           skip-oidc-discovery: "true"
@@ -1870,11 +2084,13 @@ spec:
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${local.subnetcalc_uat_public_url}/oauth2/callback
           upstream: http://subnetcalc-router.uat.svc.cluster.local:8080
-          # UAT apps should only accept demo@uat.test (not demo@admin.test).
-          email-domain: "uat.test"
+          # UAT apps should only accept identities in the app/environment group.
+          allowed-group: app-subnetcalc-uat
           cookie-domain: ${local.uat_cookie_domain}
           whitelist-domain: ${local.uat_whitelist_domains}
           cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
           # Only allow the logout landing page + favicon unauthenticated.
           # /.auth/* should stay protected so the frontend "whoami" endpoint isn't silently unauthenticated.
@@ -1907,10 +2123,120 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
     kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     # When enable_app_of_apps=true, subnetcalc-uat is managed via the GitOps tree.
+    kubectl_manifest.argocd_app_of_apps,
+  ]
+}
+
+resource "kubectl_manifest" "argocd_app_oauth2_proxy_hello_platform" {
+  for_each = var.enable_sso && var.enable_argocd ? local.sso_hello_platform_proxy_apps : {}
+
+  yaml_body = <<__YAML__
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${each.value.name}
+  namespace: ${var.argocd_namespace}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: sso
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: ${local.vendored_chart_paths.oauth2_proxy}
+    helm:
+      releaseName: ${each.value.name}
+      values: |
+        image:
+          registry: ${local.hardened_image_registry_effective}
+          repository: oauth2-proxy
+          tag: 7.15.2-debian13
+        config:
+          existingSecret: oauth2-proxy-oidc
+          cookieName: ${each.value.cookie_name}
+          configFile: ""
+
+        service:
+          portNumber: 4180
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+
+        livenessProbe:
+          initialDelaySeconds: 10
+          timeoutSeconds: 15
+          failureThreshold: 10
+
+        readinessProbe:
+          initialDelaySeconds: 5
+          timeoutSeconds: 15
+          failureThreshold: 10
+
+        extraArgs:
+          provider: oidc
+          scope: "openid email profile groups"
+          oidc-issuer-url: ${local.sso_public_url}
+          profile-url: ${local.sso_userinfo_url}
+          oidc-email-claim: email
+          oidc-groups-claim: ${local.sso_groups_claim}
+          insecure-oidc-allow-unverified-email: "true"
+          user-id-claim: email
+          skip-oidc-discovery: "true"
+          ssl-insecure-skip-verify: "true"
+          login-url: ${local.sso_login_url}
+          redeem-url: ${local.sso_token_url}
+          oidc-jwks-url: ${local.sso_jwks_url}
+          redirect-url: ${each.value.public_url}/oauth2/callback
+          upstream: ${each.value.upstream}
+          allowed-group: ${each.value.group}
+          cookie-domain: ${each.value.cookie_domain}
+          whitelist-domain: ${each.value.whitelist_domain}
+          cookie-secure: "true"
+          session-store-type: redis
+          redis-connection-url: ${local.oauth2_proxy_redis_url}
+          show-debug-on-error: "true"
+          pass-access-token: "true"
+          pass-user-headers: "true"
+          set-xauthrequest: "true"
+          set-authorization-header: "true"
+          reverse-proxy: "true"
+          skip-provider-button: "true"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = false
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
+    kubernetes_namespace_v1.sso,
+    kubernetes_secret_v1.oauth2_proxy_oidc,
+    kubectl_manifest.oauth2_proxy_session_store_service,
+    kubectl_manifest.argocd_app_dex,
+    kubectl_manifest.keycloak,
+    kubectl_manifest.keycloak_service,
     kubectl_manifest.argocd_app_of_apps,
   ]
 }

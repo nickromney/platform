@@ -86,6 +86,17 @@ setup() {
   grep -Fq "printf '%s' \"\${selector}\"" "${script}"
 }
 
+@test "oidc helper library defaults the local Kubernetes SSO provider to Keycloak" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
+  health_script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'SSO_PROVIDER="${SSO_PROVIDER:-keycloak}"' "${script}"
+  grep -Fq 'OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}/realms/${KEYCLOAK_REALM}}"' "${script}"
+  grep -Fq 'OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}/dex}"' "${script}"
+  grep -Fq '[[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"' "${health_script}"
+  grep -Fq 'Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/' "${health_script}"
+}
+
 @test "oidc helper library repairs node-local cilium when post-restart controllers lose kubernetes service reachability" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
 
@@ -127,6 +138,20 @@ setup() {
   grep -Fq 'argocd_refresh_app()' "${script}"
   grep -Fq 'argocd.argoproj.io/refresh=hard' "${script}"
   grep -Fq 'argocd_refresh_app "${ns}" "${app}"' "${script}"
+}
+
+@test "cluster health script only tolerates stale aggregate degraded health when child resources are clean" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'argocd_app_has_stale_aggregate_health()' "${script}"
+  grep -Fq '[[ "${app}" == "platform-gateway-routes" ]] || return 1' "${script}"
+  grep -Fq '[[ "${sync}" == "Synced" && "${health}" == "Degraded" ]] || return 1' "${script}"
+  grep -Fq '[[ "${op_phase}" == "Succeeded" ]] || return 1' "${script}"
+  grep -Fq '[[ -z "${conditions}" ]] || return 1' "${script}"
+  grep -Fq '[[ -z "${child_sync_drift}" ]] || return 1' "${script}"
+  grep -Fq '[[ -z "${child_bad_health}" ]] || return 1' "${script}"
+  grep -Fq 'if argocd_app_has_stale_aggregate_health "${ns}" "${app}"; then' "${script}"
+  grep -Fq 'stale aggregate Degraded health' "${script}"
 }
 
 @test "deployment health customization avoids Lua string library helpers in Argo health sandbox" {

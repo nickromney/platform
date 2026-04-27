@@ -51,7 +51,7 @@ case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
     printf '200'
     exit 0
     ;;
-  0:https://dex.127.0.0.1.sslip.io/dex/)
+  0:https://keycloak.127.0.0.1.sslip.io/)
     printf '200'
     exit 0
     ;;
@@ -64,7 +64,7 @@ case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
     printf '200'
     exit 0
     ;;
-  1:https://dex.127.0.0.1.sslip.io/dex/)
+  1:https://keycloak.127.0.0.1.sslip.io/)
     printf '200'
     exit 0
     ;;
@@ -149,7 +149,7 @@ if [[ "${args}" == *"-n gateway-routes get httproute -o jsonpath="* ]] && printf
   if [[ "${MOCK_NO_ROUTES:-0}" == "1" ]]; then
     exit 0
   fi
-  printf 'headlamp\nsubnetcalc-uat\ndex\n'
+  printf 'headlamp\nsubnetcalc-uat\nkeycloak\n'
   exit 0
 fi
 
@@ -187,20 +187,20 @@ if [[ "${args}" == *"-n gateway-routes get httproute subnetcalc-uat -o jsonpath=
   exit 0
 fi
 
-if [[ "${args}" == *"-n gateway-routes get httproute dex -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.spec.hostnames[*]'; then
-  printf 'dex.127.0.0.1.sslip.io'
+if [[ "${args}" == *"-n gateway-routes get httproute keycloak -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.spec.hostnames[*]'; then
+  printf 'keycloak.127.0.0.1.sslip.io'
   exit 0
 fi
-if [[ "${args}" == *"-n gateway-routes get httproute dex -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="Accepted"'; then
+if [[ "${args}" == *"-n gateway-routes get httproute keycloak -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="Accepted"'; then
   printf 'True'
   exit 0
 fi
-if [[ "${args}" == *"-n gateway-routes get httproute dex -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="ResolvedRefs"'; then
+if [[ "${args}" == *"-n gateway-routes get httproute keycloak -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="ResolvedRefs"'; then
   printf 'True'
   exit 0
 fi
-if [[ "${args}" == *"-n gateway-routes get httproute dex -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.path.value'; then
-  printf '/dex/\n'
+if [[ "${args}" == *"-n gateway-routes get httproute keycloak -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.path.value'; then
+  printf '/\n'
   exit 0
 fi
 
@@ -216,7 +216,7 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"HTTPS https://headlamp.admin.127.0.0.1.sslip.io/ -> 302"* ]]
   [[ "${output}" == *"HTTPS https://subnetcalc.uat.127.0.0.1.sslip.io/ -> 200"* ]]
-  [[ "${output}" == *"HTTPS https://dex.127.0.0.1.sslip.io/dex/ -> 200"* ]]
+  [[ "${output}" == *"HTTPS https://keycloak.127.0.0.1.sslip.io/ -> 200"* ]]
   [[ "${output}" != *"signoz.admin.127.0.0.1.sslip.io"* ]]
 }
 

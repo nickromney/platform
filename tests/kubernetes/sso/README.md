@@ -1,7 +1,8 @@
 # Platform SSO E2E (Playwright)
 
-Browser tests that verify you can load each SSO-protected endpoint, complete the Dex local-login flow,
-and exercise real post-login app behavior for the endpoints that support it.
+Browser tests that verify you can load each SSO-protected endpoint, complete the
+configured OIDC provider login flow, and exercise real post-login app behavior
+for the endpoints that support it.
 They target the shared `*.127.0.0.1.sslip.io` endpoints, so they work against the Kind, Lima, or Slicer platform stacks.
 The operator-facing HTTPS origin is `:443` on all three targets. Slicer still uses `:8443` for its raw local forwarder behind the Docker proxy, but the browser tests should hit the shared `https://*.127.0.0.1.sslip.io/` surface.
 By default they now perform the deeper app actions. Set `SSO_E2E_VERIFY_APP_ACTIONS=0` only when you explicitly want login-only coverage.
@@ -70,15 +71,20 @@ SSO_E2E_SENTIMENT_ANALYZE_RETRIES=5 make check-sso-e2e
 
 ## Credentials
 
-Defaults match the demo creds in the platform stack. Override with env vars if you changed them:
+Defaults match the demo creds in the platform stack. Override with provider-neutral
+env vars if you changed them:
 
 ```bash
-export DEX_DEV_LOGIN="demo@dev.test"
-export DEX_DEV_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
+export OIDC_DEV_LOGIN="demo@dev.test"
+export OIDC_DEV_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
 
-export DEX_UAT_LOGIN="demo@uat.test"
-export DEX_UAT_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
+export OIDC_UAT_LOGIN="demo@uat.test"
+export OIDC_UAT_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
 
-export DEX_ADMIN_LOGIN="demo@admin.test"
-export DEX_ADMIN_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
+export OIDC_ADMIN_LOGIN="demo@admin.test"
+export OIDC_ADMIN_PASSWORD="${PLATFORM_DEMO_PASSWORD}"
 ```
+
+The older `DEX_*` variables remain accepted for Compose and compatibility
+checks, and `KEYCLOAK_*` variables are accepted when you want the provider name
+to be explicit.
