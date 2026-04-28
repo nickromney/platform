@@ -24,6 +24,8 @@ Treat the vendored subtree as:
 - an anticorruption and mediation layer at the boundary
 - upstream-owned code that should be refreshed by vendoring, not edited in
   place as if it were a native domain module
+- a lightweight Backstage catalog source, so the platform portal can understand
+  the APIM gateway and management API without owning the simulator itself
 
 ## Consequences
 
@@ -32,8 +34,11 @@ Treat the vendored subtree as:
 - Upstream-first changes stay possible because the standalone repo remains
   authoritative.
 - The vendored subtree remains intentionally narrow: runtime package,
-  contracts, lockfiles, metadata, and Dockerfile, not upstream tutorials,
-  tests, UI, or examples.
+  contracts, lockfiles, Backstage catalog metadata, vendoring metadata, and
+  Dockerfile, not upstream tutorials, tests, UI, or examples.
+- If upstream carries an optional standalone Backstage app, `platform` still
+  does not vendor that app. `platform` owns its Backstage runtime and consumes
+  only the simulator catalog metadata.
 - DDD-wise, APIM stays a supporting context instead of becoming confused with
   the `subnetcalc` domain core.
 - Stage-specific identity wiring belongs in the platform manifests that run

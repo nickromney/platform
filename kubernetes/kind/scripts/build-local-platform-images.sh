@@ -129,6 +129,15 @@ copy_backstage_app_catalog() {
   fi
 }
 
+copy_backstage_apim_simulator_catalog() {
+  local context_dir="$1"
+  local source_file="${REPO_ROOT}/apps/subnetcalc/apim-simulator/catalog-info.yaml"
+  local target_dir="${context_dir}/catalog/apps/apim-simulator"
+
+  mkdir -p "${target_dir}"
+  cp "${source_file}" "${target_dir}/catalog-info.yaml"
+}
+
 prepare_backstage_build_context() {
   local __resultvar="$1"
   local context_dir=""
@@ -138,6 +147,7 @@ prepare_backstage_build_context() {
   register_temp_path "${context_dir}"
   cp -R "${REPO_ROOT}/apps/backstage/." "${context_dir}/"
   copy_backstage_app_catalog "${context_dir}" "subnetcalc"
+  copy_backstage_apim_simulator_catalog "${context_dir}"
   copy_backstage_app_catalog "${context_dir}" "sentiment"
   printf -v "${__resultvar}" '%s' "${context_dir}"
 }

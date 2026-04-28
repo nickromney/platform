@@ -160,6 +160,7 @@ import yaml
 
 repo_root = Path(os.environ["REPO_ROOT"])
 app_dir = repo_root / "apps/backstage"
+gitattributes = (repo_root / ".gitattributes").read_text(encoding="utf-8")
 production = yaml.safe_load((app_dir / "app-config.production.yaml").read_text(encoding="utf-8"))
 local_config = yaml.safe_load((app_dir / "app-config.yaml").read_text(encoding="utf-8"))
 backend = (app_dir / "packages/backend/src/index.ts").read_text(encoding="utf-8")
@@ -170,6 +171,8 @@ dockerfile = (app_dir / "Dockerfile").read_text(encoding="utf-8")
 backend_package = (app_dir / "packages/backend/package.json").read_text(encoding="utf-8")
 
 assert (app_dir / ".yarn/releases/yarn-4.4.1.cjs").is_file()
+assert "apps/backstage/.yarn/releases/* linguist-generated=true" in gitattributes
+assert "apps/backstage/yarn.lock linguist-generated=true" in gitattributes
 assert not (app_dir / "packages/backend/Dockerfile").exists()
 assert '"build-image": "docker build ../.. -f ../../Dockerfile --tag backstage"' in backend_package
 assert production["app"]["baseUrl"] == "${BACKSTAGE_BASE_URL}"
@@ -196,6 +199,7 @@ assert production["techdocs"]["generator"]["runIn"] == "local"
 
 targets = {loc["target"] for loc in production["catalog"]["locations"]}
 assert "./catalog/entities.yaml" in targets
+assert "./catalog/apps/apim-simulator/catalog-info.yaml" in targets
 assert "./catalog/templates/platform-service/template.yaml" in targets
 
 assert "@backstage/plugin-scaffolder-backend" in backend
@@ -256,7 +260,15 @@ from pathlib import Path
 import yaml
 
 repo_root = Path(os.environ["REPO_ROOT"])
-docs = list(yaml.safe_load_all((repo_root / "apps/backstage/catalog/entities.yaml").read_text(encoding="utf-8")))
+catalog_files = [
+    repo_root / "apps/backstage/catalog/entities.yaml",
+    repo_root / "apps/subnetcalc/catalog-info.yaml",
+    repo_root / "apps/subnetcalc/apim-simulator/catalog-info.yaml",
+    repo_root / "apps/sentiment/catalog-info.yaml",
+]
+docs = []
+for catalog_file in catalog_files:
+    docs.extend(yaml.safe_load_all(catalog_file.read_text(encoding="utf-8")))
 entities = {
     (doc["kind"], doc["metadata"]["name"]): doc
     for doc in docs
@@ -277,11 +289,22 @@ for name, (selector, source_path) in {
 
 assert entities[("Component", "backstage")]["spec"]["consumesApis"] == ["idp-api"]
 assert entities[("Component", "idp-core")]["spec"]["providesApis"] == ["idp-api"]
-for name in ["subnetcalc", "sentiment"]:
-    component = entities[("Component", name)]
-    api_name = f"{name}-api"
-    assert component["spec"]["providesApis"] == [api_name]
-    assert component["spec"]["consumesApis"] == [api_name]
+assert entities[("Component", "subnetcalc")]["spec"]["dependsOn"] == [
+    "component:default/idp-core",
+    "component:default/apim-simulator",
+]
+assert entities[("Component", "subnetcalc")]["spec"]["providesApis"] == ["subnetcalc-api"]
+assert entities[("Component", "subnetcalc")]["spec"]["consumesApis"] == [
+    "idp-api",
+    "apim-simulator-gateway-api",
+]
+assert entities[("Component", "sentiment")]["spec"]["providesApis"] == ["sentiment-api"]
+assert entities[("Component", "sentiment")]["spec"]["consumesApis"] == ["idp-api"]
+assert entities[("Component", "apim-simulator")]["spec"]["providesApis"] == [
+    "apim-simulator-gateway-api",
+    "apim-simulator-management-api",
+]
+for api_name in ["subnetcalc-api", "sentiment-api", "apim-simulator-gateway-api", "apim-simulator-management-api"]:
     assert entities[("API", api_name)]["spec"]["type"] == "openapi"
 
 print("validated Backstage catalog annotations and API relations")

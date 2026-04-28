@@ -10,6 +10,7 @@
     "profile": "runtime",
     "included_paths": [
       ".dockerignore",
+      "catalog-info.yaml",
       "Dockerfile",
       "LICENSE.md",
       "app",
@@ -20,6 +21,7 @@
     "excluded_paths": [
       ".github/",
       ".githooks/",
+      "backstage/",
       "docs/",
       "examples/",
       "observability/",
@@ -30,5 +32,8 @@
     "postprocess": [
       "Dockerfile: removed upstream examples copy"
     ]
-  }
+  },
+  "local_patches": [
+    "catalog-info.yaml: Backstage catalog metadata added pending the next upstream apim-simulator vendor refresh"
+  ]
 }

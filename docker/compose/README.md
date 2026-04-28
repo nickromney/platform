@@ -176,6 +176,8 @@ Backstage is the portal proof in Compose.
 - `backstage` runs from `apps/backstage/Dockerfile`
 - `BACKSTAGE_BASE_URL` is `https://portal.compose.127.0.0.1.sslip.io:8443`
 - the runtime uses local SQLite at `/tmp/backstage`
+- app-owned catalog files for `subnetcalc`, `sentiment`, and the vendored
+  `apim-simulator` are mounted into the portal runtime
 - the compose profile does not start Gitea; the scaffolder catalog and form render locally, while repository publishing is proved in the Kubernetes path where Gitea credentials exist
 
 ## What Is Intentionally Missing

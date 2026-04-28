@@ -45,6 +45,9 @@ catalog:
       target: ./catalog/apps/subnetcalc/catalog-info.yaml
 
     - type: file
+      target: ./catalog/apps/apim-simulator/catalog-info.yaml
+
+    - type: file
       target: ./catalog/apps/sentiment/catalog-info.yaml
 
     - type: file

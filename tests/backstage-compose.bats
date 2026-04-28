@@ -31,6 +31,9 @@ assert backstage["environment"]["BACKSTAGE_BASE_URL"] == "https://portal.compose
 assert backstage["environment"]["GITEA_BASE_URL"] == "http://gitea-not-present.compose.invalid"
 assert backstage["environment"]["GITEA_OWNER"] == "platform"
 assert backstage["environment"]["GITEA_OWNER_IS_ORG"] == "true"
+assert "../../apps/subnetcalc:/app/catalog/apps/subnetcalc:ro" in backstage["volumes"]
+assert "../../apps/subnetcalc/apim-simulator:/app/catalog/apps/apim-simulator:ro" in backstage["volumes"]
+assert "../../apps/sentiment:/app/catalog/apps/sentiment:ro" in backstage["volumes"]
 assert backstage["healthcheck"]["test"][:2] == ["CMD", "node"]
 assert any("http://127.0.0.1:7007/api/app/health" in item for item in backstage["healthcheck"]["test"])
 assert "shell" not in " ".join(backstage["healthcheck"]["test"]).lower()
