@@ -21,6 +21,17 @@ spec:
   children: []
 ---
 apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: apim-simulator-maintainers
+  description: Maintainers of the vendored APIM simulator supporting context.
+spec:
+  type: team
+  profile:
+    displayName: APIM Simulator Maintainers
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
 kind: User
 metadata:
   name: demo-admin

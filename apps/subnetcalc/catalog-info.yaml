@@ -34,10 +34,12 @@ spec:
   system: local-idp
   dependsOn:
     - component:default/idp-core
+    - component:default/apim-simulator
   providesApis:
     - subnetcalc-api
   consumesApis:
     - idp-api
+    - apim-simulator-gateway-api
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
