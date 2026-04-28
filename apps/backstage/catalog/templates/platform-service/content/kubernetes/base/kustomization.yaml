@@ -3,4 +3,4 @@ resources:
   - frontend.yaml
   - ../policies/cilium-frontend-backend.yaml
   - ../policies/kyverno-container-baseline.yaml
-
+  - ../routing/httproutes.yaml

@@ -1,0 +1,11 @@
+site_name: SubnetCalc
+site_description: Platform demo app documentation for SubnetCalc.
+docs_dir: .
+nav:
+  - Overview: README.md
+  - Compose Architecture: docs/COMPOSE-ARCHITECTURE.md
+  - Test Runbook: docs/TEST-RUNBOOK.md
+  - Testing Guide: docs/TESTING-GUIDE.md
+  - Authentication: docs/AUTHENTICATION.md
+plugins:
+  - techdocs-core

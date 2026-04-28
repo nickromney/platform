@@ -244,6 +244,122 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "kind apply rolls Backstage after rebuilding local platform images" {
+  run grep -Fn 'run_step "rollout-restart-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout restart deployment/backstage' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'run_step "rollout-status-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout status deployment/backstage --timeout=600s' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+}
+
+@test "Backstage platform service template includes Gateway API ingress starter manifests" {
+  template_root="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content"
+
+  run grep -Fn '../routing/httproutes.yaml' "${template_root}/kubernetes/base/kustomization.yaml"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kind: HTTPRoute' "${template_root}/kubernetes/routing/httproutes.yaml"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'namespace: gateway-routes' "${template_root}/kubernetes/routing/httproutes.yaml"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '${{ values.name }}.${{ environment }}.127.0.0.1.sslip.io' "${template_root}/kubernetes/routing/httproutes.yaml"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kind: ReferenceGrant' "${template_root}/kubernetes/routing/httproutes.yaml"
+  [ "${status}" -eq 0 ]
+}
+
+@test "Backstage platform service template permits platform gateway ingress to the frontend" {
+  policy="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/policies/cilium-frontend-backend.yaml"
+
+  run grep -Fn 'k8s:io.kubernetes.pod.namespace: platform-gateway' "${policy}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'k8s:app.kubernetes.io/name: platform-gateway-nginx' "${policy}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "Backstage demo app catalog entries are owned by the apps" {
+  subnetcalc_catalog="${REPO_ROOT}/apps/subnetcalc/catalog-info.yaml"
+  sentiment_catalog="${REPO_ROOT}/apps/sentiment/catalog-info.yaml"
+  dev_config="${REPO_ROOT}/apps/backstage/app-config.yaml"
+  prod_config="${REPO_ROOT}/apps/backstage/app-config.production.yaml"
+  image_build="${REPO_ROOT}/kubernetes/kind/scripts/build-local-platform-images.sh"
+
+  run grep -Fn 'backstage.io/techdocs-ref: dir:.' "${subnetcalc_catalog}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kind: API' "${subnetcalc_catalog}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'components:' "${subnetcalc_catalog}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'backstage.io/techdocs-ref: dir:.' "${sentiment_catalog}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kind: API' "${sentiment_catalog}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'components:' "${sentiment_catalog}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '../../../subnetcalc/catalog-info.yaml' "${dev_config}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn './catalog/apps/subnetcalc/catalog-info.yaml' "${prod_config}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "subnetcalc"' "${image_build}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "sentiment"' "${image_build}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "version checks cover Backstage catalog and generated platform API pins" {
+  root_check="${REPO_ROOT}/scripts/check-version.sh"
+  stack_check="${REPO_ROOT}/terraform/kubernetes/scripts/check-version.sh"
+
+  run grep -Fn 'check_backstage_catalog_pins' "${root_check}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'openapi: 3.0.3' "${root_check}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'apps/backstage/catalog/templates" -path' "${root_check}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn "uses floating ref" "${root_check}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'check_platform_manifest_api_version_pins' "${stack_check}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'gateway.networking.k8s.io/v1' "${stack_check}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'cilium.io/v2' "${stack_check}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "Backstage platform service template SHA-pins checkout action" {
+  workflow="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/build.yaml"
+
+  run grep -Fn 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2' "${workflow}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'persist-credentials: false' "${workflow}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'contents: read' "${workflow}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind stage 900 apply runs browser SSO E2E inside the devcontainer" {
   run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
@@ -271,6 +387,13 @@ setup() {
     [ "${status}" -eq 0 ]
     [[ "${output}" == *'$(MAKE) assert-kind-active >/dev/null'* ]]
   done
+}
+
+@test "kind gitea-sync uses the runtime-scoped policies deploy key" {
+  run sed -n '/^gitea-sync:/,/^\\.PHONY:/p' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}"'* ]]
 }
 
 @test "kind check-version runs the active-variant assertion directly so it can report readiness" {
