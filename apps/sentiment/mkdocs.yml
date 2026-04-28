@@ -1,0 +1,10 @@
+site_name: Sentiment
+site_description: Platform demo app documentation for Sentiment.
+docs_dir: .
+nav:
+  - Overview: README.md
+  - Model Card: MODEL_CARD.md
+  - Compose Architecture: docs/COMPOSE-ARCHITECTURE.md
+  - Test Runbook: docs/TEST-RUNBOOK.md
+plugins:
+  - techdocs-core

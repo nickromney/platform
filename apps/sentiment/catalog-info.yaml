@@ -1,0 +1,157 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: sentiment
+  title: Sentiment
+  description: Demo app used to exercise multi-component service routing, SSO, model metadata, and platform observability.
+  tags:
+    - demo
+    - frontend
+    - api
+    - sso
+    - machine-learning
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/sentiment/
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-label-selector: app=sentiment
+  links:
+    - url: https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/sentiment
+      title: Source
+      icon: github
+    - url: https://sentiment.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://sentiment.uat.127.0.0.1.sslip.io
+      title: UAT
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals
+      title: Platform App Overview
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  dependsOn:
+    - component:default/idp-core
+  providesApis:
+    - sentiment-api
+  consumesApis:
+    - idp-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: sentiment-api
+  title: Sentiment API
+  description: HTTP API for listing comments and returning sentiment classification results.
+  tags:
+    - openapi
+    - comments
+    - sentiment
+spec:
+  type: openapi
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Sentiment API
+      version: 0.1.0
+      description: |
+        Local platform example API for comment storage and sentiment classification.
+        The API is served by the Sentiment backend workload in dev and UAT.
+    servers:
+      - url: https://sentiment.dev.127.0.0.1.sslip.io
+        description: Local dev route
+      - url: https://sentiment.uat.127.0.0.1.sslip.io
+        description: Local UAT route
+    tags:
+      - name: Health
+      - name: Comments
+    paths:
+      /api/v1/health:
+        get:
+          tags: [Health]
+          summary: Check service health
+          responses:
+            '200':
+              description: Service health state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
+      /api/v1/comments:
+        get:
+          tags: [Comments]
+          summary: List stored comments
+          responses:
+            '200':
+              description: Stored comments
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Comment'
+        post:
+          tags: [Comments]
+          summary: Store a comment and classify its sentiment
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/CreateCommentRequest'
+          responses:
+            '200':
+              description: Sentiment classification result
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/Comment'
+    components:
+      schemas:
+        HealthResponse:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+        CreateCommentRequest:
+          type: object
+          required: [comment]
+          properties:
+            comment:
+              type: string
+              example: The platform workflow was easy to follow.
+        Comment:
+          type: object
+          properties:
+            id:
+              type: string
+            comment:
+              type: string
+            sentiment:
+              type: string
+              enum: [positive, neutral, negative]
+            score:
+              type: number
+              format: float
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: sentiment-gitea-repository
+  title: Sentiment Gitea Repository
+  description: Local Gitea source repository path for the Sentiment demo app.
+  tags:
+    - gitea
+    - source
+spec:
+  type: repository
+  owner: group:default/team-dolphin
+  system: local-idp
+  dependencyOf:
+    - component:default/sentiment

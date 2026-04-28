@@ -120,6 +120,13 @@ catalog:
     - type: file
       target: ../../catalog/entities.yaml
 
+    # App-owned catalog data, kept beside each demo app's code and docs.
+    - type: file
+      target: ../../../subnetcalc/catalog-info.yaml
+
+    - type: file
+      target: ../../../sentiment/catalog-info.yaml
+
     # Local platform templates
     - type: file
       target: ../../catalog/templates/platform-service/template.yaml

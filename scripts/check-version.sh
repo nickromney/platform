@@ -40,7 +40,7 @@ usage() {
 Usage: check-version.sh [--dry-run] [--execute]
 
 Checks:
-  - root GitHub Actions pins remain SHA-pinned with selector comments
+  - repo GitHub/Gitea Actions pins remain SHA-pinned with selector comments
   - the vendored apim-simulator tag and commit SHA are recorded
   - repo-local dependency age gates stay aligned across .npmrc, bunfig.toml,
     and uv-managed pyproject.toml files outside the vendored apim-simulator tree
@@ -153,38 +153,42 @@ check_action_pins() {
   section "GitHub Actions"
 
   local workflow_file_found=0
-  local workflow_file="" pins="" repo="" sha="" selector="" resolved="" label=""
+  local workflow_file="" refs="" kind="" repo="" ref="" selector="" resolved="" label=""
 
   while IFS= read -r workflow_file; do
     [[ -n "${workflow_file}" ]] || continue
     workflow_file_found=1
-    pins="$(
+    refs="$(
       run_inline_python "$workflow_file" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-pattern = re.compile(
-    r'uses:\s*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([0-9a-f]{40})(?:\s*#\s*(v[^\s]+))?'
-)
+pattern = re.compile(r'uses:\s*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^\s#]+)(?:\s*#\s*(v[^\s]+))?')
 seen = set()
-for repo, sha, selector in pattern.findall(Path(sys.argv[1]).read_text(encoding="utf-8")):
-    item = (repo, sha, selector)
+for repo, ref, selector in pattern.findall(Path(sys.argv[1]).read_text(encoding="utf-8")):
+    kind = "sha" if re.fullmatch(r"[0-9a-f]{40}", ref) else "floating"
+    item = (kind, repo, ref, selector)
     if item in seen:
         continue
     seen.add(item)
-    print(f"{repo}\t{sha}\t{selector}")
+    print(f"{kind}\t{repo}\t{ref}\t{selector}")
 PY
     )"
 
-    label="$(basename "${workflow_file}")"
-    if [[ -z "${pins}" ]]; then
-      warn "${label} has no SHA-pinned GitHub Actions"
+    label="${workflow_file#${REPO_ROOT}/}"
+    if [[ -z "${refs}" ]]; then
+      warn "${label} has no external GitHub Actions"
       continue
     fi
 
-    while IFS=$'\t' read -r repo sha selector; do
+    while IFS=$'\t' read -r kind repo ref selector; do
       [[ -n "${repo}" ]] || continue
+      if [[ "${kind}" != "sha" ]]; then
+        fail_note "${label}: ${repo} uses floating ref '${ref}' instead of a 40-character commit SHA"
+        continue
+      fi
+
       if [[ -z "${selector}" ]]; then
         fail_note "${label}: ${repo} is pinned by SHA without a trailing '# v...' selector comment"
         continue
@@ -201,12 +205,12 @@ PY
         continue
       fi
 
-      if [[ "${resolved}" == "${sha}" ]]; then
+      if [[ "${resolved}" == "${ref}" ]]; then
         ok "${label}: ${repo} ${selector} resolves to the pinned SHA"
       else
-        fail_note "${label}: ${repo} ${selector} resolves to ${resolved}, but the workflow pins ${sha}"
+        fail_note "${label}: ${repo} ${selector} resolves to ${resolved}, but the workflow pins ${ref}"
       fi
-    done <<< "${pins}"
+    done <<< "${refs}"
   done < <(workflow_files)
 
   if [[ "${workflow_file_found}" != "1" ]]; then
@@ -220,11 +224,14 @@ workflow_files() {
     return 0
   fi
 
-  if [[ ! -d "${REPO_ROOT}/.github/workflows" ]]; then
-    return 0
-  fi
-
-  find "${REPO_ROOT}/.github/workflows" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort
+  {
+    if [[ -d "${REPO_ROOT}/.github/workflows" ]]; then
+      find "${REPO_ROOT}/.github/workflows" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \)
+    fi
+    if [[ -d "${REPO_ROOT}/apps/backstage/catalog/templates" ]]; then
+      find "${REPO_ROOT}/apps/backstage/catalog/templates" -path '*/.gitea/workflows/*' -type f \( -name '*.yml' -o -name '*.yaml' \)
+    fi
+  } | LC_ALL=C sort
 }
 
 check_apim_simulator_vendor() {
@@ -424,6 +431,97 @@ PY
   fi
 
   ok "All uv-managed pyproject.toml files set exclude-newer='${CHECK_VERSION_UV_EXCLUDE_NEWER}'"
+}
+
+check_backstage_catalog_pins() {
+  section "Backstage Catalog Pins"
+
+  local output status=0
+  if output="$(
+    run_inline_python "${REPO_ROOT}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+apps = ("subnetcalc", "sentiment")
+failures = 0
+
+def emit(kind: str, message: str) -> None:
+    print(f"{kind}\t{message}")
+
+for app in apps:
+    app_dir = repo_root / "apps" / app
+    catalog = app_dir / "catalog-info.yaml"
+    mkdocs = app_dir / "mkdocs.yml"
+
+    if not catalog.is_file():
+        emit("FAIL", f"{app}: missing app-owned catalog-info.yaml")
+        failures += 1
+        continue
+
+    catalog_text = catalog.read_text(encoding="utf-8")
+    if "apiVersion: backstage.io/v1alpha1" in catalog_text:
+        emit("OK", f"{app}: Backstage entity apiVersion is pinned to backstage.io/v1alpha1")
+    else:
+        emit("FAIL", f"{app}: Backstage entity apiVersion is not pinned to backstage.io/v1alpha1")
+        failures += 1
+
+    if "kind: API" not in catalog_text:
+        emit("FAIL", f"{app}: catalog-info.yaml is missing an API entity")
+        failures += 1
+    elif "openapi: 3.0.3" in catalog_text:
+        emit("OK", f"{app}: API definition is pinned to OpenAPI 3.0.3")
+    else:
+        emit("FAIL", f"{app}: API definition is not pinned to OpenAPI 3.0.3")
+        failures += 1
+
+    if re.search(r"^\s+version:\s+[0-9]+\.[0-9]+\.[0-9]+\s*$", catalog_text, re.MULTILINE):
+        emit("OK", f"{app}: API info.version is an explicit semver pin")
+    else:
+        emit("FAIL", f"{app}: API info.version must be an explicit semver pin")
+        failures += 1
+
+    if "backstage.io/techdocs-ref: dir:." in catalog_text:
+        emit("OK", f"{app}: TechDocs source is pinned to the app directory")
+    else:
+        emit("FAIL", f"{app}: TechDocs source must be pinned with backstage.io/techdocs-ref: dir:.")
+        failures += 1
+
+    if re.search(r":\s*latest(?:\s|$)", catalog_text):
+        emit("FAIL", f"{app}: catalog-info.yaml contains a floating latest tag")
+        failures += 1
+
+    if not mkdocs.is_file():
+        emit("FAIL", f"{app}: missing app-owned mkdocs.yml")
+        failures += 1
+    else:
+        mkdocs_text = mkdocs.read_text(encoding="utf-8")
+        if re.search(r"^\s*-\s+techdocs-core\s*$", mkdocs_text, re.MULTILINE):
+            emit("OK", f"{app}: TechDocs plugin is declared explicitly")
+        else:
+            emit("FAIL", f"{app}: mkdocs.yml must declare the techdocs-core plugin explicitly")
+            failures += 1
+        if re.search(r"^docs_dir:\s+\.\s*$", mkdocs_text, re.MULTILINE):
+            emit("OK", f"{app}: TechDocs docs_dir is pinned to the app root")
+        else:
+            emit("FAIL", f"{app}: mkdocs.yml must pin docs_dir to the app root")
+            failures += 1
+
+raise SystemExit(1 if failures else 0)
+PY
+  )"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  emit_frontend_budget_lines "${output}"
+  if [[ "${status}" -ne 0 ]]; then
+    return
+  fi
+
+  ok "All Backstage catalog and TechDocs pins passed."
 }
 
 emit_frontend_budget_lines() {
@@ -684,6 +782,7 @@ check_apim_simulator_vendor
 check_npm_age_gates
 check_bun_age_gates
 check_uv_age_gates
+check_backstage_catalog_pins
 check_frontend_budgets
 
 printf '\n'

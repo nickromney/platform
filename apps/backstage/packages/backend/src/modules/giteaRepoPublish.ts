@@ -157,7 +157,7 @@ async function ensureRepo(
   });
 }
 
-async function uploadFile(
+export async function uploadFile(
   baseUrl: string,
   owner: string,
   repoName: string,
@@ -181,7 +181,7 @@ async function uploadFile(
   }
 
   await giteaRequest(baseUrl, path, {
-    method: 'PUT',
+    method: current.status === 200 ? 'PUT' : 'POST',
     allowStatuses: [200, 201],
     body,
   });

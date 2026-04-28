@@ -5,10 +5,10 @@ metadata:
 spec:
   description: >-
     Hardened policy for gitea namespace. Holds source code and container registry.
-    Ingress: ArgoCD (SSH repo sync), shared auth proxies (UI access),
-    gitea-runner (actions runner), and platform-gateway (admin UI and
-    container-registry access). Egress: DNS, kube-apiserver, intra-namespace,
-    and webhook notifications.
+    Ingress: ArgoCD (SSH repo sync), Backstage (scaffolder repository
+    publishing), shared auth proxies (UI access), gitea-runner (actions
+    runner), and platform-gateway (admin UI and container-registry access).
+    Egress: DNS, kube-apiserver, intra-namespace, and webhook notifications.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": gitea
@@ -28,6 +28,14 @@ spec:
               protocol: TCP
             - port: "2222"
               protocol: TCP
+            - port: "3000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": idp
+            "k8s:app.kubernetes.io/name": backstage
+      toPorts:
+        - ports:
             - port: "3000"
               protocol: TCP
     - fromEndpoints:

@@ -1,25 +1,6 @@
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: ${{ values.name }}-backend-ingress
-spec:
-  endpointSelector:
-    matchLabels:
-      app: ${{ values.name }}
-      tier: backend
-  ingress:
-    - fromEndpoints:
-        - matchLabels:
-            app: ${{ values.name }}
-            tier: frontend
-      toPorts:
-        - ports:
-            - port: "${{ values.backendPort }}"
-              protocol: TCP
----
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
   name: ${{ values.name }}-frontend-egress
 spec:
   endpointSelector:
@@ -44,4 +25,40 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: platform-gateway
+            k8s:app.kubernetes.io/name: platform-gateway-nginx
+      toPorts:
+        - ports:
+            - port: "${{ values.frontendPort }}"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role: shared
+            k8s:app.kubernetes.io/component: authentication-proxy
+      toPorts:
+        - ports:
+            - port: "${{ values.frontendPort }}"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ${{ values.name }}-backend-ingress
+spec:
+  endpointSelector:
+    matchLabels:
+      app: ${{ values.name }}
+      tier: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: ${{ values.name }}
+            tier: frontend
+      toPorts:
+        - ports:
+            - port: "${{ values.backendPort }}"
               protocol: TCP

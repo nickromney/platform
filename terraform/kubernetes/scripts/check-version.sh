@@ -297,6 +297,71 @@ require() {
   command -v "$bin" >/dev/null 2>&1 || fail "$bin not found in PATH"
 }
 
+check_manifest_api_version_pin() {
+  local file="$1"
+  local kind="$2"
+  local expected_api_version="$3"
+  local actual_api_version=""
+  local display_file=""
+
+  [ -f "${file}" ] || fail "Manifest API version check missing file: ${file}"
+
+  actual_api_version="$(
+    awk -v kind="${kind}" '
+      /^---[[:space:]]*$/ { api = ""; next }
+      /^[[:space:]]*apiVersion:[[:space:]]*/ {
+        api = $0
+        sub(/^[[:space:]]*apiVersion:[[:space:]]*/, "", api)
+      }
+      /^[[:space:]]*kind:[[:space:]]*/ {
+        current_kind = $0
+        sub(/^[[:space:]]*kind:[[:space:]]*/, "", current_kind)
+        if (current_kind == kind) {
+          print api
+          exit
+        }
+      }
+    ' "${file}"
+  )"
+
+  display_file="${file#${REPO_ROOT}/}"
+
+  if [ "${actual_api_version}" = "${expected_api_version}" ]; then
+    ok "${display_file} ${kind} apiVersion pinned to ${expected_api_version}"
+  else
+    fail "${display_file} ${kind} apiVersion is ${actual_api_version:-missing}, expected ${expected_api_version}"
+  fi
+}
+
+check_platform_manifest_api_version_pins() {
+  section "Platform manifest API version pins"
+
+  check_manifest_api_version_pin \
+    "${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml" \
+    "HTTPRoute" \
+    "gateway.networking.k8s.io/v1"
+
+  check_manifest_api_version_pin \
+    "${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml" \
+    "ReferenceGrant" \
+    "gateway.networking.k8s.io/v1beta1"
+
+  check_manifest_api_version_pin \
+    "${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/content/kubernetes/policies/cilium-frontend-backend.yaml" \
+    "CiliumNetworkPolicy" \
+    "cilium.io/v2"
+
+  check_manifest_api_version_pin \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/gitea-hardened.yaml" \
+    "CiliumClusterwideNetworkPolicy" \
+    "cilium.io/v2"
+
+  check_manifest_api_version_pin \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml" \
+    "CiliumClusterwideNetworkPolicy" \
+    "cilium.io/v2"
+}
+
 run_inline_python() {
   require uv
   uv run --isolated python - "$@"
@@ -3529,6 +3594,7 @@ main() {
   check_app_yaml_tfvar_drift
   check_preload_chart_section_version_alignment
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
+  check_platform_manifest_api_version_pins
 
   progress "Warming npm and PyPI metadata cache"
   run_with_heartbeat "Still warming npm and PyPI metadata cache" warm_dependency_metadata_caches

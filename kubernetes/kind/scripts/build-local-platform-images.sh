@@ -111,6 +111,37 @@ prepare_grafana_build_context() {
   printf -v "${__resultvar}" '%s' "${context_dir}"
 }
 
+copy_backstage_app_catalog() {
+  local context_dir="$1"
+  local app_name="$2"
+  local app_dir="${REPO_ROOT}/apps/${app_name}"
+  local target_dir="${context_dir}/catalog/apps/${app_name}"
+
+  mkdir -p "${target_dir}"
+  cp "${app_dir}/catalog-info.yaml" "${target_dir}/catalog-info.yaml"
+  cp "${app_dir}/mkdocs.yml" "${target_dir}/mkdocs.yml"
+  cp "${app_dir}/README.md" "${target_dir}/README.md"
+  if [ -d "${app_dir}/docs" ]; then
+    cp -R "${app_dir}/docs" "${target_dir}/docs"
+  fi
+  if [ -f "${app_dir}/MODEL_CARD.md" ]; then
+    cp "${app_dir}/MODEL_CARD.md" "${target_dir}/MODEL_CARD.md"
+  fi
+}
+
+prepare_backstage_build_context() {
+  local __resultvar="$1"
+  local context_dir=""
+
+  mkdir -p "${PLUGIN_BUILD_CONTEXT_ROOT}"
+  context_dir="$(mktemp -d "${PLUGIN_BUILD_CONTEXT_ROOT}/backstage.XXXXXX")"
+  register_temp_path "${context_dir}"
+  cp -R "${REPO_ROOT}/apps/backstage/." "${context_dir}/"
+  copy_backstage_app_catalog "${context_dir}" "subnetcalc"
+  copy_backstage_app_catalog "${context_dir}" "sentiment"
+  printf -v "${__resultvar}" '%s' "${context_dir}"
+}
+
 build_and_push() {
   local image_name="$1"
   local build_context="$2"
@@ -194,6 +225,7 @@ grafana_base_ref="${CACHE_BUILD_HOST}/${grafana_base_repo}:${GRAFANA_IMAGE_TAG}"
 plugin_fetch_ref="${CACHE_BUILD_HOST}/${plugin_fetch_repo}:3.22"
 grafana_plugin_archive=""
 grafana_build_context=""
+backstage_build_context=""
 
 mirror_image_into_cache \
   "${GRAFANA_BASE_IMAGE_SOURCE}" \
@@ -235,6 +267,15 @@ idp_core_source_tag="$(
 backstage_source_tag="$(
   if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
     source_fingerprint_tag \
+      apps/subnetcalc/catalog-info.yaml \
+      apps/subnetcalc/docs \
+      apps/subnetcalc/mkdocs.yml \
+      apps/subnetcalc/README.md \
+      apps/sentiment/catalog-info.yaml \
+      apps/sentiment/docs \
+      apps/sentiment/mkdocs.yml \
+      apps/sentiment/MODEL_CARD.md \
+      apps/sentiment/README.md \
       apps/backstage/.dockerignore \
       apps/backstage/.yarnrc.yml \
       apps/backstage/.yarn \
@@ -265,10 +306,11 @@ build_and_push \
   "${idp_core_source_tag}"
 
 if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
+  prepare_backstage_build_context backstage_build_context
   build_and_push \
     "backstage" \
-    "${REPO_ROOT}/apps/backstage" \
-    "${REPO_ROOT}/apps/backstage/Dockerfile" \
+    "${backstage_build_context}" \
+    "${backstage_build_context}/Dockerfile" \
     "${TAG}" \
     "${backstage_source_tag}"
 else

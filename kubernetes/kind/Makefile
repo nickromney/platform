@@ -729,6 +729,10 @@ apply: workflow-validate-stage
 	fi; \
 	if [ $$rc -eq 0 ]; then \
 		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
+		if [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ] && [ "$$enable_backstage" = "true" ]; then \
+			run_step "rollout-restart-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout restart deployment/backstage; \
+			run_step "rollout-status-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout status deployment/backstage --timeout=600s; \
+		fi; \
 		if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
 			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
 			run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
@@ -965,6 +969,7 @@ gitea-sync: workflow-validate-stage
 	GITEA_PASSWORD="$${GITEA_PASSWORD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-nodeport}" \
 	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
+	SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}" \
 	STACK_DIR="$$stack_path" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \
 	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
