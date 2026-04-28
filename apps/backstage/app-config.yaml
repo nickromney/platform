@@ -57,6 +57,11 @@ backend:
   # workingDirectory: /tmp # Use this to configure a working directory for the scaffolder, defaults to the OS temp-dir
 
 integrations:
+  gitea:
+    - host: gitea-http.gitea.svc.cluster.local:3000
+      baseUrl: http://gitea-http.gitea.svc.cluster.local:3000
+      username: ${GITEA_USERNAME}
+      password: ${GITEA_PASSWORD}
   github:
     - host: github.com
       # This is a Personal Access Token or PAT from GitHub. You can find out how to generate this token, and more information

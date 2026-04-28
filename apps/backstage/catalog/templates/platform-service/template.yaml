@@ -86,16 +86,25 @@ spec:
         sourcePath: .
         defaultBranch: main
         private: true
+    - id: register
+      name: Register Catalog Entry
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: catalog-info.yaml
     - id: log-request
       name: Log Result
       action: debug:log
       input:
-        message: Created local platform app repository for ${{ parameters.name }} at ${{ steps.publish.output.repoUrl }}
+        message: Created local platform app repository for ${{ parameters.name }} at ${{ steps.publish.output.repoUrl }} and registered ${{ steps.register.output.entityRef }}
   output:
     links:
       - title: Gitea Repository
         url: ${{ steps.publish.output.repoUrl }}
       - title: Catalog Descriptor
         url: ${{ steps.publish.output.catalogInfoUrl }}
+      - title: Catalog Entity
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
       - title: Grafana Golden Signals
         url: https://grafana.admin.127.0.0.1.sslip.io/d/${{ parameters.name }}-golden-signals/${{ parameters.name }}-golden-signals
