@@ -210,6 +210,7 @@ function createGiteaRepoPublishAction() {
       output: {
         repoUrl: z => z.string(),
         remoteUrl: z => z.string(),
+        repoContentsUrl: z => z.string(),
         catalogInfoUrl: z => z.string(),
       },
     },
@@ -229,10 +230,12 @@ function createGiteaRepoPublishAction() {
 
       const repoUrl = `${publicBaseUrl}/${owner}/${input.repoName}`;
       const remoteUrl = `${baseUrl}/${owner}/${input.repoName}.git`;
+      const repoContentsUrl = `${baseUrl}/${owner}/${input.repoName}/src/branch/${branch}/`;
       const catalogInfoUrl = `${publicBaseUrl}/${owner}/${input.repoName}/raw/branch/${branch}/catalog-info.yaml`;
 
       ctx.output('repoUrl', repoUrl);
       ctx.output('remoteUrl', remoteUrl);
+      ctx.output('repoContentsUrl', repoContentsUrl);
       ctx.output('catalogInfoUrl', catalogInfoUrl);
 
       if (ctx.isDryRun) {

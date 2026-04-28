@@ -360,6 +360,36 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "Backstage platform service template registers generated catalog entry" {
+  template="${REPO_ROOT}/apps/backstage/catalog/templates/platform-service/template.yaml"
+  publish_module="${REPO_ROOT}/apps/backstage/packages/backend/src/modules/giteaRepoPublish.ts"
+  config="${REPO_ROOT}/apps/backstage/app-config.yaml"
+
+  run grep -Fn 'action: catalog:register' "${template}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}' "${template}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'catalogInfoPath: catalog-info.yaml' "${template}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'catalogInfoPath: /catalog-info.yaml' "${template}"
+  [ "${status}" -ne 0 ]
+
+  run grep -Fn 'entityRef: ${{ steps.register.output.entityRef }}' "${template}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn "ctx.output('repoContentsUrl', repoContentsUrl)" "${publish_module}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'const repoContentsUrl = `${baseUrl}/${owner}/${input.repoName}/src/branch/${branch}/`;' "${publish_module}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'host: gitea-http.gitea.svc.cluster.local:3000' "${config}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind stage 900 apply runs browser SSO E2E inside the devcontainer" {
   run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
