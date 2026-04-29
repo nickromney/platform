@@ -55,7 +55,7 @@ trap cleanup_temp_paths EXIT
 
 usage() {
   cat <<EOF
-Usage: build-local-platform-images.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Builds and pushes host-side platform images into the local registry cache for
 kind-based workflows.

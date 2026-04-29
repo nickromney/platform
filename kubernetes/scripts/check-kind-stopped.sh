@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: check-kind-stopped.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Checks whether the local kind cluster is still running and exits non-zero when
 it would conflict with Lima or Slicer startup.

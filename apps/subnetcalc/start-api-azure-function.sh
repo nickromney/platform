@@ -11,7 +11,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: start-api-azure-function.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Start the local Azure Function API for subnetcalc development.
 

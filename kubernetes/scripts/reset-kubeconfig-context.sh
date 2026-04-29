@@ -7,8 +7,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: reset-kubeconfig-context.sh [options]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [options]
 
 Purpose:
   Prepare a kubeconfig for stack reset, then delete a repo context/cluster/user

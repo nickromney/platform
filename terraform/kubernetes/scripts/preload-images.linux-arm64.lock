@@ -8,11 +8,11 @@ ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1	ghcr.io/nginx/nginx-gateway-fabri
 dhi.io/argocd:3.3.8-debian13	dhi.io/argocd@sha256:85e3efad850f12a2d8bc4d0aad39fba78b78a25b3ec1b8fcc8d40a843c65dc51
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine	-
 docker.gitea.com/gitea:1.25.5-rootless	docker.gitea.com/gitea@sha256:fc9a63f855efc6733d79262a50003845f092b01d169bcb81c3683263368120d0
-dhi.io/kyverno:1.17.1-debian13	dhi.io/kyverno@sha256:e86d512362c533455e8c3384703f481ab85039f27a1553900e29cd58656e3117
-dhi.io/kyverno-init:1.17.1-debian13	dhi.io/kyverno-init@sha256:a5a3ef31dcc92dfcefb817cf44ce2f4f4f4bce191979b3bf57397019969ab7b6
-dhi.io/kyverno-background-controller:1.17.1-debian13	dhi.io/kyverno-background-controller@sha256:e95b312766106443b3f30ba581b52899eb0dd868d26a67e3239caec39898f41a
-dhi.io/kyverno-cleanup-controller:1.17.1-debian13	dhi.io/kyverno-cleanup-controller@sha256:cc635b79cf7c3bcdcb069650c6db3ec242c136debe64fbc74ca252d607001bf3
-dhi.io/kyverno-reports-controller:1.17.1-debian13	dhi.io/kyverno-reports-controller@sha256:f9db60cd8e0829a3d827a35cff73ba1fe3980b18e32e72312520609fc048d2a3
+dhi.io/kyverno:1.17.2-debian13	dhi.io/kyverno@sha256:fb15ba41c14218c7f3c53f110e3abc0d1e538bce92201654e4e5d442c419ef85
+dhi.io/kyverno-init:1.17.2-debian13	dhi.io/kyverno-init@sha256:ee0a1e0b482b9b322795d517c2a3ed5409b0649b2d2755ad6d8bd9efe607de21
+dhi.io/kyverno-background-controller:1.17.2-debian13	dhi.io/kyverno-background-controller@sha256:80a574900f73877638134fa7c99c41eb8ef597f200230349a9d848654706ce65
+dhi.io/kyverno-cleanup-controller:1.17.2-debian13	dhi.io/kyverno-cleanup-controller@sha256:1264db2edba7c6b484a08f2c0790401f8b386fd5cb09d0b0970fdd32f795aff3
+dhi.io/kyverno-reports-controller:1.17.2-debian13	dhi.io/kyverno-reports-controller@sha256:574fa8754afe208fd0b277e7eac23f3374b1cc2a3329f4eabd67a28d614b5fee
 ghcr.io/kyverno/readiness-checker:v0.1.0	ghcr.io/kyverno/readiness-checker@sha256:c54c0aa24d536f7a31ed854db4f2b2d6863b41d7d85725e21f80cd318c4e815b
 quay.io/jetstack/cert-manager-controller:v1.20.2	quay.io/jetstack/cert-manager-controller@sha256:e2b55ed3132101abb5b829779386dfcb38bb08b1c329ed854a1267341fbfc664
 quay.io/jetstack/cert-manager-webhook:v1.20.2	quay.io/jetstack/cert-manager-webhook@sha256:678cf2fab4580a3b9d540a1d27ee969006c83c4a5fe9834475c585073d360897
@@ -26,8 +26,8 @@ docker.io/altinity/clickhouse-operator:0.21.2	docker.io/altinity/clickhouse-oper
 docker.io/altinity/metrics-exporter:0.21.2	docker.io/altinity/metrics-exporter@sha256:6e96b8b8aa78d142cc83c4ffb4a3424ec8123e64066a336c3db088b30881adb3
 signoz/zookeeper:3.7.1	signoz/zookeeper@sha256:a123eae294ce9c2e32b84d32b2af83e7661d54631430cea376c53ada373d26d9
 docker.io/groundnuty/k8s-wait-for:v2.0	docker.io/groundnuty/k8s-wait-for@sha256:1fff5424ad10bf70494a87b3f50b004b8443dbcf0c83edb8ab38d1fc612c4190
-quay.io/prometheus/prometheus:v3.11.2	quay.io/prometheus/prometheus@sha256:0be9cec2746a8a9cfc3bddab924f23eecbcec47d4c7be2c614aaa16c9e26cd25
-dhi.io/prometheus:3.11.2-debian13	dhi.io/prometheus@sha256:8254d3719098a03b1ec96dc451b4d73ac5fbe31a9feb4ac85f22c5f3158be692
+quay.io/prometheus/prometheus:v3.11.3	quay.io/prometheus/prometheus@sha256:8737f27a6102141f06bd38e10e8908a8fa39a649cd187a2fee7c4b8429a366d6
+dhi.io/prometheus:3.11.3-debian13	dhi.io/prometheus@sha256:f349872ac3c818ece401694569f7a4345f0cc1e300f9c496ce5a69fa5e31d3b9
 dhi.io/prometheus-config-reloader:0.89.0-debian13	dhi.io/prometheus-config-reloader@sha256:a0ad1abcfcb0aef00e751ebf9cd3e637867f08dbadcd8d76433af2348a30d929
 dhi.io/alertmanager:0.31.1-debian13	dhi.io/alertmanager@sha256:c0567187e62874a4b66a24fee447023064022dc8e3b043d63f30c64c5fb2a4a8
 dhi.io/kube-state-metrics:2.18.0-debian13	dhi.io/kube-state-metrics@sha256:e46a23b8de2522968183096ba4142712eab1115c29e6b85b3fdb2848450816a6

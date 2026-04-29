@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: sync-gitea-repo.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Synchronize the configured repository into Gitea.
 

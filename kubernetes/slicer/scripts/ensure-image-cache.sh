@@ -13,7 +13,7 @@ port="${cache_push_host##*:}"
 
 usage() {
   cat <<EOF
-Usage: ensure-image-cache.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Ensures the Slicer-local image cache container exists and is reachable.
 

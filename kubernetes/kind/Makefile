@@ -1344,7 +1344,7 @@ test-shell:
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
-		"$(STACK_DIR)/scripts/check-version.sh"
+		"$(STACK_DIR)/scripts/check-component-version.sh"
 
 .PHONY: test-bats
 test-bats:
@@ -1372,12 +1372,12 @@ check-version:
 		component_report="$$(mktemp)"; \
 		provider_report="$$(mktemp)"; \
 		trap 'rm -f "$$component_report" "$$provider_report"' EXIT; \
-		KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG) >"$$component_report"; \
+		KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-component-version.sh" $(READONLY_MODE_FLAG) >"$$component_report"; \
 		CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG) >"$$provider_report"; \
 		jq -n --slurpfile component_report "$$component_report" --slurpfile provider_report "$$provider_report" '{component_report: $$component_report[0], provider_report: $$provider_report[0]}'; \
 	else \
 		echo "Running component and chart version audit..."; \
-		KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG); \
+		KUBECONFIG="$(KUBECONFIG_PATH)" PRELOAD_IMAGES_FILE="$(preload_images_file)" CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-component-version.sh" $(READONLY_MODE_FLAG); \
 		echo ""; \
 		echo "Running Terraform provider version audit..."; \
 		CHECK_VERSION_FORMAT="$(CHECK_VERSION_FORMAT)" "$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG); \

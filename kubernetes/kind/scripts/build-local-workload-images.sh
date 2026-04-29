@@ -16,7 +16,7 @@ SENTIMENT_MODEL_ID="${SENTIMENT_MODEL_ID:-}"
 
 usage() {
   cat <<EOF
-Usage: build-local-workload-images.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Builds and pushes workload images into the local registry cache for kind-based
 workflows.

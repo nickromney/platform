@@ -7,8 +7,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: hubble-summarise-flows.sh [options]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [options]
 
 Summarise Hubble `jsonpb` flow output into deterministic tables that are easier
 to translate into Cilium policy source manifests.

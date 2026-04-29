@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: check-stage-monotonicity.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Checks that enable_* stage toggles in the Slicer stage ladder only move
 forward and do not regress between tfvars stages.

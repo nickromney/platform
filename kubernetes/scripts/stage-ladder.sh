@@ -8,8 +8,8 @@ METADATA_FILE="${SCRIPT_DIR}/../stage-ladder.mk"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: stage-ladder.sh --stack-dir PATH [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ --stack-dir PATH [--dry-run] [--execute]
 
 Purpose:
   Emit the shared platform stage ladder as stage:path pairs for a stack root.

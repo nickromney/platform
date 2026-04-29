@@ -131,7 +131,7 @@ ensure_remote_ca() {
 # shellcheck disable=SC2329
 usage() {
   cat <<EOF
-Usage: configure-k3s-apiserver-oidc.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Configures the Lima k3s server so OIDC-issued Headlamp tokens are accepted
 by the Kubernetes API. This is Lima-only and mutates the guest VM.

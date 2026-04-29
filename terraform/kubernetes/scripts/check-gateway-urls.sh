@@ -15,8 +15,8 @@ warn() { echo "WARN $*"; }
 ok() { echo "OK   $*"; }
 
 usage() {
-  cat <<'EOF'
-Usage: check-gateway-urls.sh [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--wait-seconds N] [--retry-interval-seconds N] [--extended]
 
 Checks the NGINX Gateway Fabric + TLS path for public and admin gateway URLs.
 Use --extended (or EXTENDED=1) for deeper pod/endpoint diagnostics.

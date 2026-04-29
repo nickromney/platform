@@ -81,7 +81,7 @@ run "policies_enabled" {
   }
 
   assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "            image:\n              registry: ${local.hardened_image_registry_effective}\n              repository: kyverno\n              tag: 1.17.1-debian13")
+    condition     = strcontains(kubectl_manifest.argocd_app_kyverno[0].yaml_body, "            image:\n              registry: ${local.hardened_image_registry_effective}\n              repository: kyverno\n              tag: 1.17.2-debian13")
     error_message = "Expected Kyverno admission controller image to use the hardened image value path consumed by the chart"
   }
 

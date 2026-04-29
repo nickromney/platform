@@ -13,8 +13,8 @@ registries=(
 )
 
 usage() {
-  cat <<'EOF'
-Usage: patch-managed-kind-registry.sh [options]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [options]
 
 Patch Docker Desktop managed kind nodes so containerd can pull local workload
 images directly instead of forcing them through Docker Desktop's broken

@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: suggest-make-goal.sh [--goal GOAL] [--candidate GOAL]... [--dry-run]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--goal GOAL] [--candidate GOAL]... [--dry-run]
 
 Suggest the closest known Make goal for an unknown goal string.
 

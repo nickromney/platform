@@ -310,5 +310,5 @@ EOF
   [[ "${output}" == *$'shell-audit --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/lima/scripts --path terraform/kubernetes/scripts'* ]]
   [[ "${output}" == *"shellcheck ${REPO_ROOT}/kubernetes/lima/scripts/"* ]]
   [[ "${output}" == *"../../terraform/kubernetes/scripts/check-cluster-health.sh"* ]]
-  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-version.sh"* ]]
+  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-component-version.sh"* ]]
 }

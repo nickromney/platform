@@ -14,7 +14,7 @@ kubeconfig_context="${KUBECONFIG_CONTEXT:-}"
 
 usage() {
   cat <<EOF
-Usage: assert-variant-active.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Fails early unless the expected local variant currently owns this machine and
 its kubeconfig can reach the expected cluster.

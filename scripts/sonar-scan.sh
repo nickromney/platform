@@ -38,7 +38,7 @@ DEFAULT_EXCLUSIONS=(
 
 usage() {
   cat <<EOF
-Usage: sonar-scan.sh [options]
+Usage: ${0##*/} [options]
 
 Run a SonarQube analysis for a local repository using the bundled scanner
 container. If the target repository already has a sonar-project.properties file,

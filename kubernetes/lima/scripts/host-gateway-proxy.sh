@@ -16,7 +16,7 @@ UPSTREAM_PORT="${UPSTREAM_PORT:-30070}"
 
 usage() {
   cat <<EOF
-Usage: host-gateway-proxy.sh [--action ensure|stop|status] [--dry-run] [--execute]
+Usage: ${0##*/} [--action ensure|stop|status] [--dry-run] [--execute]
 
 Manages the Lima host gateway proxy container.
 

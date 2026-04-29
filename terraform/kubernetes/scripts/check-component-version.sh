@@ -55,7 +55,7 @@ section() {
 
 usage() {
   cat <<EOF
-Usage: check-version.sh [--dry-run] [--execute] [--ci]
+$(shell_cli_usage_line " [--dry-run] [--execute] [--ci]")
 
 Checks pinned platform component versions against current upstream releases and
 the live cluster when reachable.
@@ -324,7 +324,7 @@ check_manifest_api_version_pin() {
     ' "${file}"
   )"
 
-  display_file="${file#${REPO_ROOT}/}"
+  display_file="${file#"${REPO_ROOT}"/}"
 
   if [ "${actual_api_version}" = "${expected_api_version}" ]; then
     ok "${display_file} ${kind} apiVersion pinned to ${expected_api_version}"
@@ -1793,6 +1793,23 @@ kindest_node_latest_tag() {
   docker_hub_repo_tags "kindest" "node" 2>/dev/null | \
     grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | \
     sort -V | tail -n 1
+}
+
+makefile_variable_value() {
+  local file="$1"
+  local key="$2"
+
+  [ -f "${file}" ] || return 0
+  awk -v key="${key}" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*\\?=" {
+      value = $0
+      sub(/^[[:space:]]*[^?]+[?]=[[:space:]]*/, "", value)
+      sub(/[[:space:]]*#.*/, "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      print value
+      exit
+    }
+  ' "${file}" 2>/dev/null || true
 }
 
 kind_installed_version() {
@@ -3295,6 +3312,8 @@ main() {
   CODE_OAUTH2_PROXY=$(tf_default_from_variables "oauth2_proxy_chart_version")
   CODE_KIND_NODE_IMAGE="$(tfvar_get_any_stage_or_default "node_image" "$(tf_default_from_variables "node_image")")"
   CODE_KIND_NODE_TAG="$(image_tag_from_ref "${CODE_KIND_NODE_IMAGE}")"
+  CODE_LIMA_K3S_VERSION="$(makefile_variable_value "${REPO_ROOT}/kubernetes/lima/Makefile" "K3S_VERSION")"
+  CODE_SLICER_K3S_VERSION="$(makefile_variable_value "${REPO_ROOT}/kubernetes/slicer/Makefile" "K3S_VERSION")"
   if [ -z "${CODE_ARGOCD_IMAGE_REPO}" ]; then
     CODE_ARGOCD_IMAGE_REPO="quay.io/argoproj/argocd"
   fi
@@ -3564,11 +3583,15 @@ main() {
   LATEST_KIND_RELEASE_TAG="$(github_latest_release_tag "kubernetes-sigs/kind")"
   progress "Checking latest kindest/node tag"
   LATEST_KIND_NODE_TAG="$(kindest_node_latest_tag)"
+  progress "Checking latest k3s release tag"
+  LATEST_K3S_RELEASE_TAG="$(github_latest_release_tag "k3s-io/k3s")"
 
   kind_rows=()
   kind_rows+=("$(print_observed_latest_row "grafana victorialogs plugin" "${CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_VERSION}" "${LATEST_GRAFANA_VICTORIA_LOGS_PLUGIN_TAG}" "codebase" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind release tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${LATEST_KIND_RELEASE_TAG}" "installed cli" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind node tag" "${CODE_KIND_NODE_TAG}" "${LATEST_KIND_NODE_TAG}" "codebase" "node tag")")
+  kind_rows+=("$(print_observed_latest_row "lima k3s release tag" "${CODE_LIMA_K3S_VERSION}" "${LATEST_K3S_RELEASE_TAG}" "codebase" "release tag")")
+  kind_rows+=("$(print_observed_latest_row "slicer k3s release tag" "${CODE_SLICER_K3S_VERSION}" "${LATEST_K3S_RELEASE_TAG}" "codebase" "release tag")")
   kind_rows_sorted="$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)"
 
   check_consistent_tfvars "argocd_chart_version"

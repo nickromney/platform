@@ -13,8 +13,8 @@ source "${SCRIPT_DIR}/lib/shell-cli.sh"
 source "${SCRIPT_DIR}/trivy-common.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: trivy-run.sh [--dry-run] [--execute] [-- <trivy args...>]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute] [-- <trivy args...>]
 
 Run the local Trivy binary with the repo cache directory configured.
 

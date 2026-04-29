@@ -7,8 +7,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: refresh-kind-kubeconfig.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Purpose:
   Refresh the split kind kubeconfig using the existing ensure-kind-kubeconfig

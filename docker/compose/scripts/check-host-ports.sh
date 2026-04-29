@@ -17,7 +17,7 @@ ok() {
 
 usage() {
   cat <<EOF
-Usage: check-host-ports.sh [--mode MODE] [--dry-run] [--execute]
+Usage: ${0##*/} [--mode MODE] [--dry-run] [--execute]
 
 Checks whether the published docker/compose host ports are available.
 

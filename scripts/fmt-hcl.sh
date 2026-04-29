@@ -13,7 +13,7 @@ GIT_BIN="${GIT_BIN:-git}"
 
 usage() {
   cat <<EOF
-Usage: fmt-hcl.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Format tracked Terraform/OpenTofu/HCL files using any available \`tofu fmt\`
 and/or \`terraform fmt\` binaries.

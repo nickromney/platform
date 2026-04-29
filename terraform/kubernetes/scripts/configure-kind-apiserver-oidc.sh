@@ -15,8 +15,8 @@ source "${SCRIPT_DIR}/kind-apiserver-oidc-lib.sh"
 
 # shellcheck disable=SC2329
 usage() {
-  cat <<'EOF'
-Usage: configure-kind-apiserver-oidc.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Configures the kind control-plane kube-apiserver static manifest for OIDC auth
 against the configured SSO issuer so Headlamp OIDC tokens work against the K8s API.

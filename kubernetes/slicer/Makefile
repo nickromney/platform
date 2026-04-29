@@ -70,7 +70,7 @@ KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
 KUBECTL_REACHABILITY_ATTEMPTS ?= 10
 KUBECTL_REACHABILITY_DELAY_SECONDS ?= 3
-K3S_VERSION ?= v1.35.1+k3s1
+K3S_VERSION ?= v1.35.4+k3s1
 K3S_CHANNEL ?= stable
 K3S_SERVER_EXTRA_ARGS_CILIUM := --flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb
 K3S_SERVER_EXTRA_ARGS_DEFAULT := --disable-network-policy --disable=traefik --disable=servicelb
@@ -1295,7 +1295,7 @@ test-shell:
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
-		"$(STACK_DIR)/scripts/check-version.sh" \
+		"$(STACK_DIR)/scripts/check-component-version.sh" \
 		"$(STACK_DIR)/scripts/check-gateway-urls.sh" \
 		"$(STACK_DIR)/scripts/check-sso.sh"
 
@@ -1324,7 +1324,7 @@ check-version:
 		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG); \
 	fi
 	@KUBECONFIG_PATH="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" KUBECTL_REACHABILITY_ATTEMPTS="$(KUBECTL_REACHABILITY_ATTEMPTS)" KUBECTL_REACHABILITY_DELAY_SECONDS="$(KUBECTL_REACHABILITY_DELAY_SECONDS)" "$(WAIT_FOR_KUBECTL)" --execute >/dev/null
-	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(stage_dir_abs)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
+	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(stage_dir_abs)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-component-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""
 	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
 

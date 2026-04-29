@@ -7,7 +7,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 
 usage() {
   cat <<EOF
-Usage: render-runtime-config.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Renders the frontend runtime-config.js file from the current environment.
 

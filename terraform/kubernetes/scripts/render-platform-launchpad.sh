@@ -14,8 +14,8 @@ MARKER_END="codex:platform-launchpad:end"
 TARGETS=()
 
 usage() {
-  cat <<'EOF'
-Usage: render-platform-launchpad.sh [--target <path>]...
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--target <path>]...
 
 Renders the Platform Launchpad dashboard JSON from a small tile inventory and
 replaces the generated block in target files between marker comments.

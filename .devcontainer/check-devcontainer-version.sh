@@ -34,7 +34,7 @@ section() { printf '\n%s\n' "$*"; }
 
 usage() {
   cat <<EOF
-Usage: check-version.sh [--dry-run] [--execute]
+$(shell_cli_usage_line " [--dry-run] [--execute]")
 
 Inspects the platform devcontainer definition plus any existing workspace
 container/image to surface stale builds and tool-version drift.

@@ -33,7 +33,7 @@ RUNTIME_EXCLUDE_PATHS=(
 
 usage() {
   cat <<EOF
-Usage: vendor-apim-simulator.sh [--source PATH] [--ref TAG_OR_SHA] [--target PATH] [--metadata PATH] [--dry-run] [--execute]
+Usage: ${0##*/} [--source PATH] [--ref TAG_OR_SHA] [--target PATH] [--metadata PATH] [--dry-run] [--execute]
 
 Sync the vendored APIM simulator tree from a local git checkout pinned to a tag
 or commit SHA.

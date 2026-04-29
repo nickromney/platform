@@ -9,7 +9,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell
 
 usage() {
   cat <<EOF
-Usage: minimal-csharp-test.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Creates the minimal Azure Function App and Web App resources used for the C#
 Easy Auth test flow.

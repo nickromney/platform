@@ -45,7 +45,7 @@ EOF
   run grep -n 'SLICER_IMAGE_REF\|arkade oci install .*slicer' \
     "${REPO_ROOT}/.devcontainer/toolchain-versions.sh" \
     "${REPO_ROOT}/.devcontainer/install-toolchain.sh" \
-    "${REPO_ROOT}/.devcontainer/check-version.sh" \
+    "${REPO_ROOT}/.devcontainer/check-devcontainer-version.sh" \
     "${REPO_ROOT}/.devcontainer/README.md"
 
   [ "${status}" -eq 1 ]

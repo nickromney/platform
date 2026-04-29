@@ -23,7 +23,7 @@ TARGET_SPECS=(
 
 usage() {
   cat <<EOF
-Usage: audit-docker-builds.sh [--dry-run] [--execute] [target-name ...]
+Usage: ${0##*/} [--dry-run] [--execute] [target-name ...]
 
 Builds the selected Docker targets with plain progress output, saves the raw logs,
 captures image sizes and layer histories, and fails if build logs contain warning

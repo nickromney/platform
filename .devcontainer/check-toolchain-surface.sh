@@ -116,7 +116,7 @@ PY
 }
 
 check_file_lacks_slicer_install() {
-  if grep -Eq 'arkade oci install .*slicer|SLICER_IMAGE_REF' "${INSTALL_TOOLCHAIN_SCRIPT}" "${TOOLCHAIN_VERSIONS_FILE}" "${REPO_ROOT}/.devcontainer/check-version.sh" "${REPO_ROOT}/.devcontainer/README.md"; then
+  if grep -Eq 'arkade oci install .*slicer|SLICER_IMAGE_REF' "${INSTALL_TOOLCHAIN_SCRIPT}" "${TOOLCHAIN_VERSIONS_FILE}" "${REPO_ROOT}/.devcontainer/check-devcontainer-version.sh" "${REPO_ROOT}/.devcontainer/README.md"; then
     fail_note "slicer unexpectedly reappeared in the devcontainer toolchain surface"
   else
     ok "slicer is absent from the devcontainer toolchain surface"

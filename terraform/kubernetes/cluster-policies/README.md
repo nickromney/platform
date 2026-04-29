@@ -42,7 +42,7 @@ Namespace intent is now explicit:
 - Non-Gitea Helm charts are now vendored into the in-cluster `platform/policies` Git repository, which lets Argo CD render those charts from Gitea Git and keeps the repo-server external exception down to `dl.gitea.io:443`.
 - The dev-only Cloudflare live-fetch path is now exact-host scoped to `www.cloudflare.com:443`, while `uat` intentionally falls back to the API's bundled ranges.
 - Cilium FQDN policies now include DNS proxy rules so those hostname pins are actually enforceable.
-- `terraform/kubernetes/scripts/check-version.sh` now understands this Git-backed chart flow and reads deployed chart versions for Argo-managed apps from live `helm.sh/chart` labels.
+- `terraform/kubernetes/scripts/check-component-version.sh` now understands this Git-backed chart flow and reads deployed chart versions for Argo-managed apps from live `helm.sh/chart` labels.
 - The platform gateway TLS hardening path is now proven both declaratively and at runtime: [`../apps/platform-gateway/tls-hardening.yaml`](../apps/platform-gateway/tls-hardening.yaml) declares the NGINX directives, [`../apps/nginx-gateway-fabric/deploy.yaml`](../apps/nginx-gateway-fabric/deploy.yaml) enables `SnippetsPolicy` support in the controller, and [`../scripts/check-security.sh`](../scripts/check-security.sh) verifies the live rendered config and on-the-wire TLS behavior.
 - The biggest remaining gaps are the audit-only Kyverno rules, the remaining shared outbound internet exceptions, the Gitea bootstrap dependency on `dl.gitea.io`, and the observability allowance for host TCP `10255`.
 

@@ -9,8 +9,8 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 PLATFORM_STATUS_SCRIPT="${PLATFORM_STATUS_SCRIPT:-${REPO_ROOT}/scripts/platform-status.sh}"
 
 usage() {
-  cat <<'EOF'
-Usage: platform-tui.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Launches the Gum-based local runtime chooser. When Gum is unavailable or the
 session is non-interactive, this falls back to plain `platform-status` text.

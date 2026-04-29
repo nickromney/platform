@@ -15,8 +15,8 @@ KIND_OIDC_RECOVERY_FORCE_RUN="${KIND_OIDC_RECOVERY_FORCE_RUN:-0}"
 
 # shellcheck disable=SC2329
 usage() {
-  cat <<'EOF'
-Usage: recover-kind-cluster-after-apiserver-restart.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Performs the explicit post-restart recovery step after the kind kube-apiserver
 OIDC static-manifest patch. This validates and, when needed, repairs Kyverno,

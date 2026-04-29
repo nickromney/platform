@@ -23,7 +23,7 @@ bash4_feature_patterns=(
 
 usage() {
   cat <<EOF
-Usage: audit-shell-scripts.sh [--path PATH]... [--dry-run] [--execute]
+Usage: ${0##*/} [--path PATH]... [--dry-run] [--execute]
 
 Audit tracked shell scripts for Bash 3.2 compatibility guardrails and shell
 repo hygiene checks.

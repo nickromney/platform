@@ -3,13 +3,15 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
-  export SCRIPT="${REPO_ROOT}/scripts/check-version.sh"
+  export SCRIPT="${REPO_ROOT}/scripts/check-repo-version.sh"
   export FIXTURE_ROOT="${BATS_TEST_TMPDIR}/repo"
   export GITHUB_FIXTURES="${BATS_TEST_TMPDIR}/github"
   export FAKE_BIN="${BATS_TEST_TMPDIR}/bin"
 
   mkdir -p "${FIXTURE_ROOT}/.github/workflows"
   mkdir -p "${FIXTURE_ROOT}/apps/demo"
+  mkdir -p "${FIXTURE_ROOT}/apps/sentiment"
+  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist"
@@ -84,6 +86,34 @@ EOF
   }
 }
 EOF
+
+  for app in subnetcalc sentiment; do
+    cat >"${FIXTURE_ROOT}/apps/${app}/catalog-info.yaml" <<EOF
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${app}
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: platform
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: ${app}
+      version: 0.1.0
+    paths: {}
+EOF
+
+    cat >"${FIXTURE_ROOT}/apps/${app}/mkdocs.yml" <<'EOF'
+site_name: fixture
+docs_dir: .
+plugins:
+  - techdocs-core
+EOF
+  done
 
   cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-budgets.json" <<'EOF'
 {

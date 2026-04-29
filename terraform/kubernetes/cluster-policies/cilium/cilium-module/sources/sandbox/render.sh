@@ -8,7 +8,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: render.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Render the sandbox Cilium module source directory into its checked-in category output.
 

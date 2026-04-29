@@ -156,7 +156,7 @@ spec:
             image:
               registry: ${local.hardened_image_registry_effective}
               repository: kyverno
-              tag: 1.17.1-debian13
+              tag: 1.17.2-debian13
             securityContext:
               runAsNonRoot: true
               runAsUser: 65534
@@ -173,7 +173,7 @@ spec:
             image:
               registry: ${local.hardened_image_registry_effective}
               repository: kyverno-init
-              tag: 1.17.1-debian13
+              tag: 1.17.2-debian13
             securityContext:
               runAsNonRoot: true
               runAsUser: 65534
@@ -193,7 +193,7 @@ spec:
           image:
             registry: ${local.hardened_image_registry_effective}
             repository: kyverno-background-controller
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
         cleanupController:
           replicas: 1
           securityContext:
@@ -209,7 +209,7 @@ spec:
           image:
             registry: ${local.hardened_image_registry_effective}
             repository: kyverno-cleanup-controller
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
         reportsController:
           replicas: 1
           securityContext:
@@ -225,7 +225,7 @@ spec:
           image:
             registry: ${local.hardened_image_registry_effective}
             repository: kyverno-reports-controller
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
         cleanupJobs:
           admissionReports:
             enabled: false

@@ -392,7 +392,7 @@ variable "cilium_version" {
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.5.4"
+  default     = "9.5.9"
 }
 
 variable "argocd_image_repository" {
@@ -434,13 +434,13 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.2.1"
+  default     = "29.3.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus hardened container image tag."
   type        = string
-  default     = "3.11.2-debian13"
+  default     = "3.11.3-debian13"
 }
 
 variable "grafana_chart_version" {
@@ -512,7 +512,7 @@ variable "grafana_liveness_initial_delay_seconds" {
 variable "loki_chart_version" {
   description = "Loki chart version (grafana/loki)."
   type        = string
-  default     = "6.55.0"
+  default     = "7.0.0"
 }
 
 variable "loki_image_tag" {
@@ -548,13 +548,13 @@ variable "headlamp_chart_version" {
 variable "kyverno_chart_version" {
   description = "Kyverno chart version."
   type        = string
-  default     = "3.7.1"
+  default     = "3.7.2"
 }
 
 variable "policy_reporter_chart_version" {
   description = "Policy Reporter chart version."
   type        = string
-  default     = "3.7.3"
+  default     = "3.7.4"
 }
 
 variable "cert_manager_chart_version" {

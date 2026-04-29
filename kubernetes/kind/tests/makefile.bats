@@ -345,8 +345,8 @@ setup() {
 }
 
 @test "version checks cover Backstage catalog and generated platform API pins" {
-  root_check="${REPO_ROOT}/scripts/check-version.sh"
-  stack_check="${REPO_ROOT}/terraform/kubernetes/scripts/check-version.sh"
+  root_check="${REPO_ROOT}/scripts/check-repo-version.sh"
+  stack_check="${REPO_ROOT}/terraform/kubernetes/scripts/check-component-version.sh"
 
   run grep -Fn 'check_backstage_catalog_pins' "${root_check}"
   [ "${status}" -eq 0 ]
@@ -557,12 +557,12 @@ setup() {
   mkdir -p "${stub_scripts}"
   : >"${kubeconfig_path}"
 
-  cat >"${stub_scripts}/check-version.sh" <<'EOF'
+  cat >"${stub_scripts}/check-component-version.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' '{"report":"components"}'
 EOF
-  chmod +x "${stub_scripts}/check-version.sh"
+  chmod +x "${stub_scripts}/check-component-version.sh"
 
   cat >"${stub_scripts}/check-provider-version.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -615,12 +615,12 @@ EOF
   kubectl_log="${BATS_TEST_TMPDIR}/kubectl.log"
   mkdir -p "${stub_scripts}"
 
-  cat >"${stub_scripts}/check-version.sh" <<EOF
+  cat >"${stub_scripts}/check-component-version.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'component audit invoked\n' >>"${log_file}"
 EOF
-  chmod +x "${stub_scripts}/check-version.sh"
+  chmod +x "${stub_scripts}/check-component-version.sh"
 
   cat >"${stub_scripts}/check-provider-version.sh" <<EOF
 #!/usr/bin/env bash
@@ -671,12 +671,12 @@ EOF
   mkdir -p "${stub_scripts}"
   : >"${kubeconfig_path}"
 
-  cat >"${stub_scripts}/check-version.sh" <<'EOF'
+  cat >"${stub_scripts}/check-component-version.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'component audit ok\n'
 EOF
-  chmod +x "${stub_scripts}/check-version.sh"
+  chmod +x "${stub_scripts}/check-component-version.sh"
 
   cat >"${stub_scripts}/check-provider-version.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -756,7 +756,7 @@ EOF
   [[ "${output}" == *$'shell-audit --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/kind/scripts --path terraform/kubernetes/scripts'* ]]
   [[ "${output}" == *"shellcheck ${REPO_ROOT}/kubernetes/kind/scripts/"* ]]
   [[ "${output}" == *"../../terraform/kubernetes/scripts/check-cluster-health.sh"* ]]
-  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-version.sh"* ]]
+  [[ "${output}" == *"../../terraform/kubernetes/scripts/check-component-version.sh"* ]]
 }
 
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {

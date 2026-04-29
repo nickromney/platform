@@ -19,7 +19,7 @@ DEVCONTAINER_TLS_SERVER_NAME="${KIND_DEVCONTAINER_TLS_SERVER_NAME:-localhost}"
 
 usage() {
   cat <<EOF
-Usage: ensure-kind-kubeconfig.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Exports the current kind kubeconfig, optionally rewrites it for devcontainer
 host access, and reconciles the managed default kubeconfig.

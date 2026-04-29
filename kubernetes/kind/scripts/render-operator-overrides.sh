@@ -28,7 +28,7 @@ output_file="${KIND_OPERATOR_OVERRIDES_FILE:-}"
 
 usage() {
   cat <<EOF
-Usage: render-operator-overrides.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Renders the kind operator override tfvars fragment from the current image
 distribution environment variables.

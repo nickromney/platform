@@ -9,7 +9,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck disable=SC2329
 usage() {
   cat <<EOF
-Usage: ensure-k3s-lima-vms.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Ensures the expected set of Lima VMs exist and are running for the Lima k3s
 workflow.

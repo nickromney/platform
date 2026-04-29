@@ -17,7 +17,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
     cat <<EOF
-Usage: test-tls.sh [--target HOST:PORT] [--ca-cert PATH] [--http-redirect-port PORT] [--dry-run] [--execute]
+Usage: ${0##*/} [--target HOST:PORT] [--ca-cert PATH] [--http-redirect-port PORT] [--dry-run] [--execute]
 
 TLS cipher, protocol, and transport security tests for the sentiment compose TLS stack.
 

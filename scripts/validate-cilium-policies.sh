@@ -16,8 +16,8 @@ LIVE_VALIDATION_TMP_KUBECONFIG=""
 mode="static"
 
 usage() {
-  cat <<'EOF'
-Usage: validate-cilium-policies.sh [--mode static|live] [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--mode static|live] [--dry-run] [--execute]
 
 static
     Validate the repo's checked-in Cilium policy sources and kustomize overlays.

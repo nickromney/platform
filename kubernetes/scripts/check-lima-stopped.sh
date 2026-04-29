@@ -13,7 +13,7 @@ active_shared_ports=""
 
 usage() {
   cat <<EOF
-Usage: check-lima-stopped.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Checks whether Lima VMs or host proxy containers are still running and exits
 non-zero when they would conflict with another local runtime.

@@ -11,8 +11,8 @@ have_cmd() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: install-tool-hints.sh [--plain] [--tool TOOL]... [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--plain] [--tool TOOL]... [--dry-run] [--execute]
 
 Print install commands for missing tools using this preference order:
   1. arkade

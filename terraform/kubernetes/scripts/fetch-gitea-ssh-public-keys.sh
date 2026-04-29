@@ -66,7 +66,7 @@ wait_for_gitea_ssh() {
 
 usage() {
   cat <<EOF
-Usage: fetch-gitea-ssh-public-keys.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Reads a JSON request from stdin and returns the Gitea SSH public keys and
 service metadata as JSON.

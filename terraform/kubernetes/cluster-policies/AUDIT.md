@@ -90,7 +90,7 @@ SVG renders. Click any diagram to open its `.mmd` source.
 6. Removed the stale Kyverno `dev` overlay and its obsolete topology-spread mutation from the active policy set.
 7. Vendored non-Gitea Helm charts into the Gitea-backed `platform/policies` repo and repointed Argo `Application` sources at `apps/vendor/charts/*`.
 8. Tightened the repo-server external egress exception from a multi-host Helm allowlist to `dl.gitea.io:443` only.
-9. Updated `terraform/kubernetes/scripts/check-version.sh` so vendored Argo apps report deployed chart versions from live `helm.sh/chart` labels instead of nonexistent Helm release records.
+9. Updated `terraform/kubernetes/scripts/check-component-version.sh` so vendored Argo apps report deployed chart versions from live `helm.sh/chart` labels instead of nonexistent Helm release records.
 10. Removed the Cloudflare CIDR assist and converted the dev-only subnetcalc live-fetch path to exact-host `www.cloudflare.com` with DNS proxy visibility, while keeping `uat` on fallback behavior.
 11. Reworked namespace metadata from a two-way `application/shared` split to a three-way `application/shared/platform` taxonomy, replaced the old `security-tier` wording with `platform.publiccloudexperiments.net/sensitivity`, and added an empty `sit` application namespace to prove namespace-level inheritance without deploying workloads there.
 
@@ -112,7 +112,7 @@ These are the main best-practice gaps that still remain after the fixes above:
 - `bats kubernetes/kind/tests/platform-gateway-tls.bats` passes, proving the checked-in gateway manifests keep `SnippetsPolicy` support, TLS 1.2/1.3 listener options, and the expected hardening directives.
 - `make -C kubernetes/kind reset AUTO_APPROVE=1` followed by `make -C kubernetes/kind 900 apply AUTO_APPROVE=1` succeeded on March 11, 2026, proving the vendored-chart GitOps flow from a clean kind cluster.
 - Live `argocd-repo-server` logs on March 11, 2026 showed Git-backed manifest generation for vendored charts and only `dl.gitea.io` among the remaining public Helm endpoints.
-- `terraform/kubernetes/scripts/check-version.sh` now reports deployed chart versions for Argo-managed vendored apps such as Gitea, Prometheus, and Policy Reporter by inspecting live `helm.sh/chart` labels.
+- `terraform/kubernetes/scripts/check-component-version.sh` now reports deployed chart versions for Argo-managed vendored apps such as Gitea, Prometheus, and Policy Reporter by inspecting live `helm.sh/chart` labels.
 - Live testing on March 12, 2026 showed `dev/subnetcalc-api` successfully fetching `https://www.cloudflare.com/ips-v4/` with exact-host FQDN policy plus DNS L7 support, while `uat/subnetcalc-api` continued to report fallback range usage.
 - Live testing on March 19, 2026 showed the platform gateway accepting TLS 1.2 and TLS 1.3 on the host-facing path, serving HSTS and `X-Content-Type-Options: nosniff`, and rendering every directive from `apps/platform-gateway/tls-hardening.yaml` into the NGINX config tree.
 - Live testing on March 12, 2026 showed the empty `sit` namespace present with `platform.publiccloudexperiments.net/namespace-role=application`, `platform.publiccloudexperiments.net/environment=sit`, `kyverno.io/isolate=true`, and a generated `default-deny` `NetworkPolicy`, proving the namespace-level Kyverno defaults are no longer coupled to `dev` and `uat` alone.

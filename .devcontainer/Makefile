@@ -78,7 +78,7 @@ exec: prereqs ## Ensure the devcontainer is running, then attach a shell
 	@"$(REPO_ROOT)/.devcontainer/host-lifecycle.sh" --action exec --execute
 
 check-version: ## Inspect devcontainer tool versions and flag stale workspace images
-	@"$(REPO_ROOT)/.devcontainer/check-version.sh" --execute
+	@"$(REPO_ROOT)/.devcontainer/check-devcontainer-version.sh" --execute
 
 check-toolchain-surface: ## Validate the devcontainer toolchain surface without loading the workspace image
 	@"$(REPO_ROOT)/.devcontainer/check-toolchain-surface.sh" --execute

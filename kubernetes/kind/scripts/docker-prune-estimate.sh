@@ -8,7 +8,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: docker-prune-estimate.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Estimate how much space the standard Docker builder/system prune sequence would reclaim.
 $(shell_cli_standard_options)

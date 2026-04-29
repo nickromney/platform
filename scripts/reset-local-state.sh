@@ -31,7 +31,7 @@ skipped_tracked_paths=()
 
 usage() {
   cat <<EOF
-Usage: reset-local-state.sh [--dry-run] [--execute] [options]
+Usage: ${0##*/} [--dry-run] [--execute] [options]
 
 Remove repo-generated local state so the workspace is closer to a fresh clone.
 

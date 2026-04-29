@@ -13,7 +13,7 @@ INSTALL_HINTS_SCRIPT="${INSTALL_HINTS_SCRIPT:-${REPO_ROOT}/scripts/install-tool-
 
 usage() {
   cat <<EOF
-Usage: lint-yaml.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Lint tracked YAML files using the repo yamllint configuration.
 

@@ -11,8 +11,8 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 
 usage() {
-  cat <<'EOF'
-Usage: check-rbac.sh
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@
 
 Checks the stage-900 demo RBAC model with kubectl auth can-i.
 

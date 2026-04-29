@@ -133,7 +133,7 @@ spec:
   source:
     repoURL: https://kyverno.github.io/kyverno/
     chart: kyverno
-    targetRevision: 3.7.1
+    targetRevision: 3.7.2
     helm:
       releaseName: kyverno
       values: |
@@ -152,12 +152,12 @@ spec:
           image:
             registry: dhi.io
             repository: kyverno
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
           initContainer:
             image:
               registry: dhi.io
               repository: kyverno-init
-              tag: 1.17.1-debian13
+              tag: 1.17.2-debian13
             securityContext:
               runAsNonRoot: true
               runAsUser: 65534
@@ -171,7 +171,7 @@ spec:
           image:
             registry: dhi.io
             repository: kyverno-background-controller
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
         cleanupController:
           replicas: 1
           securityContext:
@@ -181,7 +181,7 @@ spec:
           image:
             registry: dhi.io
             repository: kyverno-cleanup-controller
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
         reportsController:
           replicas: 1
           securityContext:
@@ -191,7 +191,7 @@ spec:
           image:
             registry: dhi.io
             repository: kyverno-reports-controller
-            tag: 1.17.1-debian13
+            tag: 1.17.2-debian13
         cleanupJobs:
           admissionReports:
             enabled: false
