@@ -25,7 +25,7 @@ metadata:
 data:
   config.json: |
     {
-      "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io"],
+      "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io", "https://mcp-console.127.0.0.1.sslip.io"],
       "allow_anonymous": false,
       "oidc": {
         "issuer": "https://keycloak.127.0.0.1.sslip.io/realms/platform",
@@ -55,6 +55,13 @@ data:
           "path_prefix": "/api",
           "upstream_base_url": "http://subnetcalc-api.uat.svc.cluster.local:8000",
           "upstream_path_prefix": "/api"
+        },
+        {
+          "name": "platform-mcp",
+          "host_match": ["mcp.127.0.0.1.sslip.io"],
+          "path_prefix": "/mcp",
+          "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
+          "upstream_path_prefix": "/mcp"
         }
       ]
     }

@@ -1,0 +1,127 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: platform-mcp-hardened
+spec:
+  description: >-
+    Hardened policy for the machine MCP lane. APIM is the only permitted
+    ingress source for platform-mcp.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": mcp
+      "k8s:app.kubernetes.io/name": platform-mcp
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": keycloak
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": idp
+            "k8s:app.kubernetes.io/name": idp-core
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
+            "k8s:team": dolphin
+            "k8s:app": sentiment
+            "k8s:tier": backend
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: mcp-inspector-hardened
+spec:
+  description: >-
+    Hardened policy for the SSO MCP console lane. oauth2-proxy is the only
+    permitted ingress source for mcp-inspector.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": mcp
+      "k8s:app.kubernetes.io/name": mcp-inspector
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": oauth2-proxy
+            "k8s:app.kubernetes.io/instance": oauth2-proxy-mcp-console
+      toPorts:
+        - ports:
+            - port: "6274"
+              protocol: TCP
+            - port: "6277"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP

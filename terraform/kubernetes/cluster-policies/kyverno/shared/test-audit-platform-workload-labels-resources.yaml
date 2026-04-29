@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labeled-platform-workload
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: labeled-platform-workload
+    app.kubernetes.io/component: backend
+    team: platform
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: labeled-platform-workload
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: labeled-platform-workload
+        app.kubernetes.io/component: backend
+        team: platform
+        tier: backend
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: app
+          image: quay.io/cilium/cilium:v1.19.1
+          resources:
+            limits:
+              memory: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unlabeled-platform-workload
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: unlabeled-platform-workload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unlabeled-platform-workload
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unlabeled-platform-workload
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: app
+          image: quay.io/cilium/cilium:v1.19.1
+          resources:
+            limits:
+              memory: 64Mi

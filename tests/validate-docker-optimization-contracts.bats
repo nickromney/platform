@@ -259,27 +259,50 @@ locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="u
 for image_name, dockerfile_path in {
     "idp-core": "apps/idp-core/Dockerfile",
     "backstage": "apps/backstage/Dockerfile",
+    "platform-mcp": "apps/platform-mcp/Dockerfile",
 }.items():
     assert f'"{image_name}"' in build_script, image_name
     assert dockerfile_path in build_script, dockerfile_path
     if image_name == "idp-core":
         assert f'"${{REPO_ROOT}}" \\\n  "${{REPO_ROOT}}/{dockerfile_path}"' in build_script, dockerfile_path
-    else:
+    elif image_name == "backstage":
         assert '"${REPO_ROOT}/apps/backstage"' in build_script
         assert '"${REPO_ROOT}/apps/backstage/Dockerfile"' in build_script
-    assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
+    else:
+        assert f'"${{REPO_ROOT}}" \\\n  "${{REPO_ROOT}}/{dockerfile_path}"' in build_script, dockerfile_path
+    if image_name == "platform-mcp":
+        assert f'lookup(var.external_workload_image_refs, "{image_name}", "")' in locals_tf, image_name
+    else:
+        assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
     assert image_name in variables_tf, image_name
 
 assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in sync_script
 assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in sync_script
+assert "export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false" in sync_script
+assert "resolve_external_workload_image()" in sync_script
+assert "export_external_workload_image EXTERNAL_IMAGE_PLATFORM_MCP platform-mcp" in sync_script
+assert "EXTERNAL_IMAGE_PLATFORM_MCP" in gitops_tf
 assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in policies_script
 assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in policies_script
+assert "EXTERNAL_IMAGE_PLATFORM_MCP" in policies_script
+assert "ensure_grafana_dashboard_provider_paths" in policies_script
+assert "/^    path:[[:space:]]*/" in policies_script
+assert "/var/lib/grafana/dashboards/default" in policies_script
+assert "/var/lib/grafana/dashboards/kubernetes" in policies_script
+assert "/var/lib/grafana/dashboards/cilium" in policies_script
+assert "/var/lib/grafana/dashboards/argocd" in policies_script
 assert 'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")' in gitops_tf
 assert 'EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")' in gitops_tf
+assert 'EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")' in gitops_tf
 assert 'replace_image_ref "${idp_manifest}" "backstage" "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}"' in policies_script
 assert 'replace_image_ref "${idp_manifest}" "idp-core" "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}"' in policies_script
+assert 'replace_image_ref "${workload_file}" "platform-mcp" "${EXTERNAL_IMAGE_PLATFORM_MCP}"' in policies_script
 assert "external_platform_backstage" in locals_tf
 assert "external_platform_idp_core" in locals_tf
+assert "external_platform_mcp" in locals_tf
+
+kind_makefile = (repo_root / "kubernetes/kind/Makefile").read_text(encoding="utf-8")
+assert 'GITEA_SYNC_TARGET_TFVARS_FILE="$${GITEA_SYNC_TARGET_TFVARS_FILE:-$(KIND_OPERATOR_OVERRIDES_FILE)}"' in kind_makefile
 
 print("validated local platform IDP image build and sync contract")
 PY
@@ -299,9 +322,26 @@ build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images
 assert "source_fingerprint_tag()" in build_script
 assert "idp_core_source_tag=" in build_script
 assert "backstage_source_tag=" in build_script
+assert "platform_mcp_source_tag=" in build_script
 assert '"idp-core" \\' in build_script and '"${idp_core_source_tag}"' in build_script
 assert '"backstage" \\' in build_script and '"${backstage_source_tag}"' in build_script
+assert '"platform-mcp" \\' in build_script and '"${platform_mcp_source_tag}"' in build_script
 assert 'tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in build_script
+
+render_script = (repo_root / "kubernetes/kind/scripts/render-operator-overrides.sh").read_text(encoding="utf-8")
+assert "platform_mcp_image_tag=" in render_script
+assert "idp_core_image_tag=" in render_script
+assert "backstage_image_tag=" in render_script
+assert "write_external_platform_images()" in render_script
+assert "prefer_external_platform_images = true" in render_script
+assert "external_platform_image_refs = {" in render_script
+assert "apps/platform-mcp/platform_mcp" in render_script
+assert "apps/idp-core/app" in render_script
+assert "apps/backstage/packages" in render_script
+assert "platform/platform-mcp:${platform_mcp_image_tag}" in render_script
+assert "platform/backstage:${backstage_image_tag:-latest}" in render_script
+assert "platform/idp-core:${idp_core_image_tag}" in render_script
+assert "platform/grafana-victorialogs:latest" in render_script
 
 print("validated local platform IDP source fingerprint cache keys")
 PY
@@ -356,4 +396,29 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated local platform IDP cache hits ignore unrelated git commits"* ]]
+}
+
+@test "platform MCP Docker image uses DHI bases and installs gzip for pinned D2 tarball extraction" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+dockerfile = (repo_root / "apps/platform-mcp/Dockerfile").read_text(encoding="utf-8")
+
+assert "FROM dhi.io/python:3.13-debian13-dev AS builder" in dockerfile
+assert "FROM dhi.io/python:3.13-debian13-dev AS d2" in dockerfile
+assert "FROM dhi.io/python:3.13-debian13 AS runtime" in dockerfile
+assert "ARG D2_VERSION=0.7.1" in dockerfile
+assert "sha256sum -c -" in dockerfile
+assert "apt-get install -y --no-install-recommends ca-certificates curl gzip tar" in dockerfile
+assert "mkdir -p /usr/local/bin" in dockerfile
+assert "tar -xzf /tmp/d2.tar.gz" in dockerfile
+assert "USER 65532:65532" in dockerfile
+
+print("validated platform MCP Docker image contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated platform MCP Docker image contract"* ]]
 }

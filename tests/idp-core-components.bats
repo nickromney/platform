@@ -235,7 +235,7 @@ PY
   [[ "${output}" == *"validated SSO auth proxy egress for application upstreams"* ]]
 }
 
-@test "developer portal and API proxies share the browser SSO session cookie" {
+@test "developer portal and API proxies use scoped browser SSO cookies" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -253,16 +253,16 @@ body = block_match.group("body")
 cookie_names = dict(re.findall(r"(portal|api) = \{.*?cookie_name\s+=\s+\"([^\"]+)\"", body, re.S))
 cookie_domains = dict(re.findall(r"(portal|api) = \{.*?cookie_domain\s+=\s+([^\n]+)", body, re.S))
 
-assert cookie_names.get("portal") == "kind-sso-portal", cookie_names
-assert cookie_names.get("api") == "kind-sso-portal", cookie_names
+assert cookie_names.get("portal") == "kind-v2-sso-portal", cookie_names
+assert cookie_names.get("api") == "kind-v2-sso-portal-api", cookie_names
 assert cookie_domains.get("portal", "").strip() == "local.portal_cookie_domain", cookie_domains
 assert cookie_domains.get("api", "").strip() == "local.portal_cookie_domain", cookie_domains
 
-print("validated shared portal/API SSO cookie")
+print("validated scoped portal/API SSO cookies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated shared portal/API SSO cookie"* ]]
+  [[ "${output}" == *"validated scoped portal/API SSO cookies"* ]]
 }
 
 @test "app and environment authorization uses Keycloak groups instead of email-domain shortcuts" {

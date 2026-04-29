@@ -1,0 +1,149 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: audit-platform-runtime-baseline
+  annotations:
+    policies.kyverno.io/title: Audit platform runtime baseline
+    policies.kyverno.io/description: >-
+      Audit Pods in platform-owned workload namespaces for the runtime hardening
+      shape expected by the internal developer platform: non-privileged
+      containers, no privilege escalation, dropped Linux capabilities,
+      read-only root filesystems, and RuntimeDefault seccomp. The policy is
+      intentionally scoped away from vendor-managed platform namespaces so
+      policy reports stay actionable.
+spec:
+  admission: true
+  background: true
+  validationFailureAction: Audit
+  rules:
+    - name: require-drop-all-capabilities
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - apim
+                - dev
+                - idp
+                - mcp
+                - sit
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Platform Pods should drop ALL Linux capabilities."
+        pattern:
+          spec:
+            =(initContainers):
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
+    - name: deny-privileged
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - apim
+                - dev
+                - idp
+                - mcp
+                - sit
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Platform Pods should not run privileged containers."
+        pattern:
+          spec:
+            =(initContainers):
+              - securityContext:
+                  =(privileged): "false"
+            containers:
+              - securityContext:
+                  =(privileged): "false"
+    - name: deny-privilege-escalation
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - apim
+                - dev
+                - idp
+                - mcp
+                - sit
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Platform Pods should disable privilege escalation."
+        pattern:
+          spec:
+            =(initContainers):
+              - securityContext:
+                  allowPrivilegeEscalation: "false"
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: "false"
+    - name: require-read-only-root-filesystem
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - apim
+                - dev
+                - idp
+                - mcp
+                - sit
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Platform Pods should use read-only root filesystems."
+        pattern:
+          spec:
+            =(initContainers):
+              - securityContext:
+                  readOnlyRootFilesystem: true
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+    - name: require-runtime-default-seccomp
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - apim
+                - dev
+                - idp
+                - mcp
+                - sit
+                - uat
+      validate:
+        allowExistingViolations: true
+        message: "Platform Pods should use the RuntimeDefault seccomp profile."
+        anyPattern:
+          - spec:
+              securityContext:
+                seccompProfile:
+                  type: RuntimeDefault
+          - spec:
+              containers:
+                - securityContext:
+                    seccompProfile:
+                      type: RuntimeDefault

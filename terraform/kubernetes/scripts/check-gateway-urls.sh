@@ -305,6 +305,12 @@ probe_https_url() {
     return 0
   fi
 
+  if [[ "${url}" == https://mcp.*"/mcp" && ( "${code}" == "401" || "${code}" == "403" ) ]]; then
+    PROBE_OK=1
+    PROBE_DETAIL="${code} (MCP machine path requires bearer token)"
+    return 0
+  fi
+
   if [[ -n "${code}" && "${code}" != "000" ]]; then
     PROBE_DETAIL="${code}"
     return 0

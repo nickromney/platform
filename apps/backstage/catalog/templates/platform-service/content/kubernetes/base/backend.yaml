@@ -17,6 +17,10 @@ spec:
       app.kubernetes.io/component: backend
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "${{ values.backendPort }}"
       labels:
         app.kubernetes.io/name: ${{ values.name }}-backend
         app.kubernetes.io/component: backend
@@ -38,6 +42,15 @@ spec:
         - name: backend
           image: localhost:30090/platform/${{ values.name }}-backend:latest
           imagePullPolicy: Always
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: ${{ values.name }}-backend
+            - name: OTEL_SERVICE_NAMESPACE
+              value: ${{ values.team }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.version=0.1.0,k8s.deployment.name=${{ values.name }}-backend
+            - name: LOG_FORMAT
+              value: json
           ports:
             - name: http
               containerPort: ${{ values.backendPort }}

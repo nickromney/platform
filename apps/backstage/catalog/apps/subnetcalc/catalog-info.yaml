@@ -1,0 +1,227 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: subnetcalc
+  title: SubnetCalc
+  description: Demo app used to exercise API, frontend, APIM, routing, SSO, and platform observability.
+  tags:
+    - demo
+    - frontend
+    - api
+    - sso
+    - cilium
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/subnetcalc/
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-label-selector: app=subnetcalc
+  links:
+    - url: https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/subnetcalc
+      title: Source
+      icon: github
+    - url: https://subnetcalc.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://subnetcalc.uat.127.0.0.1.sslip.io
+      title: UAT
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals
+      title: Platform App Overview
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  dependsOn:
+    - component:default/idp-core
+    - component:default/apim-simulator
+  providesApis:
+    - subnetcalc-api
+  consumesApis:
+    - idp-api
+    - apim-simulator-gateway-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: subnetcalc-api
+  title: SubnetCalc API
+  description: HTTP API for subnet validation, private address checks, Cloudflare range checks, and subnet metadata lookups.
+  tags:
+    - openapi
+    - ipv4
+    - networking
+spec:
+  type: openapi
+  lifecycle: demo
+  owner: group:default/team-dolphin
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: SubnetCalc API
+      version: 0.1.0
+      description: |
+        Local platform example API for IPv4 address and CIDR validation.
+        The API is served by the SubnetCalc backend workload in dev and UAT.
+    servers:
+      - url: https://subnetcalc.dev.127.0.0.1.sslip.io
+        description: Local dev route
+      - url: https://subnetcalc.uat.127.0.0.1.sslip.io
+        description: Local UAT route
+    tags:
+      - name: Health
+      - name: IPv4
+    paths:
+      /api/v1/health:
+        get:
+          tags: [Health]
+          summary: Check service health
+          responses:
+            '200':
+              description: Service health state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
+      /api/v1/ipv4/validate:
+        post:
+          tags: [IPv4]
+          summary: Validate an IPv4 address
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/AddressRequest'
+          responses:
+            '200':
+              description: IPv4 address classification
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/AddressValidation'
+      /api/v1/ipv4/check-private:
+        post:
+          tags: [IPv4]
+          summary: Check whether an IPv4 address is private
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/AddressRequest'
+          responses:
+            '200':
+              description: Private address classification
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/PrivateCheck'
+      /api/v1/ipv4/check-cloudflare:
+        post:
+          tags: [IPv4]
+          summary: Check whether an IPv4 address belongs to Cloudflare
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/AddressRequest'
+          responses:
+            '200':
+              description: Cloudflare IP range check
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/CloudflareCheck'
+      /api/v1/ipv4/subnet-info:
+        post:
+          tags: [IPv4]
+          summary: Describe an IPv4 CIDR subnet
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/SubnetRequest'
+          responses:
+            '200':
+              description: Subnet metadata lookup result
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/SubnetInfo'
+    components:
+      schemas:
+        HealthResponse:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+        AddressRequest:
+          type: object
+          required: [ip]
+          properties:
+            ip:
+              type: string
+              example: 10.0.0.1
+        SubnetRequest:
+          type: object
+          required: [cidr]
+          properties:
+            cidr:
+              type: string
+              example: 10.0.0.0/24
+        AddressValidation:
+          type: object
+          properties:
+            ip:
+              type: string
+            valid:
+              type: boolean
+            version:
+              type: integer
+              example: 4
+        PrivateCheck:
+          type: object
+          properties:
+            ip:
+              type: string
+            private:
+              type: boolean
+        CloudflareCheck:
+          type: object
+          properties:
+            ip:
+              type: string
+            cloudflare:
+              type: boolean
+        SubnetInfo:
+          type: object
+          properties:
+            cidr:
+              type: string
+            network:
+              type: string
+            broadcast:
+              type: string
+            usableHosts:
+              type: integer
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: subnetcalc-gitea-repository
+  title: SubnetCalc Gitea Repository
+  description: Local Gitea source repository path for the SubnetCalc demo app.
+  tags:
+    - gitea
+    - source
+spec:
+  type: repository
+  owner: group:default/team-dolphin
+  system: local-idp
+  dependencyOf:
+    - component:default/subnetcalc

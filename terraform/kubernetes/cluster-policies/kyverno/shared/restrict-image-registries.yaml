@@ -28,6 +28,7 @@ spec:
                 - dev
                 - uat
                 - apim
+                - mcp
                 - observability
                 - sso
                 - headlamp

@@ -7,7 +7,9 @@ ignore: |
   **/node_modules/
   **/.venv/
   **/.terraform/
+  .playwright-mcp/*.yml
   apps/subnet-calculator/apim-simulator/
+  apps/backstage/catalog/templates/platform-service/content/kubernetes/routing/httproutes.yaml
   terraform/kubernetes/apps/nginx-gateway-fabric-crds/*.yaml
   terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml
   terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml

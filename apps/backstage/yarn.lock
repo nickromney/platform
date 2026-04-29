@@ -11771,7 +11771,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/js-yaml@npm:^4.0.1":
+"@types/js-yaml@npm:4.0.9, @types/js-yaml@npm:^4.0.1":
   version: 4.0.9
   resolution: "@types/js-yaml@npm:4.0.9"
   checksum: 10c0/24de857aa8d61526bbfbbaa383aa538283ad17363fcd5bb5148e2c7f604547db36646440e739d78241ed008702a8920665d1add5618687b6743858fae00da211
@@ -13887,8 +13887,10 @@ __metadata:
     "@backstage/plugin-search-backend-node": "npm:^1.4.3"
     "@backstage/plugin-signals-backend": "npm:^0.3.14"
     "@backstage/plugin-techdocs-backend": "npm:^2.1.7"
+    "@types/js-yaml": "npm:4.0.9"
     app: "link:../app"
     better-sqlite3: "npm:^12.0.0"
+    js-yaml: "npm:4.1.1"
     node-gyp: "npm:^10.0.0"
   languageName: unknown
   linkType: soft
@@ -21653,7 +21655,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"js-yaml@npm:=4.1.1, js-yaml@npm:^4.0.0, js-yaml@npm:^4.1.0, js-yaml@npm:^4.1.1":
+"js-yaml@npm:4.1.1, js-yaml@npm:=4.1.1, js-yaml@npm:^4.0.0, js-yaml@npm:^4.1.0, js-yaml@npm:^4.1.1":
   version: 4.1.1
   resolution: "js-yaml@npm:4.1.1"
   dependencies:

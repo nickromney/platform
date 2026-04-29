@@ -4,3 +4,4 @@ resources:
   - ../policies/cilium-frontend-backend.yaml
   - ../policies/kyverno-container-baseline.yaml
   - ../routing/httproutes.yaml
+  - ../observability/prometheus-scrape.yaml

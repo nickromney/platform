@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
+MAKE_KNOWN_GOALS := help prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 include ../mk/common.mk
@@ -7,7 +7,7 @@ include ../mk/common.mk
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 
-.PHONY: prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-sentiment compose-smoke-subnetcalc
+.PHONY: prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc
 
 ##@ Workflow
 prereqs: ## Check shared app workflow prerequisites without requiring Trivy
@@ -47,7 +47,10 @@ trivy-scan-all: ## Scan local apps/, workload images, and the optional in-cluste
 	@SCAN_GITEA=1 "$(TRIVY_SCAN_SCRIPT)" --mode all --execute
 
 ##@ Smoke
-compose-smoke: compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for both apps
+compose-smoke: compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for app-local stacks
+
+compose-smoke-platform-mcp: ## Run the lightweight Platform MCP compose smoke check
+	@./platform-mcp/tests/compose-smoke.sh --execute
 
 compose-smoke-sentiment: ## Run the lightweight sentiment compose smoke check
 	@./sentiment/tests/compose-smoke.sh --execute

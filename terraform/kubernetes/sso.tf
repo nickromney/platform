@@ -570,6 +570,20 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           optionalClientScopes      = []
         },
         {
+          clientId                  = local.sso_mcp_audience
+          name                      = "Platform MCP"
+          enabled                   = true
+          bearerOnly                = true
+          publicClient              = false
+          protocol                  = "openid-connect"
+          fullScopeAllowed          = false
+          standardFlowEnabled       = false
+          directAccessGrantsEnabled = false
+          serviceAccountsEnabled    = false
+          defaultClientScopes       = []
+          optionalClientScopes      = []
+        },
+        {
           clientId                  = "oauth2-proxy"
           name                      = "oauth2-proxy"
           enabled                   = true
@@ -592,6 +606,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
             "${local.hello_platform_uat_public_url}/oauth2/callback",
             "${local.idp_portal_public_url}/oauth2/callback",
             "${local.idp_api_public_url}/oauth2/callback",
+            "${local.mcp_console_public_url}/oauth2/callback",
           ]
           webOrigins           = ["+"]
           defaultClientScopes  = ["web-origins", "acr", "profile", "basic", "email"]
@@ -628,6 +643,17 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
               consentRequired = false
               config = {
                 "included.client.audience" = local.sso_apim_audience
+                "id.token.claim"           = "false"
+                "access.token.claim"       = "true"
+              }
+            },
+            {
+              name            = "${local.sso_mcp_audience}-audience"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-audience-mapper"
+              consentRequired = false
+              config = {
+                "included.client.audience" = local.sso_mcp_audience
                 "id.token.claim"           = "false"
                 "access.token.claim"       = "true"
               }
@@ -1433,7 +1459,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-admin
+          cookieName: kind-v2-sso-argocd
           configFile: ""
 
         service:
@@ -1541,7 +1567,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-admin
+          cookieName: kind-v2-sso-gitea
           configFile: ""
 
         service:
@@ -1649,7 +1675,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-admin
+          cookieName: kind-v2-sso-hubble
           configFile: ""
 
         service:
@@ -1756,7 +1782,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-admin
+          cookieName: kind-v2-sso-grafana
           configFile: ""
 
         service:
@@ -1867,7 +1893,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-admin
+          cookieName: kind-v2-sso-signoz
           configFile: ""
 
         service:
@@ -1977,7 +2003,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-dev
+          cookieName: kind-v2-sso-sentiment-dev
           configFile: ""
 
         service:
@@ -2089,7 +2115,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-uat
+          cookieName: kind-v2-sso-sentiment-uat
           configFile: ""
 
         service:
@@ -2201,7 +2227,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-dev
+          cookieName: kind-v2-sso-subnetcalc-dev
           configFile: ""
 
         service:
@@ -2313,7 +2339,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-sso-uat
+          cookieName: kind-v2-sso-subnetcalc-uat
           configFile: ""
 
         service:
@@ -2507,7 +2533,10 @@ __YAML__
 }
 
 resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
-  for_each = var.enable_sso && var.enable_argocd ? local.sso_idp_proxy_apps : {}
+  for_each = var.enable_sso && var.enable_argocd ? merge(
+    local.sso_idp_proxy_apps,
+    local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
+  ) : {}
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1

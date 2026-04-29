@@ -15,6 +15,9 @@ metadata:
     - url: https://grafana.admin.127.0.0.1.sslip.io/d/${{ values.name }}-golden-signals/${{ values.name }}-golden-signals
       title: Grafana Golden Signals
       icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/platform-logs/platform-logs?var-query=k8s.namespace.name:${{ values.name }}
+      title: Victoria Logs
+      icon: dashboard
 spec:
   type: service
   lifecycle: experimental

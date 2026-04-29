@@ -1,4 +1,6 @@
 resources:
+  - audit-platform-runtime-baseline.yaml
+  - audit-platform-workload-labels.yaml
   - require-app-labels-application-namespaces.yaml
   - namespace-default-deny.yaml
   - protect-default-deny.yaml

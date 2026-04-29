@@ -13,6 +13,24 @@
       "expr": "((max(kube_deployment_status_replicas_available{namespace=\"observability\",deployment=\"grafana\"}) > bool 0) or max(argocd_app_info{name=\"grafana\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
     },
     {
+      "title": "Platform MCP",
+      "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-mcp-observability/platform-mcp-observability",
+      "sort_key": "00/dashboard/platform-mcp",
+      "service": "platform-mcp",
+      "owner": "platform",
+      "environment": "local",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "Backstage Observability",
+      "url": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability",
+      "sort_key": "00/dashboard/backstage-observability",
+      "service": "backstage",
+      "owner": "platform",
+      "environment": "local",
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0) or max(argocd_app_info{name=\"idp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
       "title": "Argo CD",
       "url": "https://argocd.admin.127.0.0.1.sslip.io",
       "sort_key": "admin/argocd",

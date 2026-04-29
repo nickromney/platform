@@ -1,0 +1,48 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: audit-platform-workload-labels
+  annotations:
+    policies.kyverno.io/title: Audit platform workload discovery labels
+    policies.kyverno.io/description: >-
+      Audit Deployments in platform-owned workload namespaces for the labels used
+      by Backstage discovery, Grafana dashboards, and Cilium selectors. This is
+      intentionally scoped away from vendor-managed chart namespaces so policy
+      reports stay actionable.
+spec:
+  admission: true
+  background: true
+  validationFailureAction: Audit
+  rules:
+    - name: require-platform-discovery-labels
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaces:
+                - apim
+                - idp
+                - mcp
+      validate:
+        allowExistingViolations: true
+        message: >-
+          Platform/shared Deployments should carry app.kubernetes.io/name,
+          app.kubernetes.io/component, team, and tier labels on both the
+          Deployment and Pod template.
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/name: "?*"
+              app.kubernetes.io/component: "?*"
+              team: "?*"
+              tier: "?*"
+          spec:
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: "?*"
+                  app.kubernetes.io/component: "?*"
+                  team: "?*"
+                  tier: "?*"

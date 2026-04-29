@@ -125,6 +125,9 @@ catalog:
     - type: file
       target: ../../catalog/entities.yaml
 
+    - type: file
+      target: ../../catalog/apps/platform-mcp/catalog-info.yaml
+
     # App-owned catalog data, kept beside each demo app's code and docs.
     - type: file
       target: ../../../subnetcalc/catalog-info.yaml

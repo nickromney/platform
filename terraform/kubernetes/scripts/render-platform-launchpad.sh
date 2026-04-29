@@ -141,7 +141,7 @@ generate_dashboard_json() {
       editable: true,
       graphTooltip: 0,
       panels:
-        [
+        ([
           {
             gridPos: {h: 3, w: 24, x: 0, y: 0},
             id: 1,
@@ -161,7 +161,7 @@ generate_dashboard_json() {
           | sort_by(.sort_key)
           | to_entries
           | map(stat_panel(.value; .key))
-        ),
+        )),
       refresh: "30s",
       schemaVersion: 39,
       tags: ["platform", "launchpad", "entrypoints"],

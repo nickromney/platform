@@ -256,6 +256,54 @@ spec:
                 target_label: __address__
                 source_labels: [__address__]
                 regex: (.+)
+          - job_name: platform-mcp
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - mcp
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                action: keep
+                regex: platform-mcp
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                action: keep
+                regex: "true"
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                target_label: __metrics_path__
+                regex: (.+)
+              - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                target_label: __address__
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: "$1:$2"
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                target_label: app
+          - job_name: backstage-catalog
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - idp
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                action: keep
+                regex: backstage
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                action: keep
+                regex: "true"
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                target_label: __metrics_path__
+                regex: (.+)
+              - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                target_label: __address__
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: "$1:$2"
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                target_label: app
   syncPolicy:
     automated:
       prune: true
@@ -430,7 +478,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
+                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -477,6 +525,72 @@ ${local.grafana_plugins_values_yaml}
                       "links": [
                         {
                           "targetBlank": true,
+                          "title": "Open Backstage Observability",
+                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability"
+                        }
+                      ],
+                      "options": {
+                        "colorMode": "background",
+                        "graphMode": "none"
+                      },
+                      "targets": [
+                        {
+                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0) or max(argocd_app_info{name=\"idp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Backstage Observability",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {
+                            "mode": "thresholds"
+                          },
+                          "mappings": [
+                            {
+                              "options": {
+                                "0": {
+                                  "text": "Down"
+                                },
+                                "1": {
+                                  "text": "Healthy"
+                                }
+                              },
+                              "type": "value"
+                            }
+                          ],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "red",
+                                "value": 0
+                              },
+                              {
+                                "color": "green",
+                                "value": 1
+                              }
+                            ]
+                          },
+                          "unit": "short"
+                        }
+                      },
+                      "gridPos": {
+                        "h": 5,
+                        "w": 6,
+                        "x": 6,
+                        "y": 3
+                      },
+                      "id": 3,
+                      "links": [
+                        {
+                          "targetBlank": true,
                           "title": "Open Platform App Golden Signals",
                           "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals"
                         }
@@ -492,6 +606,72 @@ ${local.grafana_plugins_values_yaml}
                         }
                       ],
                       "title": "Platform App Golden Signals",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "description": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-mcp-observability/platform-mcp-observability",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {
+                            "mode": "thresholds"
+                          },
+                          "mappings": [
+                            {
+                              "options": {
+                                "0": {
+                                  "text": "Down"
+                                },
+                                "1": {
+                                  "text": "Healthy"
+                                }
+                              },
+                              "type": "value"
+                            }
+                          ],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "red",
+                                "value": 0
+                              },
+                              {
+                                "color": "green",
+                                "value": 1
+                              }
+                            ]
+                          },
+                          "unit": "short"
+                        }
+                      },
+                      "gridPos": {
+                        "h": 5,
+                        "w": 6,
+                        "x": 12,
+                        "y": 3
+                      },
+                      "id": 4,
+                      "links": [
+                        {
+                          "targetBlank": true,
+                          "title": "Open Platform MCP",
+                          "url": "https://grafana.admin.127.0.0.1.sslip.io/d/platform-mcp-observability/platform-mcp-observability"
+                        }
+                      ],
+                      "options": {
+                        "colorMode": "background",
+                        "graphMode": "none"
+                      },
+                      "targets": [
+                        {
+                          "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Platform MCP",
                       "type": "stat"
                     },
                     {
@@ -536,10 +716,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 18,
                         "y": 3
                       },
-                      "id": 3,
+                      "id": 5,
                       "links": [
                         {
                           "targetBlank": true,
@@ -602,10 +782,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
-                        "y": 3
+                        "x": 0,
+                        "y": 8
                       },
-                      "id": 4,
+                      "id": 6,
                       "links": [
                         {
                           "targetBlank": true,
@@ -668,10 +848,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 3
+                        "x": 6,
+                        "y": 8
                       },
-                      "id": 5,
+                      "id": 7,
                       "links": [
                         {
                           "targetBlank": true,
@@ -734,10 +914,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
+                        "x": 12,
                         "y": 8
                       },
-                      "id": 6,
+                      "id": 8,
                       "links": [
                         {
                           "targetBlank": true,
@@ -800,10 +980,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 18,
                         "y": 8
                       },
-                      "id": 7,
+                      "id": 9,
                       "links": [
                         {
                           "targetBlank": true,
@@ -866,10 +1046,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
-                        "y": 8
+                        "x": 0,
+                        "y": 13
                       },
-                      "id": 8,
+                      "id": 10,
                       "links": [
                         {
                           "targetBlank": true,
@@ -932,10 +1112,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 8
+                        "x": 6,
+                        "y": 13
                       },
-                      "id": 9,
+                      "id": 11,
                       "links": [
                         {
                           "targetBlank": true,
@@ -998,10 +1178,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
+                        "x": 12,
                         "y": 13
                       },
-                      "id": 10,
+                      "id": 12,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1064,10 +1244,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 18,
                         "y": 13
                       },
-                      "id": 11,
+                      "id": 13,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1130,10 +1310,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
-                        "y": 13
+                        "x": 0,
+                        "y": 18
                       },
-                      "id": 12,
+                      "id": 14,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1196,10 +1376,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 13
+                        "x": 6,
+                        "y": 18
                       },
-                      "id": 13,
+                      "id": 15,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1262,10 +1442,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
+                        "x": 12,
                         "y": 18
                       },
-                      "id": 14,
+                      "id": 16,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1328,10 +1508,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 18,
                         "y": 18
                       },
-                      "id": 15,
+                      "id": 17,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1394,10 +1574,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
-                        "y": 18
+                        "x": 0,
+                        "y": 23
                       },
-                      "id": 16,
+                      "id": 18,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1460,10 +1640,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 18
+                        "x": 6,
+                        "y": 23
                       },
-                      "id": 17,
+                      "id": 19,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1542,7 +1722,7 @@ ${local.grafana_plugins_values_yaml}
                       "id": 2,
                       "targets": [
                         {
-                          "expr": "100 * (sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\",http_status_code=~\"4..|5..\"}[5m])) by (k8s_namespace_name,service_name) / clamp_min(sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (k8s_namespace_name,service_name), 0.0001))",
+                          "expr": "(100 * (sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\",http_status_code=~\"4..|5..\"}[5m])) by (k8s_namespace_name,service_name) / clamp_min(sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (k8s_namespace_name,service_name), 0.0001))) or (0 * sum(rate(traces_span_metrics_calls_total{service_name=~\"sentiment-api|subnetcalc-api\",k8s_namespace_name=~\"dev|uat\"}[5m])) by (k8s_namespace_name,service_name))",
                           "legendFormat": "{{k8s_namespace_name}}/{{service_name}}",
                           "refId": "A"
                         }
@@ -1587,7 +1767,7 @@ ${local.grafana_plugins_values_yaml}
                       "id": 5,
                       "targets": [
                         {
-                          "expr": "histogram_quantile(0.95, sum(rate(llm_inference_latency_ms_bucket{k8s_namespace_name=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name))",
+                          "expr": "histogram_quantile(0.95, sum(rate(llm_inference_latency_ms_bucket{k8s_namespace_name=~\"dev|uat\"}[5m])) by (le,k8s_namespace_name)) or on(k8s_namespace_name) (0 * max by (k8s_namespace_name) (sentiment_comments_created_total{k8s_namespace_name=~\"dev|uat\"}))",
                           "legendFormat": "{{k8s_namespace_name}}",
                           "refId": "A"
                         }
@@ -1683,7 +1863,7 @@ ${local.grafana_plugins_values_yaml}
                       "id": 4,
                       "targets": [
                         {
-                          "expr": "count(up{job=\"kubernetes-pods\",namespace=~\"dev|uat\"} == 1) by (namespace)",
+                          "expr": "count by (namespace) (up{job=\"kubernetes-pods\",namespace=~\"dev|uat\"} == 1) or on(namespace) (0 * max by (namespace) (kube_namespace_status_phase{namespace=~\"dev|uat\",phase=\"Active\"}))",
                           "legendFormat": "{{namespace}}",
                           "refId": "A"
                         }
@@ -1700,6 +1880,550 @@ ${local.grafana_plugins_values_yaml}
                   "title": "Platform Namespace Health",
                   "uid": "platform-namespace-health",
                   "version": 1
+                }
+            platform-mcp-observability:
+              json: |
+                {
+                  "annotations": {"list": []},
+                  "editable": true,
+                  "graphTooltip": 1,
+                  "panels": [
+                    {
+                      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+                      "id": 1,
+                      "options": {
+                        "content": "## Platform MCP Observability\nThis dashboard proves the MCP workload is deployed, scrapeable, callable, and logging. A fresh stack legitimately starts with zero tool calls; use the smoke command below or MCP Inspector to generate traffic.",
+                        "mode": "markdown"
+                      },
+                      "title": "How to read this dashboard",
+                      "type": "text"
+                    },
+                    {
+                      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 3},
+                      "id": 2,
+                      "options": {
+                        "content": "### Endpoints\n- MCP API: https://mcp.127.0.0.1.sslip.io/mcp\n- MCP Console: https://mcp-console.127.0.0.1.sslip.io\n- Smoke: `PLATFORM_MCP_BEARER_TOKEN=... uv run platform-mcp-smoke`",
+                        "mode": "markdown"
+                      },
+                      "title": "Operator links",
+                      "type": "text"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {"mode": "thresholds"},
+                          "mappings": [{"options": {"0": {"text": "No replicas"}, "1": {"text": "Ready"}}, "type": "value"}],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 3},
+                      "id": 3,
+                      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+                      "targets": [{"expr": "((sum(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or vector(0))", "refId": "A"}],
+                      "title": "MCP Deployment Ready",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {"mode": "thresholds"},
+                          "mappings": [{"options": {"0": {"text": "Not scraped"}, "1": {"text": "Scraped"}}, "type": "value"}],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 3},
+                      "id": 4,
+                      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+                      "targets": [{"expr": "(max(up{job=\"platform-mcp\"}) or vector(0))", "refId": "A"}],
+                      "title": "Prometheus Scrape",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 3},
+                      "id": 5,
+                      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center"},
+                      "targets": [{"expr": "(sum(platform_mcp_tool_calls_total) or vector(0))", "refId": "A"}],
+                      "title": "Total Tool Calls",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+                      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 3},
+                      "id": 6,
+                      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center"},
+                      "targets": [{"expr": "((sum(rate(platform_mcp_tool_duration_seconds_sum[5m])) / clamp_min(sum(rate(platform_mcp_tool_calls_total[5m])), 0.001)) * 1000 or vector(0))", "refId": "A"}],
+                      "title": "Mean Tool Latency",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 7},
+                      "id": 7,
+                      "options": {"displayMode": "gradient", "legend": {"displayMode": "list", "placement": "bottom"}, "orientation": "horizontal"},
+                      "targets": [{"expr": "sum(platform_mcp_tool_calls_total) by (tool, status)", "legendFormat": "{{tool}} {{status}}", "refId": "A"}],
+                      "title": "Tool Calls by Tool",
+                      "type": "bargauge"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+                      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 7},
+                      "id": 8,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+                      "targets": [{"expr": "sum(rate(platform_mcp_tool_calls_total[5m])) by (tool, status)", "legendFormat": "{{tool}} {{status}}", "refId": "A"}],
+                      "title": "Tool Call Rate",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+                      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 7},
+                      "id": 9,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi", "sort": "desc"}},
+                      "targets": [{"expr": "(sum(rate(platform_mcp_tool_duration_seconds_sum[5m])) by (tool) / clamp_min(sum(rate(platform_mcp_tool_calls_total[5m])) by (tool), 0.001)) * 1000", "legendFormat": "{{tool}}", "refId": "A"}],
+                      "title": "Average Tool Duration",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 14},
+                      "id": 10,
+                      "options": {"showHeader": true},
+                      "targets": [{"expr": "up{job=\"platform-mcp\"}", "format": "table", "instant": true, "refId": "A"}],
+                      "title": "Scrape Target Details",
+                      "type": "table"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 14},
+                      "id": 11,
+                      "options": {"showHeader": true},
+                      "targets": [{"expr": "kube_pod_container_status_restarts_total{namespace=\"mcp\",container=\"server\"}", "format": "table", "instant": true, "refId": "A"}],
+                      "title": "Container Restarts",
+                      "type": "table"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+                      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 14},
+                      "id": 12,
+                      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+                      "targets": [{"expr": "sum(container_memory_working_set_bytes{namespace=\"mcp\",pod=~\"platform-mcp-.*\",container=\"server\"})", "legendFormat": "platform-mcp", "refId": "A"}],
+                      "title": "Memory Working Set",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 20},
+                      "id": 13,
+                      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+                      "targets": [{"datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"}, "expr": "k8s.namespace.name:mcp", "maxLines": 100, "queryType": "instant", "refId": "A"}],
+                      "title": "Recent MCP Namespace Logs",
+                      "type": "logs"
+                    }
+                  ],
+                  "refresh": "30s",
+                  "schemaVersion": 39,
+                  "tags": ["platform", "mcp", "prometheus", "victorialogs"],
+                  "templating": {"list": []},
+                  "time": {"from": "now-15m", "to": "now"},
+                  "title": "Platform MCP Observability",
+                  "uid": "platform-mcp-observability",
+                  "version": 2
+                }
+            backstage-observability:
+              json: |
+                {
+                  "annotations": {
+                    "list": []
+                  },
+                  "editable": true,
+                  "graphTooltip": 1,
+                  "panels": [
+                    {
+                      "id": 1,
+                      "type": "text",
+                      "title": "How to read this dashboard",
+                      "gridPos": {
+                        "h": 3,
+                        "w": 24,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "options": {
+                        "mode": "markdown",
+                        "content": "## Backstage Catalog Observability\nThis dashboard proves both Backstage runtime health and catalog quality. The catalog metrics endpoint counts entity kinds, APIs, service annotation coverage, API relationships, and unreadable catalog locations."
+                      }
+                    },
+                    {
+                      "id": 2,
+                      "type": "stat",
+                      "title": "Backstage Ready",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 4,
+                        "w": 4,
+                        "x": 0,
+                        "y": 3
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short",
+                          "min": 0,
+                          "max": 1
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "((sum(kube_deployment_status_replicas_available{namespace=\"idp\",deployment=\"backstage\"}) > bool 0) or vector(0))",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 3,
+                      "type": "stat",
+                      "title": "Catalog Scrape",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 4,
+                        "w": 4,
+                        "x": 4,
+                        "y": 3
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short",
+                          "min": 0,
+                          "max": 1
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "(max(up{job=\"backstage-catalog\"}) or vector(0))",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 4,
+                      "type": "stat",
+                      "title": "Catalog APIs",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 4,
+                        "w": 4,
+                        "x": 8,
+                        "y": 3
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "(max(backstage_catalog_apis_total) or vector(0))",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 5,
+                      "type": "stat",
+                      "title": "Services With Kubernetes Selector",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 4,
+                        "w": 6,
+                        "x": 12,
+                        "y": 3
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "(max(backstage_catalog_service_annotations_total{annotation=\"kubernetes_label_selector\",state=\"present\"}) or vector(0))",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 6,
+                      "type": "stat",
+                      "title": "Services Missing Kubernetes Selector",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 4,
+                        "w": 6,
+                        "x": 18,
+                        "y": 3
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "(max(backstage_catalog_service_annotations_total{annotation=\"kubernetes_label_selector\",state=\"missing\"}) or vector(0))",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 7,
+                      "type": "bargauge",
+                      "title": "Catalog Entities by Kind",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 8,
+                        "w": 8,
+                        "x": 0,
+                        "y": 7
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "max by (kind) (backstage_catalog_entities_total)",
+                          "legendFormat": "{{kind}}",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 8,
+                      "type": "bargauge",
+                      "title": "Components by Type",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 8,
+                        "w": 8,
+                        "x": 8,
+                        "y": 7
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "max by (type) (backstage_catalog_components_total)",
+                          "legendFormat": "{{type}}",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 9,
+                      "type": "bargauge",
+                      "title": "Service Annotation Coverage",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 8,
+                        "w": 8,
+                        "x": 16,
+                        "y": 7
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "max by (annotation, state) (backstage_catalog_service_annotations_total)",
+                          "legendFormat": "{{annotation}} {{state}}",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 10,
+                      "type": "stat",
+                      "title": "API Relationships",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 5,
+                        "w": 8,
+                        "x": 0,
+                        "y": 15
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "max by (relationship) (backstage_catalog_api_relationships_total)",
+                          "legendFormat": "{{relationship}}",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 11,
+                      "type": "stat",
+                      "title": "Unreadable Catalog Locations",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 5,
+                        "w": 8,
+                        "x": 8,
+                        "y": 15
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "short"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "(max(backstage_catalog_locations_missing_total) or vector(0))",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 12,
+                      "type": "timeseries",
+                      "title": "Backstage CPU",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 8,
+                        "w": 8,
+                        "x": 16,
+                        "y": 15
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "cores"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"idp\",pod=~\"backstage-.*\",container=\"backstage\"}[5m]))",
+                          "legendFormat": "backstage",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 13,
+                      "type": "timeseries",
+                      "title": "Backstage Memory",
+                      "datasource": "Prometheus",
+                      "gridPos": {
+                        "h": 8,
+                        "w": 12,
+                        "x": 0,
+                        "y": 20
+                      },
+                      "fieldConfig": {
+                        "defaults": {
+                          "unit": "bytes"
+                        },
+                        "overrides": []
+                      },
+                      "targets": [
+                        {
+                          "expr": "sum(container_memory_working_set_bytes{namespace=\"idp\",pod=~\"backstage-.*\",container=\"backstage\"})",
+                          "legendFormat": "backstage",
+                          "refId": "A"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 14,
+                      "type": "logs",
+                      "title": "Recent Backstage Logs",
+                      "datasource": {
+                        "type": "victoriametrics-logs-datasource",
+                        "uid": "victorialogs"
+                      },
+                      "gridPos": {
+                        "h": 8,
+                        "w": 12,
+                        "x": 12,
+                        "y": 23
+                      },
+                      "options": {
+                        "dedupStrategy": "none",
+                        "enableLogDetails": true,
+                        "showLabels": true,
+                        "showTime": true,
+                        "sortOrder": "Descending",
+                        "wrapLogMessage": true
+                      },
+                      "targets": [
+                        {
+                          "datasource": {
+                            "type": "victoriametrics-logs-datasource",
+                            "uid": "victorialogs"
+                          },
+                          "expr": "k8s.namespace.name:idp backstage",
+                          "maxLines": 100,
+                          "queryType": "instant",
+                          "refId": "A"
+                        }
+                      ]
+                    }
+                  ],
+                  "refresh": "30s",
+                  "schemaVersion": 39,
+                  "tags": [
+                    "platform",
+                    "backstage",
+                    "catalog",
+                    "victorialogs",
+                    "otel"
+                  ],
+                  "templating": {
+                    "list": []
+                  },
+                  "time": {
+                    "from": "now-15m",
+                    "to": "now"
+                  },
+                  "title": "Backstage Observability",
+                  "uid": "backstage-observability",
+                  "version": 2
                 }
             platform-logs:
               json: |
@@ -1770,6 +2494,32 @@ ${local.grafana_plugins_values_yaml}
                         }
                       ],
                       "title": "Recent Error Logs",
+                      "type": "logs"
+                    },
+                    {
+                      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 20},
+                      "id": 4,
+                      "options": {
+                        "dedupStrategy": "none",
+                        "enableLogDetails": true,
+                        "prettifyLogMessage": false,
+                        "showCommonLabels": false,
+                        "showLabels": true,
+                        "showTime": true,
+                        "sortOrder": "Descending",
+                        "wrapLogMessage": true
+                      },
+                      "targets": [
+                        {
+                          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+                          "expr": "k8s.namespace.name:mcp",
+                          "maxLines": 100,
+                          "queryType": "instant",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "MCP Namespace Logs",
                       "type": "logs"
                     }
                   ],

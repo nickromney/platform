@@ -73,6 +73,7 @@ locals {
   sso_admin_group                      = "platform-admins"
   sso_viewer_group                     = "platform-viewers"
   sso_apim_audience                    = "apim-simulator"
+  sso_mcp_audience                     = "platform-mcp"
   sso_app_groups                       = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat", "app-hello-platform-dev", "app-hello-platform-uat"]
   gitea_public_host                    = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
   gitea_public_url                     = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"
@@ -94,6 +95,10 @@ locals {
   subnetcalc_dev_public_url            = "https://${local.subnetcalc_dev_public_host}${local.gateway_https_host_port_suffix}"
   subnetcalc_uat_public_host           = "subnetcalc.uat.${local.platform_base_domain_effective}"
   subnetcalc_uat_public_url            = "https://${local.subnetcalc_uat_public_host}${local.gateway_https_host_port_suffix}"
+  mcp_public_host                      = "mcp.${local.platform_base_domain_effective}"
+  mcp_public_url                       = "https://${local.mcp_public_host}${local.gateway_https_host_port_suffix}"
+  mcp_console_public_host              = "mcp-console.${local.platform_base_domain_effective}"
+  mcp_console_public_url               = "https://${local.mcp_console_public_host}${local.gateway_https_host_port_suffix}"
   hello_platform_dev_public_host       = "hello-platform.dev.${local.platform_base_domain_effective}"
   hello_platform_dev_public_url        = "https://${local.hello_platform_dev_public_host}${local.gateway_https_host_port_suffix}"
   hello_platform_uat_public_host       = "hello-platform.uat.${local.platform_base_domain_effective}"
@@ -108,7 +113,7 @@ locals {
       public_url       = local.hello_platform_dev_public_url
       upstream         = "http://hello-platform.dev.svc.cluster.local:8080"
       group            = "app-hello-platform-dev"
-      cookie_name      = "kind-sso-dev"
+      cookie_name      = "kind-v2-sso-hello-platform-dev"
       cookie_domain    = local.dev_cookie_domain
       whitelist_domain = local.dev_whitelist_domains
     }
@@ -117,7 +122,7 @@ locals {
       public_url       = local.hello_platform_uat_public_url
       upstream         = "http://hello-platform.uat.svc.cluster.local:8080"
       group            = "app-hello-platform-uat"
-      cookie_name      = "kind-sso-uat"
+      cookie_name      = "kind-v2-sso-hello-platform-uat"
       cookie_domain    = local.uat_cookie_domain
       whitelist_domain = local.uat_whitelist_domains
     }
@@ -129,7 +134,7 @@ locals {
         public_url       = local.idp_portal_public_url
         upstream         = "http://backstage.idp.svc.cluster.local:7007"
         group            = local.sso_viewer_group
-        cookie_name      = "kind-sso-portal"
+        cookie_name      = "kind-v2-sso-portal"
         cookie_domain    = local.portal_cookie_domain
         whitelist_domain = local.portal_whitelist_domains
       }
@@ -140,12 +145,23 @@ locals {
         public_url       = local.idp_api_public_url
         upstream         = "http://idp-core.idp.svc.cluster.local:8080"
         group            = local.sso_viewer_group
-        cookie_name      = "kind-sso-portal"
+        cookie_name      = "kind-v2-sso-portal-api"
         cookie_domain    = local.portal_cookie_domain
         whitelist_domain = local.portal_whitelist_domains
       }
     },
   )
+  sso_mcp_console_proxy_apps = {
+    console = {
+      name             = "oauth2-proxy-mcp-console"
+      public_url       = local.mcp_console_public_url
+      upstream         = "http://mcp-inspector.mcp.svc.cluster.local:6274"
+      group            = local.sso_viewer_group
+      cookie_name      = "kind-v2-sso-mcp-console"
+      cookie_domain    = local.portal_cookie_domain
+      whitelist_domain = local.portal_whitelist_domains
+    }
+  }
   admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
   admin_route_allowlist_enabled         = length(local.admin_route_allowlist_cidrs_effective) > 0
   gateway_trusted_proxy_cidrs_effective = [for cidr in var.gateway_trusted_proxy_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
@@ -317,6 +333,7 @@ locals {
     local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["idp"] : [],
+    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["mcp"] : [],
     var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
     var.enable_sso && var.enable_hubble && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hubble"] : [],
@@ -325,6 +342,7 @@ locals {
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat"], local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
+    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-mcp-console"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(
@@ -332,6 +350,7 @@ locals {
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["dev"] : [],
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
     (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["apim"] : [],
+    (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["mcp"] : [],
   )))
 
   policies_repo_content_hash = sha1(join("", concat(
@@ -372,8 +391,11 @@ locals {
     external_sentiment_ui                  = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
     external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
+    external_platform_mcp                  = lookup(var.external_workload_image_refs, "platform-mcp", "")
     external_subnetcalc_fe                 = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
     external_subnetcalc_fe_ts              = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
+    mcp_public_host                        = local.mcp_public_host
+    mcp_console_public_host                = local.mcp_console_public_host
     prefer_external_platform               = var.prefer_external_platform_images
     host_local_registry_enabled            = local.host_local_registry_enabled
     host_local_registry_host               = local.host_local_registry_host_effective

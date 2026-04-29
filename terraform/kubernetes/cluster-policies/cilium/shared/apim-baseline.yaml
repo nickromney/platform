@@ -6,8 +6,9 @@ spec:
   description: >-
     Hardened policy for apim namespace (shared APIM simulator).
     Traffic flow (verified via APIM config.json):
-      Ingress: subnetcalc-router (dev/uat, tier=gateway) -> :8000
+      Ingress: platform-gateway and subnetcalc-router (dev/uat, tier=gateway) -> :8000
       Egress:  -> subnetcalc-api (dev/uat, tier=backend) :8000  (host-header routed)
+      Egress:  -> platform-mcp (mcp) :8080  (MCP host/path routed)
       Egress:  -> keycloak (sso) :8080  (JWKS fetch for JWT validation)
       Egress:  -> DNS, kube-apiserver
     Any namespace labeled namespace-role=application can inherit the same
@@ -35,6 +36,13 @@ spec:
             "k8s:app": subnetcalc
             "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": subnetcalc-router
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
       toPorts:
         - ports:
             - port: "8000"
@@ -71,6 +79,17 @@ spec:
       toPorts:
         - ports:
             - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": mcp
+            "k8s:team": platform
+            "k8s:app": platform-mcp
+            "k8s:tier": backend
+            "k8s:app.kubernetes.io/name": platform-mcp
+      toPorts:
+        - ports:
+            - port: "8080"
               protocol: TCP
     # kube-apiserver
     - toEntities:

@@ -64,6 +64,8 @@ resource "null_resource" "sync_gitea_policies_repo" {
       SENTIMENT_UAT_PUBLIC_HOST                     = local.sentiment_uat_public_host
       SUBNETCALC_DEV_PUBLIC_HOST                    = local.subnetcalc_dev_public_host
       SUBNETCALC_UAT_PUBLIC_HOST                    = local.subnetcalc_uat_public_host
+      MCP_PUBLIC_HOST                               = local.mcp_public_host
+      MCP_CONSOLE_PUBLIC_HOST                       = local.mcp_console_public_host
       ADMIN_ROUTE_ALLOWLIST_CIDRS                   = join(",", local.admin_route_allowlist_cidrs_effective)
       GATEWAY_TRUSTED_PROXY_CIDRS                   = join(",", local.gateway_trusted_proxy_cidrs_effective)
       ENABLE_CERT_MANAGER                           = tostring(var.enable_cert_manager)
@@ -85,6 +87,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
       EXTERNAL_IMAGE_SENTIMENT_AUTH_UI              = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
       EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI         = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
       EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR      = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
+      EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT      = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
       EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
       PREFER_EXTERNAL_PLATFORM_IMAGES               = tostring(var.prefer_external_platform_images)

@@ -31,6 +31,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"compose-smoke"* ]]
+  [[ "${output}" == *"./platform-mcp/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./sentiment/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./subnetcalc/tests/compose-smoke.sh"* ]]
 }

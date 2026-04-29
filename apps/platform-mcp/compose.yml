@@ -1,0 +1,79 @@
+# Compose configuration for the Platform MCP server and MCP Inspector.
+# This is the local deployability check for the MCP workload without kind.
+
+x-app-runtime-hardening: &app-runtime-hardening
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777
+
+services:
+  platform-mcp:
+    <<: *app-runtime-hardening
+    build:
+      context: ../..
+      dockerfile: apps/platform-mcp/Dockerfile
+    image: platform-mcp:compose
+    environment:
+      PLATFORM_MCP_HOST: 0.0.0.0
+      PLATFORM_MCP_PORT: "8080"
+      PLATFORM_MCP_PATH: /mcp
+      PLATFORM_MCP_LOG_FORMAT: json
+      PLATFORM_MCP_METRICS_ENABLED: "true"
+      PLATFORM_MCP_METRICS_PORT: "9090"
+      OTEL_SERVICE_NAME: platform-mcp
+      OTEL_SERVICE_NAMESPACE: platform
+      OTEL_RESOURCE_ATTRIBUTES: service.version=0.1.0,compose.service=platform-mcp
+      IDP_API_BASE_URL: ${IDP_API_BASE_URL:-}
+      SUBNETCALC_API_BASE_URL: ${SUBNETCALC_API_BASE_URL:-}
+      SENTIMENT_API_BASE_URL: ${SENTIMENT_API_BASE_URL:-}
+      HOME: /tmp
+    ports:
+      - "${PLATFORM_MCP_COMPOSE_HTTP_PORT:-8089}:8080"
+      - "${PLATFORM_MCP_COMPOSE_METRICS_PORT:-9099}:9090"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  mcp-inspector:
+    <<: *app-runtime-hardening
+    image: ghcr.io/modelcontextprotocol/inspector:0.21.2
+    environment:
+      HOST: 0.0.0.0
+      CLIENT_PORT: "6274"
+      SERVER_PORT: "6277"
+      MCP_AUTO_OPEN_ENABLED: "false"
+      MCP_PROXY_AUTH_TOKEN: ""
+      MCP_SERVER_URL: http://platform-mcp:8080/mcp
+      MCP_TRANSPORT_TYPE: streamable-http
+      HOME: /tmp
+    ports:
+      - "${MCP_INSPECTOR_COMPOSE_UI_PORT:-6274}:6274"
+      - "${MCP_INSPECTOR_COMPOSE_PROXY_PORT:-6277}:6277"
+    depends_on:
+      platform-mcp:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:6274').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s

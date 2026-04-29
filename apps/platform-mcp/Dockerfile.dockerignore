@@ -1,0 +1,8 @@
+**
+
+!apps/
+!apps/platform-mcp/
+!apps/platform-mcp/platform_mcp/
+!apps/platform-mcp/platform_mcp/**
+!apps/platform-mcp/pyproject.toml
+!apps/platform-mcp/uv.lock

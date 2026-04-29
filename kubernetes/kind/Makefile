@@ -938,7 +938,7 @@ check-sso-e2e: workflow-validate-stage
 			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	); \
 	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
-	SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: exercise-oidc-recovery
 exercise-oidc-recovery:
@@ -969,6 +969,7 @@ gitea-sync: workflow-validate-stage
 	GITEA_PASSWORD="$${GITEA_PASSWORD:-$${PLATFORM_ADMIN_PASSWORD}}" \
 	GITEA_LOCAL_ACCESS_MODE="$${GITEA_LOCAL_ACCESS_MODE:-nodeport}" \
 	GITEA_SYNC_TFVARS_FILE="$$sync_stage_file" \
+	GITEA_SYNC_TARGET_TFVARS_FILE="$${GITEA_SYNC_TARGET_TFVARS_FILE:-$(KIND_OPERATOR_OVERRIDES_FILE)}" \
 	SSH_PRIVATE_KEY_PATH="$${SSH_PRIVATE_KEY_PATH:-$(STACK_RUNTIME_DIR)/policies-repo.id_ed25519}" \
 	STACK_DIR="$$stack_path" \
 	KUBECONFIG="$(KUBECONFIG_PATH)" \

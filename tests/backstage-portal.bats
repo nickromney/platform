@@ -199,6 +199,7 @@ assert production["techdocs"]["generator"]["runIn"] == "local"
 
 targets = {loc["target"] for loc in production["catalog"]["locations"]}
 assert "./catalog/entities.yaml" in targets
+assert "./catalog/apps/platform-mcp/catalog-info.yaml" in targets
 assert "./catalog/apps/apim-simulator/catalog-info.yaml" in targets
 assert "./catalog/templates/platform-service/template.yaml" in targets
 
@@ -262,6 +263,7 @@ import yaml
 repo_root = Path(os.environ["REPO_ROOT"])
 catalog_files = [
     repo_root / "apps/backstage/catalog/entities.yaml",
+    repo_root / "apps/backstage/catalog/apps/platform-mcp/catalog-info.yaml",
     repo_root / "apps/subnetcalc/catalog-info.yaml",
     repo_root / "apps/subnetcalc/apim-simulator/catalog-info.yaml",
     repo_root / "apps/sentiment/catalog-info.yaml",
@@ -279,6 +281,8 @@ for name, (selector, source_path) in {
     "backstage": ("app=backstage", "apps/backstage/"),
     "idp-core": ("app=idp-core", "apps/idp-core/"),
     "hello-platform": ("app=hello-platform", "apps/hello-platform/"),
+    "platform-mcp": ("app=platform-mcp", "apps/platform-mcp/"),
+    "mcp-inspector": ("app=mcp-inspector", "apps/platform-mcp/"),
     "subnetcalc": ("app=subnetcalc", "apps/subnetcalc/"),
     "sentiment": ("app=sentiment", "apps/sentiment/"),
 }.items():
@@ -289,6 +293,21 @@ for name, (selector, source_path) in {
 
 assert entities[("Component", "backstage")]["spec"]["consumesApis"] == ["idp-api"]
 assert entities[("Component", "idp-core")]["spec"]["providesApis"] == ["idp-api"]
+assert entities[("Component", "platform-mcp")]["spec"]["dependsOn"] == [
+    "component:default/idp-core",
+    "component:default/apim-simulator",
+]
+assert entities[("Component", "platform-mcp")]["spec"]["providesApis"] == ["platform-mcp-api"]
+assert entities[("Component", "platform-mcp")]["spec"]["consumesApis"] == [
+    "idp-api",
+    "subnetcalc-api",
+    "sentiment-api",
+    "apim-simulator-gateway-api",
+]
+assert entities[("Component", "mcp-inspector")]["spec"]["dependsOn"] == [
+    "component:default/platform-mcp"
+]
+assert entities[("Component", "mcp-inspector")]["spec"]["consumesApis"] == ["platform-mcp-api"]
 assert entities[("Component", "subnetcalc")]["spec"]["dependsOn"] == [
     "component:default/idp-core",
     "component:default/apim-simulator",
@@ -306,12 +325,72 @@ assert entities[("Component", "apim-simulator")]["spec"]["providesApis"] == [
 ]
 for api_name in ["subnetcalc-api", "sentiment-api", "apim-simulator-gateway-api", "apim-simulator-management-api"]:
     assert entities[("API", api_name)]["spec"]["type"] == "openapi"
+assert entities[("API", "platform-mcp-api")]["spec"]["type"] == "openapi"
+
+platform_mcp_links = {
+    link["title"]: link["url"]
+    for link in entities[("Component", "platform-mcp")]["metadata"]["links"]
+}
+mcp_inspector_links = {
+    link["title"]: link["url"]
+    for link in entities[("Component", "mcp-inspector")]["metadata"]["links"]
+}
+assert platform_mcp_links["MCP Endpoint"] == "https://mcp.127.0.0.1.sslip.io/mcp"
+assert platform_mcp_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
+assert mcp_inspector_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
 
 print("validated Backstage catalog annotations and API relations")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated Backstage catalog annotations and API relations"* ]]
+}
+
+@test "IDP application inventory includes MCP server and inspector console" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+catalog = json.loads((repo_root / "catalog/platform-apps.json").read_text(encoding="utf-8"))
+apps = {app["name"]: app for app in catalog["applications"]}
+
+assert "platform-mcp" in apps
+assert "mcp-inspector" in apps
+
+platform_mcp = apps["platform-mcp"]
+mcp_inspector = apps["mcp-inspector"]
+
+assert platform_mcp["owner"] == "platform"
+assert platform_mcp["source"]["path"] == "apps/platform-mcp"
+assert platform_mcp["deployment"]["applications"] == ["mcp"]
+assert any(
+    env["name"] == "local"
+    and env["namespace"] == "mcp"
+    and env["route"] == "https://mcp.127.0.0.1.sslip.io/mcp"
+    for env in platform_mcp["environments"]
+)
+assert platform_mcp["scorecard"]["has_network_policy"] is True
+
+assert mcp_inspector["owner"] == "platform"
+assert mcp_inspector["source"]["path"] == "apps/platform-mcp"
+assert mcp_inspector["deployment"]["applications"] == ["mcp"]
+assert any(
+    env["name"] == "local"
+    and env["namespace"] == "mcp"
+    and env["route"] == "https://mcp-console.127.0.0.1.sslip.io"
+    for env in mcp_inspector["environments"]
+)
+assert mcp_inspector["scorecard"]["has_network_policy"] is True
+
+print("validated MCP inventory entries")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated MCP inventory entries"* ]]
 }
 
 @test "local platform image flow builds Backstage instead of the old React portal" {
@@ -369,7 +448,7 @@ assert template["metadata"]["title"] == "Create a Platform App"
 assert "frontend/backend" in template["metadata"]["description"]
 
 step_actions = [step["action"] for step in template["spec"]["steps"]]
-assert step_actions == ["fetch:template", "gitea:repo:publish", "debug:log"], step_actions
+assert step_actions == ["fetch:template", "gitea:repo:publish", "catalog:register", "debug:log"], step_actions
 
 parameters = template["spec"]["parameters"]
 all_properties = {
@@ -393,6 +472,7 @@ expected_files = {
     "kubernetes/base/frontend.yaml",
     "kubernetes/base/backend.yaml",
     "kubernetes/base/kustomization.yaml",
+    "kubernetes/observability/prometheus-scrape.yaml",
     "kubernetes/policies/cilium-frontend-backend.yaml",
     "kubernetes/policies/kyverno-container-baseline.yaml",
     "observability/grafana-dashboard.json",
@@ -402,6 +482,10 @@ assert not missing, missing
 
 frontend = (content_dir / "apps/frontend/Dockerfile").read_text(encoding="utf-8")
 backend = (content_dir / "apps/backend/Dockerfile").read_text(encoding="utf-8")
+backend_server = (content_dir / "apps/backend/server.js").read_text(encoding="utf-8")
+backend_manifest = yaml.safe_load_all((content_dir / "kubernetes/base/backend.yaml").read_text(encoding="utf-8"))
+backend_docs = list(backend_manifest)
+prometheus_scrape = yaml.safe_load((content_dir / "kubernetes/observability/prometheus-scrape.yaml").read_text(encoding="utf-8"))
 cilium_docs = list(yaml.safe_load_all((content_dir / "kubernetes/policies/cilium-frontend-backend.yaml").read_text(encoding="utf-8")))
 kyverno = yaml.safe_load((content_dir / "kubernetes/policies/kyverno-container-baseline.yaml").read_text(encoding="utf-8"))
 dashboard = (content_dir / "observability/grafana-dashboard.json").read_text(encoding="utf-8")
@@ -413,6 +497,20 @@ assert "FROM dhi.io/nginx:1.29.5-debian13" in frontend
 assert "USER 65532:65532" in frontend
 assert "FROM dhi.io/node:22-debian13" in backend
 assert "USER 1000:1000" in backend
+assert "renderMetrics()" in backend_server
+assert "http_requests_total" in backend_server
+assert "JSON.stringify" in backend_server
+backend_deployment = backend_docs[0]
+backend_template = backend_deployment["spec"]["template"]
+assert backend_template["metadata"]["annotations"]["prometheus.io/scrape"] == "true"
+assert backend_template["metadata"]["annotations"]["prometheus.io/path"] == "/metrics"
+assert backend_template["metadata"]["annotations"]["prometheus.io/port"] == "${{ values.backendPort }}"
+backend_env = {item["name"]: item["value"] for item in backend_template["spec"]["containers"][0]["env"]}
+assert backend_env["OTEL_SERVICE_NAME"] == "${{ values.name }}-backend"
+assert backend_env["OTEL_SERVICE_NAMESPACE"] == "${{ values.team }}"
+assert "service.version=0.1.0" in backend_env["OTEL_RESOURCE_ATTRIBUTES"]
+assert prometheus_scrape["kind"] == "ConfigMap"
+assert "job_name: ${{ values.name }}-backend" in prometheus_scrape["data"]["prometheus-additional-scrape.yaml"]
 assert [doc["kind"] for doc in cilium_docs] == ["CiliumNetworkPolicy", "CiliumNetworkPolicy"]
 assert {doc["metadata"]["name"] for doc in cilium_docs} == {
     "${{ values.name }}-backend-ingress",
@@ -421,7 +519,11 @@ assert {doc["metadata"]["name"] for doc in cilium_docs} == {
 assert kyverno["kind"] == "Policy"
 assert "require-drop-all-capabilities" in str(kyverno)
 assert "${{ values.name }}-golden-signals" in dashboard
+assert "victoriametrics-logs-datasource" in dashboard
+assert "k8s.namespace.name" in dashboard
+assert "http_request_duration_seconds_sum" in dashboard
 assert any(link["title"] == "Grafana Golden Signals" for link in catalog["metadata"]["links"])
+assert any(link["title"] == "Victoria Logs" for link in catalog["metadata"]["links"])
 assert catalog["metadata"]["annotations"]["backstage.io/source-location"] == "url:https://gitea.admin.127.0.0.1.sslip.io/platform/${{ values.name }}/"
 assert catalog["metadata"]["annotations"]["backstage.io/kubernetes-label-selector"] == "app=${{ values.name }}"
 assert catalog["spec"]["providesApis"] == ["${{ values.name }}-api"]
@@ -489,4 +591,83 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated Backstage Gitea publish action wiring"* ]]
+}
+
+@test "Backstage workload is visible in Grafana, Victoria Logs, and OTEL metadata" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/idp/all.yaml").read_text(encoding="utf-8"))
+    if doc
+]
+backstage = next(doc for doc in docs if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "backstage")
+template = backstage["spec"]["template"]
+annotations = template["metadata"]["annotations"]
+assert annotations["prometheus.io/scrape"] == "true"
+assert annotations["prometheus.io/path"] == "/metrics"
+assert annotations["prometheus.io/port"] == "9465"
+
+container = backstage["spec"]["template"]["spec"]["containers"][0]
+env = {item["name"]: item["value"] for item in container["env"] if "value" in item}
+ports = {port["name"]: port["containerPort"] for port in container["ports"]}
+
+assert env["OTEL_SERVICE_NAME"] == "backstage"
+assert env["OTEL_SERVICE_NAMESPACE"] == "platform"
+assert "k8s.namespace.name=idp" in env["OTEL_RESOURCE_ATTRIBUTES"]
+assert env["BACKSTAGE_CATALOG_METRICS_PORT"] == "9465"
+assert ports["metrics"] == 9465
+
+grafana = (repo_root / "terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml").read_text(encoding="utf-8")
+observability_tf = (repo_root / "terraform/kubernetes/observability.tf").read_text(encoding="utf-8")
+backend_metrics = (repo_root / "apps/backstage/packages/backend/src/modules/catalogMetrics.ts").read_text(encoding="utf-8")
+backend_index = (repo_root / "apps/backstage/packages/backend/src/index.ts").read_text(encoding="utf-8")
+prometheus = (repo_root / "terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml").read_text(encoding="utf-8")
+idp_policy = (repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/idp-hardened.yaml").read_text(encoding="utf-8")
+observability_policy = (repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/observability-hardened.yaml").read_text(encoding="utf-8")
+
+for text in (grafana, observability_tf):
+    assert "backstage-observability" in text
+    assert "Backstage Observability" in text
+    assert "Backstage Catalog Observability" in text
+    assert "Catalog APIs" in text
+    assert "Services With Kubernetes Selector" in text
+    assert "Services Missing Kubernetes Selector" in text
+    assert "Unreadable Catalog Locations" in text
+    assert "backstage_catalog_apis_total" in text
+    assert "backstage_catalog_service_annotations_total" in text
+    assert "backstage_catalog_entities_total" in text
+    assert "max by (kind) (backstage_catalog_entities_total)" in text
+    assert "max by (type) (backstage_catalog_components_total)" in text
+    assert "max by (annotation, state) (backstage_catalog_service_annotations_total)" in text
+    assert "k8s.namespace.name:idp backstage" in text
+    assert "kube_deployment_status_replicas_available" in text
+    assert "deployment=\\\"backstage\\\"" in text
+
+assert "startCatalogMetricsServer()" in backend_index
+assert "backstage_catalog_apis_total" in backend_metrics
+assert "backstage_catalog_service_annotations_total" in backend_metrics
+assert "backstage.io/kubernetes-label-selector" in backend_metrics
+assert "- job_name: backstage-catalog" in prometheus
+assert "9465" in idp_policy
+assert "9465" in observability_policy
+
+catalog = (repo_root / "apps/backstage/catalog/entities.yaml").read_text(encoding="utf-8")
+assert "backstage-observability" in catalog
+
+print("validated Backstage observability wiring")
+PY
+
+  if [ "${status}" -ne 0 ]; then
+    printf '%s\n' "${output}"
+  fi
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Backstage observability wiring"* ]]
 }
