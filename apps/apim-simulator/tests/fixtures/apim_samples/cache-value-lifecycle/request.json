@@ -1,0 +1,57 @@
+{
+  "steps": [
+    {
+      "method": "GET",
+      "path": "/sample",
+      "headers": {
+        "x-user": "alice"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sample",
+      "headers": {
+        "x-user": "alice"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sample",
+      "headers": {
+        "x-user": "alice",
+        "x-mode": "drop"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sample",
+      "headers": {
+        "x-user": "alice"
+      }
+    }
+  ],
+  "mock_responses": [
+    {
+      "match": {
+        "url": "http://upstream/"
+      },
+      "response": {
+        "status_code": 200,
+        "json": {
+          "call": 1
+        }
+      }
+    },
+    {
+      "match": {
+        "url": "http://upstream/"
+      },
+      "response": {
+        "status_code": 200,
+        "json": {
+          "call": 2
+        }
+      }
+    }
+  ]
+}

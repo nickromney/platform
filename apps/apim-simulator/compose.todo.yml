@@ -1,0 +1,118 @@
+x-python-build-args: &python-build-args
+  PYTHON_BUILD_IMAGE: ${PYTHON_BUILD_IMAGE:-dhi.io/python:3.13-debian13-dev}
+  PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
+  APP_UID: ${APP_UID:-65532}
+  APP_GID: ${APP_GID:-65532}
+
+x-python-service-hardening: &python-service-hardening
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-nginx-service-hardening: &nginx-service-hardening
+  init: true
+  read_only: true
+  user: "${NGINX_UID:-101}:${NGINX_GID:-101}"
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,uid=${NGINX_UID:-101},gid=${NGINX_GID:-101},mode=1777
+    - /var/cache/nginx:rw,noexec,nosuid,nodev,uid=${NGINX_UID:-101},gid=${NGINX_GID:-101},mode=0755
+    - /run/nginx:rw,noexec,nosuid,nodev,uid=${NGINX_UID:-101},gid=${NGINX_GID:-101},mode=0755
+    - /var/run:rw,noexec,nosuid,nodev,uid=${NGINX_UID:-101},gid=${NGINX_GID:-101},mode=0755
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+name: apim-simulator-todo
+
+services:
+  todo-api:
+    <<: *python-service-hardening
+    build:
+      context: .
+      dockerfile: examples/todo-app/api-fastapi-container-app/Dockerfile
+      args: *python-build-args
+    image: apim-simulator-todo-api:latest
+    expose:
+      - "8000"
+    environment:
+      OTEL_SERVICE_NAME: todo-api
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - todo
+
+  apim-simulator:
+    <<: *python-service-hardening
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args: *python-build-args
+    image: apim-simulator:latest
+    ports:
+      - "${APIM_GATEWAY_PORT:-8000}:8000"
+    environment:
+      APIM_CONFIG_PATH: /tmp/todo-apim-config.json
+      APIM_CONFIG_SOURCE_PATH: /app/examples/todo-app/apim.json
+      APIM_CONFIG_TEMPLATE_SUBSTITUTE: "true"
+      TODO_FRONTEND_ORIGIN_LOCALHOST: ${TODO_FRONTEND_ORIGIN_LOCALHOST:-http://localhost:3000}
+      TODO_FRONTEND_ORIGIN_LOOPBACK: ${TODO_FRONTEND_ORIGIN_LOOPBACK:-http://127.0.0.1:3000}
+      OTEL_SERVICE_NAME: apim-simulator
+    depends_on:
+      todo-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/apim/health')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - todo
+
+  todo-frontend:
+    <<: *nginx-service-hardening
+    build:
+      context: ./examples/todo-app/frontend-astro
+      dockerfile: Dockerfile
+      args:
+        NGINX_RUNTIME_IMAGE: ${NGINX_RUNTIME_IMAGE:-dhi.io/nginx:1.29.5-debian13}
+        NGINX_UID: ${NGINX_UID:-101}
+        NGINX_GID: ${NGINX_GID:-101}
+    image: apim-simulator-todo-frontend:latest
+    ports:
+      - "${TODO_FRONTEND_PORT:-3000}:8080"
+    environment:
+      API_BASE_URL: ${TODO_APIM_PUBLIC_BASE_URL:-http://localhost:8000}
+      APIM_SUBSCRIPTION_KEY: todo-demo-key
+      GRAFANA_BASE_URL: "${TODO_GRAFANA_BASE_URL:-https://lgtm.apim.127.0.0.1.sslip.io:8443}"
+      OBSERVABILITY_DASHBOARD_URL: "${TODO_OBSERVABILITY_DASHBOARD_URL:-https://lgtm.apim.127.0.0.1.sslip.io:8443/d/apim-simulator-overview/apim-simulator-overview}"
+    depends_on:
+      apim-simulator:
+        condition: service_healthy
+    networks:
+      - todo
+
+networks:
+  todo:

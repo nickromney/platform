@@ -133,7 +133,7 @@ catalog:
       target: ../../../subnetcalc/catalog-info.yaml
 
     - type: file
-      target: ../../../subnetcalc/apim-simulator/catalog-info.yaml
+      target: ../../../apim-simulator/catalog-info.yaml
 
     - type: file
       target: ../../../sentiment/catalog-info.yaml

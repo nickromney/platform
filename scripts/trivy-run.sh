@@ -29,7 +29,7 @@ EOF
 }
 
 print_dry_run() {
-  shell_cli_print_dry_run_command trivy --cache-dir "${TRIVY_CACHE_DIR}" "${trivy_args[@]}"
+  shell_cli_print_dry_run_command trivy --cache-dir "${TRIVY_CACHE_DIR}" ${trivy_args[@]+"${trivy_args[@]}"}
 }
 
 shell_cli_init_standard_flags

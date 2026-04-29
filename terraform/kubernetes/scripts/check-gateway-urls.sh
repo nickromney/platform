@@ -348,7 +348,7 @@ probe_route_urls() {
 
 probe_tls_certificate() {
   local host="$1"
-  local tmp_err cert_pem check_output rc check_rc err connect_host
+  local tmp_err cert_pem check_output rc check_rc err connect_host sans san suffix prefix
 
   TLS_CERT_OK=0
   TLS_CERT_DETAIL=""
@@ -361,26 +361,62 @@ probe_tls_certificate() {
   rc=$?
   set -e
 
-  if [[ "${rc}" -ne 0 || -z "${cert_pem}" ]]; then
+  if [[ -z "${cert_pem}" ]]; then
     err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
     rm -f "${tmp_err}"
     TLS_CERT_DETAIL="certificate read failed${err:+: ${err}}"
     return 0
   fi
 
-  set +e
-  check_output="$(printf '%s\n' "${cert_pem}" | openssl x509 -noout -checkhost "${host}" 2>>"${tmp_err}")"
-  check_rc=$?
-  set -e
+  if openssl x509 -help 2>&1 | grep -q -- "-checkhost"; then
+    set +e
+    check_output="$(printf '%s\n' "${cert_pem}" | openssl x509 -noout -checkhost "${host}" 2>>"${tmp_err}")"
+    check_rc=$?
+    set -e
+    err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+    rm -f "${tmp_err}"
+
+    if [[ "${check_rc}" -eq 0 ]]; then
+      TLS_CERT_OK=1
+      TLS_CERT_DETAIL="${check_output}"
+    else
+      TLS_CERT_DETAIL="${check_output:-hostname mismatch}${err:+ (${err})}"
+    fi
+    return 0
+  fi
+
+  sans="$(
+    printf '%s\n' "${cert_pem}" \
+      | openssl x509 -noout -text 2>>"${tmp_err}" \
+      | awk '
+          /Subject Alternative Name/ { getline; gsub(/,/, "\n"); print }
+        ' \
+      | sed -n 's/.*DNS:\([^[:space:]]*\).*/\1/p'
+  )"
   err="$(tr '\n' ' ' <"${tmp_err}" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
   rm -f "${tmp_err}"
 
-  if [[ "${check_rc}" -eq 0 ]]; then
-    TLS_CERT_OK=1
-    TLS_CERT_DETAIL="${check_output}"
-  else
-    TLS_CERT_DETAIL="${check_output:-hostname mismatch}${err:+ (${err})}"
-  fi
+  while IFS= read -r san; do
+    [[ -n "${san}" ]] || continue
+    if [[ "${san}" == "${host}" ]]; then
+      TLS_CERT_OK=1
+      TLS_CERT_DETAIL="hostname ${host} matches certificate SAN ${san}"
+      return 0
+    fi
+    if [[ "${san}" == \*.* ]]; then
+      suffix="${san#\*}"
+      if [[ "${host}" == *"${suffix}" ]]; then
+        prefix="${host%"${suffix}"}"
+        if [[ -n "${prefix}" && "${prefix}" != *.* ]]; then
+          TLS_CERT_OK=1
+          TLS_CERT_DETAIL="hostname ${host} matches certificate SAN ${san}"
+          return 0
+        fi
+      fi
+    fi
+  done <<< "${sans}"
+
+  TLS_CERT_DETAIL="hostname mismatch${err:+ (${err})}"
 }
 
 probe_route_certificates() {
@@ -395,7 +431,7 @@ probe_route_certificates() {
   local -a seen_hosts=()
   for entry in "${ROUTE_ENTRIES[@]}"; do
     host="${entry%%|*}"
-    if array_contains "${host}" "${seen_hosts[@]}"; then
+    if array_contains "${host}" ${seen_hosts[@]+"${seen_hosts[@]}"}; then
       continue
     fi
     seen_hosts+=("${host}")

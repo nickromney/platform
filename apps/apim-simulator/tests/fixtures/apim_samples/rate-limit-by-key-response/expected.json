@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "status_code": 200,
+      "headers": {
+        "x-remaining": "0",
+        "x-total": "1"
+      }
+    },
+    {
+      "status_code": 429
+    }
+  ],
+  "upstream_call_count": 1
+}

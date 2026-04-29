@@ -32,12 +32,12 @@ list_yaml_files() {
       '*.yaml' \
       '*.yml' \
       '.yamllint' \
-      ':(exclude)apps/subnetcalc/apim-simulator/**'
+      ':(exclude)apps/apim-simulator/**'
     return 0
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/subnetcalc/apim-simulator" \) -prune \
+    \( -path '*/.git' -o -path '*/.run' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/apim-simulator" \) -prune \
     -o \( -type f \( -name '*.yaml' -o -name '*.yml' -o -name '.yamllint' \) -print0 \) | sort -z
 }
 

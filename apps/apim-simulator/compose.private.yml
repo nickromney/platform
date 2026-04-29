@@ -1,0 +1,26 @@
+services:
+  smoke-runner:
+    image: ${SMOKE_RUNNER_IMAGE:-dhi.io/python:3.13-debian13}
+    init: true
+    read_only: true
+    user: "${APP_UID:-65532}:${APP_GID:-65532}"
+    profiles:
+      - smoke
+    working_dir: /work
+    environment:
+      HOME: /tmp
+      PIP_NO_CACHE_DIR: "1"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=${APP_UID:-65532},gid=${APP_GID:-65532},mode=1777
+      - /run/smoke:rw,exec,nosuid,nodev,uid=${APP_UID:-65532},gid=${APP_GID:-65532},mode=700
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - .:/work:ro
+    networks:
+      - apim
+
+networks:
+  apim:

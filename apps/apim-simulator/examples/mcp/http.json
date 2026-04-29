@@ -1,0 +1,50 @@
+{
+  "allowed_origins": [
+    "${APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE}",
+    "${APIM_ALLOWED_ORIGIN_VITE}",
+    "${APIM_ALLOWED_ORIGIN_GATEWAY}"
+  ],
+  "allow_anonymous": true,
+  "trace_enabled": true,
+  "tenant_access": {
+    "enabled": true,
+    "primary_key": "local-dev-tenant-key",
+    "secondary_key": "local-dev-tenant-key-secondary"
+  },
+  "products": {
+    "mcp": {
+      "name": "MCP",
+      "description": "Subscription-protected MCP example product",
+      "require_subscription": true
+    }
+  },
+  "subscription": {
+    "required": true,
+    "header_names": ["Ocp-Apim-Subscription-Key", "X-Ocp-Apim-Subscription-Key"],
+    "subscriptions": {
+      "mcp-demo": {
+        "id": "sub-mcp-demo",
+        "name": "mcp-demo",
+        "keys": {"primary": "mcp-demo-key", "secondary": "mcp-demo-key-secondary"},
+        "products": ["mcp"],
+        "created_by": "publisher"
+      }
+    }
+  },
+  "routes": [
+    {
+      "name": "edge-debug",
+      "path_prefix": "/__edge",
+      "upstream_base_url": "http://mock-backend:8080",
+      "upstream_path_prefix": "/api",
+      "product": "mcp"
+    },
+    {
+      "name": "mcp-server",
+      "path_prefix": "/",
+      "upstream_base_url": "http://mcp-server:8080",
+      "upstream_path_prefix": "",
+      "product": "mcp"
+    }
+  ]
+}

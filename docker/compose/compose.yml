@@ -59,7 +59,7 @@ services:
       GITEA_PASSWORD: compose
     volumes:
       - ../../apps/subnetcalc:/app/catalog/apps/subnetcalc:ro
-      - ../../apps/subnetcalc/apim-simulator:/app/catalog/apps/apim-simulator:ro
+      - ../../apps/apim-simulator:/app/catalog/apps/apim-simulator:ro
       - ../../apps/sentiment:/app/catalog/apps/sentiment:ro
     healthcheck:
       test:

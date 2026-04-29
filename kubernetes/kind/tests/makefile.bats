@@ -285,12 +285,11 @@ setup() {
 
 @test "Backstage demo app catalog entries are owned by the apps" {
   subnetcalc_catalog="${REPO_ROOT}/apps/subnetcalc/catalog-info.yaml"
-  apim_catalog="${REPO_ROOT}/apps/subnetcalc/apim-simulator/catalog-info.yaml"
+  apim_catalog="${REPO_ROOT}/apps/apim-simulator/catalog-info.yaml"
   sentiment_catalog="${REPO_ROOT}/apps/sentiment/catalog-info.yaml"
   dev_config="${REPO_ROOT}/apps/backstage/app-config.yaml"
   prod_config="${REPO_ROOT}/apps/backstage/app-config.production.yaml"
   image_build="${REPO_ROOT}/kubernetes/kind/scripts/build-local-platform-images.sh"
-  vendor_metadata="${REPO_ROOT}/apps/subnetcalc/apim-simulator.vendor.json"
 
   run grep -Fn 'backstage.io/techdocs-ref: dir:.' "${subnetcalc_catalog}"
   [ "${status}" -eq 0 ]
@@ -302,12 +301,6 @@ setup() {
   [ "${status}" -eq 0 ]
 
   run grep -Fn 'apim-simulator-management-api' "${apim_catalog}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn '"catalog-info.yaml"' "${vendor_metadata}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn '"backstage/"' "${vendor_metadata}"
   [ "${status}" -eq 0 ]
 
   run grep -Fn 'components:' "${subnetcalc_catalog}"
@@ -325,7 +318,7 @@ setup() {
   run grep -Fn '../../../subnetcalc/catalog-info.yaml' "${dev_config}"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn '../../../subnetcalc/apim-simulator/catalog-info.yaml' "${dev_config}"
+  run grep -Fn '../../../apim-simulator/catalog-info.yaml' "${dev_config}"
   [ "${status}" -eq 0 ]
 
   run grep -Fn './catalog/apps/subnetcalc/catalog-info.yaml' "${prod_config}"

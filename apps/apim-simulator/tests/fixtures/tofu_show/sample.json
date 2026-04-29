@@ -1,0 +1,153 @@
+{
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "azurerm_api_management_api_version_set.sample",
+          "type": "azurerm_api_management_api_version_set",
+          "name": "sample-version-set",
+          "values": {
+            "id": "/subscriptions/test/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim/apiVersionSets/sample-version-set",
+            "display_name": "Sample Version Set",
+            "versioning_scheme": "Header",
+            "version_header_name": "x-api-version"
+          }
+        },
+        {
+          "address": "azurerm_api_management_named_value.host",
+          "type": "azurerm_api_management_named_value",
+          "name": "host",
+          "values": {
+            "name": "host",
+            "display_name": "backend-host",
+            "value": "backend.example.test",
+            "secret": false
+          }
+        },
+        {
+          "address": "azurerm_api_management_named_value.secret",
+          "type": "azurerm_api_management_named_value",
+          "name": "secret",
+          "values": {
+            "name": "secret",
+            "display_name": "backend-secret",
+            "secret": true,
+            "value_from_key_vault": [
+              {
+                "secret_id": "/subscriptions/test/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/demo/secrets/backend-secret"
+              }
+            ]
+          }
+        },
+        {
+          "address": "azurerm_api_management_backend.sample",
+          "type": "azurerm_api_management_backend",
+          "name": "sample-backend",
+          "values": {
+            "name": "sample-backend",
+            "url": "https://{{backend-host}}/api",
+            "credentials": [
+              {
+                "authorization": [
+                  {
+                    "scheme": "Bearer",
+                    "parameter": "{{backend-secret}}"
+                  }
+                ],
+                "header": {
+                  "x-backend-name": "sample"
+                },
+                "query": {
+                  "api-version": "2024-01-01"
+                },
+                "certificate": ["ABC123"]
+              }
+            ]
+          }
+        },
+        {
+          "address": "azurerm_api_management_product.sample",
+          "type": "azurerm_api_management_product",
+          "name": "sample",
+          "values": {
+            "product_id": "sample-product",
+            "display_name": "Sample Product",
+            "subscription_required": true
+          }
+        },
+        {
+          "address": "azurerm_api_management_subscription.sample",
+          "type": "azurerm_api_management_subscription",
+          "name": "sample",
+          "values": {
+            "subscription_id": "sample-subscription",
+            "display_name": "Sample Subscription",
+            "primary_key": "sample-primary",
+            "secondary_key": "sample-secondary",
+            "product_id": "sample-product"
+          }
+        },
+        {
+          "address": "azurerm_api_management_api.sample",
+          "type": "azurerm_api_management_api",
+          "name": "sample",
+          "values": {
+            "name": "sample-api",
+            "path": "sample",
+            "service_url": "https://backend.example.test/api",
+            "version": "v1",
+            "version_set_id": "/subscriptions/test/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim/apiVersionSets/sample-version-set",
+            "subscription_key_parameter_names": [
+              {
+                "header": "X-Sample-Key",
+                "query": "sample-key"
+              }
+            ],
+            "import": [
+              {
+                "content_format": "openapi+json",
+                "content_value": "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"Sample\",\"version\":\"1.0.0\"},\"paths\":{\"/health\":{\"get\":{\"operationId\":\"health\"}},\"/widgets\":{\"post\":{\"operationId\":\"createWidget\"}}}}"
+              }
+            ]
+          }
+        },
+        {
+          "address": "azurerm_api_management_product_api.sample",
+          "type": "azurerm_api_management_product_api",
+          "name": "sample",
+          "values": {
+            "product_id": "sample-product",
+            "api_name": "sample-api"
+          }
+        },
+        {
+          "address": "azurerm_api_management_policy.gateway",
+          "type": "azurerm_api_management_policy",
+          "name": "gateway",
+          "values": {
+            "xml_content": "<policies><inbound><set-variable name=\"origin\" value=\"{path}\" /></inbound><backend /><outbound /><on-error /></policies>"
+          }
+        },
+        {
+          "address": "azurerm_api_management_api_policy.sample",
+          "type": "azurerm_api_management_api_policy",
+          "name": "sample",
+          "values": {
+            "api_name": "sample-api",
+            "xml_content": "<policies><inbound><validate-jwt header-name=\"Authorization\" require-scheme=\"Bearer\" output-token-variable-name=\"jwt\"><openid-config url=\"https://issuer.example/.well-known/openid-configuration\" /><audiences><audience>sample-api</audience></audiences></validate-jwt><set-backend-service backend-id=\"sample-backend\" /></inbound><backend /><outbound /><on-error /></policies>"
+          }
+        },
+        {
+          "address": "azurerm_api_management_api_operation_policy.sample",
+          "type": "azurerm_api_management_api_operation_policy",
+          "name": "sample",
+          "values": {
+            "api_name": "sample-api",
+            "operation_id": "health",
+            "xml_content": "<policies><inbound><send-request mode=\"new\" response-variable-name=\"probe\" timeout=\"5\" ignore-error=\"true\"><set-url>https://status.example.test/ping</set-url><set-method>GET</set-method></send-request></inbound><backend /><outbound /><on-error /></policies>"
+          }
+        }
+      ]
+    }
+  }
+}

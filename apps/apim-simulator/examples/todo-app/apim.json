@@ -1,0 +1,59 @@
+{
+  "allowed_origins": ["${TODO_FRONTEND_ORIGIN_LOCALHOST}", "${TODO_FRONTEND_ORIGIN_LOOPBACK}", "http://localhost:4321"],
+  "allow_anonymous": true,
+  "products": {
+    "todo-demo": {
+      "name": "Todo Demo",
+      "description": "Subscription-protected todo API routed through the APIM simulator.",
+      "require_subscription": true
+    }
+  },
+  "subscription": {
+    "required": true,
+    "header_names": ["Ocp-Apim-Subscription-Key", "X-Ocp-Apim-Subscription-Key"],
+    "subscriptions": {
+      "todo-demo": {
+        "id": "sub-todo-demo",
+        "name": "todo-demo",
+        "keys": {
+          "primary": "todo-demo-key",
+          "secondary": "todo-demo-key-secondary"
+        },
+        "products": ["todo-demo"],
+        "created_by": "publisher"
+      }
+    }
+  },
+  "apis": {
+    "todo-api": {
+      "name": "Todo API",
+      "path": "api",
+      "upstream_base_url": "http://todo-api:8000",
+      "upstream_path_prefix": "/api",
+      "products": ["todo-demo"],
+      "policies_xml": "<policies><inbound /><backend /><outbound><set-header name=\"x-todo-demo-policy\" exists-action=\"override\"><value>applied</value></set-header></outbound><on-error /></policies>",
+      "operations": {
+        "health": {
+          "name": "Health",
+          "method": "GET",
+          "url_template": "/health"
+        },
+        "listTodos": {
+          "name": "List Todos",
+          "method": "GET",
+          "url_template": "/todos"
+        },
+        "createTodo": {
+          "name": "Create Todo",
+          "method": "POST",
+          "url_template": "/todos"
+        },
+        "updateTodo": {
+          "name": "Update Todo",
+          "method": "PATCH",
+          "url_template": "/todos/{todo_id}"
+        }
+      }
+    }
+  }
+}

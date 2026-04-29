@@ -130,6 +130,7 @@ backstage_image_tag="$(
       apps/subnetcalc/docs \
       apps/subnetcalc/mkdocs.yml \
       apps/subnetcalc/README.md \
+      apps/apim-simulator/catalog-info.yaml \
       apps/sentiment/catalog-info.yaml \
       apps/sentiment/docs \
       apps/sentiment/mkdocs.yml \

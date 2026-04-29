@@ -131,7 +131,7 @@ copy_backstage_app_catalog() {
 
 copy_backstage_apim_simulator_catalog() {
   local context_dir="$1"
-  local source_file="${REPO_ROOT}/apps/subnetcalc/apim-simulator/catalog-info.yaml"
+  local source_file="${REPO_ROOT}/apps/apim-simulator/catalog-info.yaml"
   local target_dir="${context_dir}/catalog/apps/apim-simulator"
 
   mkdir -p "${target_dir}"

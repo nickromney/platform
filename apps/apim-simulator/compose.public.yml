@@ -1,0 +1,4 @@
+services:
+  apim-simulator:
+    ports:
+      - "${APIM_GATEWAY_PORT:-8000}:8000"

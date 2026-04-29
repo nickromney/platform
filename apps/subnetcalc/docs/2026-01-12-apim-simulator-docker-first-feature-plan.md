@@ -11,14 +11,14 @@ Primary reference:
 
 Repo intent references:
 
-- `subnetcalc/apim-simulator/` (config-driven gateway simulator)
+- `apim-simulator/` (config-driven gateway simulator)
 - `terraform/terragrunt/platform/apps/azure-apim-sim/apim-service.yaml` (Kubernetes service wiring)
 
 ## Current state (what exists today)
 
 ### Lightweight simulator
 
-`subnetcalc/apim-simulator/` (stack12):
+`apim-simulator/` (stack12):
 
 - Validates OIDC JWT (issuer/audience via JWKS)
 - Optional single `APIM_SUBSCRIPTION_KEY`
@@ -27,7 +27,7 @@ Repo intent references:
 
 ### “Full” simulator
 
-`subnetcalc/apim-simulator/`:
+`apim-simulator/`:
 
 - Config-driven routes (`path_prefix` -> upstream)
 - Products + subscriptions (primary/secondary keys) and product entitlements
@@ -250,7 +250,7 @@ MVP import targets:
 ### Phase 1 (core realism)
 
 - Pick one canonical simulator implementation (avoid divergence)
-- Decision: `github.com/nickromney/apim-simulator` is canonical; `platform/apps/subnetcalc/apim-simulator/` is the vendored mirror pinned to a release tag
+- Decision: `github.com/nickromney/apim-simulator` is canonical; `platform/apps/apim-simulator/` is the vendored mirror pinned to a release tag
 - Versioned config schema
 - Policy pipeline + validate-jwt + subscription key semantics
 

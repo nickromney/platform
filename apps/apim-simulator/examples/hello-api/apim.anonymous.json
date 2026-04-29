@@ -1,0 +1,37 @@
+{
+  "allowed_origins": [
+    "${APIM_ALLOWED_ORIGIN_BROWSER_LOCALHOST}",
+    "${APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE}",
+    "${APIM_ALLOWED_ORIGIN_VITE}",
+    "${APIM_ALLOWED_ORIGIN_GATEWAY}"
+  ],
+  "allow_anonymous": true,
+  "products": {
+    "hello": {
+      "name": "Hello",
+      "description": "Anonymous hello API for local APIM learning",
+      "require_subscription": false
+    }
+  },
+  "apis": {
+    "hello-api": {
+      "name": "Hello API",
+      "path": "api",
+      "upstream_base_url": "http://hello-api:8000",
+      "upstream_path_prefix": "/api",
+      "products": ["hello"],
+      "operations": {
+        "health": {
+          "name": "Health",
+          "method": "GET",
+          "url_template": "/health"
+        },
+        "hello": {
+          "name": "Hello",
+          "method": "GET",
+          "url_template": "/hello"
+        }
+      }
+    }
+  }
+}

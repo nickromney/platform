@@ -66,12 +66,12 @@ list_markdown_files() {
     "${GIT_BIN}" -C "${REPO_ROOT}" ls-files -z -- \
       '*.md' \
       '*.markdown' \
-      ':(exclude)apps/subnetcalc/apim-simulator/**'
+      ':(exclude)apps/apim-simulator/**'
     return 0
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/subnetcalc/apim-simulator" \) -prune \
+    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.venv' -o -path '*/.terraform' -o -path "${REPO_ROOT}/apps/apim-simulator" \) -prune \
     -o \( -type f \( -name '*.md' -o -name '*.markdown' \) -print0 \) | sort -z
 }
 

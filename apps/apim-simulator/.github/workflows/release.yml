@@ -1,0 +1,270 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      build_image:
+        description: Build the container image after creating the runtime source zip.
+        type: boolean
+        required: true
+        default: true
+      image_base:
+        description: Base image profile for manual image builds. Tag releases always use dhi.
+        type: choice
+        required: true
+        default: dhi
+        options:
+          - dhi
+          - public
+      push_image:
+        description: Push the manually built image to GHCR. Tag releases always push.
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.13"
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/apim-simulator
+
+jobs:
+  runtime-source:
+    name: Runtime Source Zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check release tag matches pyproject version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          project_version="$(
+            python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as handle:
+              print(tomllib.load(handle)["project"]["version"])
+          PY
+          )"
+          if [ "${tag_version}" != "${project_version}" ]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match pyproject version ${project_version}" >&2
+            exit 1
+          fi
+
+      - name: Build runtime source archive
+        run: python scripts/build_runtime_artifact.py --output-dir dist
+
+      - name: Upload runtime source archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: apim-simulator-runtime-source
+          path: |
+            dist/apim-simulator-runtime-*.zip
+            dist/apim-simulator-runtime-*.zip.sha256
+          if-no-files-found: error
+
+      - name: Attest runtime source archive
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-path: dist/apim-simulator-runtime-*.zip
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" dist/apim-simulator-runtime-*.zip dist/apim-simulator-runtime-*.zip.sha256 --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/apim-simulator-runtime-*.zip dist/apim-simulator-runtime-*.zip.sha256 \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+
+  image:
+    name: GHCR Image
+    if: github.event_name != 'workflow_dispatch' || inputs.build_image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: runtime-source
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build runtime image context
+        run: |
+          set -euo pipefail
+          dist_dir="${RUNNER_TEMP}/apim-simulator-dist"
+          context_dir="${RUNNER_TEMP}/apim-simulator-runtime-context"
+          python scripts/build_runtime_artifact.py --output-dir "${dist_dir}"
+          mkdir -p "${context_dir}"
+          python - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          dist_dir = Path(os.environ["RUNNER_TEMP"]) / "apim-simulator-dist"
+          context_dir = Path(os.environ["RUNNER_TEMP"]) / "apim-simulator-runtime-context"
+          archives = sorted(dist_dir.glob("apim-simulator-runtime-*.zip"))
+          if len(archives) != 1:
+              raise SystemExit(f"expected one runtime archive, found {len(archives)}")
+
+          with zipfile.ZipFile(archives[0]) as archive:
+              archive.extractall(context_dir)
+          PY
+
+      - name: Resolve image build profile
+        id: build-profile
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            image_base="dhi"
+            push_image="true"
+          else
+            image_base="${{ github.event.inputs.image_base || 'dhi' }}"
+            push_image="${{ github.event.inputs.push_image || 'false' }}"
+          fi
+
+          case "${image_base}" in
+            dhi|public)
+              ;;
+            *)
+              echo "Unsupported image_base=${image_base}" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${push_image}" in
+            true|false)
+              ;;
+            *)
+              echo "Unsupported push_image=${push_image}" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "image_base=${image_base}"
+            echo "push_image=${push_image}"
+            echo "build_args<<EOF"
+            if [ "${image_base}" = "public" ]; then
+              echo "PYTHON_BUILD_IMAGE=python:3.13-slim"
+              echo "PYTHON_RUNTIME_IMAGE=python:3.13-slim"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "Image base profile: ${image_base}"
+            echo "Push image: ${push_image}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Require Docker Hardened Images credentials
+        if: steps.build-profile.outputs.image_base == 'dhi'
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_PASSWORD: ${{ secrets.DHI_TOKEN || secrets.DHI_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DHI_USERNAME}" ] || [ -z "${DHI_PASSWORD}" ]; then
+            echo "Set DHI_USERNAME and DHI_TOKEN (or DHI_PASSWORD) repository secrets before publishing the release image." >&2
+            exit 1
+          fi
+
+      - name: Log in to Docker Hardened Images
+        if: steps.build-profile.outputs.image_base == 'dhi'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN || secrets.DHI_PASSWORD }}
+
+      - name: Verify Docker Hardened Images access
+        if: steps.build-profile.outputs.image_base == 'dhi'
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect dhi.io/python:3.13-debian13-dev >/dev/null
+          docker buildx imagetools inspect dhi.io/python:3.13-debian13 >/dev/null
+
+      - name: Log in to GHCR
+        if: steps.build-profile.outputs.push_image == 'true'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-
+
+      - name: Build and push GHCR image
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
+        with:
+          context: ${{ runner.temp }}/apim-simulator-runtime-context
+          push: ${{ steps.build-profile.outputs.push_image == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ steps.build-profile.outputs.build_args }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest GHCR image
+        if: steps.build-profile.outputs.push_image == 'true'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

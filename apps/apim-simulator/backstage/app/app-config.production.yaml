@@ -1,0 +1,27 @@
+app:
+  baseUrl: ${BACKSTAGE_BASE_URL}
+
+backend:
+  baseUrl: ${BACKSTAGE_BASE_URL}
+  listen: ':7007'
+  cors:
+    origin: ${BACKSTAGE_BASE_URL}
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: better-sqlite3
+    connection:
+      directory: /tmp/backstage
+
+catalog:
+  locations:
+    - type: file
+      target: ./catalog/apim-simulator-catalog-info.yaml
+
+    - type: file
+      target: ./catalog/apim-simulator-org.yaml
+      rules:
+        - allow: [User, Group]
+
+permission:
+  enabled: false

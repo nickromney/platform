@@ -1,0 +1,18 @@
+{
+  "steps": [
+    {
+      "method": "GET",
+      "path": "/sample",
+      "headers": {
+        "x-key": "demo"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/sample",
+      "headers": {
+        "x-key": "demo"
+      }
+    }
+  ]
+}

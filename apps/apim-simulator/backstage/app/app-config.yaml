@@ -1,0 +1,56 @@
+app:
+  title: APIM Simulator Portal
+  baseUrl: http://localhost:7007
+  packages: all
+  extensions:
+    - nav-item:search: false
+    - nav-item:user-settings: false
+    - nav-item:catalog: false
+    - nav-item:scaffolder: false
+    - nav-item:kubernetes: false
+    - page:kubernetes: false
+    - page:catalog:
+        config:
+          path: /
+
+organization:
+  name: APIM Simulator
+
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    port: 7007
+  csp:
+    connect-src: ["'self'", 'http:', 'https:']
+  cors:
+    origin: http://localhost:7007
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: better-sqlite3
+    connection:
+      directory: /tmp/backstage
+
+auth:
+  environment: development
+  providers:
+    guest:
+      dangerouslyAllowOutsideDevelopment: true
+
+catalog:
+  import:
+    entityFilename: catalog-info.yaml
+    pullRequestBranchName: backstage-integration
+  rules:
+    - allow: [Component, System, API, Resource, Location, User, Group]
+  locations:
+    - type: file
+      target: ../../../../catalog-info.yaml
+
+    - type: file
+      target: ../../catalog/org.yaml
+      rules:
+        - allow: [User, Group]
+
+permission:
+  enabled: false

@@ -18,7 +18,7 @@ TARGET_SPECS=(
   "api-fastapi-container-app|${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app|${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app/Dockerfile|platform-docker-audit/subnetcalc-api-fastapi-container-app:audit|"
   "api-fastapi-azure-function|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function/Dockerfile|platform-docker-audit/subnetcalc-api-fastapi-azure-function:audit|linux/amd64"
   "api-fastapi-azure-function-uvicorn|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn|platform-docker-audit/subnetcalc-api-fastapi-azure-function-uvicorn:audit|"
-  "apim-simulator|${REPO_ROOT}/apps/subnetcalc/apim-simulator|${REPO_ROOT}/apps/subnetcalc/apim-simulator/Dockerfile|platform-docker-audit/subnetcalc-apim-simulator:audit|"
+  "apim-simulator|${REPO_ROOT}/apps/apim-simulator|${REPO_ROOT}/apps/apim-simulator/Dockerfile|platform-docker-audit/subnetcalc-apim-simulator:audit|"
 )
 
 usage() {
@@ -39,7 +39,7 @@ preview() {
   printf 'Selected Docker build targets:\n'
   for spec in "${TARGET_SPECS[@]}"; do
     IFS='|' read -r name context dockerfile image platform <<<"${spec}"
-    if ! matches_selection "${name}" "${SELECTED_TARGETS[@]}"; then
+    if ! matches_selection "${name}" ${SELECTED_TARGETS[@]+"${SELECTED_TARGETS[@]}"}; then
       continue
     fi
     printf '  %s\n' "${name}"
@@ -81,8 +81,8 @@ matches_selection() {
 
 main() {
   shell_cli_parse_standard_only usage "$@" || exit 1
-  SELECTED_TARGETS=("${SHELL_CLI_ARGS[@]}")
-  set -- "${SELECTED_TARGETS[@]}"
+  SELECTED_TARGETS=(${SHELL_CLI_ARGS[@]+"${SHELL_CLI_ARGS[@]}"})
+  set -- ${SELECTED_TARGETS[@]+"${SELECTED_TARGETS[@]}"}
   shell_cli_maybe_execute_or_preview usage preview
 
   command -v docker >/dev/null 2>&1 || {

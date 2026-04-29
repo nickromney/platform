@@ -129,7 +129,7 @@ list_shell_scripts() {
 
     git -C "${REPO_ROOT}" ls-files -z -- \
       '*.sh' \
-      ':(exclude)apps/subnetcalc/apim-simulator/**'
+      ':(exclude)apps/apim-simulator/**'
     return 0
   fi
 
@@ -151,7 +151,7 @@ list_shell_scripts() {
   fi
 
   find "${REPO_ROOT}" \
-    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.run' -o -path '*/.terraform' -o -path '*/.venv' -o -path '*/venv' -o -path '*/dist' -o -path '*/build' -o -path "${REPO_ROOT}/apps/subnetcalc/apim-simulator" \) -prune \
+    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.run' -o -path '*/.terraform' -o -path '*/.venv' -o -path '*/venv' -o -path '*/dist' -o -path '*/build' -o -path "${REPO_ROOT}/apps/apim-simulator" \) -prune \
     -o -type f -name '*.sh' -print0 | sort -z
 }
 

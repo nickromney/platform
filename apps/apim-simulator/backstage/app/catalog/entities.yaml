@@ -1,0 +1,8 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: apim-simulator-catalog
+  description: APIM simulator local catalog entrypoint.
+spec:
+  targets:
+    - ../../../../catalog-info.yaml

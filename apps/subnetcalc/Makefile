@@ -1,7 +1,6 @@
 USE_COMMON_HELP := 1
 MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites check-docker-prerequisites clean-ports \
   up down urls logs ps \
-  vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -36,7 +35,6 @@ include $(PLATFORM_ENV_FILE)
 endif
 
 .PHONY: help prereqs test update check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
-  vendor-apim-simulator \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -51,12 +49,6 @@ DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
 CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/docs
 DEFAULT_COMPOSE_ENV := SUBNETCALC_LOCAL_PLATFORM=$(SUBNETCALC_LOCAL_PLATFORM) SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=$(SUBNETCALC_AZURE_FUNCTION_DOCKERFILE) OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 FULL_COMPOSE_PROFILES := --profile function-family --profile oidc --profile mock-easyauth
-VENDOR_APIM_SIMULATOR_SCRIPT := ./scripts/vendor-apim-simulator.sh
-VENDOR_APIM_SIMULATOR_ARGS = \
-	$(if $(APIM_SIMULATOR_SOURCE_REPO),--source "$(APIM_SIMULATOR_SOURCE_REPO)") \
-	$(if $(APIM_SIMULATOR_SOURCE_REF),--ref "$(APIM_SIMULATOR_SOURCE_REF)") \
-	$(if $(APIM_SIMULATOR_TARGET_DIR),--target "$(APIM_SIMULATOR_TARGET_DIR)") \
-	$(if $(APIM_SIMULATOR_VENDOR_METADATA_FILE),--metadata "$(APIM_SIMULATOR_VENDOR_METADATA_FILE)")
 
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
@@ -99,10 +91,6 @@ update: ## Update dependency locks across the subnetcalc app roots
 	@cd api-fastapi-container-app && uv lock --upgrade && uv sync --extra dev
 	@$(MAKE) --no-print-directory -C frontend-html-static update
 	@$(MAKE) --no-print-directory -C frontend-python-flask update
-
-##@ Vendoring
-vendor-apim-simulator: ## Refresh the vendored APIM simulator from a specific tag or commit SHA
-	@"$(VENDOR_APIM_SIMULATOR_SCRIPT)" --execute $(strip $(VENDOR_APIM_SIMULATOR_ARGS))
 
 ##@ Run
 up: check-prerequisites ## Start the default compose stack and print the local URL

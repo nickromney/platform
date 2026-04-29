@@ -5,25 +5,15 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-@test "subnetcalc make help exposes the vendoring workflow" {
+@test "subnetcalc make help exposes the compose workflows" {
   run make -C "${REPO_ROOT}/apps/subnetcalc" help
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"update"* ]]
-  [[ "${output}" == *"vendor-apim-simulator"* ]]
   [[ "${output}" == *"start-compose-happy"* ]]
   [[ "${output}" == *"start-compose-backend-container"* ]]
   [[ "${output}" == *"start-compose-frontend-react"* ]]
   [[ "${output}" == *"start-compose-full"* ]]
-}
-
-@test "subnetcalc vendor-apim-simulator delegates to the vendoring script" {
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" vendor-apim-simulator \
-    APIM_SIMULATOR_SOURCE_REPO=/tmp/apim-simulator \
-    APIM_SIMULATOR_SOURCE_REF=v0.4.0
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"\"./scripts/vendor-apim-simulator.sh\" --execute --source \"/tmp/apim-simulator\" --ref \"v0.4.0\""* ]]
 }
 
 @test "subnetcalc update delegates to bun and uv roots" {

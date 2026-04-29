@@ -265,7 +265,7 @@ catalog_files = [
     repo_root / "apps/backstage/catalog/entities.yaml",
     repo_root / "apps/backstage/catalog/apps/platform-mcp/catalog-info.yaml",
     repo_root / "apps/subnetcalc/catalog-info.yaml",
-    repo_root / "apps/subnetcalc/apim-simulator/catalog-info.yaml",
+    repo_root / "apps/apim-simulator/catalog-info.yaml",
     repo_root / "apps/sentiment/catalog-info.yaml",
 ]
 docs = []

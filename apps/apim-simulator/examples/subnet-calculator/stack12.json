@@ -1,0 +1,67 @@
+{
+  "allowed_origins": ["http://localhost:3007", "http://localhost:3008"],
+  "allow_anonymous": false,
+  "oidc": {
+    "issuer": "http://localhost:8300/realms/subnet-calculator",
+    "audience": "api-app",
+    "jwks_uri": "http://keycloak:8080/realms/subnet-calculator/protocol/openid-connect/certs"
+  },
+  "products": {
+    "subnet-calculator": {
+      "name": "Subnet Calculator",
+      "description": "Subnet Calculator API product",
+      "require_subscription": true
+    },
+    "subnet-calculator-admin": {
+      "name": "Subnet Calculator (Admin)",
+      "description": "Admin-only APIM surface (requires Keycloak realm role: admin)",
+      "require_subscription": true
+    }
+  },
+  "subscription": {
+    "required": true,
+    "header_names": ["Ocp-Apim-Subscription-Key", "X-Ocp-Apim-Subscription-Key"],
+    "subscriptions": {
+      "stack12-demo": {
+        "id": "sub-stack12-demo",
+        "name": "stack12-demo",
+        "keys": {"primary": "stack12-demo-key", "secondary": "stack12-demo-key-secondary"},
+        "products": ["subnet-calculator"],
+        "created_by": "publisher"
+      },
+      "stack12-admin": {
+        "id": "sub-stack12-admin",
+        "name": "stack12-admin",
+        "keys": {"primary": "stack12-admin-key", "secondary": "stack12-admin-key-secondary"},
+        "products": ["subnet-calculator", "subnet-calculator-admin"],
+        "created_by": "publisher"
+      }
+    },
+    "bypass": [
+      {"header": "X-Forwarded-For", "starts_with": "10.100.0"}
+    ]
+  },
+  "routes": [
+    {
+      "name": "subnet-calculator-api",
+      "path_prefix": "/api",
+      "upstream_base_url": "http://api-fastapi-keycloak:8080",
+      "upstream_path_prefix": "/api",
+      "product": "subnet-calculator",
+      "authz": {
+        "required_roles": ["user"]
+      }
+    },
+    {
+      "name": "subnet-calculator-api-admin",
+      "path_prefix": "/admin/api",
+      "upstream_base_url": "http://api-fastapi-keycloak:8080",
+      "upstream_path_prefix": "/api",
+      "product": "subnet-calculator-admin",
+      "authz": {
+        "required_roles": ["admin"]
+      },
+      "policies_xml": "<policies>\n  <inbound>\n    <rate-limit calls=\"2\" renewal-period=\"60\" scope=\"subscription\" />\n  </inbound>\n  <backend />\n  <outbound />\n  <on-error />\n</policies>"
+    }
+  ]
+}

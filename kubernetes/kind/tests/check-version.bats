@@ -156,13 +156,13 @@ EOF
 
 @test "check-version parses app cooldown policies and locked dependency versions" {
   local expected_cutoff
-  expected_cutoff="$(awk -F'\"' '/^exclude-newer = \"/ { print $2; exit }' "${REPO_ROOT}/apps/subnetcalc/apim-simulator/uv.lock")"
+  expected_cutoff="$(awk -F'\"' '/^exclude-newer = \"/ { print $2; exit }' "${REPO_ROOT}/apps/apim-simulator/uv.lock")"
 
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
     \"\$(js_dependency_cooldown_seconds '${REPO_ROOT}/apps/subnetcalc')\" \
     \"\$(bun_lock_resolved_version '${REPO_ROOT}/apps/subnetcalc/bun.lock' '@azure/static-web-apps-cli')\" \
-    \"\$(python_dependency_cooldown_cutoff '${REPO_ROOT}/apps/subnetcalc/apim-simulator')\" \
-    \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnetcalc/apim-simulator/uv.lock' 'anyio')\""
+    \"\$(python_dependency_cooldown_cutoff '${REPO_ROOT}/apps/apim-simulator')\" \
+    \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/apim-simulator/uv.lock' 'anyio')\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf '604800\n2.0.9\n%s\n4.12.1' "${expected_cutoff}")" ]

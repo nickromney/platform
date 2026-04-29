@@ -1,0 +1,419 @@
+{
+  "info": {
+    "_postman_id": "f71ca6c8-4af2-46c4-8c75-634cb810f67e",
+    "name": "todo-through-apim",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Health Through APIM",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"health returns 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"health payload is healthy\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql(\"ok\");",
+              "});",
+              "",
+              "pm.test(\"apim policy header is present\", function () {",
+              "  pm.expect(pm.response.headers.get(\"x-todo-demo-policy\")).to.eql(\"applied\");",
+              "});",
+              "",
+              "pm.test(\"apim gateway header is present\", function () {",
+              "  pm.expect(pm.response.headers.get(\"x-apim-simulator\")).to.not.eql(undefined);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Ocp-Apim-Subscription-Key",
+            "value": "{{subscriptionKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/health",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "02 CORS Preflight",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"preflight returns 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"preflight reflects allowed origin\", function () {",
+              "  pm.expect(pm.response.headers.get(\"access-control-allow-origin\")).to.eql(pm.environment.get(\"frontendOrigin\"));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "OPTIONS",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          },
+          {
+            "key": "Access-Control-Request-Method",
+            "value": "POST"
+          },
+          {
+            "key": "Access-Control-Request-Headers",
+            "value": "content-type,ocp-apim-subscription-key"
+          }
+        ],
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos"
+          ]
+        }
+      }
+    },
+    {
+      "name": "03 Missing Subscription Key",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"missing key returns 401\", function () {",
+              "  pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test(\"missing key message is explicit\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.detail).to.eql(\"Missing subscription key\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos"
+          ]
+        }
+      }
+    },
+    {
+      "name": "04 Invalid Subscription Key",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"invalid key returns 401\", function () {",
+              "  pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test(\"invalid key message is explicit\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.detail).to.eql(\"Invalid subscription key\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Ocp-Apim-Subscription-Key",
+            "value": "{{invalidSubscriptionKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos"
+          ]
+        }
+      }
+    },
+    {
+      "name": "05 List Todos",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"list returns 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"list returns items array\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(Array.isArray(body.items)).to.eql(true);",
+              "});",
+              "",
+              "pm.test(\"list carries policy header\", function () {",
+              "  pm.expect(pm.response.headers.get(\"x-todo-demo-policy\")).to.eql(\"applied\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Ocp-Apim-Subscription-Key",
+            "value": "{{subscriptionKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos"
+          ]
+        }
+      }
+    },
+    {
+      "name": "06 Create Todo",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"create returns 201\", function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"create returns an id\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.id).to.be.a(\"number\");",
+              "  pm.environment.set(\"createdTodoId\", String(body.id));",
+              "  pm.environment.set(\"createdTodoTitle\", body.title);",
+              "});",
+              "",
+              "pm.test(\"create preserves title\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.title).to.eql(\"Postman through APIM\");",
+              "  pm.expect(body.completed).to.eql(false);",
+              "});",
+              "",
+              "pm.test(\"create carries policy header\", function () {",
+              "  pm.expect(pm.response.headers.get(\"x-todo-demo-policy\")).to.eql(\"applied\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Ocp-Apim-Subscription-Key",
+            "value": "{{subscriptionKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Postman through APIM\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos"
+          ]
+        }
+      }
+    },
+    {
+      "name": "07 Toggle Created Todo",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"toggle returns 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"toggle completes the created todo\", function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.id).to.eql(Number(pm.environment.get(\"createdTodoId\")));",
+              "  pm.expect(body.completed).to.eql(true);",
+              "});",
+              "",
+              "pm.test(\"toggle carries policy header\", function () {",
+              "  pm.expect(pm.response.headers.get(\"x-todo-demo-policy\")).to.eql(\"applied\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Ocp-Apim-Subscription-Key",
+            "value": "{{subscriptionKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"completed\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos/{{createdTodoId}}",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos",
+            "{{createdTodoId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "08 List After Toggle",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"final list returns 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"final list contains the created todo\", function () {",
+              "  const body = pm.response.json();",
+              "  const createdTodoId = Number(pm.environment.get(\"createdTodoId\"));",
+              "  const createdTodo = body.items.find((item) => item.id === createdTodoId);",
+              "  pm.expect(createdTodo).to.not.eql(undefined);",
+              "  pm.expect(createdTodo.completed).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Ocp-Apim-Subscription-Key",
+            "value": "{{subscriptionKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{apimBaseUrl}}/api/todos",
+          "host": [
+            "{{apimBaseUrl}}"
+          ],
+          "path": [
+            "api",
+            "todos"
+          ]
+        }
+      }
+    }
+  ]
+}

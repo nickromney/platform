@@ -8,8 +8,7 @@ REPO_ROOT="${CHECK_VERSION_REPO_ROOT:-${ROOT_DIR}}"
 source "${ROOT_DIR}/scripts/lib/shell-cli.sh"
 
 WORKFLOW_FILE="${CHECK_VERSION_WORKFLOW_FILE:-}"
-APIM_SIMULATOR_VENDOR_METADATA_FILE="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_METADATA_FILE:-${REPO_ROOT}/apps/subnetcalc/apim-simulator.vendor.json}"
-APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/subnetcalc/apim-simulator}"
+APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/apim-simulator}"
 CHECK_VERSION_SKIP_UPSTREAM="${CHECK_VERSION_SKIP_UPSTREAM:-0}"
 CHECK_VERSION_GITHUB_API_BASE="${CHECK_VERSION_GITHUB_API_BASE:-https://api.github.com}"
 CHECK_VERSION_TIMEOUT_SECONDS="${CHECK_VERSION_TIMEOUT_SECONDS:-15}"
@@ -45,9 +44,9 @@ $(shell_cli_usage_line " [--dry-run] [--execute]")
 
 Checks:
   - repo GitHub/Gitea Actions pins remain SHA-pinned with selector comments
-  - the vendored apim-simulator tag and commit SHA are recorded
+  - the integrated apim-simulator package has coherent project metadata
   - repo-local dependency age gates stay aligned across .npmrc, bunfig.toml,
-    and uv-managed pyproject.toml files outside the vendored apim-simulator tree
+    and uv-managed pyproject.toml files
   - optional frontend package-count, initial-page, and shipped-asset budgets when local artifacts exist
 
 Options:
@@ -58,10 +57,8 @@ Options:
 Environment:
   CHECK_VERSION_REPO_ROOT=...           Override the repo root to scan.
   CHECK_VERSION_WORKFLOW_FILE=...       Override the single workflow file to validate.
-  CHECK_VERSION_APIM_SIMULATOR_VENDOR_METADATA_FILE=...
-                                        Override the APIM simulator vendoring metadata file.
   CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR=...
-                                        Override the vendored APIM simulator directory.
+                                        Override the integrated APIM simulator directory.
   CHECK_VERSION_SKIP_UPSTREAM=1         Skip network-backed upstream resolution.
   CHECK_VERSION_GITHUB_API_BASE=...     Override the GitHub API base URL.
   CHECK_VERSION_TIMEOUT_SECONDS=...     HTTP timeout in seconds. Default: 15.
@@ -239,59 +236,34 @@ workflow_files() {
 }
 
 check_apim_simulator_vendor() {
-  section "Vendored APIM Simulator"
+  section "APIM Simulator"
 
-  local output
-  if ! output="$(
-    run_inline_python "${APIM_SIMULATOR_VENDOR_METADATA_FILE}" "${APIM_SIMULATOR_VENDOR_DIR}/pyproject.toml" <<'PY'
-import json
-import re
+  local output pyproject_path dockerfile_path catalog_path
+  pyproject_path="${APIM_SIMULATOR_VENDOR_DIR}/pyproject.toml"
+  dockerfile_path="${APIM_SIMULATOR_VENDOR_DIR}/Dockerfile"
+  catalog_path="${APIM_SIMULATOR_VENDOR_DIR}/catalog-info.yaml"
+  if [[ ! -f "${pyproject_path}" || ! -f "${dockerfile_path}" || ! -f "${catalog_path}" ]]; then
+    fail_note "Integrated apim-simulator metadata is incomplete or inconsistent"
+    printf 'expected pyproject.toml, Dockerfile, and catalog-info.yaml under %s\n' "${APIM_SIMULATOR_VENDOR_DIR}"
+    return
+  fi
+  output="$(run_inline_python "${pyproject_path}" <<'PY'
 import sys
 import tomllib
 from pathlib import Path
 
-metadata_path = Path(sys.argv[1])
-pyproject_path = Path(sys.argv[2])
-
-if not metadata_path.is_file():
-    raise SystemExit(f"metadata file not found: {metadata_path}")
-if not pyproject_path.is_file():
-    raise SystemExit(f"vendored pyproject.toml not found: {pyproject_path}")
-
-metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-upstream = metadata.get("upstream", {})
-subset = metadata.get("subset", {})
-ref_kind = upstream.get("ref_kind", "")
-requested_ref = upstream.get("requested_ref", "")
-resolved_commit = upstream.get("resolved_commit", "")
-profile = subset.get("profile", "full")
-
-if not requested_ref:
-    raise SystemExit("vendored apim-simulator metadata is missing upstream.requested_ref")
-if not re.fullmatch(r"[0-9a-f]{40}", resolved_commit):
-    raise SystemExit("vendored apim-simulator metadata is missing a 40-character upstream.resolved_commit")
-
-version = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))["project"]["version"]
-if ref_kind == "tag" and requested_ref.startswith("v") and requested_ref[1:] != version:
-    raise SystemExit(
-        f"vendored apim-simulator tag {requested_ref} does not match pyproject version {version}"
-    )
-
-print(f"{ref_kind}\t{requested_ref}\t{resolved_commit}\t{version}\t{profile}")
+project = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["project"]
+if project["name"] != "apim-simulator":
+    raise SystemExit(f"unexpected project name: {project['name']}")
+print(project["version"])
 PY
-  )"; then
-    fail_note "Vendored apim-simulator metadata is incomplete or inconsistent"
+  )" || {
+    fail_note "Integrated apim-simulator metadata is incomplete or inconsistent"
     printf '%s\n' "${output}"
     return
-  fi
+  }
 
-  local ref_kind requested_ref resolved_commit version profile
-  IFS=$'\t' read -r ref_kind requested_ref resolved_commit version profile <<< "${output}"
-  if [[ "${ref_kind}" == "tag" ]]; then
-    ok "apim-simulator ${requested_ref} (${resolved_commit}) is vendored; version ${version}; profile ${profile}"
-  else
-    warn "apim-simulator was vendored from ${ref_kind} ${requested_ref} (${resolved_commit}); version ${version}; profile ${profile}"
-  fi
+  ok "apim-simulator is integrated under apps/apim-simulator; version ${output}"
 }
 
 check_npm_age_gates() {
@@ -545,7 +517,11 @@ emit_frontend_budget_lines() {
         fail_note "${message}"
         ;;
       *)
-        printf '%s\n' "${kind}${message:+	${message}}"
+        if [[ -n "${message}" ]]; then
+          printf '%s\t%s\n' "${kind}" "${message}"
+        else
+          printf '%s\n' "${kind}"
+        fi
         ;;
     esac
   done <<< "${output}"
@@ -585,8 +561,16 @@ if not frontends:
     print(f"WARN\tFrontend budget file {budget_path} defines no frontends")
     raise SystemExit(0)
 
-html_asset_pattern = re.compile(r'''(?:src|href)=["'](/?assets/[^"']+)["']''')
-static_import_pattern = re.compile(r'''(?<![\w$])import(?:(?:[\s\w{},*]+?)from\s*)?["']([^"']+)["']''')
+dq = chr(34)
+sq = chr(39)
+quote_class = f"[{dq}{sq}]"
+html_asset_pattern = re.compile(r"(?:src|href)=" + quote_class + r"(/?assets/[^" + dq + sq + r"]+)" + quote_class)
+static_import_pattern = re.compile(
+    r"(?<![\w$])import(?:(?:[\s\w{},*]+?)from\s*)?"
+    + quote_class
+    + r"([^" + dq + sq + r"]+)"
+    + quote_class
+)
 
 def measure_files(files: set[Path]) -> tuple[int, int]:
     raw_bytes = 0

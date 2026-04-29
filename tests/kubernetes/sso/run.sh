@@ -151,7 +151,7 @@ if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
-  bun run test:headed -- "${test_args[@]}"
+  bun run test:headed -- ${test_args[@]+"${test_args[@]}"}
 else
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
@@ -163,5 +163,5 @@ else
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
-  bun run test -- "${test_args[@]}"
+  bun run test -- ${test_args[@]+"${test_args[@]}"}
 fi
