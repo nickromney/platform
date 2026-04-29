@@ -1,0 +1,134 @@
+---
+title: Footguns
+description: Common mistakes, gotchas, and recovery paths for the local platform.
+---
+
+# Footguns
+
+Most failures in this repo are not mysterious Kubernetes problems. They usually
+come from crossing a boundary without realising which contract owns it: host
+runtime, kubeconfig, stage defaults, GitOps source, Gateway route, identity,
+policy, image distribution, or docs generation.
+
+Use this page as a pre-debug checklist.
+
+## Stage And Runtime Gotchas
+
+| Symptom | Likely cause | First check |
+| --- | --- | --- |
+| Stage `100` looks unhealthy | This is expected before Cilium arrives. | Continue to stage `200` or read [Stage ladder](../concepts/stage-ladder). |
+| Stage `900` takes a long time | Gateway, TLS, GitOps, SSO, and browser checks converge slowly. | Keep the apply running and use `check-health` in another shell. |
+| Lima or Slicer refuses to start | Another local runtime owns conflicting ports or state. | Run the target-specific `check-*-stopped` preflight. |
+| Slicer bootstrap fails on storage | Host Slicer config may not match the validated disk shape. | Read [Slicer walkthrough](../tutorials/slicer-walkthrough). |
+
+```bash
+make -C kubernetes/kind check-health
+make -C kubernetes/kind check-gateway-urls
+make -C kubernetes/kind check-sso-e2e
+```
+
+<Callout type="warning">
+  Do not interrupt a quiet `900 apply` only because logs pause. These applies
+  can sit in long reconciliation, TLS, OIDC, or browser-verification stretches.
+</Callout>
+
+## Kubeconfig Gotchas
+
+This repo prefers split kubeconfigs:
+
+```text
+~/.kube/kind-kind-local.yaml
+~/.kube/limavm-k3s.yaml
+~/.kube/slicer-k3s.yaml
+```
+
+If a helper cannot find the current context, pass both kubeconfig and context
+explicitly instead of assuming `~/.kube/config` is populated.
+
+The devcontainer can rewrite the kind kubeconfig endpoint to
+`host.docker.internal`; the host shell can rewrite it back to loopback. That
+shape drift is intentional when switching environments.
+
+## GitOps Gotchas
+
+Changing files in the working tree is not enough for live stage `900` GitOps
+resources. Argo CD reads the in-cluster Gitea policies repository.
+
+```bash
+make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
+```
+
+Use this after changing:
+
+- `terraform/kubernetes/apps/*`
+- `terraform/kubernetes/cluster-policies/*`
+- APIM route/config resources
+- MCP manifests
+- Backstage catalog deployment resources
+
+If the live object still differs, inspect the Argo CD app source path and
+revision before assuming Kubernetes ignored your change.
+
+## Image Gotchas
+
+Stable tags can leave Kubernetes running older code because the Deployment
+template did not change. For local platform workloads, prefer image references
+that change when rollout correctness depends on source changes.
+
+Kind, Lima, and Slicer do not distribute images the same way. Read the target
+help before debugging an image pull:
+
+```bash
+make -C kubernetes/kind help
+make -C kubernetes/lima help
+make -C kubernetes/slicer help
+```
+
+## Route And Auth Gotchas
+
+Not every protected route should redirect. Browser pages normally redirect to
+SSO; machine API routes may correctly return `401` or `403`.
+
+| Route type | Healthy unauthenticated behaviour |
+| --- | --- |
+| Browser app/admin UI | Redirect to SSO. |
+| MCP `/mcp` | `401` or `403` is acceptable. |
+| APIM-protected API | Auth failure can be the correct smoke result. |
+| Headlamp | Browser login plus Kubernetes session must both work. |
+
+The MCP route is APIM-mediated: Gateway API routes to APIM, and APIM forwards
+to `platform-mcp` in the `mcp` namespace.
+
+## Policy Gotchas
+
+Cilium flows are evidence, not automatic policy. Capture traffic, summarise it,
+then decide whether the flow should exist.
+
+Kyverno admission and Cilium runtime policy solve different problems. Kyverno
+can reject or generate Kubernetes objects; Cilium controls network behaviour
+after pods exist.
+
+## Docs Gotchas
+
+The docs site intentionally excludes generated videos, screenshots, `.next`,
+`node_modules`, and local run output. D2 source and generated SVGs are the
+normal non-text documentation assets.
+
+```bash
+bats tests/docs-site.bats tests/docs-content-current.bats
+make -C sites/docs test
+make -C sites/docs build
+```
+
+<Callout type="warning">
+  Do not move a time-stamped coding-session plan into the active docs nav
+  unless it has been rewritten as current guidance. Plans explain history;
+  contracts and runbooks explain the platform as it is now.
+</Callout>
+
+## Related Pages
+
+- [Contracts](../reference/contracts)
+- [Daily loop](./daily-loop)
+- [Troubleshooting](./troubleshooting)
+- [Health and URLs](./health-and-urls)

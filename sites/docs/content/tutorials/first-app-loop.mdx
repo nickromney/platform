@@ -1,0 +1,77 @@
+---
+title: Run an App Locally
+description: Start the sample apps without the Kubernetes stack.
+---
+
+# Run an App Locally
+
+The app directory is useful when you want to work on application behaviour
+without waiting for the Kubernetes stack. The apps mirror the platform concerns:
+browser entry, API separation, identity, routing, and local verification.
+
+This tutorial uses the two main sample apps: Subnetcalc and Sentiment.
+
+## Prepare Shared Secrets
+
+Both authenticated compose paths read values from the repo root `.env`.
+
+```bash
+cd ~/Developer/personal/platform
+cp .env.example .env
+```
+
+## Subnetcalc Fast Loop
+
+Subnetcalc is the richer domain sample. The fastest local loop starts the
+container-app backend and swaps frontends as needed.
+
+```bash
+cd ~/Developer/personal/platform/apps/subnetcalc
+make start-compose-happy
+make start-compose-backend-container
+make start-compose-frontend-vite
+```
+
+The default Vite route is usually the best frontend loop. Older Flask and
+static-HTML paths remain useful when you are comparing hosting patterns.
+
+## Sentiment Compose Loop
+
+Sentiment is smaller and identity-heavy. Its app-local compose runtime starts
+Keycloak, `oauth2-proxy`, an edge proxy, a static UI, and the sentiment API.
+
+```bash
+cd ~/Developer/personal/platform/apps/sentiment
+make up
+```
+
+Optional TLS overlay:
+
+```bash
+docker compose --env-file ../../.env -f compose.yml -f compose.tls.yml up
+```
+
+## Mental Model
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-first-app-loop-1-light.svg"
+  darkSrc="/diagrams/generated/tutorials-first-app-loop-1-dark.svg"
+  alt="First App Loop diagram"
+  width={1110}
+  height={266}
+/>
+
+The app compose loops are not replacements for the Kubernetes demo. They are
+shorter feedback loops for source changes and auth/routing experiments.
+
+<Callout type="warning">
+  Only run one compose stack that owns the same frontend or API ports at a
+  time. Several app variants intentionally demonstrate different deployment
+  shapes and will conflict if started together.
+</Callout>
+
+## Related Pages
+
+- [Subnetcalc app guide](../apps/subnetcalc)
+- [Sentiment app guide](../apps/sentiment)
+- [Daily loop](../operations/daily-loop)

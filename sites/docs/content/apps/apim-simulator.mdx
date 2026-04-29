@@ -1,0 +1,70 @@
+---
+title: APIM Simulator
+description: How the local Azure API Management simulator fits into the platform stack.
+---
+
+# APIM Simulator
+
+The APIM simulator is back inside the platform repo as an application source
+tree and a platform supporting context. It keeps its standalone compose
+workflows, but the Kubernetes stack uses it to prove API mediation, token
+audiences, subscription-key behaviour, and gateway-to-backend routing.
+
+## Where It Lives
+
+```text
+apps/apim-simulator
+apps/apim-simulator/docs
+terraform/kubernetes/apps/apim
+terraform/kubernetes/cluster-policies/cilium/projects/apim
+```
+
+The app-owned source and standalone tutorials live under
+`apps/apim-simulator/`. The Kubernetes deployment shape is rendered into the
+GitOps policy repo and reconciled by Argo CD from the `apps/apim` path.
+
+## Platform Role
+
+| Concern | Current shape |
+| --- | --- |
+| Namespace | `apim` |
+| GitOps path | `apps/apim` in the in-cluster policies repository |
+| Identity provider | Keycloak in stage `900` |
+| API audience | `apim-simulator` |
+| Route intent | Browser and machine API traffic reach APIM through Gateway API routes |
+| Policy posture | Cilium constrains ingress from the platform gateway and egress to allowed backends |
+
+APIM is not the developer portal. Backstage owns catalog and self-service UI;
+APIM owns API gateway simulation and policy behaviour.
+
+## Local Workflows
+
+Use the app-local compose paths when you are changing simulator behaviour:
+
+```bash
+make -C apps/apim-simulator help
+make -C apps/apim-simulator up
+make -C apps/apim-simulator smoke-hello
+```
+
+Use the Kubernetes stack when you need to prove the simulator as part of the
+local platform:
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-app APP=apim
+make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
+```
+
+<Callout type="warning">
+  After changing Terraform-rendered APIM manifests or policies, sync the
+  in-cluster Gitea repository before judging the live cluster. Argo CD
+  reconciles from Gitea, not directly from your working tree.
+</Callout>
+
+## Related Pages
+
+- [Application patterns](./patterns)
+- [Platform MCP](./platform-mcp)
+- [GitOps journey](../journeys/argocd-gitops)
+- [Cilium policy](../security/cilium)

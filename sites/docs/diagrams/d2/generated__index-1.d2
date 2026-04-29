@@ -1,0 +1,82 @@
+# Auto-migrated D2 source for /diagrams/generated/index-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/index-1-light.svg
+# @dark public/diagrams/generated/index-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+n01: {
+  label: "Local platform flow\nA staged route from host commands\nto reconciled workloads, with\nversion and hardening checks\naround it.\nHost commands"
+  width: 720
+  height: 220
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "make -C kubernetes/kind\npreflight, plan, apply\nRuntime"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "Kind first\nLima and Slicer paths\nIaC engine"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "Terragrunt wrapper\nOpenTofu by default\nPlatform core"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "Cilium, Hubble, Gateway API\nTLS, policy, observability\nGitOps"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n06: {
+  label: "Gitea stores rendered intent\nArgo CD reconciles drift\nApplications"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n07: {
+  label: "Subnetcalc and Sentiment\nprove the path\nVersion pins and cooldown gates"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n08: {
+  label: "keep upgrades deliberate."
+  width: 720
+  height: 104
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05
+n05 -> n06
+n06 -> n07
+n07 -> n08

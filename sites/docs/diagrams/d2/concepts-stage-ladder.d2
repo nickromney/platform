@@ -1,0 +1,91 @@
+# Source diagram for content/concepts/stage-ladder.mdx.
+# Render with scripts/generate-d2-diagrams.mjs.
+# @light public/diagrams/generated/concepts-stage-ladder-1-light.svg
+# @dark public/diagrams/generated/concepts-stage-ladder-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+s100: {
+  label: "100\nCluster bootstrap\nRuntime exists; Kind has no CNI\nyet"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s200: {
+  label: "200\nCilium\nPod networking becomes real"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s300: {
+  label: "300\nHubble\nNetwork visibility appears"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s400: {
+  label: "400\nArgo CD core\nGitOps control plane starts"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s500: {
+  label: "500\nGitea + controllers\nLocal Git server and richer Argo\nbehaviour"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s600: {
+  label: "600\nPolicies and certificates\nKyverno, cert-manager, and Cilium\npolicy controls"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s700: {
+  label: "700\nApplication repositories\nWorkload sources can be reconciled"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s800: {
+  label: "800\nGateway TLS and observability\nHeadlamp, HTTPS, Prometheus,\nGrafana, VictoriaLogs"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s900: {
+  label: "900\nSSO\nKeycloak and oauth2-proxy protect the\nadmin experience"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 12
+}
+
+s100 -> s200
+s200 -> s300
+s300 -> s400
+s400 -> s500
+s500 -> s600
+s600 -> s700
+s700 -> s800
+s800 -> s900

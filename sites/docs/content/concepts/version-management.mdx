@@ -1,0 +1,145 @@
+---
+title: Version Management
+description: How the platform repo bumps Kubernetes, Helm charts, providers, images, and app dependencies without losing control.
+---
+
+# Version Management
+
+Version management is one of the platform's product features. The repo is not
+just a pile of pinned versions; it is a change-management loop for moving a
+local platform forward without accidentally adopting new supply-chain risk,
+breaking a staged runtime, or letting docs drift away from what actually runs.
+
+The default posture is:
+
+- pin what executes
+- cool package updates before adopting them
+- audit new versions before merging them
+- bump one platform surface at a time
+- prove the bump through the Kind reference path before promoting it to Lima,
+  Slicer, compose, or public-demo documentation
+
+## Pathway Map
+
+<ThemeImage
+  className="platform-diagram platform-diagram--stage-rail"
+  lightSrc="/diagrams/generated/concepts-version-management-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-version-management-1-dark.svg"
+  alt="Version management pathway map from pin audit through cooldown, focused update, Kind proof, promotion, and release"
+  width={850}
+  height={1502}
+/>
+
+## What Is Pinned
+
+| Surface | Source of truth | Guardrail |
+| --- | --- | --- |
+| GitHub Actions | `.github/workflows/*.yml` | Actions are pinned by SHA with release-tag comments and checked by the root version guard. |
+| App packages | Lockfiles plus `.npmrc`, `bunfig.toml`, and `pyproject.toml` policy | Bun, npm, and uv use a seven-day cooldown before newly published packages are eligible. |
+| Kubernetes runtime | Kind stage tfvars and `K3S_VERSION` in Lima/Slicer Makefiles | Runtime bumps are explicit per local runtime instead of hidden behind a moving default. |
+| Terraform providers | `terraform/kubernetes` provider constraints and lock state | Provider audits are separate from chart/image audits. |
+| Helm charts, images, and CRDs | Terraform Kubernetes stack variables, rendered GitOps manifests, and vendored chart paths | The stack version audit checks chart and app versions instead of relying on memory. |
+| Vendored support code | Vendoring metadata such as `apim-simulator.vendor.json` | Vendored code records the requested ref and resolved commit. |
+
+This is the part that makes the free repo valuable: version movement is treated
+as a platform operation, not as casual dependency churn.
+
+## Bump Workflow
+
+Start by proving the current repo state:
+
+```bash
+make check-version
+make -C kubernetes/kind check-version
+make -C kubernetes/kind check-provider-version
+```
+
+Then bump one pathway at a time:
+
+1. Open a focused version-bump branch.
+2. Classify the bump: runtime, chart/image/CRD, provider, app dependency, or
+   vendored support code.
+3. Update the source-of-truth file, not generated output.
+4. Re-run the relevant audit target before touching the next surface.
+5. Plan and apply through the Kind reference stack.
+6. Promote the same decision to Lima or Slicer only after Kind is healthy.
+7. Update docs when behavior, defaults, commands, or operator choices change.
+
+For a Kubernetes minor bump, that usually means updating the Kind node image
+and the K3s version pins first, then letting the chart/provider audits expose
+secondary Helm, CRD, image, or API-version bumps.
+
+## Kubernetes Minor Example
+
+When a new Kubernetes minor such as `1.36` is ready for this repo, treat it as a
+runtime pathway change rather than a single string replacement.
+
+| Runtime | Likely first pin to review | Follow-on checks |
+| --- | --- | --- |
+| Kind | `kindest/node` in the Kind stage tfvars | Rebuild stage `100`, then stage `900`, then run health and security checks. |
+| Lima | `K3S_VERSION` in `kubernetes/lima/Makefile` | Confirm the matching K3s release exists and that Cilium, Gateway API, and GitOps stages still apply cleanly. |
+| Slicer | `K3S_VERSION` in `kubernetes/slicer/Makefile` | Repeat the Lima checks, then validate the Slicer-specific networking profile. |
+| Kubernetes stack | Helm chart, image, provider, and CRD pins under `terraform/kubernetes` | Run the Kubernetes stack version audit and provider audit after the runtime bump. |
+
+The practical loop is:
+
+```bash
+make -C kubernetes/kind reset AUTO_APPROVE=1
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 check-health
+make -C kubernetes/kind 900 check-security
+```
+
+Only after that should the same version decision move into the Lima and Slicer
+paths.
+
+## Cooldown And Prerelease Gates
+
+The package cooldown is deliberately boring. Bun, npm, and uv all wait seven
+days before accepting freshly published package versions. That delay is a
+supply-chain control: it gives the ecosystem time to detect broken or malicious
+releases before this platform adopts them.
+
+The Kubernetes stack version audit also keeps prerelease movement explicit.
+Canary, alpha, and prerelease candidates should be used only for an intentional
+test branch, not as the normal update path.
+
+```bash
+CHECK_VERSION_INCLUDE_CANARY=1 make -C kubernetes/kind check-version
+CHECK_VERSION_INCLUDE_ALPHA=1 make -C kubernetes/kind check-version
+CHECK_VERSION_INCLUDE_PRERELEASE=1 make -C kubernetes/kind check-version
+```
+
+Use those switches when you are testing what is coming next. Do not use them to
+justify a default platform bump without the same staged validation.
+
+<Callout type="warning">
+  A newer Kubernetes runtime can force Helm chart, CRD, image, Cilium, Gateway
+  API, and provider changes. Treat the first green plan as a signal to keep
+  testing, not as proof that the whole platform path is done.
+</Callout>
+
+## Release Checklist
+
+Before treating a version bump as ready:
+
+1. `make check-version` passes at the repo root.
+2. `make -C kubernetes/kind check-version` passes.
+3. `make -C kubernetes/kind check-provider-version` passes.
+4. Kind stage `100` applies cleanly from a reset.
+5. Kind stage `900` applies cleanly from a reset.
+6. `make -C kubernetes/kind 900 check-health` passes.
+7. `make -C kubernetes/kind 900 check-security` passes when the bump touches
+   policy, exposure, runtime, image, or identity behavior.
+8. Lima and Slicer are updated only where their runtime pins are part of the
+   bump.
+9. Docs are updated if defaults, pathways, commands, URLs, diagrams, or
+   hardening assumptions changed.
+
+## Related Pages
+
+- [Platform pathways](./platform-pathways)
+- [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt)
+- [Hardening choices](../security/hardening-choices)
+- [Commands](../reference/commands)

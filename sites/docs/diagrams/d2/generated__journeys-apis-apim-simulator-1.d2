@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/apis-apim-simulator.mdx.
+# @light public/diagrams/generated/journeys-apis-apim-simulator-1-light.svg
+# @dark public/diagrams/generated/journeys-apis-apim-simulator-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+browser: {
+  label: "Browser\nSubnetcalc route"
+  width: 300
+  height: 120
+  style.border-radius: 10
+}
+
+sso: {
+  label: "SSO gateway\noauth2-proxy\naccess token"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+router: {
+  label: "App router\n/api split\nheaders forwarded"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+apim: {
+  label: "APIM simulator\nOIDC validation\nroute table"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+backend: {
+  label: "Backend API\nsubnetcalc-api\ndev or UAT"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+vendor: {
+  label: "Standalone source\nvendored runtime\npinned revision"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+browser -> sso
+sso -> router
+router -> apim
+apim -> backend
+vendor -> apim

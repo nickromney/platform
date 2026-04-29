@@ -1,0 +1,101 @@
+---
+title: Tooling Requirements
+description: Which host tools are needed for each platform path.
+---
+
+# Tooling Requirements
+
+The repo deliberately keeps prerequisites close to the workflow that needs
+them. Use this page to decide what to install, then run the relevant `prereqs`
+target to verify your machine.
+
+## Common Tools
+
+| Tool | Needed for | Why |
+| --- | --- | --- |
+| `make` | Everything | Main operator surface. |
+| `jq` | Stack scripts | JSON parsing in checks and helpers. |
+| `kubectl` | Kubernetes targets | Cluster inspection and validation. |
+| `opentofu` | Kubernetes platform | Default Terraform-compatible apply engine. |
+| `terraform` | Kubernetes platform | Optional compatibility engine when selected through Terragrunt. |
+| `terragrunt` | Kubernetes platform | State generation, execution-engine selection, and stage/target input layering. |
+| `bun` / Node | Browser checks and JS apps | Playwright, app builds, Vite, tests. |
+| `mkcert` | Local TLS | Local CA and dev certificates. |
+| `kubie` | Split kubeconfigs | Safer multi-context operator workflow. |
+
+## Kind
+
+```bash
+brew install jq kind kubernetes-cli make opentofu terragrunt
+brew install bun node
+brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yamllint yq
+```
+
+Also required: Docker Desktop on macOS, or Docker Engine/Docker Desktop on
+Linux.
+
+## Lima Platform Target
+
+```bash
+brew install lima jq kubernetes-cli make opentofu terragrunt
+brew install bun node
+```
+
+The platform Lima target uses k3s inside Lima VM(s), plus the shared
+Terragrunt/OpenTofu stack for stages `200+`.
+
+OpenTofu is the default engine. If you are intentionally validating Terraform
+compatibility, use Terragrunt's binary selector:
+
+```bash
+TG_TF_PATH=terraform make -C kubernetes/kind 900 plan
+```
+
+## Slicer Platform Target
+
+Slicer requires the Slicer binary and local daemon/socket setup. The repo path
+expects a working `slicer-mac` setup unless you override `SLICER_URL` or
+`SLICER_SOCKET`.
+
+```bash
+make -C kubernetes/slicer prereqs
+```
+
+Use Kind when you want the supported default path.
+
+## SD-WAN Lima Lab
+
+```bash
+brew install lima node
+brew install socket_vmnet
+```
+
+`socket_vmnet` is optional for the lab, but the prereq check reports broken
+global Lima networking config when it sees it.
+
+## App and Container Tools
+
+| Tool | Needed for |
+| --- | --- |
+| Docker or compatible Compose backend | Compose app and platform slices. |
+| `mkcert` | TLS compose front doors. |
+| `trivy` | Optional app and image security scans. |
+| `rg` | Repo scripts and audit helpers. |
+
+```bash
+make -C docker/compose prereqs
+make -C apps prereqs
+make -C apps trivy-prereqs
+```
+
+<Callout type="warning">
+  Do not install every optional tool before your first run. Pick a path, run
+  its `prereqs` target, and let the repo tell you what is actually missing.
+</Callout>
+
+## Related Pages
+
+- [Prerequisites](./prerequisites)
+- [Kind walkthrough](../tutorials/kind-walkthrough)
+- [Terraform, OpenTofu, and Terragrunt](../concepts/terraform-opentofu-terragrunt)
+- [SD-WAN Lima lab](../tutorials/sd-wan-lima-walkthrough)

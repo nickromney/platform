@@ -1,0 +1,54 @@
+# Source diagram for content/concepts/manifest-assembly.mdx.
+# @light public/diagrams/manifest-assembly.svg
+# @dark public/diagrams/manifest-assembly-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+templates: {
+  label: "Chart templates\ntemplates/*.yaml\nshape and defaults"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+values: {
+  label: "Values\nvalues.yaml\nenvironment intent"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+helm: {
+  label: "Helm render\n{{ .Values.* }}\ntemplate expansion"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+manifest: {
+  label: "Manifest\nDeployment\nKubernetes object"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+argo: {
+  label: "Argo CD\nsyncs cluster"
+  width: 280
+  height: 108
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+templates -> helm
+values -> helm
+helm -> manifest
+manifest -> argo

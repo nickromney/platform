@@ -102,7 +102,7 @@ CHECK_VERSION_SCRIPT ?= scripts/check-version.sh
 RELEASE_SCRIPT ?= scripts/release.sh
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 
-.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites ensure-certs install-hooks fmt lint lint-check lint-yaml lint-markdown lint-bash32 lint-shell frontend-check check-version runtime-artifact release release-dry-run release-preview release-tag release-tag-dry-run build-backstage up up-all up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-backstage up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel down down-all logs logs-otel logs-oidc logs-mcp logs-private logs-hello logs-hello-otel logs-hello-oidc logs-todo logs-todo-otel logs-backstage test test-python test-shell compat compat-report import-tofu verify-azure verify-otel verify-hello-otel verify-todo-otel check-host-ports check-private-port-clear smoke-oidc smoke-mcp smoke-edge smoke-tls smoke-private smoke-hello smoke-todo smoke-backstage smoke-tutorials-live test-todo-e2e test-todo-bruno test-todo-postman export-todo-har compose-config compose-config-otel compose-config-oidc compose-config-mcp compose-config-edge compose-config-tls compose-config-private compose-config-ui compose-config-backstage compose-config-hello compose-config-hello-otel compose-config-hello-oidc compose-config-todo compose-config-todo-otel
+.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites ensure-certs install-hooks fmt lint lint-check lint-yaml lint-markdown lint-bash32 lint-shell frontend-check check-version update runtime-artifact release release-dry-run release-preview release-tag release-tag-dry-run build-backstage up up-all up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-backstage up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel down down-all logs logs-otel logs-oidc logs-mcp logs-private logs-hello logs-hello-otel logs-hello-oidc logs-todo logs-todo-otel logs-backstage test test-python test-shell compat compat-report import-tofu verify-azure verify-otel verify-hello-otel verify-todo-otel check-host-ports check-private-port-clear smoke-oidc smoke-mcp smoke-edge smoke-tls smoke-private smoke-hello smoke-todo smoke-backstage smoke-tutorials-live test-todo-e2e test-todo-bruno test-todo-postman export-todo-har compose-config compose-config-otel compose-config-oidc compose-config-mcp compose-config-edge compose-config-tls compose-config-private compose-config-ui compose-config-backstage compose-config-hello compose-config-hello-otel compose-config-hello-oidc compose-config-todo compose-config-todo-otel
 
 help:
 	@printf "Run:\n"
@@ -160,6 +160,7 @@ help:
 	@printf $(HELP_FMT) "test" "Run Python and shell tests"
 	@printf $(HELP_FMT) "test-python" "Run the Python test suite"
 	@printf $(HELP_FMT) "test-shell" "Run the shell script test suite with BATS"
+	@printf $(HELP_FMT) "update" "Update uv, npm, and Backstage Yarn locks"
 	@printf "\nVerification and Smoke:\n"
 	@printf $(HELP_FMT) "export-todo-har" "Capture the todo APIM flow as a HAR file for Proxyman"
 	@printf $(HELP_FMT) "smoke-edge" "Run the edge MCP and forwarded-header smoke test"
@@ -407,6 +408,12 @@ frontend-check:
 
 check-version:
 	@"$(CHECK_VERSION_SCRIPT)" --execute
+
+update:
+	uv lock
+	npm --prefix ui install --package-lock-only --ignore-scripts
+	npm --prefix examples/todo-app/frontend-astro install --package-lock-only --ignore-scripts
+	cd backstage/app && yarn install --mode=update-lockfile
 
 check-host-ports:
 	./scripts/check-host-ports.sh --execute $(PORTS)

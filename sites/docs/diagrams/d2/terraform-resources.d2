@@ -1,0 +1,67 @@
+# Source diagram for content/concepts/terraform-opentofu-terragrunt.mdx.
+# @light public/diagrams/terraform-resources.svg
+# @dark public/diagrams/terraform-resources-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+inputs: {
+  label: "Inputs"
+  tfvars: "stage + target tfvars"
+  moduleVars: "module variables"
+  locals: "locals and feature gates"
+}
+
+bootstrap: {
+  label: "Terraform bootstrap"
+  providers: "providers + kubeconfig"
+  cilium: "helm_release.cilium"
+  argocd: "helm_release.argocd"
+  gitea: "helm_release.gitea"
+}
+
+cluster: {
+  label: "Direct cluster resources"
+  namespaces: "namespaces + secrets"
+  crds: "Gateway API CRDs"
+  apps: "Argo CD Applications"
+}
+
+handoff: {
+  label: "GitOps handoff"
+  render: "sync-gitea-policies.sh"
+  repo: "Gitea policies repo"
+  appOfApps: "app-of-apps"
+}
+
+argo: {
+  label: "Argo reconciliation"
+  kustomize: "Kustomize overlays"
+  helm: "vendored Helm charts"
+  waves: "sync waves"
+}
+
+workloads: {
+  label: "Live platform state"
+  gateway: "Gateway routes"
+  policy: "Kyverno + Cilium policy"
+  obs: "observability stack"
+  apps: "sample workloads"
+}
+
+inputs.tfvars -> bootstrap.providers
+inputs.moduleVars -> bootstrap.cilium
+bootstrap.cilium -> cluster.crds
+bootstrap.argocd -> cluster.apps
+bootstrap.gitea -> handoff.repo
+cluster.apps -> handoff.appOfApps
+handoff.render -> handoff.repo
+handoff.repo -> argo.kustomize
+handoff.repo -> argo.helm
+argo.waves -> workloads.gateway
+argo.kustomize -> workloads.policy
+argo.helm -> workloads.obs
+argo.kustomize -> workloads.apps

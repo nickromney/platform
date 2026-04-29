@@ -1,0 +1,37 @@
+# Auto-migrated D2 source for /diagrams/generated/operations-health-and-urls-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/operations-health-and-urls-1-light.svg
+# @dark public/diagrams/generated/operations-health-and-urls-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Health And Urls\ncheck-health\ndirect bootstrap paths"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "gateway HTTPS routes\nSSO-protected admin\npaths"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "TLS and headers\nbrowser smoke where\nenabled"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03

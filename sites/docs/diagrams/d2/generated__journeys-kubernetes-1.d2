@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/kubernetes.mdx.
+# @light public/diagrams/generated/journeys-kubernetes-1-light.svg
+# @dark public/diagrams/generated/journeys-kubernetes-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+kind: {
+  label: "Kind cluster\nnodes + kubeconfig"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+namespaces: {
+  label: "Namespaces\nplatform, shared,\napplication"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+workloads: {
+  label: "Workloads\nDeployments, Pods,\nPVCs"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+services: {
+  label: "Services\nstable in-cluster\naddresses"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+gateway: {
+  label: "Gateway API\nHTTPRoutes and TLS\nfront door"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+health: {
+  label: "Health checks\nkubectl + make\ncheck-health"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+kind -> namespaces
+namespaces -> workloads
+workloads -> services
+services -> gateway
+gateway -> health

@@ -1,0 +1,94 @@
+---
+title: Source Repo Cleanup Plan
+description: A pruning and drift-removal implementation plan for the platform source repo.
+---
+
+# Source Repo Cleanup Plan
+
+This is the follow-up plan for a separate agent working in
+`~/Developer/personal/platform`. It is based on the tracked Markdown corpus and
+the current Makefiles, stage tfvars, Terraform stack, shell scripts, and app
+entrypoints.
+
+## What Was Reviewed
+
+The meaningful source-doc corpus is the tracked Markdown set in `platform`.
+Raw filesystem discovery also finds `.venv`, `node_modules`, `.pytest_cache`,
+Terragrunt cache, Playwright report, and test-result Markdown. Those generated
+or dependency-owned files should not be treated as product documentation.
+
+The durable implementation contract is:
+
+- root `make` is informational
+- focused Makefiles own mutating workflows
+- Kind is the default Docker-backed reference path
+- Lima and Slicer reuse the shared Kubernetes stack after stage `100`
+- stage tfvars define the enabled platform shape
+- OpenTofu is the default Terraform-compatible engine through Terragrunt
+- app trees are sample workloads, not the platform product itself
+
+## Cleanup Flow
+
+<ThemeImage
+  className="platform-diagram platform-diagram--stage-rail"
+  lightSrc="/diagrams/generated/reference-source-repo-cleanup-plan-1-light.svg"
+  darkSrc="/diagrams/generated/reference-source-repo-cleanup-plan-1-dark.svg"
+  alt="Source cleanup flow from inventory through drift repair, classification, pruning, and verification"
+  width={850}
+  height={1090}
+/>
+
+## Removal Candidates
+
+| Candidate | Why remove or archive | Guardrail before deletion |
+| --- | --- | --- |
+| Old Subnetcalc Azure plan docs in `apps/subnetcalc/docs/` | The folder mixes current runbooks with dated implementation plans, Azure sandbox notes, and stack-session summaries. It is the largest source of drift risk. | Keep current runbooks and auth references; move dated plans to an archive or delete them after `rg` confirms no Makefile, README, or script points at them. |
+| `apps/subnetcalc/csharp-test/` | The docs mark auth patterns as TODO and the main docs do not present this as a current platform proof path. | Check `rg "csharp-test|deploy-csharp"` and either remove the script references too or mark the whole path as archived. |
+| Docker Desktop managed Kubernetes target notes | `kubernetes/docker-desktop` is explicitly a research target, not a first-class runtime. | Keep only if those scripts are still used for regression research; otherwise archive the folder outside the main operator tree. |
+| Observability wording | Default stage files set `enable_prometheus = true`, `enable_grafana = true`, `enable_victoria_logs = true`, while `enable_loki = false` and `enable_signoz = false`. Loki and SigNoz are valid heavier pathways, not dead code. | Rewrite `README.md`, `kubernetes/kind/README.md`, `kubernetes/docker-desktop/FINDINGS.md`, and related notes so they say “default” versus “alternative” instead of implying one fixed stack. |
+| Scattered version-management notes | Version pins, cooldowns, provider audits, and Kubernetes stack audits are documented in pieces. That makes the strongest free value of the repo harder to see. | Consolidate the source README and runtime READMEs around the same bump workflow described in the docs site: pin, cool, audit, bump one pathway, rebuild Kind, then promote. |
+| Vendored APIM simulator test files | `apim-simulator.vendor.json` says the runtime profile excludes `tests/`, but the vendored path tracks two tests. | Decide whether these are deliberate smoke tests. If not, update the vendoring script and re-vendor so metadata and tree match. |
+| Generated local state in working copies | `.venv`, `node_modules`, `.pytest_cache`, `.terragrunt-cache`, `dist`, Playwright reports, and test results show up in raw scans. | Confirm `.gitignore` covers each generated path; add missing ignores rather than deleting tracked source. |
+
+## Implementation Order
+
+1. **Build the inventory.** Run `git ls-files '*.md' '*.mdx'`, `rg` for each
+   candidate path, and `git ls-files` for generated/dependency directories.
+2. **Fix factual docs drift first.** Patch stage-800/900 observability wording
+   so Prometheus/Grafana/VictoriaLogs are the implemented default and
+   Loki/SigNoz are documented as heavier alternatives.
+3. **Separate current docs from archives.** In `apps/subnetcalc/docs`, keep
+   active runbooks near code and move dated plans/session summaries under an
+   explicit archive folder, or delete them if no current reference remains.
+4. **Document the optional observability pathways.** Keep SigNoz and Loki
+   code, scripts, and chart references if they still work, but make their
+   memory cost and non-default status explicit.
+5. **Consolidate version-management docs.** Make the source repo explain how
+   Kubernetes, K3s, Helm charts, images, providers, GitHub Actions, vendored
+   code, and app dependencies move together without bypassing cooldown and
+   pinning controls.
+6. **Reconcile APIM vendoring.** Make `apim-simulator.vendor.json`, the
+   vendoring script, and the tracked vendored subtree agree.
+7. **Prune generated state.** Remove ignored local artifacts from the working
+   tree and tighten ignores for anything that keeps reappearing.
+8. **Run the smallest proof set.** Use `make`, `make lint`, `make fmt`, and
+   targeted `make -C ... help/test` checks for any subtree touched by deletion.
+
+## Non-Goals
+
+Do not remove Kind, Lima, Slicer, SD-WAN Lima, DDD notes, ADRs, policy audit
+docs, or the app sample roots as part of the first pruning pass. Those are still
+part of the source repo's current explanatory model.
+
+<Callout type="warning">
+  Treat deletion as a behaviour change when scripts, Make targets, Terraform
+  inputs, or docs still reference the path. The first pass should make stale
+  surfaces impossible to discover accidentally, not just make the tree smaller.
+</Callout>
+
+## Related Pages
+
+- [Repository map](./repository-map)
+- [Stage ladder](../concepts/stage-ladder)
+- [Version management](../concepts/version-management)
+- [Hardening choices](../security/hardening-choices)

@@ -1,0 +1,63 @@
+---
+title: Repository Map
+description: Where the important platform source trees live.
+---
+
+# Repository Map
+
+The source repo is organised by operator surface and runtime concern rather
+than by one application package.
+
+<FileTree>
+  <FileTree.Folder name="platform" defaultOpen>
+    <FileTree.Folder name="kubernetes">
+      <FileTree.Folder name="kind" />
+      <FileTree.Folder name="lima" />
+      <FileTree.Folder name="slicer" />
+    </FileTree.Folder>
+    <FileTree.Folder name="terraform">
+      <FileTree.Folder name="kubernetes" />
+    </FileTree.Folder>
+    <FileTree.Folder name="apps">
+      <FileTree.Folder name="subnetcalc" />
+      <FileTree.Folder name="sentiment" />
+    </FileTree.Folder>
+    <FileTree.Folder name="docs">
+      <FileTree.Folder name="adr" />
+      <FileTree.Folder name="ddd" />
+    </FileTree.Folder>
+    <FileTree.Folder name="scripts" />
+    <FileTree.Folder name="tests" />
+  </FileTree.Folder>
+</FileTree>
+
+## Important Paths
+
+| Path | Purpose |
+| --- | --- |
+| `kubernetes/kind` | Default Docker-backed platform runtime. |
+| `kubernetes/lima` | VM-backed k3s runtime. |
+| `kubernetes/slicer` | Optional Slicer microVM runtime. |
+| `terraform/kubernetes` | Shared in-cluster platform resources. |
+| `apps/subnetcalc` | Main domain-rich sample app. |
+| `apps/sentiment` | Smaller authenticated sample app. |
+| `docs/adr` | Design decisions. |
+| `docs/ddd` | Domain language and context maps. |
+| `scripts` | Root operator and validation helpers. |
+| `tests` | Bats and workflow-level regression checks. |
+
+## How To Navigate
+
+Start from the focused Makefile for the thing you are operating. Read the
+Terraform tree when the question is about in-cluster resources. Read the app
+tree when the question is about sample workload behaviour.
+
+<Callout type="warning">
+  Avoid treating `docs/ddd` or `docs/adr` as generated reference. Those files
+  contain design intent and should be read before renaming domain concepts.
+</Callout>
+
+## Related Pages
+
+- [Mental model](../concepts/mental-model)
+- [IaC boundaries](../concepts/iac-boundaries)

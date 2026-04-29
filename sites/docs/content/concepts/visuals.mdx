@@ -1,0 +1,68 @@
+---
+title: Visual Explanations
+description: Generated D2 diagrams for the platform docs.
+---
+
+# Visual Explanations
+
+The visual source for this docs site lives in this repository. Diagram source
+lives under `diagrams/d2/` where D2 can express the diagram cleanly. Rendered
+SVGs live under `public/diagrams/` and are generated artefacts.
+
+## Render Commands
+
+```bash
+bun run media:d2
+bun run media:diagrams
+```
+
+`media:d2` renders each D2 source twice: fixed light SVGs with `--theme=0` and
+fixed dark SVGs with `--theme=200`. The docs deliberately do not use D2's
+`--dark-theme` media-query SVGs, because the site already switches assets by
+Nextra theme and the integrity tests assert that each SVG has one explicit
+colour scheme.
+
+<Callout type="warning">
+  Do not commit generated videos or rendered still frames. If a visual is
+  wrong, change the D2 source and regenerate it.
+</Callout>
+
+<Callout type="info">
+  D2's bundled ELK layout is the default for source diagrams. TALA is not part
+  of this pipeline because it is a separate proprietary layout engine; adopting
+  it would be an explicit product decision, not an accidental build dependency.
+</Callout>
+
+## Diagrams
+
+<ThemeImage
+  className="platform-diagram platform-diagram--hero"
+  lightSrc="/diagrams/idp-local-workbench.svg"
+  darkSrc="/diagrams/idp-local-workbench-dark.svg"
+  alt="Local platform workbench architecture"
+  width={2375}
+  height={832}
+/>
+
+<ThemeImage
+  lightSrc="/diagrams/runtime-variants.svg"
+  darkSrc="/diagrams/runtime-variants-dark.svg"
+  alt="Runtime variants converging into the shared platform stage model"
+  width={1810}
+  height={322}
+/>
+
+<ThemeImage
+  lightSrc="/diagrams/manifest-assembly.svg"
+  darkSrc="/diagrams/manifest-assembly-dark.svg"
+  alt="Manifest assembly through Helm rendering and Argo CD reconciliation"
+  width={1470}
+  height={422}
+/>
+
+## Related Pages
+
+- [Mental model](./mental-model)
+- [Local runtimes](./local-runtimes)
+- [Manifest assembly](./manifest-assembly)
+- [Identity and access](./identity-and-access)

@@ -1,0 +1,96 @@
+---
+title: Application Patterns
+description: The application patterns exercised by APIM, MCP, Backstage, Subnetcalc, and Sentiment.
+---
+
+# Application Patterns
+
+The apps are not incidental examples. They are deliberately different workload
+shapes used to prove platform concerns: static delivery, API routing, OIDC,
+APIM-style mediation, MCP machine interfaces, catalog publishing, local TLS,
+image builds, GitOps, and policy boundaries.
+
+## Pattern Map
+
+<ThemeImage
+  lightSrc="/diagrams/generated/apps-patterns-1-light.svg"
+  darkSrc="/diagrams/generated/apps-patterns-1-dark.svg"
+  alt="Patterns diagram"
+  width={850}
+  height={1764}
+/>
+
+## Subnetcalc Patterns
+
+Subnetcalc demonstrates a matrix:
+
+| Family | What it teaches |
+| --- | --- |
+| Anonymous container-app path | Fast local feature loop with simple frontend/API split. |
+| Azure Function path | Function-style backend and JWT patterns. |
+| React/Vite/static/Flask frontends | Delivery model comparison without changing the core domain. |
+| OIDC + APIM path | Identity gate, API mediation, token checks, and backend forwarding. |
+| Easy Auth variants | Platform-managed identity headers and token exchange patterns. |
+
+The core domain is subnet analysis: CIDR parsing, IPv4/IPv6 behaviour, cloud
+reservation rules, RFC1918/RFC6598 handling, and Cloudflare range checks.
+
+## Sentiment Patterns
+
+Sentiment is narrower:
+
+- The app-local compose path can run Keycloak for OIDC experiments.
+- The shared Docker Compose platform path uses Dex for the compact proof path.
+- Kubernetes stage `900` uses Keycloak for the representative IDP/RBAC path.
+- `oauth2-proxy` owns the browser session.
+- `edge` separates UI and `/api/*`.
+- the API owns model loading, warmup, and classification.
+
+That makes Sentiment a good testbed for auth/routing/telemetry behaviour without
+Subnetcalc's larger hosting matrix.
+
+## Kubernetes Pattern
+
+In Kubernetes, the applications prove that the platform can:
+
+- seed app repositories into Gitea
+- reconcile workloads with Argo CD
+- route through Gateway API
+- protect admin paths with SSO
+- enforce Cilium and Kyverno policies
+- build and distribute local workload images
+
+## Platform Surfaces
+
+APIM, Platform MCP, and Backstage now sit beside the sample workloads:
+
+| App | What it proves |
+| --- | --- |
+| [APIM simulator](./apim-simulator) | API mediation, policy behaviour, subscription-key checks, and Keycloak audiences. |
+| [Platform MCP](./platform-mcp) | Protected machine API access, tool discovery, D2 tooling, and platform diagnostics. |
+| [Backstage and IDP](./backstage-idp) | Developer portal, catalog metadata, TechDocs, IDP Core API, SDK, and IDP MCP integration. |
+
+## Compose Pattern
+
+In compose, the same app concerns are faster to iterate:
+
+```bash
+make -C apps/subnetcalc start-compose-happy
+make -C apps/sentiment up
+make -C docker/compose up-all
+```
+
+<Callout type="warning">
+  Do not collapse every app variant into one "blessed" local stack. The point
+  of the app tree is to compare hosting and auth patterns while keeping the
+  domain behaviour recognisable.
+</Callout>
+
+## Related Pages
+
+- [Subnetcalc](./subnetcalc)
+- [Sentiment](./sentiment)
+- [APIM simulator](./apim-simulator)
+- [Platform MCP](./platform-mcp)
+- [Backstage and IDP](./backstage-idp)
+- [Build and use containers](../tutorials/container-workflow)

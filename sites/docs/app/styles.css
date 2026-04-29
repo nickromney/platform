@@ -1,0 +1,221 @@
+:root {
+  --platform-accent: #0f766e;
+  --platform-accent-2: #b45309;
+  --platform-text-measure: 76ch;
+  --nextra-content-width: 100vw !important;
+}
+
+html {
+  font-size: 18px;
+  overflow-x: clip;
+}
+
+body {
+  overflow-x: clip;
+  text-rendering: optimizeLegibility;
+}
+
+.platform-banner {
+  background: #171717;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  font-weight: 560;
+  line-height: 1.45;
+  padding: 0.75rem 1rem;
+  text-align: center;
+}
+
+.nextra-content {
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.nextra-content p,
+.nextra-content li {
+  max-width: var(--platform-text-measure);
+}
+
+.nextra-content h2 {
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
+  line-height: 1.2;
+  margin-top: 2.5rem;
+}
+
+.nextra-content h3 {
+  font-size: clamp(1.25rem, 1.7vw, 1.55rem);
+  line-height: 1.25;
+}
+
+.nextra-content code {
+  font-size: 0.95em;
+}
+
+.nextra-content pre code {
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.platform-hero {
+  border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  margin: -1.5rem 0 2rem;
+  padding: 4rem 1.5rem 3rem;
+}
+
+.platform-hero h1 {
+  font-size: clamp(2.5rem, 5vw, 4.75rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+  max-width: 980px;
+}
+
+.platform-hero-copy {
+  font-size: clamp(1.2rem, 1.6vw, 1.45rem);
+  line-height: 1.65;
+  max-width: 850px;
+}
+
+.platform-hero-proof {
+  border-left: 4px solid var(--platform-accent);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-top: 1.5rem;
+  max-width: 780px;
+  padding-left: 1rem;
+}
+
+.platform-signal {
+  color: var(--platform-accent);
+  font-weight: 650;
+}
+
+.platform-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.platform-action {
+  align-items: center;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 8px;
+  color: inherit;
+  display: inline-flex;
+  font-size: 0.98rem;
+  font-weight: 650;
+  justify-content: center;
+  line-height: 1.25;
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+}
+
+.platform-action--primary {
+  background: var(--platform-accent);
+  border-color: var(--platform-accent);
+  color: white;
+}
+
+.platform-action:hover {
+  border-color: var(--platform-accent);
+}
+
+.platform-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 1.5rem 0;
+}
+
+.platform-diagram {
+  background: color-mix(in srgb, currentColor 3%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 8px;
+  display: block;
+  margin: 2rem 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+
+.platform-diagram-image {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: 100%;
+}
+
+.platform-diagram--hero {
+  overflow: hidden;
+}
+
+.platform-diagram--hero .platform-diagram-image {
+  max-width: 100%;
+  width: 100%;
+}
+
+.platform-diagram--stage-rail {
+  margin-inline: auto;
+  max-width: 960px;
+  overflow-x: hidden;
+}
+
+@media (max-width: 700px) {
+  .platform-diagram {
+    max-width: 100%;
+  }
+
+  .platform-diagram-image {
+    min-width: 0;
+  }
+
+  .platform-diagram--hero .platform-diagram-image {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 1180px) {
+  .platform-diagram--stage-rail {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .platform-diagram--stage-rail .platform-diagram-image {
+    max-width: none;
+    min-width: 770px;
+    width: 770px;
+  }
+}
+
+.platform-video {
+  aspect-ratio: 16 / 9;
+  background: #020617;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 8px;
+  display: block;
+  margin: 1.5rem 0 2.25rem;
+  max-width: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+.platform-video-element {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.platform-tile {
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 8px;
+  font-size: 1rem;
+  line-height: 1.55;
+  padding: 1rem;
+}
+
+.platform-tile strong {
+  display: block;
+  margin-bottom: 0.5rem;
+}

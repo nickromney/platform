@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/index.mdx.
+# @light public/diagrams/generated/journeys-index-1-light.svg
+# @dark public/diagrams/generated/journeys-index-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+foundation: {
+  label: "Foundation\nKind + Kubernetes\nstages 100-300"
+  width: 360
+  height: 160
+  style.border-radius: 10
+}
+
+delivery: {
+  label: "Delivery\nArgo CD + Gitea\nstages 400-700"
+  width: 360
+  height: 160
+  style.border-radius: 10
+}
+
+guardrails: {
+  label: "Guardrails\nCilium + Kyverno\nstage 600+"
+  width: 360
+  height: 160
+  style.border-radius: 10
+}
+
+access: {
+  label: "Access\nGateway + Keycloak SSO\nstages 800-900"
+  width: 360
+  height: 160
+  style.border-radius: 10
+}
+
+apps: {
+  label: "Apps and APIs\nSentiment + Subnetcalc\nAPIM simulator"
+  width: 360
+  height: 160
+  style.border-radius: 10
+}
+
+gaps: {
+  label: "Closure index\nartifacts, checks,\ncapstone path"
+  width: 360
+  height: 160
+  style.border-radius: 10
+}
+
+foundation -> delivery
+delivery -> guardrails
+guardrails -> access
+access -> apps
+apps -> gaps

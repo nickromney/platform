@@ -1,0 +1,66 @@
+# Source diagram for the docs home page and visual explanations page.
+# @light public/diagrams/idp-local-workbench.svg
+# @dark public/diagrams/idp-local-workbench-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+operator: {
+  label: "Operator workbench"
+  make: "Make targets"
+  preflight: "Shell preflight"
+  health: "Reset + health checks"
+}
+
+runtime: {
+  label: "Local runtime"
+  kind: "Kind default"
+  lima: "Lima k3s path"
+  slicer: "Slicer microVM path"
+}
+
+core: {
+  label: "Platform core"
+  cilium: "Cilium"
+  hubble: "Hubble"
+  gateway: "Gateway API + local TLS"
+}
+
+gitops: {
+  label: "GitOps control"
+  gitea: "Gitea repos"
+  argo: "Argo CD"
+  policies: "Rendered policies repo"
+}
+
+security: {
+  label: "Identity + policy"
+  keycloak: "Keycloak SSO"
+  oauth: "oauth2-proxy"
+  kyverno: "Kyverno + cert-manager"
+}
+
+observability: {
+  label: "Observability"
+  default: "Prometheus + Grafana"
+  logs: "VictoriaLogs default"
+  heavier: "Loki / SigNoz opt-ins"
+}
+
+apps: {
+  label: "Sample apps"
+  subnetcalc: "Subnetcalc"
+  sentiment: "Sentiment"
+  probes: "Browser smoke probes"
+}
+
+operator.make -> runtime.kind
+runtime.kind -> core.cilium
+core.gateway -> gitops.argo
+gitops.policies -> security.kyverno
+security.oauth -> apps.subnetcalc
+security.oauth -> apps.sentiment
+core.hubble -> observability.default

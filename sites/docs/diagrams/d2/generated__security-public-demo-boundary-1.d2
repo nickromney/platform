@@ -1,0 +1,46 @@
+# Auto-migrated D2 source for /diagrams/generated/security-public-demo-boundary-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/security-public-demo-boundary-1-light.svg
+# @dark public/diagrams/generated/security-public-demo-boundary-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Public Demo Boundary\nInternet user\nWAF / edge proxy"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Operator IP / VPN\nadmin zone\nHTTPS gateway"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "public apps\noauth2-proxy\nadmin UIs"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "direct admin NodePorts\nKubernetes API"
+  width: 280
+  height: 108
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04

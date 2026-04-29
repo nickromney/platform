@@ -21,7 +21,7 @@ prereqs: ## Check shared app workflow prerequisites without requiring Trivy
 test: ## Run the default app smoke checks
 	@$(MAKE) --no-print-directory compose-smoke
 
-update: ## Update dependency locks across both app roots using native package managers
+update: ## Update dependency locks across app roots using native package managers
 	@$(MAKE) --no-print-directory -C ./apim-simulator update
 	@$(MAKE) --no-print-directory -C ./sentiment update
 	@$(MAKE) --no-print-directory -C ./subnetcalc update

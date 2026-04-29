@@ -1,0 +1,95 @@
+---
+title: Glossary
+description: Terms used throughout the local platform docs.
+---
+
+# Glossary
+
+<ThemeImage
+  lightSrc="/diagrams/generated/reference-glossary-1-light.svg"
+  darkSrc="/diagrams/generated/reference-glossary-1-dark.svg"
+  alt="Glossary diagram"
+  width={1110}
+  height={266}
+/>
+
+## Stage
+
+A cumulative target shape for the platform stack. Stage `900` includes the
+earlier stages; it is not an isolated final action.
+
+## Target
+
+A focused runtime entrypoint such as `kubernetes/kind`, `kubernetes/lima`, or
+`kubernetes/slicer`.
+
+## Operator Surface
+
+The Make and shell commands a human uses to inspect, apply, validate, and reset
+the local stack.
+
+## Split Kubeconfig
+
+A kubeconfig file dedicated to one local runtime target, usually under
+`~/.kube/`, instead of merging every context into the default kubeconfig.
+
+## GitOps
+
+The model where Argo CD reconciles cluster state from Git repositories, seeded
+locally through Gitea in this stack.
+
+## CNI
+
+Container Network Interface. Cilium provides the CNI for the reference stack
+from stage `200`.
+
+## Hubble
+
+Cilium's visibility layer for network flows.
+
+## SSO
+
+Single sign-on. Stage `900` uses Keycloak and `oauth2-proxy` for the local
+authenticated admin experience; Dex remains available for compact compose and
+compatibility paths.
+
+## Product RBAC
+
+Authorization enforced inside a product after login. Argo CD is the current
+group-aware proof: `platform-admins` maps to `role:admin`, and
+`platform-viewers` maps to `role:readonly`. Gitea and Grafana are SSO-integrated
+but are not claimed as complete group-RBAC products in this repo.
+
+## Kubernetes API RBAC
+
+Authorization enforced by the Kubernetes API server. Stage `900` wires the API
+server to the selected OIDC issuer and binds `platform-admins` and
+`platform-viewers` as Kubernetes groups. Headlamp relies on these API decisions.
+
+## App Environment Group
+
+An OIDC group scoped to an app and environment, such as
+`app-subnetcalc-dev` or `app-sentiment-uat`. The protected app routes use these
+groups to prove environment-scoped access separate from organization-wide
+platform roles.
+
+## Resource Audience
+
+The intended receiver of an access token. The Kubernetes APIM simulator checks
+for the dedicated `apim-simulator` audience instead of treating the browser
+session client as the API audience.
+
+## APIM Simulator
+
+A vendored subset of the separate APIM simulator project used by Subnetcalc
+paths that need API mediation behaviour.
+
+<Callout type="warning">
+  Terms such as Kind, Lima, and Slicer name runtime variants. They are not the
+  platform domain itself.
+</Callout>
+
+## Related Pages
+
+- [Mental model](../concepts/mental-model)
+- [Commands](./commands)

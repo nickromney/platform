@@ -1,0 +1,109 @@
+---
+title: Slicer Full Walkthrough
+description: End-to-end operator walkthrough for the optional Slicer microVM target.
+---
+
+# Slicer Full Walkthrough
+
+Slicer is the optional microVM-backed target. It is not the default teaching
+path. Use Kind when you want the supported local reference stack, and use
+Slicer when the Slicer runtime itself is the thing you want to exercise.
+
+<Callout type="warning">
+  Slicer is not bundled by this repo. Point new users at Kind unless they
+  already have a working local `slicer-mac` setup or are intentionally
+  evaluating that runtime.
+</Callout>
+
+## Current Validated Shape
+
+The source docs describe the current working Slicer shape as:
+
+- local `slicer-mac` daemon and socket
+- `slicer-1` VM in the `slicer` group
+- 8 GiB RAM
+- 25 GiB root disk
+- localhost HTTPS entrypoint on `:443`
+
+Older images and smaller disks were not stable at later stages. Stage `100`
+now fails fast if the selected VM root disk is smaller than `25G`.
+
+## Runtime Model
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-slicer-walkthrough-1-light.svg"
+  darkSrc="/diagrams/generated/tutorials-slicer-walkthrough-1-dark.svg"
+  alt="Slicer Walkthrough diagram"
+  width={1460}
+  height={266}
+/>
+
+Slicer forwards are unprivileged on macOS, so the target uses a host-forward
+plus Docker privileged-port proxy pattern: the VM is forwarded to local `:8443`,
+then Docker publishes the operator-facing HTTPS entrypoint on host `:443`.
+
+## Bring-Up Path
+
+```bash
+cd ~/Developer/personal/platform
+cp .env.example .env
+make -C kubernetes/slicer prereqs
+make -C kubernetes/slicer 100 apply
+make -C kubernetes/slicer 900 plan
+make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
+make -C kubernetes/slicer 900 check-health
+make -C kubernetes/slicer show-urls
+```
+
+Useful Slicer URLs include:
+
+- `https://gitea.admin.127.0.0.1.sslip.io/`
+- `https://grafana.admin.127.0.0.1.sslip.io/`
+- `https://keycloak.127.0.0.1.sslip.io/`
+
+## Network Profiles
+
+| Profile | Meaning |
+| --- | --- |
+| `SLICER_NETWORK_PROFILE=cilium` | Full Cilium/Hubble/policy stage ladder. |
+| `SLICER_NETWORK_PROFILE=default` | Lighter k3s default-CNI path; stages `200`, `300`, and `600` become placeholders. |
+
+Switching profiles is not an in-place upgrade. Reset first.
+
+```bash
+make -C kubernetes/slicer reset AUTO_APPROVE=1
+make -C kubernetes/slicer 500 apply SLICER_NETWORK_PROFILE=default
+```
+
+## Helper Modes
+
+```bash
+SLICER_HOST_FORWARDS_MODE=auto
+PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto
+PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto
+```
+
+Stage `700+` expects local workload images to exist at `192.168.64.1:5002`
+from inside the cluster. With cache management disabled, the Makefile fails
+fast unless a compatible registry is already reachable.
+
+## Recovery and Debugging
+
+```bash
+make -C kubernetes/slicer check-vm-health
+make -C kubernetes/slicer host-forward-status
+make -C kubernetes/slicer check-sso-e2e
+make -C kubernetes/slicer reset AUTO_APPROVE=1
+```
+
+<Callout type="warning">
+  Direct `100 apply` refuses to reuse an existing k3s install unless
+  `SLICER_ALLOW_EXISTING_K3S=1` is set. That is deliberate: silent reuse makes
+  bootstrap failures look like successful fresh runs.
+</Callout>
+
+## Related Pages
+
+- [Local runtimes](../concepts/local-runtimes)
+- [Lima walkthrough](./lima-walkthrough)
+- [Security hardening choices](../security/hardening-choices)

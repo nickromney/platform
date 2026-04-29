@@ -1,0 +1,128 @@
+---
+title: Learn Self-Hosted AI With Sentiment
+description: Learn how the Sentiment app runs a local SST classifier without a remote AI API.
+---
+
+# Learn Self-Hosted AI With Sentiment
+
+Outcome: understand how a small self-hosted AI feature works in this platform:
+the Sentiment API loads an SST model with Transformers.js, caches it locally,
+classifies text in-process, records telemetry, and serves it behind normal app
+and SSO paths.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-self-hosted-ai-sentiment-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-self-hosted-ai-sentiment-1-dark.svg"
+  alt="Self-hosted AI journey from authenticated UI through Sentiment router, API, local model cache, SST classifier, telemetry, and CSV state"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+Use compose first when you want the simplest AI app loop:
+
+```bash
+cd ~/Developer/personal/platform/apps/sentiment
+make up
+```
+
+Use Kubernetes when you want the same broad app path behind the platform:
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+kubectl -n dev get deploy sentiment-api sentiment-router sentiment-auth-ui
+```
+
+## Inspect
+
+The classifier path is in the API server:
+
+```bash
+rg -n "SENTIMENT_MODEL|pipeline\\(|sentiment.backend|sentiment_inference" apps/sentiment/api-sentiment
+```
+
+The default model is:
+
+```js filename="apps/sentiment/api-sentiment/config.js"
+export const DEFAULT_SENTIMENT_MODEL_ID = 'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+```
+
+The container runtime sets local-only model loading after the image has
+preloaded the model:
+
+```bash
+rg -n "SENTIMENT_MODEL_CACHE_DIR|SENTIMENT_MODEL_LOCAL_ONLY|preload-model" apps/sentiment/api-sentiment/Dockerfile apps/sentiment/compose.yml
+```
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`apps/sentiment/api-sentiment/server.js`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/server.js) | In-process SST classification and telemetry. |
+| [`apps/sentiment/api-sentiment/config.js`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/config.js) | Default model ID. |
+| [`apps/sentiment/api-sentiment/preload-model.js`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/preload-model.js) | Build-time model preload. |
+| [`apps/sentiment/api-sentiment/Dockerfile`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/Dockerfile) | Model cache and local-only runtime settings. |
+| [`apps/sentiment/docs/COMPOSE-ARCHITECTURE.md`](https://github.com/nickromney/platform/blob/main/apps/sentiment/docs/COMPOSE-ARCHITECTURE.md) | Compose auth, routing, and model architecture. |
+| [`terraform/kubernetes/apps/workloads/base/all.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/workloads/base/all.yaml) | Kubernetes Sentiment workloads. |
+
+## Try One Change
+
+Run the API tests before changing model behaviour:
+
+```bash
+cd ~/Developer/personal/platform/apps/sentiment/api-sentiment
+bun run test
+```
+
+Then experiment with warm-start behaviour by running the API directly:
+
+```bash
+SENTIMENT_WARM_ON_START=false \
+SENTIMENT_MODEL_CACHE_DIR=.models \
+bun run start
+```
+
+Compare first-request latency with the default warm-start path. The lesson is
+that self-hosted AI is still normal software: startup time, caching, memory,
+telemetry, and failure mode design matter.
+
+<Callout type="warning">
+  The Sentiment app is an SST classification demo, not a general AI platform.
+  It does not teach model governance, GPU scheduling, vector search, prompt
+  safety, human feedback, or multi-model serving.
+</Callout>
+
+## Closure Slice
+
+The Sentiment app now has a model card and evaluation fixture:
+
+| Artifact | Purpose |
+| --- | --- |
+| [`apps/sentiment/api-sentiment/model-card.md`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/model-card.md) | Documents model identity, cache, local-only runtime, checks, and boundaries. |
+| [`apps/sentiment/api-sentiment/tests/fixtures/evaluation.jsonl`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/tests/fixtures/evaluation.jsonl) | Tiny labelled evaluation fixture. |
+| [`apps/sentiment/api-sentiment/evaluate-model.test.js`](https://github.com/nickromney/platform/blob/main/apps/sentiment/api-sentiment/evaluate-model.test.js) | Executable evaluation-path test. |
+
+The evaluation does not try to replace model governance. It catches obvious
+label-path regressions and proves the model identity is visible in the app
+runtime.
+
+### Acceptance Checks
+
+```bash
+cd apps/sentiment/api-sentiment
+SENTIMENT_MODEL_LOCAL_ONLY=1 bun run test
+docker build --build-arg SENTIMENT_MODEL_ID=Xenova/distilbert-base-uncased-finetuned-sst-2-english .
+kubectl -n dev logs deploy/sentiment-api | rg "sentiment.backend|sentiment.model"
+```
+
+The journey is complete when you can explain how the model gets into the image,
+how runtime avoids remote fetches, and where the evaluation fixture runs.
+
+## Related Pages
+
+- [Sentiment](../apps/sentiment)
+- [Application patterns](../apps/patterns)
+- [SSO with Keycloak and Dex](/journeys/sso-dex-keycloak)

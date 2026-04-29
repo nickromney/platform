@@ -1,0 +1,102 @@
+---
+title: Run the Kind Stack
+description: Bring up the default Docker-backed local platform path.
+---
+
+# Run the Kind Stack
+
+This tutorial is for a first-time operator who wants the default local platform
+running without learning every internal boundary first. Kind is the reference
+path because it uses the local Docker daemon and the full shared stage ladder.
+
+By the end, you should have a stage-900 stack with gateway URLs and SSO checks
+passing.
+
+## Before You Start
+
+You need a working Docker daemon, `make`, `jq`, `kind`, `kubectl`, OpenTofu, and
+Terragrunt. On macOS, Docker Desktop must already be running.
+
+```bash filename="host shell"
+cd ~/Developer/personal/platform
+cp .env.example .env
+make -C kubernetes/kind prereqs
+```
+
+Optional but useful tools are `kubie`, `mkcert`, `helm`, `cilium-cli`,
+`hubble`, `kyverno`, `yamllint`, and `yq`. Install `bun` and Node when you want
+the browser SSO smoke tests that stage `900` runs through the Make wrapper.
+
+## Apply the Stack
+
+Use stage `100` first so you can see the bootstrap boundary, then jump to
+stage `900` for the full platform.
+
+<Steps>
+
+### Plan the bootstrap
+
+```bash
+make -C kubernetes/kind 100 plan
+```
+
+### Create the initial cluster
+
+```bash
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+```
+
+Stage `100` is expected to look unhealthy because the cluster exists without a
+CNI. Do not debug pod networking yet.
+
+### Converge the full platform
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+This is cumulative: it brings the cluster through Cilium, Hubble, Argo CD,
+Gitea, policies, app repos, observability, gateway TLS, and SSO.
+
+### Check health and URLs
+
+```bash
+make -C kubernetes/kind 900 check-health
+make -C kubernetes/kind show-urls
+```
+
+</Steps>
+
+## What Just Happened
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-first-kind-stack-1-light.svg"
+  darkSrc="/diagrams/generated/tutorials-first-kind-stack-1-dark.svg"
+  alt="First Kind Stack diagram"
+  width={1810}
+  height={350}
+/>
+
+The Makefile owns host-sensitive work. The shared Terraform root owns durable
+in-cluster resources. See [IaC boundaries](../concepts/iac-boundaries) before
+moving bootstrap logic between those layers.
+
+## Common Mistakes
+
+<Callout type="warning">
+  Do not treat `100` health warnings as a failure. The pod network appears at
+  stage `200`, so the stage-100 cluster is intentionally not fully healthy.
+</Callout>
+
+- Do not run Kind and a VM-backed target on the same ports unless you have
+  intentionally changed the bind surface.
+- Do not merge the repo kubeconfig into `~/.kube/config` unless you want that.
+  The normal shape is split kubeconfigs plus `kubie`.
+- Do not run raw Terragrunt applies when you expect Make-level validation. Raw
+  applies reconcile resources; Make wraps them with host checks and smoke tests.
+
+## Next Step
+
+Use [health and URLs](../operations/health-and-urls) to inspect the stack, or
+read the [stage ladder](../concepts/stage-ladder) to understand what each stage
+adds.

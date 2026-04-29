@@ -1,0 +1,55 @@
+# Auto-migrated D2 source for /diagrams/generated/reference-shell-scripts-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/reference-shell-scripts-1-light.svg
+# @dark public/diagrams/generated/reference-shell-scripts-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Shell Scripts\nMake target\nshared shell libraries"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "runtime scripts\nkind / lima / slicer\nterraform/kubernetes"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "scripts\napp scripts\nsd-wan/lima scripts"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "render and sync GitOps\nrepo\nhealth, gateway, SSO,"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "security"
+  width: 280
+  height: 104
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05

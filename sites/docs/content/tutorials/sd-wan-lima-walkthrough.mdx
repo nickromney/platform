@@ -1,0 +1,103 @@
+---
+title: SD-WAN Lima Lab
+description: Walkthrough for the Lima-backed SD-WAN teaching lab.
+---
+
+# SD-WAN Lima Lab
+
+`sd-wan/lima` is separate from the Kubernetes Lima target. It uses three Lima
+VMs to teach overlapping private address space, resolver viewpoint, WireGuard
+transport, mTLS ingress, and a subnetcalc workload.
+
+## What The Lab Teaches
+
+The central idea is that private RFC1918 addresses are reused on purpose. Raw
+private IPs are not trustworthy cross-cloud identifiers. Names and resolver
+viewpoint matter.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-sd-wan-lima-walkthrough-1-light.svg"
+  darkSrc="/diagrams/generated/tutorials-sd-wan-lima-walkthrough-1-dark.svg"
+  alt="Sd Wan Lima Walkthrough diagram"
+  width={1110}
+  height={266}
+/>
+
+## Prerequisites
+
+This path is macOS-first and Lima-first.
+
+```bash
+brew install lima node
+```
+
+Optional:
+
+```bash
+brew install socket_vmnet
+```
+
+Run the repo preflight:
+
+```bash
+make -C sd-wan/lima prereqs
+```
+
+The check verifies macOS, `limactl`, Node/npm, the Lima `user-v2` network, free
+host port `127.0.0.1:58081`, and common Lima networking misconfiguration.
+
+## Bring-Up Path
+
+```bash
+make -C sd-wan/lima up
+make -C sd-wan/lima show-urls
+make -C sd-wan/lima test
+```
+
+Success looks like:
+
+- `show-urls` prints `http://127.0.0.1:58081/`
+- the browser shows the subnetcalc frontend on cloud1
+- a lookup shows both cloud1 frontend diagnostics and cloud2 backend diagnostics
+- those panels show the same service from two different network viewpoints
+
+## Addressing Model
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-sd-wan-lima-walkthrough-2-light.svg"
+  darkSrc="/diagrams/generated/tutorials-sd-wan-lima-walkthrough-2-dark.svg"
+  alt="Sd Wan Lima Walkthrough 2 diagram"
+  width={1460}
+  height={294}
+/>
+
+The intended cross-cloud path is:
+
+1. resolve from the cloud you are standing in
+2. get a `172.16.x.x` VIP
+3. traverse the WireGuard mesh
+4. let the remote site route to its local RFC1918 workload
+
+## Useful Commands
+
+```bash
+make -C sd-wan/lima status
+make -C sd-wan/lima logs
+./sd-wan/lima/scripts/query-all-dns.sh
+make -C sd-wan/lima down
+make -C sd-wan/lima destroy
+```
+
+Re-running `up` is a supported repair path. If the VMs are already running, it
+re-applies guest hostname and sync steps instead of cold-starting everything.
+
+<Callout type="warning">
+  The Lima `user-v2` underlay exists only so the three guests can find each
+  other. It is not the SD-WAN identity layer and should not be documented as a
+  service contract.
+</Callout>
+
+## Related Pages
+
+- [Subnetcalc](../apps/subnetcalc)
+- [Tooling requirements](../operations/tooling-requirements)

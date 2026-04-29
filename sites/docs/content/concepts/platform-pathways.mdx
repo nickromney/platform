@@ -1,0 +1,93 @@
+---
+title: Platform Pathways
+description: Default and heavier alternative paths for observability and identity.
+---
+
+# Platform Pathways
+
+The repo carries more than one valid platform composition. The docs should make
+the chosen default clear without pretending the alternatives do not exist.
+
+## Pathway Map
+
+<ThemeImage
+  className="platform-diagram platform-diagram--stage-rail"
+  lightSrc="/diagrams/generated/concepts-platform-pathways-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-platform-pathways-1-dark.svg"
+  alt="Platform pathway map showing default observability and identity paths with heavier opt-ins"
+  width={850}
+  height={1418}
+/>
+
+## Observability Pathways
+
+| Pathway | Status | Use when | Tradeoff |
+| --- | --- | --- | --- |
+| Prometheus + Grafana + VictoriaLogs | Default stage-800/900 path. | You want the local platform to expose metrics, dashboards, and logs while staying reasonable on a laptop. | Less all-in-one than SigNoz, but lighter. |
+| Loki | Available alternative. | You specifically want the Loki log-store model or are comparing log backends. | More memory and chart surface than the default path. |
+| SigNoz | Available heavier alternative. | You want the OpenTelemetry-oriented, product-style observability experience. | Highest memory pressure and more moving parts. |
+
+The current default Kind/Lima/Slicer stage files set:
+
+```hcl
+enable_prometheus    = true
+enable_grafana       = true
+enable_victoria_logs = true
+enable_loki          = false
+enable_signoz        = false
+```
+
+Enable the heavier paths through explicit tfvars rather than by editing the
+checked-in stage files in place.
+
+```hcl filename=".run/heavier-observability.tfvars"
+enable_signoz = true
+```
+
+Use `enable_loki = true` for the Loki path. Combining Loki and SigNoz is
+possible, but it should be treated as a memory-rich host profile rather than
+the default laptop path.
+
+Then pass that file through the standard Make wrapper:
+
+```bash
+PLATFORM_TFVARS=.run/heavier-observability.tfvars make -C kubernetes/kind 900 plan
+```
+
+<Callout type="warning">
+  Treat SigNoz and Loki as capacity decisions. They are valid alternatives, but
+  they change startup time, memory pressure, chart reconciliation, and
+  troubleshooting surface.
+</Callout>
+
+## Identity Pathways
+
+| Pathway | Status | Use when | Tradeoff |
+| --- | --- | --- | --- |
+| Keycloak + `oauth2-proxy` | Default Kubernetes stage-900 path. | You want org roles, app/environment groups, OIDC clients, and a real IdP administration surface. | More realistic IDP surface, more memory and slower cold starts. |
+| Dex + `oauth2-proxy` | Shared compose platform and explicit compatibility path. | You want a compact local SSO layer for browser-login proofing. | Small and explicit, but not a full enterprise IdP simulation. |
+
+Stage `900` opts for Keycloak because the IDP journey now proves more than
+login: realm bootstrap, users, groups, OIDC clients, Argo CD group RBAC,
+Kubernetes API RBAC, and app/environment authorization. Compose keeps Dex as
+the smaller proof path.
+
+## Operator Rule
+
+Default pathways should be the first-run and documentation baseline. Alternative
+pathways should be explicit opt-ins with memory expectations, tfvars, and a
+focused validation command.
+
+```bash
+make -C kubernetes/kind 900 plan
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-app APP=grafana
+```
+
+## Related Pages
+
+- [Stage ladder](./stage-ladder)
+- [Version management](./version-management)
+- [Identity and access](./identity-and-access)
+- [Hardening choices](../security/hardening-choices)
+- [Source cleanup plan](../reference/source-repo-cleanup-plan)

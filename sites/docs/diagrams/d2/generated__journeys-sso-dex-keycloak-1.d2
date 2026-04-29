@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/sso-dex-keycloak.mdx.
+# @light public/diagrams/generated/journeys-sso-dex-keycloak-1-light.svg
+# @dark public/diagrams/generated/journeys-sso-dex-keycloak-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+browser: {
+  label: "Browser\nprotected route"
+  width: 280
+  height: 120
+  style.border-radius: 10
+}
+
+gateway: {
+  label: "Gateway API\nSSO HTTPRoutes\nReferenceGrants"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+oauth: {
+  label: "oauth2-proxy\nlogin callback\nsession cookie"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+keycloak: {
+  label: "Keycloak\nclients, groups,\ndemo users"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+apps: {
+  label: "Protected apps\nArgo CD, Gitea,\nHubble, Grafana"
+  width: 320
+  height: 156
+  style.border-radius: 10
+}
+
+dex: {
+  label: "Dex compatibility\nDocker Compose\ncompact proof path"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+browser -> gateway
+gateway -> oauth
+oauth -> keycloak
+oauth -> apps
+browser -> dex

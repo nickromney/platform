@@ -2277,11 +2277,11 @@ check_preload_image_version_alignment() {
   fi
 
   check_preload_image_ref_alignment "${preload_file}" "ArgoCD" '^[[:space:]]*((dhi\.io/argocd)|(quay\.io/argoproj/argocd)):' "${expected_argocd_image_ref}"
-  check_preload_repo_tag_alignment "${preload_file}" "Prometheus" '^[[:space:]]*quay\.io/prometheus/prometheus:' 's|^[[:space:]]*quay\.io/prometheus/prometheus:([^[:space:]]+).*|\1|' "${expected_prometheus_tag}"
-  check_preload_repo_tag_alignment "${preload_file}" "Grafana" '^[[:space:]]*(docker\.io/)?grafana/grafana:' 's|^[[:space:]]*(docker\.io/)?grafana/grafana:([^[:space:]]+).*|\2|' "${expected_grafana_tag}"
-  check_preload_repo_tag_alignment "${preload_file}" "Loki" '^[[:space:]]*(docker\.io/)?grafana/loki:' 's|^[[:space:]]*(docker\.io/)?grafana/loki:([^[:space:]]+).*|\2|' "${expected_loki_tag}"
-  check_preload_repo_tag_alignment "${preload_file}" "Tempo" '^[[:space:]]*(docker\.io/)?grafana/tempo:' 's|^[[:space:]]*(docker\.io/)?grafana/tempo:([^[:space:]]+).*|\2|' "${expected_tempo_tag}"
-  check_preload_repo_tag_alignment "${preload_file}" "VictoriaLogs" '^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:' 's|^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:([^[:space:]]+).*|\2|' "${expected_victoria_logs_tag}"
+  if [ "${EXPECT_PROMETHEUS:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Prometheus" '^[[:space:]]*quay\.io/prometheus/prometheus:' 's|^[[:space:]]*quay\.io/prometheus/prometheus:([^[:space:]]+).*|\1|' "${expected_prometheus_tag}"; fi
+  if [ "${EXPECT_GRAFANA:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Grafana" '^[[:space:]]*(docker\.io/)?grafana/grafana:' 's|^[[:space:]]*(docker\.io/)?grafana/grafana:([^[:space:]]+).*|\2|' "${expected_grafana_tag}"; fi
+  if [ "${EXPECT_LOKI:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Loki" '^[[:space:]]*(docker\.io/)?grafana/loki:' 's|^[[:space:]]*(docker\.io/)?grafana/loki:([^[:space:]]+).*|\2|' "${expected_loki_tag}"; fi
+  if [ "${EXPECT_TEMPO:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Tempo" '^[[:space:]]*(docker\.io/)?grafana/tempo:' 's|^[[:space:]]*(docker\.io/)?grafana/tempo:([^[:space:]]+).*|\2|' "${expected_tempo_tag}"; fi
+  if [ "${EXPECT_VICTORIA_LOGS:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "VictoriaLogs" '^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:' 's|^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:([^[:space:]]+).*|\2|' "${expected_victoria_logs_tag}"; fi
   echo ""
 }
 
@@ -3324,20 +3324,32 @@ main() {
   fi
 
   EXPECT_KIND_PROVISIONING="$(tfvar_get_any_stage_bool_or_default "provision_kind_cluster" "true")"
+  EXPECT_PROMETHEUS="$(tfvar_get_any_stage_bool_or_default "enable_prometheus" "false")"
+  EXPECT_GRAFANA="$(tfvar_get_any_stage_bool_or_default "enable_grafana" "false")"
+  EXPECT_LOKI="$(tfvar_get_any_stage_bool_or_default "enable_loki" "false")"
+  EXPECT_VICTORIA_LOGS="$(tfvar_get_any_stage_bool_or_default "enable_victoria_logs" "false")"
+  EXPECT_TEMPO="$(tfvar_get_any_stage_bool_or_default "enable_tempo" "false")"
+  EXPECT_SIGNOZ="$(tfvar_get_any_stage_bool_or_default "enable_signoz" "false")"
   EXPECTED_CLUSTER_NAME="$(tfvar_get_any_stage_or_default "cluster_name" "kind-local")"
   if [ -z "${EXPECTED_CLUSTER_NAME}" ]; then EXPECTED_CLUSTER_NAME="kind-local"; fi
 
   progress "Resolving latest upstream chart versions"
   start_heartbeat "Still resolving latest upstream chart versions"
+  LATEST_PROMETHEUS=""
+  LATEST_GRAFANA=""
+  LATEST_LOKI=""
+  LATEST_VICTORIA_LOGS=""
+  LATEST_TEMPO=""
+  LATEST_SIGNOZ=""
   LATEST_ARGOCD=$(helm_latest_chart_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd")
   LATEST_GITEA=$(helm_latest_chart_version "gitea" "https://dl.gitea.io/charts/" "gitea")
   LATEST_CILIUM=$(helm_latest_chart_version "cilium" "https://helm.cilium.io" "cilium")
-  LATEST_PROMETHEUS=$(helm_latest_chart_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus")
-  LATEST_GRAFANA=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "grafana")
-  LATEST_LOKI=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "loki")
-  LATEST_VICTORIA_LOGS=$(helm_latest_chart_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single")
-  LATEST_TEMPO=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "tempo")
-  LATEST_SIGNOZ=$(helm_latest_chart_version "signoz" "https://charts.signoz.io" "signoz")
+  if [ "${EXPECT_PROMETHEUS}" = "true" ]; then LATEST_PROMETHEUS=$(helm_latest_chart_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus"); fi
+  if [ "${EXPECT_GRAFANA}" = "true" ]; then LATEST_GRAFANA=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "grafana"); fi
+  if [ "${EXPECT_LOKI}" = "true" ]; then LATEST_LOKI=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "loki"); fi
+  if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then LATEST_VICTORIA_LOGS=$(helm_latest_chart_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single"); fi
+  if [ "${EXPECT_TEMPO}" = "true" ]; then LATEST_TEMPO=$(helm_latest_chart_version "grafana" "https://grafana.github.io/helm-charts" "tempo"); fi
+  if [ "${EXPECT_SIGNOZ}" = "true" ]; then LATEST_SIGNOZ=$(helm_latest_chart_version "signoz" "https://charts.signoz.io" "signoz"); fi
   LATEST_OTEL_COLLECTOR=$(helm_latest_chart_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector")
   LATEST_HEADLAMP=$(helm_latest_chart_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp")
   LATEST_KYVERNO=$(helm_latest_chart_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno")
@@ -3349,19 +3361,25 @@ main() {
 
   progress "Resolving appVersion metadata for configured chart versions"
   start_heartbeat "Still resolving configured chart appVersion metadata"
+  CODETAG_PROMETHEUS=""
+  CODETAG_GRAFANA=""
+  CODETAG_LOKI=""
+  CODETAG_VICTORIA_LOGS=""
+  CODETAG_TEMPO=""
+  CODETAG_SIGNOZ=""
   CODETAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${CODE_ARGOCD}")
   CODETAG_ARGOCD="${CODETAG_ARGOCD_CHART}"
   CODETAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${CODE_GITEA}")
   CODETAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${CODE_CILIUM}")
-  CODETAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${CODE_PROMETHEUS}")
-  CODETAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${CODE_GRAFANA}")
+  if [ "${EXPECT_PROMETHEUS}" = "true" ]; then CODETAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${CODE_PROMETHEUS}"); fi
+  if [ "${EXPECT_GRAFANA}" = "true" ]; then CODETAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${CODE_GRAFANA}"); fi
   if [ -n "${CODE_GRAFANA_IMAGE_TAG}" ]; then
     CODETAG_GRAFANA="${CODE_GRAFANA_IMAGE_TAG}"
   fi
-  CODETAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${CODE_LOKI}")
-  CODETAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${CODE_VICTORIA_LOGS}")
-  CODETAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${CODE_TEMPO}")
-  CODETAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${CODE_SIGNOZ}")
+  if [ "${EXPECT_LOKI}" = "true" ]; then CODETAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${CODE_LOKI}"); fi
+  if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then CODETAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${CODE_VICTORIA_LOGS}"); fi
+  if [ "${EXPECT_TEMPO}" = "true" ]; then CODETAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${CODE_TEMPO}"); fi
+  if [ "${EXPECT_SIGNOZ}" = "true" ]; then CODETAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${CODE_SIGNOZ}"); fi
   CODETAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${CODE_OTEL_COLLECTOR}")
   CODETAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${CODE_HEADLAMP}")
   CODETAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${CODE_KYVERNO}")
@@ -3373,16 +3391,22 @@ main() {
 
   progress "Resolving appVersion metadata for latest upstream chart versions"
   start_heartbeat "Still resolving latest chart appVersion metadata"
+  LATESTTAG_PROMETHEUS=""
+  LATESTTAG_GRAFANA=""
+  LATESTTAG_LOKI=""
+  LATESTTAG_VICTORIA_LOGS=""
+  LATESTTAG_TEMPO=""
+  LATESTTAG_SIGNOZ=""
   LATESTTAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${LATEST_ARGOCD}")
   LATESTTAG_ARGOCD="${LATESTTAG_ARGOCD_CHART}"
   LATESTTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${LATEST_GITEA}")
   LATESTTAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${LATEST_CILIUM}")
-  LATESTTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${LATEST_PROMETHEUS}")
-  LATESTTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${LATEST_GRAFANA}")
-  LATESTTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${LATEST_LOKI}")
-  LATESTTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${LATEST_VICTORIA_LOGS}")
-  LATESTTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${LATEST_TEMPO}")
-  LATESTTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${LATEST_SIGNOZ}")
+  if [ "${EXPECT_PROMETHEUS}" = "true" ]; then LATESTTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${LATEST_PROMETHEUS}"); fi
+  if [ "${EXPECT_GRAFANA}" = "true" ]; then LATESTTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${LATEST_GRAFANA}"); fi
+  if [ "${EXPECT_LOKI}" = "true" ]; then LATESTTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${LATEST_LOKI}"); fi
+  if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then LATESTTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${LATEST_VICTORIA_LOGS}"); fi
+  if [ "${EXPECT_TEMPO}" = "true" ]; then LATESTTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${LATEST_TEMPO}"); fi
+  if [ "${EXPECT_SIGNOZ}" = "true" ]; then LATESTTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${LATEST_SIGNOZ}"); fi
   LATESTTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${LATEST_OTEL_COLLECTOR}")
   LATESTTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${LATEST_HEADLAMP}")
   LATESTTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${LATEST_KYVERNO}")
@@ -3477,12 +3501,12 @@ main() {
     DEPLOYED_ARGOCD_IMAGE_REF=$(k8s_deployment_container_image "argocd" "argocd-server" "server")
 
     DEPLOYED_GITEA=$(argocd_app_deployed_chart_version "gitea" "gitea")
-    DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus")
-    DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana")
-    DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki")
-    DEPLOYED_VICTORIA_LOGS=$(argocd_app_deployed_chart_version "victoria-logs" "victoria-logs-single")
-    DEPLOYED_TEMPO=$(argocd_app_deployed_chart_version "tempo" "tempo")
-    DEPLOYED_SIGNOZ=$(argocd_app_deployed_chart_version "signoz" "signoz")
+    if [ "${EXPECT_PROMETHEUS}" = "true" ]; then DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus"); fi
+    if [ "${EXPECT_GRAFANA}" = "true" ]; then DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana"); fi
+    if [ "${EXPECT_LOKI}" = "true" ]; then DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki"); fi
+    if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then DEPLOYED_VICTORIA_LOGS=$(argocd_app_deployed_chart_version "victoria-logs" "victoria-logs-single"); fi
+    if [ "${EXPECT_TEMPO}" = "true" ]; then DEPLOYED_TEMPO=$(argocd_app_deployed_chart_version "tempo" "tempo"); fi
+    if [ "${EXPECT_SIGNOZ}" = "true" ]; then DEPLOYED_SIGNOZ=$(argocd_app_deployed_chart_version "signoz" "signoz"); fi
     DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-agent" "opentelemetry-collector")
     if [ -z "${DEPLOYED_OTEL_COLLECTOR}" ]; then
       DEPLOYED_OTEL_COLLECTOR=$(argocd_app_deployed_chart_version "otel-collector-prometheus" "opentelemetry-collector")
@@ -3502,12 +3526,12 @@ main() {
       DEPLOYEDTAG_ARGOCD=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${DEPLOYED_ARGOCD}")
     fi
     DEPLOYEDTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${DEPLOYED_GITEA}")
-    DEPLOYEDTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${DEPLOYED_PROMETHEUS}")
-    DEPLOYEDTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${DEPLOYED_GRAFANA}")
-    DEPLOYEDTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${DEPLOYED_LOKI}")
-    DEPLOYEDTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${DEPLOYED_VICTORIA_LOGS}")
-    DEPLOYEDTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${DEPLOYED_TEMPO}")
-    DEPLOYEDTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${DEPLOYED_SIGNOZ}")
+    if [ "${EXPECT_PROMETHEUS}" = "true" ]; then DEPLOYEDTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${DEPLOYED_PROMETHEUS}"); fi
+    if [ "${EXPECT_GRAFANA}" = "true" ]; then DEPLOYEDTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${DEPLOYED_GRAFANA}"); fi
+    if [ "${EXPECT_LOKI}" = "true" ]; then DEPLOYEDTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${DEPLOYED_LOKI}"); fi
+    if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then DEPLOYEDTAG_VICTORIA_LOGS=$(helm_chart_app_version "vm" "https://victoriametrics.github.io/helm-charts/" "victoria-logs-single" "${DEPLOYED_VICTORIA_LOGS}"); fi
+    if [ "${EXPECT_TEMPO}" = "true" ]; then DEPLOYEDTAG_TEMPO=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "tempo" "${DEPLOYED_TEMPO}"); fi
+    if [ "${EXPECT_SIGNOZ}" = "true" ]; then DEPLOYEDTAG_SIGNOZ=$(helm_chart_app_version "signoz" "https://charts.signoz.io" "signoz" "${DEPLOYED_SIGNOZ}"); fi
     DEPLOYEDTAG_OTEL_COLLECTOR=$(helm_chart_app_version "open-telemetry" "https://open-telemetry.github.io/opentelemetry-helm-charts" "opentelemetry-collector" "${DEPLOYED_OTEL_COLLECTOR}")
     DEPLOYEDTAG_HEADLAMP=$(helm_chart_app_version "headlamp" "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${DEPLOYED_HEADLAMP}")
     DEPLOYEDTAG_KYVERNO=$(helm_chart_app_version "kyverno" "https://kyverno.github.io/kyverno/" "kyverno" "${DEPLOYED_KYVERNO}")
@@ -3555,12 +3579,12 @@ main() {
   rows+=("$(print_row "argo-cd chart" "${DEPLOYED_ARGOCD}" "${CODE_ARGOCD}" "${LATEST_ARGOCD}" "${DEPLOYEDTAG_ARGOCD}" "${CODETAG_ARGOCD}" "${LATEST_PREFERRED_ARGOCD_TAG}" "${LATESTTAG_ARGOCD}" "1" "${LATEST_PREFERRED_ARGOCD_IMAGE_STATUS}")")
   rows+=("$(print_row "gitea chart" "${DEPLOYED_GITEA}" "${CODE_GITEA}" "${LATEST_GITEA}" "${DEPLOYEDTAG_GITEA}" "${CODETAG_GITEA}" "" "${LATESTTAG_GITEA}" "0")")
   rows+=("$(print_row "cilium chart" "${DEPLOYED_CILIUM}" "${CODE_CILIUM}" "${LATEST_CILIUM}" "${DEPLOYEDTAG_CILIUM}" "${CODETAG_CILIUM}" "" "${LATESTTAG_CILIUM}" "0")")
-  rows+=("$(print_row "prometheus chart" "${DEPLOYED_PROMETHEUS}" "${CODE_PROMETHEUS}" "${LATEST_PROMETHEUS}" "${DEPLOYEDTAG_PROMETHEUS}" "${CODETAG_PROMETHEUS}" "" "${LATESTTAG_PROMETHEUS}" "0")")
-  rows+=("$(print_row "grafana chart" "${DEPLOYED_GRAFANA}" "${CODE_GRAFANA}" "${LATEST_GRAFANA}" "${DEPLOYEDTAG_GRAFANA}" "${CODETAG_GRAFANA}" "" "${LATESTTAG_GRAFANA}" "0")")
-  rows+=("$(print_row "loki chart" "${DEPLOYED_LOKI}" "${CODE_LOKI}" "${LATEST_LOKI}" "${DEPLOYEDTAG_LOKI}" "${CODETAG_LOKI}" "" "${LATESTTAG_LOKI}" "0")")
-  rows+=("$(print_row "victoria-logs" "${DEPLOYED_VICTORIA_LOGS}" "${CODE_VICTORIA_LOGS}" "${LATEST_VICTORIA_LOGS}" "${DEPLOYEDTAG_VICTORIA_LOGS}" "${CODETAG_VICTORIA_LOGS}" "" "${LATESTTAG_VICTORIA_LOGS}" "0")")
-  rows+=("$(print_row "tempo chart" "${DEPLOYED_TEMPO}" "${CODE_TEMPO}" "${LATEST_TEMPO}" "${DEPLOYEDTAG_TEMPO}" "${CODETAG_TEMPO}" "" "${LATESTTAG_TEMPO}" "0")")
-  rows+=("$(print_row "signoz chart" "${DEPLOYED_SIGNOZ}" "${CODE_SIGNOZ}" "${LATEST_SIGNOZ}" "${DEPLOYEDTAG_SIGNOZ}" "${CODETAG_SIGNOZ}" "" "${LATESTTAG_SIGNOZ}" "0")")
+  if [ "${EXPECT_PROMETHEUS}" = "true" ]; then rows+=("$(print_row "prometheus chart" "${DEPLOYED_PROMETHEUS}" "${CODE_PROMETHEUS}" "${LATEST_PROMETHEUS}" "${DEPLOYEDTAG_PROMETHEUS}" "${CODETAG_PROMETHEUS}" "" "${LATESTTAG_PROMETHEUS}" "0")"); fi
+  if [ "${EXPECT_GRAFANA}" = "true" ]; then rows+=("$(print_row "grafana chart" "${DEPLOYED_GRAFANA}" "${CODE_GRAFANA}" "${LATEST_GRAFANA}" "${DEPLOYEDTAG_GRAFANA}" "${CODETAG_GRAFANA}" "" "${LATESTTAG_GRAFANA}" "0")"); fi
+  if [ "${EXPECT_LOKI}" = "true" ]; then rows+=("$(print_row "loki chart" "${DEPLOYED_LOKI}" "${CODE_LOKI}" "${LATEST_LOKI}" "${DEPLOYEDTAG_LOKI}" "${CODETAG_LOKI}" "" "${LATESTTAG_LOKI}" "0")"); fi
+  if [ "${EXPECT_VICTORIA_LOGS}" = "true" ]; then rows+=("$(print_row "victoria-logs" "${DEPLOYED_VICTORIA_LOGS}" "${CODE_VICTORIA_LOGS}" "${LATEST_VICTORIA_LOGS}" "${DEPLOYEDTAG_VICTORIA_LOGS}" "${CODETAG_VICTORIA_LOGS}" "" "${LATESTTAG_VICTORIA_LOGS}" "0")"); fi
+  if [ "${EXPECT_TEMPO}" = "true" ]; then rows+=("$(print_row "tempo chart" "${DEPLOYED_TEMPO}" "${CODE_TEMPO}" "${LATEST_TEMPO}" "${DEPLOYEDTAG_TEMPO}" "${CODETAG_TEMPO}" "" "${LATESTTAG_TEMPO}" "0")"); fi
+  if [ "${EXPECT_SIGNOZ}" = "true" ]; then rows+=("$(print_row "signoz chart" "${DEPLOYED_SIGNOZ}" "${CODE_SIGNOZ}" "${LATEST_SIGNOZ}" "${DEPLOYEDTAG_SIGNOZ}" "${CODETAG_SIGNOZ}" "" "${LATESTTAG_SIGNOZ}" "0")"); fi
   rows+=("$(print_row "otel-collector" "${DEPLOYED_OTEL_COLLECTOR}" "${CODE_OTEL_COLLECTOR}" "${LATEST_OTEL_COLLECTOR}" "${DEPLOYEDTAG_OTEL_COLLECTOR}" "${CODETAG_OTEL_COLLECTOR}" "" "${LATESTTAG_OTEL_COLLECTOR}" "0")")
   rows+=("$(print_row "headlamp chart" "${DEPLOYED_HEADLAMP}" "${CODE_HEADLAMP}" "${LATEST_HEADLAMP}" "${DEPLOYEDTAG_HEADLAMP}" "${CODETAG_HEADLAMP}" "" "${LATESTTAG_HEADLAMP}" "0")")
   rows+=("$(print_row "kyverno chart" "${DEPLOYED_KYVERNO}" "${CODE_KYVERNO}" "${LATEST_KYVERNO}" "${DEPLOYEDTAG_KYVERNO}" "${CODETAG_KYVERNO}" "" "${LATESTTAG_KYVERNO}" "0")")

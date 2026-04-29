@@ -1,0 +1,62 @@
+---
+title: Health and URLs
+description: Verify the local platform and find operator-facing URLs.
+---
+
+# Health and URLs
+
+Health checks prove that the stack is usable from the outside, not just that
+Terraform rendered resources. URL targets show where the local admin surfaces
+are exposed.
+
+## Core Commands
+
+```bash
+make -C kubernetes/kind 900 check-health
+make -C kubernetes/kind check-gateway-urls
+make -C kubernetes/kind show-urls
+make -C kubernetes/kind check-sso-e2e
+```
+
+The same general shape exists for Lima and Slicer:
+
+```bash
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/lima show-urls
+make -C kubernetes/slicer 900 check-health
+make -C kubernetes/slicer show-urls
+```
+
+## What Gets Checked
+
+<ThemeImage
+  lightSrc="/diagrams/generated/operations-health-and-urls-1-light.svg"
+  darkSrc="/diagrams/generated/operations-health-and-urls-1-dark.svg"
+  alt="Health And Urls diagram"
+  width={1110}
+  height={266}
+/>
+
+Direct paths include bootstrap surfaces such as Argo CD, Hubble UI, Gitea, and
+Grafana NodePorts where they exist. Gateway paths include admin URLs such as
+Argo CD, Gitea, Hubble, Grafana, Headlamp, and Kyverno behind the HTTPS gateway
+when the selected stage enables them.
+
+## Preview Read-Only Checks
+
+Many read-only Make targets pass `--execute` to scripts explicitly. Set
+`DRY_RUN=1` to preview script behaviour without changing the target shape.
+
+```bash
+make -C kubernetes/kind 900 check-health DRY_RUN=1
+```
+
+<Callout type="warning">
+  A raw OpenTofu or Terragrunt apply does not automatically mean the user-facing
+  URLs work. Use the Make checks when the operator experience matters.
+</Callout>
+
+## Related Pages
+
+- [Identity and access](../concepts/identity-and-access)
+- [Troubleshooting](./troubleshooting)

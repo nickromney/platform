@@ -1,0 +1,57 @@
+# Source diagram for content/journeys/gitea-version-control.mdx.
+# @light public/diagrams/generated/journeys-gitea-version-control-1-light.svg
+# @dark public/diagrams/generated/journeys-gitea-version-control-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+admin: {
+  label: "Admin bootstrap\nsecret + org\nplatform owner"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+repos: {
+  label: "Repos\npolicies, sentiment,\nsubnetcalc"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+keys: {
+  label: "Deploy keys\nArgo CD read\nCI push"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+registry: {
+  label: "Package registry\nlocal image refs\nlocalhost:30090"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+runner: {
+  label: "Gitea runner\nin-cluster jobs\nstage 700"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+argocd: {
+  label: "Argo CD\nreads desired state\nfrom Gitea"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+admin -> repos
+repos -> keys
+repos -> registry
+repos -> runner
+keys -> argocd
+registry -> argocd

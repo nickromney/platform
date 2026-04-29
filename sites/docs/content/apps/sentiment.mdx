@@ -1,0 +1,95 @@
+---
+title: Sentiment
+description: The smaller authenticated sentiment-analysis sample app.
+---
+
+# Sentiment
+
+Sentiment is a compact sample app focused on authenticated browser entry,
+frontend/API separation, and a simple sentiment-classification API.
+
+## Runtime Slices
+
+<ThemeImage
+  lightSrc="/diagrams/generated/apps-sentiment-1-light.svg"
+  darkSrc="/diagrams/generated/apps-sentiment-1-dark.svg"
+  alt="Sentiment diagram"
+  width={1110}
+  height={266}
+/>
+
+The app-local compose path can run Keycloak for OIDC experiments. The
+Kubernetes platform uses Keycloak with `oauth2-proxy` at stage `900`; the shared
+Docker Compose platform slice keeps Dex for the smaller compatibility path.
+
+## Pattern Breakdown
+
+| Slice | Responsibility | What to debug there |
+| --- | --- | --- |
+| Keycloak | App-local OIDC provider and realm. | Login redirects, issuer metadata, users. |
+| `oauth2-proxy` | Browser session and protected upstream. | Cookies, callbacks, auth headers. |
+| `edge` | Internal app router. | `/` versus `/api/*` routing. |
+| static UI | Browser experience. | Build output and API calls. |
+| sentiment API | Classification and recent results. | Model loading, warmup, latency, labels. |
+
+The backend loads the classifier in-process. That makes the runtime easy to
+operate locally, but it also means API startup and warmup behaviour matter.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/apps-sentiment-2-light.svg"
+  darkSrc="/diagrams/generated/apps-sentiment-2-dark.svg"
+  alt="Sentiment 2 diagram"
+  width={760}
+  height={266}
+/>
+
+## Local Compose Loop
+
+```bash
+cd ~/Developer/personal/platform/apps/sentiment
+cp ../../.env.example ../../.env
+make up
+```
+
+Optional TLS front door:
+
+```bash
+docker compose --env-file ../../.env -f compose.yml -f compose.tls.yml up
+```
+
+## Verification Path
+
+```bash
+cd ~/Developer/personal/platform
+cd apps/sentiment/api-sentiment && bun run test
+cd ../frontend-react-vite/sentiment-auth-ui && bun run test && bun run build
+cd ~/Developer/personal/platform && make -C apps compose-smoke-sentiment
+```
+
+Use the TLS test only when you changed reverse-proxy or ingress behaviour:
+
+```bash
+cd ~/Developer/personal/platform/apps/sentiment
+./tests/test-tls.sh --execute
+```
+
+## When To Use It
+
+Use Sentiment when you want a smaller app to test:
+
+- login and logout behaviour
+- edge routing between UI and API
+- API telemetry and latency
+- simple domain behaviour without Subnetcalc's hosting matrix
+
+<Callout type="warning">
+  The sentiment API depends on local model/runtime behaviour. Treat missing host
+  runtime prerequisites as setup failures, not as platform policy failures.
+</Callout>
+
+## Related Pages
+
+- [Run an app locally](../tutorials/first-app-loop)
+- [Application patterns](./patterns)
+- [Identity and access](../concepts/identity-and-access)
+- [Subnetcalc](./subnetcalc)

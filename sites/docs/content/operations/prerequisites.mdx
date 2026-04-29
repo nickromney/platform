@@ -1,0 +1,51 @@
+---
+title: Prerequisites
+description: Tooling expected before running the local platform.
+---
+
+# Prerequisites
+
+The platform expects a local operator toolchain. The exact checks live in the
+repo Makefiles, so use this page as orientation and the `prereqs` targets as
+the source of truth.
+
+## Default Kind Toolchain
+
+```bash
+brew install jq kind kubernetes-cli make opentofu terragrunt
+brew install bun node
+brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yamllint yq
+mkcert -install
+```
+
+On macOS, Docker Desktop must be running before you plan, apply, or reset the
+Kind stack. On Linux, Docker Engine is enough for Kind.
+
+## Check the Target
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind prereqs
+make -C kubernetes/lima prereqs
+make -C kubernetes/slicer prereqs
+```
+
+Use only the target you plan to run. Lima and Slicer include VM-specific
+requirements that do not apply to the Kind path.
+
+## Kubeconfig Model
+
+The repo prefers split kubeconfigs, for example
+`~/.kube/kind-kind-local.yaml`, rather than automatically merging everything
+into `~/.kube/config`. `kubie` is the ergonomic way to switch between them.
+
+<Callout type="warning">
+  Only use merge targets when you intentionally want a platform context copied
+  into your default kubeconfig. The split model prevents accidental cross-stack
+  commands.
+</Callout>
+
+## Related Pages
+
+- [Run the Kind stack](../tutorials/first-kind-stack)
+- [Local runtimes](../concepts/local-runtimes)

@@ -1,0 +1,72 @@
+# Source diagram for content/concepts/version-management.mdx.
+# @light public/diagrams/generated/concepts-version-management-1-light.svg
+# @dark public/diagrams/generated/concepts-version-management-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+audit: {
+  label: "Audit current pins\nroot, runtime, provider,\nchart, image, app"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+classify: {
+  label: "Classify bump type\nruntime, charts, providers,\napps, vendored code"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+cooldown: {
+  label: "Apply gates\nseven-day package cooldown\nprerelease switches explicit"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+update: {
+  label: "Update one surface\nsource of truth first\nno generated-only edits"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+prove: {
+  label: "Plan, render, diff\nthen rebuild Kind\nreference stack"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+promote: {
+  label: "Promote deliberately\nLima, Slicer, docs\nonly after Kind is healthy"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+release: {
+  label: "Tag or publish\nafter checks pass\nand drift is documented"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+audit -> classify
+classify -> cooldown
+cooldown -> update
+update -> prove
+prove -> promote
+promote -> release

@@ -1,0 +1,106 @@
+---
+title: Identity and Access
+description: How SSO, OIDC, gateway routing, and demo identities fit together.
+---
+
+# Identity and Access
+
+Identity in this repo is a local IDP concern, not a full enterprise IAM
+product. The Kubernetes stack uses Keycloak and `oauth2-proxy` at stage `900`.
+Dex remains the compact provider for the shared Docker Compose proof path and
+for explicitly selected compatibility paths.
+
+The chosen Kubernetes default is Keycloak because the stage-900 journey now
+needs users, groups, OIDC clients, lifecycle checks, and app/environment RBAC
+that look closer to a real internal developer platform.
+
+## Kubernetes Stage 900
+
+<ThemeImage
+  lightSrc="/diagrams/generated/concepts-identity-and-access-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-identity-and-access-1-dark.svg"
+  alt="Identity And Access diagram"
+  width={1460}
+  height={266}
+/>
+
+Keycloak provides the in-cluster OIDC issuer. `oauth2-proxy` protects
+browser-facing UIs. Argo CD, Headlamp, Kubernetes API OIDC, and selected app
+routes also consume group claims, so stage `900` configures more than login.
+
+The representative RBAC model is:
+
+| Layer | Implemented proof |
+| --- | --- |
+| Organization roles | `platform-admins` and `platform-viewers` are emitted in the OIDC `groups` claim. |
+| App and environment roles | `app-subnetcalc-dev`, `app-subnetcalc-uat`, `app-sentiment-dev`, `app-sentiment-uat`, `app-hello-platform-dev`, and `app-hello-platform-uat` gate app routes. |
+| Product RBAC | Argo CD maps `platform-admins` to `role:admin` and `platform-viewers` to `role:readonly`. |
+| Kubernetes API RBAC | `platform-admins` receives the local demo admin binding; `platform-viewers` receives read-only bindings. Headlamp relies on those Kubernetes API decisions. |
+| API audience | The Kubernetes APIM simulator validates Keycloak access tokens for the `apim-simulator` audience. |
+
+Gitea and Grafana are SSO-integrated, but they should not be described as
+complete group-RBAC products in this repo. Gitea is still bootstrap/admin-user
+driven after the reverse-proxy login handoff. Grafana uses auth-proxy login for
+the local observability surface.
+
+Demo login uses `demo@admin.test`, `demo@dev.test`, and `demo@uat.test` with
+the `PLATFORM_DEMO_PASSWORD` value from the repo root `.env`.
+
+The Keycloak admin UI is the platform realm console:
+`https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users`.
+Use `demo@admin.test` for the normal demo admin journey. The separate
+`keycloak-admin` secret is the permanent master-realm break-glass account. The
+`/realms/platform` URL is OIDC metadata, not the admin dashboard.
+
+## Compose Paths
+
+The shared Docker Compose platform path keeps Dex because it is small and fast.
+App compose stacks can still use Keycloak when the exercise is IdP behaviour.
+The shared concept is:
+
+- a browser-facing gate authenticates the user
+- edge routing splits frontend and API traffic
+- the backend receives identity or token context appropriate to that stack
+
+Sentiment and selected Subnetcalc app-local paths keep Keycloak available when
+the point of the exercise is application-level IdP behaviour rather than the
+smaller shared compose platform path.
+
+## What Was Verified
+
+The current platform implementation has concrete source evidence:
+
+- `kubernetes/kind/stages/900-sso.tfvars`, `kubernetes/lima/stages/900-sso.tfvars`,
+  and `kubernetes/slicer/stages/900-sso.tfvars` select `sso_provider = "keycloak"`.
+- `terraform/kubernetes/sso.tf` renders Keycloak, Postgres, users, groups,
+  OIDC clients, app route proxies, and group-based Kubernetes RBAC bindings.
+- `terraform/kubernetes/locals.tf` centralizes provider-neutral issuer, token,
+  JWKS, userinfo, username claim, groups claim, and Argo CD RBAC mapping.
+- `terraform/kubernetes/scripts/check-rbac.sh` runs impersonation checks and,
+  when Keycloak is present, real OIDC token authorization checks against the
+  Kubernetes API.
+- `docker/compose/compose.yml` keeps the shared compose path on Dex and
+  `oauth2-proxy`.
+
+## Operator Checks
+
+```bash
+make -C kubernetes/kind check-sso-e2e
+make -C kubernetes/lima check-sso-e2e
+make -C kubernetes/slicer check-sso-e2e
+```
+
+Kind and Slicer run the SSO browser smoke as part of the stage-900 Make
+confidence path. Lima keeps it as an explicit post-apply validation step.
+
+<Callout type="warning">
+  Do not copy demo identities or static local secrets into public or shared
+  environments. This repo optimizes for local repeatability.
+</Callout>
+
+## Related Pages
+
+- [Stage ladder](./stage-ladder)
+- [Platform pathways](./platform-pathways)
+- [Health and URLs](../operations/health-and-urls)
+- [Sentiment app](../apps/sentiment)

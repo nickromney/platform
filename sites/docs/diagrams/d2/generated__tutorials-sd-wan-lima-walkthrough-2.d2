@@ -1,0 +1,46 @@
+# Auto-migrated D2 source for /diagrams/generated/tutorials-sd-wan-lima-walkthrough-2-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/tutorials-sd-wan-lima-walkthrough-2-light.svg
+# @dark public/diagrams/generated/tutorials-sd-wan-lima-walkthrough-2-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Sd Wan Lima Walkthrough\n2\ncloud1 local\n10.10.1.0/24"
+  width: 280
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "api1.vanity.test\ncloud2 local\n10.10.1.0/24 again"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "cloud3 local\n172.31.1.0/24\ncross-cloud VIP"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "172.16.x.x\nWireGuard transport\n192.168.1.0/24"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04

@@ -1,0 +1,227 @@
+---
+title: Manifest Assembly
+description: How Helm, Kustomize, Terraform, templates, and GitOps produce manifests.
+---
+
+# Manifest Assembly
+
+<ThemeImage
+  lightSrc="/diagrams/manifest-assembly.svg"
+  darkSrc="/diagrams/manifest-assembly-dark.svg"
+  alt="Values and chart templates flow through Helm rendering into Kubernetes manifests and Argo CD reconciliation"
+  width={1470}
+  height={422}
+/>
+
+The platform does not have one manifest generator. It has a layered assembly
+pipeline. Stage tfvars select the desired platform shape. Terraform installs
+bootstrap resources and Argo CD Applications. A shell renderer writes the
+GitOps repository content into Gitea. Argo CD then reconciles Kustomize
+directories and Helm charts from that repository.
+
+## End-to-End Flow
+
+<ThemeImage
+  lightSrc="/diagrams/generated/concepts-manifest-assembly-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-manifest-assembly-1-dark.svg"
+  alt="Manifest Assembly diagram"
+  width={850}
+  height={2120}
+/>
+
+## Stage and Target Inputs
+
+Each runtime has:
+
+- a target profile such as `kubernetes/kind/targets/kind.tfvars`
+- cumulative stage files such as `kubernetes/kind/stages/900-sso.tfvars`
+- shared stage descriptions in `kubernetes/stage-ladder.mk`
+
+`kubernetes/scripts/build-tfvar-args.sh` turns that into the variable-file
+arguments passed to Terragrunt/OpenTofu.
+
+```bash
+make -C kubernetes/kind 900 plan
+make -C kubernetes/lima 900 apply AUTO_APPROVE=1
+```
+
+See [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt) for
+the full input layering and execution-engine model.
+
+## Terraform Direct Resources
+
+Terraform directly manages bootstrap resources that must exist before GitOps
+can take over:
+
+- namespaces and secrets
+- Cilium via `helm_release`
+- Argo CD via `helm_release`
+- some CRDs and early `kubectl_manifest` resources
+- Argo CD `Application` objects
+- Gitea bootstrap resources and sync edges
+
+Example shape:
+
+```hcl filename="terraform/kubernetes/cilium.tf"
+resource "helm_release" "cilium" {
+  name       = "cilium"
+  repository = "https://helm.cilium.io"
+  values     = [yamlencode(local.cilium_values)]
+}
+```
+
+Terraform often uses `yaml_body = <<__YAML__` for Argo CD Applications because
+the Application object is the handoff point from Terraform to GitOps.
+
+## GitOps Repo Rendering
+
+`terraform/kubernetes/scripts/sync-gitea-policies.sh` renders the policies repo
+content for the current stack inputs and pushes it to the configured Gitea repo.
+Terraform passes it a large environment containing:
+
+- enabled feature toggles
+- public hosts and domains
+- admin allowlist CIDRs
+- trusted proxy CIDRs
+- chart versions
+- image refs and hardened image registry settings
+- Git/Gitea access details
+
+That script copies checked-in manifests, rewrites hostnames and images, vendors
+or references chart paths, and pushes the result so Argo CD can pull from
+in-cluster Gitea.
+
+## Argo CD App-of-Apps
+
+When `enable_app_of_apps` is on, Terraform creates one root Application:
+
+```yaml filename="app-of-apps shape"
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+spec:
+  source:
+    repoURL: ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git
+    path: apps/argocd-apps
+    directory:
+      recurse: true
+```
+
+That root app syncs child Application manifests under `apps/argocd-apps`.
+Lower stages can also use direct Terraform-created Argo Applications when the
+app-of-apps mode is disabled.
+
+## Kustomize Directories
+
+Kustomize directories appear under paths such as:
+
+- `terraform/kubernetes/apps/platform-gateway`
+- `terraform/kubernetes/apps/platform-gateway-routes`
+- `terraform/kubernetes/apps/platform-gateway-routes-sso`
+- `terraform/kubernetes/cluster-policies/cilium`
+- `terraform/kubernetes/cluster-policies/kyverno`
+
+A directory-level `kustomization.yaml` lists resources:
+
+```yaml filename="kustomization.yaml"
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - gateway.yaml
+  - gateway-service.yaml
+  - tls-hardening.yaml
+```
+
+Argo CD points at the directory. Kustomize expands the resource list. The
+Kubernetes API receives the rendered YAML.
+
+## Helm Through Argo CD
+
+Many components are installed as Argo CD Applications whose source is a
+vendored Helm chart path and whose `helm.values` block is generated from
+Terraform locals and variables.
+
+```yaml filename="Application source shape"
+source:
+  repoURL: ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git
+  targetRevision: main
+  path: apps/vendor/charts/kyverno
+  helm:
+    releaseName: kyverno
+    values: |
+      admissionController:
+        securityContext:
+          runAsNonRoot: true
+```
+
+This keeps most chart rendering in Argo CD while keeping the chosen values
+reviewable in the Terraform source and rendered GitOps repo.
+
+## Sync Waves and Dependencies
+
+Argo CD sync waves control order inside GitOps:
+
+```yaml
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+```
+
+Terraform `depends_on` controls order before Argo CD takes over. The two are
+not interchangeable:
+
+- `depends_on` orders Terraform resources and local-exec bootstrap.
+- sync waves order Argo CD resources inside an Application or app-of-apps tree.
+
+## Policy Composition
+
+Cilium and Kyverno policy trees are Kustomize overlays. The composition script
+explains what will render from the checked-in tree:
+
+```bash
+terraform/kubernetes/scripts/show-policy-composition.sh \
+  --target cilium \
+  --namespace dev \
+  --label subnetcalc \
+  --egress \
+  --execute
+```
+
+Regenerate the policy composition document with:
+
+```bash
+terraform/kubernetes/scripts/show-policy-composition.sh \
+  --target all \
+  --format markdown \
+  --execute \
+  > terraform/kubernetes/cluster-policies/COMPOSITION.md
+```
+
+## How To Trace One Manifest
+
+Use this checklist when you want to understand where a manifest came from:
+
+1. Find the runtime and stage: `kubernetes/<target>/stages/<stage>.tfvars`.
+2. Find the feature toggle in `terraform/kubernetes/variables.tf`.
+3. Search for the toggle in `terraform/kubernetes/*.tf`.
+4. If the resource is an Argo CD Application, read its `source.path`.
+5. Find that path in the rendered policies repo or checked-in `terraform/kubernetes/apps`.
+6. If it is Helm, inspect the `helm.values` block and chart path.
+7. If it is Kustomize, inspect `kustomization.yaml` and listed resources.
+8. Use `show-policy-composition.sh` for Cilium/Kyverno overlays.
+9. Use `kubectl -n argocd get app <name> -o yaml` to compare live source and sync status.
+
+<Callout type="warning">
+  Do not assume a YAML file under `terraform/kubernetes/apps` is applied
+  directly by Terraform. Many files are copied into the GitOps repo, then
+  rendered by Argo CD through Kustomize or Helm.
+</Callout>
+
+## Related Pages
+
+- [Shell scripts](../reference/shell-scripts)
+- [Makefiles](../reference/makefiles)
+- [IaC boundaries](./iac-boundaries)
+- [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt)

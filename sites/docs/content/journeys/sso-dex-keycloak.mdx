@@ -1,0 +1,167 @@
+---
+title: Learn SSO With Keycloak And Dex
+description: Learn platform SSO through Keycloak, Dex compatibility, oauth2-proxy, Argo CD, Headlamp, Gitea, and app/environment groups.
+---
+
+# Learn SSO With Keycloak And Dex
+
+Outcome: understand the platform SSO path with Keycloak and oauth2-proxy, and
+where Dex remains useful as the smaller Docker Compose proof path.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-sso-dex-keycloak-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-sso-dex-keycloak-1-dark.svg"
+  alt="SSO journey from browser through gateway routes, oauth2-proxy, Keycloak, protected apps, and the Dex compatibility path"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-sso
+make -C kubernetes/kind check-sso-e2e
+```
+
+Inspect the SSO namespace:
+
+```bash
+kubectl -n sso get deploy,svc,secret
+kubectl -n gateway-routes get httproute | rg "keycloak|argocd|gitea|sentiment|subnetcalc|hello-platform"
+```
+
+For the compact Dex path, use the shared Docker Compose platform stack:
+
+```bash
+cd ~/Developer/personal/platform/docker/compose
+make up
+```
+
+Open the Keycloak platform realm admin console at:
+
+```text
+https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users
+```
+
+Sign in as `demo@admin.test` with the `PLATFORM_DEMO_PASSWORD` value from the
+repo root `.env`. That user should see `demo@dev.test` and `demo@uat.test`
+because `platform-admins` receives the realm-management admin role for the
+`platform` realm. The `keycloak-admin` account is a master-realm break-glass
+account, not the normal demo persona.
+
+## Inspect
+
+Keycloak realm clients, groups, and users are defined by Terraform:
+
+```bash
+rg -n "keycloak_realm|platform-admins|app-subnetcalc-dev|oauth2-proxy|argocd|headlamp" terraform/kubernetes/sso.tf
+```
+
+Gitea switches to reverse-proxy auth when SSO is enabled:
+
+```bash
+rg -n "REVERSE_PROXY|ENABLE_REVERSE_PROXY|REQUIRE_SIGNIN" terraform/kubernetes/gitea.tf
+```
+
+Dex is still present as an explicitly selected compatibility provider:
+
+```bash
+rg -n "sso_provider|sso_provider_is_dex|argocd_app_dex" terraform/kubernetes
+```
+
+The APIM simulator is a resource server in the Kubernetes path:
+
+```bash
+rg -n "sso_apim_audience|apim-simulator-audience|OIDC_AUDIENCE" terraform/kubernetes apps/subnetcalc/apim-simulator
+```
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`kubernetes/kind/stages/900-sso.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/900-sso.tfvars) | Turns on SSO and SSO-protected gateway routes. |
+| [`terraform/kubernetes/sso.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/sso.tf) | Keycloak, Dex compatibility, oauth2-proxy secrets, demo users, groups, and OIDC clients. |
+| [`terraform/kubernetes/apps/platform-gateway-routes-sso`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/apps/platform-gateway-routes-sso) | Protected HTTPRoutes and ReferenceGrants. |
+| [`terraform/kubernetes/scripts/check-sso.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-sso.sh) | Non-browser SSO checks. |
+| [`terraform/kubernetes/scripts/check-rbac.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-rbac.sh) | Kubernetes API RBAC checks for admin and viewer personas. |
+
+## Try One Change
+
+Trace one protected app, for example Gitea:
+
+```bash
+kubectl -n gateway-routes describe httproute gitea
+kubectl -n sso get deploy | rg oauth2
+kubectl -n gitea get configmap,secret
+```
+
+Then answer:
+
+- Which host does the browser open?
+- Which oauth2-proxy instance handles the callback?
+- Which Keycloak client ID is used?
+- Which headers does Gitea trust after authentication?
+
+<Callout type="warning">
+  Keycloak is heavier than Dex. Keep Dex for compact local proof paths, but use
+  Keycloak when you need admin UI, user lifecycle, groups, clients, and
+  representative IDP behaviour.
+</Callout>
+
+## Closure Slice
+
+Inspect the demo identity model in source. It includes platform groups and
+app/environment groups:
+
+```text
+platform-admins -> Argo CD admin, protected Gitea route access, Headlamp cluster-admin demo
+platform-viewers -> read-only Argo CD and Kubernetes API read access
+app-subnetcalc-dev -> subnetcalc dev access
+app-subnetcalc-uat -> subnetcalc UAT access
+app-sentiment-dev -> sentiment dev access
+app-sentiment-uat -> sentiment UAT access
+```
+
+The first concrete tool mapping is Argo CD:
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/sso.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/sso.tf) | Adds Keycloak demo users, groups, clients, and Kubernetes RBAC bindings. |
+| [`terraform/kubernetes/locals.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/locals.tf) | Centralizes provider-neutral OIDC URLs and maps groups to Argo CD roles. |
+
+Additional implemented boundaries:
+
+| Boundary | Current status |
+| --- | --- |
+| Keycloak admin UI | Normal demo admin is `demo@admin.test`; master break-glass is `keycloak-admin`. |
+| Argo CD | Native OIDC is enabled at stage `900`; `platform-admins` is admin and `platform-viewers` is readonly. |
+| Kubernetes API and Headlamp | Kubernetes authorizes real Keycloak tokens by group; Headlamp inherits those API decisions. |
+| App routes | `oauth2-proxy` checks app/environment groups for Subnetcalc, Sentiment, and Hello Platform routes. |
+| Gitea | SSO route is present, but internal group-aware RBAC is not claimed complete. |
+| Grafana | Auth-proxy login is present for observability; group-aware product RBAC is not the proof point. |
+| SigNoz | Optional heavier path only; not part of the active stage-900 SSO/RBAC success story. |
+| Subnetcalc and APIM | Keycloak is used by the Kubernetes platform path; Subnetcalc remains deployable to other platforms and the APIM simulator remains a standalone project contract. |
+
+### Acceptance Checks
+
+```bash
+make -C kubernetes/kind check-sso-e2e
+make -C kubernetes/kind check-rbac
+make -C kubernetes/kind idp-catalog
+kubectl -n argocd get cm argocd-rbac-cm -o yaml
+kubectl auth can-i get pods -n dev --as demo@dev.test --as-group platform-viewers
+kubectl auth can-i delete pods -n dev --as demo@dev.test --as-group platform-viewers
+```
+
+Compare admin and viewer users. The useful learning outcome is being able to
+say which tool reads the group claim and which tool uses a separate
+authorization mapping.
+
+## Related Pages
+
+- [Identity and access](../concepts/identity-and-access)
+- [Sentiment](../apps/sentiment)
+- [Public demo boundary](../security/public-demo-boundary)

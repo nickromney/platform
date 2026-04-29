@@ -1,0 +1,55 @@
+# Auto-migrated D2 source for /diagrams/runtime-variants.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/runtime-variants.svg
+# @dark public/diagrams/runtime-variants-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "One platform model,\nthree local runtimes\nKind\nDocker-backed reference\npath"
+  width: 280
+  height: 192
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Lima\nVM-backed k3s path\nSlicer"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "microVM target\nStage 100\nruntime boot"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "200-400\n500-700\n800-900"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "Local platform\nGitOps, gateway, SSO,\npolicy, observability"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05

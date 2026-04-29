@@ -1,0 +1,108 @@
+---
+title: Build and Use Containers
+description: Build app containers, run compose topologies, and scan images.
+---
+
+# Build and Use Containers
+
+Containers show up in three places: app-local compose loops, the shared
+`docker/compose` platform slice, and Kubernetes workload image distribution.
+Use the narrowest loop that proves the change you are making.
+
+## Local Compose Platform
+
+The `docker/compose` path starts a hardened compose topology with shared edge,
+Dex, APIM simulator, and dev/uat Subnetcalc slices.
+
+```bash
+cd ~/Developer/personal/platform
+cp .env.example .env
+make -C docker/compose prereqs
+make -C docker/compose up-all
+make -C docker/compose urls
+make -C docker/compose logs SERVICE=edge
+make -C docker/compose down
+```
+
+It defaults to `:8443` so it can coexist with Kind on `127.0.0.1:443`.
+
+## Build Workload Images For Kubernetes
+
+Kind:
+
+```bash
+make -C kubernetes/kind ensure-image-cache
+make -C kubernetes/kind build-local-workload-images
+make -C kubernetes/kind sync-image-cache
+```
+
+Lima and Slicer have equivalent helpers:
+
+```bash
+make -C kubernetes/lima build-workload-images
+make -C kubernetes/slicer build-workload-images
+```
+
+From stage `700+`, local workload images are part of the platform story because
+Gitea and Argo CD need concrete image references to reconcile.
+
+## Direct Docker Builds
+
+Use direct builds when you are debugging one Dockerfile.
+
+```bash
+docker build \
+  --progress=plain \
+  -f apps/subnetcalc/api-fastapi-container-app/Dockerfile \
+  -t platform-subnetcalc-api:local \
+  apps/subnetcalc/api-fastapi-container-app
+
+docker run --rm -p 8090:8000 platform-subnetcalc-api:local
+```
+
+For frontend images whose Dockerfile expects the app root as context, keep the
+context aligned with the repo build scripts:
+
+```bash
+docker build \
+  --progress=plain \
+  -f apps/subnetcalc/frontend-typescript-vite/Dockerfile \
+  -t platform-subnetcalc-frontend-vite:local \
+  apps/subnetcalc
+```
+
+## Audit Builds
+
+```bash
+scripts/audit-docker-builds.sh
+scripts/audit-docker-builds.sh api-fastapi-container-app frontend-react
+```
+
+The audit script captures plain build logs, image sizes, layer histories, and
+warning/error lines under `.run/docker-build-audit`.
+
+## Scan Apps and Images
+
+Trivy is optional. When installed locally:
+
+```bash
+make -C apps trivy-prereqs
+make -C apps trivy-scan
+make -C apps trivy-scan-all
+```
+
+The app scan covers `apps/sentiment`, `apps/subnetcalc`, and the canonical
+workload images.
+
+<Callout type="warning">
+  Do not bypass the repo build helpers for Kubernetes image flow unless you are
+  intentionally debugging a Dockerfile. The helpers encode target-specific
+  registry names such as `host.docker.internal:5002`, `host.lima.internal:5002`,
+  and `192.168.64.1:5002`.
+</Callout>
+
+## Related Pages
+
+- [Kind walkthrough](./kind-walkthrough)
+- [Application patterns](../apps/patterns)
+- [Hardening choices](../security/hardening-choices)

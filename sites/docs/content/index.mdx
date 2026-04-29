@@ -1,0 +1,141 @@
+---
+title: Platform Docs
+description: Local platform documentation for the platform repo.
+---
+
+# Platform Docs
+
+<div className="platform-hero">
+  <div className="platform-signal">Inspectable local platform</div>
+  <h1>Build a local IDP you can inspect.</h1>
+  <div className="platform-hero-copy">
+    Bring up the cluster, GitOps control loop, gateway, identity path, policies,
+    observability, and sample services locally. Then inspect every layer instead
+    of treating the platform as a managed black box.
+  </div>
+  <div className="platform-hero-proof">
+    Built for platform engineers who want a serious Internal Developer Platform
+    learning stack without starting in a cloud account.
+  </div>
+  <div className="platform-actions">
+    <a className="platform-action platform-action--primary" href="/tutorials/first-kind-stack">Run the Kind stack</a>
+    <a className="platform-action" href="/concepts/reader-paths">Find your path</a>
+    <a className="platform-action" href="/reference/contracts">Read contracts</a>
+    <a className="platform-action" href="/operations/footguns">Avoid footguns</a>
+    <a className="platform-action" href="/journeys">Choose a journey</a>
+  </div>
+</div>
+
+<ThemeImage
+  className="platform-diagram platform-diagram--hero"
+  lightSrc="/diagrams/idp-local-workbench.svg"
+  darkSrc="/diagrams/idp-local-workbench-dark.svg"
+  alt="Local platform workbench showing operator surface, local runtime, platform control plane, GitOps, security, and sample applications"
+  width={2375}
+  height={832}
+  priority
+/>
+
+## The Short Version
+
+The platform repo is a local platform workbench. Its primary outcome is a useful
+Kubernetes-backed developer platform on a laptop or workstation: cluster,
+Cilium, Hubble, Argo CD, Gitea, policies, app repos, Prometheus, Grafana,
+VictoriaLogs, gateway TLS, and SSO.
+
+It is not pretending to be a complete enterprise platform product yet. The
+current stack covers much of the platform shape: application configuration,
+infrastructure orchestration, environment management, deployment flow, and
+access control. The docs call out where the implementation is complete, where it
+is deliberately local, and where a production platform would need stronger
+self-service, governance, and multi-tenant controls.
+
+The product posture is source available, not contribution-led. The source repo
+has its own contribution guidance for people who need to inspect that project;
+this docs site is written as the product documentation surface.
+
+The default path is [Kind](./tutorials/first-kind-stack). [Lima](./tutorials/lima-walkthrough)
+and [Slicer](./tutorials/slicer-walkthrough) use the same staged platform shape
+but change the host runtime underneath it. The sample apps exist to prove the
+platform path rather than to be the main product.
+
+This site treats the source repo's Makefiles, stage tfvars, shell entrypoints,
+and policy trees as the contract. Older research notes and implementation plans
+in the source repo are useful evidence, but they are not stronger than the code
+that currently runs.
+
+<ThemeImage
+  className="platform-diagram platform-diagram--hero"
+  lightSrc="/diagrams/generated/index-1-light.svg"
+  darkSrc="/diagrams/generated/index-1-dark.svg"
+  alt="Local platform flow from operator commands through runtime, IaC, platform core, GitOps, and applications"
+  width={850}
+  height={1760}
+/>
+
+<div className="platform-grid">
+  <div className="platform-tile">
+    <strong>Run it</strong>
+    <div>Use the Kind tutorial when you want the fastest route to a working local platform.</div>
+  </div>
+  <div className="platform-tile">
+    <strong>Inspect it</strong>
+    <div>Follow the control loops from Make targets through IaC, Helm, GitOps, and workloads.</div>
+  </div>
+  <div className="platform-tile">
+    <strong>Harden it</strong>
+    <div>Use the security pages before changing exposure, identity, policy, or runtime boundaries.</div>
+  </div>
+  <div className="platform-tile">
+    <strong>Upgrade it</strong>
+    <div>Follow the version pathway when Kubernetes, Helm charts, providers, or app dependencies move.</div>
+  </div>
+</div>
+
+## Platform Coverage
+
+The platform is best described as an inspectable local platform workbench. Its
+main operating concerns map to this repo like this:
+
+- **Application configuration management:** Helm values, chart conventions, app
+  repos, and templated manifests show how app intent becomes Kubernetes objects.
+- **Infrastructure orchestration:** Make, shell scripts, Terragrunt/OpenTofu,
+  Kind, Lima, Slicer, Cilium, Gateway API, and Argo CD assemble the platform in
+  explicit stages.
+- **Environment management:** The local stacks give repeatable environments for
+  learning and testing, with Kind as the default and Lima/Slicer as alternate
+  host-runtime paths.
+- **Deployment management:** Gitea and Argo CD demonstrate GitOps delivery
+  rather than ad hoc `kubectl apply` workflows.
+- **Role-based access control:** Stage `900` now proves the local IDP journey
+  with Keycloak users, groups, Argo CD roles, Kubernetes API RBAC, Headlamp
+  authorization, and app/environment route groups. Enterprise tenant lifecycle
+  and governance remain outside the local workbench boundary.
+
+Generated diagrams belong in this repo's source tree and build pipeline, not
+as one-off screenshots. D2 source lives with the docs site, and rendered SVGs
+are regenerated from that source when the platform model changes.
+
+## Where To Go
+
+- [Run the Kind stack](./tutorials/first-kind-stack) if this is your first local platform run.
+- [Pick a reader path](./concepts/reader-paths) if you want the experienced-engineer TLDR or a beginner route.
+- [Read the contracts](./reference/contracts) before changing Makefiles, stage defaults, GitOps, identity, routes, policy, or docs assets.
+- [Check the footguns](./operations/footguns) before debugging a failed apply or smoke check.
+- [Choose a learning journey](./journeys) if you want to learn one platform capability at a time.
+- [Use the full Kind walkthrough](./tutorials/kind-walkthrough) for the reference stack details.
+- [Use the Lima walkthrough](./tutorials/lima-walkthrough) or [Slicer walkthrough](./tutorials/slicer-walkthrough) when you are changing host runtimes.
+- [Use the SD-WAN Lima lab](./tutorials/sd-wan-lima-walkthrough) for the separate overlapping-address teaching lab.
+- [Build and use containers](./tutorials/container-workflow) when you are working on images or compose flows.
+- [Read the mental model](./concepts/mental-model) before changing the repo structure.
+- [Compare platform pathways](./concepts/platform-pathways) before enabling heavier observability or identity options.
+- [Use version management](./concepts/version-management) before bumping Kubernetes, Helm charts, providers, images, or app dependencies.
+- [Use the daily loop](./operations/daily-loop) when you already have a stack and need practical commands.
+- [Read hardening choices](./security/hardening-choices) before changing exposure, policy, or container runtime settings.
+- [Check the command reference](./reference/commands) when you know the task but not the exact target.
+- [Use the source cleanup plan](./reference/source-repo-cleanup-plan) for the follow-up pruning pass in `platform`.
+
+<Callout type="warning">
+  The stack binds operator-facing services to localhost by default. Treat any
+  off-host exposure as a separate security exercise, not a harmless port change.
+</Callout>

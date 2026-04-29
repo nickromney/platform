@@ -1,0 +1,141 @@
+---
+title: Contracts
+description: Stable interfaces between operators, IaC, GitOps, apps, routes, identity, policy, and docs.
+---
+
+# Contracts
+
+This project is easiest to change when each layer keeps a clear contract. A
+contract is not just a file format; it is the promise another layer relies on.
+When a change crosses one of these boundaries, update the implementation,
+validation, and docs together.
+
+## Contract Map
+
+| Contract | Source of truth | Consumers |
+| --- | --- | --- |
+| Operator entrypoints | Root and subtree `Makefile`s | Humans, automation, docs, tests |
+| Stage shape | `kubernetes/{kind,lima,slicer}/stages/*.tfvars` | Make wrappers, Terragrunt/OpenTofu, docs |
+| IaC variables | `terraform/kubernetes/variables.tf` | Stage files, target files, operator overrides |
+| Runtime targets | `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer` | Operators choosing a host runtime |
+| GitOps source | In-cluster Gitea policies repo | Argo CD applications |
+| App source | `apps/*` | Image builds, GitOps manifests, Backstage catalog |
+| Route surface | Gateway API `HTTPRoute`s and APIM config | Browser tests, smoke scripts, docs links |
+| Identity | Keycloak clients, groups, `oauth2-proxy`, RBAC scripts | Admin UIs, app routes, APIM, MCP |
+| Policy | Cilium and Kyverno policy trees | Workloads, gateway, observability, admission |
+| Observability | Prometheus, Grafana, VictoriaLogs, dashboards | Health checks, operator debugging |
+| Docs media | D2 source and generated SVGs | Nextra pages and docs integrity checks |
+
+## Operator Contract
+
+The root Makefile is a router. It should stay informational:
+
+```bash
+make
+make -C apps help
+make -C kubernetes/kind help
+make -C kubernetes/lima help
+make -C kubernetes/slicer help
+```
+
+Focused Makefiles own mutating workflows. If a docs page tells a reader to run
+a command, prefer a Make target over a raw script unless the script is the
+thing being explained.
+
+<Callout type="warning">
+  Do not make root `make` depend on secrets or a live cluster. It is the
+  orientation command and must remain safe for first contact.
+</Callout>
+
+## Stage Contract
+
+Stages are cumulative. `900` means "bring the platform to the full stage-900
+shape"; it does not mean "apply only SSO".
+
+```text
+100 cluster
+200 Cilium
+300 Hubble
+400 Argo CD
+500 Gitea
+600 policies
+700 app repos
+800 observability and gateway TLS
+900 SSO
+```
+
+Current defaults matter:
+
+| Default | Meaning |
+| --- | --- |
+| `enable_victoria_logs = true` | VictoriaLogs is the default log store in stage `800+`. |
+| `enable_loki = false` | Loki is an optional pathway, not the default. |
+| `enable_app_of_apps = false` | Direct Terraform-created Argo CD `Application`s are the default. |
+| `enable_sso = true` at `900` | Keycloak and `oauth2-proxy` are part of the full stack. |
+
+## GitOps Contract
+
+Argo CD reconciles from the in-cluster Gitea policies repository. Terraform
+renders and seeds that repository; it is not the same as directly applying the
+working tree.
+
+```bash
+make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
+```
+
+Use `gitea-sync` after changing Terraform-rendered manifests, app GitOps
+content, Cilium policies, APIM resources, MCP routes, or Backstage catalog
+deployment files.
+
+## Route And Identity Contract
+
+Stage `900` routes browser apps through `oauth2-proxy` and Keycloak. Machine
+API routes may use bearer-token auth and can correctly return `401` or `403`
+when unauthenticated.
+
+| Surface | Contract |
+| --- | --- |
+| Admin browser routes | Redirect unauthenticated users into the SSO flow. |
+| APIM API routes | Validate the APIM audience and policy requirements. |
+| MCP route | Gateway API to APIM simulator to `platform-mcp` service. |
+| Kubernetes API RBAC | Verified through explicit `kubectl auth can-i` checks. |
+| Headlamp | Requires an authenticated Kubernetes session, not just a browser login. |
+
+## App Contract
+
+App-owned facts should live beside the app:
+
+```text
+apps/<name>/README.md
+apps/<name>/catalog-info.yaml
+apps/<name>/docs/
+apps/<name>/mkdocs.yml
+```
+
+Backstage may carry copied catalog entries for the local Gitea runtime, but the
+app-owned docs and catalog metadata should be updated first.
+
+## Documentation Contract
+
+The docs site lives under `sites/docs`. Root `docs/` remains durable source
+documentation for ADRs, DDD, standards, and repo-wide architecture notes.
+
+Non-text docs assets are deliberately constrained:
+
+```text
+sites/docs/diagrams/d2      # D2 source
+sites/docs/public/diagrams  # generated SVGs
+```
+
+Do not add committed videos, screenshots, build output, dependency folders, or
+local run artefacts to the docs site. If animation is reintroduced later, it
+needs source, a clear reason D2 cannot express the idea, and regression checks
+that keep rendered outputs out of Git.
+
+## Related Pages
+
+- [Reader paths](../concepts/reader-paths)
+- [Footguns](../operations/footguns)
+- [Stage ladder](../concepts/stage-ladder)
+- [Makefiles](./makefiles)
+- [Repository map](./repository-map)

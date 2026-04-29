@@ -1,0 +1,78 @@
+---
+title: Local Runtimes
+description: How Kind, Lima, and Slicer differ.
+---
+
+# Local Runtimes
+
+The platform has one stage model and multiple local runtime targets. Choose the
+runtime based on what you are trying to prove.
+
+<ThemeImage
+  lightSrc="/diagrams/runtime-variants.svg"
+  darkSrc="/diagrams/runtime-variants-dark.svg"
+  alt="Kind, Lima, and Slicer all feed the same stage 200 to 900 platform model while changing the host runtime underneath"
+  width={1810}
+  height={322}
+/>
+
+| Runtime | Use when | Stage-100 behaviour |
+| --- | --- | --- |
+| Kind | You want the default teaching path. | Creates a Docker-backed kind cluster. |
+| Lima | You want a VM-backed k3s path. | Starts Lima VM(s), installs k3s, writes kubeconfig. |
+| Slicer | You are testing the Slicer microVM target. | Starts Slicer VM, installs k3s, manages forwards. |
+
+<ThemeImage
+  lightSrc="/diagrams/generated/concepts-local-runtimes-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-local-runtimes-1-dark.svg"
+  alt="Local Runtimes diagram"
+  width={760}
+  height={266}
+/>
+
+## Kind
+
+Kind is the reference path. It uses Docker directly, binds local service ports,
+and is the first target to use when documentation or behaviour seems ambiguous.
+
+```bash
+make -C kubernetes/kind prereqs
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+## Lima
+
+Lima keeps the same platform shape on k3s inside VM(s). It is useful when you
+want a VM boundary or when Docker-backed Kind is not the behaviour under test.
+Stop Kind first on smaller hosts so Docker Desktop and Lima do not compete for
+memory. From stage `700+`, Lima expects host-built workload images and keeps the
+in-cluster Actions runner and Docker socket mount off.
+
+```bash
+make -C kubernetes/lima prereqs
+make -C kubernetes/lima 900 apply AUTO_APPROVE=1
+```
+
+## Slicer
+
+Slicer is optional and more environment-specific. The validated full stack
+requires a sufficiently sized VM root disk and the current local Slicer daemon
+shape. Use it when the microVM target itself is the work. Its default
+`SLICER_NETWORK_PROFILE=cilium` follows the full Cilium/Hubble/policy ladder;
+`SLICER_NETWORK_PROFILE=default` makes stages `200`, `300`, and `600`
+intentional placeholders.
+
+```bash
+make -C kubernetes/slicer prereqs
+make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
+```
+
+<Callout type="warning">
+  Do not switch runtime targets casually on the same host ports. Use reset and
+  status commands to make the active local runtime explicit.
+</Callout>
+
+## Related Pages
+
+- [Reset and cleanup](../operations/reset-and-cleanup)
+- [Commands](../reference/commands)

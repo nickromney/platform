@@ -1,0 +1,49 @@
+# Source diagram for content/journeys/gaps.mdx.
+# @light public/diagrams/generated/journeys-gaps-1-light.svg
+# @dark public/diagrams/generated/journeys-gaps-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+current: {
+  label: "Current workbench\nlocal Kubernetes\nGitOps, policy, SSO"
+  width: 340
+  height: 156
+  style.border-radius: 10
+}
+
+learning: {
+  label: "Closed learning slices\nhello-platform\npromotion, policy kata"
+  width: 340
+  height: 156
+  style.border-radius: 10
+}
+
+implementation: {
+  label: "Source artifacts\nworkloads, policies\nroutes, tests"
+  width: 340
+  height: 156
+  style.border-radius: 10
+}
+
+offers: {
+  label: "Practice loops\ninspect source\nrun checks\nexplain behaviour"
+  width: 340
+  height: 168
+  style.border-radius: 10
+}
+
+capstone: {
+  label: "Capstone journey\nhello-platform\nfrom dev to UAT"
+  width: 340
+  height: 156
+  style.border-radius: 10
+}
+
+current -> learning
+current -> implementation
+learning -> offers
+implementation -> offers
+offers -> capstone

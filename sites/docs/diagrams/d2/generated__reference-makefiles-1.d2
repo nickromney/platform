@@ -1,0 +1,46 @@
+# Auto-migrated D2 source for /diagrams/generated/reference-makefiles-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/reference-makefiles-1-light.svg
+# @dark public/diagrams/generated/reference-makefiles-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Makefiles\nroot Makefile\napps/Makefile"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "kubernetes/<target>\nMakefile\ndocker/compose/Makefile\nsd-wan/lima/Makefile"
+  width: 320
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "mk/common.mk\nmk/stage-workflow.mk\nmk/k8s-terragrunt.mk"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "mk/compose.mk"
+  width: 280
+  height: 104
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
