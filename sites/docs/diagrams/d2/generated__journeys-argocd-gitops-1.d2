@@ -1,0 +1,57 @@
+# Source diagram for content/journeys/argocd-gitops.mdx.
+# @light public/diagrams/generated/journeys-argocd-gitops-1-light.svg
+# @dark public/diagrams/generated/journeys-argocd-gitops-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+bootstrap: {
+  label: "Terraform bootstrap\nArgo CD Helm release\nrepo secrets"
+  width: 330
+  height: 144
+  style.border-radius: 10
+}
+
+gitea: {
+  label: "Gitea repo\npolicies and apps\nseeded locally"
+  width: 330
+  height: 144
+  style.border-radius: 10
+}
+
+apps: {
+  label: "Argo CD Applications\nkyverno, cilium,\napim, dev, uat"
+  width: 330
+  height: 156
+  style.border-radius: 10
+}
+
+sync: {
+  label: "Sync loop\nprune + self-heal\nsync waves"
+  width: 330
+  height: 144
+  style.border-radius: 10
+}
+
+cluster: {
+  label: "Live platform\nnamespaces,\npolicies, apps"
+  width: 330
+  height: 144
+  style.border-radius: 10
+}
+
+optional: {
+  label: "Optional path\napp-of-apps\ncurrently gated"
+  width: 330
+  height: 144
+  style.border-radius: 10
+}
+
+bootstrap -> apps
+gitea -> apps
+apps -> sync
+sync -> cluster
+gitea -> optional
+optional -> sync

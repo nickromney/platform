@@ -1,0 +1,82 @@
+# Auto-migrated D2 source for /diagrams/generated/apps-patterns-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/apps-patterns-1-light.svg
+# @dark public/diagrams/generated/apps-patterns-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+n01: {
+  label: "Application pattern map\nTwo sample apps exercise different\nhosting, identity, routing, and\nAPI boundaries.\nSubnetcalc lane"
+  width: 720
+  height: 192
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Frontend variants\nReact/Vite/static/Flask\nEasy Auth variants"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "APIM simulator\nIdentity gate\nAPI mediation"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "FastAPI backends\nJWT checks\nbackend forwarding"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "Subnet rules\nCIDR logic\ncloud reservation checks"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n06: {
+  label: "Sentiment lane\nStatic UI\nBrowser session"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n07: {
+  label: "local TLS edge\noauth2-proxy\nSession cookie"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n08: {
+  label: "token forwarding\nEdge router\nUI route"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05
+n05 -> n06
+n06 -> n07
+n07 -> n08

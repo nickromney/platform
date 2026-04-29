@@ -1,0 +1,142 @@
+---
+title: Makefiles
+description: How the Makefiles dispatch workflows across the repo.
+---
+
+# Makefiles
+
+The Makefiles are the user-facing command language for the repo. They route a
+technical operator into focused workflows without requiring them to remember
+script paths or raw Terragrunt commands.
+
+## How They Fit Together
+
+<ThemeImage
+  lightSrc="/diagrams/generated/reference-makefiles-1-light.svg"
+  darkSrc="/diagrams/generated/reference-makefiles-1-dark.svg"
+  alt="Makefiles diagram"
+  width={1500}
+  height={294}
+/>
+
+The root Makefile is mostly a router. Mutating stack work belongs in focused
+subtrees such as `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`,
+`docker/compose`, `apps/subnetcalc`, or `sd-wan/lima`.
+
+## Shared Make Includes
+
+| File | Role |
+| --- | --- |
+| [`kubernetes/stage-ladder.mk`](https://github.com/nickromney/platform/blob/main/kubernetes/stage-ladder.mk) | Central stage numbers, stage file names, and stage descriptions for Kind/Lima/Slicer. |
+| [`mk/common.mk`](https://github.com/nickromney/platform/blob/main/mk/common.mk) | Disables builtin rules, sets shell defaults, renders common help, validates `.env`, and suggests likely targets on typo. |
+| [`mk/compose.mk`](https://github.com/nickromney/platform/blob/main/mk/compose.mk) | Selects the Compose backend through `scripts/compose-backend.sh`. |
+| [`mk/k8s-terragrunt.mk`](https://github.com/nickromney/platform/blob/main/mk/k8s-terragrunt.mk) | Defines reusable Terragrunt init/plan/apply command templates. |
+| [`mk/stage-workflow.mk`](https://github.com/nickromney/platform/blob/main/mk/stage-workflow.mk) | Parses stage-first syntax such as `make 900 apply`, validates stage/action combinations, and rejects ambiguous workflow goals. |
+
+## Makefile Inventory
+
+| File | Role |
+| --- | --- |
+| [`apps/Makefile`](https://github.com/nickromney/platform/blob/main/apps/Makefile) | App-wide tests, compose smoke checks, and optional Trivy scans. |
+| [`apps/sentiment/Makefile`](https://github.com/nickromney/platform/blob/main/apps/sentiment/Makefile) | Sentiment compose and app-local workflows. |
+| [`apps/subnetcalc/frontend-html-static/Makefile`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/frontend-html-static/Makefile) | Static frontend focused workflow. |
+| [`apps/subnetcalc/frontend-python-flask/Makefile`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/frontend-python-flask/Makefile) | Flask frontend focused workflow. |
+| [`apps/subnetcalc/frontend-react/Makefile`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/frontend-react/Makefile) | React frontend focused workflow. |
+| [`apps/subnetcalc/frontend-typescript-vite/Makefile`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/frontend-typescript-vite/Makefile) | Vite frontend focused workflow. |
+| [`apps/subnetcalc/Makefile`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/Makefile) | Subnetcalc compose, frontend/backend, vendoring, and test workflows. |
+| [`docker/compose/Makefile`](https://github.com/nickromney/platform/blob/main/docker/compose/Makefile) | Hardened shared compose platform slice with Dex, APIM, dev/uat Subnetcalc. |
+| [`kubernetes/kind/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/Makefile) | Docker-backed reference Kubernetes platform target. |
+| [`kubernetes/lima/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/Makefile) | Lima VM + k3s platform target. |
+| [`kubernetes/slicer/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/Makefile) | Slicer microVM + k3s platform target. |
+| [`Makefile`](https://github.com/nickromney/platform/blob/main/Makefile) | Root router for status, lint, formatting, release, cleanup, and focused workflow discovery. |
+| [`sd-wan/lima/Makefile`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/Makefile) | Separate three-VM SD-WAN teaching lab. |
+
+## Stage Workflow Syntax
+
+The stage Makefiles accept several forms, but the preferred syntax is:
+
+```bash
+make -C kubernetes/kind 100 plan
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/slicer 900 check-security
+```
+
+`mk/stage-workflow.mk` extracts:
+
+- the first valid stage from `MAKECMDGOALS`
+- the first valid action such as `plan` or `apply`
+- the first valid helper such as `check-health` or `check-security`
+- unknown goals, duplicate stages, and ambiguous dispatches
+
+That is why `make 900 apply` works without requiring separate targets for every
+stage/action pair.
+
+## Target Makefiles
+
+### Kind
+
+Kind owns Docker daemon checks, Kind cluster lifecycle, image-cache mode,
+operator overrides, split kubeconfig, and the stage apply wrapper.
+
+Key knobs:
+
+```bash
+KIND_IMAGE_DISTRIBUTION_MODE=registry
+KIND_PRELOAD_IMAGES_MODE=off
+KIND_WORKER_COUNT=1
+MERGE_KUBECONFIG_TO_DEFAULT=0
+```
+
+### Lima
+
+Lima owns VM startup, k3s bootstrap, host gateway proxy helpers, local image
+cache, and the shared stage apply path.
+
+```bash
+LIMA_HOST_GATEWAY_PROXY_MODE=auto
+PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto
+PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto
+```
+
+### Slicer
+
+Slicer owns daemon startup, VM sizing, k3s bootstrap, host forwards, profile
+selection, and the Slicer-specific cache surface.
+
+```bash
+SLICER_NETWORK_PROFILE=cilium
+SLICER_HOST_FORWARDS_MODE=auto
+SLICER_VM_MIN_DISK_GB=25
+```
+
+### SD-WAN Lima
+
+The SD-WAN Makefile is not part of the Kubernetes stage ladder. It owns a
+three-VM Lima lab with explicit `up`, `down`, `destroy`, `test`, `logs`, and
+`show-urls` targets.
+
+## Makefile Style Tips
+
+- Keep root targets informational unless they are repo-wide hygiene tasks.
+- Put mutating workflows in focused subtrees with `make -C <dir> ...`.
+- Use target-local variables with safe defaults, then export only what scripts need.
+- Keep help text accurate; it is the primary UI.
+- Prefer mode variables (`auto|on|off`) over magic behaviour.
+- Validate mode variables early with `$(error ...)`.
+- Use `AUTO_APPROVE=1` for deliberate non-interactive mutation, not as a default.
+- Keep read-only checks able to flip to dry run with `DRY_RUN=1`.
+- Put reusable parsing in `mk/*.mk`, not copied across targets.
+- Let Make invoke scripts; do not bury complex Bash directly in recipes.
+
+<Callout type="warning">
+  Make is the operator interface, not just build automation. A target should
+  explain the operational boundary it crosses: host runtime, kubeconfig,
+  Terraform apply, GitOps sync, app build, or validation.
+</Callout>
+
+## Related Pages
+
+- [Shell scripts](./shell-scripts)
+- [Commands](./commands)
+- [Stage ladder](../concepts/stage-ladder)

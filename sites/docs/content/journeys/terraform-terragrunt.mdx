@@ -1,0 +1,129 @@
+---
+title: Learn Terraform And Terragrunt
+description: Learn the platform's Terraform-compatible IaC flow through Terragrunt, OpenTofu, stage tfvars, and local state.
+---
+
+# Learn Terraform And Terragrunt
+
+Outcome: understand how Make, Terragrunt, OpenTofu or Terraform, tfvars, local
+state, providers, Helm releases, and Kubernetes manifests divide
+responsibility.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-terraform-terragrunt-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-terraform-terragrunt-1-dark.svg"
+  alt="Terraform and Terragrunt journey from Make through tfvars, Terragrunt, OpenTofu, providers, Helm, Kubernetes, and GitOps"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+Always learn the IaC path with `plan` before `apply`:
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 200 plan
+make -C kubernetes/kind 200 apply AUTO_APPROVE=1
+make -C kubernetes/kind 300 plan
+```
+
+To compare execution engines without changing the platform definition:
+
+```bash
+TG_TF_PATH=terraform make -C kubernetes/kind 300 plan
+```
+
+The default path is OpenTofu, selected by `terraform/root.hcl`.
+
+## Inspect
+
+Look at the input files first:
+
+```bash
+sed -n '1,120p' kubernetes/kind/stages/300-hubble.tfvars
+sed -n '1,120p' kubernetes/kind/targets/kind.tfvars
+sed -n '1,160p' terraform/root.hcl
+```
+
+Then inspect the generated state and backend files:
+
+```bash
+ls -la terraform/.run/kubernetes-kind
+sed -n '1,80p' terraform/kubernetes/backend.tf
+```
+
+The core question is: which layer owns this behaviour?
+
+| Layer | Owns |
+| --- | --- |
+| Make | Runtime checks, stage selection, image preloading, health checks. |
+| Terragrunt | Local backend generation, tfvar wiring, execution-engine selection. |
+| OpenTofu or Terraform | The graph of Kubernetes, Helm, local, TLS, random, and external resources. |
+| Argo CD | Continuous reconciliation after the bootstrap handoff. |
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`terraform/root.hcl`](https://github.com/nickromney/platform/blob/main/terraform/root.hcl) | Terragrunt root config and default `tofu` binary. |
+| [`mk/k8s-terragrunt.mk`](https://github.com/nickromney/platform/blob/main/mk/k8s-terragrunt.mk) | Shared Terragrunt invocation from runtime Makefiles. |
+| [`kubernetes/scripts/build-tfvar-args.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/build-tfvar-args.sh) | Ordered tfvars argument assembly. |
+| [`terraform/kubernetes/*.tf`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes) | The platform HCL module. |
+| [`kubernetes/kind/stages/*.tfvars`](https://github.com/nickromney/platform/tree/main/kubernetes/kind/stages) | Stage capability toggles. |
+| [`kubernetes/kind/targets/kind.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/targets/kind.tfvars) | Kind target-specific values. |
+
+## Try One Change
+
+Do a read-only toggle exercise. Compare the plan for stage `800` with and
+without a local override:
+
+```hcl filename="local-platform.override.tfvars"
+enable_loki = true
+enable_tempo = true
+```
+
+```bash
+PLATFORM_TFVARS=$PWD/local-platform.override.tfvars \
+  make -C kubernetes/kind 800 plan
+```
+
+Delete the override when done. The lesson is that operator overrides should not
+be committed into shared stage files unless the default platform path is
+actually changing.
+
+<Callout type="warning">
+  Terragrunt cache directories are implementation detail. If a helper script
+  assumes it is running from the source tree instead of the cache copy, it will
+  fail in ways that look unrelated to Terraform.
+</Callout>
+
+## Closure Slice
+
+The platform now has a repo-local IaC variable lifecycle exercise. It closes
+the loop with a safe checklist for adding a new input without creating a
+meaningless live toggle.
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/docs/iac-variable-lifecycle.md`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/docs/iac-variable-lifecycle.md) | Checklist and safe practice variable for learning variable lifecycle. |
+| [`terraform/kubernetes/variables.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/variables.tf) | The real variable contract. |
+| [`terraform/kubernetes/locals.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/locals.tf) | The place to normalize variable behaviour before resource use. |
+
+### Acceptance Checks
+
+```bash
+make -C kubernetes/kind 800 plan
+TG_TF_PATH=terraform make -C kubernetes/kind 800 plan
+make -C kubernetes/kind 800 apply AUTO_APPROVE=1
+```
+
+The plan should show only the intended training diff. It should not recreate
+the cluster, gateway, or unrelated Helm releases.
+
+## Related Pages
+
+- [Terraform, OpenTofu, and Terragrunt](../concepts/terraform-opentofu-terragrunt)
+- [IaC boundaries](../concepts/iac-boundaries)
+- [Version management](../concepts/version-management)

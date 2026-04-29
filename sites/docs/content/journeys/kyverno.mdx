@@ -1,0 +1,131 @@
+---
+title: Learn Kyverno
+description: Learn admission policy, generated defaults, audit mode, and policy reporting with Kyverno.
+---
+
+# Learn Kyverno
+
+Outcome: understand how Kyverno admission complements Cilium runtime policy:
+Kyverno decides which Kubernetes objects are accepted, generated, or reported;
+Cilium decides which traffic is allowed after pods exist.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-kyverno-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-kyverno-1-dark.svg"
+  alt="Kyverno journey from manifest submission through admission, generated defaults, policy reports, and GitOps-managed policies"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 600 apply AUTO_APPROVE=1
+kubectl -n kyverno get deploy,pods
+kubectl get cpol
+```
+
+Validate the checked-in policies:
+
+```bash
+scripts/validate-kyverno-policies.sh --mode static --execute
+scripts/validate-kyverno-policies.sh --mode live --execute
+```
+
+## Inspect
+
+Start with generated default deny:
+
+```bash
+kubectl get ns --show-labels | rg "kyverno.io/isolate|namespace-role"
+kubectl -n dev get networkpolicy
+kubectl -n sit get networkpolicy
+```
+
+Then inspect policy reports:
+
+```bash
+kubectl get policyreports -A
+kubectl get clusterpolicyreports
+kubectl get cpol restrict-image-registries -o yaml
+```
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`kubernetes/kind/stages/600-policies.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/600-policies.tfvars) | Turns on policies through Argo CD. |
+| [`terraform/kubernetes/policies.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/policies.tf) | Creates Argo CD Applications for Kyverno and policy bundles. |
+| [`terraform/kubernetes/cluster-policies/kyverno/shared`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/cluster-policies/kyverno/shared) | Shared ClusterPolicy manifests. |
+| [`terraform/kubernetes/cluster-policies/kyverno/uat`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/cluster-policies/kyverno/uat) | UAT-specific runtime hardening audits. |
+| [`scripts/validate-kyverno-policies.sh`](https://github.com/nickromney/platform/blob/main/scripts/validate-kyverno-policies.sh) | Static and live validation entrypoint. |
+
+## Try One Change
+
+Create a local throwaway manifest that is missing the required labels and test
+how Kyverno responds:
+
+```yaml filename="bad-deployment.yaml"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: missing-platform-labels
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: missing-platform-labels
+  template:
+    metadata:
+      labels:
+        app: missing-platform-labels
+    spec:
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+```
+
+```bash
+kubectl apply --dry-run=server -f bad-deployment.yaml
+```
+
+Read the admission response and map it back to
+`require-app-labels-application-namespaces.yaml`.
+
+<Callout type="warning">
+  Audit mode is not enforcement. A policy report is evidence that something
+  happened; it is not the same as blocking the object at admission time.
+</Callout>
+
+## Closure Slice
+
+The UAT hardening path now includes a restricted runtime profile policy and
+Kyverno test fixtures. Use them to compare audited capabilities with visible
+runtime-profile decisions.
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-runtime-profile.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/kyverno/uat/uat-restrict-runtime-profile.yaml) | Audits seccomp, non-root runtime, and privilege escalation. |
+| [`terraform/kubernetes/cluster-policies/kyverno/uat/test-uat-restrict-runtime-profile-resources.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/kyverno/uat/test-uat-restrict-runtime-profile-resources.yaml) | Good and bad pod fixtures. |
+| [`terraform/kubernetes/cluster-policies/kyverno/uat/kyverno-test.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/kyverno/uat/kyverno-test.yaml) | Test suite that proves the policy behaviour. |
+
+### Acceptance Checks
+
+```bash
+scripts/validate-kyverno-policies.sh --mode static --execute
+kubectl apply --dry-run=server -f unsafe-pod.yaml
+kubectl get policyreports -A | rg uat
+```
+
+The learning outcome is that a junior engineer can explain why the policy is
+in audit mode, what would change to enforce it, and how test fixtures prove the
+decision.
+
+## Related Pages
+
+- [Kyverno admission](../security/kyverno)
+- [Cilium policy](../security/cilium)
+- [Public demo boundary](../security/public-demo-boundary)

@@ -1,0 +1,361 @@
+---
+title: Learn Kubernetes
+description: Learn Kubernetes by watching the platform build from a bare Kind cluster into a full local IDP.
+---
+
+# Learn Kubernetes
+
+Outcome: understand namespaces, pods, services, deployments, storage, labels,
+node ports, Gateway API routes, and the difference between direct cluster
+objects and objects reconciled by controllers.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-kubernetes-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-kubernetes-1-dark.svg"
+  alt="Kubernetes journey from Kind nodes through namespaces, workloads, services, gateway routes, and health checks"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+Start with the smallest useful cluster, then compare it with the complete
+platform:
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+kubectl get nodes -o wide
+kubectl get ns
+
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-health
+```
+
+## Inspect
+
+Use labels and namespaces as your first mental model:
+
+```bash
+kubectl get ns --show-labels
+kubectl -n dev get deploy,svc,pvc
+kubectl -n apim get deploy,svc,configmap
+kubectl -n platform-gateway get gateway,svc
+kubectl -n gateway-routes get httproute
+```
+
+Then trace one app request path:
+
+```bash
+kubectl -n dev get deploy sentiment-router sentiment-api sentiment-auth-ui
+kubectl -n dev get svc sentiment-router sentiment-api sentiment-auth-ui
+kubectl -n gateway-routes describe httproute sentiment-dev
+```
+
+The important pattern is that Kubernetes is not just pods. The platform uses
+labels to make policy possible, services to create stable in-cluster names,
+PVCs for local state, and HTTPRoutes to attach app traffic to the gateway.
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`kubernetes/kind/stages/100-cluster.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/100-cluster.tfvars) | The bare Kind cluster inputs. |
+| [`kubernetes/kind/stages/900-sso.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/900-sso.tfvars) | The full local platform inputs. |
+| [`terraform/kubernetes/namespaces.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/namespaces.tf) | Namespace creation and labels. |
+| [`terraform/kubernetes/apps/workloads/base/all.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/workloads/base/all.yaml) | Dev and UAT sample workloads. |
+| [`terraform/kubernetes/apps/platform-gateway`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/apps/platform-gateway) | Gateway API platform front door. |
+| [`terraform/kubernetes/apps/platform-gateway-routes-sso`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/apps/platform-gateway-routes-sso) | SSO-protected HTTPRoutes. |
+
+## Try One Change
+
+Find the `sentiment-router` deployment in `apps/workloads/base/all.yaml` and
+answer these questions before editing anything:
+
+```bash
+rg -n "name: sentiment-router|proxy_pass|containerPort" terraform/kubernetes/apps/workloads/base/all.yaml
+```
+
+- Which service receives traffic from the HTTPRoute?
+- Which Nginx paths go to the UI?
+- Which Nginx paths go to the API?
+- Which labels would Cilium and Kyverno depend on?
+
+<Callout type="warning">
+  Do not learn Kubernetes by changing random live objects with `kubectl edit`.
+  In this repo, durable platform state should come from tfvars, Terraform HCL,
+  Kustomize YAML, Helm values, or GitOps-managed manifests.
+</Callout>
+
+## Follow-On Journey
+
+The follow-on exercise uses a tiny checked-in `hello-platform` workload that
+follows the same platform path as the sample apps. Trace the deployment,
+service, route, labels, service account, reference grant, and starter policy
+from source to live cluster state.
+
+### Target Shape
+
+| Artifact | What it teaches |
+| --- | --- |
+| [`terraform/kubernetes/apps/workloads/hello-platform`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/apps/workloads/hello-platform) | Base Kubernetes objects: ServiceAccount, Deployment, Service, and ReferenceGrant. |
+| [`terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml) | Environment-specific image override for dev. |
+| [`terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml) | Environment-specific image override for UAT. |
+| [`terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-dev.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-dev.yaml) | Gateway API route for the dev host. |
+| [`terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-uat.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-uat.yaml) | Gateway API route for the UAT host. |
+| [`terraform/kubernetes/cluster-policies/cilium/projects/hello-platform`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/cluster-policies/cilium/projects/hello-platform) | Starter Cilium ingress policy for the workload. |
+
+The app should expose `/healthz` and `/`, carry the labels Kyverno expects, and
+be reachable through Gateway API in both dev and UAT.
+
+### Workload Skeleton
+
+Start with one base manifest. The important learning point is the object set:
+the app uses one ServiceAccount, one Deployment, one Service, and one
+ReferenceGrant so routes in `gateway-routes` can target services in `dev` and
+`uat`.
+
+```yaml filename="terraform/kubernetes/apps/workloads/hello-platform/all.yaml"
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hello-platform
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-platform
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello-platform
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hello-platform
+        app: hello-platform
+        project: kindlocal
+        team: dolphin
+        tier: frontend
+    spec:
+      serviceAccountName: hello-platform
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: python:3.13-alpine
+          command:
+            - python
+            - -c
+            - |
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+
+              class Handler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      if self.path in ("/", "/healthz"):
+                          self.send_response(200)
+                          self.send_header("content-type", "text/plain")
+                          self.end_headers()
+                          self.wfile.write(b"hello from the platform\n")
+                          return
+                      self.send_response(404)
+                      self.end_headers()
+
+              HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-platform
+  labels:
+    app.kubernetes.io/name: hello-platform
+    app: hello-platform
+    project: kindlocal
+    team: dolphin
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: hello-platform
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gateway-routes-hello-platform
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: gateway-routes
+  to:
+    - group: ""
+      kind: Service
+      name: hello-platform
+```
+
+Add a Kustomize entrypoint:
+
+```yaml filename="terraform/kubernetes/apps/workloads/hello-platform/kustomization.yaml"
+resources:
+  - all.yaml
+```
+
+Then include it from dev and UAT overlays:
+
+```yaml filename="terraform/kubernetes/apps/dev/kustomization.yaml"
+resources:
+  - ../workloads/base
+  - ../workloads/hello-platform
+```
+
+```yaml filename="terraform/kubernetes/apps/uat/kustomization.yaml"
+resources:
+  - ../workloads/base
+  - ../workloads/hello-platform
+```
+
+### Gateway Route
+
+Add one HTTPRoute per environment under
+`terraform/kubernetes/apps/platform-gateway-routes-sso`. The dev route should
+look like this:
+
+```yaml filename="terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-dev.yaml"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello-platform-dev
+  namespace: gateway-routes
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: platform-gateway
+      sectionName: https
+  hostnames:
+    - hello-platform.dev.127.0.0.1.sslip.io
+  rules:
+    - backendRefs:
+        - name: hello-platform
+          namespace: dev
+          port: 8080
+```
+
+Then add the UAT equivalent with:
+
+```text
+name: hello-platform-uat
+hostname: hello-platform.uat.127.0.0.1.sslip.io
+backend namespace: uat
+```
+
+Both route files must be listed in the route overlay's `kustomization.yaml`.
+
+### Starter Policy
+
+The policy starter should allow only the route path you expect. Keep it narrow
+enough that Hubble can prove what changed later:
+
+```yaml filename="terraform/kubernetes/cluster-policies/cilium/projects/hello-platform/hello-platform-ingress.yaml"
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hello-platform-ingress
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:project": kindlocal
+      "k8s:team": dolphin
+      "k8s:app": hello-platform
+      "k8s:tier": frontend
+      "k8s:app.kubernetes.io/name": hello-platform
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": nginx-gateway
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+```
+
+Wire that project policy into the `dev` and `uat` Cilium overlays after the
+basic deployment works. That sequencing matters: first prove the Kubernetes
+object path, then add runtime policy and use Hubble to inspect the traffic.
+
+### Apply And Inspect
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+
+kubectl -n dev get deploy,svc,sa | rg hello-platform
+kubectl -n uat get deploy,svc,sa | rg hello-platform
+kubectl -n gateway-routes get httproute | rg hello-platform
+kubectl -n dev describe deploy hello-platform
+```
+
+Then test the route:
+
+```bash
+curl -kI https://hello-platform.dev.127.0.0.1.sslip.io
+curl -kI https://hello-platform.uat.127.0.0.1.sslip.io
+```
+
+### Acceptance Checks
+
+```bash
+kubectl -n dev get deploy,svc,sa | rg hello-platform
+kubectl -n uat get deploy,svc,sa | rg hello-platform
+kubectl -n gateway-routes get httproute hello-platform-dev
+kubectl -n gateway-routes get httproute hello-platform-uat
+kubectl -n dev get ciliumnetworkpolicy | rg hello-platform
+curl -kI https://hello-platform.dev.127.0.0.1.sslip.io
+curl -kI https://hello-platform.uat.127.0.0.1.sslip.io
+```
+
+The learning outcome is not "the app runs." The outcome is that a learner can
+explain every object required for a platform-owned Kubernetes workload.
+
+<Callout type="warning">
+  Do not add this by editing live objects first. The point of the journey is to
+  teach the platform path: manifest source, GitOps reconciliation, policy, and
+  inspection from live Kubernetes state.
+</Callout>
+
+## Related Pages
+
+- [Run the Kind stack](../tutorials/first-kind-stack)
+- [Stage ladder](../concepts/stage-ladder)
+- [Manifest assembly](../concepts/manifest-assembly)

@@ -1,0 +1,111 @@
+---
+title: Reader Paths
+description: TLDR routes for first-time users, technology beginners, operators, and experienced engineers.
+---
+
+# Reader Paths
+
+This repo can look larger than the idea it teaches. The core mental model is
+small: Make selects a local runtime, staged IaC builds a Kubernetes platform,
+GitOps reconciles apps and policy, and sample workloads prove the serving,
+identity, observability, and security contracts.
+
+Use this page to choose the shortest useful path through the docs.
+
+## TLDR For Experienced Engineers
+
+If you already know Kubernetes, GitOps, and local container runtimes, start
+here:
+
+```bash
+cd ~/Developer/personal/platform
+make
+make -C kubernetes/kind help
+cp .env.example .env
+make -C kubernetes/kind prereqs
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-health
+make -C kubernetes/kind show-urls
+```
+
+Then read only these pages:
+
+| Need | Page |
+| --- | --- |
+| What is the architecture? | [Mental model](./mental-model) |
+| What are the stable contracts? | [Contracts](../reference/contracts) |
+| What will bite me? | [Footguns](../operations/footguns) |
+| What changed from normal Terraform? | [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt) |
+| What is optional? | [Platform pathways](./platform-pathways) |
+
+## New To This Project
+
+Start with the default path. Kind is the reference runtime because it has the
+fewest moving host parts and the best validation coverage.
+
+1. Read [Mental model](./mental-model).
+2. Run [Run the Kind stack](../tutorials/first-kind-stack).
+3. Use [Health and URLs](../operations/health-and-urls) to inspect the result.
+4. Read [Application patterns](../apps/patterns) once the stack works.
+5. Keep [Footguns](../operations/footguns) open while debugging.
+
+<Callout type="warning">
+  Do not start with Lima or Slicer unless you specifically need a VM-backed
+  runtime. They are valid targets, but Kind is the default teaching path.
+</Callout>
+
+## New To The Technology
+
+You do not need to learn everything at once. Read the platform in layers:
+
+| Layer | Learn first | Why it matters |
+| --- | --- | --- |
+| Local runtime | [Local runtimes](./local-runtimes) | Explains Kind, Lima, Slicer, host ports, and kubeconfigs. |
+| Kubernetes stages | [Stage ladder](./stage-ladder) | Shows why `900` means full shape, not only the last step. |
+| IaC | [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt) | Explains tfvars layering and wrapper contracts. |
+| GitOps | [Learn GitOps with Argo CD](../journeys/argocd-gitops) | Explains why the live cluster follows Gitea, not your working tree directly. |
+| Identity | [Identity and access](./identity-and-access) | Explains Keycloak, `oauth2-proxy`, app audiences, and RBAC. |
+| Policy | [Cilium policy](../security/cilium) and [Kyverno admission](../security/kyverno) | Explains runtime network rules and admission guardrails. |
+
+The goal is not to memorize every component. The goal is to understand which
+contract owns a failure: host runtime, Make wrapper, Terraform rendering, Argo
+CD reconciliation, Gateway routing, identity, app code, or policy.
+
+## Daily Operators
+
+Once you have a working stack, your normal loop is smaller than the first run:
+
+```bash
+make -C kubernetes/kind status
+make -C kubernetes/kind check-health
+make -C kubernetes/kind show-urls
+make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
+```
+
+Use [Daily loop](../operations/daily-loop) for the routine commands and
+[Troubleshooting](../operations/troubleshooting) when the checks point at a
+specific layer.
+
+## Contributors And Maintainers
+
+When you change behaviour, update the contract page or the closest owning page
+in the same pull request. Docs should follow the source of truth:
+
+- Make targets document operator entrypoints.
+- Stage tfvars document default platform shape.
+- `variables.tf` documents accepted IaC inputs.
+- GitOps manifests document live application shape.
+- App-owned READMEs and catalog files document app ownership.
+
+<Callout type="warning">
+  Time-stamped plans and old session notes are evidence, not current docs.
+  Prefer the code, Makefiles, tfvars, and active runbooks when facts conflict.
+</Callout>
+
+## Related Pages
+
+- [Contracts](../reference/contracts)
+- [Footguns](../operations/footguns)
+- [Repository map](../reference/repository-map)
+- [Command reference](../reference/commands)

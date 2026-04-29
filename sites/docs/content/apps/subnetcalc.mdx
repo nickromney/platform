@@ -1,0 +1,120 @@
+---
+title: Subnetcalc
+description: The richer sample workload for networking and hosting patterns.
+---
+
+# Subnetcalc
+
+Subnetcalc is the main domain-rich sample app. It calculates IPv4 and IPv6
+subnet details and demonstrates multiple frontend, backend, authentication, and
+hosting patterns.
+
+## Why It Exists
+
+The platform needs a workload with enough shape to exercise routing, auth,
+API mediation, frontend delivery, and network policy. Subnetcalc gives the
+stack those concerns without pretending to be the platform itself.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/apps-subnetcalc-1-light.svg"
+  darkSrc="/diagrams/generated/apps-subnetcalc-1-dark.svg"
+  alt="Subnetcalc diagram"
+  width={1110}
+  height={266}
+/>
+
+## Local Compose Loop
+
+```bash
+cd ~/Developer/personal/platform/apps/subnetcalc
+cp ../../.env.example ../../.env
+make start-compose-happy
+```
+
+For a smaller loop:
+
+```bash
+make start-compose-backend-container
+make start-compose-frontend-vite
+make start-compose-frontend-react
+make start-compose-frontend-static
+```
+
+## Hosting and Auth Patterns
+
+| Pattern | Frontend | Backend | Auth model | Why it exists |
+| --- | --- | --- | --- | --- |
+| Anonymous container-app | HTML, Vite, React, Flask | FastAPI container app | none | Fastest domain and UI loop. |
+| Function family | Flask or SPA variants | FastAPI Azure Function container | JWT or app-managed auth | Exercises function-hosting and token handling. |
+| OIDC plus APIM | Protected frontend | OIDC-aware API behind APIM simulator | OIDC at proxy and token checks at API boundary | Mirrors the layered platform path. |
+| Mock Easy Auth | React Easy Auth mock | mocked platform principal | Easy Auth style headers | Tests Azure-style identity headers without Azure. |
+| SWA / App Service patterns | Vite or React | Function or container backend | SWA platform auth, JWT, or Easy Auth | Compares cloud hosting shapes. |
+
+The important design choice is that frontend framework, identity model, and
+backend hosting style are separable. That lets the repo compare patterns
+without rewriting the subnet calculation domain each time.
+
+Keycloak is the Kubernetes stage-900 IdP, not a dependency of the subnet
+calculation domain. The app keeps anonymous, JWT, Easy Auth, SWA/App Service,
+and APIM-mediated variants so it can still be deployed to platforms such as
+Azure without depending on the local Keycloak stack. The vendored APIM
+simulator remains a separate project contract; the platform path configures it
+to validate Keycloak access tokens with the `apim-simulator` audience.
+
+## Request Paths
+
+Anonymous path:
+
+<ThemeImage
+  lightSrc="/diagrams/generated/apps-subnetcalc-2-light.svg"
+  darkSrc="/diagrams/generated/apps-subnetcalc-2-dark.svg"
+  alt="Subnetcalc 2 diagram"
+  width={1110}
+  height={294}
+/>
+
+OIDC plus APIM path:
+
+<ThemeImage
+  lightSrc="/diagrams/generated/apps-subnetcalc-3-light.svg"
+  darkSrc="/diagrams/generated/apps-subnetcalc-3-dark.svg"
+  alt="Subnetcalc 3 diagram"
+  width={2160}
+  height={322}
+/>
+
+## In the Kubernetes Stack
+
+In the Kubernetes platform, Subnetcalc is reconciled through the shared
+Terraform and GitOps path. Stage `700+` is where app repos and local workload
+image flow become part of the platform story.
+
+The platform path adds controls that compose does not fully model:
+
+- Gateway API routing
+- Keycloak and `oauth2-proxy` SSO at stage `900`
+- Cilium namespace and project policies
+- Kyverno label and image-source rules
+- Gitea-seeded app repositories
+- Argo CD reconciliation
+
+## Common Mistakes
+
+<Callout type="warning">
+  Do not hand-edit the vendored `apim-simulator` subtree and expect those
+  changes to survive. Land source changes in the standalone simulator repo,
+  then re-vendor from an explicit tag or SHA.
+</Callout>
+
+- Run only one compose slice that owns the same ports.
+- Prefer the Vite frontend for routine frontend work.
+- Use the Kubernetes stack when you need GitOps, gateway, SSO, or policy
+  behaviour.
+
+## Related Pages
+
+- [Run an app locally](../tutorials/first-app-loop)
+- [Application patterns](./patterns)
+- [Container workflow](../tutorials/container-workflow)
+- [Sentiment](./sentiment)
+- [Stage ladder](../concepts/stage-ladder)

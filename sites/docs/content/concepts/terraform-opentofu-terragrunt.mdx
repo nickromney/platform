@@ -1,0 +1,274 @@
+---
+title: Terraform, OpenTofu, and Terragrunt
+description: How the platform uses Terraform-compatible IaC, why OpenTofu is the default, and what Terragrunt adds.
+---
+
+# Terraform, OpenTofu, and Terragrunt
+
+The platform uses Terraform-compatible HCL for the durable Kubernetes stack.
+OpenTofu is the default execution engine in the repo today, but the stack is
+written in the Terraform language and can be run through Terragrunt with either
+`tofu` or `terraform` when you are deliberately testing that path.
+
+Terragrunt is not a second platform definition. It is the wrapper that selects
+the execution engine, generates local backend configuration, layers stage and
+target inputs, and calls the shared `terraform/kubernetes` module from each
+runtime-specific Makefile.
+
+<ThemeImage
+  lightSrc="/diagrams/terraform-terragrunt-runtime.svg"
+  darkSrc="/diagrams/terraform-terragrunt-runtime-dark.svg"
+  alt="Make selects runtime and stage inputs, Terragrunt selects state and the IaC engine, and Terraform-compatible HCL reconciles Kubernetes resources"
+  width={850}
+  height={1792}
+/>
+
+## Roles
+
+| Layer | Owns | Does not own |
+| --- | --- | --- |
+| Make | Operator commands, runtime preflight, stage targets, image build/cache steps, host checks, post-apply validation. | Durable Kubernetes object modelling. |
+| Shell | Host-sensitive glue, kubeconfig repair, local image handling, policy rendering helpers, health checks. | Hidden lifecycle work inside HCL hooks. |
+| Terragrunt | Backend generation, state path selection, execution-engine selection, common `init`/`plan`/`apply` invocation, input layering. | Creating VMs, starting Docker, opening browsers, or concealing host behaviour. |
+| OpenTofu or Terraform | Evaluating the HCL graph and reconciling Terraform-managed resources. | Deciding which local runtime to start. |
+| Providers | Kubernetes, Helm, Kind, local files, random values, TLS material, external data, and narrow `null_resource` bootstrap edges. | Replacing every operator workflow. |
+
+The distinction matters because failure modes stay readable. A failed host port
+check belongs in the runtime Makefile. A failed Helm release belongs in the
+Terraform-compatible graph. A bad state path belongs in Terragrunt.
+
+## Default Engine
+
+The root Terragrunt file sets OpenTofu as the default:
+
+```hcl filename="terraform/root.hcl"
+terraform_binary = "tofu"
+```
+
+That matches the current prereq checks and local workflow:
+
+```bash
+brew install opentofu terragrunt
+make -C kubernetes/kind 900 plan
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+Use OpenTofu unless you are specifically validating Terraform compatibility.
+It is the path the Makefiles and scripts expect by default.
+
+## Terraform Compatibility
+
+Terragrunt can run a different Terraform-compatible binary through its
+`--tf-path` option or `TG_TF_PATH` environment variable. The local Terragrunt
+version exposes this directly:
+
+```bash
+terragrunt run --help | grep -- --tf-path
+```
+
+For an explicit Terraform run, use the Make wrapper and override Terragrunt's
+binary selection:
+
+```bash
+cd ~/Developer/personal/platform
+TG_TF_PATH=terraform make -C kubernetes/kind 900 plan
+```
+
+That keeps the same Make preflight, the same Terragrunt configuration, the same
+stage and target tfvars, and the same `terraform/kubernetes` HCL. Only the
+execution engine changes.
+
+<Callout type="warning">
+  Treat Terraform runs as a compatibility path. The repo default, provider
+  lockfile, prereq checks, and day-to-day operator flow are OpenTofu-first.
+</Callout>
+
+## What Terragrunt Adds
+
+The repo uses Terragrunt for a few small, concrete additions.
+
+First, it generates local backend configuration. The root file keeps state
+inside the repo's `.run/` tree instead of requiring a cloud backend:
+
+```hcl filename="terraform/root.hcl"
+remote_state {
+  backend = "local"
+  generate = {
+    path      = "backend.tf"
+    if_exists = "overwrite"
+  }
+  config = {
+    path = get_env(
+      "TG_STATE_PATH",
+      "${get_parent_terragrunt_dir()}/.run/${path_relative_to_include()}/terraform.tfstate"
+    )
+  }
+}
+```
+
+Second, each runtime Makefile sets a runtime-specific state path. Kind, Lima,
+and Slicer all call the same `terraform/kubernetes` stack, but they do not
+share the same state file:
+
+```make filename="kubernetes/lima/Makefile"
+STACK_DIR := ../../terraform/kubernetes
+STATE_FILE ?= ../../terraform/.run/kubernetes-lima/terraform.tfstate
+TG_STATE_PATH ?= $(abspath $(STATE_FILE))
+include ../../mk/k8s-terragrunt.mk
+```
+
+Third, the shared Make helper centralises Terragrunt invocation:
+
+```make filename="mk/k8s-terragrunt.mk"
+TG ?= terragrunt
+TG_INIT_FLAGS ?= -reconfigure
+TG_ENV_PREFIX = TG_STATE_PATH="$(TG_STATE_PATH)" TG_LOG_SHOW_ABS_PATHS=$(TG_LOG_SHOW_ABS_PATHS)
+
+define tg_stack_apply
+cd "$(STACK_DIR)" && $(TG_ENV_PREFIX) $(TG) apply $(TG_APPLY_FLAGS) $(strip $(1))
+endef
+```
+
+The target Makefiles decide when to call this helper. Terragrunt does not
+decide whether Docker is running, whether Lima is booted, or whether Slicer has
+host forwards.
+
+## Input Layering
+
+The platform uses a consistent input order:
+
+1. stage tfvars, such as `kubernetes/kind/stages/900-sso.tfvars`
+2. target tfvars, such as `kubernetes/kind/targets/kind.tfvars`
+3. optional base override file from `PLATFORM_BASE_TFVARS`
+4. optional operator override file from `PLATFORM_TFVARS`
+5. runtime-specific generated operator overrides where the target needs them
+6. direct `-var` arguments for values such as kubeconfig path and context
+
+`kubernetes/scripts/build-tfvar-args.sh` is the small helper that turns that
+ordered list into Terragrunt/OpenTofu arguments. It only includes files that
+exist, so optional override files are safe to leave unset:
+
+```bash
+kubernetes/scripts/build-tfvar-args.sh \
+  --execute \
+  --format assignment \
+  --flag -var-file \
+  --optional-file kubernetes/kind/stages/900-sso.tfvars \
+  --optional-file kubernetes/kind/targets/kind.tfvars \
+  --optional-file "${PLATFORM_BASE_TFVARS:-}" \
+  --optional-file "${PLATFORM_TFVARS:-}"
+```
+
+The output shape is what the execution engine receives through Terragrunt:
+
+```bash
+-var-file=kubernetes/kind/stages/900-sso.tfvars \
+-var-file=kubernetes/kind/targets/kind.tfvars
+```
+
+Later files override earlier files in normal Terraform/OpenTofu fashion. That
+is why target files can specialise a shared stage, and operator override files
+can make local changes without editing the checked-in stage definitions.
+
+## HCL and Template Flow
+
+The HCL stack is split by platform concern under `terraform/kubernetes`:
+
+| File area | Purpose |
+| --- | --- |
+| `main.tf` | Required Terraform/OpenTofu version and provider pins. |
+| `providers.tf` | Kubernetes, Helm, and kubectl provider configuration from the selected kubeconfig. |
+| `cluster.tf` | Kind cluster shape, generated Kind config, and kubeconfig bootstrap edges. |
+| `cilium.tf`, `argocd.tf`, `gitea.tf`, `sso.tf` | Main platform components and their feature toggles. |
+| `policies.tf`, `gitops.tf`, `app-of-apps.tf`, `workload-apps.tf` | Handoff from Terraform-managed bootstrap to GitOps reconciliation. |
+| `variables.tf` | The contract accepted by stage, target, and operator tfvars. |
+| `.terraform.lock.hcl` | Provider lockfile. |
+
+The HCL itself also performs templating. For example, Kind config is generated
+from `terraform/kubernetes/templates/kind-config.yaml.tpl`:
+
+```hcl filename="terraform/kubernetes/cluster.tf"
+resource "local_file" "kind_config" {
+  count = var.provision_kind_cluster ? 1 : 0
+
+  filename = local.kind_config_path_expanded
+
+  content = templatefile("${local.stack_dir}/templates/kind-config.yaml.tpl", {
+    workers         = local.kind_workers
+    ports           = local.extra_port_mappings
+    extra_mounts    = local.kind_extra_mounts
+    api_server_port = var.kind_api_server_port
+  })
+}
+```
+
+The template then emits YAML from HCL data:
+
+```yaml filename="terraform/kubernetes/templates/kind-config.yaml.tpl"
+networking:
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: ${api_server_port}
+  disableDefaultCNI: true
+nodes:
+  - role: control-plane
+%{ if length(ports) > 0 ~}
+    extraPortMappings:
+%{ for port in ports ~}
+      - containerPort: ${port.container_port}
+        hostPort: ${port.host_port}
+%{ endfor ~}
+%{ endif ~}
+```
+
+That is separate from Helm templating. Terraform may produce values for a Helm
+chart, but Helm still renders the chart templates into Kubernetes manifests.
+For GitOps-managed applications, Terraform creates or refreshes Argo CD
+Application objects and repository content; Argo CD then reconciles the final
+manifests.
+
+## Resource Composition
+
+The Terraform stack is easier to read as a resource handoff map than as one
+long execution chain. Inputs feed bootstrap releases and direct cluster
+resources; those create the GitOps handoff that Argo CD reconciles into live
+platform state.
+
+<ThemeImage
+  lightSrc="/diagrams/terraform-resources.svg"
+  darkSrc="/diagrams/terraform-resources-dark.svg"
+  alt="Terraform resource composition from tfvars and module inputs through bootstrap resources, GitOps handoff, Argo CD reconciliation, and live platform state"
+  width={2955}
+  height={689}
+/>
+
+## State and Cache Locations
+
+Local state is intentionally repo-owned and disposable:
+
+| Path | Meaning |
+| --- | --- |
+| `terraform/.run/kubernetes-kind/terraform.tfstate` | Kind target state. |
+| `terraform/.run/kubernetes-lima/terraform.tfstate` | Lima target state. |
+| `terraform/.run/kubernetes-slicer/terraform.tfstate` | Slicer target state. |
+| `terraform/kubernetes/backend.tf` | Generated by Terragrunt from `remote_state`. |
+| `terraform/kubernetes/.terraform/` | Provider/plugin working directory. |
+| `terraform/kubernetes/.terragrunt-cache/` | Terragrunt working cache. |
+
+`make clean-local-state` and target `clean` rules can remove these generated
+paths. Do not treat local state as a deployment artefact.
+
+## Source References
+
+- [`terraform/root.hcl`](https://github.com/nickromney/platform/blob/main/terraform/root.hcl)
+- [`terraform/kubernetes/terragrunt.hcl`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/terragrunt.hcl)
+- [`mk/k8s-terragrunt.mk`](https://github.com/nickromney/platform/blob/main/mk/k8s-terragrunt.mk)
+- [`kubernetes/scripts/build-tfvar-args.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/build-tfvar-args.sh)
+- [`terraform/kubernetes/cluster.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster.tf)
+- [`terraform/kubernetes/templates/kind-config.yaml.tpl`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/templates/kind-config.yaml.tpl)
+
+## Related Pages
+
+- [IaC boundaries](./iac-boundaries)
+- [Manifest assembly](./manifest-assembly)
+- [Stage ladder](./stage-ladder)
+- [Tooling requirements](../operations/tooling-requirements)

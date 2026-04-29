@@ -1,0 +1,55 @@
+# Auto-migrated D2 source for /diagrams/mental-model-core.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/mental-model-core.svg
+# @dark public/diagrams/mental-model-core-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "The core shape\nHost machine\nMake + shell"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Docker / VM runtime\nSplit kubeconfig\nKubernetes platform"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "Cilium + Hubble\nArgo CD\nGitea + repos"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "Policies\nObservability\nSSO"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "Sample workloads\nSubnetcalc\nSentiment"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05

@@ -1,0 +1,59 @@
+---
+title: Reset and Cleanup
+description: Safely remove local runtime state.
+---
+
+# Reset and Cleanup
+
+Resets are destructive local cleanup. Use them when you need a fresh runtime,
+when stage bootstrap state is stale, or when switching between runtime targets
+on the same host.
+
+## Target Resets
+
+```bash
+make -C kubernetes/kind reset AUTO_APPROVE=1
+make -C kubernetes/lima reset AUTO_APPROVE=1
+make -C kubernetes/slicer reset AUTO_APPROVE=1
+```
+
+Without `AUTO_APPROVE=1`, reset targets should prompt before deleting cluster,
+kubeconfig, or local state.
+
+## Root Cleanup
+
+```bash
+make clean-local-state DRY_RUN=1
+make clean-local-state DRY_RUN=1 INCLUDE_DOCKER=1
+make clean-local-state INCLUDE_KUBECONFIGS=1 AUTO_APPROVE=1
+```
+
+Use the dry run first. Include host caches, kubeconfigs, Docker resources, or
+Docker volumes only when that broader cleanup is intentional.
+
+## Common Rebuild Loop
+
+```bash
+make -C kubernetes/kind reset AUTO_APPROVE=1
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+## Runtime-Specific Notes
+
+- Kind uses Docker and can leave local images or registry state depending on
+  the image distribution mode.
+- Lima can require stopping Kind first on memory-constrained hosts.
+- Slicer reset follows the local daemon model and may remove backing VM images
+  directly for the validated local setup.
+
+<Callout type="warning">
+  Do not run broad cleanup while another local stack is active unless that is
+  the point of the exercise. The repo can manage multiple targets, but host
+  ports and caches are still shared resources.
+</Callout>
+
+## Related Pages
+
+- [Local runtimes](../concepts/local-runtimes)
+- [Daily loop](./daily-loop)

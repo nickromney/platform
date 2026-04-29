@@ -1,0 +1,72 @@
+# Source diagram for content/concepts/platform-pathways.mdx.
+# @light public/diagrams/generated/concepts-platform-pathways-1-light.svg
+# @dark public/diagrams/generated/concepts-platform-pathways-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+operator: {
+  label: "Operator chooses\nstage and tfvars"
+  width: 720
+  height: 108
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+stage800: {
+  label: "Stage 800\nobservability"
+  width: 720
+  height: 108
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+defaultObs: {
+  label: "Default path\nPrometheus + Grafana\nVictoriaLogs"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+heavierObs: {
+  label: "Heavier opt-ins\nLoki\nSigNoz"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+stage900: {
+  label: "Stage 900\nidentity"
+  width: 720
+  height: 108
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+keycloak: {
+  label: "Default path\nKeycloak + oauth2-proxy\nRBAC and groups"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+dex: {
+  label: "Compatibility path\nDex + oauth2-proxy\ncompact compose SSO"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+operator -> stage800
+stage800 -> defaultObs
+defaultObs -> heavierObs
+heavierObs -> stage900
+stage900 -> keycloak
+keycloak -> dex

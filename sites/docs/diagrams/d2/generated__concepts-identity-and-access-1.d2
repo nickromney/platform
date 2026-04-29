@@ -1,0 +1,55 @@
+# Auto-migrated D2 source for /diagrams/generated/concepts-identity-and-access-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/concepts-identity-and-access-1-light.svg
+# @dark public/diagrams/generated/concepts-identity-and-access-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Browser\nprotected route"
+  width: 300
+  height: 120
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Gateway API\noauth2-proxy\nsession edge"
+  width: 320
+  height: 144
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "Keycloak realm\nusers, groups,\nOIDC clients"
+  width: 320
+  height: 144
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "Product RBAC\nArgo CD roles\napp route groups"
+  width: 320
+  height: 144
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "Kubernetes API RBAC\nHeadlamp access\ncan-i checks"
+  width: 320
+  height: 144
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n03 -> n05

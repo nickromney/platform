@@ -1,0 +1,70 @@
+---
+title: Backstage And IDP
+description: Developer portal, IDP API, SDK, and MCP surfaces in the local platform.
+---
+
+# Backstage And IDP
+
+Backstage is the developer portal for the local platform. It is not the IDP by
+itself: the portal consumes the IDP Core API, catalog entities, Kubernetes
+labels, TechDocs, and links to runtime surfaces. The IDP API is the product
+contract that SDKs, MCP, and automation clients use.
+
+## Surfaces
+
+| Surface | Repo path | Role |
+| --- | --- | --- |
+| Backstage portal | `apps/backstage` | Catalog, templates, TechDocs, and developer portal UI. |
+| IDP Core | `apps/idp-core` | FastAPI product API for catalog, runtime, environments, deployments, secrets, and actions. |
+| IDP SDK | `apps/idp-sdk` | TypeScript client for the IDP API. |
+| IDP MCP | `apps/idp-mcp` | MCP wrapper over the IDP API. |
+| Platform MCP | `apps/platform-mcp` | Learning and diagnostic MCP server for platform workflows. |
+
+## Runtime Shape
+
+Backstage is available through the stage `900` portal route when enabled:
+
+```text
+https://portal.127.0.0.1.sslip.io
+https://portal-api.127.0.0.1.sslip.io
+```
+
+For Kind, `KIND_ENABLE_BACKSTAGE=auto` is the default. The wrapper enables the
+portal only when Docker reports enough memory for the heavier developer portal
+path. Use `KIND_ENABLE_BACKSTAGE=on` to force it on, or `off` to keep the IDP
+API and skip the Backstage deployment.
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind backstage
+make -C kubernetes/kind check-app APP=backstage
+```
+
+## Catalog Model
+
+App-owned catalog metadata should live beside the app source where possible.
+The production Backstage catalog can carry copied entries for local Gitea
+runtime links, but those copies should not drift from the app-owned component
+facts.
+
+Important catalog signals:
+
+- `backstage.io/source-location` points to the local Gitea mirror in the
+  running platform.
+- `backstage.io/kubernetes-label-selector` connects catalog entities to
+  Kubernetes workloads.
+- `backstage.io/techdocs-ref` marks docs that Backstage can render.
+- Links point to the routed portal, app, Grafana, or API surfaces.
+
+<Callout type="warning">
+  Treat Backstage catalog copies as deployment packaging, not the source of
+  architectural truth. Update app-owned catalog files and docs first, then
+  refresh copied production catalog entries.
+</Callout>
+
+## Related Pages
+
+- [Platform MCP](./platform-mcp)
+- [APIM simulator](./apim-simulator)
+- [Identity and access](../concepts/identity-and-access)
+- [Health and URLs](../operations/health-and-urls)

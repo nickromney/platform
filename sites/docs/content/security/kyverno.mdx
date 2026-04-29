@@ -1,0 +1,122 @@
+---
+title: Kyverno Admission
+description: How Kyverno admission policy and generated defaults harden the platform.
+---
+
+# Kyverno Admission
+
+Kyverno provides admission policy and generated defaults. It does not replace
+Cilium; it complements it. Cilium constrains network behaviour at runtime.
+Kyverno constrains what Kubernetes objects are accepted, audited, or generated.
+
+## Source Layout
+
+```text
+terraform/kubernetes/cluster-policies/kyverno
+```
+
+| Path | Role |
+| --- | --- |
+| `shared/namespace-default-deny.yaml` | Generates `default-deny` `NetworkPolicy` in isolated namespaces. |
+| `shared/protect-default-deny.yaml` | Blocks deletion of generated default-deny policies. |
+| `shared/require-app-labels-application-namespaces.yaml` | Enforces app boundary labels in application namespaces. |
+| `shared/restrict-image-registries.yaml` | Audits image registry sources against an allowlist. |
+| `uat/uat-restrict-capabilities.yaml` | Audits capability and host-namespace restrictions in UAT. |
+
+## Generated Default Deny
+
+Namespaces labelled with:
+
+```text
+kyverno.io/isolate=true
+```
+
+receive a generated default-deny `NetworkPolicy`. That means a namespace can be
+prepared for isolation before workloads land. The empty `sit` namespace proves
+that inheritance path: namespace labels are enough to trigger the default
+network-policy scaffold.
+
+`protect-default-deny.yaml` then prevents deletion of the generated default-deny
+policy in isolated namespaces. This is enforced, not just reported.
+
+## Required App Labels
+
+`require-app-labels-application-namespaces.yaml` enforces app boundary labels on
+both the `Deployment` object and its pod template in any namespace labelled:
+
+```text
+platform.publiccloudexperiments.net/namespace-role=application
+```
+
+Required labels include:
+
+- `app`
+- `project=kindlocal`
+- `team=dolphin`
+- `tier`
+
+This matters because Cilium selectors, ownership views, and future policy
+composition depend on stable workload identity. A deployment label that does
+not match its pod template is not enough.
+
+## Image Registry Visibility
+
+`restrict-image-registries.yaml` audits image sources. It provides visibility
+into whether workloads are using expected registries, including `dhi.io/*`.
+
+This is currently audit-oriented and intentionally broad. That is a pragmatic
+local-platform choice: it provides signal without blocking experimentation too
+early. A production multi-tenant platform would usually make this narrower and
+enforced.
+
+## UAT Runtime Policy
+
+`uat/uat-restrict-capabilities.yaml` audits selected pod hardening controls in
+UAT:
+
+- disabled host namespaces
+- dropped capabilities
+- non-privileged execution
+
+It is intentionally partial. The policy audit records remaining gaps: it does
+not yet cover the full restricted pod-security profile, including all
+`allowPrivilegeEscalation`, seccomp, `runAsNonRoot`, init-container, and
+ephemeral-container cases.
+
+## Validation
+
+Static validation:
+
+```bash
+scripts/validate-kyverno-policies.sh --mode static --execute
+```
+
+This renders all Kyverno Kustomize overlays and executes the checked-in
+`kyverno-test.yaml` suites.
+
+Live validation:
+
+```bash
+scripts/validate-kyverno-policies.sh --mode live --execute
+```
+
+This renders the checked-in policies and evaluates them against the current
+kubeconfig with:
+
+```bash
+kyverno apply --cluster --policy-report
+```
+
+Run this after changing namespace labels, generated defaults, image-registry
+rules, or pod-hardening admission logic.
+
+<Callout type="warning">
+  Audit-mode policy is visibility, not enforcement. Keep audit-only decisions
+  explicit so nobody mistakes them for a hard admission boundary.
+</Callout>
+
+## Related Pages
+
+- [Cilium policy](./cilium)
+- [Hubble flow evidence](./hubble)
+- [Hardening choices](./hardening-choices)

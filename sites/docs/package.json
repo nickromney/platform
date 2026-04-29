@@ -1,0 +1,34 @@
+{
+  "name": "platform-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "NODE_OPTIONS=\"--no-experimental-webstorage ${NODE_OPTIONS:-}\" next build",
+    "dev": "NODE_OPTIONS=\"--no-experimental-webstorage ${NODE_OPTIONS:-}\" next dev",
+    "local": "bun run build && bun run serve",
+    "lint:content": "node scripts/content-lint.mjs",
+    "test:docs": "bun run lint:content && bun run check:d2 && node scripts/check-docs-integrity.mjs",
+    "media:d2": "node scripts/generate-d2-diagrams.mjs",
+    "media:diagrams": "bun run media:d2",
+    "check:d2": "node scripts/generate-d2-diagrams.mjs --check",
+    "check:svg": "node scripts/check-svg-layout.mjs",
+    "serve": "NODE_OPTIONS=\"--no-experimental-webstorage ${NODE_OPTIONS:-}\" next start",
+    "start": "bun run serve",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.2.4",
+    "nextra": "^4.6.1",
+    "nextra-theme-docs": "^4.6.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "bun-types": "^1.3.13",
+    "typescript": "^6.0.3"
+  }
+}

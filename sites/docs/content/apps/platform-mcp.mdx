@@ -1,0 +1,79 @@
+---
+title: Platform MCP
+description: MCP server for platform learning, diagnostics, and tool-assisted workflows.
+---
+
+# Platform MCP
+
+`apps/platform-mcp` is the MCP server for the platform learning environment.
+It exposes Streamable HTTP on `/mcp`, a health endpoint, and Prometheus metrics.
+The local compose path is useful for server development; the Kubernetes path
+proves the routed, authenticated machine API surface.
+
+## Tool Surface
+
+The current server exposes:
+
+| Tool | Purpose |
+| --- | --- |
+| `platform_status` | Report local platform status. |
+| `platform_catalog_list` | List platform catalog entries. |
+| `subnetcalc_calculate` | Exercise the subnet calculator domain. |
+| `sentiment_classify` | Exercise the sentiment demo API path. |
+| `d2_validate` | Validate D2 diagram source. |
+| `d2_format` | Format D2 diagram source. |
+| `d2_render` | Render D2 diagrams. |
+
+## Local Development
+
+```bash
+cd apps/platform-mcp
+uv run --extra dev pytest
+uv run platform-mcp
+docker compose -f compose.yml up -d --build
+```
+
+Local endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `http://localhost:8089/mcp` | Streamable HTTP MCP endpoint. |
+| `http://localhost:8089/health` | Health check. |
+| `http://localhost:9099/metrics` | Metrics. |
+| `http://localhost:6274` | MCP Inspector. |
+
+## Kubernetes Integration
+
+The Kubernetes stack deploys MCP at stage `900` when SSO and the workload
+surfaces are enabled. The Argo CD application source path is `apps/mcp`; the
+namespace is `mcp`.
+
+The routed machine API is APIM-mediated. Requests to
+`https://mcp.127.0.0.1.sslip.io/mcp` enter through Gateway API, hit the APIM
+simulator route first, and are then forwarded to the `platform-mcp` service in
+the `mcp` namespace. That is intentional: the platform uses MCP to prove
+machine API auth and APIM policy behaviour together, not as a direct
+Gateway-to-service bypass.
+
+Unauthenticated routed machine API checks are allowed to return `401` or `403`.
+That is a correct smoke result for protected `/mcp` routes, unlike browser SSO
+pages where a redirect is expected.
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-app APP=mcp
+PLATFORM_MCP_BEARER_TOKEN=... uv run platform-mcp-smoke
+```
+
+<Callout type="warning">
+  Keep MCP startup cheap. Missing optional upstreams or credentials should
+  become request-level tool errors, not import-time failures that prevent
+  `tools/list`, `/health`, or metrics from working.
+</Callout>
+
+## Related Pages
+
+- [APIM simulator](./apim-simulator)
+- [Backstage and IDP](./backstage-idp)
+- [Identity and access](../concepts/identity-and-access)
+- [Health and URLs](../operations/health-and-urls)

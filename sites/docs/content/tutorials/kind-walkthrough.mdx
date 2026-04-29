@@ -1,0 +1,136 @@
+---
+title: Kind Full Walkthrough
+description: End-to-end operator walkthrough for the Docker-backed reference stack.
+---
+
+# Kind Full Walkthrough
+
+Kind is the primary teaching path for this repo. It runs the shared platform
+stack on a Docker-backed local Kubernetes cluster, so it is the first target to
+trust when you are comparing behaviour across runtimes.
+
+## What Kind Owns
+
+Kind owns the local cluster lifecycle and the Docker-facing image distribution
+choices. The shared `terraform/kubernetes` stack owns the in-cluster platform
+resources after the cluster exists.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-kind-walkthrough-1-light.svg"
+  darkSrc="/diagrams/generated/tutorials-kind-walkthrough-1-dark.svg"
+  alt="Kind Walkthrough diagram"
+  width={1810}
+  height={266}
+/>
+
+## Prerequisites
+
+```bash
+brew install jq kind kubernetes-cli make opentofu terragrunt
+brew install bun node
+brew install cilium-cli helm hubble kubectx kubie kyverno mkcert yamllint yq
+mkcert -install
+```
+
+On macOS, Docker Desktop must be running. On Linux, Docker Engine is enough.
+Then let the repo check the actual contract:
+
+```bash
+cd ~/Developer/personal/platform
+cp .env.example .env
+make -C kubernetes/kind prereqs
+```
+
+## Bring-Up Path
+
+<Steps>
+
+### Inspect the Make surface
+
+```bash
+make -C kubernetes/kind help
+make -C kubernetes/kind env
+```
+
+### Plan the bootstrap
+
+```bash
+make -C kubernetes/kind 100 plan
+```
+
+### Apply stage 100
+
+```bash
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+```
+
+At this point the cluster exists, but networking is intentionally incomplete.
+
+### Apply stage 900
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+The Make wrapper runs the platform apply and then the confidence checks for
+health, gateway URLs, and browser SSO.
+
+### Print URLs
+
+```bash
+make -C kubernetes/kind show-urls
+```
+
+</Steps>
+
+## Image Distribution Modes
+
+Kind has the richest image distribution controls because it sits directly on
+Docker Desktop or Docker Engine.
+
+| Mode | Use when | Notes |
+| --- | --- | --- |
+| `registry` | Default fast local path. | Workload manifests point at `host.docker.internal:5002`. |
+| `load` | You want the older `kind load` behaviour. | Slower but conceptually simple. |
+| `hybrid` | You have a baked node image plus registry workload flow. | Requires `KIND_BAKED_NODE_IMAGE`. |
+| `baked` | Stable hot images already live in a custom node image. | Also requires `KIND_BAKED_NODE_IMAGE`. |
+
+```bash
+make -C kubernetes/kind ensure-image-cache
+make -C kubernetes/kind sync-image-cache
+make -C kubernetes/kind build-local-workload-images
+```
+
+## Validation
+
+```bash
+make -C kubernetes/kind 900 check-health
+make -C kubernetes/kind 900 check-security
+make -C kubernetes/kind check-gateway-stack
+make -C kubernetes/kind check-sso-e2e
+make -C kubernetes/kind test-idempotence STAGE=900
+```
+
+`check-security` proves the runtime hardening that matters most: WireGuard
+where enabled, gateway TLS behaviour, policy enforcement, and rendered config
+integrity.
+
+<Callout type="warning">
+  Treat planned destroys as something to explain before apply. Some
+  `null_resource` churn is expected in this stack, but it should still be
+  inspected rather than ignored.
+</Callout>
+
+## Reset Path
+
+```bash
+make -C kubernetes/kind reset AUTO_APPROVE=1
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+## Related Pages
+
+- [Stage ladder](../concepts/stage-ladder)
+- [Container workflow](./container-workflow)
+- [Hardening choices](../security/hardening-choices)

@@ -1,0 +1,123 @@
+---
+title: Hubble Flow Evidence
+description: How Hubble captures traffic evidence for Cilium policy work.
+---
+
+# Hubble Flow Evidence
+
+Hubble is not just an observability UI. In this repo it is part of the policy
+authoring loop: capture real flows, summarise them, review what should exist,
+then render candidate Cilium policy only after understanding the traffic.
+
+## Surfaces
+
+| Surface | Purpose |
+| --- | --- |
+| `hubble-relay.kube-system.svc.cluster.local:4245` | In-cluster Relay gRPC service. |
+| `https://hubble.admin.127.0.0.1.sslip.io` | Human Hubble UI through the admin gateway. |
+| `localhost:4245` | Host-side Relay access after port-forwarding. |
+
+The admin UI is not the Relay API. Do not point policy-capture tools at the UI
+hostname and expect `hubble observe` to work.
+
+## Capture Loop
+
+The helper scripts live under:
+
+```text
+terraform/kubernetes/scripts
+```
+
+The usual local loop is:
+
+```bash
+cd terraform/kubernetes/scripts
+
+./hubble-check-connection.sh --execute
+
+./hubble-capture-flows.sh \
+  -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  --since 15m \
+  --from-namespace dev \
+  --to-namespace observability \
+  | ./hubble-summarise-flows.sh \
+      --report edges \
+      --aggregate-by workload \
+      --direction egress
+```
+
+The capture script wraps `hubble observe -o jsonpb`. The summariser turns that
+stream into deterministic reports:
+
+- `dns`
+- `drops`
+- `edges`
+- `world`
+
+Use pod-level aggregation for noisy namespaces:
+
+```bash
+./hubble-capture-flows.sh \
+  -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  --since 10m \
+  --namespace observability \
+  | ./hubble-summarise-flows.sh \
+      --report edges \
+      --aggregate-by pod \
+      --direction egress
+```
+
+## From Evidence To Policy
+
+The capture-to-policy workflow is:
+
+1. Exercise the traffic you care about.
+2. Capture recent flows from Hubble Relay.
+3. Summarise by stable workload labels.
+4. Inspect `world`, `dns`, and `drops`.
+5. Generate a candidate Cilium policy only after understanding the flow.
+6. Render the category.
+7. Review the policy diff.
+8. Run static and live Cilium validation.
+
+The generator is intentionally a drafting tool:
+
+```bash
+./hubble-capture-flows.sh \
+  -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  --since 15m \
+  --namespace uat \
+  | ./hubble-summarise-flows.sh \
+      --report edges \
+      --format tsv \
+      --aggregate-by workload \
+  | ./hubble-generate-cilium-policy.sh \
+      --category uat \
+      --direction egress
+```
+
+Candidate policies carry annotations such as:
+
+- `platform.publiccloudexperiments.net/hubble-policy-candidate`
+- `platform.publiccloudexperiments.net/hubble-policy-capture-mode`
+- `platform.publiccloudexperiments.net/hubble-policy-direction`
+- `platform.publiccloudexperiments.net/hubble-policy-mode`
+- `platform.publiccloudexperiments.net/hubble-policy-row-count`
+- `platform.publiccloudexperiments.net/hubble-policy-since`
+
+Those annotations make generated manifests auditable.
+
+## Pitfalls
+
+- Drops are often more useful than allows when tightening policy.
+- Flow-derived policy can encode accidental behaviour if you capture during a
+  noisy or broken run.
+- `localhost:4245` only works after a port-forward exists.
+- Remote Relay exposure should be treated as a sensitive admin API.
+- The Hubble UI route is not a Relay endpoint.
+
+## Related Pages
+
+- [Cilium policy](./cilium)
+- [Kyverno admission](./kyverno)
+- [Hardening choices](./hardening-choices)

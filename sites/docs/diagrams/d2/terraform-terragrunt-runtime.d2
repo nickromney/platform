@@ -1,0 +1,82 @@
+# Auto-migrated D2 source for /diagrams/terraform-terragrunt-runtime.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/terraform-terragrunt-runtime.svg
+# @dark public/diagrams/terraform-terragrunt-runtime-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+n01: {
+  label: "Terraform-compatible stack,\nTerragrunt orchestration\nOpenTofu is the default engine.\nTerraform can be selected when\ntesting compatibility.\nMake target"
+  width: 720
+  height: 220
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "kind / lima / slicer\nstage 100-900\nInput layering"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "stage tfvars\ntarget tfvars\noperator overrides"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "direct -var flags\nTerragrunt\ngenerates backend.tf"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "sets local state path\ncalls selected engine\nkeeps logs readable"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n06: {
+  label: "tofu default\nterraform\nvia TG_TF_PATH"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n07: {
+  label: "runtime state\nterraform/.run/kubernetes-*\nshared HCL stack"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n08: {
+  label: "terraform/kubernetes/*.tf\nKubernetes resources\nproviders, Helm, GitOps"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05
+n05 -> n06
+n06 -> n07
+n07 -> n08

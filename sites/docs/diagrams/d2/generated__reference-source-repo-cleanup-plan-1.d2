@@ -1,0 +1,54 @@
+# Source diagram for content/reference/source-repo-cleanup-plan.mdx.
+# @light public/diagrams/generated/reference-source-repo-cleanup-plan-1-light.svg
+# @dark public/diagrams/generated/reference-source-repo-cleanup-plan-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+inventory: {
+  label: "Inventory\ntracked Markdown\nsource references"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+drift: {
+  label: "Fix factual drift\nMakefiles\nstage tfvars"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+classify: {
+  label: "Classify paths\ncurrent, optional\narchive, generated"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+prune: {
+  label: "Remove or archive\none class at a time\nwith references checked"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+verify: {
+  label: "Verify\nfocused Make targets\nlint checks"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+inventory -> drift
+drift -> classify
+classify -> prune
+prune -> verify

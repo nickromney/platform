@@ -1,0 +1,50 @@
+---
+title: Mental Model
+description: How the platform repo fits together.
+---
+
+# Mental Model
+
+The platform repo is not primarily an app repo or a Terraform module. It is an
+operator workspace for running a local platform stack. The repo keeps host
+lifecycle, cluster state, app source, validation, and design records close
+enough that a single machine can teach the whole system.
+
+## The Core Shape
+
+<ThemeImage
+  lightSrc="/diagrams/mental-model-core.svg"
+  darkSrc="/diagrams/mental-model-core-dark.svg"
+  alt="Host operator tools driving the local runtime, kubeconfig, Kubernetes platform, and sample workloads"
+  width={1810}
+  height={266}
+/>
+
+## What Each Layer Owns
+
+- Host operator layer: prerequisites, runtime lifecycle, kubeconfig repair,
+  image cache, forwards, health checks, and reset flows.
+- Terraform layer: durable in-cluster resources and the narrow bootstrap edges
+  that must be in the dependency graph.
+- GitOps layer: app-of-apps reconciliation, seeded repositories, workload
+  sources, and controller behaviour.
+- App layer: sample business behaviour that proves the platform path.
+
+## Why This Matters
+
+If you change the wrong layer, the stack can still work once and become hard to
+operate later. For example, hiding host port checks in Terraform makes a local
+port conflict feel like infrastructure drift. Keeping them in Make and shell
+makes the operator problem visible.
+
+<Callout type="warning">
+  A command name is not always a domain concept. The domain is local stack
+  operation; `kind`, `lima`, and `slicer` are runtime variants that implement
+  that domain.
+</Callout>
+
+## Read Next
+
+- [Stage ladder](./stage-ladder)
+- [IaC boundaries](./iac-boundaries)
+- [Repository map](../reference/repository-map)

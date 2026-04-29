@@ -1,0 +1,75 @@
+---
+title: Stage Ladder
+description: The cumulative platform stages from cluster bootstrap to SSO.
+---
+
+# Stage Ladder
+
+The stage ladder is the public operator model for the Kubernetes stack. Stages
+are cumulative. Applying stage `900` means "make the stack match the full
+stage-900 shape", not "run only the stage-900 delta".
+
+<ThemeImage
+  className="platform-diagram platform-diagram--stage-rail"
+  lightSrc="/diagrams/generated/concepts-stage-ladder-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-stage-ladder-1-dark.svg"
+  alt="Stage Ladder diagram"
+  width={850}
+  height={2054}
+/>
+
+| Stage | Adds | Operator meaning |
+| --- | --- | --- |
+| `100` | Cluster bootstrap | Runtime exists; Kind has no CNI yet. |
+| `200` | Cilium | Pod networking becomes real. |
+| `300` | Hubble | Network visibility appears. |
+| `400` | Argo CD core | GitOps control plane starts. |
+| `500` | Gitea + full Argo controllers | Local Git server and richer GitOps behaviour. |
+| `600` | Kyverno, cert-manager, Cilium policy controls | Policy and certificate foundations. |
+| `700` | App repos and local workload image flow | Workload sources can be reconciled. |
+| `800` | Gateway TLS, Headlamp, observability | Operator-facing HTTPS and observability. The default path is Prometheus, Grafana, and VictoriaLogs. |
+| `900` | Keycloak and `oauth2-proxy` SSO | Authenticated admin experience with org and app/environment groups. |
+
+## Runtime Differences
+
+Kind, Lima, and Slicer share the stage language. Their stage `100` differs
+because the host runtime differs:
+
+- Kind creates a Docker-backed kind cluster.
+- Lima starts a VM and installs k3s.
+- Slicer starts a microVM and installs k3s, with stricter host caveats.
+
+Stages `200+` converge through the shared Terraform root.
+
+Stage `700` is intentionally runtime-specific. Kind enables the in-cluster
+Actions runner and local app directory mount by default. Lima and Slicer keep
+those host-sensitive shortcuts disabled and use externally built local workload
+images instead. The operator outcome is still app reconciliation, but the local
+trust boundary is different.
+
+Stage `800` also has pathways. The default local path keeps memory pressure
+lower with Prometheus, Grafana, and VictoriaLogs. Loki and SigNoz are available
+through Terraform inputs and supporting scripts, but they are heavier and are
+not enabled in the default Kind/Lima/Slicer stage-900 tfvars.
+
+## Good Commands
+
+```bash
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/lima 900 plan
+make -C kubernetes/slicer 900 check-health
+```
+
+<Callout type="warning">
+  Do not read `900` as an imperative action. It is a target shape. Re-running
+  the same stage should converge or expose drift, not pile on a second copy of
+  the stack.
+</Callout>
+
+## Related Pages
+
+- [Run the Kind stack](../tutorials/first-kind-stack)
+- [Local runtimes](./local-runtimes)
+- [Platform pathways](./platform-pathways)
+- [Commands](../reference/commands)

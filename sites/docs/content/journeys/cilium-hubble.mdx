@@ -1,0 +1,129 @@
+---
+title: Learn Cilium And Hubble
+description: Learn Cilium networking, policy, WireGuard toggles, and Hubble flow evidence in the local platform.
+---
+
+# Learn Cilium And Hubble
+
+Outcome: understand why the platform disables the default Kind CNI, installs
+Cilium at stage `200`, enables Hubble at stage `300`, and later applies Cilium
+policies through GitOps.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-cilium-hubble-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-cilium-hubble-1-dark.svg"
+  alt="Cilium and Hubble journey from CNI install through Hubble Relay, observed flows, summarized evidence, and candidate policy"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 200 apply AUTO_APPROVE=1
+kubectl -n kube-system get pods -l k8s-app=cilium
+
+make -C kubernetes/kind 300 apply AUTO_APPROVE=1
+kubectl -n kube-system get deploy,svc | rg "hubble|cilium"
+```
+
+After the full stack is running, validate policy:
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+scripts/validate-cilium-policies.sh --mode static --execute
+scripts/validate-cilium-policies.sh --mode live --execute
+```
+
+## Inspect
+
+Cilium first:
+
+```bash
+kubectl -n kube-system get cm cilium-config -o yaml | rg "enable|hubble|wireguard"
+kubectl -n kube-system rollout status daemonset/cilium
+kubectl get ciliumnetworkpolicies -A
+```
+
+Hubble next:
+
+```bash
+cd terraform/kubernetes/scripts
+./hubble-check-connection.sh --execute
+
+./hubble-capture-flows.sh \
+  -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  --since 10m \
+  --namespace dev \
+  | ./hubble-summarise-flows.sh --report edges --aggregate-by workload
+```
+
+Read drops separately because they often teach more than successful flows:
+
+```bash
+./hubble-capture-flows.sh \
+  -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  --since 10m \
+  | ./hubble-summarise-flows.sh --report drops
+```
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`kubernetes/kind/stages/200-cilium.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/200-cilium.tfvars) | Turns on Cilium as the CNI. |
+| [`kubernetes/kind/stages/300-hubble.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/300-hubble.tfvars) | Turns on Hubble UI and Relay. |
+| [`terraform/kubernetes/cilium.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cilium.tf) | Helm release, Hubble patches, Cilium restart trigger. |
+| [`terraform/kubernetes/cluster-policies/cilium`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/cluster-policies/cilium) | GitOps-managed network policy tree. |
+| [`terraform/kubernetes/scripts/hubble-*`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/scripts) | Flow capture, summary, and candidate policy tools. |
+
+## Try One Change
+
+Use Hubble to explain a policy before changing it. Exercise the Sentiment app,
+capture flows from the `dev` namespace, and answer:
+
+- Which workloads talk to DNS?
+- Which workloads talk to the APIM namespace?
+- Which flows go to `world`?
+- Which denied flows are expected after policies are on?
+
+<Callout type="warning">
+  Hubble evidence is input to policy review, not automatic truth. A captured
+  flow can be accidental, overly broad, or caused by a broken test run.
+</Callout>
+
+## Closure Slice
+
+The policy kata now has a concrete workload and Cilium policy target:
+`hello-platform`. Use it to learn how a workload becomes reachable only after
+the expected ingress path is allowed.
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/apps/workloads/hello-platform`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/apps/workloads/hello-platform) | Small workload used by the policy kata. |
+| [`terraform/kubernetes/cluster-policies/cilium/projects/hello-platform`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/cluster-policies/cilium/projects/hello-platform) | Cilium ingress policy for the workload. |
+| [`terraform/kubernetes/cluster-policies/cilium/dev/kustomization.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/dev/kustomization.yaml) | Includes the project policy in dev. |
+| [`terraform/kubernetes/cluster-policies/cilium/uat/kustomization.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/uat/kustomization.yaml) | Includes the project policy in UAT. |
+
+### Acceptance Checks
+
+```bash
+./terraform/kubernetes/scripts/hubble-capture-flows.sh \
+  -P --kubeconfig ~/.kube/kind-kind-local.yaml \
+  --since 5m --namespace dev \
+  | ./terraform/kubernetes/scripts/hubble-summarise-flows.sh --report drops
+
+scripts/validate-cilium-policies.sh --mode static --execute
+scripts/validate-cilium-policies.sh --mode live --execute
+```
+
+The exercise is complete when you can point to the gateway-to-workload flow and
+explain why the policy selector is not a namespace-wide allow.
+
+## Related Pages
+
+- [Cilium policy](../security/cilium)
+- [Hubble flow evidence](../security/hubble)
+- [Hardening choices](../security/hardening-choices)

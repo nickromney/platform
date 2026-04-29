@@ -1,0 +1,360 @@
+---
+title: Shell Scripts
+description: How the platform shell scripts fit together and how to write new ones.
+---
+
+# Shell Scripts
+
+The shell scripts are the operator glue for this repo. They keep host-specific
+work visible: runtime checks, image cache setup, kubeconfig repair, local
+forwards, GitOps seeding, health probes, security checks, and app smoke tests.
+Terraform should own durable cluster state; shell should own work that depends
+on the host running the command.
+
+## Mental Model
+
+<ThemeImage
+  lightSrc="/diagrams/generated/reference-shell-scripts-1-light.svg"
+  darkSrc="/diagrams/generated/reference-shell-scripts-1-dark.svg"
+  alt="Shell Scripts diagram"
+  width={1810}
+  height={266}
+/>
+
+## Shared Style
+
+Most scripts follow the same pattern:
+
+```bash filename="script skeleton"
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: example.sh [--dry-run] [--execute]
+EOF
+  printf '\n%s\n' "$(shell_cli_standard_options)"
+}
+
+shell_cli_handle_standard_no_args usage "would do the thing" "$@"
+```
+
+Stylistic tips:
+
+- Make every tracked Bash script pass ShellCheck unless there is a documented,
+  local suppression.
+- Keep tracked Bash compatible with Bash 3.2, because that is the stock Bash
+  shipped with macOS.
+- Use `set -euo pipefail` unless there is a concrete reason not to.
+- Resolve `SCRIPT_DIR` and derive paths from it; do not depend on caller CWD.
+- Use `--dry-run` and `--execute` for mutating scripts.
+- Put environment requirements near the top with `: "${NAME:?message}"`.
+- Keep script output operator-readable: one action per line, clear failures.
+- Source `scripts/lib/shell-cli.sh` for standard flags and preview behaviour.
+- Source `scripts/platform-env.sh` when a script needs repo `.env` values.
+- Keep host lifecycle in shell; keep durable Kubernetes objects in Terraform or manifests.
+- Prefer `jq`, `kubectl -o jsonpath`, and structured parsing over fragile text parsing.
+- Write tests for script behaviour in `tests/*.bats` or target-local `tests/`.
+
+## Compatibility Gates
+
+Shell quality is not just a style preference in this repo. It is part of the
+operator contract: the same scripts should work on a default macOS host and in
+Linux-based automation.
+
+Run the repo-level checks before changing script behaviour:
+
+```bash
+make lint-shell
+make lint-bash32
+scripts/audit-shell-scripts.sh --execute
+scripts/check-bash32-compat.sh --execute
+```
+
+`scripts/audit-shell-scripts.sh` checks tracked shell scripts for repo hygiene,
+standard entrypoint behaviour, and Bash 3.2 guardrails. `scripts/check-bash32-compat.sh`
+scans tracked `*.sh` files for Bash 4+ constructs that macOS Bash 3.2 will not
+understand.
+
+Avoid Bash 4+ features in tracked scripts, including:
+
+- associative arrays: `declare -A`
+- namerefs: `local -n` or `declare -n`
+- `mapfile` and `readarray`
+- `wait -n`
+- `coproc`
+- `shopt -s globstar`
+- case modification expansions such as `${value^^}` and `${value,,}`
+
+When a script really needs newer shell behaviour, it should be an explicit
+exception with a clear interpreter and call path. The default expectation is
+Bash 3.2-compatible Bash.
+
+<Callout type="warning">
+  Avoid hiding host-sensitive work inside Terraform hooks unless the graph
+  genuinely needs that edge. Port checks, VM startup, Docker cleanup, and
+  browser validation are better as explicit shell targets.
+</Callout>
+
+## Root Script Library
+
+| Script | Role |
+| --- | --- |
+| [`scripts/lib/compose-cli.sh`](https://github.com/nickromney/platform/blob/main/scripts/lib/compose-cli.sh) | Compose command helpers. |
+| [`scripts/lib/http-fetch.sh`](https://github.com/nickromney/platform/blob/main/scripts/lib/http-fetch.sh) | HTTP fetch abstraction used by tests and shell workflows. |
+| [`scripts/lib/parallel.sh`](https://github.com/nickromney/platform/blob/main/scripts/lib/parallel.sh) | Small shell parallelism helper. |
+| [`scripts/lib/shell-cli-posix.sh`](https://github.com/nickromney/platform/blob/main/scripts/lib/shell-cli-posix.sh) | POSIX-compatible subset for scripts that cannot assume Bash-only helpers. |
+| [`scripts/lib/shell-cli.sh`](https://github.com/nickromney/platform/blob/main/scripts/lib/shell-cli.sh) | Standard `--dry-run`, `--execute`, usage, and preview helpers. |
+| [`scripts/platform-env.sh`](https://github.com/nickromney/platform/blob/main/scripts/platform-env.sh) | Loads repo `.env` into shell workflows. |
+
+## Root Operator Scripts
+
+| Script | Role |
+| --- | --- |
+| [`scripts/audit-docker-builds.sh`](https://github.com/nickromney/platform/blob/main/scripts/audit-docker-builds.sh) | Builds selected Docker targets, captures logs, image sizes, and warnings. |
+| [`scripts/audit-shell-scripts.sh`](https://github.com/nickromney/platform/blob/main/scripts/audit-shell-scripts.sh) | Shell audit pass over repo scripts. |
+| [`scripts/check-bash32-compat.sh`](https://github.com/nickromney/platform/blob/main/scripts/check-bash32-compat.sh) | Checks Bash 3.2 compatibility for macOS portability. |
+| [`scripts/check-version.sh`](https://github.com/nickromney/platform/blob/main/scripts/check-version.sh) | Repo-level version and dependency guardrail. |
+| [`scripts/compose-backend.sh`](https://github.com/nickromney/platform/blob/main/scripts/compose-backend.sh) | Selects a supported Compose backend. |
+| [`scripts/fmt-hcl.sh`](https://github.com/nickromney/platform/blob/main/scripts/fmt-hcl.sh) | Formats HCL. |
+| [`scripts/fmt-markdown.sh`](https://github.com/nickromney/platform/blob/main/scripts/fmt-markdown.sh) | Applies tracked Markdown formatting. |
+| [`scripts/install-tool-hints.sh`](https://github.com/nickromney/platform/blob/main/scripts/install-tool-hints.sh) | Prints install guidance for missing tools. |
+| [`scripts/lint-markdown.sh`](https://github.com/nickromney/platform/blob/main/scripts/lint-markdown.sh) | Markdown lint entrypoint. |
+| [`scripts/lint-yaml.sh`](https://github.com/nickromney/platform/blob/main/scripts/lint-yaml.sh) | YAML lint entrypoint. |
+| [`scripts/platform-status.sh`](https://github.com/nickromney/platform/blob/main/scripts/platform-status.sh) | Reports local runtime status across Kind, Lima, Slicer, and related stacks. |
+| [`scripts/platform-tui.sh`](https://github.com/nickromney/platform/blob/main/scripts/platform-tui.sh) | Gum-based local runtime chooser when available. |
+| [`scripts/release_tag.sh`](https://github.com/nickromney/platform/blob/main/scripts/release_tag.sh) | Annotated release tag workflow. |
+| [`scripts/release.sh`](https://github.com/nickromney/platform/blob/main/scripts/release.sh) | Release commit workflow. |
+| [`scripts/reset-local-state.sh`](https://github.com/nickromney/platform/blob/main/scripts/reset-local-state.sh) | Cleans repo-generated local state and optional host caches. |
+| [`scripts/sonar-scan.sh`](https://github.com/nickromney/platform/blob/main/scripts/sonar-scan.sh) | Runs SonarQube scan against a local repo. |
+| [`scripts/suggest-make-goal.sh`](https://github.com/nickromney/platform/blob/main/scripts/suggest-make-goal.sh) | Suggests likely Make goals when a user mistypes a target. |
+| [`scripts/trivy-common.sh`](https://github.com/nickromney/platform/blob/main/scripts/trivy-common.sh) | Shared Trivy helper functions. |
+| [`scripts/trivy-run.sh`](https://github.com/nickromney/platform/blob/main/scripts/trivy-run.sh) | Thin Trivy runner wrapper. |
+| [`scripts/trivy-scan-apps.sh`](https://github.com/nickromney/platform/blob/main/scripts/trivy-scan-apps.sh) | Scans app source trees and canonical workload images. |
+| [`scripts/validate-cilium-policies.sh`](https://github.com/nickromney/platform/blob/main/scripts/validate-cilium-policies.sh) | Static or live Cilium policy validation. |
+| [`scripts/validate-kyverno-policies.sh`](https://github.com/nickromney/platform/blob/main/scripts/validate-kyverno-policies.sh) | Static or live Kyverno policy validation. |
+
+## Kubernetes Shared Scripts
+
+These scripts sit under `kubernetes/scripts/` and are reused by Kind, Lima, and
+Slicer Makefiles.
+
+| Script | Role |
+| --- | --- |
+| [`assert-variant-active.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/assert-variant-active.sh) | Proves the expected runtime variant is active before continuing. |
+| [`build-tfvar-args.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/build-tfvar-args.sh) | Builds Terragrunt/OpenTofu `-var-file` arguments for target and stage files. |
+| [`check-kind-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-kind-stopped.sh) | Ensures Kind is stopped before a conflicting target runs. |
+| [`check-lima-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-lima-stopped.sh) | Ensures Lima is stopped before a conflicting target runs. |
+| [`check-slicer-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-slicer-stopped.sh) | Ensures Slicer is stopped before a conflicting target runs. |
+| [`check-stack-prereqs.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-stack-prereqs.sh) | Shared Kubernetes stack prerequisite checks. |
+| [`check-target-host-ports.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-target-host-ports.sh) | Shared host port preflight logic. |
+| [`docker-local-registry-lib.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/docker-local-registry-lib.sh) | Helpers for the local OCI registry cache. |
+| [`ensure-local-image-cache.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/ensure-local-image-cache.sh) | Starts or verifies the shared host image cache. |
+| [`reset-kubeconfig-context.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/reset-kubeconfig-context.sh) | Removes or refreshes repo-owned kubeconfig contexts. |
+| [`resolve-tfvar-value.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/resolve-tfvar-value.sh) | Reads a value from target/stage tfvars for scripts. |
+| [`stage-ladder.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/stage-ladder.sh) | Stage ladder helper logic. |
+| [`stop-platform-runtimes.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/stop-platform-runtimes.sh) | Stops local platform runtimes. |
+| [`sync-local-image-cache.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/sync-local-image-cache.sh) | Mirrors image sets into the host image cache. |
+| [`test-idempotence.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/test-idempotence.sh) | Runs second-apply/final-plan idempotence checks. |
+
+## Kind Scripts
+
+| Script | Role |
+| --- | --- |
+| [`build-local-platform-images.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/build-local-platform-images.sh) | Builds host-side platform shortcut images into the cache. |
+| [`build-local-workload-images.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/build-local-workload-images.sh) | Builds sample app workload images for the Kubernetes stack. |
+| [`check-docker-registry-auth.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/check-docker-registry-auth.sh) | Checks local Docker registry auth assumptions. |
+| [`check-kind-host-ports.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/check-kind-host-ports.sh) | Kind-specific localhost port preflight. |
+| [`check-stage-monotonicity.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/check-stage-monotonicity.sh) | Verifies Kind stage files are cumulative. |
+| [`delete-kind-cluster.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/delete-kind-cluster.sh) | Deletes the local kind cluster during reset. |
+| [`docker-prune-estimate.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/docker-prune-estimate.sh) | Estimates reclaimable Docker space. |
+| [`ensure-kind-kubeconfig.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh) | Creates or repairs the split Kind kubeconfig. |
+| [`kubernetes/kind/scripts/audit-bootstrap.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/audit-bootstrap.sh) | Post-bootstrap audit over apps, pods, events, restarts, and previous logs. |
+| [`local-cache-lib.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/local-cache-lib.sh) | Kind-local cache helpers. |
+| [`refresh-kind-kubeconfig.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/refresh-kind-kubeconfig.sh) | Refreshes kubeconfig after cluster changes. |
+| [`render-operator-overrides.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/scripts/render-operator-overrides.sh) | Writes operator override tfvars. |
+
+## Lima Platform Scripts
+
+| Script | Role |
+| --- | --- |
+| [`build-local-workload-images.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/build-local-workload-images.sh) | Builds workload images for the Lima cache path. |
+| [`check-kind-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/check-kind-stopped.sh) | Lima-local wrapper for conflicting Kind checks. |
+| [`check-stage-monotonicity.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/check-stage-monotonicity.sh) | Verifies Lima stage files are cumulative. |
+| [`configure-k3s-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/configure-k3s-apiserver-oidc.sh) | Configures k3s API server OIDC trust. |
+| [`ensure-k3s-lima-vms.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/ensure-k3s-lima-vms.sh) | Ensures the Lima VM fleet exists and is running. |
+| [`exercise-k3s-oidc-recovery.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/exercise-k3s-oidc-recovery.sh) | Forces and verifies the k3s OIDC recovery path. |
+| [`host-gateway-proxy.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/host-gateway-proxy.sh) | Manages localhost gateway proxy helpers. |
+| [`kubernetes/lima/scripts/bootstrap-k3s-lima.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/bootstrap-k3s-lima.sh) | Bootstraps k3s into Lima VM(s). |
+| [`sync-local-image-cache.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/sync-local-image-cache.sh) | Syncs images into the Lima-visible cache. |
+
+## Slicer Platform Scripts
+
+| Script | Role |
+| --- | --- |
+| [`bootstrap-k3s-slicer.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/bootstrap-k3s-slicer.sh) | Installs k3s in the Slicer VM. |
+| [`build-local-workload-images.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/build-local-workload-images.sh) | Builds workload images for Slicer. |
+| [`check-kind-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/check-kind-stopped.sh) | Slicer-local wrapper for conflicting Kind checks. |
+| [`check-slicer-host-ports.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/check-slicer-host-ports.sh) | Slicer-specific host port preflight. |
+| [`check-stage-monotonicity.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/check-stage-monotonicity.sh) | Verifies Slicer stage files are cumulative. |
+| [`check-vm-health.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/check-vm-health.sh) | Checks VM health, disk, and runtime assumptions. |
+| [`configure-k3s-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/configure-k3s-apiserver-oidc.sh) | Configures k3s API server OIDC trust. |
+| [`delete-vm-best-effort.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/delete-vm-best-effort.sh) | Best-effort VM cleanup during reset. |
+| [`ensure-host-forwards.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/ensure-host-forwards.sh) | Sets up host forwards for stable localhost URLs. |
+| [`ensure-image-cache.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/ensure-image-cache.sh) | Ensures the Slicer-visible image cache. |
+| [`ensure-sbox-vm.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/ensure-sbox-vm.sh) | Ensures the selected Slicer VM exists and matches sizing constraints. |
+| [`host-gateway-proxy.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/host-gateway-proxy.sh) | Publishes the Slicer HTTPS path through a Docker proxy. |
+| [`kubernetes/slicer/scripts/start-daemon.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/start-daemon.sh) | Starts the local Slicer daemon. |
+| [`stop-daemon.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/stop-daemon.sh) | Stops the local Slicer daemon. |
+| [`sync-local-image-cache.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/sync-local-image-cache.sh) | Syncs cached images for Slicer. |
+| [`wait-for-kubectl.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/wait-for-kubectl.sh) | Waits for the Slicer kubeconfig/API path. |
+
+## Terraform Platform Scripts
+
+These run from Terraform `local-exec`, Make targets, or direct operator
+commands. They are the bridge between declarative resources and local bootstrap
+edges.
+
+| Script | Role |
+| --- | --- |
+| [`bootstrap-mkcert-ca.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/bootstrap-mkcert-ca.sh) | Copies the host mkcert CA into the cluster trust path. |
+| [`check-app.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-app.sh) | Checks one deployed app surface. |
+| [`check-cluster-health.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-cluster-health.sh) | Broad stack health gate. |
+| [`check-cluster.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-cluster.sh) | Cluster-level readiness checks. |
+| [`check-gateway-stack.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-gateway-stack.sh) | Gateway CRDs, controller, routes, and control-plane signals. |
+| [`check-gateway-urls.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-gateway-urls.sh) | Black-box gateway URL checks. |
+| [`check-provider-version.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-provider-version.sh) | Provider version guardrail. |
+| [`check-security.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-security.sh) | Live security verifier for TLS, gateway, policy, and config integrity. |
+| [`check-sso.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-sso.sh) | SSO configuration and runtime checks. |
+| [`check-version.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/check-version.sh) | Terraform stack chart/image version audit. |
+| [`configure-kind-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/configure-kind-apiserver-oidc.sh) | Applies Kind API server OIDC wiring. |
+| [`create-signoz-auth-proxy-secret.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/create-signoz-auth-proxy-secret.sh) | Creates Signoz auth proxy credentials. |
+| [`ensure-gitea-org.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/ensure-gitea-org.sh) | Ensures the configured Gitea org exists. |
+| [`ensure-kind-storage.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/ensure-kind-storage.sh) | Applies Kind storage manifests. |
+| [`exercise-kind-oidc-recovery.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/exercise-kind-oidc-recovery.sh) | Operator drill for Kind OIDC recovery. |
+| [`fetch-gitea-runner-token.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/fetch-gitea-runner-token.sh) | Fetches runner registration token from Gitea. |
+| [`fetch-gitea-ssh-public-keys.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/fetch-gitea-ssh-public-keys.sh) | Fetches SSH host keys from Gitea. |
+| [`fetch-mkcert-ca-cert.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/fetch-mkcert-ca-cert.sh) | Reads the local mkcert CA certificate. |
+| [`fetch-preload-image-set.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/fetch-preload-image-set.sh) | Resolves image lists for preload/cache flows. |
+| [`gitea-local-access.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/gitea-local-access.sh) | Opens narrow local or port-forward access to Gitea. |
+| [`hubble-audit-cilium-policies.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/hubble-audit-cilium-policies.sh) | Audits Cilium policies against observations. |
+| [`hubble-capture-flows.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/hubble-capture-flows.sh) | Captures Hubble flow data. |
+| [`hubble-check-connection.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/hubble-check-connection.sh) | Checks Hubble connectivity. |
+| [`hubble-generate-cilium-policy.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/hubble-generate-cilium-policy.sh) | Generates candidate Cilium policies from observed flows. |
+| [`hubble-observe-cilium-policies.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/hubble-observe-cilium-policies.sh) | Observes flows for policy design. |
+| [`hubble-summarise-flows.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/hubble-summarise-flows.sh) | Summarises captured Hubble flows. |
+| [`kind-apiserver-oidc-lib.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh) | Shared Kind OIDC helper library. |
+| [`kind-node-kubectl-wrapper.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/kind-node-kubectl-wrapper.sh) | Runs kubectl-style actions from Kind node context. |
+| [`manage-kubeconfig.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/manage-kubeconfig.sh) | Split kubeconfig management and optional merge behaviour. |
+| [`preload-images.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/preload-images.sh) | Preloads image sets into the target runtime. |
+| [`profile-lib.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/profile-lib.sh) | Captures plan/apply timing and logs. |
+| [`promote-gitea-admin.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/promote-gitea-admin.sh) | Promotes Gitea users to admin. |
+| [`recover-kind-cluster-after-apiserver-restart.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/recover-kind-cluster-after-apiserver-restart.sh) | Repairs Kind after controlled API server OIDC restart. |
+| [`render-cilium-policy-values.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/render-cilium-policy-values.sh) | Renders values used by Cilium policy flows. |
+| [`render-platform-launchpad.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/render-platform-launchpad.sh) | Renders Grafana launchpad dashboard JSON from tile inventory. |
+| [`show-policy-composition.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/show-policy-composition.sh) | Prints a filtered view of Cilium/Kyverno policy composition. |
+| [`sync-gitea-policies.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/sync-gitea-policies.sh) | Renders the GitOps policies repo and pushes it to Gitea. |
+| [`sync-gitea-repo.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/sync-gitea-repo.sh) | Seeds an app repo into Gitea. |
+| [`sync-gitea.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/sync-gitea.sh) | Higher-level Gitea sync helper. |
+| [`tf-defaults.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/tf-defaults.sh) | Reads defaults from Terraform variables for shell renderers. |
+| [`triage-sso.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/triage-sso.sh) | Collects SSO diagnostic data. |
+| [`unset-gitea-must-change-password.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/unset-gitea-must-change-password.sh) | Normalises first-login Gitea state. |
+| [`wait-for-platform-gateway-tls.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/wait-for-platform-gateway-tls.sh) | Waits for gateway TLS readiness. |
+
+## Policy Renderer Scripts
+
+| Script | Role |
+| --- | --- |
+| [`.../sources/aks-sensible/render.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/cilium-module/sources/aks-sensible/render.sh) | Renders AKS-sensible source policies into category output. |
+| [`.../sources/cilium-connectivity-test/render.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/cilium-module/sources/cilium-connectivity-test/render.sh) | Renders Cilium connectivity-test policy sources. |
+| [`.../sources/observability/render.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/cilium-module/sources/observability/render.sh) | Renders observability policy sources. |
+| [`.../sources/sandbox/render.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/cilium-module/sources/sandbox/render.sh) | Renders sandbox policy sources. |
+| [`terraform/kubernetes/cluster-policies/cilium/cilium-module/render-category.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/cluster-policies/cilium/cilium-module/render-category.sh) | Renders policy category bundles. |
+
+## App Scripts
+
+| Script | Role |
+| --- | --- |
+| [`apps/sentiment/keycloak/start-with-templated-realm.sh`](https://github.com/nickromney/platform/blob/main/apps/sentiment/keycloak/start-with-templated-realm.sh) | Starts Keycloak with templated realm config. |
+| [`apps/sentiment/pki/gen-certs.sh`](https://github.com/nickromney/platform/blob/main/apps/sentiment/pki/gen-certs.sh) | Generates Sentiment compose TLS certificates. |
+| [`apps/sentiment/tests/compose-smoke.sh`](https://github.com/nickromney/platform/blob/main/apps/sentiment/tests/compose-smoke.sh) | Sentiment compose smoke test. |
+| [`apps/sentiment/tests/test-tls.sh`](https://github.com/nickromney/platform/blob/main/apps/sentiment/tests/test-tls.sh) | Sentiment TLS overlay test. |
+| [`apps/sentiment/update-sentiment-image-tags.sh`](https://github.com/nickromney/platform/blob/main/apps/sentiment/update-sentiment-image-tags.sh) | Updates Sentiment image tags. |
+| [`apps/subnetcalc/api-fastapi-azure-function/test_auth.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/api-fastapi-azure-function/test_auth.sh) | Function API auth test helper. |
+| [`apps/subnetcalc/api-fastapi-azure-function/test_endpoints.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/api-fastapi-azure-function/test_endpoints.sh) | Function API endpoint test helper. |
+| [`apps/subnetcalc/api-fastapi-container-app/test_endpoints.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/api-fastapi-container-app/test_endpoints.sh) | Container API endpoint test helper. |
+| [`apps/subnetcalc/pki/gen-certs.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/pki/gen-certs.sh) | Generates Subnetcalc compose TLS certificates. |
+| [`apps/subnetcalc/scripts/debug-easyauth.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/debug-easyauth.sh) | Easy Auth debugging helper. |
+| [`apps/subnetcalc/start-api-azure-function.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/start-api-azure-function.sh) | Starts the Azure Function-style API. |
+| [`apps/subnetcalc/start-api-container-app.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/start-api-container-app.sh) | Starts the container-app-style API. |
+| [`apps/subnetcalc/tests/compose-smoke.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/tests/compose-smoke.sh) | Subnetcalc compose smoke test. |
+| [`apps/subnetcalc/tests/test-tls.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/tests/test-tls.sh) | Subnetcalc TLS overlay test. |
+| [`deploy-csharp-test.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/deploy-csharp-test.sh) | Deploys the C# test harness. |
+| [`docker/compose/pki/gen-certs.sh`](https://github.com/nickromney/platform/blob/main/docker/compose/pki/gen-certs.sh) | Generates shared compose TLS certificates. |
+| [`docker/compose/scripts/check-host-ports.sh`](https://github.com/nickromney/platform/blob/main/docker/compose/scripts/check-host-ports.sh) | Checks compose host port availability. |
+| [`minimal-csharp-test.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/minimal-csharp-test.sh) | Runs a minimal C# path test. |
+| [`render-runtime-config.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/render-runtime-config.sh) | Renders runtime config for frontend/container paths. |
+| [`update-subnetcalc-image-tags.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/update-subnetcalc-image-tags.sh) | Updates Subnetcalc image tags. |
+| [`vendor-apim-simulator.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/vendor-apim-simulator.sh) | Re-vendors the APIM simulator subset. |
+
+## SD-WAN Scripts
+
+| Script | Role |
+| --- | --- |
+| [`cloud1.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/cloud1.sh), [`cloud2.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/cloud2.sh), [`cloud3.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/cloud3.sh) | Per-VM guest bootstrap entrypoints. |
+| [`e2e/run-tests.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/e2e/run-tests.sh) | Browser E2E runner. |
+| [`fix-hostname.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/fix-hostname.sh) | Sets guest hostname state. |
+| [`scripts/check-lima-host-ports.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/check-lima-host-ports.sh) | SD-WAN host port preflight. |
+| [`scripts/query-all-dns.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/query-all-dns.sh) | Queries lab DNS from each viewpoint. |
+| [`scripts/run-tests.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/run-tests.sh) | Runs SD-WAN test suite. |
+| [`sd-wan/lima/provision/common.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/common.sh) | Shared guest provisioning helpers. |
+| [`setup-dns.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/setup-dns.sh) | Configures per-cloud DNS. |
+| [`setup-iptables.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/setup-iptables.sh) | Configures guest routing and NAT rules. |
+| [`setup-nginx.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/setup-nginx.sh) | Configures guest Nginx edges. |
+| [`setup-pki.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/setup-pki.sh) | Creates lab PKI material. |
+| [`setup-wireguard.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/provision/setup-wireguard.sh) | Configures WireGuard mesh. |
+| [`test-connectivity.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/test-connectivity.sh) | Connectivity checks. |
+| [`test-dns.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/test-dns.sh) | DNS checks. |
+| [`test-split-brain.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/test-split-brain.sh) | Overlapping-RFC1918 resolver-viewpoint checks. |
+| [`test-tunnel.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/scripts/test-tunnel.sh) | WireGuard tunnel checks. |
+| [`tests/test-dns.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-dns.sh) | Test assertion script for DNS. |
+| [`tests/test-egress.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-egress.sh) | Test assertion script for egress. |
+| [`tests/test-mtls.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-mtls.sh) | Test assertion script for mTLS. |
+| [`tests/test-routing.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-routing.sh) | Test assertion script for routing. |
+| [`tests/test-subnetcalc.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-subnetcalc.sh) | Test assertion script for app behaviour. |
+| [`tests/test-tls.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-tls.sh) | Test assertion script for TLS. |
+| [`tests/test-tunnel.sh`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/tests/test-tunnel.sh) | Test assertion script for tunnel behaviour. |
+
+## Docker Desktop Reference Scripts
+
+| Script | Role |
+| --- | --- |
+| [`kubernetes/docker-desktop/scripts/cilium-workload-loop.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/docker-desktop/scripts/cilium-workload-loop.sh) | Docker Desktop Cilium workload loop reference. |
+| [`patch-managed-kind-registry.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/docker-desktop/scripts/patch-managed-kind-registry.sh) | Patches managed kind registry behaviour. |
+
+## Tests and SSO Harness
+
+| Script | Role |
+| --- | --- |
+| [`tests/kubernetes/sso/run.sh`](https://github.com/nickromney/platform/blob/main/tests/kubernetes/sso/run.sh) | Runs the Kubernetes SSO Playwright harness. |
+
+## When Adding A New Script
+
+1. Put it beside the target that owns the behaviour.
+2. Use `--dry-run` / `--execute` for anything mutating.
+3. Add a Make target instead of expecting users to remember the script path.
+4. Add Bats coverage when parsing, deletion, kubeconfig, or port behaviour is involved.
+5. Keep environment variables explicit and documented in the target help.
+6. If the script creates cluster objects, ask whether Terraform or GitOps should own that object instead.
+
+## Related Pages
+
+- [Makefiles](./makefiles)
+- [Manifest assembly](../concepts/manifest-assembly)
+- [IaC boundaries](../concepts/iac-boundaries)

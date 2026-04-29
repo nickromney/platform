@@ -1,0 +1,79 @@
+---
+title: Public Demo Boundary
+description: What changes when a local platform is exposed off-host.
+---
+
+# Public Demo Boundary
+
+The default platform is local. Risk changes when the same stack is moved onto a
+VPS, public VM, bare-metal node, or any network where outside users can reach
+the gateway or node network.
+
+## Boundary Shift
+
+<ThemeImage
+  lightSrc="/diagrams/generated/security-public-demo-boundary-1-light.svg"
+  darkSrc="/diagrams/generated/security-public-demo-boundary-1-dark.svg"
+  alt="Public Demo Boundary diagram"
+  width={1460}
+  height={266}
+/>
+
+## Minimum Safer Shape
+
+```hcl
+platform_base_domain                 = "demo.example.com"
+platform_admin_base_domain           = "admin.example.net"
+public_demo_mode                     = true
+public_demo_acknowledged             = true
+gateway_https_listen_address         = "0.0.0.0"
+expose_admin_nodeports               = false
+admin_route_allowlist_cidrs          = ["203.0.113.14/32"]
+gateway_trusted_proxy_cidrs          = ["198.51.100.10/32"]
+gitea_local_access_mode              = "port-forward"
+enable_demo_cluster_admin_binding    = false
+headlamp_cluster_role_binding_create = false
+headlamp_oidc_skip_tls_verify        = false
+enable_actions_runner                = false
+enable_docker_socket_mount           = false
+enable_apps_dir_mount                = false
+```
+
+If the gateway is directly internet-facing and not behind a WAF or load
+balancer, leave `gateway_trusted_proxy_cidrs = []` so the gateway uses direct
+peer IPs instead of trusting forwarded headers.
+
+## Main Risks
+
+| Risk | Local default | Public-demo posture |
+| --- | --- | --- |
+| Admin UI access | Localhost-oriented paths. | Gateway-only, SSO, IP allowlist. |
+| Demo identity privilege | Useful for local learning. | Disable demo cluster-admin. |
+| Headlamp privilege | Convenient local dashboard. | Use narrower RBAC or disable cluster binding. |
+| Actions runner | Useful local GitOps demo. | Disable unless isolated hard. |
+| Docker socket mount | Useful for local builds. | Avoid public exposure. |
+| Kubernetes API | Local/operator path. | Keep private behind SSH/VPN. |
+
+## OWASP Mapping
+
+- Broken access control: direct NodePorts, demo cluster-admin, and dashboard
+  RBAC are the first things to remove.
+- Cryptographic failures: local CA and TLS verification skips are local-only
+  shortcuts.
+- Injection and integrity: repo-controlled workflows plus runner privileges can
+  become host execution.
+- Security misconfiguration: broad firewall rules and stale local defaults are
+  the most likely failure mode.
+- Logging and monitoring: Grafana, Prometheus, Hubble, and logs only help if an
+  operator actually reviews them.
+
+<Callout type="warning">
+  Public-demo mode is not production certification. It forces acknowledgement
+  of risky shortcuts and provides safer knobs, but the operator still owns DNS,
+  firewalling, WAF/LB trust, credentials, patching, and incident response.
+</Callout>
+
+## Related Pages
+
+- [Hardening choices](./hardening-choices)
+- [Kind walkthrough](../tutorials/kind-walkthrough)

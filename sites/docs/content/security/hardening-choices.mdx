@@ -1,0 +1,399 @@
+---
+title: Hardening Choices
+description: Security hardening decisions in the local platform, sample apps, supply chain, and policy layers.
+---
+
+# Hardening Choices
+
+The repo is local-first, but local does not mean casual. The hardening model is
+designed to make risky edges visible: host exposure, identity, network policy,
+admission policy, container runtime settings, vendored code, dependency
+freshness, and CI trust boundaries.
+
+The platform is not claiming production certification. It is deliberately
+showing how an operator can build a local platform workbench with defensible
+defaults, inspect each layer, and understand which remaining gaps would matter
+before public or multi-tenant use.
+
+## Layered Model
+
+<ThemeImage
+  className="platform-diagram platform-diagram--hero"
+  lightSrc="/diagrams/generated/security-hardening-choices-1-light.svg"
+  darkSrc="/diagrams/generated/security-hardening-choices-1-dark.svg"
+  alt="Layered hardening model showing exposure, supply chain, image, runtime policy, and validation controls"
+  width={850}
+  height={1988}
+/>
+
+## Local Exposure Boundary
+
+The default Kubernetes stack binds operator-facing surfaces to localhost and
+loopback-oriented DNS. That is a hardening choice. A local learning cluster
+should not accidentally become a public service because a NodePort, gateway
+listener, or compose port was convenient during development.
+
+The stack therefore treats exposure as a separate decision:
+
+- localhost-first admin URLs such as `*.admin.127.0.0.1.sslip.io`
+- explicit gateway listen configuration
+- explicit admin-route allowlists
+- explicit trusted proxy CIDRs
+- separate public-demo documentation
+- separate validation for TLS, headers, and admin exposure
+
+For public demo work, the important variables include:
+
+- `platform_base_domain`
+- `platform_admin_base_domain`
+- `gateway_https_listen_address`
+- `expose_admin_nodeports`
+- `admin_route_allowlist_cidrs`
+- `gateway_trusted_proxy_cidrs`
+
+See [public demo boundary](./public-demo-boundary) before changing any of
+those values.
+
+<Callout type="warning">
+  Treat off-host exposure as a new security design, not a port-forwarding
+  convenience. The local defaults are intentionally narrower than a public
+  deployment would be.
+</Callout>
+
+## GitHub Workflow Pinning
+
+GitHub Actions are part of the supply chain. The source repo pins workflow
+actions to commit SHAs, with comments recording the corresponding release tag.
+
+Current examples:
+
+| Workflow | Action | Pin | Release comment |
+| --- | --- | --- | --- |
+| `release.yml` | `actions/checkout` | `de0fac2e4500dabe0009e67214ff5f5447ce83dd` | `v6.0.2` |
+| `release.yml` | `actions/setup-node` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | `v6.4.0` |
+| `version-audit.yml` | `actions/checkout` | `de0fac2e4500dabe0009e67214ff5f5447ce83dd` | `v6.0.2` |
+| `version-audit.yml` | `actions/setup-node` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | `v6.4.0` |
+
+That gives two useful properties:
+
+- the workflow does not silently move when a mutable tag changes
+- humans can still see the major/minor/patch release that was intentionally
+  selected
+
+The release workflow also requires `main` for publish mode and uses explicit
+permissions. The version audit workflow is read-only and runs the repo version
+guard, Terraform provider guard, and Kubernetes stack version guard.
+
+For the full bump path, including Kubernetes, Helm charts, providers, package
+cooldowns, and prerelease gates, see [version management](../concepts/version-management).
+
+## Vendored APIM Simulator
+
+`apim-simulator` is a supporting context for Subnetcalc, not an unbounded
+submodule or a floating copy. The vendored tree is recorded in
+`apps/subnetcalc/apim-simulator.vendor.json`.
+
+Current vendoring metadata:
+
+| Field | Value |
+| --- | --- |
+| Upstream | `git@github.com:nickromney/apim-simulator.git` |
+| Requested ref | `v0.4.0` |
+| Ref kind | `tag` |
+| Resolved commit | `fd545987759d1d373ef015da2882532717e027fa` |
+| Vendored path | `apps/subnetcalc/apim-simulator` |
+| Profile | `runtime` |
+
+The vendoring script only accepts a tag or commit SHA. It rejects floating refs,
+archives the resolved commit, copies a runtime subset, and writes the metadata
+file with the exact resolved commit.
+
+The runtime profile includes:
+
+- `.dockerignore`
+- `Dockerfile`
+- `LICENSE.md`
+- `app`
+- `contracts`
+- `pyproject.toml`
+- `uv.lock`
+
+The runtime profile excludes:
+
+- `.github/`
+- `.githooks/`
+- `docs/`
+- `examples/`
+- `observability/`
+- `scripts/`
+- `tests/`
+- `ui/`
+
+That keeps the runtime dependency surface small and makes updates deliberate.
+If APIM simulator changes, the operator should re-vendor from a known tag or
+commit, review the metadata diff, and rebuild the affected images.
+
+## Minimal Sample-App Ecosystems
+
+The sample apps are intentionally not broad framework showcases. They are small
+platform probes. The more packages a sample app carries, the more irrelevant
+supply-chain and update noise it introduces into a platform repo.
+
+That shows up in a few design choices:
+
+- Subnetcalc keeps multiple app variants to compare hosting and identity
+  patterns, but each variant is meant to stay narrow.
+- Sentiment uses a deliberately small Vite auth UI; its Dockerfile rejects
+  React, Next, and React Server Components packages.
+- Static frontends use Nginx where a full application server would add little.
+- Python services install from lockfiles with `uv sync --frozen`.
+- Bun services install with `bun install --frozen-lockfile`.
+- The APIM simulator vendored subset excludes upstream docs, tests, examples,
+  scripts, and UI.
+
+This does not make dependencies safe by itself. It reduces the number of
+dependencies that need review, pinning, scanning, and operational explanation.
+
+## Dependency Freshness Gates
+
+The repo uses dependency age gates in copied roots:
+
+| Tooling | Gate |
+| --- | --- |
+| Bun | `minimumReleaseAge = 604800` |
+| npm | `min-release-age=7` |
+| uv | `exclude-newer = "7 days"` |
+
+The intent is to avoid adopting a newly published package immediately after it
+appears. That is useful for supply-chain blast-radius reduction: malicious or
+broken releases are often detected quickly, and a short cooling-off period
+reduces exposure to that first wave.
+
+This is not a substitute for lockfiles, scanning, or review. It is one more
+layer in the update path.
+
+The operational workflow for using these gates is documented in
+[version management](../concepts/version-management).
+
+## Docker Hardened Images
+
+The app runtime images prefer Docker Hardened Images where the repo controls
+the runtime base:
+
+| Runtime use | Image examples |
+| --- | --- |
+| Python API runtime | `dhi.io/python:3.13-debian13` |
+| Python builder | `dhi.io/python:3.13-debian13-dev` |
+| Node runtime | `dhi.io/node:22-debian13` |
+| Nginx static/runtime frontend | `dhi.io/nginx:1.29.5-debian13` |
+
+The Kubernetes stack also carries a `hardened_image_registry` variable and
+passes the effective hardened registry into GitOps rendering for workloads such
+as SSO-related proxies.
+
+Some images remain non-DHI because they are product-specific or upstream
+runtime images: Keycloak, oauth2-proxy, Azure Functions base images, Cilium,
+and selected tool images. Those should remain visible exceptions rather than
+becoming invisible drift.
+
+The current default stage files enable Prometheus, Grafana, and VictoriaLogs for
+the stage-800/900 observability path. Loki and SigNoz are available pathways,
+but they are heavier and are not enabled by the default Kind/Lima/Slicer
+stage-900 tfvars.
+
+## Multi-Stage Builds
+
+Application images generally build in one container and run in a smaller,
+stricter runtime container. The important pattern is:
+
+1. copy only dependency manifests
+2. install dependencies from lockfiles
+3. compile or build artefacts
+4. start a separate runtime stage
+5. copy only the virtual environment, built static files, compiled binary, or
+   application files that are required at runtime
+6. run as a non-root numeric user
+
+Examples:
+
+- `apps/subnetcalc/api-fastapi-container-app/Dockerfile` builds a Python venv in
+  `dhi.io/python:3.13-debian13-dev`, then copies `.venv` and `app/` into
+  `dhi.io/python:3.13-debian13`.
+- `apps/subnetcalc/frontend-typescript-vite/Dockerfile` builds the Vite app
+  with Bun, builds a small Go runtime-config entrypoint, then copies only the
+  built assets and binary into `dhi.io/nginx`.
+- `apps/sentiment/api-sentiment/Dockerfile` installs production Node
+  dependencies, preloads the model cache in a build stage, then copies
+  dependencies, model cache, and source files into `dhi.io/node`.
+- `apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile` builds a
+  static SPA and serves only the generated `dist` directory from hardened Nginx.
+
+The tests enforce numeric runtime users for repo-owned app Dockerfiles. Current
+expected users include `65532:65532` for most Nginx/Python runtimes and
+`1000:1000` for selected Node runtimes.
+
+## Compose Runtime Hardening
+
+The compose stacks use shared hardening anchors for app and Nginx-style
+containers.
+
+App-style services use:
+
+```yaml
+read_only: true
+cap_drop:
+  - ALL
+security_opt:
+  - no-new-privileges:true
+tmpfs:
+  - /tmp:rw,noexec,nosuid,nodev,mode=1777
+```
+
+Nginx-style services need writable runtime directories, so they get explicit
+tmpfs mounts rather than a writable container filesystem:
+
+```yaml
+read_only: true
+cap_drop:
+  - ALL
+security_opt:
+  - no-new-privileges:true
+tmpfs:
+  - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777
+  - /var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+  - /var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
+```
+
+This expresses the intended runtime contract:
+
+- no Linux capabilities unless a service has a specific need
+- no privilege escalation
+- no writable root filesystem
+- writable scratch only where the process actually needs it
+- non-root numeric user where the image supports it
+
+The Bats suite validates hardened compose settings across Sentiment, Subnetcalc,
+and the shared compose stack.
+
+## Image and Build Validation
+
+The repo has several validation paths:
+
+```bash
+make -C apps trivy-scan
+scripts/audit-docker-builds.sh
+make -C kubernetes/kind 900 check-security
+```
+
+The Docker build audit is useful because hardening failures often show up as
+build-time smell rather than runtime failure: unexpected package installation,
+large images, warnings, missing lockfile use, or accidental test/dev artefacts.
+
+Trivy is optional but important when assessing a larger release or public demo
+candidate.
+
+## Policy Control Planes
+
+Cilium, Hubble, and Kyverno are now covered as dedicated security pages because
+they are more than implementation details:
+
+- [Cilium policy](./cilium) explains the network-policy model, namespace
+  taxonomy, L7 HTTP rules, FQDN egress, and validation flow.
+- [Hubble flow evidence](./hubble) explains how flow capture becomes policy
+  evidence without turning observed traffic into unreviewed policy.
+- [Kyverno admission](./kyverno) explains generated default-deny policies,
+  app-label enforcement, image-registry visibility, and current admission gaps.
+
+## Identity and Admin Access
+
+Stage `900` puts admin UIs behind Keycloak and `oauth2-proxy`. Keycloak is the
+Kubernetes default because the RBAC journey now needs a fuller IdP: users,
+groups, OIDC clients, lifecycle checks, and app/environment role modelling.
+Dex remains available for compact compose and compatibility paths.
+
+The gateway keeps `X-Frame-Options: DENY` as the global default. Keycloak is the
+explicit exception because its admin console performs same-origin browser
+storage checks through an iframe. The Keycloak route uses a scoped
+`SnippetsFilter` that preserves `SAMEORIGIN` only for that hostname instead of
+relaxing the gateway-wide default.
+
+The repo includes switches to disable risky public-demo shortcuts:
+
+- `enable_demo_cluster_admin_binding = false`
+- `headlamp_cluster_role_binding_create = false`
+- `headlamp_oidc_skip_tls_verify = false`
+
+Demo users and static local passwords are acceptable for a local teaching
+stack. They are not acceptable as public or shared environment credentials.
+
+## GitOps and Helm Supply Chain
+
+The platform deliberately reduces external chart fetches during reconciliation.
+Non-Gitea chart-based apps are rendered from vendored charts in the in-cluster
+`platform/policies` Git repository. Argo CD then reconciles from Gitea rather
+than reaching out to many public Helm endpoints.
+
+The current remaining bootstrap exception is the Gitea chart itself, where
+`argocd-repo-server` egress is narrowed to `dl.gitea.io:443`.
+
+This is an important distinction:
+
+- public internet fetches during reconciliation are constrained
+- vendored chart versions are visible in the rendered GitOps repo
+- version checks inspect live chart labels for deployed Argo-managed apps
+- the final bootstrap exception remains explicit
+
+## What Is Still Not Solved
+
+The docs should be honest about remaining gaps:
+
+- `restrict-image-registries.yaml` is audit-only and broad.
+- `uat-restrict-capabilities.yaml` is audit-only and partial.
+- Some external egress policy is still shared across multiple app backends.
+- Observability policy still allows selected host/remote-node access that
+  should stay justified.
+- Source repo Markdown still contains older wording that blurs the default
+  observability path with heavier Loki and SigNoz alternatives; treat stage
+  tfvars as the stronger source until those docs are rewritten as pathways.
+- Gitea bootstrap still needs a remaining public Helm exception.
+- Local demo credentials are not production identity.
+- A public deployment needs firewall, DNS, certificate, runner, and secret
+  handling decisions beyond the local defaults.
+
+## Operator Checklist
+
+Before changing a hardening-sensitive area:
+
+1. Identify the layer: workflow, vendoring, dependency, image, runtime, network,
+   admission, identity, or exposure.
+2. Find the source of truth in the repo rather than editing generated output.
+3. Keep refs pinned: GitHub Actions by SHA, vendored code by tag or commit,
+   dependencies by lockfile.
+4. Prefer smaller runtime surfaces over broad framework additions.
+5. Use Docker Hardened Images where the repo controls the runtime base.
+6. Keep build stages and runtime stages separate.
+7. Copy only compiled artefacts, virtual environments, static files, or runtime
+   source needed by the final image.
+8. Run as a numeric non-root user.
+9. Drop capabilities and keep filesystems read-only unless the service has a
+   specific exception.
+10. Validate Cilium and Kyverno statically before live validation.
+11. Use Hubble as evidence, not as an auto-policy oracle.
+12. Run `check-security` before treating a stack as demonstrable.
+
+<Callout type="warning">
+  `check-security` is a misconfiguration guardrail, not a certification. It
+  proves selected live properties; it does not replace review of public
+  exposure, credentials, runner privileges, policy exceptions, or firewall
+  rules.
+</Callout>
+
+## Related Pages
+
+- [Public demo boundary](./public-demo-boundary)
+- [Platform pathways](../concepts/platform-pathways)
+- [Version management](../concepts/version-management)
+- [Container workflow](../tutorials/container-workflow)
+- [Manifest assembly](../concepts/manifest-assembly)
+- [Application patterns](../apps/patterns)
+- [Shell scripts](../reference/shell-scripts)

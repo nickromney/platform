@@ -56,7 +56,7 @@ help:
 		'make release VERSION=0.3.0\tBump VERSION, run checks, and create a release commit' \
 		'make release-dry-run VERSION=0.3.0\tPreview the release commit flow' \
 		'make release-tag VERSION=0.3.0\tCreate an annotated v-version tag from main' \
-		'make sonar-scan SONAR_SCAN_REPO=~/Developer/personal/apim-simulator\tRun SonarQube on any local repo' \
+		'make sonar-scan SONAR_SCAN_REPO=apps/apim-simulator\tRun SonarQube on any local repo' \
 		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer' \
 		'make test\tShow the focused test entrypoints' \
 		'make tui\tOpen the Gum-based local runtime chooser when available' \
@@ -101,9 +101,11 @@ prereqs:
 	@echo "Run one of:"
 	@echo "  make -C .devcontainer prereqs"
 	@echo "  make -C apps prereqs"
+	@echo "  make -C apps/apim-simulator prereqs"
 	@echo "  make -C apps/sentiment prereqs"
 	@echo "  make -C apps/subnetcalc prereqs"
 	@echo "  make -C docker/compose prereqs"
+	@echo "  make -C sites/docs prereqs"
 	@echo "  make -C kubernetes/kind prereqs"
 	@echo "  make -C kubernetes/lima prereqs"
 	@echo "  make -C kubernetes/slicer prereqs"
@@ -113,9 +115,11 @@ test:
 	@echo ""
 	@echo "Run one of:"
 	@echo "  make -C apps test"
+	@echo "  make -C apps/apim-simulator test"
 	@echo "  make -C apps/sentiment test"
 	@echo "  make -C apps/subnetcalc test"
 	@echo "  make -C docker/compose test"
+	@echo "  make -C sites/docs test"
 	@echo "  make -C kubernetes/kind test"
 	@echo "  make -C kubernetes/lima test"
 	@echo "  make -C kubernetes/slicer test"

@@ -1,0 +1,66 @@
+---
+title: Daily Loop
+description: Practical commands for day-to-day platform work.
+---
+
+# Daily Loop
+
+Once the first stack works, the daily loop is short: check status, apply a
+target shape, inspect URLs, and reset only when local state needs a fresh start.
+
+## Start of Session
+
+```bash
+cd ~/Developer/personal/platform
+make status
+make -C kubernetes/kind status
+make -C kubernetes/kind show-urls
+```
+
+`make status` reports local runtime status across the root workspace. Target
+status commands give the focused view for Kind, Lima, or Slicer.
+
+## Reapply the Full Shape
+
+```bash
+make -C kubernetes/kind 900 plan
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 check-health
+```
+
+Use the same stage number repeatedly. The stage is a target shape, so reruns
+are part of the idempotence story.
+
+## Work on Apps
+
+```bash
+make -C apps test
+make -C apps compose-smoke
+make -C apps/subnetcalc start-compose-happy
+make -C apps/sentiment up
+```
+
+Use app-local compose loops when you are changing app behaviour. Use the
+Kubernetes stack when you are testing platform integration.
+
+## Repo Hygiene
+
+```bash
+make lint
+make fmt
+make check-version
+```
+
+Root `make lint` is a reporting pass across YAML, Markdown, Bash compatibility,
+shell audit, and policy checks. `make fmt` applies tracked formatting.
+
+<Callout type="warning">
+  Root `make test` is informational. It tells you which focused test entrypoint
+  to run instead of pretending the whole workspace has one cheap universal test.
+</Callout>
+
+## Related Pages
+
+- [Health and URLs](./health-and-urls)
+- [Reset and cleanup](./reset-and-cleanup)
+- [Commands](../reference/commands)

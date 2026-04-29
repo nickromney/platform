@@ -1,0 +1,61 @@
+---
+title: Journey Closure Index
+description: Concrete closure artifacts for the learning journeys.
+---
+
+# Journey Closure Index
+
+Use this page to find the concrete artifact, exercise, command, or proof loop
+that backs each journey.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-gaps-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-gaps-1-dark.svg"
+  alt="Journey closure map linking the learning paths to concrete source artifacts and exercises"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Closed Learning Slices
+
+Each row points back to the page where the artifact is explained.
+
+| Learning need | Artifact or exercise | Evidence |
+| --- | --- | --- |
+| First new workload from scratch | `hello-platform` workload and route path | [Kubernetes follow-on journey](/journeys/kubernetes#follow-on-journey) |
+| Promotion from dev to UAT | Separate dev and UAT image patch files for `hello-platform` | [GitOps closure slice](/journeys/argocd-gitops#closure-slice) |
+| Policy authoring kata | `hello-platform` Cilium policy and UAT Kyverno runtime-profile policy | [Cilium closure slice](/journeys/cilium-hubble#closure-slice), [Kyverno closure slice](/journeys/kyverno#closure-slice) |
+| Identity-to-RBAC mapping | Keycloak platform and app/environment groups mapped into Argo CD, Kubernetes API, Headlamp, and app-route checks | [SSO closure slice](/journeys/sso-dex-keycloak#closure-slice) |
+| Observability investigation | Hubble task now has a real workload and policy boundary to inspect | [Cilium closure slice](/journeys/cilium-hubble#closure-slice) |
+| IaC variable lifecycle | Variable lifecycle checklist for Terraform/Terragrunt changes | [Terraform closure slice](/journeys/terraform-terragrunt#closure-slice) |
+| Internal Git workflow | Dry-run Gitea repo lifecycle script and Makefile target | [Gitea closure slice](/journeys/gitea-version-control#closure-slice) |
+| API product shape | Non-applied APIM simulator product example | [APIM closure slice](/journeys/apis-apim-simulator#closure-slice) |
+| AI evaluation | Sentiment model card, evaluation fixture, and test | [Self-hosted AI closure slice](/journeys/self-hosted-ai-sentiment#closure-slice) |
+
+## Capstone Path
+
+A capstone that would join the journeys together:
+
+```text
+Create a tiny "hello-platform" service.
+Deploy it to dev through Gitea and Argo CD.
+Protect it with Keycloak SSO.
+Expose it through Gateway API.
+Add Cilium ingress and egress policy.
+Add Kyverno-compliant labels and security context.
+Observe one request in Hubble and Grafana.
+Promote the same image to UAT.
+```
+
+<Callout type="warning">
+  Run the capstone in a local stack first. The exercise touches routes, GitOps
+  state, and policy, so make each change in source and inspect the rendered
+  objects before applying the next one.
+</Callout>
+
+## Related Pages
+
+- [Learning journeys](/journeys)
+- [Platform pathways](../concepts/platform-pathways)
+- [Hardening choices](../security/hardening-choices)

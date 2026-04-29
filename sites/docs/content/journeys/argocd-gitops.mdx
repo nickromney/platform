@@ -1,0 +1,129 @@
+---
+title: Learn GitOps With Argo CD
+description: Learn how Terraform bootstraps Argo CD, then hands platform and app reconciliation to GitOps.
+---
+
+# Learn GitOps With Argo CD
+
+Outcome: understand the handoff from Terraform bootstrap to Argo CD
+reconciliation: Terraform installs Argo CD and creates selected `Application`
+objects; Argo CD then syncs charts and manifests from the in-cluster Gitea
+repository.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-argocd-gitops-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-argocd-gitops-1-dark.svg"
+  alt="GitOps journey from Terraform bootstrap through Argo CD Applications, Gitea repository content, sync waves, and live namespaces"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 400 apply AUTO_APPROVE=1
+kubectl -n argocd get deploy,svc
+
+make -C kubernetes/kind 500 apply AUTO_APPROVE=1
+kubectl -n argocd get applications.argoproj.io
+```
+
+Then add policies and app repos:
+
+```bash
+make -C kubernetes/kind 700 apply AUTO_APPROVE=1
+kubectl -n argocd get app -o wide
+```
+
+## Inspect
+
+Use Argo CD objects as the map:
+
+```bash
+kubectl -n argocd get app
+kubectl -n argocd describe app kyverno-policies
+kubectl -n argocd describe app dev
+kubectl -n argocd get secret | rg "repo|gitea"
+```
+
+Check which manifests Argo CD is expected to sync:
+
+```bash
+find terraform/kubernetes/apps/argocd-apps -maxdepth 1 -type f | sort
+find terraform/kubernetes/apps/dev terraform/kubernetes/apps/uat -maxdepth 2 -type f
+```
+
+The platform currently uses direct Terraform-created Argo CD Applications by
+default. The app-of-apps directory exists as an optional path, but stage `900`
+sets `enable_app_of_apps = false`.
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`kubernetes/kind/stages/400-argocd.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/400-argocd.tfvars) | Installs core Argo CD with selected controllers disabled. |
+| [`kubernetes/kind/stages/500-gitea.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/500-gitea.tfvars) | Enables Gitea and full Argo CD controllers. |
+| [`terraform/kubernetes/argocd.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/argocd.tf) | Argo CD Helm release. |
+| [`terraform/kubernetes/gitops.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/gitops.tf) | Seeds the policies repo into Gitea. |
+| [`terraform/kubernetes/policies.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/policies.tf) | Creates policy-related Argo CD Applications. |
+| [`terraform/kubernetes/workload-apps.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/workload-apps.tf) | Creates `apim`, `dev`, and `uat` Applications. |
+| [`terraform/kubernetes/app-of-apps.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/app-of-apps.tf) | Optional app-of-apps root Application. |
+
+## Try One Change
+
+Pick one Argo CD Application and trace it from desired state to live state:
+
+```bash
+kubectl -n argocd get app dev -o yaml | yq '.spec.source.path, .spec.destination.namespace'
+kubectl -n dev get deploy,svc
+```
+
+Then inspect the source path:
+
+```bash
+sed -n '1,120p' terraform/kubernetes/apps/dev/kustomization.yaml
+sed -n '1,80p' terraform/kubernetes/apps/workloads/base/kustomization.yaml
+```
+
+The lesson is that GitOps is a feedback loop. A commit or generated repo sync
+changes desired state; Argo CD reconciles live cluster state to match.
+
+<Callout type="warning">
+  Do not confuse "Argo CD is installed" with "GitOps is in charge of
+  everything." Bootstrap resources, local credentials, repo seeding, and some
+  Application objects are still Terraform-managed in this platform.
+</Callout>
+
+## Closure Slice
+
+Use `hello-platform` as the promotion example. It now has separate dev and UAT
+image patch files:
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml) | Dev image reference. |
+| [`terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml) | UAT image reference. |
+| [`terraform/kubernetes/apps/dev/kustomization.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/dev/kustomization.yaml) | Includes the dev promotion patch. |
+| [`terraform/kubernetes/apps/uat/kustomization.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/uat/kustomization.yaml) | Includes the UAT promotion patch. |
+
+The dev commit proves the new version. The UAT commit proves promotion. Both
+are visible in Gitea and in Argo CD history once synced.
+
+### Acceptance Checks
+
+```bash
+kubectl -n argocd get app dev uat -o wide
+kubectl -n dev get deploy hello-platform -o jsonpath='{.spec.template.spec.containers[0].image}'
+kubectl -n uat get deploy hello-platform -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+
+Finish by reverting the UAT promotion commit and observing Argo CD return UAT
+to the previous image.
+
+## Related Pages
+
+- [Manifest assembly](../concepts/manifest-assembly)
+- [Stage ladder](../concepts/stage-ladder)
+- [Application patterns](../apps/patterns)

@@ -1,0 +1,119 @@
+---
+title: Learn Gitea Version Control
+description: Learn non-GitHub version control, package publishing, deploy keys, and local GitOps repos with Gitea.
+---
+
+# Learn Gitea Version Control
+
+Outcome: understand how the platform uses Gitea as an internal Git host, not as
+a GitHub wrapper: it owns repos, deploy keys, package registry paths, app repo
+seeding, and the source that Argo CD reads.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-gitea-version-control-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-gitea-version-control-1-dark.svg"
+  alt="Gitea journey from admin bootstrap through org creation, repo seeding, deploy keys, package registry, runner, and Argo CD read access"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 500 apply AUTO_APPROVE=1
+kubectl -n gitea get deploy,svc,secret
+```
+
+At stage `700`, the platform also seeds app repos and enables the local runner:
+
+```bash
+make -C kubernetes/kind 700 apply AUTO_APPROVE=1
+kubectl -n gitea-runner get deploy,pods
+```
+
+## Inspect
+
+Gitea runs as an Argo CD managed application:
+
+```bash
+kubectl -n argocd get app gitea -o wide
+kubectl -n gitea get svc gitea-http gitea-ssh
+kubectl -n gitea get secret gitea-admin-secret
+```
+
+Check the repo sync resources:
+
+```bash
+rg -n "sync_gitea|app_repo|policies_repo" terraform/kubernetes/gitops.tf
+rg -n "gitea_repo_owner|gitea_org" terraform/kubernetes/*.tf
+```
+
+The stage files make the learning target explicit:
+
+```hcl filename="kubernetes/kind/stages/700-app-repos.tfvars"
+enable_actions_runner      = true
+enable_app_repo_subnetcalc = true
+enable_app_repo_sentiment  = true
+```
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`terraform/kubernetes/gitea.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/gitea.tf) | Gitea Argo CD Application and admin promotion. |
+| [`terraform/kubernetes/gitops.tf`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/gitops.tf) | Policies repo and app repo sync into Gitea. |
+| [`terraform/kubernetes/apps/gitea-actions-runner`](https://github.com/nickromney/platform/tree/main/terraform/kubernetes/apps/gitea-actions-runner) | In-cluster runner manifests. |
+| [`kubernetes/kind/stages/500-gitea.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/500-gitea.tfvars) | Enables Gitea. |
+| [`kubernetes/kind/stages/700-app-repos.tfvars`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/stages/700-app-repos.tfvars) | Enables app repo seeding and runner. |
+
+## Try One Change
+
+After stage `700`, clone a seeded app repo from local Gitea, make a harmless
+documentation change, and inspect the remote:
+
+```bash
+git clone ssh://git@127.0.0.1:30022/platform/sentiment.git /tmp/platform-sentiment
+cd /tmp/platform-sentiment
+git remote -v
+git log --oneline -5
+```
+
+If SSH access is not active for your runtime, use the runtime's documented
+port-forward path from the Lima or Slicer walkthroughs.
+
+<Callout type="warning">
+  Gitea is local infrastructure in this platform. Use it to learn GitOps and
+  internal package flows without relying on GitHub.
+</Callout>
+
+## Closure Slice
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/scripts/gitea-repo-lifecycle-demo.sh`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/scripts/gitea-repo-lifecycle-demo.sh) | Dry-run or execute a local repo lifecycle demo. |
+| [`kubernetes/kind/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/Makefile) | Exposes `make -C kubernetes/kind gitea-repo-lifecycle-demo`. |
+
+Run the dry-run path first:
+
+```bash
+make -C kubernetes/kind gitea-repo-lifecycle-demo DRY_RUN=1
+```
+
+### Acceptance Checks
+
+```bash
+curl -s http://127.0.0.1:30090/api/v1/repos/platform/hello-platform
+git ls-remote ssh://git@127.0.0.1:30022/platform/hello-platform.git
+kubectl -n gitea get pvc
+```
+
+Use the PVC check to identify where repository state lives before trying any
+backup or restore exercise.
+
+## Related Pages
+
+- [GitOps with Argo CD](/journeys/argocd-gitops)
+- [Version management](../concepts/version-management)
+- [Commands](../reference/commands)

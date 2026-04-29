@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/cilium-hubble.mdx.
+# @light public/diagrams/generated/journeys-cilium-hubble-1-light.svg
+# @dark public/diagrams/generated/journeys-cilium-hubble-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+cni: {
+  label: "Stage 200\nCilium CNI\nno default Kind CNI"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+hubble: {
+  label: "Stage 300\nHubble Relay\nHubble UI"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+traffic: {
+  label: "Exercise traffic\napps, DNS,\nobservability"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+flows: {
+  label: "Capture flows\nhubble observe\njsonpb"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+summary: {
+  label: "Summarize\ndrops, DNS,\nedges, world"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+policy: {
+  label: "Review policy\nCiliumNetworkPolicy\nthen validate"
+  width: 320
+  height: 144
+  style.border-radius: 10
+}
+
+cni -> hubble
+hubble -> traffic
+traffic -> flows
+flows -> summary
+summary -> policy

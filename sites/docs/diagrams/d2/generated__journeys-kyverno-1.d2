@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/kyverno.mdx.
+# @light public/diagrams/generated/journeys-kyverno-1-light.svg
+# @dark public/diagrams/generated/journeys-kyverno-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+manifest: {
+  label: "Manifest\nDeployment,\nNamespace, Pod"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+admission: {
+  label: "Kyverno admission\nvalidate, mutate,\ngenerate"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+defaults: {
+  label: "Generated defaults\nnamespace default-deny\nNetworkPolicy"
+  width: 300
+  height: 156
+  style.border-radius: 10
+}
+
+reports: {
+  label: "Policy reports\naudit signal\nexceptions"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+gitops: {
+  label: "GitOps source\ncluster-policies\nKyverno"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+validation: {
+  label: "Validation\nstatic tests\nlive apply"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+manifest -> admission
+admission -> defaults
+admission -> reports
+gitops -> admission
+reports -> validation

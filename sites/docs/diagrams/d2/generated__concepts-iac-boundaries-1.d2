@@ -1,0 +1,64 @@
+# Source diagram for content/concepts/iac-boundaries.mdx.
+# @light public/diagrams/generated/concepts-iac-boundaries-1-light.svg
+# @dark public/diagrams/generated/concepts-iac-boundaries-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+host: {
+  label: "Host lifecycle\nports, VMs, Docker\nkubeconfig"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+make: {
+  label: "Make + shell\nruntime preflight\noperator commands"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+terragrunt: {
+  label: "Terragrunt\nstate paths\ntfvars layering"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+tofu: {
+  label: "OpenTofu / Terraform\ndurable graph\ncluster resources"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+cluster: {
+  label: "Kubernetes state\nHelm releases\nmanifests"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+proof: {
+  label: "Readiness proof\nhealth, URLs\nbrowser smoke"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+host -> make
+make -> terragrunt
+terragrunt -> tofu
+tofu -> cluster
+make -> proof
+cluster -> proof

@@ -1,0 +1,55 @@
+# Auto-migrated D2 source for /diagrams/generated/tutorials-first-kind-stack-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/tutorials-first-kind-stack-1-light.svg
+# @dark public/diagrams/generated/tutorials-first-kind-stack-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "First Kind Stack\nYou\nMake"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "K8s\nTF\nGit"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "100 apply\ncreate Docker-backed\nkind cluster\n900 apply"
+  width: 280
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "render cumulative stage\ninputs\nreconcile platform\nresources\nseed GitOps repos and\napp sources"
+  width: 280
+  height: 220
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "run health, gateway, and\nSSO\nchecks"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05

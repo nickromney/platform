@@ -159,7 +159,7 @@ export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml
 export TF_VAR_kind_operator_overrides_file := $(KIND_OPERATOR_OVERRIDES_FILE)
 .PHONY: help
 help:
-	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/Loki)"
+	@echo "kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/VictoriaLogs)"
 	@echo ""
 	@echo "Workflow syntax:"
 	@echo "  make 100 apply"

@@ -1,0 +1,119 @@
+---
+title: Learn APIs With APIM Simulator
+description: A light-touch APIM simulator journey using Subnetcalc, gateway routes, OIDC headers, and the vendored simulator.
+---
+
+# Learn APIs With APIM Simulator
+
+Outcome: understand the platform API path at a high level: a browser hits a
+protected app route, the app router forwards API calls to the APIM simulator,
+and the simulator forwards to the backend API. This is intentionally light
+touch because the standalone `apim-simulator` repo owns the deeper product
+surface.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-apis-apim-simulator-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-apis-apim-simulator-1-dark.svg"
+  alt="APIM simulator journey from protected Subnetcalc route through app router, APIM simulator, OIDC validation, and backend API"
+  priority
+  width={1300}
+  height={760}
+/>
+
+## Run
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+kubectl -n apim get deploy,svc,configmap
+kubectl -n dev get deploy,svc | rg "subnetcalc|router"
+```
+
+Open the protected app route after SSO is ready:
+
+```bash
+make -C kubernetes/kind check-sso-e2e
+open https://subnetcalc.dev.127.0.0.1.sslip.io
+```
+
+## Inspect
+
+The APIM simulator config is a Kubernetes ConfigMap:
+
+```bash
+kubectl -n apim get configmap subnetcalc-apim-simulator-config -o yaml
+kubectl -n apim logs deploy/subnetcalc-apim-simulator
+```
+
+Trace the app router:
+
+```bash
+rg -n "subnetcalc-apim-simulator|Authorization|Ocp-Apim" \
+  terraform/kubernetes/apps/workloads/base/all.yaml
+```
+
+The vendored simulator metadata tells you which standalone repo revision was
+copied into this platform repo:
+
+```bash
+cat apps/subnetcalc/apim-simulator.vendor.json
+```
+
+## Source
+
+| Source path | Why it matters |
+| --- | --- |
+| [`terraform/kubernetes/apps/apim/all.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/apim/all.yaml) | APIM namespace, ConfigMap, Deployment, and Service. |
+| [`terraform/kubernetes/apps/workloads/base/all.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/workloads/base/all.yaml) | Subnetcalc router forwards `/api` to APIM simulator. |
+| [`apps/subnetcalc/apim-simulator`](https://github.com/nickromney/platform/tree/main/apps/subnetcalc/apim-simulator) | Vendored runtime subset from the standalone repo. |
+| [`apps/subnetcalc/scripts/vendor-apim-simulator.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/vendor-apim-simulator.sh) | Refreshes the vendored simulator. |
+| [`apps/subnetcalc/apim-simulator.vendor.json`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/apim-simulator.vendor.json) | Records origin and pinned revision. |
+
+## Try One Change
+
+Read the simulator route table and explain how dev and UAT are separated:
+
+```bash
+kubectl -n apim get cm subnetcalc-apim-simulator-config \
+  -o jsonpath='{.data.config\\.json}' | jq '.routes'
+```
+
+Then inspect the backend services:
+
+```bash
+kubectl -n dev get svc subnetcalc-api
+kubectl -n uat get svc subnetcalc-api
+```
+
+<Callout type="warning">
+  Do not treat the vendored simulator copy as the source of truth. Make
+  meaningful APIM simulator changes in the standalone `apim-simulator` repo,
+  then vendor a pinned runtime subset back into this platform.
+</Callout>
+
+## Closure Slice
+
+The deep simulator work still belongs in the standalone `apim-simulator` repo,
+but the platform now carries a product-shaped contract example:
+
+| Artifact | Purpose |
+| --- | --- |
+| [`terraform/kubernetes/apps/apim/products/subnetcalc.api-product.yaml.example`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/apim/products/subnetcalc.api-product.yaml.example) | API product contract example for Subnetcalc. |
+| [`terraform/kubernetes/apps/apim/products/README.md`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/apim/products/README.md) | Explains why the artifact is not applied by Argo CD yet. |
+
+### Acceptance Checks
+
+```bash
+kubectl -n apim get cm subnetcalc-apim-simulator-config -o yaml
+kubectl -n apim logs deploy/subnetcalc-apim-simulator | rg "subnetcalc-api"
+cd apps/subnetcalc/apim-simulator && uv run pytest
+```
+
+Use the example to identify which parts of the API contract belong to APIM and
+which parts remain inside the backend app.
+
+## Related Pages
+
+- [Subnetcalc](../apps/subnetcalc)
+- [Application patterns](../apps/patterns)
+- [GitOps with Argo CD](/journeys/argocd-gitops)

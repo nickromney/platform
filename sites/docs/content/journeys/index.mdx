@@ -1,0 +1,83 @@
+---
+title: Learning Journeys
+description: Goal-led routes through the platform for junior platform engineers.
+---
+
+# Learning Journeys
+
+Use these journeys when "run the stack" is too broad. Each path turns one
+platform capability into a small sequence: bring up the right stage, inspect
+the real objects, read the source that produced them, and make one careful
+change.
+
+<ThemeImage
+  lightSrc="/diagrams/generated/journeys-index-1-light.svg"
+  darkSrc="/diagrams/generated/journeys-index-1-dark.svg"
+  alt="Learning journey map from platform foundation through networking, policy, GitOps, identity, APIs, AI, and closure artifacts"
+  priority
+  width={1300}
+  height={900}
+/>
+
+## Pick A Path
+
+| I want to | Start with | Main stage |
+| --- | --- | --- |
+| Learn Kubernetes | [Kubernetes](/journeys/kubernetes) | `100`, then `900` for the full platform |
+| Learn Terraform and Terragrunt | [Terraform and Terragrunt](/journeys/terraform-terragrunt) | `plan` before `apply` |
+| Learn Cilium and Hubble | [Cilium and Hubble](/journeys/cilium-hubble) | `200` and `300` |
+| Learn Kyverno | [Kyverno](/journeys/kyverno) | `600` |
+| Learn GitOps with Argo CD | [GitOps with Argo CD](/journeys/argocd-gitops) | `400` through `700` |
+| Learn version control that is not GitHub | [Gitea](/journeys/gitea-version-control) | `500` and `700` |
+| Learn SSO with Keycloak and Dex | [SSO](/journeys/sso-dex-keycloak) | `900` |
+| Learn APIs with APIM simulator | [APIs with APIM simulator](/journeys/apis-apim-simulator) | `700` through `900` |
+| Learn self-hosted AI with SST | [Self-hosted AI](/journeys/self-hosted-ai-sentiment) | Sentiment app and `900` |
+| Find concrete closure artifacts | [Journey closure index](/journeys/gaps) | Applies across all stages |
+
+## Baseline Loop
+
+Most journeys assume the same local baseline:
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind check-health
+```
+
+Use smaller stages when the journey says so. The smaller stages are valuable
+because they let you see one capability arrive at a time:
+
+```bash
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 200 apply AUTO_APPROVE=1
+make -C kubernetes/kind 300 apply AUTO_APPROVE=1
+```
+
+<Callout type="warning">
+  The journeys are learning paths for the local platform workbench. Use the
+  source links and checks to understand how each capability is assembled.
+</Callout>
+
+## How To Read The Pages
+
+Each page uses the same shape:
+
+- **Outcome:** what you should understand by the end.
+- **Run:** the smallest useful command sequence.
+- **Inspect:** concrete `kubectl`, `argocd`, `git`, or app commands.
+- **Source:** files in `~/Developer/personal/platform` that define the behaviour.
+- **Try one change:** a small exercise that teaches the boundary.
+- **Closure slice:** the concrete artifact or follow-on exercise to inspect.
+
+## Source Anchors
+
+The journeys lean on these existing docs:
+
+- [Stage ladder](../concepts/stage-ladder)
+- [Terraform, OpenTofu, and Terragrunt](../concepts/terraform-opentofu-terragrunt)
+- [Manifest assembly](../concepts/manifest-assembly)
+- [Identity and access](../concepts/identity-and-access)
+- [Cilium policy](../security/cilium)
+- [Hubble flow evidence](../security/hubble)
+- [Kyverno admission](../security/kyverno)
+- [Sentiment](../apps/sentiment)

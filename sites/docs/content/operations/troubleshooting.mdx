@@ -1,0 +1,65 @@
+---
+title: Troubleshooting
+description: Common local platform failure modes and where to look first.
+---
+
+# Troubleshooting
+
+Most platform failures fall into one of four buckets: host runtime, stage
+semantics, kubeconfig targeting, or user-facing validation.
+
+## Stage 100 Looks Broken
+
+Expected on Kind: stage `100` creates a cluster without Cilium. Node or pod
+readiness can look wrong until stage `200`.
+
+```bash
+make -C kubernetes/kind 200 apply AUTO_APPROVE=1
+make -C kubernetes/kind 200 check-health
+```
+
+## Port Conflict
+
+The platform binds service ports to localhost by default. If another target or
+local service owns the same port, the target preflight should fail before a
+costly apply.
+
+```bash
+make -C kubernetes/kind 900 apply DRY_RUN=1
+make status
+```
+
+Stop the conflicting stack or override the relevant tfvars intentionally.
+
+## Wrong Cluster Context
+
+The repo prefers split kubeconfigs. Check that your shell points to the target
+you think it does before running raw `kubectl` commands.
+
+```bash
+kubectl config current-context
+ls ~/.kube/*kind* ~/.kube/*lima* ~/.kube/*slicer* 2>/dev/null
+```
+
+## SSO Does Not Recover
+
+Stage `900` configures API server OIDC trust for k3s-backed targets. Use the
+explicit recovery drills when you are testing that path.
+
+```bash
+make -C kubernetes/kind exercise-oidc-recovery OIDC_RECOVERY_FORMAT=json
+make -C kubernetes/lima exercise-k3s-oidc-recovery OIDC_RECOVERY_FORMAT=json
+make -C kubernetes/slicer check-sso-e2e
+```
+
+<Callout type="warning">
+  Avoid debugging a browser symptom before proving gateway URLs, cluster health,
+  and the intended kubeconfig context. Browser failures are often downstream of
+  a lower-level local runtime issue.
+</Callout>
+
+## Related Pages
+
+- [Health and URLs](./health-and-urls)
+- [Identity and access](../concepts/identity-and-access)
+- [Commands](../reference/commands)

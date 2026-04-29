@@ -1,0 +1,122 @@
+---
+title: Cilium Policy
+description: How Cilium implements network hardening for the local platform.
+---
+
+# Cilium Policy
+
+Cilium is the network-policy and flow-visibility backbone. It is installed at
+stage `200`; Hubble is enabled at stage `300`. The Cilium policy tree is where
+the platform turns namespace intent, workload labels, HTTP paths, DNS names,
+and egress exceptions into enforceable traffic rules.
+
+## Source Layout
+
+```text
+terraform/kubernetes/cluster-policies/cilium
+```
+
+| Path | Role |
+| --- | --- |
+| `dev/` | Thin namespace overlay for the dev application namespace. |
+| `projects/` | Reusable namespaced `CiliumNetworkPolicy` bundles for app stacks. |
+| `shared/` | Clusterwide guardrails and policies for shared/platform namespaces. |
+| `sit/` | Empty-but-real namespace overlay proving inherited policy shape. |
+| `uat/` | Thin namespace overlay for the uat application namespace. |
+| `*/overrides/` | Namespace-local exceptions owned by that namespace. |
+
+Top-level composition renders `shared`, `dev`, `uat`, and `sit`.
+
+## Namespace Taxonomy
+
+| Namespace role | Examples | Meaning |
+| --- | --- | --- |
+| `application` | `dev`, `sit`, `uat` | End-user workload namespaces. |
+| `platform` | `argocd`, `cert-manager`, `gitea`, `headlamp`, `kyverno`, `policy-reporter` | Operator, control, and delivery namespaces. |
+| `shared` | `apim`, `gateway-routes`, `observability`, `platform-gateway`, `sso` | Shared serving-path and runtime services. |
+
+This avoids writing policies around today’s namespace names. Future application
+namespaces can inherit policy by carrying the same namespace-role labels and
+including reusable project bundles through a thin overlay.
+
+## Guardrails
+
+The shared Cilium policy set includes:
+
+- application namespace baseline ingress and egress
+- application-to-application project boundary denies
+- cloud metadata endpoint egress denies
+- APIM ingress and egress constraints
+- Argo CD repo-server egress constraints
+- backend external egress through CIDR groups or exact FQDNs
+- Gitea and Gitea runner constraints
+- observability ingest and scrape constraints
+- platform gateway egress constraints
+- SSO and oauth2-proxy upstream constraints
+
+The important pattern is namespace intent plus workload labels. Policies are
+not broad namespace-to-namespace allows.
+
+## L7 HTTP Rules
+
+The app bundles include HTTP-aware policies:
+
+- `projects/sentiment/sentiment-http-routes.yaml`
+- `projects/subnetcalc/subnetcalc-http-routes.yaml`
+
+These restrict request paths and methods between routers, APIM, and APIs. That
+matters because “backend can talk to API” is too coarse. The useful policy
+question is: which workload can call which path, with which method, through
+which mediator?
+
+## FQDN Egress
+
+FQDN egress is easy to get wrong. A policy that uses `toFQDNs` needs DNS
+visibility so Cilium can associate DNS answers with allowed destinations.
+
+The checked-in policy tree keeps DNS L7 rules alongside hostname egress rules.
+The dev-only Cloudflare live-fetch exception is the reference pattern:
+
+- it lives under `dev/overrides/`
+- it is scoped to `www.cloudflare.com:443`
+- it includes DNS L7 visibility
+- it is not inherited by `uat` or `sit`
+
+That lets `dev` exercise live Cloudflare range fetches while `uat` and `sit`
+use the app fallback path if Subnetcalc is deployed there.
+
+## Validation
+
+Static validation:
+
+```bash
+scripts/validate-cilium-policies.sh --mode static --execute
+```
+
+This renders Cilium policy values and every Kustomize overlay.
+
+Live validation:
+
+```bash
+scripts/validate-cilium-policies.sh --mode live --execute
+```
+
+The live path uses `cilium-dbg preflight validate-cnp`. It tries, in order:
+
+1. local `cilium-dbg`
+2. in-cluster Cilium pod execution
+3. containerised `quay.io/cilium/cilium:v<configured-version>`
+
+Run live validation after changing selectors, FQDN rules, namespace-role labels,
+or L7 HTTP policy.
+
+<Callout type="warning">
+  Flow-derived Cilium policy is a draft, not a decision. Use Hubble evidence to
+  explain policy, then review and validate the manifest before applying it.
+</Callout>
+
+## Related Pages
+
+- [Hubble flow evidence](./hubble)
+- [Kyverno admission](./kyverno)
+- [Hardening choices](./hardening-choices)

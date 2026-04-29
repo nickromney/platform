@@ -1,0 +1,99 @@
+# Source diagram for the End-to-End Flow section in content/concepts/manifest-assembly.mdx.
+# @light public/diagrams/generated/concepts-manifest-assembly-1-light.svg
+# @dark public/diagrams/generated/concepts-manifest-assembly-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+inputs: {
+  label: "Runtime + stage inputs\ntarget tfvars\nstage tfvars"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+make: {
+  label: "Make stage workflow\npreflight\nplan / apply"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+tofu: {
+  label: "Terragrunt + OpenTofu\nstate paths\nmodule inputs"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+bootstrap: {
+  label: "Direct bootstrap\nhelm_release\nkubectl_manifest"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+renderer: {
+  label: "sync-gitea-policies.sh\nrender repo content\ninject hosts + versions"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+repo: {
+  label: "Gitea policies repo\napp-of-apps\nrendered manifests"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+argo: {
+  label: "Argo CD\nsync waves\nhealth status"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+kustomize: {
+  label: "Kustomize dirs\nGateway routes\npolicy overlays"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+helm: {
+  label: "Vendored Helm charts\nvalues blocks\nrelease settings"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+api: {
+  label: "Kubernetes API\nlive resources\nreconciled state"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+inputs -> make
+make -> tofu
+tofu -> bootstrap
+bootstrap -> renderer
+renderer -> repo
+repo -> argo
+argo -> kustomize
+kustomize -> helm
+helm -> api

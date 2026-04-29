@@ -1,0 +1,82 @@
+# Auto-migrated D2 source for /diagrams/generated/security-hardening-choices-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/security-hardening-choices-1-light.svg
+# @dark public/diagrams/generated/security-hardening-choices-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: down
+
+style.fill: transparent
+
+n01: {
+  label: "Hardening choices\nThe stack narrows exposure,\nconstrains inputs, then verifies\nruntime behaviour.\nExposure"
+  width: 720
+  height: 192
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Supply chain\nImages\nRuntime policy"
+  width: 720
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "Validation\nLocal exposure boundary\nlocalhost admin surfaces by\ndefault"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "Gateway TLS and explicit binds\nhostnames, trusted proxies, and\nallowlists are deliberate\nPinned inputs"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "workflow SHAs, lockfiles, vendored\ncommits\nSmall sample-app ecosystems\nminimal dependency graphs reduce\nreview surface"
+  width: 720
+  height: 192
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n06: {
+  label: "Hardened images\nDocker Hardened Images where\npractical\nMulti-stage build boundary"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n07: {
+  label: "copy compiled artefacts, not build\ntoolchains\nContainer restrictions\nnon-root, read-only FS, dropped\ncapabilities"
+  width: 720
+  height: 192
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n08: {
+  label: "Cilium and Kyverno controls\ndefault-deny, L7 policy, labels,\nadmission defaults\nEvidence and checks"
+  width: 720
+  height: 164
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05
+n05 -> n06
+n06 -> n07
+n07 -> n08

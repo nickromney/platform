@@ -1,0 +1,73 @@
+---
+title: IaC Boundaries
+description: Where Make, shell, Terragrunt, and Terraform each belong.
+---
+
+# IaC Boundaries
+
+The platform deliberately keeps more than one automation layer. The goal is not
+to remove shell. The goal is to keep each kind of work in the layer where it is
+most inspectable.
+
+## Ownership Rule
+
+<ThemeImage
+  lightSrc="/diagrams/generated/concepts-iac-boundaries-1-light.svg"
+  darkSrc="/diagrams/generated/concepts-iac-boundaries-1-dark.svg"
+  alt="Iac Boundaries diagram"
+  width={2180}
+  height={320}
+/>
+
+Make and shell own runtime-sensitive local work. Terraform owns durable
+in-cluster state. Terragrunt assembles invocation, configuration layering, and
+state paths.
+
+For the detailed execution model, including OpenTofu as the default engine,
+Terraform as the compatibility engine, Terragrunt state generation, and tfvars
+layering, see [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt).
+
+## Keep-Out Zones
+
+Keep these out of Terraform and Terragrunt hooks unless there is a strong,
+specific reason:
+
+- creating, starting, or deleting host VMs
+- checking host ports
+- building or syncing local workload images
+- repairing or merging kubeconfigs
+- managing localhost forwards
+- running browser or external readiness checks
+
+Those tasks are operator behaviour. Hiding them inside HCL makes failure modes
+harder to explain.
+
+## Terraform Escape Hatches
+
+Some imperative steps still sit in the Terraform graph because later resources
+depend on them during convergence. Examples include kind kubeconfig refresh,
+Gitea bootstrap normalization, GitOps repo seeding, and API server OIDC wiring.
+Treat those as named exceptions, not a precedent for moving all host behaviour
+into Terraform.
+
+```bash
+cd ~/Developer/personal/platform
+make -C kubernetes/kind 900 plan
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+The Make wrapper is the expected operator path because it surrounds the
+Terraform work with local preflight and validation.
+
+<Callout type="warning">
+  If a change starts or repairs the local runtime, it probably belongs in the
+  target Makefile or scripts. If it reconciles durable cluster resources, it may
+  belong in Terraform.
+</Callout>
+
+## Related Pages
+
+- [Mental model](./mental-model)
+- [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt)
+- [Daily loop](../operations/daily-loop)
+- [Repository map](../reference/repository-map)

@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/terraform-terragrunt.mdx.
+# @light public/diagrams/generated/journeys-terraform-terragrunt-1-light.svg
+# @dark public/diagrams/generated/journeys-terraform-terragrunt-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+make: {
+  label: "Make\nruntime target\nstage target"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+tfvars: {
+  label: "Inputs\nstage tfvars\ntarget tfvars\noverrides"
+  width: 300
+  height: 156
+  style.border-radius: 10
+}
+
+terragrunt: {
+  label: "Terragrunt\nlocal backend\nengine selection"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+tofu: {
+  label: "OpenTofu or Terraform\nproviders + graph"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+k8s: {
+  label: "Cluster state\nHelm releases\nKubernetes resources"
+  width: 300
+  height: 156
+  style.border-radius: 10
+}
+
+gitops: {
+  label: "GitOps handoff\nArgo CD keeps\nreconciling"
+  width: 300
+  height: 132
+  style.border-radius: 10
+}
+
+make -> tfvars
+tfvars -> terragrunt
+terragrunt -> tofu
+tofu -> k8s
+k8s -> gitops

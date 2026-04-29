@@ -1,0 +1,93 @@
+---
+title: Commands
+description: Common command entrypoints in the platform repo.
+---
+
+# Commands
+
+This reference lists the commands people usually need first. Prefer focused
+Makefiles over root shortcuts for mutating stack work.
+
+## Root
+
+```bash
+make
+make check-version
+make clean-local-state DRY_RUN=1
+make fmt
+make lint
+make status
+make tui
+```
+
+Root `make` is a router. Root `make prereqs` and `make test` are also
+informational; they point you at focused entrypoints.
+
+## Version Audits
+
+```bash
+make check-version
+make -C kubernetes/kind check-version
+make -C kubernetes/kind check-provider-version
+make -C kubernetes/lima check-version
+make -C kubernetes/lima check-provider-version
+make -C kubernetes/slicer check-version
+make -C kubernetes/slicer check-provider-version
+```
+
+Use the root guard for repo-wide pins and the runtime-specific guards when you
+are changing Kubernetes, Helm charts, images, CRDs, or Terraform providers.
+
+## Kind
+
+```bash
+make -C kubernetes/kind 100 apply AUTO_APPROVE=1
+make -C kubernetes/kind 100 plan
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+make -C kubernetes/kind 900 check-health
+make -C kubernetes/kind prereqs
+make -C kubernetes/kind reset AUTO_APPROVE=1
+make -C kubernetes/kind show-urls
+```
+
+## Lima
+
+```bash
+make -C kubernetes/lima 100 apply
+make -C kubernetes/lima 900 apply AUTO_APPROVE=1
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/lima check-sso-e2e
+make -C kubernetes/lima prereqs
+make -C kubernetes/lima reset AUTO_APPROVE=1
+```
+
+## Slicer
+
+```bash
+make -C kubernetes/slicer 100 apply
+make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
+make -C kubernetes/slicer 900 check-health
+make -C kubernetes/slicer prereqs
+make -C kubernetes/slicer reset AUTO_APPROVE=1
+make -C kubernetes/slicer show-urls
+```
+
+## Apps
+
+```bash
+make -C apps compose-smoke
+make -C apps test
+make -C apps/sentiment up
+make -C apps/subnetcalc start-compose-happy
+```
+
+<Callout type="warning">
+  `AUTO_APPROVE=1` removes the confirmation prompt from destructive or mutating
+  operations. Use it only when you understand what the target owns.
+</Callout>
+
+## Related Pages
+
+- [Daily loop](../operations/daily-loop)
+- [Version management](../concepts/version-management)
+- [Reset and cleanup](../operations/reset-and-cleanup)

@@ -1,0 +1,56 @@
+# Source diagram for content/journeys/self-hosted-ai-sentiment.mdx.
+# @light public/diagrams/generated/journeys-self-hosted-ai-sentiment-1-light.svg
+# @dark public/diagrams/generated/journeys-self-hosted-ai-sentiment-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+style.fill: transparent
+
+user: {
+  label: "User\ncomment text"
+  width: 280
+  height: 120
+  style.border-radius: 10
+}
+
+ui: {
+  label: "Sentiment UI\nauthenticated\nbrowser app"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+router: {
+  label: "Router\n/api to API\n/ to UI"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+api: {
+  label: "sentiment-api\nExpress server\nCSV state"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+model: {
+  label: "Local SST model\nTransformers.js\ncached on disk"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+telemetry: {
+  label: "Telemetry\nlatency, label,\nconfidence"
+  width: 300
+  height: 144
+  style.border-radius: 10
+}
+
+user -> ui
+ui -> router
+router -> api
+api -> model
+api -> telemetry

@@ -1,0 +1,55 @@
+# Auto-migrated D2 source for /diagrams/generated/tutorials-lima-walkthrough-1-light.svg.
+# Replace labels/edges here when improving the diagram; do not edit rendered SVG.
+# @light public/diagrams/generated/tutorials-lima-walkthrough-1-light.svg
+# @dark public/diagrams/generated/tutorials-lima-walkthrough-1-dark.svg
+# @layout elk
+# @pad 64
+
+direction: right
+
+style.fill: transparent
+
+n01: {
+  label: "Lima Walkthrough\nOperator\nkubernetes/lima"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n02: {
+  label: "Makefile\nLima VM(s)\nk3s cluster"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n03: {
+  label: "host gateway proxy\nlocalhost surfaces\nhost image cache"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n04: {
+  label: "127.0.0.1:5002\nshared\nterraform/kubernetes"
+  width: 280
+  height: 136
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n05: {
+  label: "stages 200-900"
+  width: 280
+  height: 104
+  style.font-size: 20
+  style.border-radius: 10
+}
+
+n01 -> n02
+n02 -> n03
+n03 -> n04
+n04 -> n05

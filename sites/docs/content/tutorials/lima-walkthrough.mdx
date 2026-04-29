@@ -1,0 +1,109 @@
+---
+title: Lima Full Walkthrough
+description: End-to-end operator walkthrough for the Lima-backed k3s target.
+---
+
+# Lima Full Walkthrough
+
+Lima runs the same platform shape as Kind, but stage `100` creates a k3s
+cluster inside Lima VM(s). It is useful when you want a VM boundary or when the
+behaviour under test depends on k3s rather than Kind.
+
+## How Lima Differs
+
+<ThemeImage
+  lightSrc="/diagrams/generated/tutorials-lima-walkthrough-1-light.svg"
+  darkSrc="/diagrams/generated/tutorials-lima-walkthrough-1-dark.svg"
+  alt="Lima Walkthrough diagram"
+  width={1810}
+  height={266}
+/>
+
+Stage `100` is the boundary. It starts or creates the Lima VM, installs k3s
+with `k3sup`, and writes `~/.kube/limavm-k3s.yaml`. Stages `200+` reuse the
+shared Terraform platform root.
+
+## Prerequisites
+
+```bash
+brew install lima jq kubernetes-cli make opentofu terragrunt
+brew install bun node
+```
+
+Run the repo check:
+
+```bash
+cd ~/Developer/personal/platform
+cp .env.example .env
+make -C kubernetes/lima prereqs
+```
+
+On a 16 GB host, stop Kind before starting Lima:
+
+```bash
+make -C kubernetes/kind stop-kind
+```
+
+## Bring-Up Path
+
+```bash
+make -C kubernetes/lima 100 apply
+make -C kubernetes/lima 900 plan
+make -C kubernetes/lima 900 apply AUTO_APPROVE=1
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/lima show-urls
+```
+
+Keep the browser SSO check explicit on Lima:
+
+```bash
+make -C kubernetes/lima check-sso-e2e
+```
+
+## Helper Modes
+
+| Variable | Values | Meaning |
+| --- | --- | --- |
+| `LIMA_HOST_GATEWAY_PROXY_MODE` | `auto`, `on`, `off` | Manages localhost-backed gateway helper proxies. |
+| `PLATFORM_LOCAL_IMAGE_CACHE_MODE` | `auto`, `on`, `off` | Manages and syncs the host registry cache. |
+| `PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE` | `auto`, `on`, `off` | Builds and pushes local workload images. |
+
+From stage `700+`, workload images are built on the host and pushed to
+`127.0.0.1:5002`; the cluster pulls them as `host.lima.internal:5002`.
+
+## Gitea Access
+
+Lima uses `gitea_local_access_mode = "port-forward"` so bootstrap automation
+does not require broad localhost proxying for Gitea.
+
+```bash
+kubectl -n gitea port-forward svc/gitea-http 3000:3000
+kubectl -n gitea port-forward svc/gitea-ssh 2222:22
+```
+
+## Recovery Drill
+
+Stage `900` configures k3s API server OIDC trust. Test the recovery path with:
+
+```bash
+make -C kubernetes/lima exercise-k3s-oidc-recovery OIDC_RECOVERY_FORMAT=json
+```
+
+<Callout type="warning">
+  Lima stage `900` checks cluster health before returning success, but browser
+  SSO remains a separate post-apply smoke check. Do not assume raw Terragrunt
+  applies include either behaviour.
+</Callout>
+
+## Reset Path
+
+```bash
+make -C kubernetes/lima status
+make -C kubernetes/lima reset AUTO_APPROVE=1
+```
+
+## Related Pages
+
+- [Local runtimes](../concepts/local-runtimes)
+- [Tooling requirements](../operations/tooling-requirements)
+- [Hardening choices](../security/hardening-choices)
