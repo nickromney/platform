@@ -13,6 +13,7 @@ resources:
   - application-backend-egress-via-fqdn.yaml
   - sentiment-api-dns-egress.yaml
   - apim-baseline.yaml
+  - mcp-hardened.yaml
   - platform-baseline.yaml
   - argocd-hardened.yaml
   - observability-hardened.yaml

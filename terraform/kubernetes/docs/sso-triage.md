@@ -106,7 +106,7 @@ Quick check:
 
 ```bash
 curl -skD - -o /dev/null 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/logged-out.html' | rg -n 'set-cookie|location'
-curl -skD - -o /dev/null -H 'Cookie: kind-sso-dev=foo' 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/logged-out.html' | rg -n 'set-cookie|location'
+curl -skD - -o /dev/null -H 'Cookie: kind-v2-sso-subnetcalc-dev=foo' 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/logged-out.html' | rg -n 'set-cookie|location'
 ```
 
 ### 5) Optional SigNoz path: oauth2-proxy Authorization header + upstream choice

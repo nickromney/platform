@@ -178,6 +178,10 @@ spec:
       app.kubernetes.io/component: frontend
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9465"
       labels:
         app.kubernetes.io/name: backstage
         app.kubernetes.io/component: frontend
@@ -220,11 +224,21 @@ spec:
                 secretKeyRef:
                   name: backstage-gitea-credentials
                   key: password
+            - name: OTEL_SERVICE_NAME
+              value: backstage
+            - name: OTEL_SERVICE_NAMESPACE
+              value: platform
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.version=0.1.0,k8s.namespace.name=idp,k8s.deployment.name=backstage
+            - name: BACKSTAGE_CATALOG_METRICS_PORT
+              value: "9465"
             - name: HOME
               value: /tmp
           ports:
             - name: http
               containerPort: 7007
+            - name: metrics
+              containerPort: 9465
           resources:
             requests:
               cpu: 250m
@@ -284,3 +298,7 @@ spec:
       appProtocol: http
       port: 7007
       targetPort: http
+    - name: metrics
+      appProtocol: http
+      port: 9465
+      targetPort: metrics

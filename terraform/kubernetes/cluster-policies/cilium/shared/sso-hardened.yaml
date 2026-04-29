@@ -99,6 +99,16 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": mcp
+            "k8s:app.kubernetes.io/name": mcp-inspector
+      toPorts:
+        - ports:
+            - port: "6274"
+              protocol: TCP
+            - port: "6277"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
           matchExpressions:
             - key: "k8s:tier"

@@ -59,6 +59,8 @@ SENTIMENT_DEV_PUBLIC_HOST="${SENTIMENT_DEV_PUBLIC_HOST:-sentiment.dev.${PLATFORM
 SENTIMENT_UAT_PUBLIC_HOST="${SENTIMENT_UAT_PUBLIC_HOST:-sentiment.uat.${PLATFORM_BASE_DOMAIN}}"
 SUBNETCALC_DEV_PUBLIC_HOST="${SUBNETCALC_DEV_PUBLIC_HOST:-subnetcalc.dev.${PLATFORM_BASE_DOMAIN}}"
 SUBNETCALC_UAT_PUBLIC_HOST="${SUBNETCALC_UAT_PUBLIC_HOST:-subnetcalc.uat.${PLATFORM_BASE_DOMAIN}}"
+MCP_PUBLIC_HOST="${MCP_PUBLIC_HOST:-mcp.${PLATFORM_BASE_DOMAIN}}"
+MCP_CONSOLE_PUBLIC_HOST="${MCP_CONSOLE_PUBLIC_HOST:-mcp-console.${PLATFORM_BASE_DOMAIN}}"
 ADMIN_ROUTE_ALLOWLIST_CIDRS="${ADMIN_ROUTE_ALLOWLIST_CIDRS:-}"
 GATEWAY_TRUSTED_PROXY_CIDRS="${GATEWAY_TRUSTED_PROXY_CIDRS:-}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
@@ -80,6 +82,7 @@ EXTERNAL_IMAGE_SENTIMENT_API="${EXTERNAL_IMAGE_SENTIMENT_API:-}"
 EXTERNAL_IMAGE_SENTIMENT_AUTH_UI="${EXTERNAL_IMAGE_SENTIMENT_AUTH_UI:-}"
 EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI="${EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI:-}"
 EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR="${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR:-}"
+EXTERNAL_IMAGE_PLATFORM_MCP="${EXTERNAL_IMAGE_PLATFORM_MCP:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
 PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
@@ -213,6 +216,7 @@ rewrite_image_owner() {
     sentiment-auth-ui \
     subnetcalc-api-fastapi-container-app \
     subnetcalc-apim-simulator \
+    platform-mcp \
     subnetcalc-frontend-react \
     subnetcalc-frontend-typescript-vite; do
     out="$(mktemp)"
@@ -261,6 +265,8 @@ rewrite_public_hostnames() {
       -e "s|sentiment\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SENTIMENT_UAT_PUBLIC_HOST}|g" \
       -e "s|subnetcalc\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_DEV_PUBLIC_HOST}|g" \
       -e "s|subnetcalc\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_UAT_PUBLIC_HOST}|g" \
+      -e "s|mcp-console\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_CONSOLE_PUBLIC_HOST}|g" \
+      -e "s|mcp\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_PUBLIC_HOST}|g" \
       -e "s|127\\.0\\.0\\.1\\.sslip\\.io|${PLATFORM_BASE_DOMAIN}|g" \
       "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
@@ -491,7 +497,7 @@ rewrite_argocd_app_to_vendored_chart() {
       path_printed=1
       next
     }
-    /^[[:space:]]*path:[[:space:]]*/ {
+    /^    path:[[:space:]]*/ {
       next
     }
     /^[[:space:]]*helm:[[:space:]]*/ && !path_printed {
@@ -557,6 +563,7 @@ apply_external_workload_images() {
   replace_image_ref "${workload_file}" "sentiment-auth-ui" "${EXTERNAL_IMAGE_SENTIMENT_AUTH_UI}"
   replace_image_ref "${workload_file}" "subnetcalc-api-fastapi-container-app" "${EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI}"
   replace_image_ref "${workload_file}" "subnetcalc-apim-simulator" "${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR}"
+  replace_image_ref "${workload_file}" "platform-mcp" "${EXTERNAL_IMAGE_PLATFORM_MCP}"
   replace_image_ref "${workload_file}" "subnetcalc-frontend-react" "${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT}"
   replace_image_ref "${workload_file}" "subnetcalc-frontend-typescript-vite" "${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT}"
 }
@@ -619,6 +626,48 @@ render_grafana_application_manifest() {
   replace_literal "${app_file}" "__GRAFANA_SIDECAR_IMAGE_TAG__" "${GRAFANA_SIDECAR_IMAGE_TAG}"
   replace_literal_block "${app_file}" "__GRAFANA_PLUGINS_VALUES__" "${plugins_block}"
   replace_literal "${app_file}" "__GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__" "${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS}"
+  ensure_grafana_dashboard_provider_paths "${app_file}"
+}
+
+ensure_grafana_dashboard_provider_paths() {
+  local app_file="$1"
+
+  [[ -f "${app_file}" ]] || return 0
+
+  local out
+  out="$(mktemp)"
+  awk '
+    function provider_path(name) {
+      if (name == "default") return "/var/lib/grafana/dashboards/default"
+      if (name == "kubernetes") return "/var/lib/grafana/dashboards/kubernetes"
+      if (name == "cilium") return "/var/lib/grafana/dashboards/cilium"
+      if (name == "argocd") return "/var/lib/grafana/dashboards/argocd"
+      return ""
+    }
+    {
+      if ($0 ~ /^[[:space:]]+- name: (default|kubernetes|cilium|argocd)$/) {
+        current = $3
+      }
+
+      if ($0 ~ /^[[:space:]]+options:[[:space:]]*$/ && provider_path(current) != "") {
+        print
+        if ((getline next_line) > 0) {
+          if (next_line ~ /^[[:space:]]+path:[[:space:]]+/) {
+            print next_line
+          } else {
+            print "                  path: " provider_path(current)
+            print next_line
+          }
+        } else {
+          print "                  path: " provider_path(current)
+        }
+        next
+      }
+
+      print
+    }
+  ' "${app_file}" > "${out}"
+  mv "${out}" "${app_file}"
 }
 
 remove_if_present() {
@@ -1479,6 +1528,7 @@ render_repo() {
   rewrite_public_hostnames "${repo_dir}"
   render_platform_gateway_proxy_config "${repo_dir}"
   apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"
+  apply_external_workload_images "${repo_dir}/apps/mcp/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/workloads/base/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/dev/all.yaml"
   apply_external_workload_images "${repo_dir}/apps/uat/all.yaml"
@@ -1488,6 +1538,7 @@ render_repo() {
   fi
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"

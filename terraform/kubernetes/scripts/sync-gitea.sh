@@ -229,6 +229,30 @@ resolve_external_platform_image() {
   tfvar_map_string_or_default "${GITEA_SYNC_TFVARS_FILE}" external_platform_image_refs "${map_key}" ""
 }
 
+resolve_external_workload_image() {
+  local env_name="$1"
+  local map_key="$2"
+  local current="${!env_name:-}"
+  local target_file
+  local value
+
+  if [[ -n "${current}" ]]; then
+    printf '%s\n' "${current}"
+    return 0
+  fi
+
+  target_file="$(target_tfvars_file_or_empty)"
+  if [[ -n "${target_file}" ]]; then
+    value="$(tfvar_map_string_or_default "${target_file}" external_workload_image_refs "${map_key}" "")"
+    if [[ -n "${value}" ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  fi
+
+  tfvar_map_string_or_default "${GITEA_SYNC_TFVARS_FILE}" external_workload_image_refs "${map_key}" ""
+}
+
 export_resolved_bool() {
   local env_name="$1"
   local tfvar_key="$2"
@@ -268,6 +292,16 @@ export_external_platform_image() {
   local resolved_value=""
 
   resolved_value="$(resolve_external_platform_image "${env_name}" "${map_key}")"
+  printf -v "${env_name}" '%s' "${resolved_value}"
+  export "${env_name?}"
+}
+
+export_external_workload_image() {
+  local env_name="$1"
+  local map_key="$2"
+  local resolved_value=""
+
+  resolved_value="$(resolve_external_workload_image "${env_name}" "${map_key}")"
   printf -v "${env_name}" '%s' "${resolved_value}"
   export "${env_name?}"
 }
@@ -354,6 +388,7 @@ main() {
   export_resolved_bool ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnetcalc true
   export_resolved_bool ENABLE_PROMETHEUS enable_prometheus true
   export_resolved_bool ENABLE_GRAFANA enable_grafana true
+  export_resolved_bool ENABLE_VICTORIA_LOGS enable_victoria_logs true
   export_resolved_bool ENABLE_LOKI enable_loki false
   export_resolved_bool ENABLE_TEMPO enable_tempo false
   export_resolved_bool ENABLE_SIGNOZ enable_signoz false
@@ -361,10 +396,18 @@ main() {
   export_resolved_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
   export_resolved_bool ENABLE_HEADLAMP enable_headlamp true
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
+  export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_GRAFANA grafana
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_IDP_CORE idp-core
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_BACKSTAGE backstage
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy
+  export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_API sentiment-api
+  export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
+  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI subnetcalc-api-fastapi-container-app
+  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR subnetcalc-apim-simulator
+  export_external_workload_image EXTERNAL_IMAGE_PLATFORM_MCP platform-mcp
+  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT subnetcalc-frontend-react
+  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT subnetcalc-frontend-typescript-vite
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
@@ -379,6 +422,7 @@ main() {
   export_resolved_string PROMETHEUS_CHART_VERSION prometheus_chart_version "$(tf_default_from_variables prometheus_chart_version)"
   export_resolved_string SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
   export_resolved_string TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
+  export_resolved_string VICTORIA_LOGS_CHART_VERSION victoria_logs_chart_version "$(tf_default_from_variables victoria_logs_chart_version)"
 
   exec "${delegate}" --execute
 }

@@ -88,14 +88,25 @@ require_tool bun
 
 cd "${SCRIPT_DIR}"
 
+decode_base64() {
+  if base64 --help 2>&1 | grep -q -- '--decode'; then
+    base64 --decode
+  else
+    base64 -D
+  fi
+}
+
 SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ:-$(tfvar_bool enable_signoz false)}"
 SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP:-$(tfvar_bool enable_headlamp false)}"
 SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS:-$(tfvar_bool enable_victoria_logs false)}"
 SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE:-$(tfvar_bool enable_backstage true)}"
+SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP:-true}"
 SSO_E2E_PROVIDER_VALUE="${SSO_E2E_PROVIDER:-$(tfvar_value sso_provider keycloak)}"
 SSO_E2E_KEYCLOAK_REALM_VALUE="${SSO_E2E_KEYCLOAK_REALM:-$(tfvar_value keycloak_realm platform)}"
 SSO_E2E_BASE_PORT_VALUE="${SSO_E2E_BASE_PORT:-$(tfvar_value gateway_https_host_port 443)}"
 SSO_E2E_HOST_RESOLVER_RULES_VALUE="${SSO_E2E_HOST_RESOLVER_RULES:-}"
+SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET:-}"
+SSO_E2E_TEST_GREP_VALUE="${SSO_E2E_TEST_GREP:-}"
 if [ "${SSO_E2E_BASE_PORT_VALUE}" = "443" ]; then
   SSO_E2E_BASE_PORT_VALUE=""
 fi
@@ -107,27 +118,50 @@ if [ -z "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" ] && [ "${PLATFORM_DEVCONTAINER:-
   fi
 fi
 
+if [ -z "${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" ] \
+  && [ "${SSO_E2E_ENABLE_MCP}" = "true" ] \
+  && [ "${SSO_E2E_PROVIDER_VALUE}" = "keycloak" ] \
+  && command -v kubectl >/dev/null 2>&1; then
+  kubectl_args=()
+  if [ -n "${KUBECONFIG_CONTEXT:-}" ]; then
+    kubectl_args+=(--context "${KUBECONFIG_CONTEXT}")
+  fi
+  encoded_secret="$(kubectl "${kubectl_args[@]}" get secret -n sso oauth2-proxy-oidc -o jsonpath='{.data.client-secret}' 2>/dev/null || true)"
+  if [ -n "${encoded_secret}" ]; then
+    SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE="$(printf '%s' "${encoded_secret}" | decode_base64)"
+  fi
+fi
+
 bun install --frozen-lockfile
 bun x playwright install chromium
+
+test_args=()
+if [ -n "${SSO_E2E_TEST_GREP_VALUE}" ]; then
+  test_args+=(--grep "${SSO_E2E_TEST_GREP_VALUE}")
+fi
 
 if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE}" \
+  SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP}" \
   SSO_E2E_PROVIDER="${SSO_E2E_PROVIDER_VALUE}" \
   SSO_E2E_KEYCLOAK_REALM="${SSO_E2E_KEYCLOAK_REALM_VALUE}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
-  bun run test:headed
+  SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
+  bun run test:headed -- "${test_args[@]}"
 else
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE}" \
+  SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP}" \
   SSO_E2E_PROVIDER="${SSO_E2E_PROVIDER_VALUE}" \
   SSO_E2E_KEYCLOAK_REALM="${SSO_E2E_KEYCLOAK_REALM_VALUE}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
-  bun run test
+  SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
+  bun run test -- "${test_args[@]}"
 fi

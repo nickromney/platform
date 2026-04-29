@@ -9,7 +9,8 @@ spec:
     Logs/metrics/traces are sensitive (OpSec risk).
     Ingress: OTEL data from app namespaces on collector ports only,
     Grafana/SigNoz UI via shared auth proxies, scrape from Prometheus.
-    Egress: DNS, kube-apiserver (service discovery), intra-namespace only.
+    Egress: DNS, kube-apiserver (service discovery), intra-namespace, and
+    explicit metrics targets only.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": observability
@@ -137,6 +138,24 @@ spec:
         - ports:
             # nginx-prometheus-exporter (NGF data plane)
             - port: "9113"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": mcp
+            "k8s:app.kubernetes.io/name": platform-mcp
+      toPorts:
+        - ports:
+            # platform-mcp Prometheus metrics
+            - port: "9090"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": idp
+            "k8s:app.kubernetes.io/name": backstage
+      toPorts:
+        - ports:
+            # Backstage catalog quality metrics
+            - port: "9465"
               protocol: TCP
     - toEndpoints:
         - matchLabels:

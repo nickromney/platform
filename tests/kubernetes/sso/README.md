@@ -52,6 +52,13 @@ cd kubernetes/kind
 HEADED=1 make check-sso-e2e
 ```
 
+Run only the authenticated MCP Inspector and D2 render/export flow:
+
+```bash
+cd kubernetes/kind
+SSO_E2E_TEST_GREP="mcp-console: load and login" make check-sso-e2e
+```
+
 Slow it down to watch interactions:
 
 ```bash

@@ -1,7 +1,7 @@
 {
   "uid": "${{ values.name }}-golden-signals",
   "title": "${{ values.name }} Golden Signals",
-  "tags": ["platform-app", "${{ values.name }}"],
+  "tags": ["platform-app", "${{ values.name }}", "victorialogs", "otel"],
   "schemaVersion": 39,
   "version": 1,
   "panels": [
@@ -9,6 +9,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Request Rate",
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "sum(rate(http_requests_total{app=\"${{ values.name }}\"}[5m]))",
@@ -19,10 +20,38 @@
     {
       "id": 2,
       "type": "timeseries",
+      "title": "Average Request Duration",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_sum{app=\"${{ values.name }}\"}[5m])) / clamp_min(sum(rate(http_requests_total{app=\"${{ values.name }}\"}[5m])), 0.001)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
       "title": "Pod Restarts",
+      "datasource": "Prometheus",
       "targets": [
         {
           "expr": "sum(increase(kube_pod_container_status_restarts_total{pod=~\"${{ values.name }}-.*\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Recent Application Logs",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [
+        {
+          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+          "expr": "k8s.namespace.name:${{ values.name }} OR service.name:${{ values.name }}-backend",
+          "queryType": "instant",
+          "maxLines": 100,
           "refId": "A"
         }
       ]

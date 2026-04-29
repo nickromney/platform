@@ -7,10 +7,10 @@ spec:
     Hardened policy for platform-gateway namespace. This is the TLS termination
     point (NGINX Gateway Fabric). All external traffic enters here.
     Ingress: external clients via host/remote-node on :443 only.
-    Egress: argocd-server on :8080, gitea on :3000, shared auth proxies on
-    :4180, application HTTP frontends on :8080, shared Keycloak on :5556,
-    headlamp on :4466, policy-reporter UI on :8080, DNS, kube-apiserver, and
-    the nginx-gateway control-plane.
+    Egress: argocd-server on :8080, gitea on :3000, shared APIM on :8000,
+    shared auth proxies on :4180, application HTTP frontends on :8080, shared
+    Keycloak on :5556, headlamp on :4466, policy-reporter UI on :8080, DNS,
+    kube-apiserver, and the nginx-gateway control-plane.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": platform-gateway
@@ -78,6 +78,15 @@ spec:
       toPorts:
         - ports:
             - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+            "k8s:tier": gateway
+      toPorts:
+        - ports:
+            - port: "8000"
               protocol: TCP
     - toEndpoints:
         - matchLabels:

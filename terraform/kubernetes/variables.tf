@@ -1181,7 +1181,7 @@ variable "prefer_external_workload_images" {
 }
 
 variable "external_workload_image_refs" {
-  description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api-fastapi-container-app, subnetcalc-apim-simulator, subnetcalc-frontend-react, subnetcalc-frontend-typescript-vite)."
+  description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api-fastapi-container-app, subnetcalc-apim-simulator, platform-mcp, subnetcalc-frontend-react, subnetcalc-frontend-typescript-vite)."
   type        = map(string)
   default     = {}
 }

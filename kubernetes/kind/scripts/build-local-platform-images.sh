@@ -145,7 +145,9 @@ prepare_backstage_build_context() {
   mkdir -p "${PLUGIN_BUILD_CONTEXT_ROOT}"
   context_dir="$(mktemp -d "${PLUGIN_BUILD_CONTEXT_ROOT}/backstage.XXXXXX")"
   register_temp_path "${context_dir}"
+  [ -d "${REPO_ROOT}/apps/backstage" ] || { echo "${0##*/}: missing Backstage source directory" >&2; exit 1; }
   cp -R "${REPO_ROOT}/apps/backstage/." "${context_dir}/"
+  cp "${REPO_ROOT}/apps/backstage/Dockerfile" "${context_dir}/Dockerfile"
   copy_backstage_app_catalog "${context_dir}" "subnetcalc"
   copy_backstage_apim_simulator_catalog "${context_dir}"
   copy_backstage_app_catalog "${context_dir}" "sentiment"
@@ -274,6 +276,15 @@ idp_core_source_tag="$(
     apps/idp-core/uv.lock \
     catalog/platform-apps.json
 )"
+platform_mcp_source_tag="$(
+  source_fingerprint_tag \
+    apps/platform-mcp/.dockerignore \
+    apps/platform-mcp/Dockerfile \
+    apps/platform-mcp/Dockerfile.dockerignore \
+    apps/platform-mcp/platform_mcp \
+    apps/platform-mcp/pyproject.toml \
+    apps/platform-mcp/uv.lock
+)"
 backstage_source_tag="$(
   if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
     source_fingerprint_tag \
@@ -314,6 +325,13 @@ build_and_push \
   "${REPO_ROOT}/apps/idp-core/Dockerfile" \
   "${TAG}" \
   "${idp_core_source_tag}"
+
+build_and_push \
+  "platform-mcp" \
+  "${REPO_ROOT}" \
+  "${REPO_ROOT}/apps/platform-mcp/Dockerfile" \
+  "${TAG}" \
+  "${platform_mcp_source_tag}"
 
 if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
   prepare_backstage_build_context backstage_build_context

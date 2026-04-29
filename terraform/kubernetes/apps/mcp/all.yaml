@@ -1,0 +1,268 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp
+  labels:
+    app.kubernetes.io/name: mcp
+    app.kubernetes.io/component: mcp
+    "platform.publiccloudexperiments.net/namespace-role": shared
+    "platform.publiccloudexperiments.net/sensitivity": internal
+    kyverno.io/isolate: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-mcp
+  namespace: mcp
+  labels:
+    app: platform-mcp
+    app.kubernetes.io/name: platform-mcp
+    app.kubernetes.io/component: mcp-server
+    project: kindlocal
+    team: platform
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-mcp
+      app.kubernetes.io/component: mcp-server
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9090"
+      labels:
+        app: platform-mcp
+        app.kubernetes.io/name: platform-mcp
+        app.kubernetes.io/component: mcp-server
+        project: kindlocal
+        team: platform
+        tier: backend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: server
+          image: localhost:30090/platform/platform-mcp:latest
+          imagePullPolicy: Always
+          env:
+            - name: PLATFORM_MCP_HOST
+              value: 0.0.0.0
+            - name: PLATFORM_MCP_PORT
+              value: "8080"
+            - name: PLATFORM_MCP_PATH
+              value: /mcp
+            - name: PLATFORM_MCP_LOG_FORMAT
+              value: json
+            - name: PLATFORM_MCP_METRICS_ENABLED
+              value: "true"
+            - name: PLATFORM_MCP_METRICS_PORT
+              value: "9090"
+            - name: OTEL_SERVICE_NAME
+              value: platform-mcp
+            - name: OTEL_SERVICE_NAMESPACE
+              value: platform
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.version=0.1.0,k8s.namespace.name=mcp,k8s.deployment.name=platform-mcp
+            - name: IDP_API_BASE_URL
+              value: http://idp-core.idp.svc.cluster.local:8080
+            - name: SUBNETCALC_API_BASE_URL
+              value: http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000
+            - name: SENTIMENT_API_BASE_URL
+              value: http://sentiment-api.dev.svc.cluster.local:8080
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+              ephemeral-storage: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 512Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-mcp
+  namespace: mcp
+  labels:
+    app: platform-mcp
+    app.kubernetes.io/name: platform-mcp
+    app.kubernetes.io/component: mcp-server
+    project: kindlocal
+    team: platform
+    tier: backend
+spec:
+  selector:
+    app.kubernetes.io/name: platform-mcp
+    app.kubernetes.io/component: mcp-server
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http
+    - name: metrics
+      appProtocol: http
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-inspector
+  namespace: mcp
+  labels:
+    app: mcp-inspector
+    app.kubernetes.io/name: mcp-inspector
+    app.kubernetes.io/component: inspector
+    project: kindlocal
+    team: platform
+    tier: tooling
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-inspector
+      app.kubernetes.io/component: inspector
+  template:
+    metadata:
+      labels:
+        app: mcp-inspector
+        app.kubernetes.io/name: mcp-inspector
+        app.kubernetes.io/component: inspector
+        project: kindlocal
+        team: platform
+        tier: tooling
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: inspector
+          image: ghcr.io/modelcontextprotocol/inspector:0.21.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HOST
+              value: 0.0.0.0
+            - name: CLIENT_PORT
+              value: "6274"
+            - name: SERVER_PORT
+              value: "6277"
+            - name: MCP_AUTO_OPEN_ENABLED
+              value: "false"
+            - name: MCP_PROXY_AUTH_TOKEN
+              value: ""
+            - name: MCP_SERVER_URL
+              value: https://mcp.127.0.0.1.sslip.io/mcp
+            - name: MCP_TRANSPORT_TYPE
+              value: streamable-http
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: ui
+              containerPort: 6274
+            - name: proxy
+              containerPort: 6277
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+              ephemeral-storage: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 512Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-inspector
+  namespace: mcp
+  labels:
+    app: mcp-inspector
+    app.kubernetes.io/name: mcp-inspector
+    app.kubernetes.io/component: inspector
+    project: kindlocal
+    team: platform
+    tier: tooling
+spec:
+  selector:
+    app.kubernetes.io/name: mcp-inspector
+    app.kubernetes.io/component: inspector
+  ports:
+    - name: ui
+      appProtocol: http
+      port: 6274
+      targetPort: ui
+    - name: proxy
+      appProtocol: http
+      port: 6277
+      targetPort: proxy

@@ -48,3 +48,6 @@ spec:
     - group: ""
       kind: Service
       name: oauth2-proxy-idp-core
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-mcp-console

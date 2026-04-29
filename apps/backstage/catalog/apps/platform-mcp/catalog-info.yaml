@@ -1,0 +1,136 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform-mcp
+  title: Platform MCP Server
+  description: Streamable HTTP MCP server for platform catalog, app API, and D2 learning workflows.
+  tags:
+    - mcp
+    - ai-gateway
+    - python
+    - d2
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/platform-mcp/
+    backstage.io/kubernetes-label-selector: app=platform-mcp
+  links:
+    - url: https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/platform-mcp
+      title: Source
+      icon: github
+    - url: https://mcp.127.0.0.1.sslip.io/mcp
+      title: MCP Endpoint
+      icon: api
+    - url: https://mcp-console.127.0.0.1.sslip.io
+      title: MCP Console
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/platform-app-overview/platform-app-golden-signals
+      title: Platform App Overview
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/platform-mcp-observability/platform-mcp-observability
+      title: MCP Observability
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/idp-core
+    - component:default/apim-simulator
+  providesApis:
+    - platform-mcp-api
+  consumesApis:
+    - idp-api
+    - subnetcalc-api
+    - sentiment-api
+    - apim-simulator-gateway-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: mcp-inspector
+  title: MCP Inspector
+  description: SSO-protected browser console for inspecting and exercising the local platform MCP endpoint.
+  tags:
+    - mcp
+    - inspector
+    - sso
+    - tooling
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/platform-mcp/
+    backstage.io/kubernetes-label-selector: app=mcp-inspector
+  links:
+    - url: https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/platform-mcp
+      title: Source
+      icon: github
+    - url: https://mcp-console.127.0.0.1.sslip.io
+      title: MCP Console
+      icon: dashboard
+    - url: https://mcp.127.0.0.1.sslip.io/mcp
+      title: MCP Endpoint
+      icon: api
+spec:
+  type: website
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/platform-mcp
+  consumesApis:
+    - platform-mcp-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: platform-mcp-api
+  title: Platform MCP API
+  description: Streamable HTTP MCP endpoint routed through the local APIM simulator for platform learning tools.
+  tags:
+    - openapi
+    - mcp
+    - ai-gateway
+spec:
+  type: openapi
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Platform MCP API
+      version: 0.1.0
+      description: Streamable HTTP MCP endpoint for platform, app API, and D2 tools.
+    servers:
+      - url: https://mcp.127.0.0.1.sslip.io
+        description: Local trusted-network MCP edge routed through APIM
+    paths:
+      /mcp:
+        get:
+          summary: Establish or resume an MCP Streamable HTTP session
+          responses:
+            '200':
+              description: MCP stream or session response
+            '401':
+              description: Missing or invalid bearer token
+        post:
+          summary: Send JSON-RPC messages to the MCP server
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  additionalProperties: true
+          responses:
+            '200':
+              description: MCP JSON-RPC response or stream
+            '401':
+              description: Missing or invalid bearer token
+            '403':
+              description: Bearer token lacks the required audience or scope
+        delete:
+          summary: Terminate an MCP Streamable HTTP session
+          responses:
+            '200':
+              description: Session terminated
+            '401':
+              description: Missing or invalid bearer token

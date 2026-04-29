@@ -11,6 +11,9 @@ type Target = {
   flow?: Flow
   postLogin?:
     | 'grafana-launchpad'
+    | 'grafana-platform-namespace-health'
+    | 'grafana-mcp-observability'
+    | 'grafana-backstage-observability'
     | 'grafana-victoria-logs'
     | 'keycloak-admin-console'
     | 'sentiment-sample-positive'
@@ -18,6 +21,7 @@ type Target = {
     | 'developer-portal'
     | 'developer-portal-api-json'
     | 'hubble-namespace-argocd'
+    | 'mcp-inspector-d2-render-export'
     | 'signoz-logs-and-metrics'
 }
 
@@ -31,6 +35,7 @@ const INCLUDE_SIGNOZ = isEnabled('SSO_E2E_ENABLE_SIGNOZ', false)
 const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', false)
 const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
 const INCLUDE_BACKSTAGE = isEnabled('SSO_E2E_ENABLE_BACKSTAGE', true)
+const INCLUDE_MCP = isEnabled('SSO_E2E_ENABLE_MCP', true)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
 const BASE_DOMAIN = process.env.SSO_E2E_BASE_DOMAIN || '127.0.0.1.sslip.io'
@@ -38,6 +43,7 @@ const BASE_PORT = process.env.SSO_E2E_BASE_PORT ? `:${process.env.SSO_E2E_BASE_P
 const SUITE_NAME = process.env.SSO_E2E_SUITE_NAME || 'platform SSO endpoints: smoke'
 const PORTAL_HOSTNAME = `portal.${BASE_DOMAIN}`.toLowerCase()
 const PORTAL_API_HOSTNAME = `portal-api.${BASE_DOMAIN}`.toLowerCase()
+const OAUTH2_PROXY_CLIENT_SECRET = process.env.SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET || ''
 
 function platformUrl(hostPrefix: string) {
   return `${BASE_SCHEME}://${hostPrefix}.${BASE_DOMAIN}${BASE_PORT}/`
@@ -46,6 +52,8 @@ function platformUrl(hostPrefix: string) {
 function absolutePlatformUrl(hostPrefix: string, path: string) {
   return new URL(path, platformUrl(hostPrefix)).toString()
 }
+
+const MCP_ENDPOINT_URL = absolutePlatformUrl('mcp', '/mcp')
 
 const OIDC_PROVIDER = (process.env.SSO_E2E_PROVIDER || 'keycloak').toLowerCase()
 const KEYCLOAK_REALM = process.env.SSO_E2E_KEYCLOAK_REALM || 'platform'
@@ -160,6 +168,43 @@ if (INCLUDE_BACKSTAGE) {
   })
 }
 
+if (INCLUDE_MCP) {
+  TARGETS.push({
+    name: 'mcp-console',
+    url: platformUrl('mcp-console'),
+    segment: 'dev',
+    flow: 'oauth2-proxy',
+    postLogin: 'mcp-inspector-d2-render-export',
+  })
+}
+
+if (INCLUDE_MCP && INCLUDE_VICTORIA_LOGS) {
+  TARGETS.push({
+    name: 'grafana-platform-namespace-health',
+    url: absolutePlatformUrl('grafana.admin', '/d/platform-namespace-health/platform-namespace-health?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
+    segment: 'admin',
+    flow: 'oauth2-proxy',
+    postLogin: 'grafana-platform-namespace-health',
+  })
+  TARGETS.push({
+    name: 'grafana-mcp-observability',
+    url: absolutePlatformUrl('grafana.admin', '/d/platform-mcp-observability/platform-mcp-observability?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
+    segment: 'admin',
+    flow: 'oauth2-proxy',
+    postLogin: 'grafana-mcp-observability',
+  })
+}
+
+if (INCLUDE_BACKSTAGE && INCLUDE_VICTORIA_LOGS) {
+  TARGETS.push({
+    name: 'grafana-backstage-observability',
+    url: absolutePlatformUrl('grafana.admin', '/d/backstage-observability/backstage-observability?orgId=1&from=now-6h&to=now&timezone=browser&refresh=30s'),
+    segment: 'admin',
+    flow: 'oauth2-proxy',
+    postLogin: 'grafana-backstage-observability',
+  })
+}
+
 if (INCLUDE_SIGNOZ) {
   TARGETS.push({
     name: 'signoz-admin',
@@ -207,6 +252,9 @@ if (!creds('admin').password || !creds('dev').password || !creds('uat').password
 }
 if (OIDC_PROVIDER === 'keycloak' && !keycloakConsoleCreds().password) {
   throw new Error('Set PLATFORM_DEMO_PASSWORD or KEYCLOAK_CONSOLE_ADMIN_PASSWORD before running the Keycloak admin console smoke test')
+}
+if (INCLUDE_MCP && OIDC_PROVIDER === 'keycloak' && VERIFY_APP_ACTIONS && !OAUTH2_PROXY_CLIENT_SECRET) {
+  throw new Error('Set SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET, or run tests/kubernetes/sso/run.sh against a cluster that has sso/oauth2-proxy-oidc')
 }
 
 async function maybeClickOauth2ProxyProvider(page: Page) {
@@ -750,6 +798,181 @@ async function grafanaVictoriaLogsDashboardWorks(page: Page, baseUrl: string) {
   await expect(body).not.toContainText(/Could not find plugin definition for data source/i)
 }
 
+async function grafanaDashboardContains(page: Page, dashboardName: RegExp, requiredPanelNames: RegExp[]) {
+  await assertNoGatewayErrorWithReloads(page, `grafana-${dashboardName}`)
+  const body = page.locator('body')
+  await expect(body).toContainText(dashboardName, { timeout: 120_000 })
+  for (const panelName of requiredPanelNames) {
+    await expect(body).toContainText(panelName, { timeout: 120_000 })
+  }
+  await expect(body).not.toContainText(/Datasource victorialogs was not found/i)
+  await expect(body).not.toContainText(/Could not find plugin definition for data source/i)
+}
+
+async function grafanaMcpObservabilityDashboardWorks(page: Page) {
+  await grafanaDashboardContains(page, /Platform MCP Observability/i, [
+    /MCP Deployment Ready/i,
+    /Prometheus Scrape/i,
+    /Total Tool Calls/i,
+    /Tool Calls by Tool/i,
+  ])
+}
+
+async function grafanaPlatformNamespaceHealthDashboardWorks(page: Page) {
+  await grafanaDashboardContains(page, /Platform Namespace Health/i, [
+    /CPU usage by namespace/i,
+    /Memory working set by namespace/i,
+    /Network throughput by namespace/i,
+    /Scraped pods up/i,
+  ])
+  await expect(page.locator('body')).not.toContainText(/No data/i, { timeout: 30_000 })
+}
+
+async function grafanaBackstageObservabilityDashboardWorks(page: Page) {
+  await grafanaDashboardContains(page, /Backstage Observability/i, [
+    /Catalog APIs/i,
+    /Services With Kubernetes Selector/i,
+    /Services Missing Kubernetes Selector/i,
+  ])
+  await page.keyboard.press('End')
+  await expect(page.locator('body')).toContainText(/Recent Backstage Logs/i, { timeout: 30_000 })
+}
+
+async function keycloakAccessToken(page: Page, segment: Segment) {
+  if (OIDC_PROVIDER !== 'keycloak') {
+    throw new Error('MCP bearer-token E2E currently requires Keycloak because the APIM simulator validates Keycloak-issued JWTs')
+  }
+
+  const tokenUrl = absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`)
+  const user = creds(segment)
+  const response = await page.request.post(tokenUrl, {
+    form: {
+      grant_type: 'password',
+      client_id: 'oauth2-proxy',
+      client_secret: OAUTH2_PROXY_CLIENT_SECRET,
+      username: user.login,
+      password: user.password,
+      scope: 'openid email profile groups',
+    },
+  })
+  const body = await response.text()
+  expect(response.status(), body).toBe(200)
+  const json = JSON.parse(body)
+  expect(typeof json.access_token, body).toBe('string')
+  return json.access_token as string
+}
+
+function parseMcpJsonResponse(body: string) {
+  const trimmed = body.trim()
+  if (trimmed.startsWith('data:')) {
+    const eventPayload = trimmed
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.startsWith('data:') && !line.includes('[DONE]'))
+    if (!eventPayload) throw new Error(`MCP event stream did not contain JSON data: ${body.slice(0, 500)}`)
+    return JSON.parse(eventPayload.replace(/^data:\s*/, ''))
+  }
+  return JSON.parse(trimmed)
+}
+
+async function mcpJsonRpcThroughBrowser(page: Page, token: string, payload: Record<string, unknown>) {
+  const result = await page.evaluate(
+    async ({ url, bearerToken, rpcPayload }) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${bearerToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(rpcPayload),
+      })
+      return {
+        body: await response.text(),
+        contentType: response.headers.get('content-type') ?? '',
+        status: response.status,
+        url: response.url,
+      }
+    },
+    { url: MCP_ENDPOINT_URL, bearerToken: token, rpcPayload: payload },
+  )
+
+  expect(result.status, result.body).toBe(200)
+  expect(new URL(result.url).hostname).toBe(`mcp.${BASE_DOMAIN}`)
+  const json = parseMcpJsonResponse(result.body)
+  expect(json.error, JSON.stringify(json)).toBeUndefined()
+  return json
+}
+
+function toolResultPayload(jsonRpcResponse: any) {
+  const text = jsonRpcResponse?.result?.content?.find((item: any) => item?.type === 'text')?.text
+  expect(typeof text, JSON.stringify(jsonRpcResponse)).toBe('string')
+  return JSON.parse(text)
+}
+
+async function mcpInspectorD2RenderAndExport(page: Page) {
+  await expect(page.locator('body')).toContainText(/MCP Inspector|Inspector/i, { timeout: 120_000 })
+
+  const token = await keycloakAccessToken(page, 'dev')
+  await mcpJsonRpcThroughBrowser(page, token, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-11-25',
+      capabilities: {},
+      clientInfo: { name: 'platform-sso-e2e', version: '0.1.0' },
+    },
+  })
+
+  const listResponse = await mcpJsonRpcThroughBrowser(page, token, {
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/list',
+  })
+  const toolNames = listResponse.result.tools.map((tool: any) => tool.name)
+  expect(toolNames).toEqual(expect.arrayContaining(['d2_validate', 'd2_render']))
+
+  const source = [
+    'platform: Platform MCP',
+    'diagram: D2 renderer',
+    'browser: Playwright E2E',
+    'platform -> diagram: validates and renders',
+    'browser -> platform: JSON-RPC through APIM',
+  ].join('\n')
+  const renderResponse = await mcpJsonRpcThroughBrowser(page, token, {
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: {
+      name: 'd2_render',
+      arguments: {
+        source,
+        output_format: 'svg',
+        layout: 'elk',
+      },
+    },
+  })
+  const toolPayload = toolResultPayload(renderResponse)
+  expect(toolPayload.status, JSON.stringify(toolPayload)).toBe('ok')
+  const svg = toolPayload.data?.artifact ?? toolPayload.data?.content ?? toolPayload.data?.svg
+  expect(typeof svg, JSON.stringify(toolPayload).slice(0, 1000)).toBe('string')
+  expect(svg).toContain('<svg')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.evaluate((svgText) => {
+    const blob = new Blob([svgText], { type: 'image/svg+xml' })
+    const anchor = document.createElement('a')
+    anchor.href = URL.createObjectURL(blob)
+    anchor.download = 'platform-mcp-d2-e2e.svg'
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+  }, svg)
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('platform-mcp-d2-e2e.svg')
+}
+
 async function signozLogsExplorerHasContent(page: Page, baseUrl: string) {
   const u = new URL('/logs/logs-explorer', baseUrl)
   await gotoWithGatewayRetry(page, u.toString())
@@ -888,7 +1111,7 @@ async function developerPortalWorks(page: Page, traffic: BrowserApiTraffic) {
   await expect(page.getByRole('link', { name: /guest/i })).toHaveCount(0)
 
   await expectBodyToContain(page, /Platform Engineering Catalog|Catalog/i, 'Backstage catalog shell did not render after edge SSO login')
-  const allComponentsFilter = page.getByRole('menuitem', { name: /All\s+5/i })
+  const allComponentsFilter = page.getByRole('menuitem', { name: /All\s+\d+/i })
   await expect(allComponentsFilter, 'Backstage catalog did not expose the full platform catalog filter').toBeVisible({ timeout: 30_000 })
   await allComponentsFilter.click()
   await expectBodyToContain(page, /Developer Portal/i, 'Backstage catalog did not expose the Backstage portal component')
@@ -1002,8 +1225,20 @@ test.describe(SUITE_NAME, () => {
         if (t.postLogin === 'grafana-victoria-logs') {
           await grafanaVictoriaLogsDashboardWorks(page, t.url)
         }
+        if (t.postLogin === 'grafana-platform-namespace-health') {
+          await grafanaPlatformNamespaceHealthDashboardWorks(page)
+        }
+        if (t.postLogin === 'grafana-mcp-observability') {
+          await grafanaMcpObservabilityDashboardWorks(page)
+        }
+        if (t.postLogin === 'grafana-backstage-observability') {
+          await grafanaBackstageObservabilityDashboardWorks(page)
+        }
         if (t.postLogin === 'keycloak-admin-console') {
           await keycloakAdminConsoleWorks(page)
+        }
+        if (t.postLogin === 'mcp-inspector-d2-render-export') {
+          await mcpInspectorD2RenderAndExport(page)
         }
         if (t.postLogin === 'signoz-logs-and-metrics') {
           await signozVerifyLogsAndMetrics(page, t.url)

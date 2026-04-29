@@ -11,4 +11,3 @@ This repository was created by the local platform Backstage template. It contain
 - `observability/grafana-dashboard.json`: a golden-signals dashboard seed.
 
 Owner: `${{ values.owner }}`
-

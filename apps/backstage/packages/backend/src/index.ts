@@ -7,9 +7,12 @@
  */
 
 import { createBackend } from '@backstage/backend-defaults';
+import { startCatalogMetricsServer } from './modules/catalogMetrics';
 import { giteaRepoPublishModule } from './modules/giteaRepoPublish';
 
 const backend = createBackend();
+
+startCatalogMetricsServer();
 
 backend.add(import('@backstage/plugin-app-backend'));
 backend.add(import('@backstage/plugin-proxy-backend'));
