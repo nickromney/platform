@@ -1,0 +1,348 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "22"
+  MKCERT_VERSION: "v1.4.4"
+
+jobs:
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Check formatting
+        run: uv run --extra dev ruff format --check .
+
+      - name: Run Ruff
+        run: uv run --extra dev ruff check .
+
+  test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: "false"
+
+      - name: Install mkcert
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools
+          curl -fsSLo mkcert "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-amd64"
+          chmod +x mkcert
+          sudo install -m 0755 mkcert /usr/local/bin/mkcert
+          mkcert -install
+
+      - name: Run test suite
+        run: make test-python
+
+      - name: Enforce bootstrap coverage floor
+        run: uv run --extra dev coverage report
+
+      - name: Enforce diff coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}"
+          uv run --extra dev diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=95
+
+  compat:
+    name: Compatibility Harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: "false"
+
+      - name: Run curated APIM compatibility harness
+        run: make compat
+
+      - name: Run Terraform/APIM compatibility report
+        run: TOFU_SHOW=tests/fixtures/tofu_show/sample.json make compat-report
+
+  ui-build:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            examples/todo-app/frontend-astro/package-lock.json
+
+      - name: Run frontend checks
+        run: make frontend-check
+
+  compose-config:
+    name: Compose Config Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Resolve compose image defaults
+        run: |
+          set -euo pipefail
+          if python3 scripts/check_docker_registry_auth.py dhi.io "Docker Hardened Images (dhi.io)"; then
+            echo "Using DHI defaults for compose validation"
+          else
+            {
+              echo "PYTHON_BUILD_IMAGE=python:3.13-slim"
+              echo "PYTHON_RUNTIME_IMAGE=python:3.13-slim"
+              echo "NGINX_RUNTIME_IMAGE=nginx:1.27-alpine"
+              echo "EDGE_PROXY_IMAGE=nginx:1.27-alpine"
+              echo "SMOKE_RUNNER_IMAGE=python:3.13-slim"
+            } >> "${GITHUB_ENV}"
+            echo "Falling back to upstream images for compose validation"
+          fi
+
+      - name: Install mkcert
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools
+          curl -fsSLo mkcert "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-amd64"
+          chmod +x mkcert
+          sudo install -m 0755 mkcert /usr/local/bin/mkcert
+          mkcert -install
+
+      - name: Generate dev certs for edge/TLS overlays
+        run: ./scripts/gen_dev_certs.sh --execute
+
+      - name: Verify Docker Compose is available
+        run: docker compose version
+
+      - name: Render supported compose stacks
+        run: |
+          set -euo pipefail
+          make compose-config
+          make compose-config-mcp
+          make compose-config-oidc
+          make compose-config-edge
+          make compose-config-tls
+          make compose-config-private
+          make compose-config-ui
+
+  compose-smokes:
+    name: Compose Smoke Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Resolve compose image defaults
+        run: |
+          set -euo pipefail
+          if python3 scripts/check_docker_registry_auth.py dhi.io "Docker Hardened Images (dhi.io)"; then
+            echo "Using DHI defaults for compose smokes"
+          else
+            {
+              echo "PYTHON_BUILD_IMAGE=python:3.13-slim"
+              echo "PYTHON_RUNTIME_IMAGE=python:3.13-slim"
+              echo "NGINX_RUNTIME_IMAGE=nginx:1.27-alpine"
+              echo "EDGE_PROXY_IMAGE=nginx:1.27-alpine"
+              echo "SMOKE_RUNNER_IMAGE=python:3.13-slim"
+            } >> "${GITHUB_ENV}"
+            echo "Falling back to upstream images for compose smokes"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0
+        with:
+          enable-cache: true
+          save-cache: "false"
+
+      - name: Install mkcert
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools
+          curl -fsSLo mkcert "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-amd64"
+          chmod +x mkcert
+          sudo install -m 0755 mkcert /usr/local/bin/mkcert
+          mkcert -install
+
+      - name: Verify Docker Compose is available
+        run: docker compose version
+
+      - name: Direct public gateway smoke
+        run: |
+          set -euo pipefail
+          make up
+          i=0
+          until curl -fsS http://localhost:8000/apim/startup >/dev/null; do
+            i=$((i + 1))
+            if [ "$i" -ge 60 ]; then
+              echo "gateway did not become ready" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8000/apim/health >/dev/null
+          curl -fsS http://localhost:8000/api/echo >/dev/null
+          make down
+
+      - name: Direct public MCP smoke
+        run: |
+          set -euo pipefail
+          make up-mcp
+          make smoke-mcp
+          make down
+
+      - name: Edge HTTP smoke
+        run: |
+          set -euo pipefail
+          make up-edge
+          make smoke-edge
+          make down
+
+      - name: Edge TLS smoke
+        run: |
+          set -euo pipefail
+          make up-tls
+          make smoke-tls
+          make down
+
+      - name: Private-mode smoke
+        run: |
+          set -euo pipefail
+          make check-private-port-clear
+          docker compose -f compose.yml -f compose.private.yml -f compose.mcp.yml up --build -d
+          make smoke-private
+          make down
+
+      - name: OIDC smoke
+        run: |
+          set -euo pipefail
+          make up-oidc
+          make smoke-oidc
+          make down
+
+      - name: Tutorials live smoke
+        run: |
+          set -euo pipefail
+          make smoke-tutorials-live
+
+      - name: Collect compose logs on failure
+        if: failure()
+        run: |
+          set +e
+          mkdir -p "${RUNNER_TEMP}/compose-logs"
+          docker ps -a > "${RUNNER_TEMP}/compose-logs/docker-ps.txt" 2>&1 || true
+          docker compose version > "${RUNNER_TEMP}/compose-logs/docker-compose-version.txt" 2>&1 || true
+          docker compose \
+            -f compose.yml \
+            -f compose.public.yml \
+            -f compose.edge.yml \
+            -f compose.tls.yml \
+            -f compose.private.yml \
+            -f compose.ui.yml \
+            -f compose.oidc.yml \
+            -f compose.mcp.yml \
+            logs --no-color > "${RUNNER_TEMP}/compose-logs/compose-all.log" 2>&1 || true
+
+      - name: Upload compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: compose-logs
+          path: ${{ runner.temp }}/compose-logs
+          if-no-files-found: ignore
+
+      - name: Cleanup compose state
+        if: always()
+        run: make down || true

@@ -1,0 +1,19 @@
+# Repo markdownlint configuration.
+# This mirrors platform's v0.1.0 posture: lint tracked docs, but avoid broad
+# style churn that does not improve operator-facing content.
+default: true
+
+# Long command lines and code blocks are common in operator docs.
+MD013: false
+
+# Repeated section headings are acceptable in larger walkthroughs.
+MD024: false
+
+# Inline HTML is occasionally useful in docs.
+MD033: false
+
+# Some markdown files begin with prose or frontmatter-like metadata.
+MD041: false
+
+# Compact pipe tables already exist in the docs; do not force a repo-wide rewrite.
+MD060: false

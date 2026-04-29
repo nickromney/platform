@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "name": "todo-through-apim",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git",
+    "results.html",
+    "results.json",
+    "results.xml"
+  ]
+}

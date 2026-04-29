@@ -1,0 +1,48 @@
+x-backstage-runtime-hardening: &backstage-runtime-hardening
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  backstage:
+    profiles: ["backstage"]
+    <<: *backstage-runtime-hardening
+    build:
+      context: ${BACKSTAGE_BUILD_CONTEXT:-./backstage/app}
+      dockerfile: ${BACKSTAGE_DOCKERFILE:-Dockerfile}
+    image: ${BACKSTAGE_IMAGE:-apim-simulator-backstage:local}
+    command:
+      - node
+      - packages/backend
+      - --config
+      - app-config.yaml
+      - --config
+      - app-config.production.yaml
+    environment:
+      BACKSTAGE_BASE_URL: ${BACKSTAGE_BASE_URL:-http://localhost:7007}
+      HOME: /tmp
+    ports:
+      - "${BACKSTAGE_PORT:-7007}:7007"
+    volumes:
+      - ./catalog-info.yaml:/app/catalog/apim-simulator-catalog-info.yaml:ro
+      - ./backstage/org.yaml:/app/catalog/apim-simulator-org.yaml:ro
+    depends_on:
+      apim-simulator:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7007/api/app/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s

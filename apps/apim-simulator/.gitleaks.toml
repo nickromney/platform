@@ -1,0 +1,37 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Intentional local-only demo credentials and tutorial keys"
+regexTarget = "line"
+regexes = [
+  '''(?i)\blocal-dev-tenant-key(?:-secondary)?\b''',
+  '''(?i)\btodo-demo-key(?:-invalid|-secondary)?\b''',
+  '''(?i)\bmcp-demo-key(?:-secondary)?\b''',
+  '''(?i)\bhello-demo-key(?:-invalid)?\b''',
+  '''(?i)\boidc-(?:demo|admin)-key(?:-secondary)?\b''',
+  '''(?i)\baws-migration-demo-key(?:-secondary)?\b''',
+  '''(?i)\btutorial-key(?:-secondary)?\b''',
+  '''(?i)\bdemo-password\b''',
+]
+
+[[allowlists]]
+description = "Generated local development TLS private keys"
+paths = [
+  '''examples/edge/certs/edge\.apim\.127\.0\.0\.1\.sslip\.io\.key''',
+]
+
+[[allowlists]]
+description = "Intentional local-only APIM hostnames"
+regexTarget = "line"
+regexes = [
+  '''(?i)(?:edge\.)?(?:\*\.)?apim\.127\.0\.0\.1\.sslip\.io''',
+]
+
+[[allowlists]]
+description = "Intentional local-only APIM edge host env vars"
+regexTarget = "line"
+regexes = [
+  '''(?i)\bAPIM_EDGE_(?:ROOT_)?HOST\b''',
+  '''(?i)\bAPIM_EDGE_WILDCARD_HOST\b''',
+]

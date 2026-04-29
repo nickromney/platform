@@ -1,0 +1,29 @@
+<policies>
+  <inbound>
+    <set-variable name="token" value="@(context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;,&quot;scheme param&quot;).Split(&#x27; &#x27;).Last())" />
+    <send-request mode="new" response-variable-name="tokenstate" timeout="20" ignore-error="true">
+      <set-url>https://introspection.example/token</set-url>
+      <set-method>POST</set-method>
+      <set-header name="Authorization" exists-action="override">
+        <value>basic demo</value>
+      </set-header>
+      <set-header name="Content-Type" exists-action="override">
+        <value>application/x-www-form-urlencoded</value>
+      </set-header>
+      <set-body>@($&quot;token={(string)context.Variables[&quot;token&quot;]}&quot;)</set-body>
+    </send-request>
+    <choose>
+      <when condition="@((bool)((IResponse)context.Variables[&quot;tokenstate&quot;]).Body.As&lt;JObject&gt;()[&quot;active&quot;] == false)">
+        <return-response>
+          <set-status code="401" reason="Unauthorized" />
+          <set-header name="WWW-Authenticate" exists-action="override">
+            <value>Bearer error=&quot;invalid_token&quot;</value>
+          </set-header>
+        </return-response>
+      </when>
+    </choose>
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>

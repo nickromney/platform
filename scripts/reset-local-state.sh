@@ -90,7 +90,7 @@ append_unique_path() {
   local path="${2}"
   local existing=""
 
-  eval "for existing in \"\${${array_name}[@]}\"; do
+  eval "for existing in \${${array_name}[@]+\"\${${array_name}[@]}\"}; do
     if [[ \"\${existing}\" == \"${path}\" ]]; then
       return 0
     fi
@@ -253,7 +253,7 @@ print_skipped_paths() {
   fi
 
   printf '%s\n' "Skipping tracked path(s):"
-  for path in "${skipped_tracked_paths[@]}"; do
+  for path in ${skipped_tracked_paths[@]+"${skipped_tracked_paths[@]}"}; do
     printf '  %s\n' "${path}"
   done
 }

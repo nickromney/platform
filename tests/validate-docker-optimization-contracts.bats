@@ -62,7 +62,7 @@ expectations = {
     "apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn": [
         "--mount=type=cache,target=/root/.cache/uv",
     ],
-    "apps/subnetcalc/apim-simulator/Dockerfile": [
+    "apps/apim-simulator/Dockerfile": [
         "--mount=type=cache,target=/root/.cache/uv",
     ],
 }
@@ -95,7 +95,7 @@ dockerfiles = [
     "apps/subnetcalc/api-fastapi-container-app/Dockerfile",
     "apps/subnetcalc/api-fastapi-azure-function/Dockerfile",
     "apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn",
-    "apps/subnetcalc/apim-simulator/Dockerfile",
+    "apps/apim-simulator/Dockerfile",
 ]
 
 for relative_path in dockerfiles:

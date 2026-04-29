@@ -1,0 +1,5 @@
+{
+  "method": "POST",
+  "path": "/sample/items",
+  "body": "original"
+}

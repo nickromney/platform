@@ -229,6 +229,47 @@
       }
     },
     {
+      "name": "apim-simulator",
+      "display_name": "APIM Simulator",
+      "owner": "apim-simulator-maintainers",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/apim-simulator"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["apim"]
+      },
+      "environments": [
+        {
+          "name": "local",
+          "type": "platform",
+          "namespace": "apim",
+          "route": "https://subnetcalc.dev.127.0.0.1.sslip.io/api",
+          "rbac": {
+            "group": "platform-viewers",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "subnetcalc-apim-signing-key",
+          "binding": "apim",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
       "name": "subnetcalc",
       "display_name": "SubnetCalc",
       "owner": "team-dolphin",

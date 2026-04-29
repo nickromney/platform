@@ -12,7 +12,7 @@ setup() {
   mkdir -p "${FIXTURE_ROOT}/apps/demo"
   mkdir -p "${FIXTURE_ROOT}/apps/sentiment"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator"
+  mkdir -p "${FIXTURE_ROOT}/apps/apim-simulator"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist/assets"
@@ -69,22 +69,24 @@ version = "0.1.0"
 exclude-newer = "7 days"
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator/pyproject.toml" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/apim-simulator/pyproject.toml" <<'EOF'
 [project]
 name = "apim-simulator"
 version = "0.4.0"
-EOF
 
-  cat >"${FIXTURE_ROOT}/apps/subnetcalc/apim-simulator.vendor.json" <<'EOF'
-{
-  "vendored_path": "apps/subnetcalc/apim-simulator",
-  "upstream": {
-    "origin": "git@example.com:example/apim-simulator.git",
-    "ref_kind": "tag",
-    "requested_ref": "v0.4.0",
-    "resolved_commit": "fd545987759d1d373ef015da2882532717e027fa"
-  }
-}
+[tool.uv]
+exclude-newer = "7 days"
+EOF
+  touch "${FIXTURE_ROOT}/apps/apim-simulator/Dockerfile"
+  cat >"${FIXTURE_ROOT}/apps/apim-simulator/catalog-info.yaml" <<'EOF'
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: apim-simulator
+spec:
+  type: service
+  lifecycle: local
+  owner: group:default/platform
 EOF
 
   for app in subnetcalc sentiment; do
@@ -190,7 +192,7 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"actions/checkout v6.0.2 resolves to the pinned SHA"* ]]
-  [[ "${output}" == *"apim-simulator v0.4.0 (fd545987759d1d373ef015da2882532717e027fa) is vendored; version 0.4.0; profile full"* ]]
+  [[ "${output}" == *"apim-simulator is integrated under apps/apim-simulator; version 0.4.0"* ]]
   [[ "${output}" == *"All .npmrc files set min-release-age=7"* ]]
   [[ "${output}" == *"All bunfig.toml files set minimumReleaseAge=604800"* ]]
   [[ "${output}" == *"All uv-managed pyproject.toml files set exclude-newer='7 days'"* ]]

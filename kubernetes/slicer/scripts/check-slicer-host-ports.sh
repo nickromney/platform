@@ -65,4 +65,4 @@ fi
 
 TARGET_LABEL="slicer" \
 PORT_CHECKS="${PORT_CHECKS}" \
-exec "${SHARED_SCRIPT}" "${ORIGINAL_ARGS[@]}"
+exec "${SHARED_SCRIPT}" ${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}

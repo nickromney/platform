@@ -1,0 +1,7 @@
+{
+  "method": "GET",
+  "path": "/sample/items",
+  "config": {
+    "upstream_path_prefix": "/sample"
+  }
+}

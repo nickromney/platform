@@ -1,0 +1,51 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Mock Backend API",
+    "version": "1.0.0",
+    "description": "Local OpenAPI document for the checked-in mock backend used by the APIM simulator tutorials."
+  },
+  "servers": [
+    {
+      "url": "http://mock-backend:8080/api"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Health",
+        "responses": {
+          "200": {
+            "description": "Health response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/echo": {
+      "get": {
+        "operationId": "echo",
+        "summary": "Echo",
+        "responses": {
+          "200": {
+            "description": "Echo response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "hello from the mock backend"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

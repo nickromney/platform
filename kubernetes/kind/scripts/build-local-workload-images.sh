@@ -95,8 +95,8 @@ build_and_push \
 
 build_and_push \
   "subnetcalc-apim-simulator" \
-  "${REPO_ROOT}/apps/subnetcalc/apim-simulator" \
-  "${REPO_ROOT}/apps/subnetcalc/apim-simulator/Dockerfile"
+  "${REPO_ROOT}/apps/apim-simulator" \
+  "${REPO_ROOT}/apps/apim-simulator/Dockerfile"
 
 build_and_push \
   "subnetcalc-frontend-typescript-vite" \

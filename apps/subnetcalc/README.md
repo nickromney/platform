@@ -128,29 +128,12 @@ podman-compose down
 docker compose down
 ```
 
-## Vendored APIM Simulator
+## APIM Simulator
 
-`apps/subnetcalc/apim-simulator/` is a vendored runtime subset of the
-standalone `apim-simulator` repository. Treat the standalone repo as
-authoritative.
-
-Refresh the vendored copy from an explicit tag or commit SHA:
-
-```bash
-make vendor-apim-simulator \
-  APIM_SIMULATOR_SOURCE_REPO=$HOME/Developer/personal/apim-simulator \
-  APIM_SIMULATOR_SOURCE_REF=v0.4.0
-```
-
-The vendoring script records the resolved source commit and subset profile in
-`apps/subnetcalc/apim-simulator.vendor.json`. The default `runtime`
-profile keeps only the simulator package, contracts, lockfile/package metadata,
-license, and runtime Dockerfile. It intentionally excludes upstream docs,
-examples, tutorials, tests, UI assets, and local development scripts.
-
-Do not hand-edit the vendored subtree and assume those changes will be
-preserved; land source changes in the standalone repo first, then re-vendor
-here.
+The APIM simulator now lives as a first-class app at
+[`../apim-simulator/`](../apim-simulator/). Subnetcalc still uses it in local
+and Kubernetes flows, but the simulator is no longer a vendored subnetcalc
+subtree.
 
 ## Azure Infrastructure Scripts
 

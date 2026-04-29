@@ -1,0 +1,15 @@
+extends: default
+
+ignore: |
+  .git/
+  .run/
+  **/.run/
+  **/node_modules/
+  **/.venv/
+  **/.terraform/
+  dist/
+
+rules:
+  document-start: disable
+  truthy: disable
+  line-length: disable

@@ -1,0 +1,9 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: apim-simulator-backstage
+  description: Optional local Backstage developer portal for the APIM simulator.
+spec:
+  type: website
+  owner: group:default/apim-simulator-maintainers
+  lifecycle: local

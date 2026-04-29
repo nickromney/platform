@@ -10,6 +10,8 @@ This directory contains the source applications that feed the local platform dem
 - [`sentiment/`](sentiment/) contains the sentiment demo and its local compose-based workflows.
   Local compose architecture: [`sentiment/docs/COMPOSE-ARCHITECTURE.md`](sentiment/docs/COMPOSE-ARCHITECTURE.md)
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)
+- [`apim-simulator/`](apim-simulator/) contains the local Azure API Management simulator used by the Kubernetes APIM gateway demo and by app-local compose workflows.
+  It keeps its own standalone Docker Compose entrypoints, for example `make -C apps/apim-simulator up` and `make -C apps/apim-simulator smoke-hello`.
 
 ## Relationship To The Kubernetes Demos
 

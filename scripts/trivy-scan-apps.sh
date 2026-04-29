@@ -35,6 +35,7 @@ TRIVY_SKIP_DIRS=(
 )
 
 SOURCE_TARGETS=(
+  "apps/apim-simulator"
   "apps/sentiment"
   "apps/subnetcalc"
 )
@@ -44,7 +45,7 @@ IMAGE_SPECS=(
   "platform-security-scan/sentiment-api:scan|apps/sentiment/api-sentiment|apps/sentiment/api-sentiment/Dockerfile|"
   "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment/frontend-react-vite/sentiment-auth-ui|apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile|"
   "platform-security-scan/subnetcalc-api-fastapi-container-app:scan|apps/subnetcalc/api-fastapi-container-app|apps/subnetcalc/api-fastapi-container-app/Dockerfile|"
-  "platform-security-scan/subnetcalc-apim-simulator:scan|apps/subnetcalc/apim-simulator|apps/subnetcalc/apim-simulator/Dockerfile|"
+  "platform-security-scan/subnetcalc-apim-simulator:scan|apps/apim-simulator|apps/apim-simulator/Dockerfile|"
   "platform-security-scan/subnetcalc-frontend-typescript-vite:scan|apps/subnetcalc|apps/subnetcalc/frontend-typescript-vite/Dockerfile|"
   "platform-security-scan/subnetcalc-frontend-react:scan|apps/subnetcalc|apps/subnetcalc/frontend-react/Dockerfile|"
 )

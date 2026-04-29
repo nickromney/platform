@@ -1,0 +1,132 @@
+---
+import "../styles/global.css";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gateway-Proof Todo</title>
+    <meta
+      name="description"
+      content="A small Astro frontend that proves the browser-to-APIM-to-FastAPI path inside the APIM simulator repo."
+    />
+    <script is:inline src="/runtime-config.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero-panel">
+        <p class="eyebrow">APIM simulator teaching app</p>
+        <h1>Gateway-Proof Todo</h1>
+        <p class="lede">
+          A deliberately small workflow that proves the browser talks to a protected APIM edge instead of
+          reaching the FastAPI container directly.
+        </p>
+
+        <div class="route-card" aria-label="Network path">
+          <span>Browser</span>
+          <span>Astro</span>
+          <span>APIM</span>
+          <span>FastAPI</span>
+        </div>
+      </section>
+
+      <section class="app-panel">
+        <header class="panel-head">
+          <div>
+            <p class="section-kicker">Live state</p>
+            <h2>Tasks routed through the gateway</h2>
+          </div>
+          <div class="status-stack">
+            <p class="status-pill" data-testid="gateway-status">Connecting</p>
+            <p class="status-copy" data-testid="policy-indicator">Awaiting APIM response headers</p>
+          </div>
+        </header>
+
+        <div class="message-banner" data-testid="error-banner" hidden></div>
+
+        <form class="composer" data-testid="create-form">
+          <label class="composer-label" for="todo-title">Add a new task</label>
+          <div class="composer-row">
+            <input
+              id="todo-title"
+              name="title"
+              type="text"
+              maxlength="120"
+              placeholder="Ship a Kubernetes-friendly APIM demo"
+              autocomplete="off"
+            />
+            <button type="submit">Create</button>
+          </div>
+        </form>
+
+        <div class="list-shell">
+          <p class="empty-state" data-testid="empty-state">No tasks yet. Create one through APIM to seed the list.</p>
+          <ul class="todo-list" data-testid="todo-list"></ul>
+        </div>
+
+        <section class="observability-strip" aria-label="Observability jump-off">
+          <div class="observability-copy">
+            <p class="section-kicker">Human loop</p>
+            <h3>Follow the click into OTEL</h3>
+            <p class="diagnostic-copy">
+              Create or toggle a task, then open Grafana to inspect the resulting gateway metrics, logs, and traces.
+            </p>
+          </div>
+          <div class="observability-actions">
+            <a
+              class="obs-link"
+              data-testid="observability-dashboard-link"
+              href="https://lgtm.apim.127.0.0.1.sslip.io:8443/d/apim-simulator-overview/apim-simulator-overview"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open OTEL dashboard
+            </a>
+            <a
+              class="obs-link is-secondary"
+              data-testid="observability-home-link"
+              href="https://lgtm.apim.127.0.0.1.sslip.io:8443"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Grafana home
+            </a>
+          </div>
+        </section>
+
+        <section class="diagnostics-grid" aria-label="Gateway diagnostics">
+          <article class="diagnostic-card">
+            <header class="diagnostic-head">
+              <div>
+                <p class="section-kicker">Show your working</p>
+                <h3>Routing path</h3>
+              </div>
+              <p class="diagnostic-copy">The route is described from the browser edge through the APIM mapping into the backend.</p>
+            </header>
+            <ol class="hop-list" data-testid="network-path"></ol>
+          </article>
+
+          <article class="diagnostic-card">
+            <header class="diagnostic-head">
+              <div>
+                <p class="section-kicker">Live transcript</p>
+                <h3>API calls made by the browser</h3>
+              </div>
+              <p class="diagnostic-copy">Each entry is recorded after the APIM response returns, including the headers that prove the gateway handled it.</p>
+            </header>
+            <p class="call-log-empty" data-testid="api-call-empty">Waiting for the first APIM-backed request.</p>
+            <div class="call-log" data-testid="api-call-log"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      import { bootTodoApp } from "../scripts/app";
+
+      bootTodoApp();
+    </script>
+  </body>
+</html>

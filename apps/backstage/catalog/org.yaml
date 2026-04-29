@@ -24,7 +24,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
   name: apim-simulator-maintainers
-  description: Maintainers of the vendored APIM simulator supporting context.
+  description: Maintainers and local operators of the APIM simulator.
 spec:
   type: team
   profile:
