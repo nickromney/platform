@@ -5,6 +5,12 @@ shell_cli_script_name() {
   basename "$0"
 }
 
+shell_cli_usage_line() {
+  local suffix="${1:-}"
+
+  printf 'Usage: %s%s\n' "$(shell_cli_script_name)" "${suffix}"
+}
+
 shell_cli_unknown_flag() {
   local script_name="$1"
   local flag="$2"

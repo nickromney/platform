@@ -10,7 +10,7 @@ KEY_FILE="${SCRIPT_DIR}/compose-platform-key.pem"
 
 usage() {
   cat <<EOF
-Usage: gen-certs.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Generate or refresh the mkcert-backed TLS certificate for the docker/compose edge.
 

@@ -17,7 +17,7 @@ ok() { echo "OK   $*"; }
 
 usage() {
   cat <<EOF
-Usage: delete-vm-best-effort.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Best-effort cleanup for the managed Slicer VM, including local slicer-mac disk
 artifacts when applicable.

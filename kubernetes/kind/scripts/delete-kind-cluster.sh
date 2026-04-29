@@ -8,7 +8,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: delete-kind-cluster.sh --name <cluster-name> [--retries N] [--delay-seconds N] [--dry-run] [--execute]
+Usage: ${0##*/} --name <cluster-name> [--retries N] [--delay-seconds N] [--dry-run] [--execute]
 
 Retries transient Docker Desktop delete failures where the daemon reports that it
 did not receive a container exit event.

@@ -3,6 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="${CHECK_VERSION_REPO_ROOT:-${ROOT_DIR}}"
+
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/lib/shell-cli.sh"
+
 WORKFLOW_FILE="${CHECK_VERSION_WORKFLOW_FILE:-}"
 APIM_SIMULATOR_VENDOR_METADATA_FILE="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_METADATA_FILE:-${REPO_ROOT}/apps/subnetcalc/apim-simulator.vendor.json}"
 APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/subnetcalc/apim-simulator}"
@@ -36,8 +40,8 @@ fail_note() { printf '%sFAIL%s %s\n' "${RED}" "${NC}" "$*"; FAILURES=$((FAILURES
 section() { printf '\n%s\n' "$*"; }
 
 usage() {
-  cat <<'EOF'
-Usage: check-version.sh [--dry-run] [--execute]
+  cat <<EOF
+$(shell_cli_usage_line " [--dry-run] [--execute]")
 
 Checks:
   - repo GitHub/Gitea Actions pins remain SHA-pinned with selector comments
@@ -176,7 +180,7 @@ for repo, ref, selector in pattern.findall(Path(sys.argv[1]).read_text(encoding=
 PY
     )"
 
-    label="${workflow_file#${REPO_ROOT}/}"
+    label="${workflow_file#"${REPO_ROOT}"/}"
     if [[ -z "${refs}" ]]; then
       warn "${label} has no external GitHub Actions"
       continue

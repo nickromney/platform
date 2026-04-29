@@ -136,7 +136,7 @@ ensure_remote_ca() {
 
 usage() {
   cat <<EOF
-Usage: configure-k3s-apiserver-oidc.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Configures the Slicer-backed k3s server so OIDC-issued Headlamp tokens are
 accepted by the Kubernetes API. This mutates the guest VM.

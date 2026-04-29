@@ -21,7 +21,7 @@ flowchart TD
 - `cd apps/subnetcalc/shared-frontend && bun run lint:check && bun run type-check && bun run build && bun run test`
 - `cd apps/subnetcalc/frontend-react && bun run lint:check && bun run type-check && bun run build && bun run test`
 - `cd apps/subnetcalc/frontend-typescript-vite && bun run check && bun run build && bun run test`
-- `./scripts/check-version.sh --execute`
+- `./scripts/check-repo-version.sh --execute`
 - `make -C apps compose-smoke-subnetcalc`
 
 This is the expected path for normal UI, config, and container work. The default `frontend-typescript-vite` Playwright config now excludes SWA-only specs, so it stays runnable against local preview without extra services.

@@ -23,7 +23,7 @@ GATEWAY_HTTPS_GUEST_PORT="${GATEWAY_HTTPS_GUEST_PORT:-443}"
 
 usage() {
   cat <<EOF
-Usage: ensure-host-forwards.sh [--action ensure|stop|status] [--dry-run] [--execute]
+Usage: ${0##*/} [--action ensure|stop|status] [--dry-run] [--execute]
 
 Manages the long-lived Slicer host-forward process that maps local ports into
 the VM.

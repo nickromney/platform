@@ -12,8 +12,8 @@ MATCH_FILE="$(mktemp "${TMPDIR:-/tmp}/bash32-compat-matches.XXXXXX")"
 trap 'rm -f "${FILES_TO_SCAN}" "${MATCH_FILE}"' EXIT
 
 usage() {
-  cat <<'EOF'
-Usage: check-bash32-compat.sh [--dry-run] [--path PATH]...
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--path PATH]...
 
 Scan tracked shell scripts for Bash 4+ constructs that are incompatible with
 macOS's stock Bash 3.2.

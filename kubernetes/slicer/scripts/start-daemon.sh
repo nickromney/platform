@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: start-daemon.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Waits for the configured Slicer endpoint or on-device slicer-mac socket to be
 ready for use.

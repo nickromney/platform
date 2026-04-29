@@ -12,7 +12,7 @@ EVENT_LOOKBACK_MINUTES="${EVENT_LOOKBACK_MINUTES:-15}"
 
 usage() {
   cat <<EOF
-Usage: audit-bootstrap.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Runs a post-bootstrap audit for the kind stack: applications, pods, events,
 restarts, gateway status, and previous logs.

@@ -9,7 +9,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: check-backstage.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Smoke-check the Docker Compose Backstage portal profile after it has started.
 

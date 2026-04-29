@@ -7,8 +7,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: hubble-capture-flows.sh [options] [-- <extra hubble observe args>]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [options] [-- <extra hubble observe args>]
 
 Capture Hubble flows as `jsonpb` so they can be piped into
 `hubble-summarise-flows.sh` or saved for later policy analysis.

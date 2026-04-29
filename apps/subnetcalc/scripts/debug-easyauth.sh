@@ -11,7 +11,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: debug-easyauth.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Runs Azure Easy Auth and Managed Identity diagnostics for the configured Web App
 and Function App.

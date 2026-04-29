@@ -15,8 +15,8 @@ warn() { echo "WARN $*"; }
 ok() { echo "OK   $*"; }
 
 usage() {
-  cat <<'EOF'
-Usage: check-sso.sh [--var-file PATH] [--host-port PORT] [--extended]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--extended]
 
 Checks the selected OIDC provider + oauth2-proxy SSO plumbing with an emphasis on Gitea.
 This is a read-only diagnostic script.

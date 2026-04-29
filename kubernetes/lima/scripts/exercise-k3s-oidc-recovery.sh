@@ -29,8 +29,8 @@ json_mode() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: exercise-k3s-oidc-recovery.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Runs a controlled Lima OIDC recovery drill: converge the k3s apiserver OIDC
 configuration, force a k3s restart, observe the temporary API outage, and

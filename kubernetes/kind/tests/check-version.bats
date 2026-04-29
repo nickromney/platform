@@ -3,7 +3,7 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
-  export SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/check-version.sh"
+  export SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/check-component-version.sh"
   export TF_DEFAULTS_SCRIPT="${REPO_ROOT}/terraform/kubernetes/scripts/tf-defaults.sh"
   export KIND_KUBECONFIG="${HOME}/.kube/kind-kind-local.yaml"
 }
@@ -98,6 +98,22 @@ kind_argocd_app_synced_healthy() {
   [[ "${lines[2]}" == *"latest release tag (v0.26.3)"* ]]
 }
 
+@test "check-version reads k3s pins from local variant Makefiles" {
+  local makefile="${BATS_TEST_TMPDIR}/Makefile"
+  cat >"${makefile}" <<'EOF'
+OTHER_VERSION ?= v0.0.1
+K3S_VERSION ?= v1.35.4+k3s1 # keep in sync with latest supported k3s
+EOF
+
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(makefile_variable_value '${makefile}' K3S_VERSION)\"; print_observed_latest_row 'lima k3s release tag' \"\$(makefile_variable_value '${makefile}' K3S_VERSION)\" 'v1.35.4+k3s1' 'codebase' 'release tag'"
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = "v1.35.4+k3s1" ]
+  [[ "${lines[1]}" == *$'lima k3s release tag\tv1.35.4+k3s1\tv1.35.4+k3s1\t'* ]]
+  [[ "${lines[1]}" == *"latest release tag (v1.35.4+k3s1)"* ]]
+}
+
 @test "check-version classifies docker manifest probe results" {
   local stub_bin="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${stub_bin}"
@@ -149,7 +165,7 @@ EOF
     \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/subnetcalc/apim-simulator/uv.lock' 'anyio')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf '604800\n2.0.8\n%s\n4.12.1' "${expected_cutoff}")" ]
+  [ "${output}" = "$(printf '604800\n2.0.9\n%s\n4.12.1' "${expected_cutoff}")" ]
 }
 
 @test "check-version collects only project dependencies from pyproject arrays" {

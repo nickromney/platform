@@ -13,7 +13,7 @@ GIT_BIN="${GIT_BIN:-git}"
 
 usage() {
   cat <<EOF
-Usage: lint-markdown.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Lint tracked Markdown files using the repo markdownlint configuration when a
 supported markdownlint binary is available.

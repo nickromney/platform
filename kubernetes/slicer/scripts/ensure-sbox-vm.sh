@@ -20,7 +20,7 @@ tag_workspace="${SLICER_WORKSPACE_TAG:-workspace=platform}"
 
 usage() {
   cat <<EOF
-Usage: ensure-sbox-vm.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Ensures the configured Slicer sandbox VM exists, has adequate resources, and is
 ready.

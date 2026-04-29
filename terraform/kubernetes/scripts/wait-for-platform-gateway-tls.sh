@@ -21,8 +21,8 @@ WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-900}"
 APP_REFRESH_INTERVAL_SECONDS="${APP_REFRESH_INTERVAL_SECONDS:-30}"
 
 usage() {
-  cat <<'EOF'
-Usage: wait-for-platform-gateway-tls.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Wait for the cert-manager webhook, trigger Argo CD to retry cert-manager-config
 reconciliation if needed, and only return once the platform gateway TLS secret

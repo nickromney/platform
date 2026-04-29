@@ -21,8 +21,8 @@ json_mode() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: exercise-kind-oidc-recovery.sh [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--dry-run] [--execute]
 
 Forces the kind post-kube-apiserver OIDC recovery branch in a controlled way,
 delegates to the explicit post-restart recovery script, and verifies the

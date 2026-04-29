@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: stop-daemon.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Stops a stale project-managed slicer-mac daemon and cleans up its pid file.
 

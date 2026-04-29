@@ -12,7 +12,7 @@ source "${REPO_ROOT}/scripts/lib/compose-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: compose-smoke.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Run the Platform MCP compose smoke test against the local server and Inspector.
 

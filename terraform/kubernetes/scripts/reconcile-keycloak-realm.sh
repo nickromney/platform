@@ -11,7 +11,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: reconcile-keycloak-realm.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Reconciles the existing Postgres-backed Keycloak realm with the rendered
 bootstrap realm ConfigMap. Keycloak's start-time import intentionally skips an

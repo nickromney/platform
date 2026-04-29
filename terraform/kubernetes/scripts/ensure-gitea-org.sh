@@ -17,7 +17,7 @@ ok() { echo "ensure-gitea-org: $*"; }
 
 usage() {
   cat <<EOF
-Usage: ensure-gitea-org.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Ensures the configured Gitea organization and member accounts exist.
 

@@ -9,7 +9,7 @@ source "${repo_root}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: bootstrap-k3s-slicer.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Bootstraps or reconciles the Slicer-backed k3s cluster and refreshes the
 managed kubeconfig output.

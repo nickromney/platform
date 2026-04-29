@@ -12,7 +12,7 @@ vm_name="${SLICER_VM_NAME:-slicer-1}"
 
 usage() {
   cat <<EOF
-Usage: check-vm-health.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Checks the configured Slicer VM for basic k3s, storage, and kernel health.
 

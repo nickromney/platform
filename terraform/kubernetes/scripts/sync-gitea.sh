@@ -17,7 +17,7 @@ source "${SCRIPT_DIR}/tf-defaults.sh"
 
 usage() {
   cat <<EOF
-Usage: sync-gitea.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Compatibility wrapper for manual policies syncs. This script resolves the
 expected environment from stage tfvars, then delegates to sync-gitea-policies.sh

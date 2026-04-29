@@ -54,7 +54,7 @@ spec:
       containers:
         - name: server
           image: localhost:30090/platform/platform-mcp:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           env:
             - name: PLATFORM_MCP_HOST
               value: 0.0.0.0

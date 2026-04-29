@@ -14,7 +14,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
     cat <<EOF
-Usage: gen-certs.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Generate or refresh the local development PKI for the sentiment compose stack.
 

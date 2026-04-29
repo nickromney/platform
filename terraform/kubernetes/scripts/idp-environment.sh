@@ -43,8 +43,8 @@ relative_to_repo_path() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: idp-environment.sh --action create|delete|promote --app NAME --env NAME [--image REF] [--target-env NAME]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ --action create|delete|promote --app NAME --env NAME [--image REF] [--target-env NAME]
 
 Creates or deletes a local generated environment request, or promotes an app
 image by updating the target environment image patch declared in the catalog.

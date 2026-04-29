@@ -12,8 +12,8 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 fail() { echo "FAIL $*" >&2; exit 1; }
 
 usage() {
-  cat <<'EOF'
-Usage: idp-secrets.sh [--format text|json]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--format text|json]
 
 Prints the local IDP secret binding and rotation model from the catalog.
 EOF

@@ -11,7 +11,7 @@ STAGE_TFVARS="${STAGE_TFVARS:-}"
 
 usage() {
   cat <<EOF
-Usage: run.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Runs the Kubernetes SSO Playwright end-to-end test suite with stage-derived
 feature toggles.

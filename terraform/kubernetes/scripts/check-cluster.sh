@@ -13,7 +13,7 @@ source "${REPO_ROOT}/scripts/platform-env.sh"
 
 usage() {
   cat <<EOF
-Usage: check-cluster.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Runs a broad stack diagnostic covering Gitea, registry images, Argo CD, and
 workload namespaces for the current platform environment.

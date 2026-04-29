@@ -24,7 +24,7 @@ RUN_DIR="${RUN_ROOT}/${RUN_ID}"
 
 usage() {
   cat <<EOF
-Usage: cilium-workload-loop.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Exercises the Docker Desktop managed kind + Cilium workload reset loop and
 captures status snapshots in the run directory.

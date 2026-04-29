@@ -12,7 +12,7 @@ ok() { echo "ensure-kind-storage: $*"; }
 
 usage() {
   cat <<EOF
-Usage: ensure-kind-storage.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Ensures the local-path provisioner and standard storage class exist on the
 current kind cluster.

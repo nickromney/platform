@@ -15,7 +15,7 @@ active_shared_ports=""
 
 usage() {
   cat <<EOF
-Usage: check-slicer-stopped.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Checks whether Slicer VMs, host-forward processes, or proxy containers are
 still running and exits non-zero when they would conflict with another runtime.

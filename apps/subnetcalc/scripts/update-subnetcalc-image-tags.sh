@@ -74,7 +74,7 @@ fi
 
 usage() {
   cat <<EOF
-Usage: update-subnetcalc-image-tags.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Clones the policies repo, rewrites subnet calculator workload image tags, and
 pushes the updated manifests back to the configured branch.

@@ -403,7 +403,7 @@ EOF
 }
 
 @test "root check-version delegates to the repo version checker" {
-  check_version_stub="${BATS_TEST_TMPDIR}/check-version.sh"
+  check_version_stub="${BATS_TEST_TMPDIR}/check-repo-version.sh"
   log_file="${BATS_TEST_TMPDIR}/check-version.log"
 
   cat >"${check_version_stub}" <<EOF

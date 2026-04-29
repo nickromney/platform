@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/../../../scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: fetch-gitea-runner-token.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Request or read-through-cache a Gitea Actions runner registration token from stdin payload.
 

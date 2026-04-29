@@ -14,7 +14,7 @@ delay_seconds="${KUBECTL_REACHABILITY_DELAY_SECONDS:-3}"
 
 usage() {
   cat <<EOF
-Usage: wait-for-kubectl.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Waits for kubectl to reach the configured cluster using KUBECONFIG_PATH or
 KUBECONFIG and an optional KUBECONFIG_CONTEXT.

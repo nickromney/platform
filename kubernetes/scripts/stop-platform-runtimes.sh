@@ -12,7 +12,7 @@ exclude_slicer=0
 
 usage() {
   cat <<EOF >&2
-Usage: stop-platform-runtimes.sh [--exclude kind|lima|slicer]... [--dry-run] [--execute]
+Usage: ${0##*/} [--exclude kind|lima|slicer]... [--dry-run] [--execute]
 
 Stops local kind, Lima, and Slicer runtimes best-effort, optionally excluding
 selected runtimes.

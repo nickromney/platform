@@ -13,7 +13,7 @@ positional=()
 
 usage() {
   cat <<EOF >&2
-Usage: check-docker-registry-auth.sh --registry HOST [--display-name NAME] [--dry-run] [--execute]
+Usage: ${0##*/} --registry HOST [--display-name NAME] [--dry-run] [--execute]
 
 Checks whether Docker credentials exist for a registry.
 

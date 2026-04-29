@@ -28,4 +28,4 @@ jobs:
         run: ./terraform/kubernetes/scripts/check-provider-version.sh --execute
 
       - name: Run Kubernetes stack version guard in CI mode
-        run: ./terraform/kubernetes/scripts/check-version.sh --execute --ci
+        run: ./terraform/kubernetes/scripts/check-component-version.sh --execute --ci

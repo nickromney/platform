@@ -50,7 +50,7 @@ progress() {
 
 usage() {
   cat <<EOF
-Usage: check-provider-version.sh [--dry-run] [--execute]
+$(shell_cli_usage_line " [--dry-run] [--execute]")
 
 Checks the locked Terraform provider versions against the latest upstream
 registry releases.
@@ -266,6 +266,7 @@ main() {
   providers_file="$(mktemp)"
   rows_file="$(mktemp)"
   output_dir="$(mktemp -d)"
+  # shellcheck disable=SC2064 # Capture the current temp paths for EXIT cleanup.
   trap "cleanup_temp_paths '${providers_file}' '${rows_file}' '${output_dir}'" EXIT
 
   extract_locked_providers >"${providers_file}"

@@ -17,8 +17,8 @@ LIVE_VALIDATION_TMP_POLICIES=""
 mode="static"
 
 usage() {
-  cat <<'EOF'
-Usage: validate-kyverno-policies.sh [--mode static|live] [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--mode static|live] [--dry-run] [--execute]
 
 static
     Render the repo's checked-in Kyverno kustomize overlays and execute the

@@ -13,7 +13,7 @@ GIT_BIN="${GIT_BIN:-git}"
 
 usage() {
   cat <<EOF
-Usage: fmt-markdown.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Format tracked Markdown files using the repo markdownlint configuration when a
 supported markdownlint binary is available.

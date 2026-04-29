@@ -23,7 +23,7 @@ require() {
 
 usage() {
   cat <<EOF
-Usage: triage-sso.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Prints a read-only SSO triage bundle for gateway routes, oauth2-proxy
 deployments, Argo CD applications, and in-cluster curl probes.

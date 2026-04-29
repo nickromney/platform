@@ -31,7 +31,7 @@ for repo, (sha, selector) in expected.items():
 assert "cron: '0 9 * * 1'" in text
 assert "run: make check-version" in text
 assert "run: ./terraform/kubernetes/scripts/check-provider-version.sh --execute" in text
-assert "run: ./terraform/kubernetes/scripts/check-version.sh --execute --ci" in text
+assert "run: ./terraform/kubernetes/scripts/check-component-version.sh --execute --ci" in text
 PY
 
   [ "${status}" -eq 0 ]

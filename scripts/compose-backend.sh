@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 usage() {
   cat <<USAGE
-Usage: compose-backend.sh [--print] [--dry-run] [--execute]
+Usage: ${0##*/} [--print] [--dry-run] [--execute]
 
 Print the first supported compose backend command. Without --execute, the
 script previews the action only.

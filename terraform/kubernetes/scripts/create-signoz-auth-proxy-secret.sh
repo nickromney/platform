@@ -11,7 +11,7 @@ NAME="${SIGNOZ_AUTH_PROXY_SECRET_NAME:-signoz-auth-proxy-credentials}"
 
 usage() {
   cat <<EOF
-Usage: create-signoz-auth-proxy-secret.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Create/update the Signoz OIDC auth proxy secret.
 $(shell_cli_standard_options)

@@ -8,7 +8,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: deploy-csharp-test.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Builds and deploys the experimental C# Function App and Web App test payloads.
 

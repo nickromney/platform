@@ -12,7 +12,7 @@ ok() { echo "promote-gitea-admin: $*"; }
 
 usage() {
   cat <<EOF
-Usage: promote-gitea-admin.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Promote a Gitea user to an administrator account.
 

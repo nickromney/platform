@@ -8,7 +8,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
   cat <<EOF >&2
-Usage: resolve-tfvar-value.sh --key NAME --default VALUE [--tfvars-file PATH]... [--dry-run] [--execute]
+Usage: ${0##*/} --key NAME --default VALUE [--tfvars-file PATH]... [--dry-run] [--execute]
 
 Resolves a tfvars value by scanning the provided files in order and falling
 back to the supplied default.

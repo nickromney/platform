@@ -16,7 +16,7 @@ UPSTREAM_PORT="${UPSTREAM_PORT:-8443}"
 
 usage() {
   cat <<EOF
-Usage: host-gateway-proxy.sh [--action ensure|stop|status] [--dry-run] [--execute]
+Usage: ${0##*/} [--action ensure|stop|status] [--dry-run] [--execute]
 
 Manages the Slicer host gateway proxy container.
 

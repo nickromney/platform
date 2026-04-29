@@ -13,7 +13,7 @@ source "${REPO_ROOT}/scripts/platform-env.sh"
 
 usage() {
   cat <<EOF
-Usage: check-cluster-health.sh [--var-file PATH]... [--show-urls] [--dry-run] [--execute]
+Usage: ${0##*/} [--var-file PATH]... [--show-urls] [--dry-run] [--execute]
 
 Runs the stack-aware cluster health diagnostics for the current platform
 environment.

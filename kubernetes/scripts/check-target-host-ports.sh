@@ -13,7 +13,7 @@ PORT_CHECKS="${PORT_CHECKS:-}"
 
 usage() {
   cat <<EOF
-Usage: check-target-host-ports.sh [--var-file PATH]... [--dry-run] [--execute]
+Usage: ${0##*/} [--var-file PATH]... [--dry-run] [--execute]
 
 Checks whether the host ports required for a target are free.
 

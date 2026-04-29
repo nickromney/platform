@@ -10,7 +10,7 @@ fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
 
 usage() {
   cat <<EOF
-Usage: sync-gitea-policies.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Render the policies repository content for the current stack inputs and push it
 to the configured Gitea repository.

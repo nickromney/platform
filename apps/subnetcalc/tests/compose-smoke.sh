@@ -12,7 +12,7 @@ source "${REPO_ROOT}/scripts/lib/compose-cli.sh"
 
 usage() {
   cat <<EOF
-Usage: compose-smoke.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Run the lightweight subnetcalc compose smoke test against the local stack.
 

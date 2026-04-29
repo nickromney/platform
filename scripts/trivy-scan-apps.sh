@@ -751,8 +751,8 @@ print_final_status() {
 }
 
 usage() {
-  cat <<'EOF'
-Usage: trivy-scan-apps.sh [--mode prereqs|fs|images|gitea|all] [--dry-run] [--execute]
+  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
+Usage: @SCRIPT_NAME@ [--mode prereqs|fs|images|gitea|all] [--dry-run] [--execute]
 
 Environment:
   SCAN_GITEA=1            Also clone and scan the seeded private app repos from Gitea.

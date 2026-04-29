@@ -16,7 +16,7 @@ warn() { echo "WARN $*" >&2; }
 
 usage() {
   cat <<EOF
-Usage: sync-local-image-cache.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Mirrors required Lima preload images into the local Docker registry cache.
 

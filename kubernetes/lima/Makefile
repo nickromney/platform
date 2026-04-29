@@ -46,7 +46,7 @@ LIMA_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301 3302
 K3SUP_CONTEXT ?= limavm-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
-K3S_VERSION ?= v1.35.1+k3s1
+K3S_VERSION ?= v1.35.4+k3s1
 K3S_CHANNEL ?= stable
 K3S_SERVER_EXTRA_ARGS ?= --flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb
 K3S_AGENT_EXTRA_ARGS ?=
@@ -1064,7 +1064,7 @@ test-shell:
 	@shellcheck \
 		"$(MAKEFILE_DIR)scripts/"*.sh \
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
-		"$(STACK_DIR)/scripts/check-version.sh"
+		"$(STACK_DIR)/scripts/check-component-version.sh"
 
 .PHONY: test-bats test-unit
 test-bats:
@@ -1090,7 +1090,7 @@ check-version:
 		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
 		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG); \
 	fi
-	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(abspath $(MAKEFILE_DIR)stages)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-version.sh" $(READONLY_MODE_FLAG)
+	@KUBECONFIG="$(KUBECONFIG_PATH)" STAGES_DIR="$(abspath $(MAKEFILE_DIR)stages)" TARGET_TFVARS="$(target_var_file)" PRELOAD_IMAGES_FILE="$(preload_images_file)" "$(STACK_DIR)/scripts/check-component-version.sh" $(READONLY_MODE_FLAG)
 	@echo ""
 	@"$(STACK_DIR)/scripts/check-provider-version.sh" $(READONLY_MODE_FLAG)
 

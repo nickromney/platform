@@ -14,7 +14,7 @@ SECRET_NAME="${MKCERT_CA_SECRET_NAME:-mkcert-ca-key-pair}"
 
 usage() {
   cat <<EOF
-Usage: bootstrap-mkcert-ca.sh [--dry-run] [--execute]
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Create or update the cert-manager TLS secret from the local mkcert root CA.
 
