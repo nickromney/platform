@@ -31,6 +31,7 @@ HOST_FORWARDS := $(SCRIPTS_DIR)/ensure-host-forwards.sh
 ENSURE_IMAGE_CACHE := $(SCRIPTS_DIR)/ensure-image-cache.sh
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
+BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
 TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
 BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
@@ -946,6 +947,7 @@ apply: workflow-validate
 	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
 		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc STAGE="$(STAGE)"; \
 		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
+		run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
 		run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
 	fi
 
@@ -1121,7 +1123,19 @@ check-sso-e2e:
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
-	STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+	tfvar_files=(); \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		tfvar_files+=("$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			--optional-file "$$stage_tfvars" \
+			--optional-file "$(target_var_file)" \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+	); \
+	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: gitea-sync
 gitea-sync:

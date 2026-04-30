@@ -61,6 +61,9 @@ K3S_CONFIG_FRAGMENT="${K3S_CONFIG_FRAGMENT:-/etc/rancher/k3s/config.yaml.d/90-he
 PLATFORM_GATEWAY_NAMESPACE="${PLATFORM_GATEWAY_NAMESPACE:-platform-gateway}"
 PLATFORM_GATEWAY_INTERNAL_SVC="${PLATFORM_GATEWAY_INTERNAL_SVC:-platform-gateway-nginx-internal}"
 GATEWAY_DEPLOY_NAME="${GATEWAY_DEPLOY_NAME:-platform-gateway-nginx}"
+NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
+NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
+GATEWAY_RECONCILE_ANNOTATION="${GATEWAY_RECONCILE_ANNOTATION:-platform.publiccloudexperiments.net/oidc-reconcile-at}"
 PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
 PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
 GATEWAY_DEPLOY_WAIT_SECONDS="${GATEWAY_DEPLOY_WAIT_SECONDS:-900}"
@@ -175,13 +178,28 @@ fi
 ok "Slicer node: ${SLICER_VM_NAME}"
 ok "gateway internal clusterIP: ${GATEWAY_IP}"
 
+gateway_data_plane_ready() {
+  kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1 || return 1
+
+  local endpoint_count
+  endpoint_count="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC" -o jsonpath='{range .subsets[*].addresses[*]}x{end}' 2>/dev/null | wc -c | tr -d ' ')"
+  [[ "${endpoint_count:-0}" -gt 0 ]]
+}
+
+request_gateway_reconcile() {
+  if kubectl -n "$NGINX_GATEWAY_NAMESPACE" rollout status "deploy/${NGINX_GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1; then
+    kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" annotate gateway "$PLATFORM_GATEWAY_NAME" "${GATEWAY_RECONCILE_ANNOTATION}=$(date +%s)" --overwrite >/dev/null 2>&1 || true
+  fi
+}
+
 ok "waiting for gateway data plane (${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME})"
 gw_end=$((SECONDS + GATEWAY_DEPLOY_WAIT_SECONDS))
 while (( SECONDS < gw_end )); do
-  if kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1; then
+  if gateway_data_plane_ready; then
     ok "gateway data plane ready"
     break
   fi
+  request_gateway_reconcile
   sleep 5
 done
 if (( SECONDS >= gw_end )); then
