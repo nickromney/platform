@@ -110,6 +110,7 @@ run "uat_namespace_has_isolate_label" {
     enable_actions_runner     = true
     enable_app_repo_sentiment = true
     enable_signoz             = false
+    gitea_admin_pwd           = "test-admin-password"
   }
 
   assert {
@@ -150,6 +151,7 @@ run "dev_namespace_has_isolate_label" {
     enable_actions_runner     = true
     enable_app_repo_sentiment = true
     enable_signoz             = false
+    gitea_admin_pwd           = "test-admin-password"
   }
 
   assert {
@@ -183,6 +185,7 @@ run "sit_namespace_has_application_defaults" {
     enable_gitea    = true
     enable_policies = true
     enable_signoz   = false
+    gitea_admin_pwd = "test-admin-password"
   }
 
   assert {
@@ -221,6 +224,41 @@ run "sit_namespace_has_application_defaults" {
   }
 }
 
+run "review_namespace_has_application_defaults" {
+  command = plan
+
+  variables {
+    cni_provider          = "cilium"
+    enable_hubble         = false
+    enable_argocd         = true
+    enable_gitea          = true
+    enable_policies       = true
+    enable_actions_runner = false
+    enable_signoz         = false
+    gitea_admin_pwd       = "test-admin-password"
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.review) == 1
+    error_message = "Expected kubernetes_namespace_v1.review to exist when Gitea and Argo CD are enabled"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.review[0].metadata[0].labels["kyverno.io/isolate"] == "true"
+    error_message = "Expected review namespace to have kyverno.io/isolate=true label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.review[0].metadata[0].labels["platform.publiccloudexperiments.net/namespace-role"] == "application"
+    error_message = "Expected review namespace to have platform.publiccloudexperiments.net/namespace-role=application label"
+  }
+
+  assert {
+    condition     = kubernetes_namespace_v1.review[0].metadata[0].labels["platform.publiccloudexperiments.net/environment"] == "review"
+    error_message = "Expected review namespace to have platform.publiccloudexperiments.net/environment=review label"
+  }
+}
+
 run "sso_namespace_has_sensitivity_labels" {
   command = plan
 
@@ -232,6 +270,7 @@ run "sso_namespace_has_sensitivity_labels" {
     enable_gateway_tls = true
     enable_sso         = true
     enable_signoz      = false
+    gitea_admin_pwd    = "test-admin-password"
   }
 
   assert {
@@ -266,6 +305,7 @@ run "platform_namespaces_have_platform_role" {
     enable_policies    = true
     enable_gitea       = true
     enable_signoz      = false
+    gitea_admin_pwd    = "test-admin-password"
   }
 
   assert {

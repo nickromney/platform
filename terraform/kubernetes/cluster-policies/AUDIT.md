@@ -77,7 +77,7 @@ SVG renders. Click any diagram to open its `.mmd` source.
 | `shared/namespace-default-deny.yaml` | Generates a `default-deny` `NetworkPolicy` for namespaces labeled `kyverno.io/isolate=true`. | Valid scaffold; the label is defined in Terraform-managed namespaces. |
 | `shared/protect-default-deny.yaml` | Blocks deletion of generated `default-deny` policies in isolated namespaces. | Now enforced instead of audit-only. |
 | `shared/restrict-image-registries.yaml` | Audits image sources in selected namespaces against an allowlist. | Still audit-only and intentionally broad. |
-| `shared/require-app-labels-application-namespaces.yaml` | Enforces `app`, `tier`, `project=kindlocal`, and `team=dolphin` on both the `Deployment` object and its pod template in any namespace labeled `platform.publiccloudexperiments.net/namespace-role=application`. | This decouples label enforcement from the current `dev`/`uat` workload namespaces and is now live-proven by the empty `sit` namespace as well. |
+| `shared/require-app-labels-application-namespaces.yaml` | Enforces `app`, `tier`, `project=kindlocal`, and a non-empty `team` label on both the `Deployment` object and its pod template in any namespace labeled `platform.publiccloudexperiments.net/namespace-role=application`. | This decouples label enforcement from the current `dev`/`uat` workload namespaces and is now live-proven by the empty `sit` namespace as well. |
 | `uat/uat-restrict-capabilities.yaml` | Audits dropped capabilities, non-privileged execution, and disabled host namespaces for pods in `uat`. | Still partial restricted-profile coverage and still audit-only. |
 
 ## What changed in this branch

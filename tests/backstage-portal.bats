@@ -175,11 +175,19 @@ assert "apps/backstage/.yarn/releases/* linguist-generated=true" in gitattribute
 assert "apps/backstage/yarn.lock linguist-generated=true" in gitattributes
 assert not (app_dir / "packages/backend/Dockerfile").exists()
 assert '"build-image": "docker build ../.. -f ../../Dockerfile --tag backstage"' in backend_package
+assert production["app"]["title"] == "Portal"
+assert local_config["app"]["title"] == "Portal"
 assert production["app"]["baseUrl"] == "${BACKSTAGE_BASE_URL}"
 assert production["backend"]["baseUrl"] == "${BACKSTAGE_BASE_URL}"
+assert production["backend"]["cors"] == {
+    "origin": "${BACKSTAGE_BASE_URL}",
+    "methods": ["GET", "HEAD", "PATCH", "POST", "PUT", "DELETE"],
+    "credentials": True,
+}
 assert production["backend"]["database"]["client"] == "better-sqlite3"
 assert production["backend"]["database"]["connection"] == {"directory": "/tmp/backstage"}
 assert local_config["backend"]["database"]["connection"] == {"directory": "/tmp/backstage"}
+assert "localhost:3000" not in (app_dir / "app-config.production.yaml").read_text(encoding="utf-8")
 assert production["auth"]["environment"] == "production"
 assert "guest" not in production["auth"]["providers"]
 assert "guest" not in local_config["auth"]["providers"]
@@ -214,6 +222,9 @@ assert "@backstage/plugin-search-backend-module-pg" not in backend_package
 assert '"pg":' not in backend_package
 assert "ProxiedSignInPage" in frontend
 assert 'provider="oauth2Proxy"' in frontend
+assert "portalTheme" in frontend
+assert "ThemeBlueprint.make" in (app_dir / "packages/app/src/modules/theme.tsx").read_text(encoding="utf-8")
+assert ">Portal<" in (app_dir / "packages/app/src/modules/nav/LogoFull.tsx").read_text(encoding="utf-8")
 
 users = {
     doc["metadata"]["name"]: doc["spec"]["profile"]["email"]
@@ -463,6 +474,7 @@ expected_files = {
     "README.md",
     "catalog-info.yaml",
     ".gitea/workflows/build.yaml",
+    ".gitea/workflows/review-environment.yaml",
     "apps/frontend/Dockerfile",
     "apps/frontend/index.html",
     "apps/frontend/nginx.conf",
@@ -489,6 +501,7 @@ prometheus_scrape = yaml.safe_load((content_dir / "kubernetes/observability/prom
 cilium_docs = list(yaml.safe_load_all((content_dir / "kubernetes/policies/cilium-frontend-backend.yaml").read_text(encoding="utf-8")))
 kyverno = yaml.safe_load((content_dir / "kubernetes/policies/kyverno-container-baseline.yaml").read_text(encoding="utf-8"))
 dashboard = (content_dir / "observability/grafana-dashboard.json").read_text(encoding="utf-8")
+review_workflow = (content_dir / ".gitea/workflows/review-environment.yaml").read_text(encoding="utf-8")
 catalog_docs = list(yaml.safe_load_all((content_dir / "catalog-info.yaml").read_text(encoding="utf-8")))
 catalog = catalog_docs[0]
 catalog_api = catalog_docs[1]
@@ -522,6 +535,24 @@ assert "${{ values.name }}-golden-signals" in dashboard
 assert "victoriametrics-logs-datasource" in dashboard
 assert "k8s.namespace.name" in dashboard
 assert "http_request_duration_seconds_sum" in dashboard
+assert "branches-ignore" in review_workflow
+assert "runs-on: [self-hosted, in-cluster, review-env]" in review_workflow
+assert "delete:" in review_workflow
+assert "REVIEW_REF_TYPE" in review_workflow
+assert "REVIEW_NAMESPACE: review" in review_workflow
+assert "platform.local/review-environment" in review_workflow
+assert "${APP_NAME}-${slug}.review.127.0.0.1.sslip.io" in review_workflow
+assert "Remove deleted branch review environment" in review_workflow
+assert "Skipping review environment cleanup for deleted" in review_workflow
+assert "kubectl -n \"${REVIEW_NAMESPACE}\" delete deployment,service" in review_workflow
+assert "kubectl -n gateway-routes delete httproute" in review_workflow
+assert "docker push" in review_workflow
+assert "imagePullSecrets" in review_workflow
+assert "gitea-registry-creds" in review_workflow
+assert "kind: CiliumNetworkPolicy" in review_workflow
+assert "kind: HTTPRoute" in review_workflow
+assert "kind: ReferenceGrant" in review_workflow
+assert "kubectl create namespace" not in review_workflow
 assert any(link["title"] == "Grafana Golden Signals" for link in catalog["metadata"]["links"])
 assert any(link["title"] == "Victoria Logs" for link in catalog["metadata"]["links"])
 assert catalog["metadata"]["annotations"]["backstage.io/source-location"] == "url:https://gitea.admin.127.0.0.1.sslip.io/platform/${{ values.name }}/"

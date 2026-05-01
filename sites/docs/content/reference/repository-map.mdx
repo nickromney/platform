@@ -10,22 +10,46 @@ than by one application package.
 
 <FileTree>
   <FileTree.Folder name="platform" defaultOpen>
+    <FileTree.Folder name="apps">
+      <FileTree.Folder name="apim-simulator" />
+      <FileTree.Folder name="backstage" />
+      <FileTree.Folder name="idp-core" />
+      <FileTree.Folder name="idp-mcp" />
+      <FileTree.Folder name="idp-sdk" />
+      <FileTree.Folder name="platform-mcp" />
+      <FileTree.Folder name="sentiment" />
+      <FileTree.Folder name="subnetcalc" />
+    </FileTree.Folder>
+    <FileTree.Folder name="catalog" />
     <FileTree.Folder name="kubernetes">
       <FileTree.Folder name="kind" />
       <FileTree.Folder name="lima" />
       <FileTree.Folder name="slicer" />
     </FileTree.Folder>
     <FileTree.Folder name="terraform">
-      <FileTree.Folder name="kubernetes" />
-    </FileTree.Folder>
-    <FileTree.Folder name="apps">
-      <FileTree.Folder name="subnetcalc" />
-      <FileTree.Folder name="sentiment" />
+      <FileTree.Folder name="kubernetes">
+        <FileTree.Folder name="apps">
+          <FileTree.Folder name="cert-manager-config" />
+          <FileTree.Folder name="gitea-actions-runner" />
+          <FileTree.Folder name="platform-gateway-routes-sso" />
+          <FileTree.Folder name="workloads" />
+        </FileTree.Folder>
+        <FileTree.Folder name="cluster-policies" />
+      </FileTree.Folder>
     </FileTree.Folder>
     <FileTree.Folder name="docs">
       <FileTree.Folder name="adr" />
       <FileTree.Folder name="ddd" />
+      <FileTree.Folder name="plans" />
     </FileTree.Folder>
+    <FileTree.Folder name="sites">
+      <FileTree.Folder name="docs" />
+    </FileTree.Folder>
+    <FileTree.Folder name="skills">
+      <FileTree.Folder name="use-platform" />
+    </FileTree.Folder>
+    <FileTree.Folder name="mk" />
+    <FileTree.Folder name="schemas" />
     <FileTree.Folder name="scripts" />
     <FileTree.Folder name="tests" />
   </FileTree.Folder>
@@ -39,8 +63,17 @@ than by one application package.
 | `kubernetes/lima` | VM-backed k3s runtime. |
 | `kubernetes/slicer` | Optional Slicer microVM runtime. |
 | `terraform/kubernetes` | Shared in-cluster platform resources. |
+| `terraform/kubernetes/apps/gitea-actions-runner` | In-cluster Gitea Actions runner and review-environment RBAC. |
+| `terraform/kubernetes/cluster-policies` | Cilium and Kyverno policy source. |
+| `apps/backstage` | Portal UI, catalog, TechDocs, and scaffolding templates. |
+| `apps/idp-core` | Product API for catalog, runtime, environments, deployments, secrets, and actions. |
+| `apps/idp-sdk` | TypeScript client for the IDP API. |
+| `apps/idp-mcp` | MCP wrapper over the IDP API. |
+| `apps/platform-mcp` | Learning and diagnostic MCP server for platform workflows. |
 | `apps/subnetcalc` | Main domain-rich sample app. |
 | `apps/sentiment` | Smaller authenticated sample app. |
+| `sites/docs` | Local Nextra documentation site. |
+| `skills/use-platform` | Repo-local Codex skill and operator memory. |
 | `docs/adr` | Design decisions. |
 | `docs/ddd` | Domain language and context maps. |
 | `scripts` | Root operator and validation helpers. |

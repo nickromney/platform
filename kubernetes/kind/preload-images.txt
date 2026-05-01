@@ -88,6 +88,7 @@ otel/opentelemetry-collector-contrib:0.150.1
 # --- Gitea Actions Runner ---
 docker:29.4.1-cli
 gitea/act_runner:0.4.1
+kindest/node:v1.35.1
 
 # --- Build base images (used in COPY --from during docker build) ---
 ghcr.io/astral-sh/uv:0.10.4

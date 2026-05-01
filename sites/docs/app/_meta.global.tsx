@@ -58,6 +58,7 @@ const meta = {
       'tooling-requirements': 'Tooling requirements',
       'daily-loop': 'Daily loop',
       'health-and-urls': 'Health and URLs',
+      'review-environments': 'Review environments',
       footguns: 'Footguns',
       'reset-and-cleanup': 'Reset and cleanup',
       troubleshooting: 'Troubleshooting'
@@ -70,7 +71,7 @@ const meta = {
       'patterns': 'Application patterns',
       'apim-simulator': 'APIM simulator',
       'platform-mcp': 'Platform MCP',
-      'backstage-idp': 'Backstage and IDP',
+      'backstage-idp': 'Portal and IDP',
       subnetcalc: 'Subnetcalc',
       sentiment: 'Sentiment'
     }

@@ -5,12 +5,12 @@ import { SignInPageBlueprint } from '@backstage/plugin-app-react';
 import catalogPlugin from '@backstage/plugin-catalog/alpha';
 import scaffolderPlugin from '@backstage/plugin-scaffolder/alpha';
 import { navModule } from './modules/nav';
+import { portalTheme } from './modules/theme';
 
 const signInPage = SignInPageBlueprint.make({
   params: {
-    loader: async () => props => (
-      <ProxiedSignInPage {...props} provider="oauth2Proxy" />
-    ),
+    loader: async () => props =>
+      <ProxiedSignInPage {...props} provider="oauth2Proxy" />,
   },
 });
 
@@ -21,7 +21,7 @@ export default createApp({
     navModule,
     createFrontendModule({
       pluginId: 'app',
-      extensions: [signInPage],
+      extensions: [signInPage, portalTheme],
     }),
   ],
 });

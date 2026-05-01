@@ -338,6 +338,8 @@ assert "external_platform_image_refs = {" in render_script
 assert "apps/platform-mcp/platform_mcp" in render_script
 assert "apps/idp-core/app" in render_script
 assert "apps/backstage/packages" in render_script
+assert "apps/apim-simulator/catalog-info.yaml" in build_script
+assert "apps/apim-simulator/catalog-info.yaml" in render_script
 assert "platform/platform-mcp:${platform_mcp_image_tag}" in render_script
 assert "platform/backstage:${backstage_image_tag:-latest}" in render_script
 assert "platform/idp-core:${idp_core_image_tag}" in render_script

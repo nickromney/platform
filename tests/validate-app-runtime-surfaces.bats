@@ -540,6 +540,7 @@ expected_counts = {
     "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
         "image: docker:29.4.1-cli": 1,
         "image: gitea/act_runner:0.4.1": 2,
+        "image: kindest/node:v1.35.1": 1,
     },
     "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
         "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
@@ -567,7 +568,7 @@ print(f"validated {validated} external image expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 22 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 23 external image expectation(s)"* ]]
 }
 
 @test "subnetcalc frontend stays single-replica for local laptop clusters" {
@@ -622,6 +623,7 @@ required_lines = [
     "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
     "docker:29.4.1-cli",
     "gitea/act_runner:0.4.1",
+    "kindest/node:v1.35.1",
     "python:3.12.13-alpine3.23",
     "docker.io/curlimages/curl:8.19.0",
     "curlimages/curl:8.19.0",
@@ -637,6 +639,7 @@ lock_expectations = [
     "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
     "docker:29.4.1-cli",
     "gitea/act_runner:0.4.1",
+    "kindest/node:v1.35.1",
     "python:3.12.13-alpine3.23",
     "docker.io/curlimages/curl:8.19.0",
     "curlimages/curl:8.19.0",
@@ -653,5 +656,5 @@ print(f"validated {len(preload_files)} preload image snapshot(s) and {len(lock_e
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 preload image snapshot(s) and 9 lock entry(ies)"* ]]
+  [[ "${output}" == *"validated 4 preload image snapshot(s) and 10 lock entry(ies)"* ]]
 }

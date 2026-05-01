@@ -38,7 +38,7 @@ setup() {
   [[ "${output}" == *"Deployments in application namespaces must carry app, tier,"* ]]
   [[ "${output}" == *$'            matchLabels:\n              platform.publiccloudexperiments.net/namespace-role: application'* ]]
   [[ "${output}" == *"project: kindlocal"* ]]
-  [[ "${output}" == *"team: dolphin"* ]]
+  [[ "${output}" == *"team: ?*"* ]]
   [[ "${output}" == *"app: ?*"* ]]
   [[ "${output}" == *"tier: ?*"* ]]
 }
@@ -97,7 +97,8 @@ setup() {
   [[ "${output}" == *"name: application-baseline"* ]]
   [[ "${output}" == *"name: apim-baseline"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/component: authentication-proxy"* ]]
-  [[ "${output}" == *"k8s:app.kubernetes.io/name: dex"* ]]
+  [[ "${output}" == *"key: k8s:app.kubernetes.io/name"* ]]
+  [[ "${output}" == *"      - dex"* ]]
   [[ "${output}" == *"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role: shared"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-router"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-api"* ]]

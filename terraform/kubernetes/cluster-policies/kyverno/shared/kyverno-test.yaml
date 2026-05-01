@@ -107,6 +107,7 @@ results:
     rule: require-app-boundary-labels
     resources:
       - good-app
+      - good-non-dolphin-team-app
     kind: Deployment
     result: pass
   - policy: require-app-labels-application-namespaces
