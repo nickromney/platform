@@ -23,6 +23,22 @@ make tui
 Root `make` is a router. Root `make prereqs` and `make test` are also
 informational; they point you at focused entrypoints.
 
+## Guided Workflows
+
+```bash
+make tui
+make workflow-ui
+scripts/platform-tui.sh
+scripts/platform-workflow.sh options --execute
+scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan
+scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan --app sentiment=off
+scripts/platform-workflow-ui.sh --execute --host 127.0.0.1 --port 8765
+```
+
+`make tui` is the primary guided interface. `make workflow-ui` serves the local
+browser chooser. `scripts/platform-workflow.sh` is the shared non-interactive
+core used by both wrappers.
+
 ## Version Audits
 
 ```bash
@@ -89,5 +105,6 @@ make -C apps/subnetcalc start-compose-happy
 ## Related Pages
 
 - [Daily loop](../operations/daily-loop)
+- [Guided workflows](../operations/guided-workflows)
 - [Version management](../concepts/version-management)
 - [Reset and cleanup](../operations/reset-and-cleanup)

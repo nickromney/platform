@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test status tui workflow-ui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -17,14 +17,17 @@ SONAR_SCAN_REPO ?= $(CURDIR)
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 PLATFORM_STATUS_SCRIPT ?= scripts/platform-status.sh
 PLATFORM_TUI_SCRIPT ?= scripts/platform-tui.sh
+PLATFORM_WORKFLOW_UI_SCRIPT ?= scripts/platform-workflow-ui.sh
 RESET_LOCAL_STATE_SCRIPT ?= scripts/reset-local-state.sh
 STATUS_FORMAT ?= text
+WORKFLOW_UI_HOST ?= 127.0.0.1
+WORKFLOW_UI_PORT ?= 8765
 
 .DEFAULT_GOAL := default
 
 include mk/common.mk
 
-.PHONY: default help prereqs test status tui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs test status tui workflow-ui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -60,6 +63,7 @@ help:
 		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer' \
 		'make test\tShow the focused test entrypoints' \
 		'make tui\tOpen the Gum-based local runtime chooser when available' \
+		'make workflow-ui [WORKFLOW_UI_PORT=8765]\tServe the browser workflow chooser on localhost' \
 	| while IFS=$$'\t' read -r command description; do \
 		printf '  %-60s %s\n' "$$command" "$$description"; \
 	done
@@ -129,6 +133,9 @@ status:
 
 tui:
 	@"$(PLATFORM_TUI_SCRIPT)" --execute
+
+workflow-ui:
+	@"$(PLATFORM_WORKFLOW_UI_SCRIPT)" --execute --host "$(WORKFLOW_UI_HOST)" --port "$(WORKFLOW_UI_PORT)"
 
 clean-local-state:
 	@"$(RESET_LOCAL_STATE_SCRIPT)" \

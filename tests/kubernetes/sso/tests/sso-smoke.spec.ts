@@ -36,6 +36,8 @@ const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', false)
 const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
 const INCLUDE_BACKSTAGE = isEnabled('SSO_E2E_ENABLE_BACKSTAGE', true)
 const INCLUDE_MCP = isEnabled('SSO_E2E_ENABLE_MCP', true)
+const INCLUDE_SENTIMENT = isEnabled('SSO_E2E_ENABLE_SENTIMENT', true)
+const INCLUDE_SUBNETCALC = isEnabled('SSO_E2E_ENABLE_SUBNETCALC', true)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
 const BASE_DOMAIN = process.env.SSO_E2E_BASE_DOMAIN || '127.0.0.1.sslip.io'
@@ -156,7 +158,13 @@ const BASE_TARGETS: Target[] = [
   },
 ]
 
-const TARGETS: Target[] = [...BASE_TARGETS]
+function filterTargetByEnabledApps(target: Target) {
+  if (target.name.startsWith('sentiment-')) return INCLUDE_SENTIMENT
+  if (target.name.startsWith('subnetcalc-')) return INCLUDE_SUBNETCALC
+  return true
+}
+
+const TARGETS: Target[] = BASE_TARGETS.filter(filterTargetByEnabledApps)
 
 if (INCLUDE_BACKSTAGE) {
   TARGETS.push({

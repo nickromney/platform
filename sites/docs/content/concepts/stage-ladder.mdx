@@ -29,6 +29,7 @@ stage-900 shape", not "run only the stage-900 delta".
 | `700` | App repos and local workload image flow | Workload sources can be reconciled. |
 | `800` | Gateway TLS, Headlamp, observability | Operator-facing HTTPS and observability. The default path is Prometheus, Grafana, and VictoriaLogs. |
 | `900` | Keycloak and `oauth2-proxy` SSO | Authenticated admin experience with org and app/environment groups. |
+| `950-local-idp` | Kind-only local IDP target | Post-900 local IDP path with SSO kept on and heavier optional services trimmed. |
 
 ## Runtime Differences
 
@@ -61,6 +62,37 @@ make -C kubernetes/lima 900 plan
 make -C kubernetes/slicer 900 check-health
 ```
 
+The guided workflow core accepts every stage in the ladder:
+
+```bash
+for stage in 100 200 300 400 500 600 700 800 900; do
+  scripts/platform-workflow.sh preview --execute \
+    --target kind \
+    --stage "$stage" \
+    --action plan
+done
+```
+
+For the resource-conscious local IDP path on Kind:
+
+```bash
+scripts/platform-workflow.sh preview --execute \
+  --target kind \
+  --stage 950-local-idp \
+  --action plan
+```
+
+Stage `700+` is where app repo/workload toggles are most useful:
+
+```bash
+scripts/platform-workflow.sh preview --execute \
+  --target kind \
+  --stage 800 \
+  --action plan \
+  --app sentiment=off \
+  --app subnetcalc=off
+```
+
 <Callout type="warning">
   Do not read `900` as an imperative action. It is a target shape. Re-running
   the same stage should converge or expose drift, not pile on a second copy of
@@ -70,6 +102,7 @@ make -C kubernetes/slicer 900 check-health
 ## Related Pages
 
 - [Run the Kind stack](../tutorials/first-kind-stack)
+- [Guided workflows](../operations/guided-workflows)
 - [Local runtimes](./local-runtimes)
 - [Platform pathways](./platform-pathways)
 - [Commands](../reference/commands)

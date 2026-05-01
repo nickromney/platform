@@ -24,6 +24,16 @@ The current server exposes:
 | `d2_format` | Format D2 diagram source. |
 | `d2_render` | Render D2 diagrams. |
 
+The current MCP surface is workload-level diagnostics and learning tooling. It
+does not yet expose the guided platform workflow abstraction, such as "plan or
+apply Kind to stage 700 with sentiment disabled". That abstraction currently
+lives in `scripts/platform-workflow.sh` and is shared by the TUI and local
+browser wrapper.
+
+When MCP grows workflow actions, keep them at the same operator intent level as
+the TUI: target, stage, action, and app toggles. Do not make MCP
+clients assemble low-level Terraform or Makefile details themselves.
+
 ## Local Development
 
 ```bash
@@ -75,5 +85,6 @@ PLATFORM_MCP_BEARER_TOKEN=... uv run platform-mcp-smoke
 
 - [APIM simulator](./apim-simulator)
 - [Portal and IDP](./backstage-idp)
+- [Guided workflows](../operations/guided-workflows)
 - [Identity and access](../concepts/identity-and-access)
 - [Health and URLs](../operations/health-and-urls)

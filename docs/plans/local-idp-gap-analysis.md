@@ -15,5 +15,5 @@ deployment loop. FastAPI, the developer portal, SDK, TUI, and MCP expose
 validated requests and status over those existing boundaries.
 
 The launch-default path remains `kubernetes/kind` because it runs Kubernetes in
-Docker. A 16GB machine should use an `idp-lite` profile before the full stage
+Docker. A 16GB machine should use an `950-local-idp` profile before the full stage
 900 teaching stack.

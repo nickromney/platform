@@ -21,7 +21,7 @@ The repo already has:
 
 At review start, the repo did not have runnable IDP container images. The
 current implementation adds those images, host-local-cache wiring, SSO browser
-coverage, API projection tests, and an `idp-lite` kind profile. The remaining
+coverage, API projection tests, and an `950-local-idp` kind profile. The remaining
 blocking gap is live stack proof: rebuild/apply kind stage 900, then run the
 health and browser SSO checks against that freshly applied stack.
 
@@ -299,7 +299,7 @@ cd apps/idp-core && UV_PROJECT_ENVIRONMENT=/tmp/platform-idp-core-venv uv run --
 python3 scripts/validate-json-schema.py schemas/idp/status.schema.json <sample-status-json>
 ```
 
-### 6. `idp-lite` Profile
+### 6. `950-local-idp` Profile
 
 Ownership:
 
@@ -311,7 +311,7 @@ Ownership:
 Red tests:
 
 - Add a test for the chosen public entrypoint, for example a new
-  `make -C kubernetes/kind idp-lite plan` or documented tfvars profile.
+  `make -C kubernetes/kind 950-local-idp plan`.
 - Add tests proving the lite profile includes:
   - kind
   - Gateway API/TLS
@@ -341,7 +341,7 @@ Green implementation:
 Focused verification:
 
 ```bash
-make -C kubernetes/kind idp-lite plan
+make -C kubernetes/kind 950-local-idp plan
 make -C kubernetes/kind check-stage-monotonicity
 ```
 
@@ -444,7 +444,7 @@ cd apps/backstage && docker build -t platform/backstage:test -f Dockerfile .
 kubectl kustomize terraform/kubernetes/apps/idp
 kubectl kustomize terraform/kubernetes/apps/platform-gateway-routes-sso
 cd terraform/kubernetes && tofu test -filter=tests/direct_workload_apps.tftest.hcl -filter=tests/gitops_features.tftest.hcl -filter=tests/validations.tftest.hcl
-make -n -C kubernetes/kind idp-lite plan
+make -n -C kubernetes/kind 950-local-idp plan
 make -C kubernetes/kind build-local-platform-images DRY_RUN=1
 cd tests/kubernetes/sso && PLATFORM_DEMO_PASSWORD=dummy bun x playwright test --list
 make check-version
