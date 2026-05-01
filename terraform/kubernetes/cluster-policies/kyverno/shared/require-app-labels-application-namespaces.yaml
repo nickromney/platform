@@ -30,7 +30,7 @@ spec:
         allowExistingViolations: true
         message: >-
           Deployments in application namespaces must carry app, tier,
-          project=kindlocal, and team=dolphin labels on both the Deployment
+          project=kindlocal, and a non-empty team label on both the Deployment
           and Pod template.
         pattern:
           metadata:
@@ -38,7 +38,7 @@ spec:
               app: "?*"
               tier: "?*"
               project: kindlocal
-              team: dolphin
+              team: "?*"
           spec:
             template:
               metadata:
@@ -46,4 +46,4 @@ spec:
                   app: "?*"
                   tier: "?*"
                   project: kindlocal
-                  team: dolphin
+                  team: "?*"

@@ -1,0 +1,391 @@
+name: review-environment
+
+on:
+  push:
+    branches-ignore:
+      - main
+  delete:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: [self-hosted, in-cluster, review-env]
+    env:
+      APP_NAME: ${{ values.name }}
+      APP_TEAM: ${{ values.team }}
+      REGISTRY_NAMESPACE: platform
+      REVIEW_NAMESPACE: review
+    steps:
+      - name: Check out repository
+        if: gitea.event_name != 'delete'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Compute review identity
+        run: |
+          set -eu
+          event_name="${GITEA_EVENT_NAME:-${GITHUB_EVENT_NAME:-push}}"
+          branch="${GITHUB_REF_NAME:-${GITEA_REF_NAME:-review}}"
+          ref_type="${GITEA_REF_TYPE:-${GITHUB_REF_TYPE:-branch}}"
+          if [ "${event_name}" = "delete" ] && [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH}" ]; then
+            branch="$(sed -n 's/.*"ref"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${GITHUB_EVENT_PATH}" | head -n 1)"
+            ref_type="$(sed -n 's/.*"ref_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${GITHUB_EVENT_PATH}" | head -n 1)"
+          fi
+          slug="$(printf '%s' "${branch}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/^$/review/' | cut -c1-32)"
+          echo "REVIEW_REF_TYPE=${ref_type:-branch}" >> "${GITHUB_ENV}"
+          echo "REVIEW_SLUG=${slug}" >> "${GITHUB_ENV}"
+          echo "REVIEW_NAME=${APP_NAME}-${slug}" >> "${GITHUB_ENV}"
+          echo "REVIEW_HOST=${APP_NAME}-${slug}.review.127.0.0.1.sslip.io" >> "${GITHUB_ENV}"
+          if [ "${event_name}" != "delete" ]; then
+            : "${REGISTRY_HOST:?REGISTRY_HOST must be provided by the in-cluster runner}"
+            echo "REGISTRY=${REGISTRY_HOST}/${REGISTRY_NAMESPACE}" >> "${GITHUB_ENV}"
+          fi
+      - name: Remove deleted branch review environment
+        if: gitea.event_name == 'delete'
+        run: |
+          set -eu
+          if [ "${REVIEW_REF_TYPE:-branch}" != "branch" ]; then
+            echo "Skipping review environment cleanup for deleted ${REVIEW_REF_TYPE}"
+            exit 0
+          fi
+          selector="platform.local/review-environment=true,platform.local/review-slug=${REVIEW_SLUG},app=${APP_NAME}"
+          kubectl -n "${REVIEW_NAMESPACE}" delete deployment,service -l "${selector}" --ignore-not-found=true
+          kubectl -n "${REVIEW_NAMESPACE}" delete ciliumnetworkpolicy -l "${selector}" --ignore-not-found=true
+          kubectl -n "${REVIEW_NAMESPACE}" delete referencegrant -l "${selector}" --ignore-not-found=true
+          kubectl -n gateway-routes delete httproute -l "${selector}" --ignore-not-found=true
+      - name: Build and push branch images
+        if: gitea.event_name != 'delete'
+        run: |
+          set -eu
+          : "${REGISTRY_USERNAME:?REGISTRY_USERNAME must be provided by the in-cluster runner}"
+          : "${REGISTRY_PWD:?REGISTRY_PWD must be provided by the in-cluster runner}"
+          printf '%s' "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" --username "${REGISTRY_USERNAME}" --password-stdin
+          docker build -t "${REGISTRY}/${APP_NAME}-backend:${REVIEW_SLUG}" apps/backend
+          docker build -t "${REGISTRY}/${APP_NAME}-frontend:${REVIEW_SLUG}" apps/frontend
+          docker push "${REGISTRY}/${APP_NAME}-backend:${REVIEW_SLUG}"
+          docker push "${REGISTRY}/${APP_NAME}-frontend:${REVIEW_SLUG}"
+      - name: Deploy review environment
+        if: gitea.event_name != 'delete'
+        run: |
+          set -eu
+          cat <<YAML | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ${REVIEW_NAME}-backend
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app.kubernetes.io/name: ${APP_NAME}-backend
+              app.kubernetes.io/component: backend
+              app.kubernetes.io/part-of: ${APP_NAME}
+              app: ${APP_NAME}
+              project: kindlocal
+              team: ${APP_TEAM}
+              tier: backend
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: ${APP_NAME}-backend
+                app.kubernetes.io/component: backend
+                platform.local/review-slug: ${REVIEW_SLUG}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: ${APP_NAME}-backend
+                  app.kubernetes.io/component: backend
+                  app: ${APP_NAME}
+                  project: kindlocal
+                  team: ${APP_TEAM}
+                  tier: backend
+                  platform.local/review-environment: "true"
+                  platform.local/review-slug: ${REVIEW_SLUG}
+              spec:
+                imagePullSecrets:
+                  - name: gitea-registry-creds
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: backend
+                    image: ${REGISTRY}/${APP_NAME}-backend:${REVIEW_SLUG}
+                    imagePullPolicy: Always
+                    ports:
+                      - name: http
+                        containerPort: ${{ values.backendPort }}
+                    readinessProbe:
+                      httpGet:
+                        path: /health
+                        port: http
+                    securityContext:
+                      privileged: false
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                    volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
+                volumes:
+                  - name: tmp
+                    emptyDir: {}
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${REVIEW_NAME}-backend
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app.kubernetes.io/name: ${APP_NAME}-backend
+              app.kubernetes.io/component: backend
+              app: ${APP_NAME}
+              project: kindlocal
+              team: ${APP_TEAM}
+              tier: backend
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            selector:
+              app.kubernetes.io/name: ${APP_NAME}-backend
+              app.kubernetes.io/component: backend
+              platform.local/review-slug: ${REVIEW_SLUG}
+            ports:
+              - name: http
+                appProtocol: http
+                port: ${{ values.backendPort }}
+                targetPort: http
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ${REVIEW_NAME}-frontend
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app.kubernetes.io/name: ${APP_NAME}-frontend
+              app.kubernetes.io/component: frontend
+              app.kubernetes.io/part-of: ${APP_NAME}
+              app: ${APP_NAME}
+              project: kindlocal
+              team: ${APP_TEAM}
+              tier: frontend
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: ${APP_NAME}-frontend
+                app.kubernetes.io/component: frontend
+                platform.local/review-slug: ${REVIEW_SLUG}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: ${APP_NAME}-frontend
+                  app.kubernetes.io/component: frontend
+                  app: ${APP_NAME}
+                  project: kindlocal
+                  team: ${APP_TEAM}
+                  tier: frontend
+                  platform.local/review-environment: "true"
+                  platform.local/review-slug: ${REVIEW_SLUG}
+              spec:
+                imagePullSecrets:
+                  - name: gitea-registry-creds
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  runAsGroup: 65532
+                  fsGroup: 65532
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: frontend
+                    image: ${REGISTRY}/${APP_NAME}-frontend:${REVIEW_SLUG}
+                    imagePullPolicy: Always
+                    ports:
+                      - name: http
+                        containerPort: ${{ values.frontendPort }}
+                    readinessProbe:
+                      httpGet:
+                        path: /
+                        port: http
+                    securityContext:
+                      privileged: false
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                    volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
+                      - name: nginx-cache
+                        mountPath: /var/cache/nginx
+                      - name: nginx-run
+                        mountPath: /var/run/nginx
+                volumes:
+                  - name: tmp
+                    emptyDir: {}
+                  - name: nginx-cache
+                    emptyDir: {}
+                  - name: nginx-run
+                    emptyDir: {}
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${REVIEW_NAME}-frontend
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app.kubernetes.io/name: ${APP_NAME}-frontend
+              app.kubernetes.io/component: frontend
+              app: ${APP_NAME}
+              project: kindlocal
+              team: ${APP_TEAM}
+              tier: frontend
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            selector:
+              app.kubernetes.io/name: ${APP_NAME}-frontend
+              app.kubernetes.io/component: frontend
+              platform.local/review-slug: ${REVIEW_SLUG}
+            ports:
+              - name: http
+                appProtocol: http
+                port: ${{ values.frontendPort }}
+                targetPort: http
+          ---
+          apiVersion: cilium.io/v2
+          kind: CiliumNetworkPolicy
+          metadata:
+            name: ${REVIEW_NAME}-frontend
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app: ${APP_NAME}
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            endpointSelector:
+              matchLabels:
+                app: ${APP_NAME}
+                tier: frontend
+                platform.local/review-environment: "true"
+                platform.local/review-slug: ${REVIEW_SLUG}
+            ingress:
+              - fromEndpoints:
+                  - matchLabels:
+                      "k8s:io.kubernetes.pod.namespace": platform-gateway
+                      "k8s:app.kubernetes.io/name": platform-gateway-nginx
+                toPorts:
+                  - ports:
+                      - port: "${{ values.frontendPort }}"
+                        protocol: TCP
+            egress:
+              - toEndpoints:
+                  - matchLabels:
+                      app: ${APP_NAME}
+                      tier: backend
+                      platform.local/review-environment: "true"
+                      platform.local/review-slug: ${REVIEW_SLUG}
+                toPorts:
+                  - ports:
+                      - port: "${{ values.backendPort }}"
+                        protocol: TCP
+          ---
+          apiVersion: cilium.io/v2
+          kind: CiliumNetworkPolicy
+          metadata:
+            name: ${REVIEW_NAME}-backend
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app: ${APP_NAME}
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            endpointSelector:
+              matchLabels:
+                app: ${APP_NAME}
+                tier: backend
+                platform.local/review-environment: "true"
+                platform.local/review-slug: ${REVIEW_SLUG}
+            ingress:
+              - fromEndpoints:
+                  - matchLabels:
+                      app: ${APP_NAME}
+                      tier: frontend
+                      platform.local/review-environment: "true"
+                      platform.local/review-slug: ${REVIEW_SLUG}
+                toPorts:
+                  - ports:
+                      - port: "${{ values.backendPort }}"
+                        protocol: TCP
+          ---
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata:
+            name: ${REVIEW_NAME}
+            namespace: gateway-routes
+            labels:
+              app: ${APP_NAME}
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            parentRefs:
+              - group: gateway.networking.k8s.io
+                kind: Gateway
+                name: platform-gateway
+                namespace: platform-gateway
+                sectionName: https
+            hostnames:
+              - ${REVIEW_HOST}
+            rules:
+              - matches:
+                  - path:
+                      type: PathPrefix
+                      value: /
+                backendRefs:
+                  - group: ""
+                    kind: Service
+                    name: ${REVIEW_NAME}-frontend
+                    namespace: ${REVIEW_NAMESPACE}
+                    port: ${{ values.frontendPort }}
+          ---
+          apiVersion: gateway.networking.k8s.io/v1beta1
+          kind: ReferenceGrant
+          metadata:
+            name: allow-gateway-routes-${REVIEW_NAME}
+            namespace: ${REVIEW_NAMESPACE}
+            labels:
+              app: ${APP_NAME}
+              platform.local/review-environment: "true"
+              platform.local/review-slug: ${REVIEW_SLUG}
+          spec:
+            from:
+              - group: gateway.networking.k8s.io
+                kind: HTTPRoute
+                namespace: gateway-routes
+            to:
+              - group: ""
+                kind: Service
+                name: ${REVIEW_NAME}-frontend
+          YAML
+      - name: Print review URL
+        if: gitea.event_name != 'delete'
+        run: |
+          echo "Review environment: https://${REVIEW_HOST}"

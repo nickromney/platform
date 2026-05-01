@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const repo = process.cwd()
@@ -213,6 +213,46 @@ run('all referenced diagrams are D2-generated', () => {
     }
   }
   if (missing.length) throw new Error(`Non-D2 diagram reference(s):\n${missing.join('\n')}`)
+})
+
+run('Nextra navigation includes current platform surfaces', () => {
+  const meta = readFileSync(join(repo, 'app/_meta.global.tsx'), 'utf8')
+  const required = [
+    "'review-environments': 'Review environments'",
+    "'backstage-idp': 'Portal and IDP'",
+  ]
+  const missing = required.filter(snippet => !meta.includes(snippet))
+  if (missing.length) {
+    throw new Error(`Missing Nextra navigation entries:\n${missing.join('\n')}`)
+  }
+})
+
+run('repository map FileTree includes active source trees', () => {
+  const mapPath = join(repo, 'content/reference/repository-map.mdx')
+  const map = readFileSync(mapPath, 'utf8')
+  const tree = map.match(/<FileTree>[\s\S]*<\/FileTree>/)?.[0] ?? ''
+  const required = [
+    'name="backstage"',
+    'name="idp-core"',
+    'name="idp-mcp"',
+    'name="idp-sdk"',
+    'name="platform-mcp"',
+    'name="gitea-actions-runner"',
+    'name="cluster-policies"',
+    'name="sites"',
+    'name="use-platform"',
+  ]
+  const missing = required.filter(snippet => !tree.includes(snippet))
+  if (missing.length) {
+    throw new Error(`Repository map FileTree missing entries:\n${missing.join('\n')}`)
+  }
+})
+
+run('review environments page exists', () => {
+  const pagePath = join(repo, 'content/operations/review-environments.mdx')
+  if (!existsSync(pagePath)) {
+    throw new Error('Missing content/operations/review-environments.mdx')
+  }
 })
 
 for (const [file, theme] of themePairs) {

@@ -33,6 +33,38 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: good-non-dolphin-team-app
+  namespace: app-demo
+  labels:
+    app: demo
+    tier: frontend
+    project: kindlocal
+    team: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: demo
+        tier: frontend
+        project: kindlocal
+        team: platform
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: app
+          image: quay.io/curl/curl:8.12.1
+          resources:
+            limits:
+              memory: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: bad-app
   namespace: app-demo
   labels:

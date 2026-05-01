@@ -22,6 +22,7 @@ data:
         - "linux"
         - "arm64"
         - "in-cluster"
+        - "review-env"
     cache:
       enabled: true
       dir: /data/cache

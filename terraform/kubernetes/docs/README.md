@@ -184,6 +184,9 @@ Enable the runner via:
 
 The runner uses the host Docker socket and registers itself against the in-cluster Gitea.
 This gives you an in‑cluster CI path that can build/push images to the Gitea registry.
+Review-environment workflows target the explicit `review-env` runner label in
+addition to `self-hosted` and `in-cluster`; do not alias this deploy-capable
+runner as `ubuntu-latest`.
 
 ### 3) Registry pull secrets for namespaces
 
@@ -191,7 +194,10 @@ If you want workloads to pull images from the local Gitea registry, add namespac
 
 - `registry_secret_namespaces = ["<your-namespace>"]`
 
-This creates a `gitea-registry-creds` secret in each namespace.
+This creates a `gitea-registry-creds` secret in each namespace. The platform
+also creates one automatically in the `review` namespace when the in-cluster
+Gitea and Argo CD substrate is enabled, because branch review environments pull
+branch-tagged images from the same registry.
 You still need to reference the secret from workloads/service accounts:
 
 - `imagePullSecrets: [{ name: gitea-registry-creds }]`

@@ -11,8 +11,13 @@ run "registry_secret_namespaces_explicit" {
   }
 
   assert {
-    condition     = length(kubernetes_secret_v1.gitea_registry_creds) == 2
-    error_message = "Expected 2 gitea_registry_creds secrets when registry_secret_namespaces has 2 entries"
+    condition     = length(kubernetes_secret_v1.gitea_registry_creds) == 3
+    error_message = "Expected 3 gitea_registry_creds secrets when registry_secret_namespaces has 2 entries and review environments are enabled"
+  }
+
+  assert {
+    condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), "review")
+    error_message = "Expected explicit registry_secret_namespaces to still include the managed review namespace secret"
   }
 
   assert {
@@ -40,6 +45,7 @@ run "registry_secret_namespaces_auto_from_app_repos" {
     enable_app_repo_subnetcalc = true
 
     registry_secret_namespaces = []
+    gitea_admin_pwd            = "test-admin-password"
   }
 
   assert {
@@ -58,7 +64,35 @@ run "registry_secret_namespaces_auto_from_app_repos" {
   }
 
   assert {
-    condition     = length(kubernetes_secret_v1.gitea_registry_creds) == 3
-    error_message = "Expected exactly 3 auto-created registry secrets (dev, uat, apim)"
+    condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), "mcp")
+    error_message = "Expected gitea_registry_creds to be created for mcp when subnetcalc repo is enabled"
+  }
+
+  assert {
+    condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), "review")
+    error_message = "Expected gitea_registry_creds to be created for review when review environments are enabled"
+  }
+
+  assert {
+    condition     = length(kubernetes_secret_v1.gitea_registry_creds) == 5
+    error_message = "Expected exactly 5 auto-created registry secrets (dev, uat, apim, mcp, review)"
+  }
+}
+
+run "registry_secret_namespaces_auto_includes_review_without_runner" {
+  command = plan
+
+  variables {
+    enable_argocd         = true
+    enable_gitea          = true
+    enable_actions_runner = false
+
+    registry_secret_namespaces = []
+    gitea_admin_pwd            = "test-admin-password"
+  }
+
+  assert {
+    condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), "review")
+    error_message = "Expected gitea_registry_creds to be created for review even when the actions runner is disabled"
   }
 }

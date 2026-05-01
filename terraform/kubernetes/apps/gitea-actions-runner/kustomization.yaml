@@ -3,4 +3,6 @@ kind: Kustomization
 
 resources:
   - configmap.yaml
+  - serviceaccount.yaml
+  - review-environment-rbac.yaml
   - deployment.yaml

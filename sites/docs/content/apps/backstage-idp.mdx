@@ -1,20 +1,21 @@
 ---
-title: Backstage And IDP
+title: Portal and IDP
 description: Developer portal, IDP API, SDK, and MCP surfaces in the local platform.
 ---
 
-# Backstage And IDP
+# Portal and IDP
 
-Backstage is the developer portal for the local platform. It is not the IDP by
-itself: the portal consumes the IDP Core API, catalog entities, Kubernetes
-labels, TechDocs, and links to runtime surfaces. The IDP API is the product
-contract that SDKs, MCP, and automation clients use.
+Portal is the user-facing developer portal for the local platform. The backing
+service is still Backstage internally, but users should see Portal in the UI and
+docs. It is not the IDP by itself: Portal consumes the IDP Core API, catalog
+entities, Kubernetes labels, TechDocs, and links to runtime surfaces. The IDP
+API is the product contract that SDKs, MCP, and automation clients use.
 
 ## Surfaces
 
 | Surface | Repo path | Role |
 | --- | --- | --- |
-| Backstage portal | `apps/backstage` | Catalog, templates, TechDocs, and developer portal UI. |
+| Portal | `apps/backstage` | Catalog, templates, TechDocs, and developer portal UI. |
 | IDP Core | `apps/idp-core` | FastAPI product API for catalog, runtime, environments, deployments, secrets, and actions. |
 | IDP SDK | `apps/idp-sdk` | TypeScript client for the IDP API. |
 | IDP MCP | `apps/idp-mcp` | MCP wrapper over the IDP API. |
@@ -22,7 +23,7 @@ contract that SDKs, MCP, and automation clients use.
 
 ## Runtime Shape
 
-Backstage is available through the stage `900` portal route when enabled:
+Portal is available through the stage `900` route when enabled:
 
 ```text
 https://portal.127.0.0.1.sslip.io
@@ -62,9 +63,25 @@ Important catalog signals:
   refresh copied production catalog entries.
 </Callout>
 
+## Review Environments
+
+The platform-service template includes a generated Gitea Actions workflow for
+branch previews. Portal owns the scaffolding, while Kubernetes owns the shared
+runtime substrate: the `review` namespace, registry pull secret, wildcard
+gateway certificate, and policy baseline.
+
+```bash
+make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+The default Kind registry mode validates the substrate but leaves the Gitea
+runner disabled. Use a runner-capable image mode when you need branch pushes to
+create live preview URLs.
+
 ## Related Pages
 
 - [Platform MCP](./platform-mcp)
 - [APIM simulator](./apim-simulator)
 - [Identity and access](../concepts/identity-and-access)
 - [Health and URLs](../operations/health-and-urls)
+- [Review environments](../operations/review-environments)

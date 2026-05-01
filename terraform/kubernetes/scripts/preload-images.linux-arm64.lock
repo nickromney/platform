@@ -47,6 +47,7 @@ dhi.io/oauth2-proxy:7.15.2-debian13	dhi.io/oauth2-proxy@sha256:5585e678ef10e3f29
 otel/opentelemetry-collector-contrib:0.150.1	otel/opentelemetry-collector-contrib@sha256:23bc3f594ca26df26a6daa572861b21ef2f88c9c1336f11f4c1ed69078cb0642
 docker:29.4.1-cli	docker@sha256:24b137d1441b41c4aa60cd5a38d069feb70e191d8c4340bcf9a7ad9b86aefb23
 gitea/act_runner:0.4.1	gitea/act_runner@sha256:56cc968b104b34c72bf7a564d78b60fb2e5a531a9c0783e03ef6328a5d33bb45
+kindest/node:v1.35.1	kindest/node@sha256:05d7bcdefbda08b4e038f644c4df690cdac3fba8b06f8289f30e10026720a1ab
 ghcr.io/astral-sh/uv:0.10.4	ghcr.io/astral-sh/uv@sha256:2c51f61a7cfbd85154b74cd3466bcd2aa2a382c08585c1c4bae0ca311cbab7fe
 python:3.13-slim	python@sha256:ee541b6a5c74b5efe7068193261709b73fef081b61514a76d55e0ecd143d0ed7
 node:22-alpine	node@sha256:17d4748a1004bd443c82171cc6642a7e741ce0bd6e97f98fddc299b8add1e44d

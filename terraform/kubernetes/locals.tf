@@ -34,6 +34,7 @@ locals {
   argocd_oidc_enabled                  = var.enable_sso && var.enable_argocd_oidc
   cni_provider_effective               = lower(var.cni_provider)
   enable_cilium_effective              = local.cni_provider_effective == "cilium"
+  enable_review_environments           = var.enable_argocd && var.enable_gitea
   sso_provider_effective               = lower(trimspace(var.sso_provider))
   sso_provider_is_dex                  = local.sso_provider_effective == "dex"
   sso_provider_is_keycloak             = local.sso_provider_effective == "keycloak"
@@ -351,6 +352,7 @@ locals {
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
     (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["apim"] : [],
     (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["mcp"] : [],
+    local.enable_review_environments ? ["review"] : [],
   )))
 
   policies_repo_content_hash = sha1(join("", concat(

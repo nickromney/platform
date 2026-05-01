@@ -16,6 +16,7 @@ spec:
       labels:
         app.kubernetes.io/name: act-runner
     spec:
+      serviceAccountName: act-runner
       initContainers:
         # Download Docker CLI and buildx plugin for the runner to use
         # Pinned to 29.4.1-cli for reproducibility (buildx at /usr/local/libexec/docker/cli-plugins/)
@@ -37,6 +38,27 @@ spec:
               cp /usr/local/libexec/docker/cli-plugins/docker-buildx /tools/.docker/cli-plugins/
               chmod +x /tools/.docker/cli-plugins/docker-buildx
               echo "Buildx installed: $(/tools/.docker/cli-plugins/docker-buildx version)"
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+        # Reuse the Kubernetes node image already pinned by the local stack.
+        # It carries a kubectl binary that review-environment workflows need
+        # for scoped Deployment/Service/HTTPRoute/CiliumNetworkPolicy updates.
+        - name: install-kubectl
+          image: kindest/node:v1.35.1
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              kubectl_path="$(command -v kubectl || true)"
+              if [ -z "${kubectl_path}" ]; then
+                echo "kubectl not found in kind node image"
+                exit 1
+              fi
+              cp "${kubectl_path}" /tools/kubectl
+              chmod +x /tools/kubectl
+              echo "kubectl installed: $(/tools/kubectl version --client=true --output=yaml | head -n 3 | tr '\n' ' ')"
           volumeMounts:
             - name: tools
               mountPath: /tools

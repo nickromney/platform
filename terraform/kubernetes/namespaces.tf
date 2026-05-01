@@ -182,6 +182,27 @@ resource "kubernetes_namespace_v1" "sit" {
   ]
 }
 
+resource "kubernetes_namespace_v1" "review" {
+  count = local.enable_review_environments ? 1 : 0
+
+  metadata {
+    name = "review"
+    labels = {
+      "app.kubernetes.io/name"                                  = "review"
+      "app.kubernetes.io/managed-by"                            = "terraform"
+      "platform.publiccloudexperiments.net/namespace-role"      = "application"
+      "platform.publiccloudexperiments.net/environment"         = "review"
+      "platform.publiccloudexperiments.net/environment-purpose" = "branch-preview"
+      "kyverno.io/isolate"                                      = "true"
+    }
+  }
+
+  depends_on = [
+    kind_cluster.local,
+    null_resource.ensure_kind_kubeconfig,
+  ]
+}
+
 resource "kubernetes_namespace_v1" "apim" {
   count = var.enable_argocd && local.enable_subnetcalc_workloads_effective ? 1 : 0
 
