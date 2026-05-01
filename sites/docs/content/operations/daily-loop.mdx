@@ -13,12 +13,17 @@ target shape, inspect URLs, and reset only when local state needs a fresh start.
 ```bash
 cd ~/Developer/personal/platform
 make status
+make tui
 make -C kubernetes/kind status
 make -C kubernetes/kind show-urls
 ```
 
 `make status` reports local runtime status across the root workspace. Target
 status commands give the focused view for Kind, Lima, or Slicer.
+
+Use `make tui` when you want to choose the target, stage, action, and
+app toggles interactively. The TUI previews the generated Make command before
+running it.
 
 ## Reapply the Full Shape
 
@@ -30,6 +35,16 @@ make -C kubernetes/kind 900 check-health
 
 Use the same stage number repeatedly. The stage is a target shape, so reruns
 are part of the idempotence story.
+
+For a guided plan that disables the sentiment reference app:
+
+```bash
+scripts/platform-workflow.sh preview --execute \
+  --target kind \
+  --stage 900 \
+  --action plan \
+  --app sentiment=off
+```
 
 ## Work on Apps
 
@@ -61,6 +76,7 @@ shell audit, and policy checks. `make fmt` applies tracked formatting.
 
 ## Related Pages
 
+- [Guided workflows](./guided-workflows)
 - [Health and URLs](./health-and-urls)
 - [Reset and cleanup](./reset-and-cleanup)
 - [Commands](../reference/commands)

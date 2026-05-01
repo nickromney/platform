@@ -8,6 +8,7 @@ INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 DEFAULT_STAGE_TFVARS="${REPO_ROOT}/kubernetes/kind/stages/900-sso.tfvars"
 STAGE_TFVARS="${STAGE_TFVARS:-}"
+STAGE_TFVARS_FILES="${STAGE_TFVARS_FILES:-}"
 
 usage() {
   cat <<EOF
@@ -26,11 +27,26 @@ if [ -z "${STAGE_TFVARS}" ] && [ -f "${DEFAULT_STAGE_TFVARS}" ]; then
   STAGE_TFVARS="${DEFAULT_STAGE_TFVARS}"
 fi
 
+tfvar_files=()
+if [ -n "${STAGE_TFVARS_FILES}" ]; then
+  IFS=':' read -r -a tfvar_files <<<"${STAGE_TFVARS_FILES}"
+elif [ -n "${STAGE_TFVARS}" ]; then
+  tfvar_files=("${STAGE_TFVARS}")
+fi
+
 tfvar_value() {
   local key="$1"
   local default_value="$2"
 
-  if [ -z "${STAGE_TFVARS}" ] || [ ! -f "${STAGE_TFVARS}" ]; then
+  local existing_files=()
+  local file=""
+  for file in "${tfvar_files[@]}"; do
+    if [ -n "${file}" ] && [ -f "${file}" ]; then
+      existing_files+=("${file}")
+    fi
+  done
+
+  if [ "${#existing_files[@]}" -eq 0 ]; then
     echo "${default_value}"
     return 0
   fi
@@ -40,7 +56,7 @@ tfvar_value() {
     sed -nE \
       -e "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\\1/p" \
       -e "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*([^\"#[:space:]]+).*/\\1/p" \
-      "${STAGE_TFVARS}" | tail -n 1
+      "${existing_files[@]}" | tail -n 1
   )"
   if [ -n "${value}" ]; then
     echo "${value}"
@@ -101,6 +117,8 @@ SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP:-$(tfvar_bool enable_headlamp
 SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS:-$(tfvar_bool enable_victoria_logs false)}"
 SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE:-$(tfvar_bool enable_backstage true)}"
 SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP:-true}"
+SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT:-$(tfvar_bool enable_app_repo_sentiment true)}"
+SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC:-$(tfvar_bool enable_app_repo_subnetcalc true)}"
 SSO_E2E_PROVIDER_VALUE="${SSO_E2E_PROVIDER:-$(tfvar_value sso_provider keycloak)}"
 SSO_E2E_KEYCLOAK_REALM_VALUE="${SSO_E2E_KEYCLOAK_REALM:-$(tfvar_value keycloak_realm platform)}"
 SSO_E2E_BASE_PORT_VALUE="${SSO_E2E_BASE_PORT:-$(tfvar_value gateway_https_host_port 443)}"
@@ -146,6 +164,8 @@ if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE}" \
   SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP}" \
+  SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT}" \
+  SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC}" \
   SSO_E2E_PROVIDER="${SSO_E2E_PROVIDER_VALUE}" \
   SSO_E2E_KEYCLOAK_REALM="${SSO_E2E_KEYCLOAK_REALM_VALUE}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
@@ -158,6 +178,8 @@ else
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE}" \
   SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP}" \
+  SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT}" \
+  SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC}" \
   SSO_E2E_PROVIDER="${SSO_E2E_PROVIDER_VALUE}" \
   SSO_E2E_KEYCLOAK_REALM="${SSO_E2E_KEYCLOAK_REALM_VALUE}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \

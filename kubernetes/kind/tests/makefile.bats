@@ -26,7 +26,7 @@ setup() {
   [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=auto|on|off"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
-  [[ "${output}" == *"make idp-lite plan"* ]]
+  [[ "${output}" == *"make 950-local-idp plan"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
   [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
@@ -38,16 +38,16 @@ setup() {
   [[ "${output}" != *"${HOME}"* ]]
 }
 
-@test "kind idp-lite plan dispatches to stage 900 with the lite profile" {
-  run make -n -C "${REPO_ROOT}/kubernetes/kind" idp-lite plan
+@test "kind 950-local-idp plan dispatches to stage 900 with the lite profile" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" 950-local-idp plan
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'make plan STAGE="900"'* ]]
-  [[ "${output}" == *'KIND_PROFILE_TFVARS="'*"kubernetes/kind/profiles/idp-lite.tfvars"* ]]
+  [[ "${output}" == *'KIND_PROFILE_TFVARS="'*"kubernetes/kind/profiles/950-local-idp.tfvars"* ]]
 }
 
-@test "kind idp-lite profile keeps IDP essentials and disables heavy optional components" {
-  profile="${REPO_ROOT}/kubernetes/kind/profiles/idp-lite.tfvars"
+@test "kind 950-local-idp profile keeps IDP essentials and disables heavy optional components" {
+  profile="${REPO_ROOT}/kubernetes/kind/profiles/950-local-idp.tfvars"
 
   run test -f "${profile}"
   [ "${status}" -eq 0 ]

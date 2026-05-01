@@ -1289,6 +1289,7 @@ actions_json="$(
     build_action_json kind-reset 'Reset kind' kind kubernetes/kind "$( [ "${kind_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${kind_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/kind is not present' )" 'make -C kubernetes/kind reset AUTO_APPROVE=1' 1
     build_action_json kind-apply-100 'Kind stage 100 apply' kind kubernetes/kind "${kind_apply_100_enabled}" "${kind_apply_100_reason}" 'make -C kubernetes/kind 100 apply AUTO_APPROVE=1' 1
     build_action_json kind-apply-900 'Kind stage 900 apply' kind kubernetes/kind "${kind_apply_900_enabled}" "${kind_apply_900_reason}" 'make -C kubernetes/kind 900 apply AUTO_APPROVE=1' 1
+    build_action_json kind-apply-950-local-idp 'Kind 950 local IDP apply' kind kubernetes/kind "${kind_apply_900_enabled}" "${kind_apply_900_reason}" 'make -C kubernetes/kind 950-local-idp apply AUTO_APPROVE=1' 1
     build_action_json kind-switch 'Switch to kind' kind kubernetes/kind "${kind_apply_900_enabled}" "$( [ "${kind_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${kind_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/kind reset && make -C kubernetes/kind 100 apply && make -C kubernetes/kind 900 apply' 1
     build_action_json kind-idp-catalog 'IDP catalog' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-catalog' 0
     build_action_json kind-idp-env-create 'IDP environment request' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-env ACTION=create APP=hello-platform ENV=preview-nr' 0

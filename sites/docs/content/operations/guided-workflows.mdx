@@ -1,0 +1,167 @@
+---
+title: Guided Workflows
+description: Use the TUI, shared workflow core, and browser wrapper to choose local platform stages and app toggles.
+---
+
+# Guided Workflows
+
+Guided workflows are the operator-friendly layer over the staged Kubernetes
+Makefiles. They keep the well-known shell commands as the source of truth, but
+help you choose a target, stage, action, and app toggles without
+remembering every flag.
+
+The command flow is:
+
+```text
+TUI or browser UI
+  -> scripts/platform-workflow.sh
+  -> make -C kubernetes/<target> <stage> <action>
+```
+
+The wrapper does not replace the stage Makefiles. It builds the same command
+you would type by hand and, when app toggles are selected, writes a small
+generated tfvars file under `.run/operator/`.
+
+## TUI
+
+Start the terminal UI from the repo root:
+
+```bash
+make tui
+```
+
+or run the helper directly:
+
+```bash
+scripts/platform-tui.sh
+```
+
+Choose **Guided platform workflow** for the conversational path. A typical
+plan-only smoke test is:
+
+```text
+Guided platform workflow
+kind
+900 sso
+plan
+Disable sentiment
+Use stage default (enabled)
+```
+
+For a full Kind stage-900 apply without the sentiment reference app, choose the
+same options but select `apply`. The preview should include a command shaped
+like:
+
+```bash
+env PLATFORM_TFVARS=/Users/nickromney/Developer/personal/platform/.run/operator/kind-stage900.tfvars make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
+
+<Callout type="warning">
+  `apply` is still a real Make workflow. Use `plan` first when you are exploring
+  combinations, especially when the live cluster is already at a higher stage.
+</Callout>
+
+## Shared Core
+
+The non-interactive contract lives in `scripts/platform-workflow.sh`. Use it
+when you want the same abstraction without a prompt:
+
+```bash
+scripts/platform-workflow.sh preview --execute \
+  --target kind \
+  --stage 900 \
+  --action plan \
+  --app sentiment=off
+```
+
+Run the generated workflow with:
+
+```bash
+scripts/platform-workflow.sh apply --execute \
+  --target kind \
+  --stage 900 \
+  --action plan \
+  --app sentiment=off
+```
+
+The supported app toggles are:
+
+| Toggle | Effect |
+| --- | --- |
+| `--app sentiment=off` | Disables the sentiment reference app repo/workload. |
+| `--app subnetcalc=off` | Disables the subnetcalc reference app repo/workload. |
+| `--app sentiment=on` | Forces the sentiment app repo/workload on. |
+| `--app subnetcalc=on` | Forces the subnetcalc app repo/workload on. |
+
+Kind also has a first-class post-900 local IDP target. It keeps the SSO/IDP
+path but trims heavier optional local services:
+
+```bash
+scripts/platform-workflow.sh preview --execute \
+  --target kind \
+  --stage 950-local-idp \
+  --action plan
+```
+
+## Browser Wrapper
+
+The browser UI is a local wrapper over the same workflow core. It is useful for
+checking the graphical affordance, but the CLI/TUI path stays primary.
+
+```bash
+make workflow-ui
+```
+
+or run the helper directly:
+
+```bash
+scripts/platform-workflow-ui.sh --execute --host 127.0.0.1 --port 8765
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765
+```
+
+The UI should let you choose the same options as the TUI and preview the same
+command. It uses only the Python standard library server in
+`scripts/platform-workflow-ui.py`; there are no Flask, FastAPI, or extra Python
+packages to pin.
+
+<Callout type="warning">
+  Keep the workflow UI bound to `127.0.0.1`. It is a local operator helper, not
+  a hardened remotely exposed control plane.
+</Callout>
+
+## Plan Matrix
+
+The workflow matrix covers every Kind stage from `100` to `900`, plus the
+Kind-only `950-local-idp` target, at the shared workflow layer. It also covers selected app-toggle combinations
+that have exposed brittleness before.
+
+```bash
+bats tests/platform-workflow.bats tests/platform-workflow-matrix.bats
+```
+
+For live plan checks against the current Kind cluster, use the shared core:
+
+```bash
+for stage in 100 200 300 400 500 600 700 800 900; do
+  scripts/platform-workflow.sh apply --execute \
+    --target kind \
+    --stage "$stage" \
+    --action plan
+done
+```
+
+If your live cluster is already at stage `900`, lower-stage plans will naturally
+show planned destroys. That is not a failed plan by itself. Treat the plan exit
+status and the specific resources as the signal.
+
+## Related Pages
+
+- [Daily loop](./daily-loop)
+- [Stage ladder](../concepts/stage-ladder)
+- [Commands](../reference/commands)
+- [Platform MCP](../apps/platform-mcp)

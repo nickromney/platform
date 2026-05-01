@@ -24,6 +24,7 @@ setup() {
   [[ "${output}" == *"make status [STATUS_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make test"* ]]
   [[ "${output}" == *"make tui"* ]]
+  [[ "${output}" == *"make workflow-ui [WORKFLOW_UI_PORT=8765]"* ]]
   [[ "${output}" == *"make kubernetes"* ]]
   [[ "${output}" == *"make docker"* ]]
   [[ "${output}" == *"make apps"* ]]
@@ -47,6 +48,7 @@ setup() {
   lint_line="$(printf '%s\n' "${output}" | grep -n '^  make lint[[:space:]]' | cut -d: -f1)"
   status_line="$(printf '%s\n' "${output}" | grep -n '^  make status ' | cut -d: -f1)"
   tui_line="$(printf '%s\n' "${output}" | grep -n '^  make tui' | cut -d: -f1)"
+  workflow_ui_line="$(printf '%s\n' "${output}" | grep -n '^  make workflow-ui' | cut -d: -f1)"
 
   [ "${apps_line}" -lt "${check_version_line}" ]
   [ "${check_version_line}" -lt "${docker_line}" ]
@@ -55,6 +57,7 @@ setup() {
   [ "${kubernetes_line}" -lt "${lint_line}" ]
   [ "${lint_line}" -lt "${status_line}" ]
   [ "${status_line}" -lt "${tui_line}" ]
+  [ "${tui_line}" -lt "${workflow_ui_line}" ]
 }
 
 @test "root bare make defaults to informational help" {

@@ -57,6 +57,7 @@ const meta = {
       prerequisites: 'Prerequisites',
       'tooling-requirements': 'Tooling requirements',
       'daily-loop': 'Daily loop',
+      'guided-workflows': 'Guided workflows',
       'health-and-urls': 'Health and URLs',
       'review-environments': 'Review environments',
       footguns: 'Footguns',

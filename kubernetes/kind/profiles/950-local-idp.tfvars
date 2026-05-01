@@ -1,4 +1,4 @@
-# Resource-conscious stage-900 profile for the local IDP demo.
+# Resource-conscious post-900 local IDP target.
 #
 # This file is layered on top of stages/900-sso.tfvars and targets/kind.tfvars.
 # It keeps the cumulative kind stage workflow while trimming optional services.
