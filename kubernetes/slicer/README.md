@@ -162,8 +162,8 @@ Then use:
   separate repair step.
 - Stage `900` is the confidence path when you drive it through `make`. A
   successful `make -C kubernetes/slicer 900 apply` now also runs
-  `check-health` and `check-sso-e2e` before returning success. Raw
-  Terragrunt/OpenTofu applies remain apply-only.
+  `check-health`, `check-gateway-urls`, and `check-sso-e2e` before returning
+  success. Raw Terragrunt/OpenTofu applies remain apply-only.
 - `SLICER_VM_NAME` now defaults to `$(SLICER_VM_GROUP)-1`. For the on-device
   Slicer group, `export SLICER_VM_GROUP=slicer` gives you `slicer-1` by
   default; override `SLICER_VM_NAME` explicitly if you want a different VM.

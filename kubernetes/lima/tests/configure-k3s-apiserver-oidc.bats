@@ -65,3 +65,20 @@ EOF
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"Could not determine clusterIP"* ]]
 }
+
+@test "waits for the platform-gateway deployment and service endpoints" {
+  run grep -Fn 'NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}"' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC"' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'request_gateway_reconcile' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'annotate gateway "$PLATFORM_GATEWAY_NAME"' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+}

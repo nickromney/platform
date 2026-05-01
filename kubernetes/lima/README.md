@@ -101,10 +101,10 @@ Then use:
   Headlamp tokens, so a fresh `900 apply` leaves Headlamp login-ready without a
   separate repair step.
 - Stage `900` is the confidence path when you drive it through `make`. A
-  successful `make -C kubernetes/lima 900 apply` now also runs `check-health`
-  before returning success. Keep `make -C kubernetes/lima check-sso-e2e` as an
-  explicit post-apply browser smoke check. Raw Terragrunt/OpenTofu applies
-  remain apply-only.
+  successful `make -C kubernetes/lima 900 apply` now also runs `check-health`,
+  `check-gateway-urls`, and `check-sso-e2e` before returning success, matching
+  the other local Kubernetes targets. Raw Terragrunt/OpenTofu applies remain
+  apply-only.
 - Stages `200+` reuse the shared Terraform platform root. The Lima target
   profile disables kind-only plumbing such as kind provisioning, Docker socket
   mounts, the in-cluster actions runner, and Cilium WireGuard.

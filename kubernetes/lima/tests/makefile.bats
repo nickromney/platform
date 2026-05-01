@@ -121,11 +121,32 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "lima stage 900 apply does not run browser SSO E2E verification inline" {
+@test "lima stage 900 apply verifies gateway URLs before browser SSO E2E" {
+  run grep -Fn 'run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima stage 900 apply runs browser SSO E2E verification inline" {
   run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
-  [ "${status}" -ne 0 ]
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima check-sso-e2e uses the split kubeconfig and rendered Backstage gate" {
+  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars"' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "lima target profile rewrites platform-mcp to the local image cache" {
+  run grep -Fn 'platform-mcp                         = "host.lima.internal:5002/platform/platform-mcp:latest"' \
+    "${REPO_ROOT}/kubernetes/lima/targets/lima.tfvars"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "lima cluster-dependent read-only targets gate on assert-lima-active" {

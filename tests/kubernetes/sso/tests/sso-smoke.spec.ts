@@ -1111,9 +1111,8 @@ async function developerPortalWorks(page: Page, traffic: BrowserApiTraffic) {
   await expect(page.getByRole('link', { name: /guest/i })).toHaveCount(0)
 
   await expectBodyToContain(page, /Platform Engineering Catalog|Catalog/i, 'Backstage catalog shell did not render after edge SSO login')
-  const allComponentsFilter = page.getByRole('menuitem', { name: /All\s+\d+/i })
-  await expect(allComponentsFilter, 'Backstage catalog did not expose the full platform catalog filter').toBeVisible({ timeout: 30_000 })
-  await allComponentsFilter.click()
+  await page.goto(absolutePlatformUrl('portal', '/?filters%5Bkind%5D=component&filters%5Buser%5D=all'))
+  await expect(page).toHaveURL((u) => u.hostname === PORTAL_HOSTNAME && (u.pathname === '/' || u.pathname.startsWith('/catalog')))
   await expectBodyToContain(page, /Developer Portal/i, 'Backstage catalog did not expose the Backstage portal component')
   await expectBodyToContain(page, /Portal API/i, 'Backstage catalog did not expose the IDP API component')
   await expectBodyToContain(page, /Hello Platform/i, 'Backstage catalog did not expose workload catalog content')

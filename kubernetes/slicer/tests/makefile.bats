@@ -98,9 +98,35 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "slicer stage 900 apply verifies gateway URLs before browser SSO E2E" {
+  run grep -Fn 'run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)";' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "slicer stage 900 apply runs browser SSO E2E verification after health checks" {
   run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer check-sso-e2e uses the split kubeconfig and rendered Backstage gate" {
+  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars"' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "slicer target profile rewrites platform-mcp to the local image cache" {
+  run grep -Fn 'platform-mcp                         = "192.168.64.1:5002/platform/platform-mcp:latest"' \
+    "${REPO_ROOT}/kubernetes/slicer/targets/slicer.tfvars"
 
   [ "${status}" -eq 0 ]
 }
