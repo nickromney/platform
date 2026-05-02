@@ -26,6 +26,27 @@ Expect most stack workflows to require a platform env file. Run the subtree `pre
 
 For non-interactive stack runs, use `AUTO_APPROVE=1`. `AUTO_APPLY` is not a supported flag in this repo.
 
+Use the guided workflow surfaces when the user asks to operate the local stacks interactively, compare stage/app options, or see the exact command before running it:
+
+- `make tui` opens the Bubble Tea terminal UI from `tools/platform-tui`. It requires Go because it runs the TUI from source. The TUI delegates to `scripts/platform-workflow.sh`, previews the generated Make command, can run it, streams output, keeps scrollback, and supports target, stage, action, reset, state-reset, and app toggle choices.
+- `make build-tui` builds a local TUI binary under `tools/platform-tui/bin/` when you need a reusable executable.
+- `make workflow-ui` serves the browser workflow UI from `tools/platform-workflow-ui` through `scripts/platform-workflow-ui.sh`. It requires `uv`, uses FastAPI + HTMX, defaults to local HTTPS at `https://console.127.0.0.1.sslip.io:8443`, and delegates to the same `scripts/platform-workflow.sh` core as the TUI.
+- Use `make workflow-ui WORKFLOW_UI_HTTP=http1 WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=8765` when local HTTPS or HTTP/2 gets in the way of browser debugging. Use `WORKFLOW_UI_PORT=<port>` when the default port is busy.
+- Treat both guided surfaces as wrappers over the same contract, not separate deployment systems. If a preview looks wrong, inspect `scripts/platform-workflow.sh` and its tests before changing either UI.
+
+Prefer the shared workflow core for automation and tests:
+
+- Inspect choices:
+  `scripts/platform-workflow.sh options --execute`
+- Preview without mutating:
+  `scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan`
+- Preview with generated app override tfvars:
+  `scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action apply --app sentiment=off`
+- Run the selected workflow:
+  `scripts/platform-workflow.sh apply --execute --target kind --stage 900 --action apply --auto-approve --app sentiment=off`
+
+Generated operator tfvars paths in docs and examples should be relative to the repository root, such as `.run/operator/kind-stage900.tfvars`. Do not write user-specific absolute paths like `/Users/<name>/...` into docs, skills, or generated examples.
+
 Use these local cluster command paths when you need to prove a stack end to end instead of just reading docs:
 
 - Kind full confidence path:

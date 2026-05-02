@@ -34,6 +34,7 @@ go run ./tools/platform-tui/cmd/platform-tui --execute
 scripts/platform-workflow.sh options --execute
 scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan
 scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan --app sentiment=off
+scripts/platform-workflow.sh apply --execute --target kind --stage 900 --action apply --auto-approve --app sentiment=off
 scripts/platform-workflow-ui.sh --execute --host 127.0.0.1 --port 8765
 ```
 
@@ -64,6 +65,14 @@ create `.run/workflow-ui/workflow-ui.pem` and
 `.run/workflow-ui/workflow-ui-key.pem` if you do not provide certificate paths
 directly to `scripts/platform-workflow-ui.sh`. `WORKFLOW_UI_HTTP=http1` is the
 plain HTTP fallback.
+
+The TUI and browser UI are guided surfaces over the same contract. Both should
+show a preview shaped like the direct Make command before any mutating run. For
+example, a Kind stage-900 apply with sentiment disabled previews as:
+
+```bash
+env PLATFORM_TFVARS=.run/operator/kind-stage900.tfvars make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+```
 
 ## Version Audits
 

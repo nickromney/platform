@@ -11,7 +11,7 @@ target shape, inspect URLs, and reset only when local state needs a fresh start.
 ## Start of Session
 
 ```bash
-cd ~/Developer/personal/platform
+# From the repository root.
 make status
 make tui
 make -C kubernetes/kind status
@@ -25,6 +25,11 @@ Use `make tui` when you want to choose the target, stage, action, and
 app toggles interactively. The TUI previews the generated Make command before
 running it. Go is only required for this optional TUI; direct stack commands
 continue to work without Go.
+
+Use `make workflow-ui` when you want the same guided workflow in a browser. It
+serves the local FastAPI + HTMX console at
+`https://console.127.0.0.1.sslip.io:8443` and delegates to the same workflow
+core as the TUI.
 
 ## Reapply the Full Shape
 
@@ -46,6 +51,11 @@ scripts/platform-workflow.sh preview --execute \
   --action plan \
   --app sentiment=off
 ```
+
+For the same path through the TUI, choose `kubernetes/kind`, `900 sso`, `plan`,
+`Disable sentiment`, and `Enable subnetcalc (stage default)`. For the browser
+UI, make the same selections in the form and review the generated command
+before running it.
 
 ## Work on Apps
 

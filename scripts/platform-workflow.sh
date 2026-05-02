@@ -111,6 +111,13 @@ action_uses_stage() {
   esac
 }
 
+action_uses_auto_approve() {
+  case "$1" in
+    apply|reset|state-reset) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 default_profiles_dir() {
   printf '%s/kubernetes/%s/profiles\n' "${REPO_ROOT}" "${TARGET}"
 }
@@ -195,7 +202,7 @@ build_command_args() {
     WORKFLOW_COMMAND_ARGS+=("${STAGE}")
   fi
   WORKFLOW_COMMAND_ARGS+=("${ACTION}")
-  if [[ "${AUTO_APPROVE}" = "1" ]]; then
+  if [[ "${AUTO_APPROVE}" = "1" ]] && action_uses_auto_approve "${ACTION}"; then
     WORKFLOW_COMMAND_ARGS+=(AUTO_APPROVE=1)
   fi
 }

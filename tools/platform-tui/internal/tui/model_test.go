@@ -47,7 +47,7 @@ func selectLabel(m Model, t *testing.T, label string) (Model, tea.Cmd) {
 func drainRun(m Model, cmd tea.Cmd, t *testing.T) Model {
 	t.Helper()
 	for i := 0; i < 20 && cmd != nil; i++ {
-		next, nextCmd := m.Update(cmd())
+		next, nextCmd := m.Update(runMsgFromCmd(cmd, t))
 		m = next.(Model)
 		cmd = nextCmd
 		if !m.running {
@@ -56,6 +56,18 @@ func drainRun(m Model, cmd tea.Cmd, t *testing.T) Model {
 	}
 	t.Fatalf("run did not finish; view: %q", m.View())
 	return m
+}
+
+func runMsgFromCmd(cmd tea.Cmd, t *testing.T) tea.Msg {
+	t.Helper()
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		if len(batch) == 0 {
+			return nil
+		}
+		return batch[0]()
+	}
+	return msg
 }
 
 func TestQQuitsImmediately(t *testing.T) {
@@ -117,6 +129,12 @@ func TestStateResetBuildsCommandWithoutStageOrAppToggles(t *testing.T) {
 	if !reflect.DeepEqual(m.workflowArgs("apply"), wantApply) {
 		t.Fatalf("apply args\nwant %#v\n got %#v", wantApply, m.workflowArgs("apply"))
 	}
+
+	next, _ := m.Update(key("esc"))
+	m = next.(Model)
+	if m.screen != screenStage {
+		t.Fatalf("expected esc from state reset preview to return to stage screen, got %v", m.screen)
+	}
 }
 
 func TestKindOnlyLocalIDPStage(t *testing.T) {
@@ -130,6 +148,52 @@ func TestKindOnlyLocalIDPStage(t *testing.T) {
 	m = choose(m, t, "lima")
 	if hasLabel(m.items(), "950 local-idp") {
 		t.Fatalf("lima must not expose local IDP stage")
+	}
+}
+
+func TestStageScreenSupportsDirectShortcuts(t *testing.T) {
+	m := New(Config{})
+	m = choose(m, t, "kind")
+
+	next, _ := m.Update(key("7"))
+	m = next.(Model)
+	if m.screen != screenAction || m.stage != "700" {
+		t.Fatalf("expected 7 shortcut to select stage 700, got screen=%v stage=%q", m.screen, m.stage)
+	}
+
+	m = New(Config{})
+	m = choose(m, t, "kind")
+	next, _ = m.Update(key("0"))
+	m = next.(Model)
+	if m.screen != screenAction || m.stage != "950-local-idp" {
+		t.Fatalf("expected 0 shortcut to select kind local-idp, got screen=%v stage=%q", m.screen, m.stage)
+	}
+
+	m = New(Config{})
+	m = choose(m, t, "lima")
+	next, _ = m.Update(key("0"))
+	m = next.(Model)
+	if m.screen != screenStage || m.stage != "" {
+		t.Fatalf("expected 0 shortcut to be ignored outside kind, got screen=%v stage=%q", m.screen, m.stage)
+	}
+}
+
+func TestStageScreenSupportsResetShortcuts(t *testing.T) {
+	m := New(Config{})
+	m = choose(m, t, "kind")
+
+	next, cmd := m.Update(key("r"))
+	m = next.(Model)
+	if m.screen != screenPreview || m.action != "reset" || cmd == nil {
+		t.Fatalf("expected r shortcut to preview reset, screen=%v action=%q cmd=%v", m.screen, m.action, cmd)
+	}
+
+	m = New(Config{})
+	m = choose(m, t, "kind")
+	next, cmd = m.Update(key("t"))
+	m = next.(Model)
+	if m.screen != screenPreview || m.action != "state-reset" || cmd == nil {
+		t.Fatalf("expected t shortcut to preview state reset, screen=%v action=%q cmd=%v", m.screen, m.action, cmd)
 	}
 }
 
@@ -200,6 +264,33 @@ func TestViewHasSingleHeaderAndFooterHints(t *testing.T) {
 	}
 	if !containsString(view, "q quit") || !containsString(view, "esc back") {
 		t.Fatalf("expected footer hints, got %q", view)
+	}
+}
+
+func TestViewShowsInlineStageAndAppToggleHints(t *testing.T) {
+	m := New(Config{})
+	m = choose(m, t, "kind")
+	if !containsString(m.View(), "1 selects 100 cluster") {
+		t.Fatalf("expected selected stage shortcut hint, got %q", m.View())
+	}
+
+	m.cursor = 6
+	if !containsString(m.View(), "app toggles start here") {
+		t.Fatalf("expected stage 700 app toggle hint, got %q", m.View())
+	}
+
+	m = New(Config{})
+	m = choose(m, t, "kind")
+	m = choose(m, t, "600 policies")
+	if !containsString(m.View(), "skips app toggles") {
+		t.Fatalf("expected early-stage action hint explaining hidden app toggles, got %q", m.View())
+	}
+
+	m = New(Config{})
+	m = choose(m, t, "kind")
+	m = choose(m, t, "700 app repos")
+	if !containsString(m.View(), "can include app toggle overrides") {
+		t.Fatalf("expected contained-stage action hint, got %q", m.View())
 	}
 }
 
@@ -283,7 +374,7 @@ exit 2
 	m = next.(Model)
 
 	view := m.View()
-	if containsString(view, "exit status 2\n\n➜ Run") {
+	if containsString(view, "exit status 2\n\n➜ Execute") {
 		t.Fatalf("view only showed exit status: %q", view)
 	}
 	if !containsString(view, "Preview failed") {
@@ -341,10 +432,10 @@ esac
 	m = drainRun(m, cmd, t)
 
 	view := m.View()
-	if containsString(view, "exit status 2\n\n➜ Run") {
+	if containsString(view, "exit status 2\n\n➜ Execute") {
 		t.Fatalf("view only showed exit status: %q", view)
 	}
-	if !containsString(view, "Run failed") {
+	if !containsString(view, "Execution failed") {
 		t.Fatalf("expected run failure label, got %q", view)
 	}
 	if !containsString(view, "kind-local exists, but terraform state lock remains") {
@@ -432,7 +523,7 @@ esac
 	nextModel, _ := m.Update(cmd())
 	m = nextModel.(Model)
 
-	next, cmd = selectLabel(m, t, "Run")
+	next, cmd = selectLabel(m, t, "Execute")
 	m = next
 	if cmd == nil {
 		t.Fatalf("expected run command")
@@ -476,7 +567,7 @@ esac
 	nextModel, _ := m.Update(cmd())
 	m = nextModel.(Model)
 
-	next, cmd = selectLabel(m, t, "Run")
+	next, cmd = selectLabel(m, t, "Execute")
 	m = next
 	m = drainRun(m, cmd, t)
 
@@ -497,8 +588,11 @@ esac
 	if m.stage != "900" || m.action != "apply" {
 		t.Fatalf("expected next option to prepare 900 apply, got stage=%q action=%q", m.stage, m.action)
 	}
-	if m.runOutput != "" || m.runSucceeded {
-		t.Fatalf("expected next option to clear prior run state")
+	if m.runOutput == "" {
+		t.Fatalf("expected next option to keep prior output visible")
+	}
+	if m.runSucceeded {
+		t.Fatalf("expected next option to clear success state")
 	}
 }
 
@@ -530,7 +624,7 @@ esac
 	nextModel, _ := m.Update(cmd())
 	m = nextModel.(Model)
 
-	next, cmd = selectLabel(m, t, "Run")
+	next, cmd = selectLabel(m, t, "Execute")
 	m = next
 	m = drainRun(m, cmd, t)
 
@@ -564,13 +658,16 @@ esac
 	m = choose(m, t, "plan")
 	m = choose(m, t, "Enable sentiment (stage default)")
 
-	next, cmd := m.Update(key("enter"))
-	m = next.(Model)
-	next, _ = m.Update(cmd())
-	m = next.(Model)
+	next, cmd := selectLabel(m, t, "Enable subnetcalc (stage default)")
+	m = next
+	if cmd == nil {
+		t.Fatalf("expected preview command")
+	}
+	nextModel, _ := m.Update(cmd())
+	m = nextModel.(Model)
 
-	next, cmd = m.Update(key("enter"))
-	m = next.(Model)
+	nextModel, cmd = m.Update(key("enter"))
+	m = nextModel.(Model)
 	if cmd == nil {
 		t.Fatalf("expected run command")
 	}
@@ -580,15 +677,45 @@ esac
 	if !containsString(m.View(), "Running workflow") {
 		t.Fatalf("expected immediate running feedback, got %q", m.View())
 	}
+	if !containsString(m.View(), "Elapsed: 0s") {
+		t.Fatalf("expected elapsed time in running feedback, got %q", m.View())
+	}
+	if !containsString(m.View(), "Executing: make -C kubernetes/kind 100 plan") {
+		t.Fatalf("expected exact command identity in running feedback, got %q", m.View())
+	}
 
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok || len(batch) < 2 {
+		t.Fatalf("expected run command batch, got %T %#v", msg, msg)
+	}
 	done := make(chan tea.Msg, 1)
 	go func() {
-		done <- cmd()
+		done <- batch[0]()
 	}()
 	select {
 	case <-done:
 		t.Fatalf("run command returned before long-running workflow completed")
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestElapsedTickRefreshesRunningView(t *testing.T) {
+	started := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+	m := New(Config{})
+	m.screen = screenPreview
+	m.previewCommand = "make -C kubernetes/kind 900 apply"
+	m.running = true
+	m.runStartedAt = started
+	m.now = started
+
+	next, cmd := m.Update(elapsedTickMsg(started.Add(65 * time.Second)))
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected running tick to schedule another tick")
+	}
+	if !containsString(m.View(), "Elapsed: 1m05s") {
+		t.Fatalf("expected elapsed time to refresh, got %q", m.View())
 	}
 }
 
@@ -640,5 +767,71 @@ esac
 	}
 	if containsString(view, "Target: kind (kubernetes/kind)") {
 		t.Fatalf("run output leaked into prior screen: %q", view)
+	}
+}
+
+func TestRunOutputSurvivesChoosingAnotherStage(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "workflow.sh")
+	if err := os.WriteFile(script, []byte(`#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  preview)
+    stage="600"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --stage) stage="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    printf '{"command":"make -C kubernetes/kind %s plan"}\n' "$stage"
+    ;;
+  apply)
+    echo "PLAN OUTPUT FROM STAGE 600"
+    ;;
+esac
+`), 0o755); err != nil {
+		t.Fatalf("write workflow stub: %v", err)
+	}
+
+	m := New(Config{WorkflowScript: script})
+	m = choose(m, t, "kind")
+	m = choose(m, t, "600 policies")
+	next, cmd := selectLabel(m, t, "plan")
+	m = next
+	if cmd == nil {
+		t.Fatalf("expected preview command")
+	}
+	nextModel, _ := m.Update(cmd())
+	m = nextModel.(Model)
+
+	next, cmd = selectLabel(m, t, "Execute")
+	m = next
+	m = drainRun(m, cmd, t)
+	if !containsString(m.View(), "PLAN OUTPUT FROM STAGE 600") {
+		t.Fatalf("expected stage 600 output before changing selection, got %q", m.View())
+	}
+
+	nextModel, _ = m.Update(key("esc"))
+	m = nextModel.(Model)
+	nextModel, _ = m.Update(key("esc"))
+	m = nextModel.(Model)
+	m = choose(m, t, "900 sso")
+	m = choose(m, t, "plan")
+	m = choose(m, t, "Enable sentiment (stage default)")
+	next, cmd = selectLabel(m, t, "Enable subnetcalc (stage default)")
+	m = next
+	if cmd == nil {
+		t.Fatalf("expected preview command")
+	}
+	nextModel, _ = m.Update(cmd())
+	m = nextModel.(Model)
+
+	view := m.View()
+	if !containsString(view, "make -C kubernetes/kind 900 plan") {
+		t.Fatalf("expected new stage 900 preview, got %q", view)
+	}
+	if !containsString(view, "PLAN OUTPUT FROM STAGE 600") {
+		t.Fatalf("expected previous output to remain available after changing stage, got %q", view)
 	}
 }
