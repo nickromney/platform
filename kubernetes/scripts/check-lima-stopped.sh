@@ -85,7 +85,7 @@ echo "  make -C kubernetes/lima stop-lima" >&2
 echo "" >&2
 
 if [[ -n "${active_shared_ports}" ]]; then
-  echo "Conflicting shared host ports currently in use by Lima:" >&2
+  echo "Shared host ports currently in use while Lima is active:" >&2
   while IFS= read -r port; do
     [[ -z "${port}" ]] && continue
     printf '  127.0.0.1:%s\n' "${port}" >&2

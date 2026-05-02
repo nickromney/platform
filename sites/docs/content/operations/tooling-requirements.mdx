@@ -20,6 +20,7 @@ target to verify your machine.
 | `terraform` | Kubernetes platform | Optional compatibility engine when selected through Terragrunt. |
 | `terragrunt` | Kubernetes platform | State generation, execution-engine selection, and stage/target input layering. |
 | `bun` / Node | Browser checks and JS apps | Playwright, app builds, Vite, tests. |
+| `uv` | Python tool apps | Runs the FastAPI + HTMX workflow UI without a global Python install. |
 | `mkcert` | Local TLS | Local CA and dev certificates. |
 | `kubie` | Split kubeconfigs | Safer multi-context operator workflow. |
 
@@ -86,6 +87,21 @@ global Lima networking config when it sees it.
 make -C docker/compose prereqs
 make -C apps prereqs
 make -C apps trivy-prereqs
+```
+
+## Guided UI Tools
+
+The direct Make workflows do not require either Go or `uv`, but the optional
+guided interfaces do:
+
+| Tool | Needed for |
+| --- | --- |
+| Go | `make tui`, unless you run a prebuilt TUI binary. |
+| `uv` | `make workflow-ui`, which serves the FastAPI + HTMX browser UI. |
+
+```bash
+make tui
+make workflow-ui
 ```
 
 <Callout type="warning">

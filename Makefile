@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test status tui workflow-ui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test status tui build-tui workflow-ui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
@@ -16,18 +16,21 @@ SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
 SONAR_SCAN_REPO ?= $(CURDIR)
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 PLATFORM_STATUS_SCRIPT ?= scripts/platform-status.sh
-PLATFORM_TUI_SCRIPT ?= scripts/platform-tui.sh
+PLATFORM_TUI_GO_BIN ?= go
+PLATFORM_TUI_CMD ?= cd tools/platform-tui && $(PLATFORM_TUI_GO_BIN) run ./cmd/platform-tui --repo-root ../..
+PLATFORM_TUI_BUILD_CMD ?= $(MAKE) --no-print-directory -C tools/platform-tui build
 PLATFORM_WORKFLOW_UI_SCRIPT ?= scripts/platform-workflow-ui.sh
 RESET_LOCAL_STATE_SCRIPT ?= scripts/reset-local-state.sh
 STATUS_FORMAT ?= text
-WORKFLOW_UI_HOST ?= 127.0.0.1
-WORKFLOW_UI_PORT ?= 8765
+WORKFLOW_UI_HOST ?= console.127.0.0.1.sslip.io
+WORKFLOW_UI_PORT ?= 8443
+WORKFLOW_UI_HTTP ?= h2
 
 .DEFAULT_GOAL := default
 
 include mk/common.mk
 
-.PHONY: default help prereqs test status tui workflow-ui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs test status tui build-tui workflow-ui clean-local-state lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -44,6 +47,7 @@ help:
 	@echo "Root shortcuts:"
 	@printf '%b\n' \
 		'make apps\tShow the app/frontend Makefiles' \
+		'make build-tui\tBuild the optional Bubble Tea platform TUI into tools/platform-tui/bin/' \
 		'make check-version\tVerify repo-level dependency/version guardrails' \
 		'make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1]\tPreview or clear repo-generated local state plus optional host caches' \
 		'make docker\tShow the Docker/Compose Makefiles' \
@@ -62,8 +66,8 @@ help:
 		'make sonar-scan SONAR_SCAN_REPO=apps/apim-simulator\tRun SonarQube on any local repo' \
 		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer' \
 		'make test\tShow the focused test entrypoints' \
-		'make tui\tOpen the Gum-based local runtime chooser when available' \
-		'make workflow-ui [WORKFLOW_UI_PORT=8765]\tServe the browser workflow chooser on localhost' \
+		'make tui\tOpen the Bubble Tea local runtime chooser' \
+		'make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]\tServe the browser workflow chooser on local HTTPS' \
 	| while IFS=$$'\t' read -r command description; do \
 		printf '  %-60s %s\n' "$$command" "$$description"; \
 	done
@@ -113,6 +117,9 @@ prereqs:
 	@echo "  make -C kubernetes/kind prereqs"
 	@echo "  make -C kubernetes/lima prereqs"
 	@echo "  make -C kubernetes/slicer prereqs"
+	@echo ""
+	@echo "Optional root tools:"
+	@echo "  go (only for make tui / make build-tui)"
 
 test:
 	@echo "Root test is informational."
@@ -132,10 +139,18 @@ status:
 	@"$(PLATFORM_STATUS_SCRIPT)" --execute --output "$(STATUS_FORMAT)"
 
 tui:
-	@"$(PLATFORM_TUI_SCRIPT)" --execute
+	@if ! command -v "$(PLATFORM_TUI_GO_BIN)" >/dev/null 2>&1; then \
+		echo "Go is required for make tui."; \
+		echo "Install Go, run make build-tui on a host with Go, or use make status / focused Makefiles directly if you do not want the TUI."; \
+		exit 1; \
+	fi
+	@$(PLATFORM_TUI_CMD) --execute
+
+build-tui:
+	@$(PLATFORM_TUI_BUILD_CMD)
 
 workflow-ui:
-	@"$(PLATFORM_WORKFLOW_UI_SCRIPT)" --execute --host "$(WORKFLOW_UI_HOST)" --port "$(WORKFLOW_UI_PORT)"
+	@"$(PLATFORM_WORKFLOW_UI_SCRIPT)" --execute --host "$(WORKFLOW_UI_HOST)" --port "$(WORKFLOW_UI_PORT)" --http "$(WORKFLOW_UI_HTTP)"
 
 clean-local-state:
 	@"$(RESET_LOCAL_STATE_SCRIPT)" \

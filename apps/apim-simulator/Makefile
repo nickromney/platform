@@ -62,6 +62,7 @@ SMOKE_OIDC_BASE_URL ?= $(APIM_LOOPBACK_BASE_URL)
 SMOKE_OIDC_KEYCLOAK_BASE_URL ?= $(KEYCLOAK_BASE_URL)
 SMOKE_MCP_URL ?= $(APIM_BASE_URL)/mcp
 SMOKE_EDGE_BASE_URL ?= $(EDGE_HTTP_BASE_URL)
+KEYVAULT_BASE_URL ?= $(APIM_LOOPBACK_BASE_URL)
 PORTS ?= $(TODO_FRONTEND_PORT) $(GRAFANA_PORT) $(OTEL_GRPC_PORT) $(OTEL_HTTP_PORT) $(APIM_GATEWAY_PORT) $(EDGE_HTTP_PORT) $(EDGE_TLS_HTTP_PORT) $(EDGE_TLS_PORT) $(OPERATOR_CONSOLE_PORT) $(KEYCLOAK_PORT) $(if $(filter true,$(BACKSTAGE_ENABLED)),$(BACKSTAGE_PORT))
 UP_ALL_SLOT_BASE ?= 0
 UP_ALL_STACKS := up up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel
@@ -74,6 +75,7 @@ export TODO_FRONTEND_BASE_URL TODO_FRONTEND_BROWSER_URL TODO_FRONTEND_ORIGIN_LOC
 export APIM_ALLOWED_ORIGIN_BROWSER_LOCALHOST APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE APIM_ALLOWED_ORIGIN_VITE APIM_ALLOWED_ORIGIN_GATEWAY
 export EDGE_HTTP_BASE_URL EDGE_TLS_BASE_URL
 export SMOKE_HELLO_BASE_URL SMOKE_HELLO_KEYCLOAK_BASE_URL SMOKE_OIDC_BASE_URL SMOKE_OIDC_KEYCLOAK_BASE_URL SMOKE_MCP_URL SMOKE_EDGE_BASE_URL
+export KEYVAULT_BASE_URL
 
 COMPOSE_BACKSTAGE_OVERLAY := $(if $(filter true,$(BACKSTAGE_ENABLED)),-f compose.backstage.yml --profile backstage)
 COMPOSE_CORE := $(call compose_stack,core) -f compose.yml -f compose.public.yml $(COMPOSE_BACKSTAGE_OVERLAY)
@@ -90,6 +92,7 @@ COMPOSE_HELLO_OIDC := $(call compose_stack,hello-oidc) -f compose.yml -f compose
 COMPOSE_TODO := $(call compose_stack,todo) -f compose.todo.yml
 COMPOSE_TODO_OTEL := $(call compose_stack,todo-otel) -f compose.todo.yml -f compose.todo.otel.yml
 COMPOSE_BACKSTAGE := $(call compose_stack,backstage) -f compose.yml -f compose.public.yml -f compose.backstage.yml --profile backstage
+COMPOSE_KEYVAULT := $(call compose_stack,keyvault) -f compose.yml -f compose.public.yml -f compose.keyvault.yml
 COMPOSE_ALL := $(call compose_stack,all) -f compose.yml -f compose.public.yml -f compose.edge.yml -f compose.tls.yml -f compose.private.yml -f compose.ui.yml -f compose.oidc.yml -f compose.mcp.yml
 DEV_CERTS := examples/edge/certs/$(APIM_EDGE_HOST).crt examples/edge/certs/$(APIM_EDGE_HOST).key
 HELP_FMT := "  %-34s %s\n"
@@ -102,7 +105,7 @@ CHECK_VERSION_SCRIPT ?= scripts/check-version.sh
 RELEASE_SCRIPT ?= scripts/release.sh
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 
-.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites ensure-certs install-hooks fmt lint lint-check lint-yaml lint-markdown lint-bash32 lint-shell frontend-check check-version update runtime-artifact release release-dry-run release-preview release-tag release-tag-dry-run build-backstage up up-all up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-backstage up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel down down-all logs logs-otel logs-oidc logs-mcp logs-private logs-hello logs-hello-otel logs-hello-oidc logs-todo logs-todo-otel logs-backstage test test-python test-shell compat compat-report import-tofu verify-azure verify-otel verify-hello-otel verify-todo-otel check-host-ports check-private-port-clear smoke-oidc smoke-mcp smoke-edge smoke-tls smoke-private smoke-hello smoke-todo smoke-backstage smoke-tutorials-live test-todo-e2e test-todo-bruno test-todo-postman export-todo-har compose-config compose-config-otel compose-config-oidc compose-config-mcp compose-config-edge compose-config-tls compose-config-private compose-config-ui compose-config-backstage compose-config-hello compose-config-hello-otel compose-config-hello-oidc compose-config-todo compose-config-todo-otel
+.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites ensure-certs install-hooks fmt lint lint-check lint-yaml lint-markdown lint-bash32 lint-shell frontend-check check-version update runtime-artifact release release-dry-run release-preview release-tag release-tag-dry-run build-backstage up up-all up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-backstage up-keyvault up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel down down-all logs logs-otel logs-oidc logs-mcp logs-private logs-hello logs-hello-otel logs-hello-oidc logs-todo logs-todo-otel logs-backstage logs-keyvault test test-python test-shell compat compat-report import-tofu verify-azure verify-otel verify-hello-otel verify-todo-otel check-host-ports check-private-port-clear smoke-oidc smoke-mcp smoke-edge smoke-tls smoke-private smoke-hello smoke-todo smoke-backstage smoke-keyvault smoke-tutorials-live test-todo-e2e test-todo-bruno test-todo-postman export-todo-har compose-config compose-config-otel compose-config-oidc compose-config-mcp compose-config-edge compose-config-tls compose-config-private compose-config-ui compose-config-backstage compose-config-keyvault compose-config-hello compose-config-hello-otel compose-config-hello-oidc compose-config-todo compose-config-todo-otel
 
 help:
 	@printf "Run:\n"
@@ -124,6 +127,7 @@ help:
 	@printf $(HELP_FMT) "up-todo-otel" "Start the todo demo stack with LGTM at $(GRAFANA_BASE_URL)"
 	@printf $(HELP_FMT) "up-ui" "Start the operator console on localhost:3007"
 	@printf $(HELP_FMT) "up-backstage" "Start the optional Backstage API catalog portal on $(BACKSTAGE_BASE_URL)"
+	@printf $(HELP_FMT) "up-keyvault" "Start the direct public stack with local Key Vault persistence"
 	@printf $(HELP_FMT) "BACKSTAGE_ENABLED=true make up" "Start the direct public stack with the Backstage overlay"
 	@printf $(HELP_FMT) "up-all" "Start every compose stack at once using isolated slots"
 	@printf $(HELP_FMT) "down-all" "Stop every stack launched by up-all"
@@ -141,6 +145,7 @@ help:
 	@printf $(HELP_FMT) "logs-todo" "Tail todo demo stack logs"
 	@printf $(HELP_FMT) "logs-todo-otel" "Tail todo demo stack logs with LGTM"
 	@printf $(HELP_FMT) "logs-backstage" "Tail the optional Backstage portal stack logs"
+	@printf $(HELP_FMT) "logs-keyvault" "Tail the Key Vault compose stack logs"
 	@printf "\nCode Quality and Tooling:\n"
 	@printf $(HELP_FMT) "check-version" "Check synchronized release versions and pinned upstream refs"
 	@printf $(HELP_FMT) "check-host-ports" "Check common local host ports before starting stacks"
@@ -171,6 +176,7 @@ help:
 	@printf $(HELP_FMT) "smoke-tls" "Run the TLS edge smoke test using the generated local CA"
 	@printf $(HELP_FMT) "smoke-todo" "Run the APIM-backed todo demo smoke test"
 	@printf $(HELP_FMT) "smoke-backstage" "Check optional Backstage health and catalog import"
+	@printf $(HELP_FMT) "smoke-keyvault" "Run the local Key Vault secrets and certificates smoke test"
 	@printf $(HELP_FMT) "smoke-tutorials-live" "Run all numbered tutorial scripts against live local stacks"
 	@printf $(HELP_FMT) "test-todo-bruno" "Run the Bruno collection against the running todo demo stack"
 	@printf $(HELP_FMT) "test-todo-e2e" "Run Playwright against the running todo demo stack"
@@ -201,6 +207,7 @@ help:
 	@printf $(HELP_FMT) "compose-config-todo-otel" "Render docker compose config for the todo demo LGTM stack"
 	@printf $(HELP_FMT) "compose-config-ui" "Render docker compose config for the console stack"
 	@printf $(HELP_FMT) "compose-config-backstage" "Render docker compose config for the Backstage portal overlay"
+	@printf $(HELP_FMT) "compose-config-keyvault" "Render docker compose config for the Key Vault stack"
 
 prereqs: check-docker-prerequisites check-mkcert-prerequisites check-host-ports
 
@@ -282,6 +289,9 @@ up-ui:
 up-backstage: build-backstage
 	$(COMPOSE_BACKSTAGE) up --build -d
 
+up-keyvault:
+	$(COMPOSE_KEYVAULT) up --build -d
+
 up-hello:
 	$(COMPOSE_HELLO) up --build -d
 
@@ -322,6 +332,7 @@ down:
 	$(COMPOSE_PRIVATE) down --remove-orphans
 	$(COMPOSE_UI) down --remove-orphans
 	$(COMPOSE_BACKSTAGE) down --remove-orphans
+	$(COMPOSE_KEYVAULT) down --remove-orphans
 	$(COMPOSE_HELLO) down --remove-orphans
 	$(COMPOSE_HELLO_OTEL) down --remove-orphans
 	$(COMPOSE_HELLO_OIDC) down --remove-orphans
@@ -369,6 +380,9 @@ logs-todo-otel:
 
 logs-backstage:
 	$(COMPOSE_BACKSTAGE) logs -f apim-simulator mock-backend backstage
+
+logs-keyvault:
+	$(COMPOSE_KEYVAULT) logs -f apim-simulator mock-backend
 
 install-hooks:
 	git config core.hooksPath .githooks
@@ -499,6 +513,9 @@ smoke-todo:
 smoke-backstage:
 	BACKSTAGE_BASE_URL="$(BACKSTAGE_BASE_URL)" $(UV_RUN) python scripts/check_backstage.py
 
+smoke-keyvault:
+	KEYVAULT_BASE_URL="$(KEYVAULT_BASE_URL)" $(UV_RUN) python scripts/smoke_keyvault.py
+
 smoke-tutorials-live:
 	APIM_BASE="$(APIM_BASE_URL)" GRAFANA_BASE="$(GRAFANA_BASE_URL)" OPERATOR_CONSOLE_BASE="$(OPERATOR_CONSOLE_URL)" ./scripts/run_tutorial_smoke.sh --execute
 
@@ -552,6 +569,9 @@ compose-config-ui:
 
 compose-config-backstage:
 	$(COMPOSE_BACKSTAGE) config
+
+compose-config-keyvault:
+	$(COMPOSE_KEYVAULT) config
 
 compose-config-hello:
 	$(COMPOSE_HELLO) config

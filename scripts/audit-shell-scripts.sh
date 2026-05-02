@@ -9,6 +9,7 @@ source "${SCRIPT_DIR}/lib/shell-cli.sh"
 
 allowed_python_execution=(
   ".devcontainer/check-toolchain-surface.sh"
+  "scripts/platform-workflow-ui.sh"
 )
 
 bash4_feature_patterns=(

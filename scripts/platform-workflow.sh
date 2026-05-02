@@ -38,7 +38,7 @@ Workflow options:
   --target kind|lima|slicer       Kubernetes target stack (default: kind)
   --stage 100|200|...|900|950-local-idp
                                   Cumulative stage or named stage-like target (default: 700)
-  --action plan|apply|status|show-urls|check-health|check-security|check-rbac
+  --action plan|apply|reset|state-reset|status|show-urls|check-health|check-security|check-rbac
                                   Make workflow action (default: plan)
   --profile-name NAME             Name for save-profile output
   --profiles-dir PATH             Directory for save-profile output
@@ -75,6 +75,15 @@ target_path() {
   esac
 }
 
+target_state_lock_file() {
+  case "$1" in
+    kind) printf '%s/terraform/.run/kubernetes/.terraform.tfstate.lock.info\n' "${REPO_ROOT}" ;;
+    lima) printf '%s/terraform/.run/kubernetes-lima/.terraform.tfstate.lock.info\n' "${REPO_ROOT}" ;;
+    slicer) printf '%s/terraform/.run/kubernetes-slicer/.terraform.tfstate.lock.info\n' "${REPO_ROOT}" ;;
+    *) return 1 ;;
+  esac
+}
+
 validate_target() {
   target_path "$1" >/dev/null || die_usage "Invalid --target '${1}'. Expected one of: kind, lima, slicer"
 }
@@ -89,15 +98,15 @@ validate_stage() {
 
 validate_action() {
   case "$1" in
-    plan|apply|status|show-urls|check-health|check-security|check-rbac) ;;
-    *) die_usage "Invalid --action '${1}'. Expected one of: plan, apply, status, show-urls, check-health, check-security, check-rbac" ;;
+    plan|apply|reset|state-reset|status|show-urls|check-health|check-security|check-rbac) ;;
+    *) die_usage "Invalid --action '${1}'. Expected one of: plan, apply, reset, state-reset, status, show-urls, check-health, check-security, check-rbac" ;;
   esac
 }
 
 action_uses_stage() {
   case "$1" in
     plan|apply|check-health|check-security|check-rbac) return 0 ;;
-    status|show-urls) return 1 ;;
+    reset|state-reset|status|show-urls) return 1 ;;
     *) return 1 ;;
   esac
 }
@@ -191,6 +200,31 @@ build_command_args() {
   fi
 }
 
+check_state_lock_before_run() {
+  local lock_file=""
+  local reset_command=""
+  local lock_summary=""
+
+  case "${ACTION}" in
+    reset|state-reset) return 0 ;;
+  esac
+
+  lock_file="$(target_state_lock_file "${TARGET}")"
+  [[ -e "${lock_file}" ]] || return 0
+
+  reset_command="$(shell_cli_print_command make -C "${STACK_PATH}" state-reset AUTO_APPROVE=1)"
+  printf 'Terraform/OpenTofu state lock present: %s\n' "${lock_file}" >&2
+  if command -v jq >/dev/null 2>&1; then
+    lock_summary="$(jq -r '[.Operation,.Who,.Created] | map(select(. != null and . != "")) | join("; ")' "${lock_file}" 2>/dev/null || true)"
+    if [[ -n "${lock_summary}" ]]; then
+      printf 'Lock: %s\n' "${lock_summary}" >&2
+    fi
+  fi
+  printf 'Refusing to run %s while the previous Terraform/OpenTofu operation may still be active.\n' "${ACTION}" >&2
+  printf 'To clear a stale lock after confirming no operation is active, run:\n  %s\n' "${reset_command}" >&2
+  return 2
+}
+
 command_string() {
   shell_cli_print_command "${WORKFLOW_COMMAND_ARGS[@]}"
 }
@@ -221,6 +255,8 @@ Actions:
   apply
   status
   show-urls
+  reset
+  state-reset
   check-health
   check-security
   check-rbac
@@ -246,7 +282,7 @@ EOF
           {id:"900", label:"sso"},
           {id:"950-local-idp", label:"local-idp", target:"kind"}
         ],
-        actions: ["plan", "apply", "status", "show-urls", "check-health", "check-security", "check-rbac"],
+        actions: ["plan", "apply", "reset", "state-reset", "status", "show-urls", "check-health", "check-security", "check-rbac"],
         apps: ["sentiment", "subnetcalc"],
         profiles: []
       }'
@@ -362,7 +398,10 @@ fi
 
 case "${SUBCOMMAND}" in
   options|preview|apply|save-profile) ;;
-  -h|--help|'')
+  '')
+    SUBCOMMAND="preview"
+    ;;
+  -h|--help)
     usage
     exit 0
     ;;
@@ -467,6 +506,7 @@ case "${SUBCOMMAND}" in
   apply)
     write_tfvars_if_needed
     print_preview "${STACK_PATH}" >&2
+    check_state_lock_before_run
     exec "${WORKFLOW_COMMAND_ARGS[@]}"
     ;;
   save-profile)

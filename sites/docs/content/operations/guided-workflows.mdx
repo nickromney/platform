@@ -13,7 +13,7 @@ remembering every flag.
 The command flow is:
 
 ```text
-TUI or browser UI
+Bubble Tea TUI or FastAPI/HTMX browser UI
   -> scripts/platform-workflow.sh
   -> make -C kubernetes/<target> <stage> <action>
 ```
@@ -22,7 +22,7 @@ The wrapper does not replace the stage Makefiles. It builds the same command
 you would type by hand and, when app toggles are selected, writes a small
 generated tfvars file under `.run/operator/`.
 
-## TUI
+## Terminal TUI
 
 Start the terminal UI from the repo root:
 
@@ -30,23 +30,34 @@ Start the terminal UI from the repo root:
 make tui
 ```
 
-or run the helper directly:
+The TUI is a Bubble Tea app in `tools/platform-tui`. It requires Go when run
+from source with `make tui`; the direct Make workflows do not require Go. Build
+a local binary with:
 
 ```bash
-scripts/platform-tui.sh
+make build-tui
 ```
 
-Choose **Guided platform workflow** for the conversational path. A typical
-plan-only smoke test is:
+or run the Go helper directly:
+
+```bash
+go run ./tools/platform-tui/cmd/platform-tui --execute
+```
+
+Choose a target, stage, action, and app toggles from the guided screens. A
+typical plan-only smoke test is:
 
 ```text
-Guided platform workflow
 kind
 900 sso
 plan
 Disable sentiment
-Use stage default (enabled)
+Enable subnetcalc (stage default)
 ```
+
+Choose `Reset target` from the stage screen when you need the target-local reset
+workflow. The preview should show `make -C kubernetes/<target> reset
+AUTO_APPROVE=1`.
 
 For a full Kind stage-900 apply without the sentiment reference app, choose the
 same options but select `apply`. The preview should include a command shaped
@@ -60,6 +71,22 @@ env PLATFORM_TFVARS=/Users/nickromney/Developer/personal/platform/.run/operator/
   `apply` is still a real Make workflow. Use `plan` first when you are exploring
   combinations, especially when the live cluster is already at a higher stage.
 </Callout>
+
+### TUI Affordances
+
+The TUI is the most polished local operator path. It includes:
+
+- explicit `Back` and `Quit` items on intermediate screens;
+- stage-aware app prompts, so stages `100` through `600` skip sentiment and
+  subnetcalc toggles;
+- streaming command output in a scrollable viewport;
+- output review with `PgUp`, `PgDn`, `u`, `d`, `Home`, and `End`;
+- auto-follow while output streams, with manual scrollback preserving your
+  position;
+- focus moving to `Back` after successful runs, so a destructive action is not
+  selected again by default;
+- opinionated next-stage shortcuts after successful applies, for example
+  `600 apply`, `900 apply`, and Kind-only `950 apply` after `500 apply`.
 
 ## Shared Core
 
@@ -103,10 +130,11 @@ scripts/platform-workflow.sh preview --execute \
   --action plan
 ```
 
-## Browser Wrapper
+## Browser UI
 
-The browser UI is a local wrapper over the same workflow core. It is useful for
-checking the graphical affordance, but the CLI/TUI path stays primary.
+The browser UI is a local FastAPI + HTMX wrapper over the same workflow core.
+It is useful when you want a lightweight web surface without a JavaScript build
+pipeline.
 
 ```bash
 make workflow-ui
@@ -115,23 +143,49 @@ make workflow-ui
 or run the helper directly:
 
 ```bash
-scripts/platform-workflow-ui.sh --execute --host 127.0.0.1 --port 8765
+scripts/platform-workflow-ui.sh --execute
 ```
 
 Then open:
 
 ```text
-http://127.0.0.1:8765
+https://console.127.0.0.1.sslip.io:8443
 ```
 
-The UI should let you choose the same options as the TUI and preview the same
-command. It uses only the Python standard library server in
-`scripts/platform-workflow-ui.py`; there are no Flask, FastAPI, or extra Python
-packages to pin.
+The UI is a small FastAPI + HTMX app under `tools/platform-workflow-ui`. It is
+served through `uv` by `scripts/platform-workflow-ui.sh`, vendors HTMX locally,
+and does not use Node, Vite, React, or `node_modules`.
+
+The browser UI supports command preview, running the selected workflow, polling
+command output, stage-aware app toggles, and next-stage actions after a
+successful apply. It intentionally stays local and small:
+
+```text
+scripts/platform-workflow-ui.sh
+  -> uv run --project tools/platform-workflow-ui
+  -> hypercorn platform_workflow_ui.main:app
+  -> scripts/platform-workflow.sh
+```
+
+HTTPS over HTTP/2 is the default. It uses Hypercorn and a local mkcert
+certificate under `.run/workflow-ui` unless you pass explicit certificate paths
+to `scripts/platform-workflow-ui.sh`. Plain HTTP is still available as an
+opt-in fallback:
+
+```bash
+make workflow-ui WORKFLOW_UI_HTTP=http1 WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=8765
+```
+
+Use a different HTTPS port when `8443` is already taken:
+
+```bash
+make workflow-ui WORKFLOW_UI_PORT=9876
+```
 
 <Callout type="warning">
-  Keep the workflow UI bound to `127.0.0.1`. It is a local operator helper, not
-  a hardened remotely exposed control plane.
+  Keep the workflow UI on loopback addresses such as
+  `console.127.0.0.1.sslip.io` or `127.0.0.1`. It is a local operator helper,
+  not a hardened remotely exposed control plane.
 </Callout>
 
 ## Plan Matrix

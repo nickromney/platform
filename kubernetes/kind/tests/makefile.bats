@@ -891,6 +891,102 @@ EOF
   [[ "$(cat "${state_file}")" == "running" ]]
 }
 
+@test "kind prereqs revives stopped kind before kubeconfig validation" {
+  run bash -c 'prereqs=$(sed -n "/^prereqs:/,/^preload-images:/p" "$1"); ensure_line=$(printf "%s\n" "$prereqs" | grep -n "\$(MAKE) ensure-kind-running" | head -n1 | cut -d: -f1); kubeconfig_line=$(printf "%s\n" "$prereqs" | grep -n "\$(MAKE) check-kubeconfig" | head -n1 | cut -d: -f1); test -n "$ensure_line" && test -n "$kubeconfig_line" && test "$ensure_line" -lt "$kubeconfig_line"' _ \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind start does not print misleading node listing failures" {
+  run bash -c 'sed -n "/^start-kind:/,/^start:/p" "$1" | grep -F "get nodes -o wide" || true' _ \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "kind check-kind-state refuses to continue when a local terraform lock remains" {
+  state_file="${BATS_TEST_TMPDIR}/terraform.tfstate"
+  cat >"${state_file}" <<'EOF'
+{
+  "version": 4,
+  "resources": [
+    {
+      "type": "kind_cluster",
+      "name": "local",
+      "instances": [{}]
+    }
+  ]
+}
+EOF
+  cat >"${state_file%/*}/.terraform.tfstate.lock.info" <<'EOF'
+{"ID":"test-lock","Operation":"OperationTypeApply","Who":"tester","Created":"2026-05-02T06:07:31Z"}
+EOF
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "info" ]]; then
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "get" && "${2:-}" == "clusters" ]]; then
+  printf 'kind-local\n'
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/kind"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-kind-state STATE_FILE="${state_file}"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"terraform state lock remains"* ]]
+  [[ "${output}" == *".terraform.tfstate.lock.info"* ]]
+  [[ "${output}" == *"Lock: OperationTypeApply; tester; 2026-05-02T06:07:31Z"* ]]
+  [[ "${output}" == *"Refusing to continue while the previous Terraform/OpenTofu operation may still be active"* ]]
+}
+
+@test "kind state-reset removes only the local terraform lock" {
+  state_dir="${BATS_TEST_TMPDIR}/state"
+  mkdir -p "${state_dir}"
+  lock_file="${state_dir}/.terraform.tfstate.lock.info"
+  state_file="${state_dir}/terraform.tfstate"
+  printf '{"version":4}\n' >"${state_file}"
+  cat >"${lock_file}" <<'EOF'
+{"ID":"test-lock","Operation":"OperationTypePlan","Who":"tester","Created":"2026-05-02T10:21:33Z"}
+EOF
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" state-reset STATE_LOCK_FILE="${lock_file}" AUTO_APPROVE=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"This will remove the Terraform/OpenTofu state lock only"* ]]
+  [[ "${output}" == *"Lock: OperationTypePlan; tester; 2026-05-02T10:21:33Z"* ]]
+  [[ "${output}" == *"OK   Removed Terraform/OpenTofu state lock: ${lock_file}"* ]]
+  [ -f "${state_file}" ]
+  [ ! -e "${lock_file}" ]
+}
+
+@test "kind state-reset fails clearly without auto approval in non-interactive mode" {
+  state_dir="${BATS_TEST_TMPDIR}/state"
+  mkdir -p "${state_dir}"
+  lock_file="${state_dir}/.terraform.tfstate.lock.info"
+  printf '{"Operation":"OperationTypePlan"}\n' >"${lock_file}"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" state-reset STATE_LOCK_FILE="${lock_file}"
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"ABORTED: state reset requires AUTO_APPROVE=1 in non-interactive mode"* ]]
+  [ -e "${lock_file}" ]
+}
+
 @test "kind reset prepares invalid kubeconfigs for cleanup instead of blindly backing them up" {
   run grep -Fn '"$(RESET_KUBECONFIG_CONTEXT)" --execute --kubeconfig "$$KUBECONFIG_PATH"' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
@@ -1107,4 +1203,12 @@ EOF
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -ne 0 ]
+}
+
+@test "kind reset does not stop other platform runtimes" {
+  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting Lima/Slicer runtimes" || true' _ \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }

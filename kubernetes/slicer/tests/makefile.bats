@@ -25,6 +25,7 @@ setup() {
   [[ "${output}" == *"~/.kube/slicer-k3s.yaml"* ]]
   [[ "${output}" == *"~/slicer-mac/slicer.sock"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
+  [[ "${output}" == *"make state-reset  [AUTO_APPROVE=1]"* ]]
   [[ "${output}" != *"${HOME}"* ]]
 }
 
@@ -188,6 +189,23 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "slicer state-reset removes only the local terraform lock" {
+  state_dir="${BATS_TEST_TMPDIR}/state"
+  mkdir -p "${state_dir}"
+  lock_file="${state_dir}/.terraform.tfstate.lock.info"
+  state_file="${state_dir}/terraform.tfstate"
+  printf '{"version":4}\n' >"${state_file}"
+  printf '{"Operation":"OperationTypePlan","Who":"tester","Created":"2026-05-02T10:21:33Z"}\n' >"${lock_file}"
+
+  run make -C "${REPO_ROOT}/kubernetes/slicer" state-reset STATE_LOCK_FILE="${lock_file}" AUTO_APPROVE=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Lock: OperationTypePlan; tester; 2026-05-02T10:21:33Z"* ]]
+  [[ "${output}" == *"OK   Removed Terraform/OpenTofu state lock: ${lock_file}"* ]]
+  [ -f "${state_file}" ]
+  [ ! -e "${lock_file}" ]
+}
+
 @test "slicer reset warns when Docker proxy cleanup cannot be verified" {
   run grep -Fn 'existing Slicer proxy containers, if any, could not be removed' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
@@ -212,6 +230,14 @@ setup() {
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -ne 0 ]
+}
+
+@test "slicer reset does not stop other platform runtimes" {
+  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting kind/Lima runtimes" || true' _ \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }
 
 @test "stop-slicer reports the shared host ports it is releasing" {

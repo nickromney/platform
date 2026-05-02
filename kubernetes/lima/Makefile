@@ -5,6 +5,7 @@ STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := lima
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes-lima/terraform.tfstate
+STATE_LOCK_FILE ?= $(dir $(STATE_FILE)).terraform.tfstate.lock.info
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
@@ -95,7 +96,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -191,6 +192,7 @@ help:
 	@echo "  make prereqs"
 	@echo "  make proxy-status"
 	@echo "  make reset        [AUTO_APPROVE=1]"
+	@echo "  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only"
 	@echo "  make show-urls"
 	@echo "  make status"
 	@echo "  make stop                                    Alias for stop-lima"
@@ -460,7 +462,12 @@ status:
 stop-lima:
 	@set -euo pipefail; \
 	command -v limactl >/dev/null 2>&1 || { echo "limactl not found in PATH"; exit 1; }; \
-	echo "Shared host ports managed by Lima:"; \
+	vm_names="$$(limactl list -q 2>/dev/null | grep -E '^$(LIMA_INSTANCE_PREFIX)-[0-9]+$$' || true)"; \
+	if [ -n "$$vm_names" ]; then \
+		echo "Shared host ports managed by active Lima runtime:"; \
+	else \
+		echo "Configured Lima shared host port set (no matching Lima VMs found):"; \
+	fi; \
 	for port in $(LIMA_SHARED_HOST_PORTS); do \
 		printf '  127.0.0.1:%s\n' "$$port"; \
 	done; \
@@ -468,7 +475,6 @@ stop-lima:
 	echo "Stopping host gateway proxy containers (best-effort)..."; \
 	$(MAKE) stop-host-gateway-proxy >/dev/null 2>&1 || true; \
 	echo "OK   proxies stopped"; \
-	vm_names="$$(limactl list -q 2>/dev/null | grep -E '^$(LIMA_INSTANCE_PREFIX)-[0-9]+$$' || true)"; \
 	if [ -z "$$vm_names" ]; then \
 		echo "No Lima VMs matching $(LIMA_INSTANCE_PREFIX)-* found."; \
 		exit 0; \
@@ -951,7 +957,6 @@ reset:
 	vm_names="$$(limactl list -q 2>/dev/null | grep -E '^$(LIMA_INSTANCE_PREFIX)-[0-9]+$$' || true)"; \
 	echo "This will:"; \
 	echo "  - Delete Lima VMs matching $(LIMA_INSTANCE_PREFIX)-*"; \
-	echo "  - Stop conflicting kind/Slicer runtimes (best-effort)"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
 	echo "  - Stop host gateway proxy containers"; \
 	echo "  - Remove local terragrunt state: $$state_dir"; \
@@ -964,10 +969,6 @@ reset:
 			exit 0; \
 		fi; \
 	fi; \
-	echo ""; \
-	echo "Stopping conflicting platform runtimes (best-effort)..."; \
-	"$(STOP_PLATFORM_RUNTIMES)" --execute --exclude lima; \
-	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Stopping host gateway proxy containers (best-effort)..."; \
 	$(MAKE) stop-host-gateway-proxy >/dev/null 2>&1 || true; \
@@ -1011,6 +1012,28 @@ reset:
 	rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   done"
+
+.PHONY: state-reset
+state-reset:
+	@set -euo pipefail; \
+	lock_file="$(STATE_LOCK_FILE)"; \
+	if [ ! -e "$$lock_file" ]; then \
+		echo "OK   No Terraform/OpenTofu state lock found: $$lock_file"; \
+		exit 0; \
+	fi; \
+	echo "This will remove the Terraform/OpenTofu state lock only:"; \
+	echo "  - $$lock_file"; \
+	if command -v jq >/dev/null 2>&1; then \
+		lock_summary="$$(jq -r '[.Operation,.Who,.Created] | map(select(. != null and . != "")) | join("; ")' "$$lock_file" 2>/dev/null || true)"; \
+		if [ -n "$$lock_summary" ]; then echo "Lock: $$lock_summary"; fi; \
+	fi; \
+	if [ "$(AUTO_APPROVE)" != "1" ]; then \
+		if [ ! -t 0 ]; then echo "ABORTED: state reset requires AUTO_APPROVE=1 in non-interactive mode. No state files were changed."; exit 2; fi; \
+		printf "Proceed with Terraform/OpenTofu state lock removal? [y/N] "; read -r confirm; \
+		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: state reset cancelled by user. No state files were changed."; exit 0; fi; \
+	fi; \
+	rm -f "$$lock_file"; \
+	echo "OK   Removed Terraform/OpenTofu state lock: $$lock_file"
 
 .PHONY: env
 env:

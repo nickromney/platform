@@ -48,6 +48,7 @@ from app.config import (
     UserConfig,
     load_config,
 )
+from app.keyvault import register_keyvault_routes
 from app.management_service import ManagementService
 from app.named_values import mask_secret_data
 from app.openapi_import import parse_api_import
@@ -761,6 +762,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             return response
         finally:
             reset_correlation_id(token)
+
+    register_keyvault_routes(app)
 
     @app.get("/")
     async def root_hint(request: Request) -> dict[str, Any]:

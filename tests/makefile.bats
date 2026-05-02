@@ -24,7 +24,8 @@ setup() {
   [[ "${output}" == *"make status [STATUS_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make test"* ]]
   [[ "${output}" == *"make tui"* ]]
-  [[ "${output}" == *"make workflow-ui [WORKFLOW_UI_PORT=8765]"* ]]
+  [[ "${output}" == *"make build-tui"* ]]
+  [[ "${output}" == *"make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]"* ]]
   [[ "${output}" == *"make kubernetes"* ]]
   [[ "${output}" == *"make docker"* ]]
   [[ "${output}" == *"make apps"* ]]
@@ -42,6 +43,7 @@ setup() {
 
   apps_line="$(printf '%s\n' "${output}" | grep -n '^  make apps' | cut -d: -f1)"
   check_version_line="$(printf '%s\n' "${output}" | grep -n '^  make check-version' | cut -d: -f1)"
+  build_tui_line="$(printf '%s\n' "${output}" | grep -n '^  make build-tui' | cut -d: -f1)"
   docker_line="$(printf '%s\n' "${output}" | grep -n '^  make docker' | cut -d: -f1)"
   fmt_line="$(printf '%s\n' "${output}" | grep -n '^  make fmt' | cut -d: -f1)"
   kubernetes_line="$(printf '%s\n' "${output}" | grep -n '^  make kubernetes' | cut -d: -f1)"
@@ -50,7 +52,8 @@ setup() {
   tui_line="$(printf '%s\n' "${output}" | grep -n '^  make tui' | cut -d: -f1)"
   workflow_ui_line="$(printf '%s\n' "${output}" | grep -n '^  make workflow-ui' | cut -d: -f1)"
 
-  [ "${apps_line}" -lt "${check_version_line}" ]
+  [ "${apps_line}" -lt "${build_tui_line}" ]
+  [ "${build_tui_line}" -lt "${check_version_line}" ]
   [ "${check_version_line}" -lt "${docker_line}" ]
   [ "${docker_line}" -lt "${fmt_line}" ]
   [ "${fmt_line}" -lt "${kubernetes_line}" ]
@@ -133,8 +136,8 @@ EOF
   [ "${output}" = $'status --execute --output json' ]
 }
 
-@test "root tui delegates to the platform tui helper" {
-  tui_stub="${BATS_TEST_TMPDIR}/platform-tui.sh"
+@test "root tui delegates to the Go platform tui command" {
+  tui_stub="${BATS_TEST_TMPDIR}/platform-tui"
   log_file="${BATS_TEST_TMPDIR}/platform-tui.log"
 
   cat >"${tui_stub}" <<EOF
@@ -145,7 +148,7 @@ printf 'platform tui\n'
 EOF
   chmod +x "${tui_stub}"
 
-  run make -C "${REPO_ROOT}" tui PLATFORM_TUI_SCRIPT="${tui_stub}"
+  run make -C "${REPO_ROOT}" tui PLATFORM_TUI_CMD="${tui_stub}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"platform tui"* ]]
@@ -154,6 +157,58 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'tui --execute' ]
+}
+
+@test "root tui fails cleanly when go is missing" {
+  run make -C "${REPO_ROOT}" tui PLATFORM_TUI_GO_BIN="${BATS_TEST_TMPDIR}/missing-go"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"Go is required for make tui."* ]]
+  [[ "${output}" == *"use make status / focused Makefiles directly if you do not want the TUI."* ]]
+}
+
+@test "root build-tui delegates to the tool-local Makefile" {
+  build_stub="${BATS_TEST_TMPDIR}/build-tui"
+  log_file="${BATS_TEST_TMPDIR}/build-tui.log"
+
+  cat >"${build_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'build %s\n' "\$*" >>"${log_file}"
+printf 'built tui\n'
+EOF
+  chmod +x "${build_stub}"
+
+  run make -C "${REPO_ROOT}" build-tui PLATFORM_TUI_BUILD_CMD="${build_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"built tui"* ]]
+
+  run cat "${log_file}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "build " ]
+}
+
+@test "root workflow-ui passes host port and http mode to the wrapper" {
+  ui_stub="${BATS_TEST_TMPDIR}/workflow-ui"
+  log_file="${BATS_TEST_TMPDIR}/workflow-ui.log"
+
+  cat >"${ui_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >"${log_file}"
+printf 'workflow ui\n'
+EOF
+  chmod +x "${ui_stub}"
+
+  run make -C "${REPO_ROOT}" workflow-ui PLATFORM_WORKFLOW_UI_SCRIPT="${ui_stub}" WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=9999 WORKFLOW_UI_HTTP=h2
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"workflow ui"* ]]
+
+  run cat "${log_file}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "--execute --host 127.0.0.1 --port 9999 --http h2" ]
 }
 
 @test "root clean-local-state delegates to the reset helper with dry-run and opt-in scopes" {
@@ -190,6 +245,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Root prereqs is informational."* ]]
+  [[ "${output}" == *"go (only for make tui / make build-tui)"* ]]
   [[ "${output}" == *"make -C .devcontainer prereqs"* ]]
   [[ "${output}" == *"make -C docker/compose prereqs"* ]]
   [[ "${output}" == *"make -C kubernetes/kind prereqs"* ]]

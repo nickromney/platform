@@ -43,7 +43,8 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"make -C kubernetes/slicer stop-slicer"* ]]
-  [[ "${output}" == *"Conflicting shared host ports currently in use by Slicer:"* ]]
+  [[ "${output}" == *"Shared host ports currently in use while Slicer is active:"* ]]
+  [[ "${output}" != *"currently in use by Slicer"* ]]
   [[ "${output}" == *"127.0.0.1:443"* ]]
   [[ "${output}" == *"slicer-platform-gateway-443"* ]]
 }

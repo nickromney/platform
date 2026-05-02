@@ -5,6 +5,7 @@ STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := kind
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes/terraform.tfstate
+STATE_LOCK_FILE ?= $(dir $(STATE_FILE)).terraform.tfstate.lock.info
 LEGACY_STATE_FILE ?= ../../terraform/.run/platform/terraform.tfstate
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -102,7 +103,7 @@ VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-ss
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind|950-local-idp] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -215,6 +216,7 @@ help:
 	@echo "  make preload-images-pull-only                 Warm Docker cache only"
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
+	@echo "  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only"
 	@echo "  make show-urls"
 	@echo "  make sync-image-cache                        Mirror the filtered preload image set into the shared host registry"
 	@echo "  make status"
@@ -354,7 +356,16 @@ check-kind-state:
 	fi; \
 	if [ ! -f "$(STATE_FILE)" ]; then \
 		echo "kind-local exists, but $(STATE_FILE) is missing."; \
-		echo "Refusing to apply with no local state for the live cluster."; \
+		echo "Refusing to continue with no local state for the live cluster."; \
+		exit 1; \
+	fi; \
+	if [ -f "$(STATE_LOCK_FILE)" ]; then \
+		echo "kind-local exists, but terraform state lock remains: $(STATE_LOCK_FILE)"; \
+		if command -v jq >/dev/null 2>&1; then \
+			lock_summary="$$(jq -r '[.Operation,.Who,.Created] | map(select(. != null and . != "")) | join("; ")' "$(STATE_LOCK_FILE)" 2>/dev/null || true)"; \
+			if [ -n "$$lock_summary" ]; then echo "Lock: $$lock_summary"; fi; \
+		fi; \
+		echo "Refusing to continue while the previous Terraform/OpenTofu operation may still be active."; \
 		exit 1; \
 	fi; \
 	if ! jq -e '.resources[] | select(.type=="kind_cluster" and .name=="local" and (.instances | length) > 0)' "$(STATE_FILE)" >/dev/null 2>&1; then \
@@ -362,7 +373,7 @@ check-kind-state:
 		if [ -f "$(STATE_FILE).backup" ]; then \
 			echo "A backup exists at $(STATE_FILE).backup."; \
 		fi; \
-		echo "Refusing to apply against a live cluster with truncated state."; \
+		echo "Refusing to continue against a live cluster with truncated state."; \
 		exit 1; \
 	fi
 
@@ -1086,7 +1097,6 @@ start-kind:
 	docker start $$nodes >/dev/null; \
 	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" GLOBAL_KUBECONFIG_PATH="$(DEFAULT_KUBECONFIG_PATH)" KUBECONFIG_HELPER="$(KUBECONFIG_HELPER)" MERGE_KUBECONFIG_TO_DEFAULT="$(MERGE_KUBECONFIG_TO_DEFAULT)" "$(ENSURE_KIND_KUBECONFIG)" --execute || true; \
 	echo "Started: $$nodes"; \
-	kubectl --kubeconfig "$(KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)" get nodes -o wide || true
 
 .PHONY: start
 start:
@@ -1182,6 +1192,7 @@ prereqs:
 		$(MAKE) check-platform-env; \
 		echo ""; \
 	fi; \
+	$(MAKE) ensure-kind-running; \
 	$(MAKE) check-kubeconfig
 
 .PHONY: preload-images
@@ -1219,7 +1230,6 @@ reset:
 	STATE_DIR="$(dir $(STATE_FILE))"; \
 	echo "This will:"; \
 	echo "  - Delete kind cluster: $$CLUSTER_NAME"; \
-	echo "  - Stop conflicting Lima/Slicer runtimes (best-effort)"; \
 	if [ -n "$$CTX" ]; then \
 		echo "  - Remove kubeconfig context/cluster/user: $$CTX"; \
 	else \
@@ -1255,10 +1265,6 @@ reset:
 			if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: reset cancelled by user at the confirmation prompt. Docker preflight passed. No kubeconfig or local state changes were made."; exit 0; fi; \
 		fi; \
 	fi; \
-	echo ""; \
-	echo "Stopping conflicting platform runtimes (best-effort)..."; \
-	"$(STOP_PLATFORM_RUNTIMES)" --execute --exclude kind; \
-	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Cleaning kubeconfig (best-effort)..."; \
 	if [ -n "$$CTX" ]; then \
@@ -1310,6 +1316,28 @@ reset:
 	rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \
 	rm -f "$(STACK_DIR)/kind-config.yaml" "$(STACK_DIR)/backend.tf" 2>/dev/null || true; \
 	echo "OK   Done"
+
+.PHONY: state-reset
+state-reset:
+	@set -euo pipefail; \
+	lock_file="$(STATE_LOCK_FILE)"; \
+	if [ ! -e "$$lock_file" ]; then \
+		echo "OK   No Terraform/OpenTofu state lock found: $$lock_file"; \
+		exit 0; \
+	fi; \
+	echo "This will remove the Terraform/OpenTofu state lock only:"; \
+	echo "  - $$lock_file"; \
+	if command -v jq >/dev/null 2>&1; then \
+		lock_summary="$$(jq -r '[.Operation,.Who,.Created] | map(select(. != null and . != "")) | join("; ")' "$$lock_file" 2>/dev/null || true)"; \
+		if [ -n "$$lock_summary" ]; then echo "Lock: $$lock_summary"; fi; \
+	fi; \
+	if [ "$(AUTO_APPROVE)" != "1" ]; then \
+		if [ ! -t 0 ]; then echo "ABORTED: state reset requires AUTO_APPROVE=1 in non-interactive mode. No state files were changed."; exit 2; fi; \
+		printf "Proceed with Terraform/OpenTofu state lock removal? [y/N] "; read -r confirm; \
+		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: state reset cancelled by user. No state files were changed."; exit 0; fi; \
+	fi; \
+	rm -f "$$lock_file"; \
+	echo "OK   Removed Terraform/OpenTofu state lock: $$lock_file"
 
 .PHONY: env
 env:
