@@ -5,6 +5,7 @@ STACK_DIR := ../../terraform/kubernetes
 STACK_RUNTIME_SCOPE := slicer
 STACK_RUNTIME_DIR := $(abspath $(STACK_DIR)/.run/$(STACK_RUNTIME_SCOPE))
 STATE_FILE ?= ../../terraform/.run/kubernetes-slicer/terraform.tfstate
+STATE_LOCK_FILE ?= $(dir $(STATE_FILE)).terraform.tfstate.lock.info
 TG_STATE_PATH ?= $(abspath $(STATE_FILE))
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(MAKEFILE_DIR)../..)
@@ -122,7 +123,7 @@ VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_SLICER_NETWORK_PROFILES := cilium default
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file readiness prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kind-stopped check-lima-stopped check-conflicting-clusters-stopped assert-slicer-active check-kubeconfig check-host-ports check-platform-env-file readiness prereqs daemon-up daemon-down slicer-vm-up start bootstrap-k3s merge-default-kubeconfig ensure-host-forwards stop-host-forwards host-forward-status ensure-image-cache sync-image-cache build-workload-images status stop-slicer stop check-vm-health configure-k3s-apiserver-oidc init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -233,6 +234,7 @@ help:
 	@echo "  make plan         100|200|300|...|900"
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
+	@echo "  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only"
 	@echo "  make show-urls"
 	@echo "  make start        Alias for slicer-vm-up"
 	@echo "  make slicer-vm-up"
@@ -1208,7 +1210,6 @@ reset:
 	else \
 		echo "  - Delete Slicer VM $(SLICER_VM_NAME) if present"; \
 	fi; \
-	echo "  - Stop conflicting kind/Lima runtimes (best-effort)"; \
 	echo "  - Stop host forwards and Docker proxy helpers (best-effort)"; \
 	echo "  - Clean any stale repo-managed slicer daemon state from older revisions"; \
 	echo "  - Remove kubeconfig context/cluster/user: $$ctx"; \
@@ -1222,10 +1223,6 @@ reset:
 			exit 0; \
 		fi; \
 	fi; \
-	echo ""; \
-	echo "Stopping conflicting platform runtimes (best-effort)..."; \
-	"$(STOP_PLATFORM_RUNTIMES)" --execute --exclude slicer; \
-	echo "OK   conflicting platform runtimes stopped"; \
 	echo ""; \
 	echo "Stopping host forwards (best-effort)..."; \
 	$(MAKE) stop-host-forwards >/dev/null 2>&1 || true; \
@@ -1281,6 +1278,28 @@ reset:
 		echo "WARN reset completed with manual Slicer cleanup still required." >&2; \
 		exit 1; \
 	fi
+
+.PHONY: state-reset
+state-reset:
+	@set -euo pipefail; \
+	lock_file="$(STATE_LOCK_FILE)"; \
+	if [ ! -e "$$lock_file" ]; then \
+		echo "OK   No Terraform/OpenTofu state lock found: $$lock_file"; \
+		exit 0; \
+	fi; \
+	echo "This will remove the Terraform/OpenTofu state lock only:"; \
+	echo "  - $$lock_file"; \
+	if command -v jq >/dev/null 2>&1; then \
+		lock_summary="$$(jq -r '[.Operation,.Who,.Created] | map(select(. != null and . != "")) | join("; ")' "$$lock_file" 2>/dev/null || true)"; \
+		if [ -n "$$lock_summary" ]; then echo "Lock: $$lock_summary"; fi; \
+	fi; \
+	if [ "$(AUTO_APPROVE)" != "1" ]; then \
+		if [ ! -t 0 ]; then echo "ABORTED: state reset requires AUTO_APPROVE=1 in non-interactive mode. No state files were changed."; exit 2; fi; \
+		printf "Proceed with Terraform/OpenTofu state lock removal? [y/N] "; read -r confirm; \
+		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then echo "ABORTED: state reset cancelled by user. No state files were changed."; exit 0; fi; \
+	fi; \
+	rm -f "$$lock_file"; \
+	echo "OK   Removed Terraform/OpenTofu state lock: $$lock_file"
 
 .PHONY: env
 env:

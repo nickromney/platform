@@ -12,12 +12,14 @@ Makefiles over root shortcuts for mutating stack work.
 
 ```bash
 make
+make build-tui
 make check-version
 make clean-local-state DRY_RUN=1
 make fmt
 make lint
 make status
 make tui
+make workflow-ui
 ```
 
 Root `make` is a router. Root `make prereqs` and `make test` are also
@@ -28,16 +30,40 @@ informational; they point you at focused entrypoints.
 ```bash
 make tui
 make workflow-ui
-scripts/platform-tui.sh
+go run ./tools/platform-tui/cmd/platform-tui --execute
 scripts/platform-workflow.sh options --execute
 scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan
 scripts/platform-workflow.sh preview --execute --target kind --stage 900 --action plan --app sentiment=off
 scripts/platform-workflow-ui.sh --execute --host 127.0.0.1 --port 8765
 ```
 
-`make tui` is the primary guided interface. `make workflow-ui` serves the local
-browser chooser. `scripts/platform-workflow.sh` is the shared non-interactive
-core used by both wrappers.
+`make tui` is the primary Bubble Tea guided interface. `make workflow-ui`
+serves the local browser chooser. `scripts/platform-workflow.sh` is the shared
+non-interactive core used by both wrappers.
+
+`make tui` requires Go because the TUI is source-built with `go run`. Go is not
+required for the platform Make workflows themselves. Use `make build-tui` to
+build a local binary under `tools/platform-tui/bin/`; release builds can attach
+that binary as an artifact rather than committing compiled output.
+
+`make workflow-ui` requires `uv`. It serves the FastAPI + HTMX browser UI from
+`tools/platform-workflow-ui` at `https://console.127.0.0.1.sslip.io:8443` by
+default:
+
+```bash
+make workflow-ui
+make workflow-ui WORKFLOW_UI_PORT=9876
+make workflow-ui WORKFLOW_UI_HTTP=http1 WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=8765
+```
+
+The web UI vendors HTMX locally and does not require Node, Vite, React, or a
+`node_modules` install.
+
+HTTPS over HTTP/2 is the default and is served by Hypercorn. It uses mkcert to
+create `.run/workflow-ui/workflow-ui.pem` and
+`.run/workflow-ui/workflow-ui-key.pem` if you do not provide certificate paths
+directly to `scripts/platform-workflow-ui.sh`. `WORKFLOW_UI_HTTP=http1` is the
+plain HTTP fallback.
 
 ## Version Audits
 

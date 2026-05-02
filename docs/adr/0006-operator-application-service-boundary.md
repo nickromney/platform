@@ -19,8 +19,8 @@ entrypoints:
   subtree workflows
 - `scripts/platform-status.sh`, which assembles the read model for ownership,
   readiness, blockers, and available actions across variants
-- `scripts/platform-tui.sh`, which presents the same status/action surface in
-  an interactive chooser and falls back to plain status text when needed
+- `tools/platform-tui`, which presents the same status/action surface in an
+  interactive Bubble Tea chooser and falls back to plain status text when needed
 
 The tests make this explicit. Root `make` is required to stay informational.
 `platform-status` exposes variant-oriented fields and action metadata.
@@ -62,10 +62,10 @@ workspace-wide services rather than variant-specific operations.
 
 - [Makefile](../../Makefile)
 - [scripts/platform-status.sh](../../scripts/platform-status.sh)
-- [scripts/platform-tui.sh](../../scripts/platform-tui.sh)
+- [tools/platform-tui](../../tools/platform-tui)
 - [tests/makefile.bats](../../tests/makefile.bats)
 - [tests/platform-status.bats](../../tests/platform-status.bats)
-- [tests/platform-tui.bats](../../tests/platform-tui.bats)
+- [tools/platform-tui/internal/tui/model_test.go](../../tools/platform-tui/internal/tui/model_test.go)
 - Current history:
   - `d88aace` improved repo onboarding and root Make defaults
   - `0f65cec` added local runtime status and the TUI

@@ -81,6 +81,47 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "returns success without exporting when kind metadata exists but control-plane is stopped" {
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  get)
+    printf 'kind-local\n'
+    ;;
+  export)
+    echo 'ERROR: failed to get cluster internal kubeconfig' >&2
+    exit 1
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/kind"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "ps" ]]; then
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run env KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"failed to get cluster internal kubeconfig"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/kind-kind-local.yaml" ]
+}
+
 @test "returns success when kind get clusters times out" {
   cat >"${TEST_BIN}/kind" <<'EOF'
 #!/usr/bin/env bash

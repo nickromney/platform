@@ -1,0 +1,5 @@
+services:
+  apim-simulator:
+    environment:
+      KEYVAULT_STORE_PATH: /tmp/apim-keyvault-store.json
+      KEYVAULT_HOST: ${KEYVAULT_HOST:-local-keyvault.vault.azure.net}

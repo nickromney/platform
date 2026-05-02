@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.config import GatewayConfig
+from app.keyvault import resolve_secret_id_from_store
 
 NAMED_VALUE_PATTERN = re.compile(r"\{\{([^{}]+)\}\}")
 ENV_NAME_PATTERN = re.compile(r"[^A-Za-z0-9]+")
@@ -49,6 +50,17 @@ def resolve_named_value(config: GatewayConfig, name: str) -> ResolvedNamedValue 
             source="config",
             env_var_name=env_var_name,
         )
+
+    if entry.value_from_key_vault is not None:
+        resolved = resolve_secret_id_from_store(entry.value_from_key_vault.secret_id)
+        if resolved is not None:
+            return ResolvedNamedValue(
+                name=name,
+                value=resolved,
+                is_secret=True,
+                source="key_vault",
+                env_var_name=env_var_name,
+            )
 
     return ResolvedNamedValue(
         name=name,

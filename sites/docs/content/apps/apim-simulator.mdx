@@ -5,10 +5,11 @@ description: How the local Azure API Management simulator fits into the platform
 
 # APIM Simulator
 
-The APIM simulator is back inside the platform repo as an application source
-tree and a platform supporting context. It keeps its standalone compose
-workflows, but the Kubernetes stack uses it to prove API mediation, token
-audiences, subscription-key behaviour, and gateway-to-backend routing.
+The APIM simulator is the platform's local Azure API Management compatibility
+surface. It keeps Azure-shaped gateway, management, policy, named-value, and
+Key Vault reference behaviour available in fast local loops, while the
+Kubernetes stack uses it to prove API mediation, token audiences,
+subscription-key behaviour, and gateway-to-backend routing.
 
 ## Where It Lives
 
@@ -19,7 +20,7 @@ terraform/kubernetes/apps/apim
 terraform/kubernetes/cluster-policies/cilium/projects/apim
 ```
 
-The app-owned source and standalone tutorials live under
+Standalone simulator code, examples, tests, and tutorials live under
 `apps/apim-simulator/`. The Kubernetes deployment shape is rendered into the
 GitOps policy repo and reconciled by Argo CD from the `apps/apim` path.
 
@@ -46,6 +47,34 @@ make -C apps/apim-simulator help
 make -C apps/apim-simulator up
 make -C apps/apim-simulator smoke-hello
 ```
+
+Use the Key Vault stack when you need local Azure-style storage for API
+secrets or imported certificates:
+
+```bash
+make -C apps/apim-simulator up-keyvault
+make -C apps/apim-simulator smoke-keyvault
+```
+
+The Key Vault simulator is intentionally small. It supports versioned secrets
+and imported certificates through `/keyvault/secrets/*` and
+`/keyvault/certificates/*`, with bearer-token auth enabled by default. Secret
+lists return metadata only. Certificate list and normal get responses expose
+known public properties such as `kid`, `sid`, `cer`, `x5t`, subject, issuer,
+DNS names, serial number, and validity dates, but they do not return private
+keys or raw PFX material.
+
+For local automation, an authorized caller can read a certificate's backing
+secret from `/keyvault/certificates/{name}/{version}/secret`. That endpoint is
+for control-plane style workflows such as materializing a local
+`kubernetes.io/tls` Secret during development.
+
+<Callout type="warning">
+  Key Vault certificate storage does not replace this repo's current TLS
+  implementation. Gateway TLS still comes from mkcert-backed cert-manager
+  resources in Kubernetes, and the existing cert-manager manifests and gateway
+  certificate flow remain unchanged.
+</Callout>
 
 Use the Kubernetes stack when you need to prove the simulator as part of the
 local platform:

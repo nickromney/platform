@@ -351,7 +351,7 @@ locals {
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["dev"] : [],
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
     (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["apim"] : [],
-    (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["mcp"] : [],
+    (var.enable_sso && var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["mcp"] : [],
     local.enable_review_environments ? ["review"] : [],
   )))
 

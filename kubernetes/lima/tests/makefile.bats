@@ -26,6 +26,7 @@ setup() {
   [[ "${output}" == *"~/.kube/limavm-k3s.yaml"* ]]
   [[ "${output}" == *"OIDC_RECOVERY_FORMAT=text|json"* ]]
   [[ "${output}" == *"<repo>/.run/profiles"* ]]
+  [[ "${output}" == *"make state-reset  [AUTO_APPROVE=1]"* ]]
   [[ "${output}" != *"${HOME}"* ]]
 }
 
@@ -200,6 +201,23 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "lima state-reset removes only the local terraform lock" {
+  state_dir="${BATS_TEST_TMPDIR}/state"
+  mkdir -p "${state_dir}"
+  lock_file="${state_dir}/.terraform.tfstate.lock.info"
+  state_file="${state_dir}/terraform.tfstate"
+  printf '{"version":4}\n' >"${state_file}"
+  printf '{"Operation":"OperationTypePlan","Who":"tester","Created":"2026-05-02T10:21:33Z"}\n' >"${lock_file}"
+
+  run make -C "${REPO_ROOT}/kubernetes/lima" state-reset STATE_LOCK_FILE="${lock_file}" AUTO_APPROVE=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Lock: OperationTypePlan; tester; 2026-05-02T10:21:33Z"* ]]
+  [[ "${output}" == *"OK   Removed Terraform/OpenTofu state lock: ${lock_file}"* ]]
+  [ -f "${state_file}" ]
+  [ ! -e "${lock_file}" ]
+}
+
 @test "lima reset cleans only the lima runtime artifact scope" {
   run grep -Fn 'rm -rf "$(STACK_RUNTIME_DIR)" 2>/dev/null || true; \' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
@@ -210,6 +228,14 @@ setup() {
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -ne 0 ]
+}
+
+@test "lima reset does not stop other platform runtimes" {
+  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting kind/Slicer runtimes" || true' _ \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }
 
 @test "stop-lima reports the shared host ports it is releasing" {
@@ -242,7 +268,7 @@ EOF
     HOST_GATEWAY_PROXY="${TEST_BIN}/host-gateway-proxy.sh"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Shared host ports managed by Lima:"* ]]
+  [[ "${output}" == *"Shared host ports managed by active Lima runtime:"* ]]
   [[ "${output}" == *"127.0.0.1:443"* ]]
   [[ "${output}" == *"127.0.0.1:30080"* ]]
   [[ "${output}" == *"127.0.0.1:30022"* ]]

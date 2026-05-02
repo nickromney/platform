@@ -153,6 +153,59 @@ setup() {
   [ "${output}" = "make -C kubernetes/lima 900 check-health" ]
 }
 
+@test "platform workflow supports reset without forcing a stage argument" {
+  run "${SCRIPT}" preview --execute --target kind --stage 100 --action reset --auto-approve --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.action, .command' <<<"${output}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'reset\nmake -C kubernetes/kind reset AUTO_APPROVE=1' ]
+}
+
+@test "platform workflow supports state-reset without forcing a stage argument" {
+  run "${SCRIPT}" preview --execute --target kind --stage 700 --action state-reset --auto-approve --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.action, .command' <<<"${output}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'state-reset\nmake -C kubernetes/kind state-reset AUTO_APPROVE=1' ]
+}
+
+@test "platform workflow refuses to run commands when a target state lock is present" {
+  lock_file="${REPO_ROOT}/terraform/.run/kubernetes/.terraform.tfstate.lock.info"
+  mkdir -p "$(dirname "${lock_file}")"
+  cat >"${lock_file}" <<'EOF'
+{"Operation":"OperationTypePlan","Who":"tester","Created":"2026-05-02T10:21:33Z"}
+EOF
+
+  run "${SCRIPT}" apply --execute --target kind --stage 800 --action plan
+
+  rm -f "${lock_file}"
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Terraform/OpenTofu state lock present: ${lock_file}"* ]]
+  [[ "${output}" == *"Lock: OperationTypePlan; tester; 2026-05-02T10:21:33Z"* ]]
+  [[ "${output}" == *"Refusing to run plan while the previous Terraform/OpenTofu operation may still be active."* ]]
+  [[ "${output}" == *"make -C kubernetes/kind state-reset AUTO_APPROVE=1"* ]]
+}
+
+@test "platform workflow allows state-reset when a target state lock is present" {
+  lock_file="${REPO_ROOT}/terraform/.run/kubernetes/.terraform.tfstate.lock.info"
+  mkdir -p "$(dirname "${lock_file}")"
+  printf '{"Operation":"OperationTypePlan"}\n' >"${lock_file}"
+
+  run "${SCRIPT}" preview --execute --target kind --stage 800 --action state-reset --auto-approve --output json
+
+  rm -f "${lock_file}"
+
+  [ "${status}" -eq 0 ]
+  run jq -r '.command' <<<"${output}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "make -C kubernetes/kind state-reset AUTO_APPROVE=1" ]
+}
+
 @test "platform workflow rejects 950-local-idp for non-kind targets" {
   run "${SCRIPT}" preview --execute --target lima --stage 950-local-idp
 
