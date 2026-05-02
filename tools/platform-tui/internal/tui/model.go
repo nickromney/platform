@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,6 +61,8 @@ type runOutputMsg struct {
 	Text string
 }
 
+type elapsedTickMsg time.Time
+
 type Model struct {
 	cfg Config
 
@@ -79,7 +82,10 @@ type Model struct {
 	loadingPreview bool
 	running        bool
 	runSucceeded   bool
+	runStartedAt   time.Time
+	now            time.Time
 	runOutput      string
+	lastRunOutput  string
 	runCh          chan tea.Msg
 	outputViewport viewport.Model
 	autoFollow     bool
@@ -133,9 +139,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.runSucceeded = false
 			if m.runOutput == "" {
-				m.errText = "Run failed:\n" + msg.Err.Error()
+				m.errText = "Execution failed:\n" + msg.Err.Error()
 			} else {
-				m.errText = "Run failed"
+				m.errText = "Execution failed"
 			}
 		} else if msg.Output != "" {
 			m.runSucceeded = m.action == "apply"
@@ -153,6 +159,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runOutputMsg:
 		m.setRunOutput(appendOutput(m.runOutput, msg.Text))
 		return m, waitRunMsg(m.runCh)
+	case elapsedTickMsg:
+		if !m.running {
+			return m, nil
+		}
+		m.now = time.Time(msg)
+		return m, elapsedTickCmd()
 	}
 	return m, nil
 }
@@ -179,8 +191,31 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 		return m, nil
+	case "r":
+		if m.screen == screenStage {
+			return m.selectItemValue("reset")
+		}
+	case "t":
+		if m.screen == screenStage {
+			return m.selectItemValue("state-reset")
+		}
 	case "enter", " ":
 		return m.selectCurrent()
+	}
+	if m.screen == screenStage && len(msg.Runes) == 1 {
+		if value, ok := stageShortcutValue(msg.Runes[0], m.target); ok {
+			return m.selectItemValue(value)
+		}
+	}
+	return m, nil
+}
+
+func (m Model) selectItemValue(value string) (tea.Model, tea.Cmd) {
+	for i, item := range m.items() {
+		if item.Value == value {
+			m.cursor = i
+			return m.selectCurrent()
+		}
 	}
 	return m, nil
 }
@@ -260,10 +295,15 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 			m.running = true
 			m.runSucceeded = false
 			m.status = ""
+			if m.runOutput != "" {
+				m.lastRunOutput = m.runOutput
+			}
 			m.setRunOutput("")
 			m.autoFollow = true
+			m.runStartedAt = time.Now()
+			m.now = m.runStartedAt
 			m.runCh = make(chan tea.Msg)
-			return m, m.runWorkflowCmd(m.runCh)
+			return m, tea.Batch(m.runWorkflowCmd(m.runCh), elapsedTickCmd())
 		case "back":
 			return m.back(), nil
 		case "quit":
@@ -276,7 +316,8 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 func (m Model) back() Model {
 	m.cursor = 0
 	m.errText = ""
-	m.clearRunResult()
+	m.status = ""
+	m.runSucceeded = false
 	switch m.screen {
 	case screenTarget:
 		return m
@@ -289,7 +330,7 @@ func (m Model) back() Model {
 	case screenSubnetcalc:
 		m.screen = screenSentiment
 	case screenPreview:
-		if m.action == "reset" {
+		if m.action == "reset" || m.action == "state-reset" {
 			m.screen = screenStage
 		} else if !m.hasAppToggles() {
 			m.screen = screenAction
@@ -304,6 +345,9 @@ func (m *Model) clearRunResult() {
 	m.status = ""
 	m.errText = ""
 	m.runSucceeded = false
+	if m.runOutput != "" {
+		m.lastRunOutput = m.runOutput
+	}
 	m.setRunOutput("")
 	m.autoFollow = true
 }
@@ -417,7 +461,7 @@ func (m Model) items() []menuItem {
 		return withNavigation(appItems("subnetcalc", stageDefault(m.stage, "subnetcalc")))
 	case screenPreview:
 		items := []menuItem{
-			{Label: "Run", Value: "run"},
+			{Label: "Execute", Value: "run"},
 		}
 		items = append(items, m.nextItems()...)
 		items = append(items,
@@ -477,6 +521,33 @@ func stageDisplay(stage string) string {
 	return stage
 }
 
+func stageShortcutValue(shortcut rune, target string) (string, bool) {
+	switch shortcut {
+	case '1':
+		return "100", true
+	case '2':
+		return "200", true
+	case '3':
+		return "300", true
+	case '4':
+		return "400", true
+	case '5':
+		return "500", true
+	case '6':
+		return "600", true
+	case '7':
+		return "700", true
+	case '8':
+		return "800", true
+	case '9':
+		return "900", true
+	case '0':
+		return "950-local-idp", target == "kind"
+	default:
+		return "", false
+	}
+}
+
 func (m Model) selectNext(value string) (tea.Model, tea.Cmd) {
 	stage := strings.TrimPrefix(value, "next:")
 	m.stage = stage
@@ -488,7 +559,9 @@ func (m Model) selectNext(value string) (tea.Model, tea.Cmd) {
 	m.status = ""
 	m.errText = ""
 	m.runSucceeded = false
-	m.setRunOutput("")
+	if m.runOutput != "" {
+		m.lastRunOutput = m.runOutput
+	}
 	m.autoFollow = true
 	m.screen = screenPreview
 	m.cursor = 0
@@ -663,6 +736,12 @@ func waitRunMsg(ch chan tea.Msg) tea.Cmd {
 	}
 }
 
+func elapsedTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return elapsedTickMsg(t)
+	})
+}
+
 func appendOutput(existing, next string) string {
 	next = strings.TrimRight(next, "\r\n")
 	if next == "" {
@@ -706,7 +785,12 @@ func (m Model) View() string {
 		}
 	}
 	if m.screen == screenPreview && m.running {
-		fmt.Fprintf(&b, "%s\n\n", lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("Running workflow..."))
+		fmt.Fprintf(&b, "%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("Running workflow"))
+		fmt.Fprintf(&b, "%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("Elapsed: "+m.elapsedText()))
+		if m.previewCommand != "" {
+			fmt.Fprintf(&b, "%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("Executing: "+m.previewCommand))
+		}
+		fmt.Fprintln(&b)
 	}
 	if m.screen == screenPreview && m.runOutput != "" {
 		fmt.Fprintf(&b, "%s\n", m.outputViewport.View())
@@ -715,6 +799,9 @@ func (m Model) View() string {
 			scrollStatus += " follow"
 		}
 		fmt.Fprintf(&b, "%s\n\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(scrollStatus+"  pgup/pgdn scroll  home/end jump"))
+	} else if m.screen == screenPreview && m.lastRunOutput != "" {
+		fmt.Fprintf(&b, "%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("Latest output from previous command:"))
+		fmt.Fprintf(&b, "%s\n\n", outputViewportStyle.Width(m.outputViewport.Width).Height(m.outputViewport.Height).Render(m.lastRunOutput))
 	}
 	if m.errText != "" {
 		fmt.Fprintf(&b, "%s\n\n", lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render(m.errText))
@@ -730,6 +817,9 @@ func (m Model) View() string {
 			cursor = "➜ "
 		}
 		fmt.Fprintf(&b, "%s%s\n", cursor, item.Label)
+	}
+	if hint := m.inlineHint(); hint != "" {
+		fmt.Fprintf(&b, "\n%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(hint))
 	}
 	fmt.Fprintf(&b, "\n%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("↑/↓ or j/k move  enter select  esc back  q quit"))
 	return b.String()
@@ -747,4 +837,100 @@ func (m Model) breadcrumb() string {
 		parts = append(parts, m.action)
 	}
 	return strings.Join(parts, " / ")
+}
+
+func (m Model) inlineHint() string {
+	item := m.selectedItem()
+	if item.Value == "" && item.Label == "" {
+		return ""
+	}
+	switch m.screen {
+	case screenTarget:
+		if item.Value == "status" {
+			return "Shows root runtime status without changing any stack."
+		}
+		if item.Value != "quit" {
+			return "Pick the local runtime target before choosing a stage."
+		}
+	case screenStage:
+		return m.stageHint(item)
+	case screenAction:
+		return m.actionHint(item)
+	case screenSentiment, screenSubnetcalc:
+		return "App overrides are offered only from stage 700 onward, after app repositories exist."
+	case screenPreview:
+		if item.Value == "run" {
+			return "Executes the exact command shown above through scripts/platform-workflow.sh --execute."
+		}
+		if strings.HasPrefix(item.Value, "next:") {
+			return "Shortcut to the next useful apply stage after this successful run."
+		}
+	}
+	return ""
+}
+
+func (m Model) selectedItem() menuItem {
+	items := m.items()
+	if m.cursor < 0 || m.cursor >= len(items) {
+		return menuItem{}
+	}
+	return items[m.cursor]
+}
+
+func (m Model) stageHint(item menuItem) string {
+	switch item.Value {
+	case "100":
+		return "1 selects 100 cluster: create or inspect the base local cluster."
+	case "200":
+		return "2 selects 200 cilium: install networking before higher platform services."
+	case "300":
+		return "3 selects 300 hubble: add Cilium observability."
+	case "400":
+		return "4 selects 400 argocd: install GitOps control plane."
+	case "500":
+		return "5 selects 500 gitea: add the internal Git server."
+	case "600":
+		return "6 selects 600 policies: apply cluster policies before app repos."
+	case "700":
+		return "7 selects 700 app repos: app toggles start here because app repos exist."
+	case "800":
+		return "8 selects 800 observability: app toggles remain available for workload coverage."
+	case "900":
+		return "9 selects 900 sso: app toggles remain available for end-to-end local apps."
+	case "950-local-idp":
+		return "0 selects 950 local-idp: kind-only local identity provider finish stage."
+	case "reset":
+		return "r resets the selected target through the workflow script."
+	case "state-reset":
+		return "t resets Terraform state for the selected target."
+	default:
+		return "Stages 100-600 hide app toggles because apps are not contained until stage 700."
+	}
+}
+
+func (m Model) actionHint(item menuItem) string {
+	if !m.hasAppToggles() {
+		return fmt.Sprintf("%s on stage %s skips app toggles; app choices appear at stages 700, 800, 900, and kind 950.", item.Label, stageDisplay(m.stage))
+	}
+	return fmt.Sprintf("%s on stage %s can include app toggle overrides before preview.", item.Label, stageDisplay(m.stage))
+}
+
+func (m Model) elapsedText() string {
+	if m.runStartedAt.IsZero() {
+		return "0s"
+	}
+	now := m.now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if now.Before(m.runStartedAt) {
+		now = m.runStartedAt
+	}
+	elapsed := now.Sub(m.runStartedAt).Round(time.Second)
+	minutes := int(elapsed.Minutes())
+	seconds := int(elapsed.Seconds()) % 60
+	if minutes > 0 {
+		return fmt.Sprintf("%dm%02ds", minutes, seconds)
+	}
+	return fmt.Sprintf("%ds", seconds)
 }

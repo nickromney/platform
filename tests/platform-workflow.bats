@@ -153,6 +153,16 @@ setup() {
   [ "${output}" = "make -C kubernetes/lima 900 check-health" ]
 }
 
+@test "platform workflow ignores auto approve for read-only helpers" {
+  for action in status show-urls check-health check-security check-rbac; do
+    run "${SCRIPT}" preview --execute --target kind --stage 900 --action "${action}" --auto-approve --output json
+    [ "${status}" -eq 0 ]
+    run jq -r '.command' <<<"${output}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *"AUTO_APPROVE=1"* ]]
+  done
+}
+
 @test "platform workflow supports reset without forcing a stage argument" {
   run "${SCRIPT}" preview --execute --target kind --stage 100 --action reset --auto-approve --output json
 

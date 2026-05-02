@@ -10,7 +10,7 @@ Makefiles. They keep the well-known shell commands as the source of truth, but
 help you choose a target, stage, action, and app toggles without
 remembering every flag.
 
-The command flow is:
+The command flow is the same whether you start in the terminal or the browser:
 
 ```text
 Bubble Tea TUI or FastAPI/HTMX browser UI
@@ -20,7 +20,9 @@ Bubble Tea TUI or FastAPI/HTMX browser UI
 
 The wrapper does not replace the stage Makefiles. It builds the same command
 you would type by hand and, when app toggles are selected, writes a small
-generated tfvars file under `.run/operator/`.
+generated tfvars file under `.run/operator/`. Use the generated preview as the
+handoff point: if the preview is surprising, change the selection before you
+run it.
 
 ## Terminal TUI
 
@@ -44,8 +46,17 @@ or run the Go helper directly:
 go run ./tools/platform-tui/cmd/platform-tui --execute
 ```
 
-Choose a target, stage, action, and app toggles from the guided screens. A
-typical plan-only smoke test is:
+The normal TUI path is:
+
+1. Choose `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`, or root
+   status.
+2. Choose a cumulative stage, target reset, or Terraform state reset.
+3. Choose an action such as `plan`, `apply`, `status`, `show-urls`, or
+   `check-health`.
+4. Choose app toggles when the selected stage can carry app repositories.
+5. Review the generated command, then run it.
+
+A typical plan-only smoke test is:
 
 ```text
 kind
@@ -64,7 +75,7 @@ same options but select `apply`. The preview should include a command shaped
 like:
 
 ```bash
-env PLATFORM_TFVARS=/Users/nickromney/Developer/personal/platform/.run/operator/kind-stage900.tfvars make -C kubernetes/kind 900 apply AUTO_APPROVE=1
+env PLATFORM_TFVARS=.run/operator/kind-stage900.tfvars make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 ```
 
 <Callout type="warning">
@@ -72,9 +83,33 @@ env PLATFORM_TFVARS=/Users/nickromney/Developer/personal/platform/.run/operator/
   combinations, especially when the live cluster is already at a higher stage.
 </Callout>
 
+For a full reset and rebuild from the TUI, use the same review step for each
+operation:
+
+```text
+kubernetes/kind
+Reset target
+Execute
+
+kubernetes/kind
+100 cluster
+apply
+Execute
+
+kubernetes/kind
+900 sso
+apply
+Execute
+```
+
+The reset preview should be `make -C kubernetes/kind reset AUTO_APPROVE=1`.
+The stage `900` apply delegates to the Kind Makefile, so a successful run also
+executes the stage-900 health, gateway URL, and browser SSO checks before it
+returns.
+
 ### TUI Affordances
 
-The TUI is the most polished local operator path. It includes:
+The TUI is a polished terminal operator path. It includes:
 
 - explicit `Back` and `Quit` items on intermediate screens;
 - stage-aware app prompts, so stages `100` through `600` skip sentiment and
@@ -87,6 +122,10 @@ The TUI is the most polished local operator path. It includes:
   selected again by default;
 - opinionated next-stage shortcuts after successful applies, for example
   `600 apply`, `900 apply`, and Kind-only `950 apply` after `500 apply`.
+
+Those shortcuts are conveniences over the same preview contract. Selecting one
+clears the prior run output, loads a fresh preview for the next stage, and keeps
+you on the review screen until you choose `Execute`.
 
 ## Shared Core
 
@@ -101,7 +140,17 @@ scripts/platform-workflow.sh preview --execute \
   --app sentiment=off
 ```
 
-Run the generated workflow with:
+Dry-run the generated workflow with the same shell contract:
+
+```bash
+scripts/platform-workflow.sh apply --dry-run \
+  --target kind \
+  --stage 900 \
+  --action plan \
+  --app sentiment=off
+```
+
+Execute the generated workflow with:
 
 ```bash
 scripts/platform-workflow.sh apply --execute \
@@ -132,9 +181,9 @@ scripts/platform-workflow.sh preview --execute \
 
 ## Browser UI
 
-The browser UI is a local FastAPI + HTMX wrapper over the same workflow core.
-It is useful when you want a lightweight web surface without a JavaScript build
-pipeline.
+The browser UI is a polished local web operator path over the same workflow
+core. It uses FastAPI + HTMX to provide a lightweight web console without a
+JavaScript build pipeline.
 
 ```bash
 make workflow-ui
@@ -152,13 +201,30 @@ Then open:
 https://console.127.0.0.1.sslip.io:8443
 ```
 
+The browser walkthrough mirrors the TUI:
+
+1. Use the variant shortcuts or the `Variant` select to choose the target.
+2. Choose the stage and action.
+3. Leave app toggles at `stage default`, or force `on`/`off` when you want a
+   generated `.run/operator/` tfvars file.
+4. Review the preview panel. It shows a single command pane with tabs for the
+   `Makefile abstraction` and the equivalent `Script inputs`, plus read-only /
+   mutating / destructive badges, stage-jump hints, and cheap preflight badges.
+5. Use `Dry-run` for the shell-level preview path, or `Execute` to run the
+   generated command and watch the output stream.
+6. Use the pinned output drawer to keep the latest and previous output visible
+   while you inspect another stage or action.
+7. Use the success actions to preview the next stage, return to preview, or
+   inspect reset/state-reset commands.
+
 The UI is a small FastAPI + HTMX app under `tools/platform-workflow-ui`. It is
 served through `uv` by `scripts/platform-workflow-ui.sh`, vendors HTMX locally,
 and does not use Node, Vite, React, or `node_modules`.
 
-The browser UI supports command preview, running the selected workflow, polling
-command output, stage-aware app toggles, and next-stage actions after a
-successful apply. It intentionally stays local and small:
+The browser UI supports command preview, dry-run, execution, polling command
+output, output preservation, stage-aware app toggles, command provenance, and
+next-stage actions after a successful apply. It intentionally stays local and
+small:
 
 ```text
 scripts/platform-workflow-ui.sh
@@ -181,6 +247,11 @@ Use a different HTTPS port when `8443` is already taken:
 ```bash
 make workflow-ui WORKFLOW_UI_PORT=9876
 ```
+
+The command history keeps the last few previews and runs, including exit
+status, variant, and a copy button. Output auto-follows while the command is
+streaming, but manual scrollback pauses follow mode until you return near the
+bottom.
 
 <Callout type="warning">
   Keep the workflow UI on loopback addresses such as

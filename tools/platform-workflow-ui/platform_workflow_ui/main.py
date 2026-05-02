@@ -98,7 +98,8 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
     @app.post("/preview", response_class=HTMLResponse)
     async def preview_fragment(request: Request) -> str:
         payload = await form_payload(request)
-        return history_panel(app.state.command_history.snapshot(), str(payload["variant"]), oob=True) + render_preview(resolved_root, payload)
+        history = app.state.command_history.snapshot()
+        return history_panel(history, str(payload["variant"]), oob=True) + render_preview(resolved_root, payload, history)
 
     @app.post("/run", response_class=HTMLResponse)
     async def run_fragment(request: Request) -> str:
@@ -106,7 +107,8 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
         command = str(payload.get("command") or preview_command(resolved_root, payload) or "")
         if command:
             payload["command"] = command
-            payload["history_id"] = app.state.command_history.add(command, "Run", str(payload["variant"]))
+            history_kind = "Dry-run" if payload.get("dry_run") else action_label(str(payload["action"]))
+            payload["history_id"] = app.state.command_history.add(command, history_kind, str(payload["variant"]), payload)
         job = app.state.jobs.start(payload, on_finish=app.state.command_history.record_exit)
         return job_fragment(job, app.state.command_history.snapshot())
 
@@ -115,6 +117,8 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
         job = app.state.jobs.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
+        if not job.running and job.returncode is not None:
+            app.state.command_history.record_exit(job.payload.get("history_id"), job.returncode, job.text)
         return job_fragment(job, app.state.command_history.snapshot())
 
     @app.post("/next", response_class=HTMLResponse)
@@ -139,10 +143,10 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
 class CommandHistory:
     def __init__(self, limit: int = 5) -> None:
         self.limit = limit
-        self._items: list[dict[str, str]] = []
+        self._items: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
-    def add(self, command: str, kind: str, variant: str) -> str:
+    def add(self, command: str, kind: str, variant: str, payload: dict[str, Any] | None = None) -> str:
         if not command.strip():
             return ""
         item = {
@@ -153,6 +157,8 @@ class CommandHistory:
             "exit_status": "running",
             "timestamp": datetime.now().astimezone().strftime("%H:%M:%S"),
         }
+        if payload:
+            item["payload"] = history_payload(payload)
         with self._lock:
             if self._items and self._items[0]["command"] == command and self._items[0]["kind"] == kind:
                 return self._items[0]["id"]
@@ -160,18 +166,32 @@ class CommandHistory:
             self._items = self._items[: self.limit]
             return item["id"]
 
-    def record_exit(self, history_id: str | None, returncode: int) -> None:
+    def record_exit(self, history_id: str | None, returncode: int, output: str = "") -> None:
         if not history_id:
             return
         with self._lock:
             for item in self._items:
                 if item.get("id") == history_id:
                     item["exit_status"] = str(returncode)
+                    item["output"] = output
                     return
 
-    def snapshot(self) -> list[dict[str, str]]:
+    def snapshot(self) -> list[dict[str, Any]]:
         with self._lock:
             return [dict(item) for item in self._items]
+
+
+def form_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else ""
+    return str(value)
+
+
+def history_payload(payload: dict[str, Any]) -> dict[str, str]:
+    keys = ("variant", "stage", "action", "sentiment", "subnetcalc", "auto_approve", "command", "source")
+    return {key: form_value(payload.get(key)) for key in keys}
 
 
 async def form_payload(request: Request) -> dict[str, Any]:
@@ -185,17 +205,19 @@ async def form_payload(request: Request) -> dict[str, Any]:
         "subnetcalc": str(form.get("subnetcalc") or ""),
         "auto_approve": str(form.get("auto_approve") or "") in {"1", "true", "on"} or action in {"apply", "reset", "state-reset"},
         "command": str(form.get("command") or ""),
+        "dry_run": str(form.get("dry_run") or "") in {"1", "true", "on"},
+        "source": str(form.get("source") or "dropdowns"),
     }
 
 
-def render_preview(repo_root: Path, payload: dict[str, Any], history: list[dict[str, str]] | None = None) -> str:
+def render_preview(repo_root: Path, payload: dict[str, Any], history: list[dict[str, Any]] | None = None) -> str:
     args = build_workflow_args(payload, subcommand="preview")
     code, stdout, stderr = run_workflow_json(repo_root, args)
     if code != 0:
         message = html.escape(stderr.strip() or stdout.strip() or "Preview failed")
         return f'<div class="notice error">Preview failed</div><pre class="output">{message}</pre>'
     result = parse_preview(stdout)
-    return preview_panel(result, payload)
+    return preview_panel(repo_root, result, payload) + latest_output_panel(history)
 
 
 def preview_command(repo_root: Path, payload: dict[str, Any]) -> str:
@@ -223,17 +245,14 @@ def page() -> str:
       hx-target="#result"
       hx-trigger="load, change delay:120ms from:select, submit"
       hx-swap="innerHTML">
-      <section class="variant-shortcuts" aria-label="Variant shortcuts">
-        <span>Variant shortcuts</span>
-        {variant_buttons()}
-      </section>
       <section class="controls">
-        <label>Variant {select("variant", [(variant, variant) for variant in VARIANTS], "kubernetes/kind")}</label>
-        <label>Stage {select("stage", [(stage, f"{stage} {label}") for stage, label in STAGES], "900")}</label>
-        <label>Action {select("action", [(action, action) for action in ACTIONS], "apply")}</label>
-        <label class="app-toggle">Sentiment {app_select("sentiment", "900", "sentiment")}</label>
-        <label class="app-toggle">Subnetcalc {app_select("subnetcalc", "900", "subnetcalc")}</label>
+        <label class="control-field">Variant {select("variant", [(variant, variant) for variant in VARIANTS], "kubernetes/kind")}</label>
+        <label class="control-field">Stage {select("stage", [(stage, f"{stage} {label}") for stage, label in STAGES], "900")}</label>
+        <label class="control-field">Action {select("action", [(action, action) for action in ACTIONS], "apply")}</label>
+        <label class="control-field app-toggle">Sentiment {app_select("sentiment", "900", "sentiment")}</label>
+        <label class="control-field app-toggle">Subnetcalc {app_select("subnetcalc", "900", "subnetcalc")}</label>
         <input type="hidden" name="auto_approve" value="1">
+        <input type="hidden" name="source" value="dropdowns">
       </section>
     </form>
     {quick_actions({"variant": "kubernetes/kind", "stage": "900"})}
@@ -276,22 +295,48 @@ def page() -> str:
     document.body.addEventListener('change', (event) => {{
       if (event.target && event.target.name === 'stage') {{
         updateAppToggles(event.target.value);
+        updateQuickActionState();
       }}
       if (event.target && event.target.name === 'variant') {{
-        updateQuickActionVariants(event.target.value);
+        updateQuickActionState();
         document.querySelectorAll('.variant-shortcuts button').forEach((node) => {{
           node.classList.toggle('active', node.dataset.variant === event.target.value);
         }});
+      }}
+      if (event.target && event.target.name === 'action') {{
+        updateQuickActionState();
+      }}
+      if (event.target && event.target.tagName === 'SELECT') {{
+        updateSelectedFields();
       }}
     }});
     function selectVariant(variant, button) {{
       const select = document.querySelector('select[name="variant"]');
       if (!select) return;
       select.value = variant;
-      updateQuickActionVariants(variant);
+      setSource('variant shortcut');
+      updateQuickActionState();
       document.querySelectorAll('.variant-shortcuts button').forEach((node) => {{
         node.classList.toggle('active', node === button);
       }});
+      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    }}
+    function selectStage(stage) {{
+      const select = document.querySelector('select[name="stage"]');
+      if (!select) return;
+      select.value = stage;
+      setSource('stage ladder');
+      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    }}
+    function selectAction(action) {{
+      const select = document.querySelector('select[name="action"]');
+      if (!select) return;
+      select.value = action;
+      setSource('action button');
+      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    }}
+    function setSource(source) {{
+      document.querySelectorAll('input[name="source"]').forEach((node) => {{ node.value = source; }});
     }}
     function copyCommand(id, button) {{
       const node = document.getElementById(id);
@@ -303,43 +348,240 @@ def page() -> str:
         window.setTimeout(() => {{ button.innerText = previous; }}, 1200);
       }});
     }}
-    function updateQuickActionVariants(variant) {{
-      document.querySelectorAll('.quick-actions input[name="variant"]').forEach((node) => {{
-        node.value = variant;
+    function copyOutput(id, button) {{
+      copyCommand(id, button);
+    }}
+    function showCommandTab(tab) {{
+      document.querySelectorAll('.command-tab').forEach((node) => {{
+        node.classList.toggle('active', node.dataset.tab === tab);
+      }});
+      document.querySelectorAll('.command-pane').forEach((node) => {{
+        node.hidden = node.dataset.pane !== tab;
+      }});
+    }}
+    function toggleOutputFollow(jobId) {{
+      const state = window.platformWorkflowTail && window.platformWorkflowTail[jobId];
+      if (!state) return;
+      state.follow = !state.follow;
+      state.manual = true;
+      if (state.follow) {{
+        const output = document.getElementById(`output-${{jobId}}`);
+        if (output) output.scrollTop = output.scrollHeight;
+      }}
+      updateOutputFollowControls(jobId);
+    }}
+    function updateOutputFollowControls(jobId) {{
+      const state = window.platformWorkflowTail && window.platformWorkflowTail[jobId];
+      const label = document.getElementById(`follow-state-${{jobId}}`);
+      const button = document.getElementById(`follow-toggle-${{jobId}}`);
+      if (!state || !label || !button) return;
+      label.textContent = state.follow ? 'Follow latest' : 'Follow paused';
+      button.textContent = state.follow ? 'Pause follow' : 'Follow latest';
+    }}
+    function updateQuickActionState() {{
+      const variant = document.querySelector('select[name="variant"]').value;
+      const stage = document.querySelector('select[name="stage"]').value;
+      document.querySelectorAll('.quick-actions input[name="variant"]').forEach((node) => {{ node.value = variant; }});
+      document.querySelectorAll('.quick-actions input[name="stage"]').forEach((node) => {{ node.value = stage; }});
+      document.querySelectorAll('.stage-ladder button').forEach((node) => {{
+        node.classList.toggle('active', node.dataset.stage === stage);
+        node.hidden = variant !== 'kubernetes/kind' && node.dataset.stage === '950-local-idp';
+      }});
+      document.querySelectorAll('.variant-shortcuts button').forEach((node) => {{
+        node.classList.toggle('active', node.dataset.variant === variant);
+      }});
+      document.querySelectorAll('.action-bar button').forEach((node) => {{
+        node.classList.toggle('active', node.dataset.action === document.querySelector('select[name="action"]').value);
+      }});
+    }}
+    function updateSelectedFields() {{
+      document.querySelectorAll('.control-field').forEach((label) => {{
+        const select = label.querySelector('select');
+        label.classList.toggle('selected', !!select && select.value !== '');
       }});
     }}
     updateAppToggles(document.querySelector('select[name="stage"]').value);
-    updateQuickActionVariants(document.querySelector('select[name="variant"]').value);
+    updateQuickActionState();
+    updateSelectedFields();
   </script>
 </body>
 </html>"""
 
 
-def preview_panel(result: dict[str, Any], payload: dict[str, Any]) -> str:
+def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, Any]) -> str:
     command = html.escape(str(result.get("command", "")))
     variant = html.escape(str(payload["variant"]))
     stage = html.escape(str(result.get("stage", payload["stage"])))
     action = html.escape(str(result.get("action", payload["action"])))
-    hidden = hidden_inputs({**payload, "command": str(result.get("command", ""))})
+    raw_action = str(result.get("action", payload["action"]))
+    source = html.escape(str(payload.get("source") or "dropdowns"))
+    intent = html.escape(intent_summary(str(result.get("action", payload["action"])), stage, variant))
+    consequence = html.escape(consequence_summary(str(result.get("action", payload["action"]))))
+    button_label = html.escape(action_label(raw_action))
+    risk = action_risk(raw_action)
+    risk_label = html.escape(risk[0])
+    risk_class = html.escape(risk[1])
+    stage_delta = html.escape(stage_delta_hint(stage))
+    workflow_execute = html.escape(workflow_command(payload, standard_flag="--execute"))
+    workflow_dry_run = html.escape(workflow_command(payload, standard_flag="--dry-run"))
+    preflight = preflight_badges(repo_root, payload)
+    hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": ""})
+    dry_run_hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": "1"})
     return f"""
+<div class="provenance-strip">
+  <span>Source <strong>{source}</strong></span>
+  <span class="risk-badge {risk_class}">{risk_label}</span>
+  {preflight}
+</div>
 <div class="summary">
   <div><span>Variant</span><strong>{variant}</strong></div>
   <div><span>Stage</span><strong>{stage}</strong></div>
   <div><span>Action</span><strong>{action}</strong></div>
 </div>
-<div class="command-head">
-  <h2>Command</h2>
-  <button type="button" title="Copy command" onclick="copyCommand('command-text', this)">Copy</button>
+<div class="stage-delta">{stage_delta}</div>
+<div class="intent-summary">
+  <div><span>Intent</span><strong>{intent}</strong></div>
+  <div><span>Consequence</span><strong>{consequence}</strong></div>
 </div>
-<pre id="command-text" class="command">{command}</pre>
-<form hx-post="/run" hx-target="#result" hx-swap="innerHTML">
-  {hidden}
-  <button class="run" type="submit">Run</button>
-</form>
+<div class="command-panel">
+  <div class="command-tabs" role="tablist" aria-label="Command views">
+    <button type="button" class="command-tab active" data-tab="makefile" onclick="showCommandTab('makefile')">Makefile abstraction</button>
+    <button type="button" class="command-tab" data-tab="script" onclick="showCommandTab('script')">Script inputs</button>
+  </div>
+  <div class="command-pane" data-pane="makefile">
+    <div class="command-head">
+      <h2>Makefile abstraction</h2>
+      <button type="button" title="Copy command" onclick="copyCommand('command-text', this)">Copy</button>
+    </div>
+    <pre id="command-text" class="command">{command}</pre>
+  </div>
+  <div class="command-pane" data-pane="script" hidden>
+    <div class="command-head">
+      <h2>Script inputs</h2>
+      <button type="button" title="Copy script command" onclick="copyCommand('workflow-command-text', this)">Copy</button>
+    </div>
+    <pre id="workflow-command-text" class="command">{workflow_execute}</pre>
+  </div>
+</div>
+<div class="execution-actions">
+  <form hx-post="/run" hx-target="#result" hx-swap="innerHTML">
+    {dry_run_hidden}
+    <button class="dry-run" type="submit">Dry-run</button>
+  </form>
+  <form hx-post="/run" hx-target="#result" hx-swap="innerHTML">
+    {hidden}
+    <button class="run" type="submit">Execute {button_label}</button>
+  </form>
+</div>
+<p class="dry-run-note">Dry-run uses <code>{workflow_dry_run}</code>.</p>
 """
 
 
-def history_panel(history: list[dict[str, str]], current_variant: str | None = None, *, oob: bool = False) -> str:
+def intent_summary(action: str, stage: str, variant: str) -> str:
+    target = variant_to_target(variant)
+    if action == "plan":
+        return f"Preview Terraform changes for {target} stage {stage}."
+    if action == "apply":
+        return f"Apply the selected {target} stage {stage} workflow."
+    if action == "reset":
+        return f"Reset the local {target} stack."
+    if action == "state-reset":
+        return f"Reset Terraform state for the local {target} stack."
+    labels = {
+        "status": "Check runtime status",
+        "show-urls": "Show service URLs",
+        "check-health": "Run health checks",
+        "check-security": "Run security checks",
+        "check-rbac": "Run RBAC checks",
+    }
+    return f"{labels.get(action, action)} for {target}."
+
+
+def consequence_summary(action: str) -> str:
+    if action == "plan":
+        return "Read-only. No local stack changes should be applied."
+    if action == "apply":
+        return "May create, update, or delete local runtime resources."
+    if action == "reset":
+        return "Destructive local cleanup. Review the command before running."
+    if action == "state-reset":
+        return "Destructive state cleanup. Review the command before running."
+    return "Runs the selected diagnostic command and streams output here."
+
+
+def action_risk(action: str) -> tuple[str, str]:
+    if action in {"plan", "status", "show-urls", "check-health", "check-security", "check-rbac"}:
+        return ("Read-only", "readonly")
+    if action == "apply":
+        return ("Mutating", "mutating")
+    if action in {"reset", "state-reset"}:
+        return ("Destructive", "destructive")
+    return ("Command", "neutral")
+
+
+def stage_delta_hint(stage: str) -> str:
+    if stage == "950-local-idp":
+        return "Kind-only finish stage for the local identity provider path."
+    try:
+        value = int(stage)
+    except ValueError:
+        return "The selected stage is passed through to the workflow core."
+    if value >= 900:
+        return "Stage 900 is cumulative; jumping here includes the earlier platform checkpoints."
+    if value >= 700:
+        return "Stages 700 and later include app repo/workload toggles."
+    return "Stages 100-600 focus on substrate and hide app toggles."
+
+
+def workflow_command(payload: dict[str, Any], *, standard_flag: str) -> str:
+    args = build_workflow_args(payload, subcommand="apply", standard_flag=standard_flag)
+    return " ".join(["scripts/platform-workflow.sh", *shell_quote_args(args)])
+
+
+def shell_quote_args(args: list[str]) -> list[str]:
+    rendered = []
+    for arg in args:
+        if re.match(r"^[A-Za-z0-9_./:=+-]+$", arg):
+            rendered.append(arg)
+        else:
+            rendered.append("'" + arg.replace("'", "'\"'\"'") + "'")
+    return rendered
+
+
+def preflight_badges(repo_root: Path, payload: dict[str, Any]) -> str:
+    target = variant_to_target(str(payload.get("variant") or "kubernetes/kind"))
+    badges: list[str] = []
+    lock_paths = {
+        "kind": repo_root / "terraform" / ".run" / "kubernetes" / ".terraform.tfstate.lock.info",
+        "lima": repo_root / "terraform" / ".run" / "kubernetes-lima" / ".terraform.tfstate.lock.info",
+        "slicer": repo_root / "terraform" / ".run" / "kubernetes-slicer" / ".terraform.tfstate.lock.info",
+    }
+    lock_path = lock_paths.get(target)
+    if lock_path and lock_path.exists():
+        badges.append('<span class="preflight-badge blocked">State lock present</span>')
+    else:
+        badges.append('<span class="preflight-badge ok">No state lock</span>')
+    if target in {"kind", "lima", "slicer"}:
+        badges.append('<span class="preflight-badge neutral">Runtime conflict checks run in Make</span>')
+    return "".join(badges)
+
+
+def action_label(action: str) -> str:
+    labels = {
+        "plan": "Plan",
+        "apply": "Apply",
+        "reset": "Reset",
+        "state-reset": "State reset",
+        "status": "Status",
+        "show-urls": "URLs",
+        "check-health": "Check health",
+        "check-security": "Check security",
+        "check-rbac": "Check RBAC",
+    }
+    return labels.get(action, action.replace("-", " ").title())
+
+
+def history_panel(history: list[dict[str, Any]], current_variant: str | None = None, *, oob: bool = False) -> str:
     oob_attr = ' hx-swap-oob="outerHTML"' if oob else ""
     if not history:
         return f'<section id="history" class="history" aria-label="Recent commands" hidden{oob_attr}></section>'
@@ -354,8 +596,9 @@ def history_panel(history: list[dict[str, str]], current_variant: str | None = N
         variant_note = ""
         if index == 0 and current_variant and entry.get("variant") and entry.get("variant") != current_variant:
             variant_note = f'<small>Latest run was for {variant}</small>'
+        preview_again = history_preview_form(entry)
         items.append(
-            f"""<li>{marker}<time datetime="{timestamp}">{timestamp}</time><span class="history-status">{status}</span><code id="{command_id}">{command}</code>{variant_note}<button type="button" title="Copy command" aria-label="Copy command" onclick="copyCommand('{command_id}', this)">Copy</button></li>"""
+            f"""<li>{marker}<time datetime="{timestamp}">{timestamp}</time><span class="history-status">{status}</span><code id="{command_id}">{command}</code>{variant_note}<button type="button" title="Copy command" aria-label="Copy command" onclick="copyCommand('{command_id}', this)">Copy</button>{preview_again}</li>"""
         )
     return f"""
 <section id="history" class="history" aria-label="Recent commands"{oob_attr}>
@@ -375,7 +618,56 @@ def history_status(exit_status: str | None) -> str:
     return '<span class="history-status-unknown">Unknown</span>'
 
 
-def job_fragment(job, history: list[dict[str, str]] | None = None) -> str:
+def history_preview_form(entry: dict[str, Any]) -> str:
+    payload = entry.get("payload")
+    if not isinstance(payload, dict):
+        return ""
+    fields = hidden_inputs(payload)
+    return f'<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">{fields}<button type="submit">Preview again</button></form>'
+
+
+def latest_output_panel(history: list[dict[str, Any]] | None) -> str:
+    if not history:
+        return ""
+    entries = [entry for entry in history if str(entry.get("output") or "").strip()]
+    if not entries:
+        return ""
+    panels = []
+    for index, entry in enumerate(entries[:2]):
+        output = str(entry.get("output") or "")
+        command = html.escape(str(entry.get("command") or "latest command"))
+        label = "Latest output" if index == 0 else "Previous output"
+        output_id = "latest-output-text" if index == 0 else f"previous-output-text-{index}"
+        panels.append(
+            f"""
+<details class="output-drawer" open>
+  <summary>{label}</summary>
+  <div class="output-meta">{output_meta(entry)}</div>
+  <p>{command}</p>
+  <pre id="{output_id}" class="output">{ansi_to_html(output)}</pre>
+</details>
+"""
+        )
+    return f"""
+<div class="latest-output" id="latest-output-drawer">
+  <div class="command-head">
+    <h2>Pinned output</h2>
+    <button type="button" title="Copy latest output" onclick="copyCommand('latest-output-text', this)">Copy latest</button>
+    <button type="button" title="Clear output drawer" onclick="document.getElementById('latest-output-drawer').hidden = true">Clear</button>
+  </div>
+  {''.join(panels)}
+</div>
+"""
+
+
+def output_meta(entry: dict[str, Any]) -> str:
+    status = html.escape(str(entry.get("exit_status") or "unknown"))
+    timestamp = html.escape(str(entry.get("timestamp") or ""))
+    kind = html.escape(str(entry.get("kind") or "Command"))
+    return f"{kind} | exit {status} | {timestamp}"
+
+
+def job_fragment(job, history: list[dict[str, Any]] | None = None) -> str:
     output = ansi_to_html(job.text or "Starting workflow...")
     poll = f' hx-get="/jobs/{job.id}" hx-trigger="every 1s" hx-swap="outerHTML"' if job.running else ""
     state = "running" if job.running else ("succeeded" if job.succeeded else "failed")
@@ -383,13 +675,36 @@ def job_fragment(job, history: list[dict[str, str]] | None = None) -> str:
     if not job.running:
         next_html = next_actions(job.payload, job.succeeded)
     tail_script = tail_output_script(job.id)
+    result_header = job_result_header(job)
     return f"""
 {history_panel(history or [], str(job.payload.get("variant") or "kubernetes/kind"), oob=True)}
 <div id="job-{job.id}" class="job"{poll}>
   <div class="notice {state}">Workflow {state}</div>
+  {result_header}
+  <div class="output-controls" aria-label="Output controls">
+    <span id="follow-state-{job.id}" class="follow-state">Follow latest</span>
+    <button id="follow-toggle-{job.id}" type="button" onclick="toggleOutputFollow('{job.id}')">Pause follow</button>
+    <button type="button" onclick="copyOutput('output-{job.id}', this)">Copy output</button>
+  </div>
   <pre id="output-{job.id}" class="output">{output}</pre>
   {next_html}
   {tail_script}
+</div>
+"""
+
+
+def job_result_header(job) -> str:
+    command = html.escape(" ".join(job.command))
+    started = datetime.fromtimestamp(job.started_at).astimezone().strftime("%H:%M:%S")
+    finished = job.finished_at or datetime.now().timestamp()
+    duration = max(0.0, finished - job.started_at)
+    exit_code = "running" if job.returncode is None else str(job.returncode)
+    return f"""
+<div class="result-header">
+  <span>Command <strong>{command}</strong></span>
+  <span>Exit <strong>{html.escape(exit_code)}</strong></span>
+  <span>Started <strong>{html.escape(started)}</strong></span>
+  <span>Duration <strong>{duration:.1f}s</strong></span>
 </div>
 """
 
@@ -399,23 +714,27 @@ def tail_output_script(job_id: str) -> str:
     return f"""<script>
 (() => {{
   window.platformWorkflowTail = window.platformWorkflowTail || {{}};
-  const state = window.platformWorkflowTail['{escaped_id}'] || {{ follow: true, bound: false }};
+  const state = window.platformWorkflowTail['{escaped_id}'] || {{ follow: true, manual: false }};
   window.platformWorkflowTail['{escaped_id}'] = state;
   const output = document.getElementById('output-{escaped_id}');
   if (!output) return;
   const nearBottom = () => output.scrollHeight - output.scrollTop - output.clientHeight < 24;
-  if (!state.bound) {{
-    state.bound = true;
+  if (state.boundOutput !== output) {{
+    state.boundOutput = output;
     ['wheel', 'pointerdown', 'touchstart', 'keydown'].forEach((eventName) => {{
       output.addEventListener(eventName, () => {{
         state.follow = nearBottom();
+        state.manual = false;
+        updateOutputFollowControls('{escaped_id}');
       }}, {{ passive: true }});
     }});
     output.addEventListener('scroll', () => {{
       state.follow = nearBottom();
+      if (!state.manual) updateOutputFollowControls('{escaped_id}');
     }}, {{ passive: true }});
   }}
   if (state.follow) output.scrollTop = output.scrollHeight;
+  updateOutputFollowControls('{escaped_id}');
 }})();
 </script>"""
 
@@ -466,74 +785,85 @@ def next_actions(payload: dict[str, Any], succeeded: bool) -> str:
 
 def quick_actions(payload: dict[str, Any]) -> str:
     variant = str(payload["variant"])
+    stage = str(payload.get("stage") or "900")
     return f"""
 <section class="quick-actions" aria-label="Quick actions">
-  {stage_action_grid(variant)}
-  {primitive_actions(variant, str(payload.get("stage") or "900"))}
+  <div class="quick-actions-layout">
+    {variant_shortcuts()}
+    {stage_ladder(variant)}
+    {action_bar(variant, stage)}
+    {reset_actions(variant, stage)}
+  </div>
 </section>
 """
 
 
-def stage_action_grid(variant: str) -> str:
+def variant_shortcuts() -> str:
+    return '<div class="variant-shortcuts" aria-label="Variant shortcuts">' + variant_buttons() + "</div>"
+
+
+def stage_ladder(variant: str) -> str:
     target = variant_to_target(variant)
     stage_options = [stage for stage, label in STAGES if target == "kind" or stage != "950-local-idp"]
-    rows = ['<div class="action-row-label"></div>']
+    buttons = ['<div class="stage-ladder" role="group" aria-label="Stage ladder">']
     for stage in stage_options:
-        rows.append(f'<div class="action-stage">{html.escape(stage_display_label(stage))}</div>')
-    for action in ("plan", "apply"):
-        rows.append(f'<div class="action-row-label">{action.title()}</div>')
-        for stage in stage_options:
-            stage_label = dict(STAGES)[stage]
-            button_label = stage_display_label(stage)
-            tooltip = html.escape(f"{action.title()} {button_label} {stage_label}")
-            rows.append(
-                f"""<form hx-post="/run" hx-target="#result" hx-swap="innerHTML">
-  <input type="hidden" name="variant" value="{html.escape(variant)}">
-  <input type="hidden" name="stage" value="{html.escape(stage)}">
-  <input type="hidden" name="action" value="{action}">
-  <input type="hidden" name="auto_approve" value="{1 if action == "apply" else 0}">
-  <button type="submit" data-tooltip="{tooltip}" aria-label="{tooltip}">{button_label}</button>
-</form>"""
-            )
-    columns = "90px " + " ".join(["minmax(96px, 1fr)" for _stage in stage_options])
-    return f'<div class="actions action-grid" style="grid-template-columns:{columns}">' + "\n".join(rows) + "</div>"
+        stage_label = dict(STAGES)[stage]
+        active = " active" if stage == "900" else ""
+        buttons.append(
+            f'<button type="button" class="stage-step{active}" data-stage="{html.escape(stage)}" data-tooltip="{html.escape(stage_label)}" aria-label="Select stage {html.escape(stage)} {html.escape(stage_label)}" onclick="selectStage(\'{html.escape(stage)}\')">{html.escape(stage_display_label(stage))}</button>'
+        )
+    buttons.append("</div>")
+    return "\n".join(buttons)
 
 
-def primitive_actions(variant: str, stage: str) -> str:
+def action_bar(variant: str, stage: str) -> str:
     target = variant_to_target(variant)
-    reset_form = f"""<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">
-  <input type="hidden" name="variant" value="{html.escape(variant)}">
-  <input type="hidden" name="stage" value="{html.escape(stage)}">
-  <input type="hidden" name="action" value="reset">
-  <input type="hidden" name="auto_approve" value="1">
-  <button type="submit" data-tooltip="{html.escape(f"Review reset for {target}")}" aria-label="{html.escape(f"Review reset for {target}")}">Reset</button>
-</form>"""
-    state_reset_form = f"""<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">
-  <input type="hidden" name="variant" value="{html.escape(variant)}">
-  <input type="hidden" name="stage" value="{html.escape(stage)}">
-  <input type="hidden" name="action" value="state-reset">
-  <input type="hidden" name="auto_approve" value="1">
-  <button type="submit" data-tooltip="{html.escape(f"Review Terraform state reset for {target}")}" aria-label="{html.escape(f"Review Terraform state reset for {target}")}">State reset</button>
-</form>"""
     actions = [
+        ("plan", "Plan", f"Review {target} plan for selected stage"),
+        ("apply", "Apply", f"Review {target} apply for selected stage"),
         ("status", "Status", f"Check {target} status"),
         ("show-urls", "URLs", f"Show {target} service URLs"),
-        ("check-health", "Check health", f"Run {target} health checks"),
-        ("check-security", "Check security", f"Run {target} security checks"),
-        ("check-rbac", "Check RBAC", f"Run {target} RBAC checks"),
+        ("check-health", "Check health", f"Check {target} health"),
+        ("check-security", "Check security", f"Check {target} security"),
+        ("check-rbac", "Check RBAC", f"Check {target} RBAC"),
     ]
-    forms = [reset_form, state_reset_form, '<span class="reset-note">Reset actions require review before they run.</span>']
+    forms = ['<div class="action-bar" role="group" aria-label="Actions">']
     for action, label, tooltip in actions:
+        active = " active" if action == "apply" else ""
         forms.append(
-            f"""<form hx-post="/run" hx-target="#result" hx-swap="innerHTML">
+            f"""<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">
   <input type="hidden" name="variant" value="{html.escape(variant)}">
   <input type="hidden" name="stage" value="{html.escape(stage)}">
   <input type="hidden" name="action" value="{html.escape(action)}">
-  <input type="hidden" name="auto_approve" value="0">
+  <input type="hidden" name="auto_approve" value="{1 if action == "apply" else 0}">
+  <input type="hidden" name="source" value="action button">
+  <button type="submit" class="{active.strip()}" data-action="{html.escape(action)}" data-tooltip="{html.escape(tooltip)}" aria-label="{html.escape(tooltip)}" onclick="selectAction('{html.escape(action)}')">{html.escape(label)}</button>
+</form>"""
+        )
+    forms.append("</div>")
+    return "\n".join(forms)
+
+
+def reset_actions(variant: str, stage: str) -> str:
+    target = variant_to_target(variant)
+    reset_forms = ['<div class="reset-actions" role="group" aria-label="Reset actions">']
+    for action, label, tooltip in (
+        ("reset", "Reset", f"Review reset for {target}"),
+        ("state-reset", "State reset", f"Review Terraform state reset for {target}"),
+    ):
+        reset_forms.append(
+            f"""<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">
+  <input type="hidden" name="variant" value="{html.escape(variant)}">
+  <input type="hidden" name="stage" value="{html.escape(stage)}">
+  <input type="hidden" name="action" value="{html.escape(action)}">
+  <input type="hidden" name="auto_approve" value="1">
+  <input type="hidden" name="source" value="reset button">
   <button type="submit" data-tooltip="{html.escape(tooltip)}" aria-label="{html.escape(tooltip)}">{html.escape(label)}</button>
 </form>"""
         )
-    return '<div class="primitive-actions">' + "\n".join(forms) + "</div>"
+    reset_forms.append('<span class="reset-note">Review required.</span>')
+    reset_forms.append("</div>")
+    return "\n".join(reset_forms)
 
 
 def stage_display_label(stage: str) -> str:
@@ -586,12 +916,12 @@ h1 { margin:0; font-size:clamp(2rem, 4vw, 4rem); letter-spacing:0; }
 .eyebrow { margin:0 0 6px; color:var(--muted); font-weight:800; text-transform:uppercase; font-size:.78rem; }
 section, .result { background:var(--panel); border:1px solid var(--line); }
 main > form { display:block; }
-.variant-shortcuts { display:flex; gap:8px; align-items:center; padding:10px 14px; border-bottom:0; }
-.variant-shortcuts span { margin-right:4px; color:var(--muted); font-size:.72rem; font-weight:800; text-transform:uppercase; }
+.variant-shortcuts { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .variant-shortcuts button { min-width:150px; }
-.variant-shortcuts button.active { background:var(--ink); border-color:var(--ink); }
+.variant-shortcuts button.active, .stage-ladder button.active, .action-bar button.active { background:var(--ink); border-color:var(--ink); box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
 .controls { display:grid; grid-template-columns: minmax(150px, .8fr) minmax(190px, 1fr) minmax(150px, .8fr) minmax(210px, 1.05fr) minmax(210px, 1.05fr); gap:12px; padding:14px; align-items:end; }
 label { display:grid; gap:6px; color:var(--muted); font-weight:800; font-size:.78rem; text-transform:uppercase; }
+.control-field.selected { outline:2px solid var(--ink); outline-offset:3px; background:#fbfaf4; }
 select, button { min-height:40px; border:1px solid var(--ink); background:white; color:var(--ink); padding:8px 10px; font:inherit; }
 select { width:100%; min-width:0; font-weight:700; overflow:hidden; text-overflow:ellipsis; }
 button { cursor:pointer; background:var(--accent); color:white; border-color:var(--accent); font-weight:800; }
@@ -604,11 +934,22 @@ button[data-tooltip]:hover::after, button[data-tooltip]:focus-visible::after { o
 .summary div { border:1px solid var(--line); padding:10px; background:#fbfaf4; }
 .summary span { display:block; color:var(--muted); text-transform:uppercase; font-size:.72rem; font-weight:800; }
 .summary strong { display:block; margin-top:6px; }
+.provenance-strip { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+.provenance-strip span, .risk-badge, .preflight-badge { display:inline-flex; align-items:center; min-height:28px; border:1px solid var(--line); background:#fbfaf4; padding:4px 8px; font-size:.75rem; font-weight:800; text-transform:uppercase; }
+.risk-badge.readonly, .preflight-badge.ok { border-color:var(--accent); color:var(--accent); }
+.risk-badge.mutating { border-color:#8a5b00; color:#8a5b00; }
+.risk-badge.destructive, .preflight-badge.blocked { border-color:var(--danger); color:var(--danger); }
+.preflight-badge.neutral, .risk-badge.neutral { color:var(--muted); }
+.stage-delta { margin:-6px 0 14px; color:var(--muted); font-size:.86rem; font-weight:700; }
+.intent-summary { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+.intent-summary div { border:1px solid var(--line); padding:10px; background:#eef8f4; }
+.intent-summary span { display:block; color:var(--muted); text-transform:uppercase; font-size:.72rem; font-weight:800; }
+.intent-summary strong { display:block; margin-top:6px; line-height:1.35; }
 .history { margin-bottom:16px; border:1px solid var(--line); background:#fbfaf4; padding:10px 12px; }
 .history[hidden] { display:none; }
 .history h2 { margin:0 0 8px; font-size:.8rem; text-transform:uppercase; color:var(--muted); }
 .history ol { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
-.history li { display:grid; grid-template-columns:20px 72px 112px minmax(0, 1fr) minmax(0, auto) auto; gap:10px; align-items:center; }
+.history li { display:grid; grid-template-columns:20px 72px 112px minmax(0, 1fr) minmax(0, auto) auto auto; gap:10px; align-items:center; }
 .history span { color:var(--muted); font-size:.72rem; font-weight:800; text-transform:uppercase; }
 .history-current { color:var(--accent); font-size:1rem; line-height:1; text-align:center; }
 .history time { color:var(--muted); font-size:.72rem; font-weight:800; font-variant-numeric:tabular-nums; }
@@ -620,11 +961,28 @@ button[data-tooltip]:hover::after, button[data-tooltip]:focus-visible::after { o
 .history small { color:#8a5b00; font-size:.72rem; font-weight:800; white-space:nowrap; }
 .history code { display:block; min-width:0; overflow:auto; white-space:nowrap; font-family:ui-monospace, monospace; color:var(--ink); }
 .history button { min-height:32px; padding:5px 9px; }
+.history form { margin:0; }
 .command-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; }
 .command-head h2 { margin:0; font-size:.8rem; text-transform:uppercase; color:var(--muted); }
+.command-panel { margin-top:8px; }
+.command-tabs { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+.command-tab { background:white; color:var(--accent); border-color:var(--accent); }
+.command-tab.active { background:var(--ink); color:white; border-color:var(--ink); }
+.command-pane[hidden] { display:none; }
 pre { margin:0; padding:14px; background:var(--code); color:#e5fff7; overflow:auto; white-space:pre; line-height:1.45; }
 .command { min-height:90px; font-weight:800; color:#8ee8ff; }
+.latest-output { margin-top:16px; border-top:1px solid var(--line); padding-top:12px; min-height:0; }
+.output-drawer { border:1px solid var(--line); background:#fbfaf4; padding:10px; margin-top:8px; }
+.output-drawer summary { cursor:pointer; color:var(--muted); font-size:.78rem; font-weight:800; text-transform:uppercase; }
+.output-meta, .result-header { display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:.76rem; font-weight:800; text-transform:uppercase; margin-bottom:8px; }
+.result-header { border:1px solid var(--line); background:#fbfaf4; padding:8px; }
+.result-header strong { color:var(--ink); text-transform:none; }
+.latest-output p { margin:0 0 8px; color:var(--muted); font-family:ui-monospace, monospace; font-size:.82rem; overflow:auto; white-space:nowrap; }
+.latest-output .output { max-height:220px; }
 .job { display:flex; flex-direction:column; min-height:0; height:100%; }
+.output-controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.output-controls span { color:var(--muted); font-size:.78rem; font-weight:800; text-transform:uppercase; }
+.output-controls button { min-height:32px; padding:5px 9px; }
 .output { flex:1 1 auto; min-height:0; max-height:none; }
 .ansi-bold { font-weight:800; }
 .ansi-black { color:#1f2933; }
@@ -640,17 +998,20 @@ pre { margin:0; padding:14px; background:var(--code); color:#e5fff7; overflow:au
 .error, .failed { color:var(--danger); }
 .running { color:#8a5b00; }
 .succeeded { color:var(--accent); }
-.run { margin-top:12px; width:auto; min-width:132px; padding-inline:20px; }
+.execution-actions { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+.execution-actions form { margin:0; }
+.run, .dry-run { width:auto; min-width:132px; padding-inline:20px; }
+.dry-run { background:white; color:var(--accent); border-color:var(--accent); }
+.dry-run:hover { background:#eef8f4; }
 .quick-actions { margin-top:16px; padding:12px; }
-.actions { margin-top:12px; }
-.action-grid { display:grid; gap:8px; align-items:stretch; overflow-x:auto; overflow-y:visible; padding-top:8px; }
-.action-row-label, .action-stage { display:flex; align-items:center; min-height:40px; color:var(--muted); font-size:.72rem; font-weight:800; text-transform:uppercase; }
-.action-stage { justify-content:center; }
-.action-grid form { margin:0; }
-.action-grid button { width:100%; min-width:0; white-space:nowrap; }
-.primitive-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.quick-actions-layout { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px 14px; align-items:end; }
+.stage-ladder { grid-column:1 / 2; display:grid; grid-template-columns:repeat(10, minmax(56px, 1fr)); gap:6px; }
+.stage-ladder button { min-width:0; padding-inline:6px; }
+.action-bar { grid-column:1 / 2; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.action-bar form, .reset-actions form { margin:0; }
+.reset-actions { grid-row:1 / span 3; grid-column:2 / 3; display:flex; gap:8px; flex-direction:column; align-items:stretch; min-width:150px; padding-left:14px; border-left:1px solid var(--line); }
 .reset-note { display:inline-flex; align-items:center; color:var(--muted); font-size:.82rem; font-weight:800; }
-@media (max-width: 900px) { header, .controls, .summary, .history li { grid-template-columns:1fr; display:grid; } .variant-shortcuts { flex-wrap:wrap; } }
+@media (max-width: 900px) { header, .controls, .summary, .intent-summary, .history li, .quick-actions-layout { grid-template-columns:1fr; display:grid; } .variant-shortcuts { flex-wrap:wrap; } .stage-ladder { grid-template-columns:repeat(5, minmax(56px, 1fr)); } .reset-actions { grid-row:auto; grid-column:auto; flex-direction:row; flex-wrap:wrap; padding-left:0; border-left:0; border-top:1px solid var(--line); padding-top:10px; } }
 """
 
 

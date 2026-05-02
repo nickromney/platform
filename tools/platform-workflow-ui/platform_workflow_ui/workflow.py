@@ -49,10 +49,10 @@ def next_stages(variant: str, stage: str, action: str, succeeded: bool) -> list[
     return stages
 
 
-def build_workflow_args(payload: dict[str, Any], *, subcommand: str) -> list[str]:
+def build_workflow_args(payload: dict[str, Any], *, subcommand: str, standard_flag: str = "--execute") -> list[str]:
     args = [
         subcommand,
-        "--execute",
+        standard_flag,
     ]
     if subcommand == "preview":
         args.extend(["--output", "json"])
@@ -71,7 +71,7 @@ def build_workflow_args(payload: dict[str, Any], *, subcommand: str) -> list[str
             value = payload.get(app)
             if value:
                 args.extend(["--app", f"{app}={value}"])
-    if payload.get("auto_approve"):
+    if payload.get("auto_approve") and str(payload.get("action") or "") in {"apply", "reset", "state-reset"}:
         args.append("--auto-approve")
     return args
 
@@ -111,8 +111,9 @@ class JobStore:
         self.jobs: dict[str, WorkflowJob] = {}
         self.lock = threading.Lock()
 
-    def start(self, payload: dict[str, Any], on_finish: Callable[[str | None, int], None] | None = None) -> WorkflowJob:
-        args = build_workflow_args(payload, subcommand="apply")
+    def start(self, payload: dict[str, Any], on_finish: Callable[[str | None, int, str], None] | None = None) -> WorkflowJob:
+        standard_flag = "--dry-run" if payload.get("dry_run") else "--execute"
+        args = build_workflow_args(payload, subcommand="apply", standard_flag=standard_flag)
         job = WorkflowJob(
             id=uuid.uuid4().hex,
             payload=dict(payload),
@@ -137,7 +138,7 @@ class JobStore:
             job.returncode = returncode
             job.finished_at = time.time()
 
-    def _run(self, job: WorkflowJob, on_finish: Callable[[str | None, int], None] | None = None) -> None:
+    def _run(self, job: WorkflowJob, on_finish: Callable[[str | None, int, str], None] | None = None) -> None:
         env = os.environ.copy()
         process = subprocess.Popen(
             job.command,
@@ -153,7 +154,7 @@ class JobStore:
         returncode = process.wait()
         self._finish(job, returncode)
         if on_finish is not None:
-            on_finish(job.payload.get("history_id"), returncode)
+            on_finish(job.payload.get("history_id"), returncode, job.text)
 
 
 def parse_preview(stdout: str) -> dict[str, Any]:
