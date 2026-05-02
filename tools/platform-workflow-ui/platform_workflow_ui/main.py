@@ -414,7 +414,7 @@ def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, An
     stage = html.escape(str(result.get("stage", payload["stage"])))
     action = html.escape(str(result.get("action", payload["action"])))
     raw_action = str(result.get("action", payload["action"]))
-    source = html.escape(str(payload.get("source") or "dropdowns"))
+    selection = html.escape(selection_label(str(payload.get("source") or "dropdowns")))
     intent = html.escape(intent_summary(str(result.get("action", payload["action"])), stage, variant))
     consequence = html.escape(consequence_summary(str(result.get("action", payload["action"]))))
     button_label = html.escape(action_label(raw_action))
@@ -429,7 +429,7 @@ def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, An
     dry_run_hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": "1"})
     return f"""
 <div class="provenance-strip">
-  <span>Source <strong>{source}</strong></span>
+  <span class="selection-badge">Selection: {selection}</span>
   <span class="risk-badge {risk_class}">{risk_label}</span>
   {preflight}
 </div>
@@ -519,6 +519,17 @@ def action_risk(action: str) -> tuple[str, str]:
     return ("Command", "neutral")
 
 
+def selection_label(source: str) -> str:
+    labels = {
+        "dropdowns": "Dropdowns",
+        "variant shortcut": "Variant shortcut",
+        "stage ladder": "Stage ladder",
+        "action button": "Action shortcut",
+        "reset button": "Reset shortcut",
+    }
+    return labels.get(source, "Manual selection")
+
+
 def stage_delta_hint(stage: str) -> str:
     if stage == "950-local-idp":
         return "Kind-only finish stage for the local identity provider path."
@@ -562,7 +573,7 @@ def preflight_badges(repo_root: Path, payload: dict[str, Any]) -> str:
     else:
         badges.append('<span class="preflight-badge ok">No state lock</span>')
     if target in {"kind", "lima", "slicer"}:
-        badges.append('<span class="preflight-badge neutral">Runtime conflict checks run in Make</span>')
+        badges.append('<span class="preflight-badge neutral">Checked at execution</span>')
     return "".join(badges)
 
 
@@ -935,7 +946,7 @@ button[data-tooltip]:hover::after, button[data-tooltip]:focus-visible::after { o
 .summary span { display:block; color:var(--muted); text-transform:uppercase; font-size:.72rem; font-weight:800; }
 .summary strong { display:block; margin-top:6px; }
 .provenance-strip { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-.provenance-strip span, .risk-badge, .preflight-badge { display:inline-flex; align-items:center; min-height:28px; border:1px solid var(--line); background:#fbfaf4; padding:4px 8px; font-size:.75rem; font-weight:800; text-transform:uppercase; }
+.selection-badge, .risk-badge, .preflight-badge { display:inline-flex; align-items:center; min-height:28px; border:1px solid var(--line); background:#fbfaf4; padding:4px 8px; font-size:.75rem; font-weight:800; text-transform:uppercase; }
 .risk-badge.readonly, .preflight-badge.ok { border-color:var(--accent); color:var(--accent); }
 .risk-badge.mutating { border-color:#8a5b00; color:#8a5b00; }
 .risk-badge.destructive, .preflight-badge.blocked { border-color:var(--danger); color:var(--danger); }

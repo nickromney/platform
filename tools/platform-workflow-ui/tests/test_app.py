@@ -117,8 +117,7 @@ def test_preview_fragment_uses_shared_workflow_script(tmp_path: Path) -> None:
     assert "Execute Apply" in response.text
     assert "Intent" in response.text
     assert "Consequence" in response.text
-    assert "Source" in response.text
-    assert "dropdowns" in response.text
+    assert '<span class="selection-badge">Selection: Dropdowns</span>' in response.text
     assert "Mutating" in response.text
     assert "Stage 900 is cumulative" not in response.text
     assert "Apply the selected kind stage 500 workflow." in response.text
@@ -132,7 +131,7 @@ def test_preview_fragment_uses_shared_workflow_script(tmp_path: Path) -> None:
     assert "set -euo pipefail" not in response.text
     assert "Dry-run uses" in response.text
     assert "No state lock" in response.text
-    assert "Runtime conflict checks run in Make" in response.text
+    assert "Checked at execution" in response.text
     assert 'id="history"' in response.text
     assert 'hx-swap-oob="outerHTML"' in response.text
     assert "<h2>Recent commands</h2>" not in response.text
@@ -169,7 +168,7 @@ def test_read_only_preview_has_read_only_badge_and_no_auto_approve(tmp_path: Pat
 
     assert response.status_code == 200
     assert "Read-only" in response.text
-    assert "action button" in response.text
+    assert '<span class="selection-badge">Selection: Action shortcut</span>' in response.text
     assert "make -C kubernetes/kind 900 check-health" in response.text
     assert "AUTO_APPROVE=1" not in response.text
     assert "Stage 900 is cumulative" in response.text
