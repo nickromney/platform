@@ -11,7 +11,20 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-APP_STAGES = {"700", "800", "900", "950-local-idp"}
+APP_STAGES = {"700", "800", "900"}
+PRESET_FIELD_GROUPS = {
+    "preset_resource_profile": "resource-profile",
+    "preset_image_distribution": "image-distribution",
+    "preset_network_profile": "network-profile",
+    "preset_observability_stack": "observability-stack",
+    "preset_identity_stack": "identity-stack",
+    "preset_app_set": "app-set",
+}
+CUSTOM_OVERRIDE_FIELDS = {
+    "custom_worker_count": "worker_count",
+    "custom_node_image": "node_image",
+    "custom_enable_backstage": "enable_backstage",
+}
 VARIANT_TARGETS = {
     "kubernetes/kind": "kind",
     "kubernetes/lima": "lima",
@@ -28,28 +41,35 @@ def stage_has_app_toggles(stage: str) -> bool:
 
 
 def stage_default(stage: str, app: str) -> bool:
-    if stage == "950-local-idp":
-        return app == "sentiment"
     return stage in {"700", "800", "900"}
+
+
+def app_default(payload: dict[str, Any], app: str) -> bool:
+    app_set = str(payload.get("preset_app_set") or "default")
+    if app_set == "reference-apps":
+        return True
+    if app_set == "no-reference-apps":
+        return False
+    if app_set == "sentiment-only":
+        return app == "sentiment"
+    return stage_default(str(payload.get("stage") or "900"), app)
 
 
 def next_stages(variant: str, stage: str, action: str, succeeded: bool) -> list[str]:
     if not succeeded or action != "apply":
         return []
     stages_by_current = {
-        "500": ["600", "900", "950-local-idp"],
-        "600": ["700", "800", "900", "950-local-idp"],
-        "700": ["800", "900", "950-local-idp"],
-        "800": ["900", "950-local-idp"],
-        "900": ["950-local-idp"],
+        "500": ["600", "900"],
+        "600": ["700", "800", "900"],
+        "700": ["800", "900"],
+        "800": ["900"],
     }
     stages = stages_by_current.get(stage, [])
-    if variant_to_target(variant) != "kind":
-        stages = [candidate for candidate in stages if candidate != "950-local-idp"]
     return stages
 
 
 def build_workflow_args(payload: dict[str, Any], *, subcommand: str, standard_flag: str = "--execute") -> list[str]:
+    variant = variant_to_target(str(payload.get("variant") or "kubernetes/kind"))
     args = [
         subcommand,
         standard_flag,
@@ -58,18 +78,27 @@ def build_workflow_args(payload: dict[str, Any], *, subcommand: str, standard_fl
         args.extend(["--output", "json"])
     args.extend(
         [
-            "--target",
-            variant_to_target(str(payload.get("variant") or "kubernetes/kind")),
+            "--variant",
+            variant,
             "--stage",
             str(payload.get("stage") or "900"),
             "--action",
             str(payload.get("action") or "apply"),
         ]
     )
+    for field, group in PRESET_FIELD_GROUPS.items():
+        value = str(payload.get(field) or "")
+        if value and value != "default":
+            args.extend(["--preset", f"{group}={value}"])
+    for field, option in CUSTOM_OVERRIDE_FIELDS.items():
+        value = str(payload.get(field) or "")
+        if value:
+            args.extend(["--set", f"{option}={value}"])
     if stage_has_app_toggles(str(payload.get("stage") or "900")):
         for app in ("sentiment", "subnetcalc"):
-            value = payload.get(app)
-            if value:
+            value = str(payload.get(app) or "")
+            default_value = "on" if app_default(payload, app) else "off"
+            if value and value != default_value:
                 args.extend(["--app", f"{app}={value}"])
     if payload.get("auto_approve") and str(payload.get("action") or "") in {"apply", "reset", "state-reset"}:
         args.append("--auto-approve")
@@ -78,6 +107,21 @@ def build_workflow_args(payload: dict[str, Any], *, subcommand: str, standard_fl
 
 def run_workflow_json(repo_root: Path, args: list[str]) -> tuple[int, str, str]:
     command = [str(repo_root / "scripts" / "platform-workflow.sh"), *args]
+    result = subprocess.run(command, cwd=repo_root, text=True, capture_output=True, check=False)
+    return result.returncode, result.stdout, result.stderr
+
+
+def run_inventory_json(repo_root: Path, *, variant: str = "kubernetes/kind", stage: str = "900") -> tuple[int, str, str]:
+    command = [
+        str(repo_root / "scripts" / "platform-inventory.sh"),
+        "--execute",
+        "--variant",
+        variant_to_target(variant),
+        "--stage",
+        stage,
+        "--output",
+        "json",
+    ]
     result = subprocess.run(command, cwd=repo_root, text=True, capture_output=True, check=False)
     return result.returncode, result.stdout, result.stderr
 

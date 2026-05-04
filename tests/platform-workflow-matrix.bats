@@ -8,7 +8,7 @@ setup() {
 
 assert_preview() {
   local name="$1"
-  local target="$2"
+  local variant="$2"
   local stage="$3"
   local action="$4"
   local profile="$5"
@@ -21,7 +21,7 @@ assert_preview() {
   local tfvars_file="${BATS_TEST_TMPDIR}/${name}.tfvars"
   local args=(
     preview --execute --output json
-    --target "${target}"
+    --variant "${variant}"
     --stage "${stage}"
     --action "${action}"
     --tfvars-file "${tfvars_file}"
@@ -52,7 +52,7 @@ assert_preview() {
   [ "${output}" = "${expected_sentiment}"$'\n'"${expected_subnetcalc}"$'\n'"${expected_profile}" ]
 }
 
-@test "platform workflow matrix covers target, stage, and app toggle combinations" {
+@test "platform workflow matrix covers variant, stage, and app toggle combinations" {
   assert_preview \
     kind_100_default \
     kind 100 plan "" "" "" \
@@ -120,18 +120,6 @@ assert_preview() {
     false false none
 
   assert_preview \
-    kind_950_local_idp_plan \
-    kind 950-local-idp plan "" "" "" \
-    "make -C kubernetes/kind 950-local-idp plan" \
-    null null none
-
-  assert_preview \
-    kind_950_local_idp_no_subnetcalc_plan \
-    kind 950-local-idp plan "" "" off \
-    "env PLATFORM_TFVARS=${BATS_TEST_TMPDIR}/kind_950_local_idp_no_subnetcalc_plan.tfvars make -C kubernetes/kind 950-local-idp plan" \
-    null false none
-
-  assert_preview \
     lima_700_default_plan \
     lima 700 plan "" "" "" \
     "make -C kubernetes/lima 700 plan" \
@@ -156,9 +144,9 @@ assert_preview() {
     null null none
 }
 
-@test "platform workflow matrix rejects unsupported cross-target stage-like targets" {
-  run "${SCRIPT}" preview --execute --target slicer --stage 950-local-idp --action plan
+@test "platform workflow matrix rejects removed 950-local-idp stage" {
+  run "${SCRIPT}" preview --execute --variant slicer --stage 950-local-idp --action plan
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Stage '950-local-idp' is only available for target kind"* ]]
+  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb"* ]]
 }

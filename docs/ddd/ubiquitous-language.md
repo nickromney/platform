@@ -41,9 +41,17 @@ domain language.
 | internal developer platform | the whole local platform product assembled by this repo | The developer portal is only one surface over the IDP, not the IDP itself. |
 | solution | the first-level grouping, currently `kubernetes` | The repo is grouped by what you want to run. |
 | variant | the concrete operable path beneath a solution | Examples: `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`. |
+| variant adapter | the implementation behind a variant that satisfies platform contracts | May be Terraform/OpenTofu, Terragrunt, scripts, provider APIs, or a mix of them. |
+| variant family | broad runtime class for a variant | Current value is `local`; future values may include `existing`, `hosted`, and `bare-metal`. |
 | target | a Makefile and workflow noun | Implementation-facing term for `make` goals. |
+| context | a deployable or state boundary inside a variant workflow | Current local contexts are `local-substrate` and `platform-stack`; future hosted variants may split network, identity, and cluster contexts. |
+| contract | facts a context provides or consumes | Examples: kubeconfig, ingress, DNS, registry, CNI, identity, resource sizing, lifecycle, and state behavior. |
+| lifecycle mode | whether a variant creates, attaches to, or delegates a runtime | Current local variants use `create`; future modes include `attach` and `external`. |
+| state scope | ownership boundary for infrastructure state | Current local variants use `single-local`; future hosted variants may use `per-context` or `external`. |
 | stack | the whole collection of apps realized for a solution variant | A full deployment shape. |
 | stage | the cumulative build ladder on a solution variant | Examples: `100` through `900`. |
+| preset | a named overlay of stage, variant, and context defaults | Presets are not hidden stages. |
+| override | an operator-supplied value that wins over defaults and presets | Guided surfaces render these into generated operator tfvars where needed. |
 | provider | reserved for Terraform provider discussions | Not used for `kind`, `lima`, or `slicer`. |
 | environment | the app exposure or testing band | Examples: `dev`, `sit`, `uat`, `admin`. |
 | environment namespace | a Kubernetes namespace carrying an environment label | Current application environments are `dev`, `sit`, and `uat`; `admin` is a route band rather than an app namespace. |
@@ -146,7 +154,7 @@ deployment evidence, and scorecards. Current app/environment surfaces include
 | usable addresses | addresses available after reservation rules | Allocatable hosts. |
 | first usable IP | first allocatable host address | Start of usable range. |
 | last usable IP | last allocatable host address | End of usable range. |
-| lookup | frontend composed query | Client-side orchestration term. |
+| lookup | the frontend's combined query over validation, private-range, Cloudflare, and subnet-info checks | Frontend orchestration term; not a backend domain concept pre-launch. |
 | API mediation | policy and forwarding layer | Implemented by APIM or simulators. |
 
 ## Sentiment Analysis Language
