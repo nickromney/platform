@@ -36,9 +36,13 @@ start_server() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'"variants"'* ]]
+  [[ "${output}" == *'"variant_classes"'* ]]
+  [[ "${output}" == *'"contexts"'* ]]
+  [[ "${output}" == *'"contracts"'* ]]
   [[ "${output}" == *'"kubernetes/kind"'* ]]
+  [[ "${output}" == *'"local-created-cluster"'* ]]
   [[ "${output}" != *'"targets"'* ]]
-  [[ "${output}" == *'"950-local-idp"'* ]]
+  [[ "${output}" != *'"950-local-idp"'* ]]
 }
 
 @test "platform workflow ui dry-run defaults to h2 https console URL" {
@@ -147,9 +151,12 @@ EOF
   run curl -fsS "http://127.0.0.1:18743/"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'Stage default: enabled'* ]]
+  [[ "${output}" == *'Default: enabled'* ]]
   [[ "${output}" == *'name="sentiment"'* ]]
   [[ "${output}" == *'name="subnetcalc"'* ]]
+  [[ "${output}" == *'<option value="on" selected>Enabled</option>'* ]]
+  [[ "${output}" == *'<option value="off">Disabled</option>'* ]]
+  [[ "${output}" != *'Stage default: enabled'* ]]
   [[ "${output}" != *'Enable sentiment (stage default)'* ]]
   [[ "${output}" != *'Enable subnetcalc (stage default)'* ]]
   [[ "${output}" != *'<option value="">Stage default</option>'* ]]

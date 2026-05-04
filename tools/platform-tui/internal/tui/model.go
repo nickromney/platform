@@ -28,6 +28,7 @@ const (
 	screenTarget screen = iota
 	screenStage
 	screenAction
+	screenPreset
 	screenSentiment
 	screenSubnetcalc
 	screenPreview
@@ -69,12 +70,20 @@ type Model struct {
 	screen screen
 	cursor int
 
-	target     string
-	stage      string
-	stageLabel string
-	action     string
-	sentiment  string
-	subnetcalc string
+	variant                   string
+	stage                    string
+	stageLabel               string
+	action                   string
+	sentiment                string
+	subnetcalc               string
+	presetResourceProfile    string
+	presetImageDistribution  string
+	presetNetworkProfile     string
+	presetObservabilityStack string
+	presetIdentityStack      string
+	presetAppSet             string
+	customWorkerCount        string
+	customNodeImage          string
 
 	previewCommand string
 	status         string
@@ -203,7 +212,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.selectCurrent()
 	}
 	if m.screen == screenStage && len(msg.Runes) == 1 {
-		if value, ok := stageShortcutValue(msg.Runes[0], m.target); ok {
+		if value, ok := stageShortcutValue(msg.Runes[0], m.variant); ok {
 			return m.selectItemValue(value)
 		}
 	}
@@ -244,12 +253,12 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 		case "quit":
 			return m, tea.Quit
 		case "status":
-			m.target = ""
+			m.variant = ""
 			m.screen = screenPreview
 			m.previewCommand = "make status"
 			return m, nil
 		default:
-			m.target = item.Value
+			m.variant = item.Value
 			m.screen = screenStage
 			m.cursor = 0
 			return m, nil
@@ -268,14 +277,24 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 	case screenAction:
+		if item.Value == "preset" {
+			m.screen = screenPreset
+			m.cursor = 0
+			return m, nil
+		}
 		m.action = item.Value
 		m.cursor = 0
-		if m.hasAppToggles() {
+		if m.hasAppToggles() && actionSupportsAppToggles(m.action) {
 			m.screen = screenSentiment
 			return m, nil
 		}
 		m.screen = screenPreview
 		return m, m.loadPreviewCmd()
+	case screenPreset:
+		m.applyPresetBundle(item.Value)
+		m.screen = screenAction
+		m.cursor = 0
+		return m, nil
 	case screenSentiment:
 		m.sentiment = item.Value
 		m.screen = screenSubnetcalc
@@ -325,6 +344,8 @@ func (m Model) back() Model {
 		m.screen = screenTarget
 	case screenAction:
 		m.screen = screenStage
+	case screenPreset:
+		m.screen = screenAction
 	case screenSentiment:
 		m.screen = screenAction
 	case screenSubnetcalc:
@@ -332,7 +353,7 @@ func (m Model) back() Model {
 	case screenPreview:
 		if m.action == "reset" || m.action == "state-reset" {
 			m.screen = screenStage
-		} else if !m.hasAppToggles() {
+		} else if !m.hasAppToggles() || !actionSupportsAppToggles(m.action) {
 			m.screen = screenAction
 		} else {
 			m.screen = screenSubnetcalc
@@ -439,14 +460,13 @@ func (m Model) items() []menuItem {
 			{Label: "800 observability", Value: "800"},
 			{Label: "900 sso", Value: "900"},
 		}
-		if m.target == "kind" {
-			items = append(items, menuItem{Label: "950 local-idp", Value: "950-local-idp"})
-		}
-		items = append(items, menuItem{Label: "Reset target", Value: "reset"})
+		items = append(items, menuItem{Label: "Reset variant", Value: "reset"})
 		items = append(items, menuItem{Label: "Terraform state reset", Value: "state-reset"})
 		return withNavigation(items)
 	case screenAction:
 		return withNavigation([]menuItem{
+			{Label: "Preset bundle", Value: "preset"},
+			{Label: "readiness", Value: "readiness"},
 			{Label: "plan", Value: "plan"},
 			{Label: "apply", Value: "apply"},
 			{Label: "status", Value: "status"},
@@ -455,10 +475,19 @@ func (m Model) items() []menuItem {
 			{Label: "check-security", Value: "check-security"},
 			{Label: "check-rbac", Value: "check-rbac"},
 		})
+	case screenPreset:
+		return withNavigation([]menuItem{
+			{Label: "Stage defaults", Value: "default"},
+			{Label: "Minimal local", Value: "minimal"},
+			{Label: "IDP demo", Value: "local-idp-12gb"},
+			{Label: "No reference apps", Value: "no-reference-apps"},
+			{Label: "Local cache", Value: "local-cache"},
+			{Label: "Airplane", Value: "airplane"},
+		})
 	case screenSentiment:
-		return withNavigation(appItems("sentiment", stageDefault(m.stage, "sentiment")))
+		return withNavigation(appItems("sentiment", m.appDefault("sentiment")))
 	case screenSubnetcalc:
-		return withNavigation(appItems("subnetcalc", stageDefault(m.stage, "subnetcalc")))
+		return withNavigation(appItems("subnetcalc", m.appDefault("subnetcalc")))
 	case screenPreview:
 		items := []menuItem{
 			{Label: "Execute", Value: "run"},
@@ -481,18 +510,13 @@ func (m Model) nextItems() []menuItem {
 	var stages []string
 	switch m.stage {
 	case "500":
-		stages = []string{"600", "900", "950-local-idp"}
+		stages = []string{"600", "900"}
 	case "600":
-		stages = []string{"700", "800", "900", "950-local-idp"}
+		stages = []string{"700", "800", "900"}
 	case "700":
-		stages = []string{"800", "900", "950-local-idp"}
+		stages = []string{"800", "900"}
 	case "800":
-		stages = []string{"900", "950-local-idp"}
-	case "900":
-		stages = []string{"950-local-idp"}
-	}
-	if m.target != "kind" {
-		stages = removeStage(stages, "950-local-idp")
+		stages = []string{"900"}
 	}
 	items := make([]menuItem, 0, len(stages))
 	for _, stage := range stages {
@@ -504,24 +528,11 @@ func (m Model) nextItems() []menuItem {
 	return items
 }
 
-func removeStage(stages []string, remove string) []string {
-	kept := stages[:0]
-	for _, stage := range stages {
-		if stage != remove {
-			kept = append(kept, stage)
-		}
-	}
-	return kept
-}
-
 func stageDisplay(stage string) string {
-	if stage == "950-local-idp" {
-		return "950"
-	}
 	return stage
 }
 
-func stageShortcutValue(shortcut rune, target string) (string, bool) {
+func stageShortcutValue(shortcut rune, variant string) (string, bool) {
 	switch shortcut {
 	case '1':
 		return "100", true
@@ -541,8 +552,6 @@ func stageShortcutValue(shortcut rune, target string) (string, bool) {
 		return "800", true
 	case '9':
 		return "900", true
-	case '0':
-		return "950-local-idp", target == "kind"
 	default:
 		return "", false
 	}
@@ -578,20 +587,47 @@ func withNavigation(items []menuItem) []menuItem {
 func appItems(app string, enabled bool) []menuItem {
 	if enabled {
 		return []menuItem{
-			{Label: fmt.Sprintf("Enable %s (stage default)", app), Value: ""},
-			{Label: fmt.Sprintf("Disable %s", app), Value: app + "=off"},
+			{Label: fmt.Sprintf("%s enabled (default: enabled)", app), Value: app + "=on"},
+			{Label: fmt.Sprintf("%s disabled", app), Value: app + "=off"},
 		}
 	}
 	return []menuItem{
-		{Label: fmt.Sprintf("Disable %s (stage default)", app), Value: ""},
-		{Label: fmt.Sprintf("Enable %s", app), Value: app + "=on"},
+		{Label: fmt.Sprintf("%s disabled (default: disabled)", app), Value: app + "=off"},
+		{Label: fmt.Sprintf("%s enabled", app), Value: app + "=on"},
+	}
+}
+
+func (m *Model) applyPresetBundle(bundle string) {
+	m.presetResourceProfile = ""
+	m.presetImageDistribution = ""
+	m.presetNetworkProfile = ""
+	m.presetObservabilityStack = ""
+	m.presetIdentityStack = ""
+	m.presetAppSet = ""
+	m.customWorkerCount = ""
+	m.customNodeImage = ""
+	switch bundle {
+	case "minimal":
+		m.presetResourceProfile = "minimal"
+		m.presetImageDistribution = "pull"
+		m.presetNetworkProfile = "cilium"
+		m.presetAppSet = "no-reference-apps"
+	case "local-idp-12gb":
+		m.presetResourceProfile = "local-idp-12gb"
+		m.presetImageDistribution = "local-cache"
+		m.presetNetworkProfile = "cilium"
+	case "no-reference-apps":
+		m.presetAppSet = "no-reference-apps"
+	case "local-cache":
+		m.presetImageDistribution = "local-cache"
+	case "airplane":
+		m.presetResourceProfile = "airplane"
+		m.presetImageDistribution = "airplane"
+		m.presetNetworkProfile = "cilium"
 	}
 }
 
 func stageDefault(stage, app string) bool {
-	if stage == "950-local-idp" {
-		return app == "sentiment"
-	}
 	switch stage {
 	case "700", "800", "900":
 		return true
@@ -600,13 +636,35 @@ func stageDefault(stage, app string) bool {
 	}
 }
 
+func (m Model) appDefault(app string) bool {
+	switch m.presetAppSet {
+	case "reference-apps":
+		return true
+	case "no-reference-apps":
+		return false
+	case "sentiment-only":
+		return app == "sentiment"
+	default:
+		return stageDefault(m.stage, app)
+	}
+}
+
 func (m Model) hasAppToggles() bool {
 	return stageHasAppToggles(m.stage)
 }
 
+func actionSupportsAppToggles(action string) bool {
+	switch action {
+	case "plan", "apply", "check-health", "check-security", "check-rbac":
+		return true
+	default:
+		return false
+	}
+}
+
 func stageHasAppToggles(stage string) bool {
 	switch stage {
-	case "700", "800", "900", "950-local-idp":
+	case "700", "800", "900":
 		return true
 	default:
 		return false
@@ -618,17 +676,48 @@ func (m Model) workflowArgs(subcommand string) []string {
 	if subcommand == "preview" {
 		args = append(args, "--output", "json")
 	}
-	args = append(args, "--target", m.target, "--stage", m.stage, "--action", m.action)
-	if m.sentiment != "" {
+	args = append(args, "--variant", m.variant, "--stage", m.stage, "--action", m.action)
+	if m.presetResourceProfile != "" {
+		args = append(args, "--preset", "resource-profile="+m.presetResourceProfile)
+	}
+	if m.presetImageDistribution != "" {
+		args = append(args, "--preset", "image-distribution="+m.presetImageDistribution)
+	}
+	if m.presetNetworkProfile != "" {
+		args = append(args, "--preset", "network-profile="+m.presetNetworkProfile)
+	}
+	if m.presetObservabilityStack != "" {
+		args = append(args, "--preset", "observability-stack="+m.presetObservabilityStack)
+	}
+	if m.presetIdentityStack != "" {
+		args = append(args, "--preset", "identity-stack="+m.presetIdentityStack)
+	}
+	if m.presetAppSet != "" {
+		args = append(args, "--preset", "app-set="+m.presetAppSet)
+	}
+	if m.customWorkerCount != "" {
+		args = append(args, "--set", "worker_count="+m.customWorkerCount)
+	}
+	if m.customNodeImage != "" {
+		args = append(args, "--set", "node_image="+m.customNodeImage)
+	}
+	if m.sentiment != "" && m.sentiment != appDefaultOverride("sentiment", m.appDefault("sentiment")) {
 		args = append(args, "--app", m.sentiment)
 	}
-	if m.subnetcalc != "" {
+	if m.subnetcalc != "" && m.subnetcalc != appDefaultOverride("subnetcalc", m.appDefault("subnetcalc")) {
 		args = append(args, "--app", m.subnetcalc)
 	}
 	if m.action == "apply" || m.action == "reset" || m.action == "state-reset" {
 		args = append(args, "--auto-approve")
 	}
 	return args
+}
+
+func appDefaultOverride(app string, enabled bool) string {
+	if enabled {
+		return app + "=on"
+	}
+	return app + "=off"
 }
 
 func (m Model) loadPreviewCmd() tea.Cmd {
@@ -773,7 +862,7 @@ func commandErr(err error, output []byte) error {
 func (m Model) View() string {
 	var b bytes.Buffer
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")).Render("Platform TUI")
-	subtitle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("Choose a target, stage, action, and app toggles.")
+	subtitle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("Choose a variant, stage, optional presets, action, and app toggles.")
 	fmt.Fprintf(&b, "%s\n%s\n\n", title, subtitle)
 	fmt.Fprintf(&b, "%s\n\n", m.breadcrumb())
 
@@ -827,8 +916,8 @@ func (m Model) View() string {
 
 func (m Model) breadcrumb() string {
 	parts := []string{"Guided workflow"}
-	if m.target != "" {
-		parts = append(parts, m.target)
+	if m.variant != "" {
+		parts = append(parts, m.variant)
 	}
 	if m.stage != "" && m.action != "reset" && m.action != "state-reset" {
 		parts = append(parts, m.stage)
@@ -836,7 +925,39 @@ func (m Model) breadcrumb() string {
 	if m.action != "" {
 		parts = append(parts, m.action)
 	}
+	if preset := m.presetSummary(); preset != "" {
+		parts = append(parts, preset)
+	}
 	return strings.Join(parts, " / ")
+}
+
+func (m Model) presetSummary() string {
+	presets := []string{}
+	if m.presetResourceProfile != "" {
+		presets = append(presets, "resource="+m.presetResourceProfile)
+	}
+	if m.presetImageDistribution != "" {
+		presets = append(presets, "images="+m.presetImageDistribution)
+	}
+	if m.presetNetworkProfile != "" {
+		presets = append(presets, "network="+m.presetNetworkProfile)
+	}
+	if m.presetObservabilityStack != "" {
+		presets = append(presets, "observability="+m.presetObservabilityStack)
+	}
+	if m.presetIdentityStack != "" {
+		presets = append(presets, "identity="+m.presetIdentityStack)
+	}
+	if m.presetAppSet != "" {
+		presets = append(presets, "apps="+m.presetAppSet)
+	}
+	if m.customWorkerCount != "" {
+		presets = append(presets, "worker_count="+m.customWorkerCount)
+	}
+	if m.customNodeImage != "" {
+		presets = append(presets, "node_image="+m.customNodeImage)
+	}
+	return strings.Join(presets, ",")
 }
 
 func (m Model) inlineHint() string {
@@ -850,12 +971,14 @@ func (m Model) inlineHint() string {
 			return "Shows root runtime status without changing any stack."
 		}
 		if item.Value != "quit" {
-			return "Pick the local runtime target before choosing a stage."
+			return "Pick the local runtime variant before choosing a stage."
 		}
 	case screenStage:
 		return m.stageHint(item)
 	case screenAction:
 		return m.actionHint(item)
+	case screenPreset:
+		return "Preset bundles set the same workflow --preset overlays as the browser UI."
 	case screenSentiment, screenSubnetcalc:
 		return "App overrides are offered only from stage 700 onward, after app repositories exist."
 	case screenPreview:
@@ -897,20 +1020,21 @@ func (m Model) stageHint(item menuItem) string {
 		return "8 selects 800 observability: app toggles remain available for workload coverage."
 	case "900":
 		return "9 selects 900 sso: app toggles remain available for end-to-end local apps."
-	case "950-local-idp":
-		return "0 selects 950 local-idp: kind-only local identity provider finish stage."
 	case "reset":
-		return "r resets the selected target through the workflow script."
+		return "r resets the selected variant through the workflow script."
 	case "state-reset":
-		return "t resets Terraform state for the selected target."
+		return "t resets Terraform state for the selected variant."
 	default:
 		return "Stages 100-600 hide app toggles because apps are not contained until stage 700."
 	}
 }
 
 func (m Model) actionHint(item menuItem) string {
+	if item.Value == "preset" {
+		return "Choose optional preset overlays before selecting plan, apply, or a read-only helper."
+	}
 	if !m.hasAppToggles() {
-		return fmt.Sprintf("%s on stage %s skips app toggles; app choices appear at stages 700, 800, 900, and kind 950.", item.Label, stageDisplay(m.stage))
+		return fmt.Sprintf("%s on stage %s skips app toggles; app choices appear at stages 700, 800, and 900.", item.Label, stageDisplay(m.stage))
 	}
 	return fmt.Sprintf("%s on stage %s can include app toggle overrides before preview.", item.Label, stageDisplay(m.stage))
 }

@@ -91,23 +91,23 @@ func TestEscBacksOutOneScreen(t *testing.T) {
 	next, _ := m.Update(key("esc"))
 	m = next.(Model)
 	if m.screen != screenTarget {
-		t.Fatalf("expected target screen after esc, got %v", m.screen)
+		t.Fatalf("expected variant screen after esc, got %v", m.screen)
 	}
 }
 
 func TestResetBuildsCommandWithoutStageOrAppToggles(t *testing.T) {
 	m := New(Config{})
 	m = choose(m, t, "kind")
-	m = choose(m, t, "Reset target")
+	m = choose(m, t, "Reset variant")
 
 	if m.screen != screenPreview {
 		t.Fatalf("expected preview screen, got %v", m.screen)
 	}
-	wantPreview := []string{"preview", "--execute", "--output", "json", "--target", "kind", "--stage", "100", "--action", "reset", "--auto-approve"}
+	wantPreview := []string{"preview", "--execute", "--output", "json", "--variant", "kind", "--stage", "100", "--action", "reset", "--auto-approve"}
 	if !reflect.DeepEqual(m.workflowArgs("preview"), wantPreview) {
 		t.Fatalf("preview args\nwant %#v\n got %#v", wantPreview, m.workflowArgs("preview"))
 	}
-	wantApply := []string{"apply", "--execute", "--target", "kind", "--stage", "100", "--action", "reset", "--auto-approve"}
+	wantApply := []string{"apply", "--execute", "--variant", "kind", "--stage", "100", "--action", "reset", "--auto-approve"}
 	if !reflect.DeepEqual(m.workflowArgs("apply"), wantApply) {
 		t.Fatalf("apply args\nwant %#v\n got %#v", wantApply, m.workflowArgs("apply"))
 	}
@@ -121,11 +121,11 @@ func TestStateResetBuildsCommandWithoutStageOrAppToggles(t *testing.T) {
 	if m.screen != screenPreview {
 		t.Fatalf("expected preview screen, got %v", m.screen)
 	}
-	wantPreview := []string{"preview", "--execute", "--output", "json", "--target", "kind", "--stage", "100", "--action", "state-reset", "--auto-approve"}
+	wantPreview := []string{"preview", "--execute", "--output", "json", "--variant", "kind", "--stage", "100", "--action", "state-reset", "--auto-approve"}
 	if !reflect.DeepEqual(m.workflowArgs("preview"), wantPreview) {
 		t.Fatalf("preview args\nwant %#v\n got %#v", wantPreview, m.workflowArgs("preview"))
 	}
-	wantApply := []string{"apply", "--execute", "--target", "kind", "--stage", "100", "--action", "state-reset", "--auto-approve"}
+	wantApply := []string{"apply", "--execute", "--variant", "kind", "--stage", "100", "--action", "state-reset", "--auto-approve"}
 	if !reflect.DeepEqual(m.workflowArgs("apply"), wantApply) {
 		t.Fatalf("apply args\nwant %#v\n got %#v", wantApply, m.workflowArgs("apply"))
 	}
@@ -137,17 +137,17 @@ func TestStateResetBuildsCommandWithoutStageOrAppToggles(t *testing.T) {
 	}
 }
 
-func TestKindOnlyLocalIDPStage(t *testing.T) {
+func TestLocalIDPStageIsNotExposed(t *testing.T) {
 	m := New(Config{})
 	m = choose(m, t, "kind")
-	if !hasLabel(m.items(), "950 local-idp") {
-		t.Fatalf("kind should expose local IDP stage")
+	if hasLabel(m.items(), "950 local-idp") {
+		t.Fatalf("kind must not expose removed local IDP stage")
 	}
 
 	m = New(Config{})
 	m = choose(m, t, "lima")
 	if hasLabel(m.items(), "950 local-idp") {
-		t.Fatalf("lima must not expose local IDP stage")
+		t.Fatalf("lima must not expose removed local IDP stage")
 	}
 }
 
@@ -165,8 +165,8 @@ func TestStageScreenSupportsDirectShortcuts(t *testing.T) {
 	m = choose(m, t, "kind")
 	next, _ = m.Update(key("0"))
 	m = next.(Model)
-	if m.screen != screenAction || m.stage != "950-local-idp" {
-		t.Fatalf("expected 0 shortcut to select kind local-idp, got screen=%v stage=%q", m.screen, m.stage)
+	if m.screen != screenStage || m.stage != "" {
+		t.Fatalf("expected 0 shortcut to be ignored, got screen=%v stage=%q", m.screen, m.stage)
 	}
 
 	m = New(Config{})
@@ -202,8 +202,8 @@ func TestApplyGetsAutoApproveAndPlanDoesNot(t *testing.T) {
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "apply")
-	m = choose(m, t, "Disable sentiment")
-	m = choose(m, t, "Enable subnetcalc (stage default)")
+	m = choose(m, t, "sentiment disabled")
+	m = choose(m, t, "subnetcalc enabled (default: enabled)")
 	if got := m.workflowArgs("preview"); !contains(got, "--auto-approve") {
 		t.Fatalf("apply preview should include auto approve: %#v", got)
 	}
@@ -212,8 +212,8 @@ func TestApplyGetsAutoApproveAndPlanDoesNot(t *testing.T) {
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Disable sentiment")
-	m = choose(m, t, "Enable subnetcalc (stage default)")
+	m = choose(m, t, "sentiment disabled")
+	m = choose(m, t, "subnetcalc enabled (default: enabled)")
 	if got := m.workflowArgs("preview"); contains(got, "--auto-approve") {
 		t.Fatalf("plan preview should not include auto approve: %#v", got)
 	}
@@ -239,7 +239,7 @@ func TestAppTogglesOnlyAppearForAppStages(t *testing.T) {
 		if cmd == nil {
 			t.Fatalf("%s apply should load preview immediately", stage)
 		}
-		if hasLabel(m.items(), "Enable sentiment (stage default)") || hasLabel(m.items(), "Enable sentiment") {
+		if hasLabel(m.items(), "sentiment enabled (default: enabled)") || hasLabel(m.items(), "sentiment enabled") {
 			t.Fatalf("%s should not expose sentiment toggles, got %#v", stage, m.items())
 		}
 	}
@@ -251,7 +251,7 @@ func TestAppTogglesOnlyAppearForAppStages(t *testing.T) {
 	if m.screen != screenSentiment {
 		t.Fatalf("stage 700 should still offer app toggles, got screen %v", m.screen)
 	}
-	if !hasLabel(m.items(), "Enable sentiment (stage default)") {
+	if !hasLabel(m.items(), "sentiment enabled (default: enabled)") {
 		t.Fatalf("stage 700 should expose sentiment toggle, got %#v", m.items())
 	}
 }
@@ -262,8 +262,120 @@ func TestViewHasSingleHeaderAndFooterHints(t *testing.T) {
 	if count := stringCount(view, "Platform TUI"); count != 1 {
 		t.Fatalf("expected one header, got %d in %q", count, view)
 	}
+	if !containsString(view, "Choose a variant, stage, optional presets, action, and app toggles.") {
+		t.Fatalf("expected variant-oriented subtitle, got %q", view)
+	}
 	if !containsString(view, "q quit") || !containsString(view, "esc back") {
 		t.Fatalf("expected footer hints, got %q", view)
+	}
+}
+
+func TestPresetBundleAddsWorkflowArgs(t *testing.T) {
+	m := New(Config{})
+	m = choose(m, t, "kind")
+	m = choose(m, t, "900 sso")
+	m = choose(m, t, "Preset bundle")
+	m = choose(m, t, "IDP demo")
+	m = choose(m, t, "plan")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
+	m = choose(m, t, "subnetcalc enabled (default: enabled)")
+
+	got := m.workflowArgs("preview")
+	for _, want := range []string{
+		"--preset",
+		"resource-profile=local-idp-12gb",
+		"image-distribution=local-cache",
+		"network-profile=cilium",
+	} {
+		if !contains(got, want) {
+			t.Fatalf("preview args missing %q: %#v", want, got)
+		}
+	}
+	if !containsString(m.breadcrumb(), "resource=local-idp-12gb") {
+		t.Fatalf("expected preset breadcrumb, got %q", m.breadcrumb())
+	}
+}
+
+func TestPresetBundlesMatchBrowserSetupProfiles(t *testing.T) {
+	tests := []struct {
+		label string
+		want  []string
+	}{
+		{
+			label: "Minimal local",
+			want: []string{
+				"resource-profile=minimal",
+				"image-distribution=pull",
+				"network-profile=cilium",
+				"app-set=no-reference-apps",
+			},
+		},
+		{
+			label: "IDP demo",
+			want: []string{
+				"resource-profile=local-idp-12gb",
+				"image-distribution=local-cache",
+				"network-profile=cilium",
+			},
+		},
+		{
+			label: "Airplane",
+			want: []string{
+				"resource-profile=airplane",
+				"image-distribution=airplane",
+				"network-profile=cilium",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			m := New(Config{})
+			m = choose(m, t, "kind")
+			m = choose(m, t, "900 sso")
+			m = choose(m, t, "Preset bundle")
+			m = choose(m, t, tt.label)
+			m = choose(m, t, "plan")
+			m = choose(m, t, appDefaultLabel("sentiment", m.appDefault("sentiment")))
+			m = choose(m, t, appDefaultLabel("subnetcalc", m.appDefault("subnetcalc")))
+
+			got := m.workflowArgs("preview")
+			for _, want := range tt.want {
+				if !contains(got, want) {
+					t.Fatalf("%s args missing %q: %#v", tt.label, want, got)
+				}
+			}
+		})
+	}
+}
+
+func appDefaultLabel(app string, enabled bool) string {
+	if enabled {
+		return app + " enabled (default: enabled)"
+	}
+	return app + " disabled (default: disabled)"
+}
+
+func TestDetailedPresetAndCustomOverridesFoldBackFromBrowserUI(t *testing.T) {
+	m := New(Config{})
+	m.variant = "slicer"
+	m.stage = "900"
+	m.action = "plan"
+	m.presetNetworkProfile = "default-cni"
+	m.presetIdentityStack = "dex"
+	m.customWorkerCount = "2"
+	m.customNodeImage = "kindest/node:v1.34.0"
+
+	got := m.workflowArgs("preview")
+	for _, want := range []string{
+		"network-profile=default-cni",
+		"identity-stack=dex",
+		"worker_count=2",
+		"node_image=kindest/node:v1.34.0",
+	} {
+		if !contains(got, want) {
+			t.Fatalf("preview args missing %q: %#v", want, got)
+		}
 	}
 }
 
@@ -282,13 +394,18 @@ func TestViewShowsInlineStageAndAppToggleHints(t *testing.T) {
 	m = New(Config{})
 	m = choose(m, t, "kind")
 	m = choose(m, t, "600 policies")
+	m.cursor = indexOfLabel(m.items(), "apply")
 	if !containsString(m.View(), "skips app toggles") {
 		t.Fatalf("expected early-stage action hint explaining hidden app toggles, got %q", m.View())
+	}
+	if containsString(m.View(), "kind 950") {
+		t.Fatalf("stage/action hints must not mention removed 950 stage, got %q", m.View())
 	}
 
 	m = New(Config{})
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
+	m.cursor = indexOfLabel(m.items(), "apply")
 	if !containsString(m.View(), "can include app toggle overrides") {
 		t.Fatalf("expected contained-stage action hint, got %q", m.View())
 	}
@@ -299,7 +416,7 @@ func TestIntermediateScreensHaveExplicitBackAndQuit(t *testing.T) {
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Enable sentiment (stage default)")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
 
 	if m.screen != screenSubnetcalc {
 		t.Fatalf("expected subnetcalc screen, got %v", m.screen)
@@ -363,7 +480,7 @@ exit 2
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Enable sentiment (stage default)")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
 
 	next, cmd := m.Update(key("enter"))
 	m = next.(Model)
@@ -411,7 +528,7 @@ esac
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Enable sentiment (stage default)")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
 
 	next, cmd := m.Update(key("enter"))
 	m = next.(Model)
@@ -515,7 +632,7 @@ esac
 
 	m := New(Config{WorkflowScript: script})
 	m = choose(m, t, "kind")
-	next, cmd := selectLabel(m, t, "Reset target")
+	next, cmd := selectLabel(m, t, "Reset variant")
 	m = next
 	if cmd == nil {
 		t.Fatalf("expected preview command")
@@ -571,7 +688,7 @@ esac
 	m = next
 	m = drainRun(m, cmd, t)
 
-	for _, label := range []string{"600 apply", "900 apply", "950 apply"} {
+	for _, label := range []string{"600 apply", "900 apply"} {
 		if !hasLabel(m.items(), label) {
 			t.Fatalf("expected next option %q after successful 500 apply, got %#v", label, m.items())
 		}
@@ -628,7 +745,7 @@ esac
 	m = next
 	m = drainRun(m, cmd, t)
 
-	for _, label := range []string{"700 apply", "800 apply", "900 apply", "950 apply"} {
+	for _, label := range []string{"700 apply", "800 apply", "900 apply"} {
 		if !hasLabel(m.items(), label) {
 			t.Fatalf("expected next option %q after successful 600 apply, got %#v", label, m.items())
 		}
@@ -656,9 +773,9 @@ esac
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Enable sentiment (stage default)")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
 
-	next, cmd := selectLabel(m, t, "Enable subnetcalc (stage default)")
+	next, cmd := selectLabel(m, t, "subnetcalc enabled (default: enabled)")
 	m = next
 	if cmd == nil {
 		t.Fatalf("expected preview command")
@@ -742,7 +859,7 @@ esac
 	m = choose(m, t, "kind")
 	m = choose(m, t, "700 app repos")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Enable sentiment (stage default)")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
 
 	next, cmd := m.Update(key("enter"))
 	m = next.(Model)
@@ -818,8 +935,8 @@ esac
 	m = nextModel.(Model)
 	m = choose(m, t, "900 sso")
 	m = choose(m, t, "plan")
-	m = choose(m, t, "Enable sentiment (stage default)")
-	next, cmd = selectLabel(m, t, "Enable subnetcalc (stage default)")
+	m = choose(m, t, "sentiment enabled (default: enabled)")
+	next, cmd = selectLabel(m, t, "subnetcalc enabled (default: enabled)")
 	m = next
 	if cmd == nil {
 		t.Fatalf("expected preview command")

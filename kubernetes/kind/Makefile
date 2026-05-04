@@ -96,7 +96,7 @@ endif
 
 include $(STAGE_LADDER_MK)
 
-VALID_TARGETS := kind 950-local-idp
+VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-sso-e2e
@@ -105,7 +105,7 @@ VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
 MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
-STAGE_WORKFLOW_USAGE := make [kind|950-local-idp] <stage> <plan|apply> [AUTO_APPROVE=1]
+STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
 KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 
@@ -147,7 +147,6 @@ endif
 
 stage_file = $(STAGE_FILE_REL_$(STAGE))
 target_profile_file = targets/kind.tfvars
-LOCAL_IDP_950_TFVARS := $(abspath profiles/950-local-idp.tfvars)
 KIND_PROFILE_TFVARS ?=
 kind_profile_tfvar_arg = $(if $(strip $(KIND_PROFILE_TFVARS)),--optional-file "$(KIND_PROFILE_TFVARS)")
 stage_var_file = $(abspath $(stage_file))
@@ -170,7 +169,6 @@ help:
 	@echo "Accepted variants:"
 	@echo "  make apply 100"
 	@echo "  make kind 100 apply"
-	@echo "  make 950-local-idp plan"
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Targets (workflow syntax above is preferred):"
@@ -199,7 +197,6 @@ help:
 	@echo "  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
 	@echo "  make gitea-repo-lifecycle-demo [REPO_NAME=hello-platform] [DRY_RUN=1]"
-	@echo "  make 950-local-idp plan                    Resource-conscious post-900 local IDP target"
 	@echo "  make idp-catalog                              Show the local IDP service catalog"
 	@echo "  make idp-env ACTION=create APP=hello-platform ENV=preview-nr [DRY_RUN=1]"
 	@echo "  make idp-deployments                          Show the app/environment deployment read model"
@@ -484,19 +481,6 @@ kind: workflow-validate
 		exit 1; \
 	fi; \
 	$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"
-
-.PHONY: 950-local-idp
-950-local-idp: workflow-validate
-	@set -euo pipefail; \
-	if [ -z "$(ACTION_FROM_GOALS)" ]; then \
-		echo "Usage: make 950-local-idp <plan|apply> [AUTO_APPROVE=1]"; \
-		exit 1; \
-	fi; \
-	if [ ! -f "$(LOCAL_IDP_950_TFVARS)" ]; then \
-		echo "Missing $(LOCAL_IDP_950_TFVARS)"; \
-		exit 1; \
-	fi; \
-	make $(KIND_DISPATCH_TARGET) STAGE="$(if $(filter 1,$(STAGE_SPECIFIED)),$(STAGE),900)" AUTO_APPROVE="$(AUTO_APPROVE)" KIND_PROFILE_TFVARS="$(LOCAL_IDP_950_TFVARS)"
 
 .PHONY: init
 init: WORKFLOW_REQUIRE_STAGE_FILE=1

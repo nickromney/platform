@@ -40,3 +40,11 @@ section_occurrence_count() {
 
   [ "${status}" -eq 1 ]
 }
+
+@test "ubiquitous language ratifies variant adapter contracts" {
+  for term in "variant adapter" "context" "contract" "lifecycle mode" "state scope"; do
+    run rg -n "^\\| ${term} \\|" "${GLOSSARY}"
+
+    [ "${status}" -eq 0 ]
+  done
+}
