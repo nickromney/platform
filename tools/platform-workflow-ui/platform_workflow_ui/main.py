@@ -288,6 +288,107 @@ def preview_command(repo_root: Path, payload: dict[str, Any]) -> str:
     return str(parse_preview(stdout).get("command", ""))
 
 
+def guided_tab() -> str:
+    variant_facts = {
+        "kubernetes/kind": ("Kind", "Kubernetes IN Docker"),
+        "kubernetes/lima": ("Lima", "K3s in Lima VM"),
+        "kubernetes/slicer": ("Slicer", "K3s in Slicer"),
+    }
+    stage_descs = {
+        "100": "Cluster substrate and resource sizing",
+        "200": "Cilium networking layer",
+        "300": "Hubble visibility for Cilium",
+        "400": "Argo CD GitOps controller",
+        "500": "Gitea internal Git provider",
+        "600": "Policy and certificate foundations",
+        "700": "App repos and reference workloads",
+        "800": "Observability, gateway TLS, dashboards",
+        "900": "SSO, IDP, Backstage, authenticated surfaces",
+    }
+    variant_btns = []
+    for variant in VARIANTS:
+        title, subtitle = variant_facts.get(variant, (variant, variant))
+        active = " active" if variant == "kubernetes/kind" else ""
+        variant_btns.append(
+            f'<button type="button" class="guided-btn guided-variant-btn{active}" data-variant="{html.escape(variant)}"'
+            f' data-tooltip="{html.escape(variant)}" onclick="selectVariant(\'{html.escape(variant)}\', this)">'
+            f'<strong>{html.escape(title)}</strong><span>{html.escape(subtitle)}</span></button>'
+        )
+    stage_btns = []
+    for stage, label in STAGES:
+        active = " active" if stage == "900" else ""
+        desc = stage_descs.get(stage, "")
+        stage_btns.append(
+            f'<button type="button" class="guided-btn guided-stage-btn{active}" data-stage="{html.escape(stage)}"'
+            f' data-tooltip="{html.escape(desc)}" onclick="selectStage(\'{html.escape(stage)}\')">'
+            f'<strong>{html.escape(stage)}</strong><span>{html.escape(label)}</span></button>'
+        )
+    profiles = [
+        ("stage-defaults", "Stage defaults", "Baseline — no overrides applied"),
+        ("minimal-local", "Minimal local", "Stage 700, minimal resources, no reference apps"),
+        ("idp-demo", "IDP demo", "Kind stage 900, local IDP profile, 12 GB"),
+        ("airplane", "Airplane", "Stage 900, local cache, no pull required"),
+    ]
+    profile_btns = []
+    for key, name, desc in profiles:
+        active = " active" if key == "stage-defaults" else ""
+        profile_btns.append(
+            f'<button type="button" class="guided-btn guided-profile-btn{active}" data-profile="{html.escape(key)}"'
+            f' onclick="applySetupProfile(\'{html.escape(key)}\')">'
+            f'<strong>{html.escape(name)}</strong><span>{html.escape(desc)}</span></button>'
+        )
+    action_defs = [
+        ("readiness", "Readiness", "Check prerequisites"),
+        ("plan", "Plan", "Preview Terraform changes"),
+        ("apply", "Apply", "Deploy the selected stage"),
+        ("status", "Status", "Check runtime status"),
+        ("show-urls", "URLs", "Show service endpoints"),
+    ]
+    action_btns = []
+    for action, label, desc in action_defs:
+        active = " active" if action == "apply" else ""
+        action_btns.append(
+            f'<button type="button" class="guided-btn guided-action-btn{active}" data-action="{html.escape(action)}"'
+            f' onclick="selectAction(\'{html.escape(action)}\')">'
+            f'<strong>{html.escape(label)}</strong><span>{html.escape(desc)}</span></button>'
+        )
+    return f"""
+<div class="guided-layout">
+  <div class="guided-section">
+    <div class="guided-section-head"><span class="guided-step">1</span><strong>Runtime</strong></div>
+    <div class="guided-group">{''.join(variant_btns)}</div>
+  </div>
+  <div class="guided-section">
+    <div class="guided-section-head"><span class="guided-step">2</span><strong>Stage</strong><small>Cumulative — each stage includes all prior stages</small></div>
+    <div class="guided-group guided-stages">{''.join(stage_btns)}</div>
+  </div>
+  <div class="guided-section">
+    <div class="guided-section-head"><span class="guided-step">3</span><strong>Profile</strong></div>
+    <div class="guided-group">{''.join(profile_btns)}</div>
+  </div>
+  <div class="guided-section">
+    <div class="guided-section-head"><span class="guided-step">4</span><strong>Action</strong></div>
+    <div class="guided-group">{''.join(action_btns)}</div>
+  </div>
+</div>
+"""
+
+
+def expert_tab() -> str:
+    return f"""
+<div class="expert-layout">
+  <div class="expert-controls">
+    <label class="control-field">Variant {select("variant", [(v, v) for v in VARIANTS], "kubernetes/kind")}</label>
+    <label class="control-field">Stage {select("stage", [(s, f"{s} {lb}") for s, lb in STAGES], "900")}</label>
+    <label class="control-field">Action {select("action", [(a, a) for a in ACTIONS], "apply")}</label>
+  </div>
+  {preset_panel()}
+  {apps_panel()}
+  {advanced_overrides_panel()}
+</div>
+"""
+
+
 def page() -> str:
     return f"""<!doctype html>
 <html lang="en" data-theme="dark">
@@ -305,38 +406,65 @@ def page() -> str:
       hx-target="#result"
       hx-trigger="load, change delay:120ms from:select, change delay:250ms from:input, submit"
       hx-swap="innerHTML">
-      <section class="controls">
-        <label class="control-field">Variant {select("variant", [(variant, variant) for variant in VARIANTS], "kubernetes/kind")}</label>
-        <label class="control-field">Stage {select("stage", [(stage, f"{stage} {label}") for stage, label in STAGES], "900")}</label>
-        <label class="control-field">Action {select("action", [(action, action) for action in ACTIONS], "apply")}</label>
-        <div class="preset-summary" aria-live="polite"><span>Setup</span><strong id="preset-summary-text">Stage defaults</strong></div>
-        <button id="theme-switcher" class="theme-switcher" type="button" aria-label="Switch to light theme" title="Switch theme" onclick="toggleTheme()">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"></path></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7 7 0 1 0 20.5 14.5Z"></path></svg>
-        </button>
-        <input type="hidden" name="auto_approve" value="1">
-        <input type="hidden" name="source" value="dropdowns">
-      </section>
-      {stage_panels()}
-      {preset_panel()}
-      {wizard_panel()}
-      {apps_panel()}
-      {advanced_overrides_panel()}
+      <div class="tab-bar">
+        <nav class="tab-nav" role="tablist">
+          <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="guided" onclick="switchTab('guided')">Guided</button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="expert" onclick="switchTab('expert')">Expert</button>
+        </nav>
+        <div class="tab-bar-end">
+          <div class="preset-summary" aria-live="polite"><span>Setup</span><strong id="preset-summary-text">Stage defaults</strong></div>
+          <button id="theme-switcher" class="theme-switcher" type="button" aria-label="Switch to light theme" title="Switch theme" onclick="toggleTheme()">
+            <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"></path></svg>
+            <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7 7 0 1 0 20.5 14.5Z"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div id="tab-guided" class="tab-panel" role="tabpanel">
+        {guided_tab()}
+      </div>
+      <div id="tab-expert" class="tab-panel" role="tabpanel" hidden>
+        {expert_tab()}
+      </div>
+      <input type="hidden" name="auto_approve" value="1">
+      <input type="hidden" name="source" value="dropdowns">
     </form>
-    {quick_actions({"variant": "kubernetes/kind", "stage": "900"})}
-    {history_panel([])}
     <section id="inventory" hx-get="/inventory" hx-include="#workflow-form" hx-trigger="load, every 15s" hx-swap="innerHTML">
-      <div class="notice">Loading prereqs...</div>
+      <div class="notice">Checking prereqs...</div>
     </section>
+    {history_panel([])}
     <section id="result" class="result" aria-live="polite">
       <div class="notice">Loading preview...</div>
     </section>
   </main>
   <script>
+    function switchTab(tab) {{
+      document.querySelectorAll('.tab-panel').forEach((panel) => {{
+        panel.hidden = panel.id !== `tab-${{tab}}`;
+      }});
+      document.querySelectorAll('.tab-btn').forEach((btn) => {{
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+        btn.setAttribute('aria-selected', btn.dataset.tab === tab ? 'true' : 'false');
+      }});
+      if (tab === 'guided') syncGuidedTabState();
+      try {{ localStorage.setItem('platform-workflow-ui-tab', tab); }} catch (_e) {{}}
+    }}
+    function syncGuidedTabState() {{
+      const variant = (document.querySelector('select[name="variant"]') || {{}}).value || '';
+      const stage = (document.querySelector('select[name="stage"]') || {{}}).value || '';
+      const action = (document.querySelector('select[name="action"]') || {{}}).value || '';
+      document.querySelectorAll('.guided-variant-btn').forEach((btn) => {{
+        btn.classList.toggle('active', btn.dataset.variant === variant);
+      }});
+      document.querySelectorAll('.guided-stage-btn').forEach((btn) => {{
+        btn.classList.toggle('active', btn.dataset.stage === stage);
+      }});
+      document.querySelectorAll('.guided-action-btn').forEach((btn) => {{
+        btn.classList.toggle('active', btn.dataset.action === action);
+      }});
+    }}
     function stageDefault(stage, app) {{
       return ['700', '800', '900'].includes(stage);
     }}
-
     function effectiveAppDefault(stage, app) {{
       const appSet = document.querySelector('input[name="preset_app_set"]:checked');
       const preset = appSet ? appSet.value : 'default';
@@ -345,7 +473,6 @@ def page() -> str:
       if (preset === 'sentiment-only') return app === 'sentiment';
       return stageDefault(stage, app);
     }}
-
     function updateAppToggles(stage) {{
       document.querySelectorAll('.app-toggle').forEach((node) => {{
         node.hidden = !['700', '800', '900'].includes(stage);
@@ -358,10 +485,7 @@ def page() -> str:
         const previousDefault = select.dataset.defaultValue || '';
         const defaultValue = enabled ? 'on' : 'off';
         select.innerHTML = '';
-        [
-          ['on', 'Enabled'],
-          ['off', 'Disabled'],
-        ].forEach(([value, label]) => {{
+        [['on', 'Enabled'], ['off', 'Disabled']].forEach(([value, label]) => {{
           const option = document.createElement('option');
           option.value = value;
           option.textContent = label;
@@ -377,21 +501,9 @@ def page() -> str:
         if (hint) hint.textContent = `Default: ${{enabled ? 'enabled' : 'disabled'}}`;
       }});
     }}
-
     document.body.addEventListener('change', (event) => {{
       if (event.target && event.target.name === 'stage') {{
         updateAppToggles(event.target.value);
-        updateQuickActionState();
-        updateStagePanels(event.target.value);
-      }}
-      if (event.target && event.target.name === 'variant') {{
-        updateQuickActionState();
-        document.querySelectorAll('.variant-shortcuts button').forEach((node) => {{
-          node.classList.toggle('active', node.dataset.variant === event.target.value);
-        }});
-      }}
-      if (event.target && event.target.name === 'action') {{
-        updateQuickActionState();
       }}
       if (event.target && event.target.name === 'preset_app_set') {{
         updateAppToggles(document.querySelector('select[name="stage"]').value);
@@ -399,42 +511,36 @@ def page() -> str:
       if (event.target && (event.target.tagName === 'SELECT' || event.target.tagName === 'INPUT')) {{
         updateSelectedFields();
         updatePresetSummary();
+        syncGuidedTabState();
       }}
     }});
     function selectVariant(variant, button) {{
-      const select = document.querySelector('select[name="variant"]');
-      if (!select) return;
-      select.value = variant;
+      const sel = document.querySelector('select[name="variant"]');
+      if (!sel) return;
+      sel.value = variant;
       setSource('variant shortcut');
-      updateQuickActionState();
-      document.querySelectorAll('.variant-shortcuts button').forEach((node) => {{
-        node.classList.toggle('active', node === button);
-      }});
-      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+      sel.dispatchEvent(new Event('change', {{ bubbles: true }}));
     }}
     function selectStage(stage) {{
-      const select = document.querySelector('select[name="stage"]');
-      if (!select) return;
-      select.value = stage;
+      const sel = document.querySelector('select[name="stage"]');
+      if (!sel) return;
+      sel.value = stage;
       setSource('stage ladder');
-      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+      sel.dispatchEvent(new Event('change', {{ bubbles: true }}));
     }}
     function selectAction(action) {{
-      const select = document.querySelector('select[name="action"]');
-      if (!select) return;
-      select.value = action;
+      const sel = document.querySelector('select[name="action"]');
+      if (!sel) return;
+      sel.value = action;
       setSource('action button');
-      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+      sel.dispatchEvent(new Event('change', {{ bubbles: true }}));
     }}
     function setSource(source) {{
       document.querySelectorAll('input[name="source"]').forEach((node) => {{ node.value = source; }});
     }}
     function setSelectValue(name, value) {{
-      const select = document.querySelector(`select[name="${{name}}"]`);
-      if (select) {{
-        select.value = value;
-        return;
-      }}
+      const sel = document.querySelector(`select[name="${{name}}"]`);
+      if (sel) {{ sel.value = value; return; }}
       const radio = document.querySelector(`input[name="${{name}}"][value="${{value}}"]`);
       if (radio) radio.checked = true;
     }}
@@ -494,15 +600,14 @@ def page() -> str:
       setActiveSetupProfile(profile);
       const stage = document.querySelector('select[name="stage"]').value;
       updateAppToggles(stage);
-      updateQuickActionState();
+      syncGuidedTabState();
       updateSelectedFields();
       updatePresetSummary();
-      updateStagePanels(stage);
       const trigger = document.querySelector('select[name="stage"]') || document.querySelector('select[name="preset_resource_profile"]');
       if (trigger) trigger.dispatchEvent(new Event('change', {{ bubbles: true }}));
     }}
     function setActiveSetupProfile(profile) {{
-      document.querySelectorAll('.setup-card').forEach((node) => {{
+      document.querySelectorAll('.setup-card, .guided-profile-btn').forEach((node) => {{
         node.classList.toggle('active', node.dataset.profile === profile);
       }});
     }}
@@ -527,53 +632,6 @@ def page() -> str:
       const more = labels.length > 2 ? ` | +${{labels.length - 2}} more` : '';
       target.textContent = `${{labels.length}} override${{labels.length === 1 ? '' : 's'}}: ${{visible}}${{more}}`;
     }}
-    function updateStagePanels(stage) {{
-      const stageOrder = ['100','200','300','400','500','600','700','800','900'];
-      const selectedIndex = stageOrder.indexOf(stage);
-      document.querySelectorAll('.stage-panel').forEach((panel) => {{
-        const index = stageOrder.indexOf(panel.dataset.stage);
-        panel.classList.toggle('current', index === selectedIndex);
-        panel.classList.toggle('future', selectedIndex >= 0 && index > selectedIndex);
-        panel.classList.toggle('complete', selectedIndex >= 0 && index < selectedIndex);
-      }});
-      updateStageFocus(stage, stageOrder);
-    }}
-    function updateStageFocus(stage, stageOrder) {{
-      const labels = {{
-        '100': '100 cluster',
-        '200': '200 cilium',
-        '300': '300 hubble',
-        '400': '400 argocd',
-        '500': '500 gitea',
-        '600': '600 policies',
-        '700': '700 app repos',
-        '800': '800 observability',
-        '900': '900 sso',
-      }};
-      const descriptions = {{
-        '100': 'Cluster substrate, host access, local registry, and resource sizing.',
-        '200': 'Cilium networking layer.',
-        '300': 'Hubble visibility for Cilium.',
-        '400': 'Argo CD GitOps controller.',
-        '500': 'Gitea internal Git provider.',
-        '600': 'Policy and certificate foundations.',
-        '700': 'Application repositories and reference workloads.',
-        '800': 'Observability, gateway TLS, dashboards, and operator surfaces.',
-        '900': 'SSO, IDP integration, Backstage, and authenticated portal surfaces.',
-      }};
-      const selectedIndex = stageOrder.indexOf(stage);
-      const current = document.getElementById('stage-focus-current');
-      const detail = document.getElementById('stage-focus-detail');
-      const path = document.getElementById('stage-focus-path');
-      const next = document.getElementById('stage-focus-next');
-      if (current) current.textContent = labels[stage] || stage;
-      if (detail) detail.textContent = descriptions[stage] || '';
-      if (path) path.textContent = selectedIndex >= 0 ? stageOrder.slice(0, selectedIndex + 1).map((item) => labels[item].split(' ')[0]).join(' > ') : stage;
-      if (next) {{
-        const nextStage = selectedIndex >= 0 ? stageOrder[selectedIndex + 1] : '';
-        next.textContent = nextStage ? labels[nextStage] : 'Complete';
-      }}
-    }}
     function copyCommand(id, button) {{
       const node = document.getElementById(id);
       if (!node || !navigator.clipboard) return;
@@ -584,9 +642,7 @@ def page() -> str:
         window.setTimeout(() => {{ button.innerText = previous; }}, 1200);
       }});
     }}
-    function copyOutput(id, button) {{
-      copyCommand(id, button);
-    }}
+    function copyOutput(id, button) {{ copyCommand(id, button); }}
     function showCommandTab(tab) {{
       document.querySelectorAll('.command-tab').forEach((node) => {{
         node.classList.toggle('active', node.dataset.tab === tab);
@@ -614,31 +670,16 @@ def page() -> str:
       label.textContent = state.follow ? 'Follow latest' : 'Follow paused';
       button.textContent = state.follow ? 'Pause follow' : 'Follow latest';
     }}
-    function updateQuickActionState() {{
-      const variant = document.querySelector('select[name="variant"]').value;
-      const stage = document.querySelector('select[name="stage"]').value;
-      document.querySelectorAll('.quick-actions input[name="variant"]').forEach((node) => {{ node.value = variant; }});
-      document.querySelectorAll('.quick-actions input[name="stage"]').forEach((node) => {{ node.value = stage; }});
-      document.querySelectorAll('.stage-ladder button').forEach((node) => {{
-        node.classList.toggle('active', node.dataset.stage === stage);
-      }});
-      document.querySelectorAll('.variant-shortcuts button').forEach((node) => {{
-        node.classList.toggle('active', node.dataset.variant === variant);
-      }});
-      document.querySelectorAll('.action-bar button').forEach((node) => {{
-        node.classList.toggle('active', node.dataset.action === document.querySelector('select[name="action"]').value);
-      }});
-    }}
     function updateSelectedFields() {{
       document.querySelectorAll('.control-field').forEach((label) => {{
-        const select = label.querySelector('select');
+        const sel = label.querySelector('select');
         const input = label.querySelector('input');
         let selected = false;
-        if (select) {{
-          if (select.dataset.defaultValue) {{
-            selected = select.value !== select.dataset.defaultValue;
+        if (sel) {{
+          if (sel.dataset.defaultValue) {{
+            selected = sel.value !== sel.dataset.defaultValue;
           }} else {{
-            selected = select.value !== '';
+            selected = sel.value !== '';
           }}
         }}
         if (input) {{
@@ -648,10 +689,13 @@ def page() -> str:
       }});
     }}
     updateAppToggles(document.querySelector('select[name="stage"]').value);
-    updateQuickActionState();
+    syncGuidedTabState();
     updateSelectedFields();
     updatePresetSummary();
-    updateStagePanels(document.querySelector('select[name="stage"]').value);
+    try {{
+      const savedTab = localStorage.getItem('platform-workflow-ui-tab');
+      if (savedTab === 'expert') switchTab('expert');
+    }} catch (_e) {{}}
     function applyTheme(theme) {{
       const resolved = theme === 'light' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', resolved);
@@ -726,44 +770,6 @@ def preset_panel() -> str:
 """
 
 
-def wizard_panel() -> str:
-    return """
-<details class="workflow-panel wizard-panel">
-  <summary>Build a custom set</summary>
-  <div class="wizard-steps">
-    <div class="wizard-step">
-      <span>1</span>
-      <strong>Choose a variant</strong>
-      <p>Each variant is a concrete operable path beneath the Kubernetes solution.</p>
-      <div class="wizard-buttons">
-        <button type="button" onclick="selectVariant('kubernetes/kind', this)">Kind</button>
-        <button type="button" onclick="selectVariant('kubernetes/lima', this)">Lima</button>
-        <button type="button" onclick="selectVariant('kubernetes/slicer', this)">Slicer</button>
-      </div>
-    </div>
-    <div class="wizard-step">
-      <span>2</span>
-      <strong>Choose the outcome</strong>
-      <p>The stage ladder is cumulative. Stage 900 means the whole local platform path, not only SSO.</p>
-      <div class="wizard-buttons">
-        <button type="button" onclick="selectStage('700')">Apps</button>
-        <button type="button" onclick="selectStage('800')">Observability</button>
-        <button type="button" onclick="selectStage('900')">SSO</button>
-      </div>
-    </div>
-    <div class="wizard-step">
-      <span>3</span>
-      <strong>Apply constraints</strong>
-      <p>Start with a curated preset, then use Detailed view for individual preset groups.</p>
-      <div class="wizard-buttons">
-        <button type="button" onclick="applySetupProfile('minimal-local')">Minimal</button>
-        <button type="button" onclick="applySetupProfile('idp-demo')">IDP demo</button>
-        <button type="button" onclick="applySetupProfile('airplane')">Airplane</button>
-      </div>
-    </div>
-  </div>
-</details>
-"""
 
 
 def apps_panel() -> str:
@@ -814,69 +820,6 @@ def advanced_overrides_panel() -> str:
 """
 
 
-def stage_panels() -> str:
-    panels = []
-    for stage, label in STAGES:
-        stage_num = int(stage)
-        badges = ["stage default"]
-        if stage_num >= 700:
-            badges.append("apps")
-        if stage_num >= 800:
-            badges.append("observability")
-        if stage_num >= 900:
-            badges.append("identity")
-        badge_html = "".join(f'<span class="source-badge">{html.escape(badge)}</span>' for badge in badges)
-        risk = ""
-        if stage == "100":
-            risk = '<p class="risk-note">Overrides here can rebuild the cluster because this is the substrate boundary.</p>'
-        panels.append(
-            f"""
-<details class="stage-panel" data-stage="{html.escape(stage)}">
-  <summary><span>{html.escape(stage_display_label(stage))}</span><strong>{html.escape(label)}</strong>{badge_html}</summary>
-  <p>{html.escape(stage_panel_description(stage))}</p>
-  {risk}
-</details>
-"""
-        )
-    return f"""
-<details class="workflow-panel ladder-panel" open>
-  <summary>Stage ladder</summary>
-  <div class="ladder-curation">
-    <div>
-      <span>Current stage</span>
-      <strong id="stage-focus-current">900 sso</strong>
-      <small id="stage-focus-detail">SSO, IDP integration, Backstage, and authenticated portal surfaces.</small>
-    </div>
-    <div>
-      <span>Included path</span>
-      <strong id="stage-focus-path">100 &gt; 200 &gt; 300 &gt; 400 &gt; 500 &gt; 600 &gt; 700 &gt; 800 &gt; 900</strong>
-    </div>
-    <div>
-      <span>Next stage</span>
-      <strong id="stage-focus-next">Complete</strong>
-    </div>
-  </div>
-  <details class="stage-inspector">
-    <summary>Inspect every stage</summary>
-    {''.join(panels)}
-  </details>
-</details>
-"""
-
-
-def stage_panel_description(stage: str) -> str:
-    descriptions = {
-        "100": "Cluster substrate, host access, local registry, and resource sizing.",
-        "200": "Cilium networking layer where the selected variant supports it.",
-        "300": "Hubble visibility for the Cilium path.",
-        "400": "Argo CD GitOps controller.",
-        "500": "Gitea internal Git provider.",
-        "600": "Policy and certificate foundations.",
-        "700": "Application repositories, reference workloads, and API mediation surfaces.",
-        "800": "Observability, gateway TLS, dashboards, and operator surfaces.",
-        "900": "SSO, IDP integration, Backstage, and authenticated portal surfaces.",
-    }
-    return descriptions.get(stage, "Cumulative platform stage.")
 
 
 def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, Any]) -> str:
@@ -1590,108 +1533,8 @@ def next_actions(payload: dict[str, Any], succeeded: bool) -> str:
     return ""
 
 
-def quick_actions(payload: dict[str, Any]) -> str:
-    variant = str(payload["variant"])
-    stage = str(payload.get("stage") or "900")
-    return f"""
-<section class="quick-actions" aria-label="Quick actions">
-  <div class="quick-actions-layout">
-    {variant_shortcuts()}
-    {stage_ladder(variant)}
-    {action_bar(variant, stage)}
-    {reset_actions(variant, stage)}
-  </div>
-</section>
-"""
-
-
-def variant_shortcuts() -> str:
-    return '<div class="variant-shortcuts" aria-label="Variant shortcuts">' + variant_buttons() + "</div>"
-
-
-def stage_ladder(variant: str) -> str:
-    stage_options = [stage for stage, _label in STAGES]
-    buttons = ['<div class="stage-ladder" role="group" aria-label="Stage ladder">']
-    for stage in stage_options:
-        stage_label = dict(STAGES)[stage]
-        active = " active" if stage == "900" else ""
-        buttons.append(
-            f'<button type="button" class="stage-step{active}" data-stage="{html.escape(stage)}" data-tooltip="{html.escape(stage_label)}" aria-label="Select stage {html.escape(stage)} {html.escape(stage_label)}" onclick="selectStage(\'{html.escape(stage)}\')">{html.escape(stage_display_label(stage))}</button>'
-        )
-    buttons.append("</div>")
-    return "\n".join(buttons)
-
-
-def action_bar(variant: str, stage: str) -> str:
-    target = variant_to_target(variant)
-    actions = [
-        ("readiness", "Readiness", f"Check {target} prerequisites"),
-        ("plan", "Plan", f"Review {target} plan for selected stage"),
-        ("apply", "Apply", f"Review {target} apply for selected stage"),
-        ("status", "Status", f"Check {target} status"),
-        ("show-urls", "URLs", f"Show {target} service URLs"),
-        ("check-health", "Check health", f"Check {target} health"),
-        ("check-security", "Check security", f"Check {target} security"),
-        ("check-rbac", "Check RBAC", f"Check {target} RBAC"),
-    ]
-    forms = ['<div class="action-bar" role="group" aria-label="Actions">']
-    for action, label, tooltip in actions:
-        active = " active" if action == "apply" else ""
-        forms.append(
-            f"""<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">
-  <input type="hidden" name="variant" value="{html.escape(variant)}">
-  <input type="hidden" name="stage" value="{html.escape(stage)}">
-  <input type="hidden" name="action" value="{html.escape(action)}">
-  <input type="hidden" name="auto_approve" value="{1 if action == "apply" else 0}">
-  <input type="hidden" name="source" value="action button">
-  <button type="submit" class="{active.strip()}" data-action="{html.escape(action)}" data-tooltip="{html.escape(tooltip)}" aria-label="{html.escape(tooltip)}" onclick="selectAction('{html.escape(action)}')">{html.escape(label)}</button>
-</form>"""
-        )
-    forms.append("</div>")
-    return "\n".join(forms)
-
-
-def reset_actions(variant: str, stage: str) -> str:
-    target = variant_to_target(variant)
-    reset_forms = ['<div class="reset-actions" role="group" aria-label="Reset actions">']
-    for action, label, tooltip in (
-        ("reset", "Reset", f"Review reset for {target}"),
-        ("state-reset", "State reset", f"Review Terraform state reset for {target}"),
-    ):
-        reset_forms.append(
-            f"""<form hx-post="/preview" hx-target="#result" hx-swap="innerHTML">
-  <input type="hidden" name="variant" value="{html.escape(variant)}">
-  <input type="hidden" name="stage" value="{html.escape(stage)}">
-  <input type="hidden" name="action" value="{html.escape(action)}">
-  <input type="hidden" name="auto_approve" value="1">
-  <input type="hidden" name="source" value="reset button">
-  <button type="submit" data-tooltip="{html.escape(tooltip)}" aria-label="{html.escape(tooltip)}">{html.escape(label)}</button>
-</form>"""
-        )
-    reset_forms.append('<span class="reset-note">Review required.</span>')
-    reset_forms.append("</div>")
-    return "\n".join(reset_forms)
-
-
 def stage_display_label(stage: str) -> str:
     return stage
-
-
-def variant_buttons() -> str:
-    facts = {
-        "kubernetes/kind": ("kind", "Kubernetes IN Docker"),
-        "kubernetes/lima": ("lima", "K3s in Lima"),
-        "kubernetes/slicer": ("slicer", "K3s in Slicer"),
-    }
-    buttons = []
-    for variant in VARIANTS:
-        label, title = facts.get(variant, (variant_to_target(variant), variant))
-        active = " active" if variant == "kubernetes/kind" else ""
-        buttons.append(
-            f'<button class="variant-button{active}" type="button" data-variant="{html.escape(variant)}" data-tooltip="Switch to {html.escape(variant)}" aria-label="Switch to {html.escape(variant)}" onclick="selectVariant(\'{html.escape(variant)}\', this)">'
-            f'<span>{html.escape(label)}</span><strong>{html.escape(title)}</strong></button>'
-        )
-    return "".join(buttons)
 
 
 def select(name: str, options: list[tuple[str, str]], selected: str) -> str:
@@ -1733,18 +1576,8 @@ html, body { min-height:100%; }
 body { margin:0; min-height:100vh; overflow:auto; font-family: ui-sans-serif, system-ui, sans-serif; color:var(--ink); background:radial-gradient(circle at 20% -10%, rgba(47,179,159,.22), transparent 34rem), linear-gradient(180deg, var(--paper) 0, #0c1312 100%); }
 html[data-theme="light"] body { background:radial-gradient(circle at 20% -10%, rgba(0,121,107,.14), transparent 34rem), linear-gradient(180deg, #ffffff 0, var(--paper) 100%); }
 main { width:calc(100vw - 40px); min-height:100vh; margin:0 auto; padding:18px 0; display:flex; flex-direction:column; gap:12px; }
-header { display:flex; justify-content:space-between; gap:20px; align-items:end; border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:18px; }
-h1 { margin:0; font-size:clamp(2rem, 4vw, 4rem); letter-spacing:0; }
-.eyebrow { margin:0 0 6px; color:var(--muted); font-weight:800; text-transform:uppercase; font-size:.78rem; }
 section, .result { background:var(--panel); border:1px solid var(--line); box-shadow:0 10px 28px var(--shadow); }
-main > form { display:block; }
-.variant-shortcuts { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; align-items:stretch; }
-.variant-shortcuts button { min-width:0; text-align:left; display:grid; gap:3px; align-content:start; background:var(--panel-2); color:var(--ink); border-color:var(--line); padding:10px 12px; }
-.variant-shortcuts button span { color:var(--blue); font-size:.72rem; font-weight:900; text-transform:uppercase; }
-.variant-shortcuts button strong { font-size:.92rem; line-height:1.1; }
-.variant-shortcuts button.active, .stage-ladder button.active, .action-bar button.active { background:var(--selection); color:var(--ink); border-color:var(--selection-line); box-shadow:inset 4px 0 0 var(--selection-line); }
-.variant-shortcuts button.active span { color:#d8f4ed; }
-.controls { display:grid; grid-template-columns: minmax(150px, .8fr) minmax(190px, 1fr) minmax(150px, .8fr) minmax(260px, 1.2fr) 48px; gap:12px; padding:14px; align-items:end; border-bottom:1px solid var(--line); }
+main > form { display:block; border:1px solid var(--line); box-shadow:0 10px 28px var(--shadow); background:var(--panel); }
 label { display:grid; gap:6px; color:var(--muted); font-weight:800; font-size:.78rem; text-transform:uppercase; }
 .control-field.selected { background:linear-gradient(90deg, var(--selection), transparent); }
 select, input, button { min-height:40px; border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:8px 10px; font:inherit; }
@@ -1757,29 +1590,56 @@ button[data-tooltip]::after { content:attr(data-tooltip); position:absolute; lef
 button[data-tooltip]::before { content:""; position:absolute; left:50%; bottom:calc(100% + 5px); z-index:21; transform:translateX(-50%) rotate(45deg); width:9px; height:9px; border-right:1px solid var(--tooltip-border); border-bottom:1px solid var(--tooltip-border); background:var(--tooltip-bg); opacity:0; pointer-events:none; }
 button[data-tooltip]:hover::after, button[data-tooltip]:focus-visible::after, button[data-tooltip]:hover::before, button[data-tooltip]:focus-visible::before { opacity:1; }
 .result { display:flex; flex-direction:column; min-height:260px; padding:16px; overflow:auto; }
-.preset-summary { border:1px solid var(--line); background:var(--panel-2); padding:9px 10px; min-height:40px; }
-.preset-summary span { display:block; color:var(--muted); font-size:.7rem; text-transform:uppercase; font-weight:800; }
-.preset-summary strong { display:block; margin-top:4px; overflow-wrap:anywhere; font-size:.9rem; }
-.workflow-panel { border:1px solid var(--line); border-top:0; background:color-mix(in srgb, var(--panel) 88%, var(--accent) 12%); padding:10px 14px; }
-.theme-switcher { width:48px; min-width:48px; aspect-ratio:1; padding:0; display:grid; place-items:center; background:var(--panel-2); color:var(--amber); border-color:var(--line); }
-.theme-icon { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.theme-switcher { width:44px; min-width:44px; aspect-ratio:1; padding:0; display:grid; place-items:center; background:transparent; color:var(--amber); border-color:var(--line); border-width:1px; }
+.theme-icon { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 .theme-icon-moon { display:none; }
 html[data-theme="light"] .theme-icon-sun { display:none; }
 html[data-theme="light"] .theme-icon-moon { display:block; color:var(--blue); }
+.tab-bar { display:flex; align-items:stretch; justify-content:space-between; border-bottom:1px solid var(--line); background:var(--panel-2); }
+.tab-nav { display:flex; }
+.tab-btn { min-height:46px; background:transparent; color:var(--muted); border:0; border-bottom:3px solid transparent; border-radius:0; padding:0 22px; font-weight:900; font-size:.8rem; letter-spacing:.04em; text-transform:uppercase; }
+.tab-btn.active { color:var(--ink); border-bottom-color:var(--accent); background:transparent; }
+.tab-btn:hover { color:var(--ink); background:color-mix(in srgb, var(--panel-2) 60%, var(--accent) 8%); }
+.tab-bar-end { display:flex; align-items:center; gap:8px; padding:0 10px; }
+.tab-panel[hidden] { display:none; }
+.preset-summary { border:1px solid var(--line); background:var(--panel); padding:7px 10px; min-height:36px; }
+.preset-summary span { display:block; color:var(--muted); font-size:.66rem; text-transform:uppercase; font-weight:800; }
+.preset-summary strong { display:block; margin-top:2px; overflow-wrap:anywhere; font-size:.82rem; }
+.guided-layout { display:flex; flex-direction:column; }
+.guided-section { padding:14px 16px; border-bottom:1px solid var(--line); }
+.guided-section:last-child { border-bottom:0; }
+.guided-section-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.guided-step { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--accent); color:white; font-size:.7rem; font-weight:900; flex-shrink:0; }
+.guided-section-head strong { font-size:.88rem; font-weight:900; }
+.guided-section-head small { color:var(--muted); font-size:.75rem; font-weight:700; margin-left:4px; }
+.guided-group { display:flex; flex-wrap:wrap; gap:8px; }
+.guided-btn { min-height:54px; display:grid; gap:2px; align-content:center; background:var(--panel-2); color:var(--ink); border-color:var(--line); padding:8px 14px; text-align:left; }
+.guided-btn strong { font-size:.9rem; display:block; font-weight:900; line-height:1.2; }
+.guided-btn span { display:block; color:var(--muted); font-size:.72rem; font-weight:700; line-height:1.3; }
+.guided-btn:hover { background:color-mix(in srgb, var(--panel-2) 60%, var(--accent) 12%); color:var(--ink); border-color:var(--accent); }
+.guided-btn.active { background:var(--selection); border-color:var(--selection-line); box-shadow:inset 3px 0 0 var(--selection-line); color:var(--ink); }
+.guided-btn.active strong { color:var(--accent-strong); }
+.guided-variant-btn { min-width:148px; }
+.guided-stage-btn { min-width:74px; }
+.guided-profile-btn { flex:1 1 180px; max-width:300px; }
+.guided-action-btn { min-width:120px; }
+.expert-layout { display:flex; flex-direction:column; }
+.expert-controls { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; padding:14px; border-bottom:1px solid var(--line); }
+.workflow-panel { border:1px solid var(--line); border-top:0; background:color-mix(in srgb, var(--panel) 88%, var(--accent) 12%); padding:10px 14px; }
+.workflow-panel summary, .fine-tune-panel summary, .preset-summary-panel summary, .tfvars-panel summary, .diagnostic-bundle summary { cursor:pointer; color:var(--muted); font-size:.78rem; font-weight:800; text-transform:uppercase; }
 .panel-title-row { display:flex; justify-content:space-between; gap:14px; align-items:start; }
 .panel-title-row h2 { margin:0; font-size:1rem; line-height:1.1; }
 .panel-title-row p { margin:5px 0 0; color:var(--muted); font-weight:750; font-size:.86rem; }
 .panel-title-row > span { color:var(--muted); font-size:.72rem; font-weight:900; text-transform:uppercase; white-space:nowrap; }
-.workflow-panel summary, .stage-panel summary, .stage-inspector summary, .fine-tune-panel summary, .preset-summary-panel summary, .tfvars-panel summary, .diagnostic-bundle summary { cursor:pointer; color:var(--muted); font-size:.78rem; font-weight:800; text-transform:uppercase; }
 .panel-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; margin-top:10px; }
 .setup-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-top:10px; }
 .setup-card { display:grid; grid-template-rows:auto auto 1fr auto; gap:6px; min-width:0; border:1px solid var(--line); background:var(--panel); padding:10px; box-shadow:0 1px 0 var(--shadow); }
 .setup-card.active { border-color:var(--selection-line); box-shadow:inset 4px 0 0 var(--selection-line), 0 1px 0 var(--shadow); background:var(--selection); }
-.setup-card span, .ladder-curation span { color:var(--muted); font-size:.68rem; font-weight:800; text-transform:uppercase; }
-.setup-card strong, .ladder-curation strong { display:block; overflow-wrap:anywhere; }
-.setup-card small, .ladder-curation small { color:var(--muted); font-weight:700; line-height:1.35; }
+.setup-card span { color:var(--muted); font-size:.68rem; font-weight:800; text-transform:uppercase; }
+.setup-card strong { display:block; overflow-wrap:anywhere; }
+.setup-card small { color:var(--muted); font-weight:700; line-height:1.35; }
 .setup-card button { margin-top:4px; min-height:34px; padding:5px 9px; }
-.fine-tune-panel, .stage-inspector { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+.fine-tune-panel { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
 .fine-tune-panel h3 { margin:10px 0 0; font-size:.86rem; color:var(--muted); text-transform:uppercase; }
 .ninite-grid { display:grid; grid-template-columns:repeat(3, minmax(180px, 1fr)); gap:18px 28px; margin-top:12px; padding:10px; background:var(--panel); border:1px solid var(--line); }
 .preset-column { min-width:0; border:0; padding:0; margin:0; }
@@ -1787,19 +1647,11 @@ html[data-theme="light"] .theme-icon-moon { display:block; color:var(--blue); }
 .preset-option { display:grid; grid-template-columns:16px minmax(0, 1fr); align-items:center; gap:6px; margin:3px 0; color:var(--ink); font-size:.9rem; font-weight:650; text-transform:none; }
 .preset-option input { width:14px; min-height:14px; padding:0; accent-color:var(--accent); }
 .preset-option span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ladder-curation { display:grid; grid-template-columns:1fr 1.4fr .8fr; gap:10px; margin-top:10px; }
-.ladder-curation div { min-width:0; border:1px solid var(--line); background:var(--panel); padding:10px; }
 .surface-list { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; list-style:none; padding:0; margin:12px 0 0; }
 .surface-list li { border:1px solid var(--line); background:var(--panel); padding:8px; min-width:0; }
 .surface-list strong, .surface-list span { display:block; overflow-wrap:anywhere; }
 .surface-list span { margin-top:4px; color:var(--muted); font-size:.75rem; font-weight:800; }
 .field-hint { color:var(--muted); font-size:.72rem; font-weight:800; text-transform:none; }
-.stage-panel { border:1px solid var(--line); background:var(--panel); padding:8px; margin-top:6px; }
-.stage-panel summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.stage-panel summary strong { color:var(--ink); text-transform:none; }
-.stage-panel p { margin:8px 0 0; color:var(--muted); font-weight:700; }
-.stage-panel.future { opacity:.55; }
-.stage-panel.current { border-color:var(--selection-line); box-shadow:inset 4px 0 0 var(--selection-line); background:var(--selection); }
 .source-badge { display:inline-flex; border:1px solid var(--line); padding:2px 6px; background:var(--panel-2); color:var(--muted); font-size:.66rem; font-weight:800; text-transform:uppercase; }
 .risk-note { margin:10px 0 0; color:#8a5b00; font-size:.86rem; font-weight:800; }
 .inventory { padding:10px 12px; }
@@ -1906,24 +1758,7 @@ pre { margin:0; padding:14px; background:var(--code); color:#e5fff7; overflow:au
 .run, .dry-run { width:auto; min-width:132px; padding-inline:20px; }
 .dry-run { background:white; color:var(--accent); border-color:var(--accent); }
 .dry-run:hover { background:var(--selection); }
-.quick-actions { margin-top:16px; padding:12px; border-width:2px; border-color:var(--ink); box-shadow:0 4px 0 var(--ink); }
-.quick-actions-layout { display:grid; grid-template-columns:minmax(280px, .95fr) minmax(0, 1.65fr) auto; gap:10px 14px; align-items:start; }
-.stage-ladder { grid-column:2 / 3; display:grid; grid-template-columns:repeat(9, minmax(54px, 1fr)); gap:5px; align-self:start; }
-.stage-ladder button { min-width:0; height:64px; padding-inline:6px; background:var(--panel); color:var(--ink); border-color:var(--line); font-variant-numeric:tabular-nums; }
-.action-bar { grid-column:1 / 3; display:grid; grid-template-columns:repeat(8, minmax(118px, 1fr)); gap:8px; align-items:center; }
-.action-bar form, .reset-actions form { margin:0; }
-.action-bar button { width:100%; white-space:nowrap; padding-inline:10px; }
-.reset-actions { grid-row:1 / span 3; grid-column:3 / 4; display:flex; gap:8px; flex-direction:column; align-items:stretch; min-width:150px; padding-left:14px; border-left:1px solid var(--line); }
-.reset-note { display:inline-flex; align-items:center; color:var(--muted); font-size:.82rem; font-weight:800; }
-.wizard-steps { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; margin-top:10px; }
-.wizard-step { display:grid; grid-template-columns:32px minmax(0, 1fr); gap:4px 10px; align-content:start; border:1px solid var(--line); background:var(--panel); padding:10px; }
-.wizard-step > span { grid-row:1 / span 3; display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--ink); color:white; font-weight:900; }
-.wizard-step strong { display:block; }
-.wizard-step p { margin:0; color:var(--muted); font-size:.82rem; font-weight:750; line-height:1.35; }
-.wizard-buttons { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-.wizard-buttons button { min-height:32px; padding:5px 9px; background:var(--panel-2); color:var(--accent-strong); border-color:var(--accent); }
-@media (max-width: 1100px) { .quick-actions-layout { grid-template-columns:1fr; } .variant-shortcuts, .stage-ladder, .action-bar, .reset-actions { grid-column:auto; grid-row:auto; } .reset-actions { flex-direction:row; flex-wrap:wrap; padding-left:0; border-left:0; border-top:1px solid var(--line); padding-top:10px; } }
-@media (max-width: 900px) { header, .controls, .summary, .intent-summary, .architecture-grid, .preset-grid, .panel-grid, .setup-grid, .ladder-curation, .inventory-grid, .surface-list, .history li, .quick-actions-layout, .wizard-steps { grid-template-columns:1fr; display:grid; } .variant-shortcuts { grid-template-columns:1fr; } .stage-ladder { grid-template-columns:repeat(5, minmax(56px, 1fr)); } .stage-ladder button { height:52px; } .ninite-grid { grid-template-columns:1fr; } .panel-title-row { display:grid; } .reset-actions { grid-row:auto; grid-column:auto; flex-direction:row; flex-wrap:wrap; padding-left:0; border-left:0; border-top:1px solid var(--line); padding-top:10px; } }
+@media (max-width: 900px) { .summary, .intent-summary, .architecture-grid, .preset-grid, .panel-grid, .setup-grid, .inventory-grid, .surface-list, .history li, .expert-controls { grid-template-columns:1fr; display:grid; } .guided-stages { flex-direction:row; flex-wrap:wrap; } .guided-profile-btn { max-width:none; } .ninite-grid { grid-template-columns:1fr; } .panel-title-row { display:grid; } }
 """
 
 

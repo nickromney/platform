@@ -94,12 +94,13 @@ def test_app_serves_htmx_page_and_static_asset(tmp_path: Path) -> None:
 
     assert page.status_code == 200
     assert 'hx-post="/preview"' in page.text
-    assert "State reset" in page.text
     assert 'value="state-reset"' in page.text
-    assert "Review required." in page.text
-    assert "Stage ladder" in page.text
     assert "Action" in page.text
-    assert 'class="stage-ladder"' in page.text
+    assert 'id="tab-guided"' in page.text
+    assert 'id="tab-expert"' in page.text
+    assert 'class="tab-btn active"' in page.text
+    assert "guided-variant-btn" in page.text
+    assert "guided-stage-btn" in page.text
     assert 'data-stage="100"' in page.text
     assert 'data-stage="900"' in page.text
     assert 'data-stage="950-local-idp"' not in page.text
@@ -107,19 +108,17 @@ def test_app_serves_htmx_page_and_static_asset(tmp_path: Path) -> None:
     assert 'data-action="plan"' in page.text
     assert 'data-action="apply"' in page.text
     assert 'onclick="selectAction(' in page.text
-    assert "Review kind plan for selected stage" in page.text
-    assert "Review kind apply for selected stage" in page.text
     assert "/static/htmx.min.js" in page.text
     assert "FastAPI + HTMX, no Node build" not in page.text
-    assert "Variant shortcuts" in page.text
     assert 'data-variant="kubernetes/kind"' in page.text
     assert 'data-variant="kubernetes/lima"' in page.text
     assert 'data-variant="kubernetes/slicer"' in page.text
     assert 'name="variant"' in page.text
     assert 'name="target"' not in page.text
-    assert "updateQuickActionState()" in page.text
+    assert "syncGuidedTabState()" in page.text
+    assert "updateQuickActionState()" not in page.text
     assert "selectStage(stage)" in page.text
-    assert "select.dispatchEvent(new Event('change', { bubbles: true }))" in page.text
+    assert "sel.dispatchEvent(new Event('change', { bubbles: true }))" in page.text
     assert "htmx.trigger(form, 'submit')" not in page.text
     assert "form.requestSubmit()" not in page.text
     assert "Preview</button>" not in page.text
@@ -149,21 +148,19 @@ def test_app_serves_htmx_page_and_static_asset(tmp_path: Path) -> None:
     assert 'name="custom_worker_count"' in page.text
     assert 'hx-get="/inventory"' in page.text
     assert 'id="inventory"' in page.text
-    assert "Loading prereqs..." in page.text
+    assert "Checking prereqs..." in page.text
     assert "Setup presets" in page.text
     assert "Curated setup profiles" in page.text
     assert "Minimal local" in page.text
     assert "IDP demo" in page.text
     assert "Airplane" in page.text
     assert "Individual preset controls" in page.text
-    assert "Inspect every stage" in page.text
     assert "Expand all" not in page.text
     assert "Collapse all" not in page.text
     assert "applySetupProfile('idp-demo')" in page.text
     assert "+${labels.length - 2} more" in page.text
     assert "Apps and platform surfaces" in page.text
     assert "Kubernetes IN Docker" in page.text
-    assert "Choose a variant" in page.text
     assert "Reference path" not in page.text
     assert "Docker-backed teaching variant" not in page.text
     assert "Fastest local Kubernetes path" not in page.text
@@ -172,8 +169,10 @@ def test_app_serves_htmx_page_and_static_asset(tmp_path: Path) -> None:
     assert "MicroVM-backed Kubernetes" not in page.text
     assert "Pick the machine" not in page.text
     assert ".control-field.selected { outline:" not in page.text
-    assert ".action-bar button { width:100%; white-space:nowrap;" in page.text
-    assert ".stage-ladder button { min-width:0; height:64px;" in page.text
+    assert "switchTab(" in page.text
+    assert "syncGuidedTabState" in page.text
+    assert ".tab-btn" in page.text
+    assert ".guided-btn" in page.text
 
     htmx = client.get("/static/htmx.min.js")
     assert htmx.status_code == 200
