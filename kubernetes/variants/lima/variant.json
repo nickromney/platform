@@ -1,0 +1,68 @@
+{
+  "schema_version": "platform.variant/v1",
+  "id": "lima",
+  "path": "kubernetes/lima",
+  "label": "lima",
+  "guided_label": "Lima",
+  "class": "local-created-cluster",
+  "family": "local",
+  "lifecycle_mode": "create",
+  "state_scope": "single-local",
+  "contexts": ["local-substrate", "platform-stack"],
+  "execution_adapter": {
+    "type": "make",
+    "make_dir": "kubernetes/lima"
+  },
+  "state": {
+    "runtime_scope": "lima",
+    "state_file": "terraform/.run/kubernetes-lima/terraform.tfstate",
+    "state_lock_file": "terraform/.run/kubernetes-lima/.terraform.tfstate.lock.info"
+  },
+  "cluster_access": {
+    "kubeconfig_path": "~/.kube/limavm-k3s.yaml",
+    "kubeconfig_context": "limavm-k3s",
+    "cluster_name": "limavm-k3s"
+  },
+  "stage_ladder": {
+    "stages_dir": "kubernetes/lima/stages",
+    "target_profile_file": "kubernetes/lima/targets/lima.tfvars",
+    "stage_files": {
+      "100": "kubernetes/lima/stages/100-cluster.tfvars",
+      "200": "kubernetes/lima/stages/200-cilium.tfvars",
+      "300": "kubernetes/lima/stages/300-hubble.tfvars",
+      "400": "kubernetes/lima/stages/400-argocd.tfvars",
+      "500": "kubernetes/lima/stages/500-gitea.tfvars",
+      "600": "kubernetes/lima/stages/600-policies.tfvars",
+      "700": "kubernetes/lima/stages/700-app-repos.tfvars",
+      "800": "kubernetes/lima/stages/800-gateway-tls.tfvars",
+      "900": "kubernetes/lima/stages/900-sso.tfvars"
+    }
+  },
+  "readiness": {
+    "command": "make -C kubernetes/lima prereqs",
+    "facets": ["operator_prereqs", "active_variant", "cluster_access", "host_access_path", "stage_contracts", "blockers"]
+  },
+  "blockers": {
+    "conflicting_variants": ["kind", "slicer"],
+    "checks": ["check-kind-stopped", "check-slicer-stopped"]
+  },
+  "registry": {
+    "runtime_host": "host.lima.internal:5002",
+    "push_host": "127.0.0.1:5002",
+    "scheme": "http",
+    "image_distribution_modes": ["pull", "local-cache", "airplane"],
+    "default_image_distribution_mode": "local-cache"
+  },
+  "host_access_path": {
+    "mode": "host-gateway-proxy",
+    "gateway_host_port": 443,
+    "shared_host_ports": [443, 30022, 30080, 30090, 31235, 3301, 3302],
+    "requires_proxy": true,
+    "requires_forward_process": false,
+    "can_degrade": true
+  },
+  "network_profile": {
+    "default": "cilium",
+    "allowed": ["cilium"]
+  }
+}

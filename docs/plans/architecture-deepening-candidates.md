@@ -4,6 +4,7 @@
 
 - Status: Draft
 - Date: 2026-05-06
+- Last reviewed: 2026-05-07
 - Scope: Local Stack Operations architecture review
 - Source process: `improve-codebase-architecture`
 
@@ -44,6 +45,409 @@ Expected benefits:
 Stage, action, preset, and variant changes gain Locality. Guided surfaces get
 more Leverage from the workflow core, and tests can assert that every surface is
 derived from one Interface.
+
+### 2. Deepen The Solution Variant Contract
+
+Files:
+
+- `kubernetes/kind/Makefile`
+- `kubernetes/lima/Makefile`
+- `kubernetes/slicer/Makefile`
+- `kubernetes/workflow/options.json`
+- `mk/stage-workflow.mk`
+- `mk/k8s-terragrunt.mk`
+
+Problem:
+The repo has ratified `solution`, `variant`, `variant adapter`, `context`, and
+`contract` language, but the implementation still keeps important variant facts
+in parallel Makefile state. Kubeconfig path and context, state path, runtime
+scope, registry host, host access path, blocker checks, readiness command, and
+stage files are repeated across the three local variants. The current Modules
+are shallow because the Interface for a variant is not one place; callers have
+to learn the Makefile variables, workflow metadata, and variant scripts
+together.
+
+Candidate solution:
+Create a first-class solution variant contract Module. The contract should
+record the facts each adapter variant provides to the Kubernetes solution:
+cluster access, state, stage ladder, registry, host access path, blockers, and
+readiness. The existing variant Makefiles can remain the execution Adapters,
+but they should consume or be generated from the same contract facts instead of
+redeclaring them independently.
+
+Expected benefits:
+Variant changes gain Locality. Shared stage/apply behaviour gets more Leverage
+because `kind`, `lima`, and `slicer` stop copying the same workflow Interface.
+Tests can assert a variant contract matrix instead of treating each Makefile as
+a separate source of truth.
+
+### 3. Deepen The Readiness And Blocker Read Model
+
+Files:
+
+- `scripts/platform-status.sh`
+- `scripts/platform-inventory.sh`
+- `tests/platform-status.bats`
+- `tests/assert-variant-active.bats`
+- `kubernetes/workflow/options.json`
+
+Problem:
+`platform-status.sh` mixes host probing, ownership, readiness, blocker
+construction, recommended actions, JSON projection, and text rendering.
+Readiness and blocker language is real domain language, but the current Module
+Interface is a large script output with many implied meanings.
+
+Candidate solution:
+Create a Local Stack Operations read-model Module with explicit ownership,
+readiness facets, blockers, and recommended action projections. Shell status
+output, inventory JSON, terminal TUI, and browser workflow UI should become
+rendering Adapters over that read model.
+
+Expected benefits:
+Ownership and readiness changes gain Locality. Guided surfaces get more
+Leverage from the same read model. Tests can exercise readiness and blockers at
+the Interface instead of through several rendered surfaces.
+
+### 4. Deepen The Host Access Path Contract
+
+Files:
+
+- `kubernetes/scripts/check-target-host-ports.sh`
+- `kubernetes/kind/scripts/check-kind-host-ports.sh`
+- `kubernetes/slicer/scripts/check-slicer-host-ports.sh`
+- `kubernetes/lima/scripts/host-gateway-proxy.sh`
+- `kubernetes/slicer/scripts/ensure-host-forwards.sh`
+- `terraform/kubernetes/locals.tf`
+
+Problem:
+`host access path` is ratified as the umbrella for proxy, port-forward, and host
+forward mechanics, but its Implementation is split across scripts, Make helper
+modes, Terraform variables, and repeated port lists. The Seam is currently a
+set of loose environment variables rather than a named contract.
+
+Candidate solution:
+Define a host access path contract with facts such as mode, gateway host port,
+target port, public bind, admin NodePorts, required proxy or forward process,
+degradation behaviour, and blocker message. Variant adapters should fill the
+contract; checks and guided surfaces should project from it.
+
+Expected benefits:
+Ingress and local edge behaviour gain Locality. Host access tests gain Leverage
+because they assert the contract once and then smoke-test each Adapter.
+
+### 5. Deepen The Service Catalog Module
+
+Files:
+
+- `catalog/platform-apps.json`
+- `apps/idp-core/app/main.py`
+- `terraform/kubernetes/scripts/idp-catalog.sh`
+- `terraform/kubernetes/scripts/idp-deployments.sh`
+- `terraform/kubernetes/scripts/idp-secrets.sh`
+- `schemas/idp/*.schema.json`
+
+Problem:
+The service catalog is now the source of application intent, but application
+spec, environment request, deployment record, secret binding, and scorecard are
+still implicit JSON conventions. Python routes and shell scripts each interpret
+the catalog separately.
+
+Candidate solution:
+Add a service catalog Module with typed projections for application specs,
+environments, deployment records, secret bindings, and scorecards. The portal
+API and shell scripts should consume that Interface instead of embedding local
+JSON traversal logic.
+
+Expected benefits:
+Catalog rule changes gain Locality. Portal API, scripts, SDK, MCP, Backstage,
+and Grafana get more Leverage from the same projections. Tests can move from
+string-level assertions to Interface-level catalog behaviour.
+
+### 6. Deepen The Portal API Contract And Runtime Adapter
+
+Files:
+
+- `apps/idp-core/app/adapters.py`
+- `apps/idp-core/app/models.py`
+- `apps/idp-sdk/src/index.ts`
+- `apps/idp-mcp/idp_mcp/server.py`
+- `apps/backstage/catalog/entities.yaml`
+
+Problem:
+The runtime adapter currently mostly builds command strings, and SDK/MCP/
+Backstage each hand-code partial portal API contract knowledge. As the portal
+API grows, caller knowledge will spread unless the API contract and runtime
+adapter Interface become deeper.
+
+Candidate solution:
+Make the portal API OpenAPI schema the canonical contract source for SDK/MCP/
+Backstage validation or generation. Deepen `RuntimeAdapter` into a port that
+models environment requests, deployment records, secret binding, and runtime
+capabilities; Make commands should be one Adapter detail behind that seam.
+
+Expected benefits:
+Portal API changes gain Locality. SDK, MCP, Backstage, and tests get more
+Leverage from the same contract. Missing runtime support, such as Slicer in the
+current IDP adapter path, becomes a visible Adapter gap.
+
+## Deeper Exploration: Solution Variant Contract
+
+### Current Shape
+
+The Kubernetes solution already has a metadata Interface in
+`kubernetes/workflow/options.json`. It names variants, variant classes,
+contexts, contracts, lifecycle mode, state scope, and readiness commands.
+
+The executable Interface still lives mostly in the variant Makefiles:
+
+- `kubernetes/kind/Makefile` owns kind-specific state files, kubeconfig facts,
+  local registry host defaults, image distribution modes, and conflicting
+  runtime checks.
+- `kubernetes/lima/Makefile` owns Lima k3s bootstrap facts, host gateway proxy
+  mode, image cache mode, state file, kubeconfig facts, and blocker checks.
+- `kubernetes/slicer/Makefile` owns Slicer daemon/socket facts, VM sizing,
+  network profile, host forwards, image cache mode, state file, kubeconfig
+  facts, and blocker checks.
+
+Shared Includes already exist, especially `mk/stage-workflow.mk` and
+`mk/k8s-terragrunt.mk`, but they do not own the solution variant contract.
+They assume the variant Makefile has already declared enough variables to make
+the workflow valid.
+
+### Duplicated Interface Facts
+
+| Variant fact | Current locations |
+| --- | --- |
+| Variant id and path | `options.json`, variant Makefile path, status scripts |
+| State file and lock file | each variant Makefile, workflow core state-lock helper |
+| Kubeconfig path and context | each variant Makefile, status script defaults, docs |
+| Stage ladder and stage files | `stage-ladder.mk`, variant Makefiles, `options.json` |
+| Readiness command | `options.json`, variant Makefiles, status/inventory surfaces |
+| Active-variant blockers | variant Makefiles, `kubernetes/scripts/assert-variant-active.sh`, status script |
+| Registry runtime and push host | variant Makefiles, workflow core preset rendering, image cache scripts |
+| Host access path | variant Makefiles, port/proxy/forward scripts, Terraform vars, docs |
+| CNI/network profile | Slicer Makefile, workflow preset compatibility, stage files |
+
+This is the Locality failure. A change to the variant Interface currently
+requires a maintainer to inspect metadata, Make variables, shell scripts, docs,
+and tests.
+
+### Deletion Test
+
+Deleting one variant Makefile would not delete the concept of a solution
+variant. The same contract facts would have to reappear in a new Makefile,
+workflow metadata, status probes, and scripts.
+
+Deleting `options.json` would not delete variant complexity either, because the
+Makefiles still know how to operate the variants. The signal is that the
+contract is split: neither Module is deep enough to own the Interface alone.
+
+Concentrating variant facts behind a solution variant contract would not remove
+the adapter-specific Implementation. It would make the shared Interface stable
+and leave kind, Lima, and Slicer to supply concrete adapter facts.
+
+### Proposed Module Shape
+
+Create a source-controlled variant contract per adapter variant, then use the
+existing workflow options as the aggregated discovery Interface.
+
+Candidate paths:
+
+```text
+kubernetes/variants/kind/variant.json
+kubernetes/variants/lima/variant.json
+kubernetes/variants/slicer/variant.json
+```
+
+or:
+
+```text
+kubernetes/workflow/variants/kind.json
+kubernetes/workflow/variants/lima.json
+kubernetes/workflow/variants/slicer.json
+```
+
+The first path makes `variant` a first-class Module. The second path keeps the
+contract near the current workflow metadata. Either can work; the important
+decision is that the variant facts are not copied by hand across Makefiles and
+guided surfaces.
+
+Initial Interface fields:
+
+- `id`
+- `path`
+- `label`
+- `class`
+- `lifecycle_mode`
+- `state_scope`
+- `contexts`
+- `state`
+- `cluster_access`
+- `stage_ladder`
+- `readiness`
+- `blockers`
+- `registry`
+- `host_access_path`
+- `network_profile`
+- `execution_adapter`
+
+### What Stays Behind The Adapter Seam
+
+Keep these in variant-specific Implementation:
+
+- kind cluster creation and kubeconfig rewriting
+- Lima VM lifecycle and k3s bootstrap
+- Slicer daemon/socket/VM lifecycle
+- concrete proxy or host-forward process management
+- variant-specific reset and troubleshooting helpers
+
+Move or derive these from the solution variant contract:
+
+- paths and labels
+- state file and lock file paths
+- kubeconfig path and context defaults
+- readiness command and readiness facets
+- blocker list and conflicting variant checks
+- local registry runtime and push host defaults
+- host access path facts
+- stage file mapping where it is not profile-dependent
+- network profile capability and allowed values
+
+### First Implementation Slice
+
+The safest first slice is documentation plus contract validation:
+
+1. Add per-variant contract JSON files with facts already present in the
+   Makefiles.
+2. Add a small validator that checks the contracts against the current
+   Makefile-visible facts without changing execution.
+3. Add tests that compare the contracts with `options.json` and the expected
+   state/kubeconfig/registry/host-access facts.
+4. Only after that, let `scripts/platform-workflow.sh options` aggregate from
+   the variant contracts.
+5. Later, use generated `variant.mk` or Make include fragments for low-risk
+   Makefile convergence.
+
+This avoids changing live stack operations in the first pass while making drift
+visible.
+
+### Implementation Notes
+
+The first slice now exists:
+
+- `kubernetes/variants/kind/variant.json`
+- `kubernetes/variants/lima/variant.json`
+- `kubernetes/variants/slicer/variant.json`
+- `kubernetes/workflow/render-options.sh`
+- `tests/variant-contracts.bats`
+
+`scripts/platform-workflow.sh` still exposes the stable
+`options --output json` Interface, but it now renders variant facts from the
+per-variant contracts into `.variants[].variant_contract`. Stack execution is
+unchanged: the Makefiles remain the execution Adapters.
+
+The next implementation slice should reduce duplication without changing the
+operator surface. Good candidates:
+
+1. Move `target_state_lock_file` in `scripts/platform-workflow.sh` to read
+   `.variant_contract.state.state_lock_file`.
+2. Move local registry runtime host selection to
+   `.variant_contract.registry.runtime_host`.
+3. Add a generated or validated `variant.mk` fragment for state and kubeconfig
+   defaults, then compare it with the hand-authored Makefile variables before
+   allowing Make to consume it.
+
+Items 1 and 2 are complete. A validation surface for item 3 now exists through
+the shared `variant-contract-print` Make target. It prints the hand-authored
+Makefile defaults for state, cluster access, and registry facts as JSON, and
+`tests/variant-contracts.bats` compares that output with the source contracts.
+This makes drift visible while keeping the Makefiles as the execution Adapters.
+
+### Grilling Questions
+
+These decisions should be settled before implementation:
+
+1. Should the contract live under `kubernetes/variants/` as a first-class
+   variant Module, or under `kubernetes/workflow/variants/` as workflow
+   metadata?
+2. Should the first pass only validate contract drift, or should it immediately
+   make `options.json` aggregate from the per-variant contracts?
+3. Should Make consume generated `variant.mk` fragments eventually, or should
+   Make remain hand-authored with contract tests guarding drift?
+4. Should `host_access_path` be a nested part of the variant contract now, or
+   a separate Module after the variant contract lands?
+5. Should Slicer network profile facts live in the variant contract, or in a
+   later profile/preset Module?
+
+## Implementation Progress
+
+### Candidate 2: Solution Variant Contract
+
+Implemented:
+
+- `kubernetes/variants/*/variant.json` records the first-class variant
+  contract for kind, Lima, and Slicer.
+- `kubernetes/workflow/render-options.sh` renders workflow options with
+  `.variants[].variant_contract` sourced from those files.
+- `scripts/platform-workflow.sh` reads state-lock, registry runtime host,
+  registry push host, and selected preset compatibility from the rendered
+  contract instead of hardcoded variant cases.
+- `mk/common.mk` exposes `variant-contract-print`, a narrow Makefile JSON
+  projection for state, cluster access, and registry defaults.
+- `tests/variant-contracts.bats` checks contract shape, workflow option drift,
+  and Makefile default drift.
+
+### Candidate 3: Readiness And Blocker Read Model
+
+Implemented:
+
+- `scripts/platform-status-read-model.sh` projects existing `platform-status`
+  JSON into ownership, readiness, blockers, parsed blocker ownership, action
+  facts, and recommended action facts.
+- `tests/platform-status-read-model.bats` covers the projection without
+  changing `platform-status.sh` behaviour.
+
+This keeps the status script as the probing Adapter while creating a smaller
+read-model Interface for future TUI/browser/status surfaces.
+
+### Candidate 4: Host Access Path Contract
+
+Implemented:
+
+- `kubernetes/host-access/render-contracts.sh` projects host access facts from
+  `kubernetes/variants/*/variant.json`.
+- `tests/host-access-contracts.bats` validates kind, Lima, and Slicer modes,
+  required proxy/forward processes, gateway ports, and shared host ports.
+
+This keeps host access execution in the existing variant scripts while creating
+a testable contract Interface for local ingress behaviour.
+
+### Candidate 5: Service Catalog Module
+
+Implemented:
+
+- `apps/idp-core/app/catalog.py` adds typed catalog/read-model helpers for
+  application specs, deployment records, secret bindings, and scorecards.
+- `apps/idp-core/app/main.py` delegates derived read endpoints to those helpers
+  while keeping raw catalog endpoints stable.
+- `apps/idp-core/tests/test_catalog.py` covers projection defaults and
+  extra-field preservation.
+
+This concentrates service catalog projection rules behind one Module instead
+of duplicating JSON traversal in each portal API endpoint.
+
+### Candidate 6: Portal API Contract And Runtime Adapter
+
+Implemented:
+
+- `apps/idp-core/app/contracts.py` adds a portal runtime adapter contract
+  projection and OpenAPI contract summary.
+- `apps/idp-core/tests/test_contracts.py` covers supported runtimes,
+  Makefile-backed runtime adapter metadata, portal API operation coverage, and
+  the current Slicer runtime-adapter gap.
+
+This makes the portal API/runtime Adapter contract explicit without changing
+route behaviour.
 
 ## Deeper Exploration: Guided Workflow Contract
 

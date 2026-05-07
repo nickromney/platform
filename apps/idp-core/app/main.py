@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters import StatusProvider, get_adapter, list_adapters
 from app.audit import AuditWriter
+from app.catalog import deployment_records, load_catalog, scorecard_records, secret_bindings
 from app.models import DeploymentRequest, EnvironmentRequest, ScaffoldRequest, SecretRequest, WorkflowResponse
 from app.paths import discover_repo_root
 
@@ -50,8 +51,8 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH, status_provider: Status
     def catalog() -> dict:
         return json.loads(catalog_path().read_text(encoding="utf-8"))
 
-    def optional_string(value) -> str | None:
-        return value if isinstance(value, str) else None
+    def catalog_document():
+        return load_catalog(catalog_path())
 
     def workflow_response(action: str, runtime: str, plan, request: dict[str, object]) -> dict[str, object]:
         audit_record = audit.write(
@@ -101,56 +102,15 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH, status_provider: Status
 
     @app.get("/api/v1/deployments")
     def deployments() -> dict[str, object]:
-        records = []
-        for app_spec in catalog().get("applications", []):
-            deployment = app_spec.get("deployment", {})
-            for environment in app_spec.get("environments", []):
-                environment_deployment = environment.get("deployment", {})
-                records.append(
-                    {
-                        "app": app_spec.get("name"),
-                        "environment": environment.get("name"),
-                        "route": environment.get("route"),
-                        "controller": deployment.get("controller"),
-                        "image": optional_string(environment_deployment.get("image") or deployment.get("image")),
-                        "health": optional_string(environment.get("health") or app_spec.get("health")),
-                        "sync": optional_string(environment.get("sync") or deployment.get("sync")),
-                    }
-                )
-        return {"deployments": records}
+        return {"deployments": [record.model_dump() for record in deployment_records(catalog_document())]}
 
     @app.get("/api/v1/secrets")
     def secrets() -> dict[str, object]:
-        records = []
-        for app_spec in catalog().get("applications", []):
-            for secret in app_spec.get("secrets", []):
-                records.append(
-                    {
-                        "app": app_spec.get("name"),
-                        "name": secret.get("name"),
-                        "binding": secret.get("binding", "unknown"),
-                        "rotation": secret.get("rotation", "unknown"),
-                        **secret,
-                    }
-                )
-        return {"secrets": records}
+        return {"secrets": [record.model_dump() for record in secret_bindings(catalog_document())]}
 
     @app.get("/api/v1/scorecards")
     def scorecards() -> dict[str, object]:
-        records = []
-        for app_spec in catalog().get("applications", []):
-            scorecard = app_spec.get("scorecard", {})
-            records.append(
-                {
-                    "app": app_spec.get("name"),
-                    "runtime_profile": scorecard.get("runtime_profile", "unknown"),
-                    "has_health_endpoint": scorecard.get("has_health_endpoint", False),
-                    "has_network_policy": scorecard.get("has_network_policy", False),
-                    "has_owner": scorecard.get("has_owner", bool(app_spec.get("owner"))),
-                    **scorecard,
-                }
-            )
-        return {"scorecards": records}
+        return {"scorecards": [record.model_dump() for record in scorecard_records(catalog_document())]}
 
     @app.get("/api/v1/actions")
     def actions() -> dict[str, object]:

@@ -3,7 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WORKFLOW_OPTIONS_FILE="${REPO_ROOT}/kubernetes/workflow/options.json"
+WORKFLOW_OPTIONS_BASE_FILE="${REPO_ROOT}/kubernetes/workflow/options.json"
+WORKFLOW_OPTIONS_RENDERER="${REPO_ROOT}/kubernetes/workflow/render-options.sh"
+WORKFLOW_OPTIONS_FILE="${PLATFORM_WORKFLOW_OPTIONS_FILE:-${REPO_ROOT}/.run/workflow/options.json}"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
@@ -83,17 +85,41 @@ target_path() {
   printf '%s' "${path}"
 }
 
+variant_contract_value() {
+  local variant="$1"
+  local jq_filter="$2"
+
+  jq -r --arg id "${variant}" ".variants[] | select(.id == \$id) | .variant_contract | ${jq_filter} // empty" "${WORKFLOW_OPTIONS_FILE}"
+}
+
+repo_path() {
+  local path="$1"
+
+  if [[ "${path}" = /* ]]; then
+    printf '%s' "${path}"
+  else
+    printf '%s/%s' "${REPO_ROOT}" "${path}"
+  fi
+}
+
 target_state_lock_file() {
-  case "$1" in
-    kind) printf '%s/terraform/.run/kubernetes/.terraform.tfstate.lock.info\n' "${REPO_ROOT}" ;;
-    lima) printf '%s/terraform/.run/kubernetes-lima/.terraform.tfstate.lock.info\n' "${REPO_ROOT}" ;;
-    slicer) printf '%s/terraform/.run/kubernetes-slicer/.terraform.tfstate.lock.info\n' "${REPO_ROOT}" ;;
-    *) return 1 ;;
-  esac
+  local path=""
+
+  path="$(variant_contract_value "$1" '.state.state_lock_file')"
+  [[ -n "${path}" ]] || return 1
+  repo_path "${path}"
 }
 
 workflow_options_json() {
   jq '.' "${WORKFLOW_OPTIONS_FILE}"
+}
+
+render_workflow_options() {
+  local tmp_file="${WORKFLOW_OPTIONS_FILE}.$$.tmp"
+
+  mkdir -p "$(dirname "${WORKFLOW_OPTIONS_FILE}")"
+  "${WORKFLOW_OPTIONS_RENDERER}" >"${tmp_file}"
+  mv "${tmp_file}" "${WORKFLOW_OPTIONS_FILE}"
 }
 
 validate_target() {
@@ -234,26 +260,57 @@ stage_at_least() {
   [[ "${value}" =~ ^[0-9]+$ ]] && [[ "${value}" -ge "${minimum}" ]]
 }
 
+preset_supported_by_variant() {
+  local group="$1"
+  local preset="$2"
+
+  jq -e \
+    --arg group "${group}" \
+    --arg preset "${preset}" \
+    --arg variant "${TARGET}" \
+    '.presets[]
+      | select(.group == $group and .id == $preset)
+      | (.variants // [])
+      | index($variant)' "${WORKFLOW_OPTIONS_FILE}" >/dev/null
+}
+
+preset_stage_requirement() {
+  local group="$1"
+  local preset="$2"
+
+  jq -r \
+    --arg group "${group}" \
+    --arg preset "${preset}" \
+    '.presets[]
+      | select(.group == $group and .id == $preset)
+      | .introduced_at_stage // empty' "${WORKFLOW_OPTIONS_FILE}"
+}
+
+validate_selected_preset() {
+  local group="$1"
+  local preset="$2"
+  local display_group="${group//_/-}"
+  local stage_requirement=""
+
+  [[ "${preset}" != "default" ]] || return 0
+
+  if ! preset_supported_by_variant "${group}" "${preset}"; then
+    die_usage "Preset ${display_group}=${preset} is not available for variant ${TARGET}"
+  fi
+
+  stage_requirement="$(preset_stage_requirement "${group}" "${preset}")"
+  if [[ -n "${stage_requirement}" ]]; then
+    stage_at_least "${stage_requirement}" || die_usage "Preset ${display_group}=${preset} requires stage ${stage_requirement} or later"
+  fi
+}
+
 validate_preset_selection() {
-  if [[ "${PRESET_RESOURCE_PROFILE}" = "local-idp-12gb" ]]; then
-    [[ "${TARGET}" = "kind" ]] || die_usage "Preset resource-profile=local-idp-12gb is only available for variant kind"
-    stage_at_least 900 || die_usage "Preset resource-profile=local-idp-12gb requires stage 900 or later"
-  fi
-  if [[ "${PRESET_IMAGE_DISTRIBUTION}" = "preload" || "${PRESET_IMAGE_DISTRIBUTION}" = "baked" ]]; then
-    [[ "${TARGET}" = "kind" ]] || die_usage "Preset image-distribution=${PRESET_IMAGE_DISTRIBUTION} is only available for variant kind"
-  fi
-  if [[ "${PRESET_NETWORK_PROFILE}" = "default-cni" ]]; then
-    [[ "${TARGET}" = "slicer" ]] || die_usage "Preset network-profile=default-cni is only available for variant slicer"
-  fi
-  if [[ "${PRESET_OBSERVABILITY_STACK}" != "default" ]]; then
-    stage_at_least 800 || die_usage "Preset observability-stack=${PRESET_OBSERVABILITY_STACK} requires stage 800 or later"
-  fi
-  if [[ "${PRESET_IDENTITY_STACK}" != "default" ]]; then
-    stage_at_least 900 || die_usage "Preset identity-stack=${PRESET_IDENTITY_STACK} requires stage 900 or later"
-  fi
-  if [[ "${PRESET_APP_SET}" != "default" ]]; then
-    stage_at_least 700 || die_usage "Preset app-set=${PRESET_APP_SET} requires stage 700 or later"
-  fi
+  validate_selected_preset resource_profile "${PRESET_RESOURCE_PROFILE}"
+  validate_selected_preset image_distribution "${PRESET_IMAGE_DISTRIBUTION}"
+  validate_selected_preset network_profile "${PRESET_NETWORK_PROFILE}"
+  validate_selected_preset observability_stack "${PRESET_OBSERVABILITY_STACK}"
+  validate_selected_preset identity_stack "${PRESET_IDENTITY_STACK}"
+  validate_selected_preset app_set "${PRESET_APP_SET}"
 }
 
 normalize_custom_bool() {
@@ -324,12 +381,11 @@ app_tfvar_name() {
 }
 
 local_registry_runtime_host() {
-  case "${TARGET}" in
-    kind) printf 'host.docker.internal:5002' ;;
-    lima) printf 'host.lima.internal:5002' ;;
-    slicer) printf '192.168.64.1:5002' ;;
-    *) return 1 ;;
-  esac
+  variant_contract_value "${TARGET}" '.registry.runtime_host'
+}
+
+local_registry_push_host() {
+  variant_contract_value "${TARGET}" '.registry.push_host'
 }
 
 hcl_string() {
@@ -551,12 +607,12 @@ append_image_distribution_env() {
         kind)
           append_env_override "KIND_IMAGE_DISTRIBUTION_MODE=registry"
           append_env_override "KIND_LOCAL_IMAGE_CACHE_HOST=$(local_registry_runtime_host)"
-          append_env_override "KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002"
+          append_env_override "KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
           ;;
         lima|slicer)
           append_env_override "PLATFORM_LOCAL_IMAGE_CACHE_MODE=on"
           append_env_override "LOCAL_IMAGE_CACHE_HOST=$(local_registry_runtime_host)"
-          append_env_override "LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002"
+          append_env_override "LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
           ;;
       esac
       ;;
@@ -573,7 +629,7 @@ append_image_distribution_env() {
           append_env_override "KIND_IMAGE_DISTRIBUTION_MODE=registry"
           append_env_override "KIND_PRELOAD_IMAGES_MODE=on"
           append_env_override "KIND_LOCAL_IMAGE_CACHE_HOST=$(local_registry_runtime_host)"
-          append_env_override "KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002"
+          append_env_override "KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
           append_env_override "KIND_LOCAL_IMAGE_CACHE_OPTIONAL=0"
           ;;
         lima|slicer)
@@ -581,7 +637,7 @@ append_image_distribution_env() {
           append_env_override "PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=on"
           append_env_override "PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=on"
           append_env_override "LOCAL_IMAGE_CACHE_HOST=$(local_registry_runtime_host)"
-          append_env_override "LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002"
+          append_env_override "LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
           append_env_override "LOCAL_IMAGE_CACHE_OPTIONAL=0"
           ;;
       esac
@@ -834,6 +890,8 @@ case "${SUBCOMMAND}" in
     die_usage "Unknown subcommand '${SUBCOMMAND}'. Expected options, preview, apply, or save-profile"
     ;;
 esac
+
+render_workflow_options
 
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
