@@ -18,6 +18,9 @@ quote_hcl() {
   printf '"%s"' "${value}"
 }
 
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
+
 mode="${KIND_IMAGE_DISTRIBUTION_MODE:-load}"
 worker_count="${KIND_WORKER_COUNT:-1}"
 cache_host="${KIND_LOCAL_IMAGE_CACHE_HOST:-host.docker.internal:5002}"
@@ -105,61 +108,23 @@ esac
 mkdir -p "$(dirname "${output_file}")"
 
 platform_mcp_image_tag="$(
-  source_fingerprint_tag \
-    apps/platform-mcp/.dockerignore \
-    apps/platform-mcp/Dockerfile \
-    apps/platform-mcp/Dockerfile.dockerignore \
-    apps/platform-mcp/platform_mcp \
-    apps/platform-mcp/pyproject.toml \
-    apps/platform-mcp/uv.lock
+  image_catalog_source_tag workload platform-mcp
 )"
 idp_core_image_tag="$(
-  source_fingerprint_tag \
-    apps/idp-core/.dockerignore \
-    apps/idp-core/Dockerfile \
-    apps/idp-core/Dockerfile.dockerignore \
-    apps/idp-core/app \
-    apps/idp-core/pyproject.toml \
-    apps/idp-core/uv.lock \
-    catalog/platform-apps.json
+  image_catalog_source_tag platform idp-core
 )"
 backstage_image_tag="$(
   if [ "${backstage_enabled}" = "true" ]; then
-    source_fingerprint_tag \
-      apps/subnetcalc/catalog-info.yaml \
-      apps/subnetcalc/docs \
-      apps/subnetcalc/mkdocs.yml \
-      apps/subnetcalc/README.md \
-      apps/apim-simulator/catalog-info.yaml \
-      apps/sentiment/catalog-info.yaml \
-      apps/sentiment/docs \
-      apps/sentiment/mkdocs.yml \
-      apps/sentiment/MODEL_CARD.md \
-      apps/sentiment/README.md \
-      apps/backstage/.dockerignore \
-      apps/backstage/.yarnrc.yml \
-      apps/backstage/.yarn \
-      apps/backstage/Dockerfile \
-      apps/backstage/app-config.production.yaml \
-      apps/backstage/app-config.yaml \
-      apps/backstage/backstage.json \
-      apps/backstage/catalog \
-      apps/backstage/catalog-info.yaml \
-      apps/backstage/package.json \
-      apps/backstage/packages \
-      apps/backstage/plugins \
-      apps/backstage/tsconfig.json \
-      apps/backstage/yarn.lock
+    image_catalog_source_tag platform backstage
   fi
 )"
+image_namespace="$(image_catalog_namespace)"
 
 write_external_platform_images() {
   cat <<EOF
 prefer_external_platform_images = true
 external_platform_image_refs = {
-  backstage = $(quote_hcl "${cache_host}/platform/backstage:${backstage_image_tag:-latest}")
-  grafana    = $(quote_hcl "${cache_host}/platform/grafana-victorialogs:latest")
-  "idp-core" = $(quote_hcl "${cache_host}/platform/idp-core:${idp_core_image_tag}")
+$(image_catalog_hcl_refs platform "${cache_host}" "${image_namespace}" "backstage=${backstage_image_tag:-latest}" "idp-core=${idp_core_image_tag}")
 }
 EOF
 }
@@ -187,13 +152,7 @@ enable_actions_runner = false
 $(write_external_platform_images)
 prefer_external_workload_images = true
 external_workload_image_refs = {
-  sentiment-api                        = $(quote_hcl "${cache_host}/platform/sentiment-api:latest")
-  sentiment-auth-ui                    = $(quote_hcl "${cache_host}/platform/sentiment-auth-ui:latest")
-  subnetcalc-api-fastapi-container-app = $(quote_hcl "${cache_host}/platform/subnetcalc-api-fastapi-container-app:latest")
-  subnetcalc-apim-simulator            = $(quote_hcl "${cache_host}/platform/subnetcalc-apim-simulator:latest")
-  platform-mcp                         = $(quote_hcl "${cache_host}/platform/platform-mcp:${platform_mcp_image_tag}")
-  subnetcalc-frontend-react            = $(quote_hcl "${cache_host}/platform/subnetcalc-frontend-react:latest")
-  subnetcalc-frontend-typescript-vite  = $(quote_hcl "${cache_host}/platform/subnetcalc-frontend-typescript-vite:latest")
+$(image_catalog_hcl_refs workload "${cache_host}" "${image_namespace}" "platform-mcp=${platform_mcp_image_tag}")
 }
 EOF
       ;;
@@ -211,13 +170,7 @@ $(write_external_platform_images)
 prefer_external_workload_images = true
 node_image = $(quote_hcl "${baked_node_image}")
 external_workload_image_refs = {
-  sentiment-api                        = $(quote_hcl "${cache_host}/platform/sentiment-api:latest")
-  sentiment-auth-ui                    = $(quote_hcl "${cache_host}/platform/sentiment-auth-ui:latest")
-  subnetcalc-api-fastapi-container-app = $(quote_hcl "${cache_host}/platform/subnetcalc-api-fastapi-container-app:latest")
-  subnetcalc-apim-simulator            = $(quote_hcl "${cache_host}/platform/subnetcalc-apim-simulator:latest")
-  platform-mcp                         = $(quote_hcl "${cache_host}/platform/platform-mcp:${platform_mcp_image_tag}")
-  subnetcalc-frontend-react            = $(quote_hcl "${cache_host}/platform/subnetcalc-frontend-react:latest")
-  subnetcalc-frontend-typescript-vite  = $(quote_hcl "${cache_host}/platform/subnetcalc-frontend-typescript-vite:latest")
+$(image_catalog_hcl_refs workload "${cache_host}" "${image_namespace}" "platform-mcp=${platform_mcp_image_tag}")
 }
 EOF
       ;;

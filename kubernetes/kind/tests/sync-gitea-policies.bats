@@ -413,6 +413,34 @@ EOF
   grep -Fq "image: host.docker.internal:5002/platform/signoz-auth-proxy:dev" "${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
 }
 
+@test "sync-gitea-policies can load render inputs from a GitOps render contract" {
+  contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
+  cat >"${contract_file}" <<'EOF'
+{
+  "enable_backstage": false,
+  "enable_prometheus": true,
+  "enable_grafana": true,
+  "enable_app_repo_sentiment": true,
+  "prefer_external_images": true,
+  "external_sentiment_api": "host.docker.internal:5002/platform/sentiment-api:contract",
+  "external_sentiment_ui": "host.docker.internal:5002/platform/sentiment-auth-ui:contract",
+  "prefer_external_platform": true,
+  "external_platform_backstage": "host.docker.internal:5002/platform/backstage:contract",
+  "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:contract",
+  "grafana_image_registry": "host.docker.internal:5002",
+  "grafana_image_repository": "platform/grafana-victorialogs",
+  "grafana_image_tag": "contract",
+  "grafana_victoria_logs_plugin_url": "",
+  "grafana_liveness_initial_delay_seconds": 111
+}
+EOF
+
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; printf '%s\n' \"\$ENABLE_BACKSTAGE\" \"\$ENABLE_PROMETHEUS\" \"\$ENABLE_GRAFANA\" \"\$ENABLE_APP_REPO_SENTIMENT\" \"\$PREFER_EXTERNAL_WORKLOAD_IMAGES\" \"\$EXTERNAL_IMAGE_SENTIMENT_API\" \"\$PREFER_EXTERNAL_PLATFORM_IMAGES\" \"\$EXTERNAL_PLATFORM_IMAGE_BACKSTAGE\" \"\$GRAFANA_IMAGE_REPOSITORY\" \"\$GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'false\ntrue\ntrue\ntrue\ntrue\nhost.docker.internal:5002/platform/sentiment-api:contract\ntrue\nhost.docker.internal:5002/platform/backstage:contract\nplatform/grafana-victorialogs\n111')" ]
+}
+
 @test "render_grafana_application_manifest injects Grafana image and plugin values" {
   app_file="${BATS_TEST_TMPDIR}/95-grafana.application.yaml"
 

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,6 +41,80 @@ type menuItem struct {
 	Value string
 }
 
+type workflowOptions struct {
+	Variants              []variantOption        `json:"variants"`
+	Stages                []stageOption          `json:"stages"`
+	ActionMetadata        []actionOption         `json:"action_metadata"`
+	Apps                  []string               `json:"apps"`
+	AppMetadata           []appOption            `json:"app_metadata"`
+	Presets               []presetOption         `json:"presets"`
+	GuidedSurfaceProfiles []guidedSurfaceProfile `json:"guided_surface_profiles"`
+	UIRules               uiRules                `json:"ui_rules"`
+}
+
+type variantOption struct {
+	ID                string `json:"id"`
+	Path              string `json:"path"`
+	Label             string `json:"label"`
+	GuidedLabel       string `json:"guided_label"`
+	GuidedDescription string `json:"guided_description"`
+}
+
+type stageOption struct {
+	ID             string `json:"id"`
+	Label          string `json:"label"`
+	Shortcut       string `json:"shortcut"`
+	AppToggles     bool   `json:"app_toggles"`
+	GuidedHint     string `json:"guided_hint"`
+	StageDeltaHint string `json:"stage_delta_hint"`
+}
+
+type actionOption struct {
+	ID                 string `json:"id"`
+	Label              string `json:"label"`
+	GuidedLabel        string `json:"guided_label"`
+	GuidedDescription  string `json:"guided_description"`
+	UsesAutoApprove    bool   `json:"uses_auto_approve"`
+	SupportsAppToggles bool   `json:"supports_app_toggles"`
+}
+
+type appOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+type guidedSurfaceProfile struct {
+	ID          string            `json:"id"`
+	Label       string            `json:"label"`
+	Variant     string            `json:"variant"`
+	Stage       string            `json:"stage"`
+	Presets     map[string]string `json:"presets"`
+	Description string            `json:"description"`
+}
+
+type presetOption struct {
+	ID      string                 `json:"id"`
+	Group   string                 `json:"group"`
+	Overlay map[string]interface{} `json:"overlay"`
+}
+
+type uiRules struct {
+	GuidedProfileOrder     []string              `json:"guided_profile_order"`
+	GuidedActionOrder      []string              `json:"guided_action_order"`
+	AppToggleStages        []string              `json:"app_toggle_stages"`
+	AppToggleActions       []string              `json:"app_toggle_actions"`
+	AppToggleHiddenHint    string                `json:"app_toggle_hidden_hint"`
+	AppToggleAvailableHint string                `json:"app_toggle_available_hint"`
+	NextApplyStages        map[string][]string   `json:"next_apply_stages_by_stage"`
+	PlatformSurfaces       []platformSurfaceFact `json:"platform_surfaces"`
+}
+
+type platformSurfaceFact struct {
+	Name  string `json:"name"`
+	Kind  string `json:"kind"`
+	Stage string `json:"stage"`
+}
+
 var commandPreviewStyle = lipgloss.NewStyle().
 	Bold(true).
 	Foreground(lipgloss.Color("81"))
@@ -65,17 +141,18 @@ type runOutputMsg struct {
 type elapsedTickMsg time.Time
 
 type Model struct {
-	cfg Config
+	cfg     Config
+	options workflowOptions
 
 	screen screen
 	cursor int
 
-	variant                   string
+	variant                  string
 	stage                    string
 	stageLabel               string
 	action                   string
-	sentiment                string
-	subnetcalc               string
+	appIndex                 int
+	appOverrides             map[string]string
 	presetResourceProfile    string
 	presetImageDistribution  string
 	presetNetworkProfile     string
@@ -113,11 +190,112 @@ func New(cfg Config) Model {
 	outputViewport.Style = outputViewportStyle
 	return Model{
 		cfg:            cfg,
+		options:        loadWorkflowOptions(cfg),
 		screen:         screenTarget,
+		appOverrides:   map[string]string{},
 		outputViewport: outputViewport,
 		autoFollow:     true,
 		width:          80,
 		height:         24,
+	}
+}
+
+func loadWorkflowOptions(cfg Config) workflowOptions {
+	for _, path := range workflowOptionsPaths(cfg) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if options, ok := parseWorkflowOptions(data); ok {
+			return options
+		}
+	}
+	if options, ok := loadWorkflowOptionsFromScript(cfg); ok {
+		return options
+	}
+	return fallbackWorkflowOptions()
+}
+
+func workflowOptionsPaths(cfg Config) []string {
+	rel := filepath.Join("kubernetes", "workflow", "options.json")
+	paths := []string{}
+	if strings.TrimSpace(cfg.RepoRoot) != "" {
+		paths = append(paths, filepath.Join(cfg.RepoRoot, rel))
+	}
+	paths = append(paths, rel)
+	if cwd, err := os.Getwd(); err == nil {
+		for dir := cwd; ; dir = filepath.Dir(dir) {
+			paths = append(paths, filepath.Join(dir, rel))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+		}
+	}
+	return paths
+}
+
+func parseWorkflowOptions(data []byte) (workflowOptions, bool) {
+	var options workflowOptions
+	if err := json.Unmarshal(data, &options); err != nil {
+		return workflowOptions{}, false
+	}
+	if len(options.Variants) == 0 || len(options.Stages) == 0 || len(options.ActionMetadata) == 0 {
+		return workflowOptions{}, false
+	}
+	if len(options.Apps) == 0 {
+		options.Apps = []string{"sentiment", "subnetcalc"}
+	}
+	return options, true
+}
+
+func loadWorkflowOptionsFromScript(cfg Config) (workflowOptions, bool) {
+	cmd := exec.Command(cfg.WorkflowScript, "options", "--execute", "--output", "json")
+	if strings.TrimSpace(cfg.RepoRoot) != "" {
+		cmd.Dir = cfg.RepoRoot
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return workflowOptions{}, false
+	}
+	return parseWorkflowOptions(out)
+}
+
+func fallbackWorkflowOptions() workflowOptions {
+	return workflowOptions{
+		Variants: []variantOption{
+			{ID: "kind", Path: "kubernetes/kind", Label: "kind"},
+			{ID: "lima", Path: "kubernetes/lima", Label: "lima"},
+			{ID: "slicer", Path: "kubernetes/slicer", Label: "slicer"},
+		},
+		Stages: []stageOption{
+			{ID: "100", Label: "cluster", Shortcut: "1", GuidedHint: "1 selects 100 cluster: create or inspect the base local cluster."},
+			{ID: "200", Label: "cilium", Shortcut: "2", GuidedHint: "2 selects 200 cilium: install networking before higher platform services."},
+			{ID: "300", Label: "hubble", Shortcut: "3", GuidedHint: "3 selects 300 hubble: add Cilium observability."},
+			{ID: "400", Label: "argocd", Shortcut: "4", GuidedHint: "4 selects 400 argocd: install GitOps control plane."},
+			{ID: "500", Label: "gitea", Shortcut: "5", GuidedHint: "5 selects 500 gitea: add the internal Git server."},
+			{ID: "600", Label: "policies", Shortcut: "6", GuidedHint: "6 selects 600 policies: apply cluster policies before app repos."},
+			{ID: "700", Label: "app-repos", Shortcut: "7", AppToggles: true, GuidedHint: "7 selects 700 app repos: app toggles start here because app repos exist."},
+			{ID: "800", Label: "observability", Shortcut: "8", AppToggles: true, GuidedHint: "8 selects 800 observability: app toggles remain available for workload coverage."},
+			{ID: "900", Label: "sso", Shortcut: "9", AppToggles: true, GuidedHint: "9 selects 900 sso: app toggles remain available for end-to-end local apps."},
+		},
+		ActionMetadata: []actionOption{
+			{ID: "readiness", Label: "readiness"},
+			{ID: "plan", Label: "plan", SupportsAppToggles: true},
+			{ID: "apply", Label: "apply", UsesAutoApprove: true, SupportsAppToggles: true},
+			{ID: "status", Label: "status"},
+			{ID: "show-urls", Label: "show-urls"},
+			{ID: "check-health", Label: "check-health", SupportsAppToggles: true},
+			{ID: "check-security", Label: "check-security", SupportsAppToggles: true},
+			{ID: "check-rbac", Label: "check-rbac", SupportsAppToggles: true},
+		},
+		Apps: []string{"sentiment", "subnetcalc"},
+		UIRules: uiRules{
+			AppToggleStages:        []string{"700", "800", "900"},
+			AppToggleActions:       []string{"plan", "apply", "check-health", "check-security", "check-rbac"},
+			AppToggleHiddenHint:    "Stages 100-600 hide app toggles because apps are not contained until stage 700.",
+			AppToggleAvailableHint: "App overrides are offered only from stage 700 onward, after app repositories exist.",
+		},
 	}
 }
 
@@ -212,7 +390,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.selectCurrent()
 	}
 	if m.screen == screenStage && len(msg.Runes) == 1 {
-		if value, ok := stageShortcutValue(msg.Runes[0], m.variant); ok {
+		if value, ok := m.stageShortcutValue(msg.Runes[0]); ok {
 			return m.selectItemValue(value)
 		}
 	}
@@ -284,7 +462,9 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 		}
 		m.action = item.Value
 		m.cursor = 0
-		if m.hasAppToggles() && actionSupportsAppToggles(m.action) {
+		if m.hasAppToggles() && m.actionSupportsAppToggles(m.action) {
+			m.appIndex = 0
+			m.appOverrides = map[string]string{}
 			m.screen = screenSentiment
 			return m, nil
 		}
@@ -296,15 +476,9 @@ func (m Model) selectCurrent() (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 	case screenSentiment:
-		m.sentiment = item.Value
-		m.screen = screenSubnetcalc
-		m.cursor = 0
-		return m, nil
+		return m.selectAppOverride(item.Value)
 	case screenSubnetcalc:
-		m.subnetcalc = item.Value
-		m.screen = screenPreview
-		m.cursor = 0
-		return m, m.loadPreviewCmd()
+		return m.selectAppOverride(item.Value)
 	case screenPreview:
 		switch item.Value {
 		case "run":
@@ -349,14 +523,25 @@ func (m Model) back() Model {
 	case screenSentiment:
 		m.screen = screenAction
 	case screenSubnetcalc:
-		m.screen = screenSentiment
+		if m.appIndex > 1 {
+			m.appIndex--
+			m.screen = screenSubnetcalc
+		} else {
+			m.appIndex = 0
+			m.screen = screenSentiment
+		}
 	case screenPreview:
 		if m.action == "reset" || m.action == "state-reset" {
 			m.screen = screenStage
-		} else if !m.hasAppToggles() || !actionSupportsAppToggles(m.action) {
+		} else if !m.hasAppToggles() || !m.actionSupportsAppToggles(m.action) {
 			m.screen = screenAction
 		} else {
-			m.screen = screenSubnetcalc
+			if len(m.options.Apps) <= 1 {
+				m.screen = screenSentiment
+			} else {
+				m.appIndex = len(m.options.Apps) - 1
+				m.screen = screenSubnetcalc
+			}
 		}
 	}
 	return m
@@ -441,53 +626,62 @@ func (m *Model) resizeOutputViewport() {
 func (m Model) items() []menuItem {
 	switch m.screen {
 	case screenTarget:
-		return []menuItem{
-			{Label: "kind", Value: "kind"},
-			{Label: "lima", Value: "lima"},
-			{Label: "slicer", Value: "slicer"},
-			{Label: "Status", Value: "status"},
-			{Label: "Quit", Value: "quit"},
+		items := make([]menuItem, 0, len(m.options.Variants)+2)
+		for _, variant := range m.options.Variants {
+			label := variant.Label
+			if label == "" {
+				label = variant.ID
+			}
+			items = append(items, menuItem{Label: label, Value: variant.ID})
 		}
+		items = append(items, menuItem{Label: "Status", Value: "status"}, menuItem{Label: "Quit", Value: "quit"})
+		return items
 	case screenStage:
-		items := []menuItem{
-			{Label: "100 cluster", Value: "100"},
-			{Label: "200 cilium", Value: "200"},
-			{Label: "300 hubble", Value: "300"},
-			{Label: "400 argocd", Value: "400"},
-			{Label: "500 gitea", Value: "500"},
-			{Label: "600 policies", Value: "600"},
-			{Label: "700 app repos", Value: "700"},
-			{Label: "800 observability", Value: "800"},
-			{Label: "900 sso", Value: "900"},
+		items := make([]menuItem, 0, len(m.options.Stages)+2)
+		for _, stage := range m.options.Stages {
+			items = append(items, menuItem{Label: fmt.Sprintf("%s %s", stage.ID, strings.ReplaceAll(stage.Label, "-", " ")), Value: stage.ID})
 		}
 		items = append(items, menuItem{Label: "Reset variant", Value: "reset"})
 		items = append(items, menuItem{Label: "Terraform state reset", Value: "state-reset"})
 		return withNavigation(items)
 	case screenAction:
-		return withNavigation([]menuItem{
-			{Label: "Preset bundle", Value: "preset"},
-			{Label: "readiness", Value: "readiness"},
-			{Label: "plan", Value: "plan"},
-			{Label: "apply", Value: "apply"},
-			{Label: "status", Value: "status"},
-			{Label: "show-urls", Value: "show-urls"},
-			{Label: "check-health", Value: "check-health"},
-			{Label: "check-security", Value: "check-security"},
-			{Label: "check-rbac", Value: "check-rbac"},
-		})
+		items := []menuItem{{Label: "Preset bundle", Value: "preset"}}
+		for _, action := range m.options.ActionMetadata {
+			if action.ID == "reset" || action.ID == "state-reset" {
+				continue
+			}
+			label := action.Label
+			if label == "" {
+				label = action.ID
+			}
+			items = append(items, menuItem{Label: label, Value: action.ID})
+		}
+		return withNavigation(items)
 	case screenPreset:
-		return withNavigation([]menuItem{
-			{Label: "Stage defaults", Value: "default"},
-			{Label: "Minimal local", Value: "minimal"},
-			{Label: "IDP demo", Value: "local-idp-12gb"},
-			{Label: "No reference apps", Value: "no-reference-apps"},
-			{Label: "Local cache", Value: "local-cache"},
-			{Label: "Airplane", Value: "airplane"},
-		})
+		items := make([]menuItem, 0, len(m.options.GuidedSurfaceProfiles))
+		profilesByID := make(map[string]guidedSurfaceProfile, len(m.options.GuidedSurfaceProfiles))
+		for _, profile := range m.options.GuidedSurfaceProfiles {
+			profilesByID[profile.ID] = profile
+		}
+		seen := map[string]bool{}
+		for _, id := range m.options.UIRules.GuidedProfileOrder {
+			profile, ok := profilesByID[id]
+			if !ok {
+				continue
+			}
+			items = append(items, menuItem{Label: profile.Label, Value: profile.ID})
+			seen[id] = true
+		}
+		for _, profile := range m.options.GuidedSurfaceProfiles {
+			if !seen[profile.ID] {
+				items = append(items, menuItem{Label: profile.Label, Value: profile.ID})
+			}
+		}
+		return withNavigation(items)
 	case screenSentiment:
-		return withNavigation(appItems("sentiment", m.appDefault("sentiment")))
+		return withNavigation(appItems(m.currentApp(), m.appDefault(m.currentApp())))
 	case screenSubnetcalc:
-		return withNavigation(appItems("subnetcalc", m.appDefault("subnetcalc")))
+		return withNavigation(appItems(m.currentApp(), m.appDefault(m.currentApp())))
 	case screenPreview:
 		items := []menuItem{
 			{Label: "Execute", Value: "run"},
@@ -507,17 +701,7 @@ func (m Model) nextItems() []menuItem {
 	if !m.runSucceeded || m.action != "apply" {
 		return nil
 	}
-	var stages []string
-	switch m.stage {
-	case "500":
-		stages = []string{"600", "900"}
-	case "600":
-		stages = []string{"700", "800", "900"}
-	case "700":
-		stages = []string{"800", "900"}
-	case "800":
-		stages = []string{"900"}
-	}
+	stages := m.options.UIRules.NextApplyStages[m.stage]
 	items := make([]menuItem, 0, len(stages))
 	for _, stage := range stages {
 		items = append(items, menuItem{
@@ -532,29 +716,14 @@ func stageDisplay(stage string) string {
 	return stage
 }
 
-func stageShortcutValue(shortcut rune, variant string) (string, bool) {
-	switch shortcut {
-	case '1':
-		return "100", true
-	case '2':
-		return "200", true
-	case '3':
-		return "300", true
-	case '4':
-		return "400", true
-	case '5':
-		return "500", true
-	case '6':
-		return "600", true
-	case '7':
-		return "700", true
-	case '8':
-		return "800", true
-	case '9':
-		return "900", true
-	default:
-		return "", false
+func (m Model) stageShortcutValue(shortcut rune) (string, bool) {
+	value := string(shortcut)
+	for _, stage := range m.options.Stages {
+		if stage.Shortcut == value {
+			return stage.ID, true
+		}
 	}
+	return "", false
 }
 
 func (m Model) selectNext(value string) (tea.Model, tea.Cmd) {
@@ -562,8 +731,8 @@ func (m Model) selectNext(value string) (tea.Model, tea.Cmd) {
 	m.stage = stage
 	m.stageLabel = stageDisplay(stage)
 	m.action = "apply"
-	m.sentiment = ""
-	m.subnetcalc = ""
+	m.appIndex = 0
+	m.appOverrides = map[string]string{}
 	m.previewCommand = ""
 	m.status = ""
 	m.errText = ""
@@ -572,6 +741,42 @@ func (m Model) selectNext(value string) (tea.Model, tea.Cmd) {
 		m.lastRunOutput = m.runOutput
 	}
 	m.autoFollow = true
+	m.screen = screenPreview
+	m.cursor = 0
+	return m, m.loadPreviewCmd()
+}
+
+func (m Model) currentApp() string {
+	if len(m.options.Apps) == 0 {
+		return ""
+	}
+	if m.appIndex < 0 {
+		return m.options.Apps[0]
+	}
+	if m.appIndex >= len(m.options.Apps) {
+		return m.options.Apps[len(m.options.Apps)-1]
+	}
+	return m.options.Apps[m.appIndex]
+}
+
+func (m Model) selectAppOverride(value string) (tea.Model, tea.Cmd) {
+	app := m.currentApp()
+	if m.appOverrides == nil {
+		m.appOverrides = map[string]string{}
+	}
+	if app != "" {
+		m.appOverrides[app] = value
+	}
+	m.appIndex++
+	if m.appIndex < len(m.options.Apps) {
+		if m.appIndex == 0 {
+			m.screen = screenSentiment
+		} else {
+			m.screen = screenSubnetcalc
+		}
+		m.cursor = 0
+		return m, nil
+	}
 	m.screen = screenPreview
 	m.cursor = 0
 	return m, m.loadPreviewCmd()
@@ -606,69 +811,66 @@ func (m *Model) applyPresetBundle(bundle string) {
 	m.presetAppSet = ""
 	m.customWorkerCount = ""
 	m.customNodeImage = ""
-	switch bundle {
-	case "minimal":
-		m.presetResourceProfile = "minimal"
-		m.presetImageDistribution = "pull"
-		m.presetNetworkProfile = "cilium"
-		m.presetAppSet = "no-reference-apps"
-	case "local-idp-12gb":
-		m.presetResourceProfile = "local-idp-12gb"
-		m.presetImageDistribution = "local-cache"
-		m.presetNetworkProfile = "cilium"
-	case "no-reference-apps":
-		m.presetAppSet = "no-reference-apps"
-	case "local-cache":
-		m.presetImageDistribution = "local-cache"
-	case "airplane":
-		m.presetResourceProfile = "airplane"
-		m.presetImageDistribution = "airplane"
-		m.presetNetworkProfile = "cilium"
-	}
-}
-
-func stageDefault(stage, app string) bool {
-	switch stage {
-	case "700", "800", "900":
-		return true
-	default:
-		return false
+	for _, profile := range m.options.GuidedSurfaceProfiles {
+		if profile.ID != bundle {
+			continue
+		}
+		if profile.Variant != "" {
+			m.variant = profile.Variant
+		}
+		if profile.Stage != "" {
+			m.stage = profile.Stage
+			m.stageLabel = stageDisplay(profile.Stage)
+		}
+		m.presetResourceProfile = profile.Presets["resource_profile"]
+		m.presetImageDistribution = profile.Presets["image_distribution"]
+		m.presetNetworkProfile = profile.Presets["network_profile"]
+		m.presetObservabilityStack = profile.Presets["observability_stack"]
+		m.presetIdentityStack = profile.Presets["identity_stack"]
+		m.presetAppSet = profile.Presets["app_set"]
+		return
 	}
 }
 
 func (m Model) appDefault(app string) bool {
-	switch m.presetAppSet {
-	case "reference-apps":
-		return true
-	case "no-reference-apps":
-		return false
-	case "sentiment-only":
-		return app == "sentiment"
-	default:
-		return stageDefault(m.stage, app)
+	tfvar := appTFVarName(app)
+	for _, preset := range m.options.Presets {
+		if preset.Group != "app_set" || preset.ID != m.presetAppSet || preset.Overlay == nil {
+			continue
+		}
+		if value, ok := preset.Overlay[tfvar].(bool); ok {
+			return value
+		}
 	}
+	return m.hasAppToggles()
 }
 
 func (m Model) hasAppToggles() bool {
-	return stageHasAppToggles(m.stage)
+	for _, stage := range m.options.UIRules.AppToggleStages {
+		if stage == m.stage {
+			return true
+		}
+	}
+	for _, stage := range m.options.Stages {
+		if stage.ID == m.stage {
+			return stage.AppToggles
+		}
+	}
+	return false
 }
 
-func actionSupportsAppToggles(action string) bool {
-	switch action {
-	case "plan", "apply", "check-health", "check-security", "check-rbac":
-		return true
-	default:
-		return false
+func (m Model) actionSupportsAppToggles(action string) bool {
+	for _, allowed := range m.options.UIRules.AppToggleActions {
+		if allowed == action {
+			return true
+		}
 	}
-}
-
-func stageHasAppToggles(stage string) bool {
-	switch stage {
-	case "700", "800", "900":
-		return true
-	default:
-		return false
+	for _, option := range m.options.ActionMetadata {
+		if option.ID == action {
+			return option.SupportsAppToggles
+		}
 	}
+	return false
 }
 
 func (m Model) workflowArgs(subcommand string) []string {
@@ -701,16 +903,25 @@ func (m Model) workflowArgs(subcommand string) []string {
 	if m.customNodeImage != "" {
 		args = append(args, "--set", "node_image="+m.customNodeImage)
 	}
-	if m.sentiment != "" && m.sentiment != appDefaultOverride("sentiment", m.appDefault("sentiment")) {
-		args = append(args, "--app", m.sentiment)
+	for _, app := range m.options.Apps {
+		override := m.appOverrides[app]
+		if override != "" && override != appDefaultOverride(app, m.appDefault(app)) {
+			args = append(args, "--app", override)
+		}
 	}
-	if m.subnetcalc != "" && m.subnetcalc != appDefaultOverride("subnetcalc", m.appDefault("subnetcalc")) {
-		args = append(args, "--app", m.subnetcalc)
-	}
-	if m.action == "apply" || m.action == "reset" || m.action == "state-reset" {
+	if m.actionUsesAutoApprove(m.action) {
 		args = append(args, "--auto-approve")
 	}
 	return args
+}
+
+func (m Model) actionUsesAutoApprove(action string) bool {
+	for _, option := range m.options.ActionMetadata {
+		if option.ID == action {
+			return option.UsesAutoApprove
+		}
+	}
+	return action == "apply" || action == "reset" || action == "state-reset"
 }
 
 func appDefaultOverride(app string, enabled bool) string {
@@ -718,6 +929,10 @@ func appDefaultOverride(app string, enabled bool) string {
 		return app + "=on"
 	}
 	return app + "=off"
+}
+
+func appTFVarName(app string) string {
+	return "enable_app_repo_" + strings.ReplaceAll(app, "-", "_")
 }
 
 func (m Model) loadPreviewCmd() tea.Cmd {
@@ -980,6 +1195,9 @@ func (m Model) inlineHint() string {
 	case screenPreset:
 		return "Preset bundles set the same workflow --preset overlays as the browser UI."
 	case screenSentiment, screenSubnetcalc:
+		if m.options.UIRules.AppToggleAvailableHint != "" {
+			return m.options.UIRules.AppToggleAvailableHint
+		}
 		return "App overrides are offered only from stage 700 onward, after app repositories exist."
 	case screenPreview:
 		if item.Value == "run" {
@@ -1001,6 +1219,11 @@ func (m Model) selectedItem() menuItem {
 }
 
 func (m Model) stageHint(item menuItem) string {
+	if item.Value != "reset" && item.Value != "state-reset" {
+		if stage, ok := m.stageOption(item.Value); ok && stage.GuidedHint != "" {
+			return stage.GuidedHint
+		}
+	}
 	switch item.Value {
 	case "100":
 		return "1 selects 100 cluster: create or inspect the base local cluster."
@@ -1025,6 +1248,9 @@ func (m Model) stageHint(item menuItem) string {
 	case "state-reset":
 		return "t resets Terraform state for the selected variant."
 	default:
+		if m.options.UIRules.AppToggleHiddenHint != "" {
+			return m.options.UIRules.AppToggleHiddenHint
+		}
 		return "Stages 100-600 hide app toggles because apps are not contained until stage 700."
 	}
 }
@@ -1034,9 +1260,28 @@ func (m Model) actionHint(item menuItem) string {
 		return "Choose optional preset overlays before selecting plan, apply, or a read-only helper."
 	}
 	if !m.hasAppToggles() {
-		return fmt.Sprintf("%s on stage %s skips app toggles; app choices appear at stages 700, 800, and 900.", item.Label, stageDisplay(m.stage))
+		return fmt.Sprintf("%s on stage %s skips app toggles; %s", item.Label, stageDisplay(m.stage), appToggleStageSummary(m.options.UIRules.AppToggleStages))
 	}
 	return fmt.Sprintf("%s on stage %s can include app toggle overrides before preview.", item.Label, stageDisplay(m.stage))
+}
+
+func (m Model) stageOption(stageID string) (stageOption, bool) {
+	for _, stage := range m.options.Stages {
+		if stage.ID == stageID {
+			return stage, true
+		}
+	}
+	return stageOption{}, false
+}
+
+func appToggleStageSummary(stages []string) string {
+	if len(stages) == 0 {
+		return "app choices are unavailable for this stage."
+	}
+	if len(stages) == 1 {
+		return "app choices appear at stage " + stages[0] + "."
+	}
+	return "app choices appear at stages " + strings.Join(stages[:len(stages)-1], ", ") + ", and " + stages[len(stages)-1] + "."
 }
 
 func (m Model) elapsedText() string {

@@ -12,6 +12,14 @@ resource "local_sensitive_file" "policies_repo_private_key" {
   depends_on           = [tls_private_key.policies_repo]
 }
 
+resource "local_file" "gitops_render_contract" {
+  count                = local.enable_gitops_repo ? 1 : 0
+  filename             = "${local.run_dir}/gitops-render-contract.json"
+  content              = jsonencode(local.policies_repo_render_contract)
+  file_permission      = "0644"
+  directory_permission = "0700"
+}
+
 resource "null_resource" "sync_gitea_policies_repo" {
   count = local.enable_gitops_repo ? 1 : 0
 
@@ -29,6 +37,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
     command = "bash \"${local.stack_dir}/scripts/sync-gitea-policies.sh\" --execute"
     environment = {
       STACK_DIR                                     = local.stack_dir
+      GITOPS_RENDER_CONTRACT_FILE                   = local_file.gitops_render_contract[0].filename
       GITEA_LOCAL_ACCESS_MODE                       = local.gitea_local_access_mode_effective
       GITEA_HTTP_NODE_PORT                          = tostring(var.gitea_http_node_port)
       GITEA_HTTP_BASE                               = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
@@ -129,6 +138,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
     kubectl_manifest.argocd_app_gitea,
     null_resource.gitea_org,
     local_sensitive_file.policies_repo_private_key,
+    local_file.gitops_render_contract,
   ]
 }
 

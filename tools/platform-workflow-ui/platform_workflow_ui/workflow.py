@@ -11,25 +11,27 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-APP_STAGES = {"700", "800", "900"}
+DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
+WORKFLOW_OPTIONS_PATH = DEFAULT_REPO_ROOT / "kubernetes" / "workflow" / "options.json"
+
+
+def load_workflow_options(repo_root: Path | None = None) -> dict[str, Any]:
+    path = (repo_root or DEFAULT_REPO_ROOT) / "kubernetes" / "workflow" / "options.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+WORKFLOW_OPTIONS = load_workflow_options()
+APP_STAGES = {stage["id"] for stage in WORKFLOW_OPTIONS.get("stages", []) if stage.get("app_toggles")}
 PRESET_FIELD_GROUPS = {
-    "preset_resource_profile": "resource-profile",
-    "preset_image_distribution": "image-distribution",
-    "preset_network_profile": "network-profile",
-    "preset_observability_stack": "observability-stack",
-    "preset_identity_stack": "identity-stack",
-    "preset_app_set": "app-set",
+    f"preset_{group['id']}": group["id"].replace("_", "-") for group in WORKFLOW_OPTIONS.get("preset_groups", [])
 }
 CUSTOM_OVERRIDE_FIELDS = {
     "custom_worker_count": "worker_count",
     "custom_node_image": "node_image",
     "custom_enable_backstage": "enable_backstage",
 }
-VARIANT_TARGETS = {
-    "kubernetes/kind": "kind",
-    "kubernetes/lima": "lima",
-    "kubernetes/slicer": "slicer",
-}
+VARIANT_TARGETS = {variant["path"]: variant["id"] for variant in WORKFLOW_OPTIONS.get("variants", [])}
+NEXT_APPLY_STAGES = WORKFLOW_OPTIONS.get("ui_rules", {}).get("next_apply_stages_by_stage", {})
 
 
 def variant_to_target(variant: str) -> str:
@@ -41,30 +43,24 @@ def stage_has_app_toggles(stage: str) -> bool:
 
 
 def stage_default(stage: str, app: str) -> bool:
-    return stage in {"700", "800", "900"}
+    return stage in APP_STAGES
 
 
 def app_default(payload: dict[str, Any], app: str) -> bool:
     app_set = str(payload.get("preset_app_set") or "default")
-    if app_set == "reference-apps":
-        return True
-    if app_set == "no-reference-apps":
-        return False
-    if app_set == "sentiment-only":
-        return app == "sentiment"
+    tfvar_name = f"enable_app_repo_{app.replace('-', '_')}"
+    for preset in WORKFLOW_OPTIONS.get("presets", []):
+        if preset.get("group") == "app_set" and preset.get("id") == app_set:
+            overlay = preset.get("overlay", {})
+            if tfvar_name in overlay:
+                return bool(overlay[tfvar_name])
     return stage_default(str(payload.get("stage") or "900"), app)
 
 
 def next_stages(variant: str, stage: str, action: str, succeeded: bool) -> list[str]:
     if not succeeded or action != "apply":
         return []
-    stages_by_current = {
-        "500": ["600", "900"],
-        "600": ["700", "800", "900"],
-        "700": ["800", "900"],
-        "800": ["900"],
-    }
-    stages = stages_by_current.get(stage, [])
+    stages = NEXT_APPLY_STAGES.get(stage, [])
     return stages
 
 
@@ -95,12 +91,17 @@ def build_workflow_args(payload: dict[str, Any], *, subcommand: str, standard_fl
         if value:
             args.extend(["--set", f"{option}={value}"])
     if stage_has_app_toggles(str(payload.get("stage") or "900")):
-        for app in ("sentiment", "subnetcalc"):
+        for app in WORKFLOW_OPTIONS.get("apps", []):
             value = str(payload.get(app) or "")
             default_value = "on" if app_default(payload, app) else "off"
             if value and value != default_value:
                 args.extend(["--app", f"{app}={value}"])
-    if payload.get("auto_approve") and str(payload.get("action") or "") in {"apply", "reset", "state-reset"}:
+    action_uses_auto_approve = {
+        action["id"]
+        for action in WORKFLOW_OPTIONS.get("action_metadata", [])
+        if action.get("uses_auto_approve")
+    }
+    if payload.get("auto_approve") and str(payload.get("action") or "") in action_uses_auto_approve:
         args.append("--auto-approve")
     return args
 

@@ -185,6 +185,7 @@ setup() {
   [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
   [[ "${output}" == *'--optional-file "${PLATFORM_BASE_TFVARS:-}" --optional-file "${PLATFORM_TFVARS:-}"'* ]]
   [[ "${output}" == *'operator-overrides.tfvars"'* ]]
+  [[ "${output}" == *'KUBECONFIG="'* ]]
   [[ "${output}" == *'check-app.sh" --execute $vf --app "${APP}"'* ]]
 }
 
@@ -217,6 +218,13 @@ setup() {
 
 @test "kind check-gateway-urls uses the split kind kubeconfig" {
   run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-gateway-urls.sh" $(READONLY_MODE_FLAG) $$vf' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind check-app uses the split kind kubeconfig" {
+  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-app.sh" $(READONLY_MODE_FLAG) $$vf --app "$${APP}"' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

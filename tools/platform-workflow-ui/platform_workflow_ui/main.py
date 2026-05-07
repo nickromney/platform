@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from platform_workflow_ui.workflow import (
     JobStore,
+    WORKFLOW_OPTIONS,
     build_workflow_args,
     parse_preview,
     run_inventory_json,
@@ -30,28 +31,32 @@ from platform_workflow_ui.workflow import (
 
 
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
-STAGES = [
-    ("100", "cluster"),
-    ("200", "cilium"),
-    ("300", "hubble"),
-    ("400", "argocd"),
-    ("500", "gitea"),
-    ("600", "policies"),
-    ("700", "app repos"),
-    ("800", "observability"),
-    ("900", "sso"),
+UI_RULES = WORKFLOW_OPTIONS.get("ui_rules", {})
+STAGE_METADATA = {stage["id"]: stage for stage in WORKFLOW_OPTIONS["stages"]}
+ACTION_METADATA = {action["id"]: action for action in WORKFLOW_OPTIONS.get("action_metadata", [])}
+STAGES = [(stage["id"], str(stage.get("label", stage["id"])).replace("-", " ")) for stage in WORKFLOW_OPTIONS["stages"]]
+ACTIONS = [
+    action["id"]
+    for action in WORKFLOW_OPTIONS.get("action_metadata", [])
+    if action["id"] != "reset"
 ]
-ACTIONS = ["readiness", "plan", "apply", "status", "show-urls", "check-health", "check-security", "check-rbac", "state-reset"]
-VARIANTS = ["kubernetes/kind", "kubernetes/lima", "kubernetes/slicer"]
+VARIANTS = [variant["path"] for variant in WORKFLOW_OPTIONS["variants"]]
+VARIANT_METADATA = {variant["path"]: variant for variant in WORKFLOW_OPTIONS["variants"]}
+PRESET_LABELS = {
+    (preset["group"], preset["id"]): preset.get("label", preset["id"]) for preset in WORKFLOW_OPTIONS.get("presets", [])
+}
 PRESET_GROUPS = [
-    ("preset_resource_profile", "Resource profile", [("default", "Stage default"), ("minimal", "Minimal"), ("local-12gb", "Local 12 GB"), ("local-idp-12gb", "Local IDP 12 GB"), ("airplane", "Airplane")]),
-    ("preset_image_distribution", "Image distribution", [("default", "Stage default"), ("pull", "Pull"), ("local-cache", "Local cache"), ("preload", "Preload"), ("baked", "Baked"), ("airplane", "Airplane")]),
-    ("preset_network_profile", "Network profile", [("default", "Stage default"), ("cilium", "Cilium"), ("default-cni", "Default CNI")]),
-    ("preset_observability_stack", "Observability stack", [("default", "Stage default"), ("victoria", "VictoriaLogs"), ("lgtm", "LGTM"), ("minimal-observability", "Minimal"), ("none", "None")]),
-    ("preset_identity_stack", "Identity stack", [("default", "Stage default"), ("keycloak", "Keycloak"), ("dex", "Dex")]),
-    ("preset_app_set", "App set", [("default", "Stage default"), ("reference-apps", "Reference apps"), ("no-reference-apps", "No reference apps"), ("sentiment-only", "Sentiment only")]),
+    (
+        f"preset_{group['id']}",
+        group["label"],
+        [(preset_id, PRESET_LABELS.get((group["id"], preset_id), preset_id)) for preset_id in group["presets"]],
+    )
+    for group in WORKFLOW_OPTIONS.get("preset_groups", [])
 ]
-APP_OPTIONS = [("sentiment", "Sentiment"), ("subnetcalc", "Subnetcalc")]
+APP_LABELS = {app["id"]: app.get("label", app["id"]) for app in WORKFLOW_OPTIONS.get("app_metadata", [])}
+APP_OPTIONS = [(app, APP_LABELS.get(app, app[:1].upper() + app[1:])) for app in WORKFLOW_OPTIONS.get("apps", [])]
+APP_NAMES = [name for name, _label in APP_OPTIONS]
+GUIDED_SURFACE_PROFILES = {profile["id"]: profile for profile in WORKFLOW_OPTIONS.get("guided_surface_profiles", [])}
 ANSI_PATTERN = re.compile(r"\x1b\[([0-9;]*)m")
 OSC_PATTERN = re.compile(r"\x1b\][^\x07]*(?:\x07|\x1b\\)")
 ANSI_CLASS_BY_CODE = {
@@ -156,8 +161,6 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
             "stage": stage,
             "action": action,
             "auto_approve": action in {"apply", "reset", "state-reset"},
-            "sentiment": "",
-            "subnetcalc": "",
             "preset_resource_profile": "default",
             "preset_image_distribution": "default",
             "preset_network_profile": "default",
@@ -168,6 +171,7 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
             "custom_node_image": "",
             "custom_enable_backstage": "",
         }
+        payload.update({app_name: "" for app_name in APP_NAMES})
         return render_preview(resolved_root, payload, app.state.command_history.snapshot())
 
     return app
@@ -227,8 +231,7 @@ def history_payload(payload: dict[str, Any]) -> dict[str, str]:
         "variant",
         "stage",
         "action",
-        "sentiment",
-        "subnetcalc",
+        *APP_NAMES,
         "preset_resource_profile",
         "preset_image_distribution",
         "preset_network_profile",
@@ -252,8 +255,7 @@ async def form_payload(request: Request) -> dict[str, Any]:
         "variant": str(form.get("variant") or "kubernetes/kind"),
         "stage": str(form.get("stage") or "900"),
         "action": action,
-        "sentiment": str(form.get("sentiment") or ""),
-        "subnetcalc": str(form.get("subnetcalc") or ""),
+        **{app_name: str(form.get(app_name) or "") for app_name in APP_NAMES},
         "preset_resource_profile": str(form.get("preset_resource_profile") or "default"),
         "preset_image_distribution": str(form.get("preset_image_distribution") or "default"),
         "preset_network_profile": str(form.get("preset_network_profile") or "default"),
@@ -289,25 +291,11 @@ def preview_command(repo_root: Path, payload: dict[str, Any]) -> str:
 
 
 def guided_tab() -> str:
-    variant_facts = {
-        "kubernetes/kind": ("Kind", "Kubernetes IN Docker"),
-        "kubernetes/lima": ("Lima", "K3s in Lima VM"),
-        "kubernetes/slicer": ("Slicer", "K3s in Slicer"),
-    }
-    stage_descs = {
-        "100": "Cluster substrate and resource sizing",
-        "200": "Cilium networking layer",
-        "300": "Hubble visibility for Cilium",
-        "400": "Argo CD GitOps controller",
-        "500": "Gitea internal Git provider",
-        "600": "Policy and certificate foundations",
-        "700": "App repos and reference workloads",
-        "800": "Observability, gateway TLS, dashboards",
-        "900": "SSO, IDP, Backstage, authenticated surfaces",
-    }
     variant_btns = []
     for variant in VARIANTS:
-        title, subtitle = variant_facts.get(variant, (variant, variant))
+        metadata = VARIANT_METADATA.get(variant, {})
+        title = str(metadata.get("guided_label") or metadata.get("label") or variant)
+        subtitle = str(metadata.get("guided_description") or variant)
         active = " active" if variant == "kubernetes/kind" else ""
         variant_btns.append(
             f'<button type="button" class="guided-btn guided-variant-btn{active}" data-variant="{html.escape(variant)}"'
@@ -317,35 +305,30 @@ def guided_tab() -> str:
     stage_btns = []
     for stage, label in STAGES:
         active = " active" if stage == "900" else ""
-        desc = stage_descs.get(stage, "")
+        desc = str(STAGE_METADATA.get(stage, {}).get("guided_description") or "")
         stage_btns.append(
             f'<button type="button" class="guided-btn guided-stage-btn{active}" data-stage="{html.escape(stage)}"'
             f' data-tooltip="{html.escape(desc)}" onclick="selectStage(\'{html.escape(stage)}\')">'
             f'<strong>{html.escape(stage)}</strong><span>{html.escape(label)}</span></button>'
         )
-    profiles = [
-        ("stage-defaults", "Stage defaults", "Baseline — no overrides applied"),
-        ("minimal-local", "Minimal local", "Stage 700, minimal resources, no reference apps"),
-        ("idp-demo", "IDP demo", "Kind stage 900, local IDP profile, 12 GB"),
-        ("airplane", "Airplane", "Stage 900, local cache, no pull required"),
-    ]
     profile_btns = []
-    for key, name, desc in profiles:
+    for key in UI_RULES.get("guided_profile_order", list(GUIDED_SURFACE_PROFILES)):
+        profile = GUIDED_SURFACE_PROFILES.get(key)
+        if not profile:
+            continue
+        name = profile["label"]
+        desc = profile.get("description", "")
         active = " active" if key == "stage-defaults" else ""
         profile_btns.append(
             f'<button type="button" class="guided-btn guided-profile-btn{active}" data-profile="{html.escape(key)}"'
             f' onclick="applySetupProfile(\'{html.escape(key)}\')">'
             f'<strong>{html.escape(name)}</strong><span>{html.escape(desc)}</span></button>'
         )
-    action_defs = [
-        ("readiness", "Readiness", "Check prerequisites"),
-        ("plan", "Plan", "Preview Terraform changes"),
-        ("apply", "Apply", "Deploy the selected stage"),
-        ("status", "Status", "Check runtime status"),
-        ("show-urls", "URLs", "Show service endpoints"),
-    ]
     action_btns = []
-    for action, label, desc in action_defs:
+    for action in UI_RULES.get("guided_action_order", ["readiness", "plan", "apply", "status", "show-urls"]):
+        metadata = ACTION_METADATA.get(action, {})
+        label = str(metadata.get("guided_label") or metadata.get("label") or action)
+        desc = str(metadata.get("guided_description") or "")
         active = " active" if action == "apply" else ""
         action_btns.append(
             f'<button type="button" class="guided-btn guided-action-btn{active}" data-action="{html.escape(action)}"'
@@ -390,6 +373,36 @@ def expert_tab() -> str:
 
 
 def page() -> str:
+    variant_paths_by_id = {variant["id"]: variant["path"] for variant in WORKFLOW_OPTIONS["variants"]}
+    preset_defaults = {f"preset_{group['id']}": group.get("default", "default") for group in WORKFLOW_OPTIONS["preset_groups"]}
+    app_names_json = json.dumps(APP_NAMES)
+    app_toggle_stages_json = json.dumps(UI_RULES.get("app_toggle_stages", []), sort_keys=True)
+    app_set_defaults_json = json.dumps(
+        {
+            preset["id"]: {
+                app_name: bool(preset.get("overlay", {}).get(f"enable_app_repo_{app_name.replace('-', '_')}"))
+                for app_name in APP_NAMES
+                if f"enable_app_repo_{app_name.replace('-', '_')}" in preset.get("overlay", {})
+            }
+            for preset in WORKFLOW_OPTIONS.get("presets", [])
+            if preset.get("group") == "app_set"
+        },
+        sort_keys=True,
+    )
+    guided_profile_json = json.dumps(
+        {
+            profile_id: {
+                "variant": variant_paths_by_id.get(str(profile.get("variant")), profile.get("variant")),
+                "stage": profile.get("stage"),
+                "values": {
+                    **preset_defaults,
+                    **{f"preset_{group}": value for group, value in profile.get("presets", {}).items()},
+                },
+            }
+            for profile_id, profile in GUIDED_SURFACE_PROFILES.items()
+        },
+        sort_keys=True,
+    )
     return f"""<!doctype html>
 <html lang="en" data-theme="dark">
 <head>
@@ -425,6 +438,7 @@ def page() -> str:
       <div id="tab-expert" class="tab-panel" role="tabpanel" hidden>
         {expert_tab()}
       </div>
+      <section class="quick-actions" aria-label="Quick actions"></section>
       <input type="hidden" name="auto_approve" value="1">
       <input type="hidden" name="source" value="dropdowns">
     </form>
@@ -463,21 +477,22 @@ def page() -> str:
       }});
     }}
     function stageDefault(stage, app) {{
-      return ['700', '800', '900'].includes(stage);
+      return {app_toggle_stages_json}.includes(stage);
     }}
     function effectiveAppDefault(stage, app) {{
+      const appSetDefaults = {app_set_defaults_json};
       const appSet = document.querySelector('input[name="preset_app_set"]:checked');
       const preset = appSet ? appSet.value : 'default';
-      if (preset === 'reference-apps') return true;
-      if (preset === 'no-reference-apps') return false;
-      if (preset === 'sentiment-only') return app === 'sentiment';
+      if (appSetDefaults[preset] && Object.prototype.hasOwnProperty.call(appSetDefaults[preset], app)) {{
+        return appSetDefaults[preset][app];
+      }}
       return stageDefault(stage, app);
     }}
     function updateAppToggles(stage) {{
       document.querySelectorAll('.app-toggle').forEach((node) => {{
-        node.hidden = !['700', '800', '900'].includes(stage);
+        node.hidden = !{app_toggle_stages_json}.includes(stage);
       }});
-      ['sentiment', 'subnetcalc'].forEach((app) => {{
+      {app_names_json}.forEach((app) => {{
         const select = document.querySelector(`select[name="${{app}}"]`);
         if (!select) return;
         const enabled = effectiveAppDefault(stage, app);
@@ -545,52 +560,7 @@ def page() -> str:
       if (radio) radio.checked = true;
     }}
     function applySetupProfile(profile) {{
-      const profiles = {{
-        'stage-defaults': {{
-          values: {{
-            preset_resource_profile: 'default',
-            preset_image_distribution: 'default',
-            preset_network_profile: 'default',
-            preset_observability_stack: 'default',
-            preset_identity_stack: 'default',
-            preset_app_set: 'default',
-          }},
-        }},
-        'minimal-local': {{
-          stage: '700',
-          values: {{
-            preset_resource_profile: 'minimal',
-            preset_image_distribution: 'pull',
-            preset_network_profile: 'cilium',
-            preset_observability_stack: 'default',
-            preset_identity_stack: 'default',
-            preset_app_set: 'no-reference-apps',
-          }},
-        }},
-        'idp-demo': {{
-          variant: 'kubernetes/kind',
-          stage: '900',
-          values: {{
-            preset_resource_profile: 'local-idp-12gb',
-            preset_image_distribution: 'local-cache',
-            preset_network_profile: 'cilium',
-            preset_observability_stack: 'default',
-            preset_identity_stack: 'default',
-            preset_app_set: 'default',
-          }},
-        }},
-        'airplane': {{
-          stage: '900',
-          values: {{
-            preset_resource_profile: 'airplane',
-            preset_image_distribution: 'airplane',
-            preset_network_profile: 'cilium',
-            preset_observability_stack: 'default',
-            preset_identity_stack: 'default',
-            preset_app_set: 'default',
-          }},
-        }},
-      }};
+      const profiles = {guided_profile_json};
       const config = profiles[profile];
       if (!config) return;
       if (config.variant) setSelectValue('variant', config.variant);
@@ -726,6 +696,20 @@ def preset_panel() -> str:
         controls.append(
             f'<fieldset class="preset-column"><legend>{html.escape(label)}</legend>{"".join(option_items)}</fieldset>'
         )
+    profile_cards = []
+    for profile_id in UI_RULES.get("guided_profile_order", list(GUIDED_SURFACE_PROFILES)):
+        profile = GUIDED_SURFACE_PROFILES.get(profile_id)
+        if not profile:
+            continue
+        active = " active" if profile_id == "stage-defaults" else ""
+        description = str(profile.get("description") or "")
+        profile_cards.append(
+            f'<div class="setup-card{active}" data-profile="{html.escape(profile_id)}">'
+            f'<strong>{html.escape(str(profile.get("label") or profile_id))}</strong>'
+            f'<small>{html.escape(description)}</small>'
+            f'<button type="button" onclick="applySetupProfile(\'{html.escape(profile_id)}\')">Select</button>'
+            "</div>"
+        )
     return f"""
 <section class="workflow-panel presets-panel" aria-label="Setup presets">
   <div class="panel-title-row">
@@ -736,30 +720,7 @@ def preset_panel() -> str:
     <span id="preset-summary-compact">Curated setup profiles</span>
   </div>
   <div class="setup-grid" aria-label="Curated setup profiles">
-    <div class="setup-card active" data-profile="stage-defaults">
-      <span>Curated default</span>
-      <strong>Stage defaults</strong>
-      <small>Pure stage ladder. Good for learning the baseline.</small>
-      <button type="button" onclick="applySetupProfile('stage-defaults')">Select</button>
-    </div>
-    <div class="setup-card" data-profile="minimal-local">
-      <span>Low resource</span>
-      <strong>Minimal local</strong>
-      <small>Stage 700, minimal resource profile, reference apps off.</small>
-      <button type="button" onclick="applySetupProfile('minimal-local')">Select</button>
-    </div>
-    <div class="setup-card" data-profile="idp-demo">
-      <span>12 GB laptop</span>
-      <strong>IDP demo</strong>
-      <small>Kind stage 900 with the local IDP profile.</small>
-      <button type="button" onclick="applySetupProfile('idp-demo')">Select</button>
-    </div>
-    <div class="setup-card" data-profile="airplane">
-      <span>Offline prep</span>
-      <strong>Airplane</strong>
-      <small>Stage 900 with local cache and preload enabled.</small>
-      <button type="button" onclick="applySetupProfile('airplane')">Select</button>
-    </div>
+    {''.join(profile_cards)}
   </div>
   <details class="fine-tune-panel detailed-view">
     <summary>Detailed view</summary>
@@ -776,15 +737,12 @@ def apps_panel() -> str:
     app_controls = []
     for name, label in APP_OPTIONS:
         app_controls.append(app_control(name, label, "900"))
-    platform_rows = [
-        ("hello-platform", "Reference platform workload", "stage 700"),
-        ("apim-simulator", "API mediation surface", "stage 700"),
-        ("Backstage", "Developer portal", "stage 900"),
-        ("IDP core", "Identity portal/API", "stage 900"),
-    ]
+    platform_rows = UI_RULES.get("platform_surfaces", [])
     rows = "".join(
-        f"<li><strong>{html.escape(name)}</strong><span>{html.escape(kind)} | {html.escape(stage)}</span></li>"
-        for name, kind, stage in platform_rows
+        f"<li><strong>{html.escape(str(row.get('name') or ''))}</strong>"
+        f"<span>{html.escape(str(row.get('kind') or ''))} | {html.escape(str(row.get('stage') or ''))}</span></li>"
+        for row in platform_rows
+        if isinstance(row, dict)
     )
     return f"""
 <details class="workflow-panel apps-panel">
@@ -1229,6 +1187,9 @@ def selection_label(source: str) -> str:
 
 
 def stage_delta_hint(stage: str) -> str:
+    configured = STAGE_METADATA.get(stage, {}).get("stage_delta_hint")
+    if configured:
+        return str(configured)
     try:
         value = int(stage)
     except ValueError:
@@ -1421,6 +1382,7 @@ def job_result_header(job) -> str:
 
 
 def diagnostic_bundle(job) -> str:
+    app_overrides = {app_name: job.payload.get(app_name, "") for app_name in APP_NAMES}
     bundle = {
         "variant": job.payload.get("variant"),
         "stage": job.payload.get("stage"),
@@ -1437,8 +1399,7 @@ def diagnostic_bundle(job) -> str:
             "worker_count": job.payload.get("custom_worker_count", ""),
             "node_image": job.payload.get("custom_node_image", ""),
             "enable_backstage": job.payload.get("custom_enable_backstage", ""),
-            "sentiment": job.payload.get("sentiment", ""),
-            "subnetcalc": job.payload.get("subnetcalc", ""),
+            **app_overrides,
         },
         "command": " ".join(job.command),
         "exit_code": job.returncode,
