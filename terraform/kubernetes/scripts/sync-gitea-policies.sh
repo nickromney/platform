@@ -38,6 +38,111 @@ fi
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
 
+contract_value() {
+  local key="$1"
+  local file="${GITOPS_RENDER_CONTRACT_FILE:-}"
+
+  if [[ -z "${file}" || ! -f "${file}" ]]; then
+    return 0
+  fi
+
+  jq -er --arg key "${key}" 'if has($key) then .[$key] | tostring else empty end' "${file}" 2>/dev/null || true
+}
+
+contract_default() {
+  local env_name="$1"
+  local contract_key="$2"
+  local fallback="${3:-}"
+  local value=""
+
+  value="$(contract_value "${contract_key}")"
+  if [[ -z "${value}" ]]; then
+    local current=""
+    eval "current=\"\${${env_name}:-}\""
+    if [[ -n "${current}" ]]; then
+      return 0
+    fi
+    value="${fallback}"
+  fi
+
+  printf -v "${env_name}" '%s' "${value}"
+}
+
+load_gitops_render_contract_defaults() {
+  local file="${GITOPS_RENDER_CONTRACT_FILE:-}"
+
+  if [[ -z "${file}" ]]; then
+    return 0
+  fi
+  [[ -f "${file}" ]] || fail "GITOPS_RENDER_CONTRACT_FILE not found: ${file}"
+  command -v jq >/dev/null 2>&1 || fail "jq not found"
+
+  contract_default GITEA_REPO_OWNER repo_owner "${GITEA_REPO_OWNER}"
+  contract_default GITEA_REPO_OWNER_IS_ORG repo_is_org "${GITEA_REPO_OWNER_IS_ORG:-false}"
+  contract_default ENABLE_HUBBLE enable_hubble true
+  contract_default ENABLE_POLICIES enable_policies true
+  contract_default ENABLE_GATEWAY_TLS enable_gateway_tls true
+  contract_default GATEWAY_HTTPS_HOST_PORT gateway_https_host_port 443
+  contract_default PLATFORM_BASE_DOMAIN platform_base_domain 127.0.0.1.sslip.io
+  contract_default PLATFORM_ADMIN_BASE_DOMAIN platform_admin_base_domain "${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
+  contract_default ADMIN_ROUTE_ALLOWLIST_CIDRS admin_route_allowlist_cidrs ""
+  contract_default GATEWAY_TRUSTED_PROXY_CIDRS gateway_trusted_proxy_cidrs ""
+  contract_default ENABLE_CERT_MANAGER enable_cert_manager true
+  contract_default ENABLE_ACTIONS_RUNNER enable_actions_runner true
+  contract_default ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment false
+  contract_default ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnetcalc false
+  contract_default ENABLE_PROMETHEUS enable_prometheus false
+  contract_default ENABLE_GRAFANA enable_grafana false
+  contract_default ENABLE_LOKI enable_loki false
+  contract_default ENABLE_VICTORIA_LOGS enable_victoria_logs false
+  contract_default ENABLE_TEMPO enable_tempo false
+  contract_default ENABLE_SIGNOZ enable_signoz false
+  contract_default ENABLE_OTEL_GATEWAY enable_otel_gateway false
+  contract_default ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
+  contract_default ENABLE_HEADLAMP enable_headlamp false
+  contract_default ENABLE_BACKSTAGE enable_backstage true
+  contract_default PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_images false
+  contract_default EXTERNAL_IMAGE_SENTIMENT_API external_sentiment_api ""
+  contract_default EXTERNAL_IMAGE_SENTIMENT_AUTH_UI external_sentiment_ui ""
+  contract_default EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI external_subnetcalc_api ""
+  contract_default EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR external_subnetcalc_apim ""
+  contract_default EXTERNAL_IMAGE_PLATFORM_MCP external_platform_mcp ""
+  contract_default EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT external_subnetcalc_fe ""
+  contract_default EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT external_subnetcalc_fe_ts ""
+  contract_default MCP_PUBLIC_HOST mcp_public_host ""
+  contract_default MCP_CONSOLE_PUBLIC_HOST mcp_console_public_host ""
+  contract_default PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform false
+  contract_default EXTERNAL_PLATFORM_IMAGE_GRAFANA external_platform_grafana ""
+  contract_default EXTERNAL_PLATFORM_IMAGE_IDP_CORE external_platform_idp_core ""
+  contract_default EXTERNAL_PLATFORM_IMAGE_BACKSTAGE external_platform_backstage ""
+  contract_default EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY external_platform_signoz_auth ""
+  contract_default HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
+  contract_default CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
+  contract_default DEX_CHART_VERSION dex_chart_version "$(tf_default_from_variables dex_chart_version)"
+  contract_default GRAFANA_CHART_VERSION grafana_chart_version "$(tf_default_from_variables grafana_chart_version)"
+  contract_default GRAFANA_IMAGE_REGISTRY grafana_image_registry "$(tf_default_from_variables grafana_image_registry)"
+  contract_default GRAFANA_IMAGE_REPOSITORY grafana_image_repository "$(tf_default_from_variables grafana_image_repository)"
+  contract_default GRAFANA_IMAGE_TAG grafana_image_tag "$(tf_default_from_variables grafana_image_tag)"
+  contract_default GRAFANA_SIDECAR_IMAGE_REGISTRY grafana_sidecar_image_registry "$(tf_default_from_variables grafana_sidecar_image_registry)"
+  contract_default GRAFANA_SIDECAR_IMAGE_REPOSITORY grafana_sidecar_image_repository "$(tf_default_from_variables grafana_sidecar_image_repository)"
+  contract_default GRAFANA_SIDECAR_IMAGE_TAG grafana_sidecar_image_tag "$(tf_default_from_variables grafana_sidecar_image_tag)"
+  contract_default GRAFANA_VICTORIA_LOGS_PLUGIN_URL grafana_victoria_logs_plugin_url "$(tf_default_from_variables grafana_victoria_logs_plugin_url)"
+  contract_default GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS grafana_liveness_initial_delay_seconds "$(tf_default_from_variables grafana_liveness_initial_delay_seconds)"
+  contract_default HEADLAMP_CHART_VERSION headlamp_chart_version "$(tf_default_from_variables headlamp_chart_version)"
+  contract_default KYVERNO_CHART_VERSION kyverno_chart_version "$(tf_default_from_variables kyverno_chart_version)"
+  contract_default LOKI_CHART_VERSION loki_chart_version "$(tf_default_from_variables loki_chart_version)"
+  contract_default OAUTH2_PROXY_CHART_VERSION oauth2_proxy_chart_version "$(tf_default_from_variables oauth2_proxy_chart_version)"
+  contract_default OPENTELEMETRY_COLLECTOR_CHART_VERSION otel_chart_version "$(tf_default_from_variables opentelemetry_collector_chart_version)"
+  contract_default POLICY_REPORTER_CHART_VERSION policy_reporter_chart_version "$(tf_default_from_variables policy_reporter_chart_version)"
+  contract_default PROMETHEUS_CHART_VERSION prometheus_chart_version "$(tf_default_from_variables prometheus_chart_version)"
+  contract_default SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
+  contract_default TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
+  contract_default VICTORIA_LOGS_CHART_VERSION victoria_logs_chart_version "$(tf_default_from_variables victoria_logs_chart_version)"
+  contract_default SIGNOZ_AUTH_PROXY_IMAGE signoz_auth_proxy_image ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
+}
+
+load_gitops_render_contract_defaults
+
 POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${GITEA_SSH_USERNAME}@gitea-ssh.gitea.svc.cluster.local:22/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}.git}"
 GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
 GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"

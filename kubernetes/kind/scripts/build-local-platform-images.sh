@@ -230,6 +230,9 @@ source_fingerprint_tag() {
   printf 'src-%s' "${digest:0:20}"
 }
 
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
+
 grafana_version_tag="${GRAFANA_IMAGE_TAG}-v${VICTORIA_LOGS_PLUGIN_VERSION}"
 grafana_base_repo="${BASE_IMAGE_NAMESPACE}/grafana-grafana"
 plugin_fetch_repo="${BASE_IMAGE_NAMESPACE}/library-alpine"
@@ -267,57 +270,18 @@ build_and_push \
   --build-arg GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG}"
 
 idp_core_source_tag="$(
-  source_fingerprint_tag \
-    apps/idp-core/.dockerignore \
-    apps/idp-core/Dockerfile \
-    apps/idp-core/Dockerfile.dockerignore \
-    apps/idp-core/app \
-    apps/idp-core/pyproject.toml \
-    apps/idp-core/uv.lock \
-    catalog/platform-apps.json
+  image_catalog_source_tag platform idp-core
 )"
 platform_mcp_source_tag="$(
-  source_fingerprint_tag \
-    apps/platform-mcp/.dockerignore \
-    apps/platform-mcp/Dockerfile \
-    apps/platform-mcp/Dockerfile.dockerignore \
-    apps/platform-mcp/platform_mcp \
-    apps/platform-mcp/pyproject.toml \
-    apps/platform-mcp/uv.lock
+  image_catalog_source_tag workload platform-mcp
 )"
 backstage_source_tag="$(
   if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
-    source_fingerprint_tag \
-      apps/subnetcalc/catalog-info.yaml \
-      apps/subnetcalc/docs \
-      apps/subnetcalc/mkdocs.yml \
-      apps/subnetcalc/README.md \
-      apps/apim-simulator/catalog-info.yaml \
-      apps/sentiment/catalog-info.yaml \
-      apps/sentiment/docs \
-      apps/sentiment/mkdocs.yml \
-      apps/sentiment/MODEL_CARD.md \
-      apps/sentiment/README.md \
-      apps/backstage/.dockerignore \
-      apps/backstage/.yarnrc.yml \
-      apps/backstage/.yarn \
-      apps/backstage/Dockerfile \
-      apps/backstage/app-config.production.yaml \
-      apps/backstage/app-config.yaml \
-      apps/backstage/backstage.json \
-      apps/backstage/catalog \
-      apps/backstage/catalog-info.yaml \
-      apps/backstage/package.json \
-      apps/backstage/packages \
-      apps/backstage/plugins \
-      apps/backstage/tsconfig.json \
-      apps/backstage/yarn.lock
+    image_catalog_source_tag platform backstage
   fi
 )"
 keycloak_source_tag="$(
-  source_fingerprint_tag \
-    apps/keycloak/.dockerignore \
-    apps/keycloak/Dockerfile
+  image_catalog_source_tag platform keycloak
 )"
 
 build_and_push \

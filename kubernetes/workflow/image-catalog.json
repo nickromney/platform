@@ -1,0 +1,178 @@
+{
+  "schema_version": "0.1",
+  "namespace": "platform",
+  "platform_images": [
+    {
+      "id": "backstage",
+      "hcl_key": "backstage",
+      "image_name": "backstage",
+      "default_tag": "latest",
+      "fingerprint_sources": [
+        "apps/subnetcalc/catalog-info.yaml",
+        "apps/subnetcalc/docs",
+        "apps/subnetcalc/mkdocs.yml",
+        "apps/subnetcalc/README.md",
+        "apps/apim-simulator/catalog-info.yaml",
+        "apps/sentiment/catalog-info.yaml",
+        "apps/sentiment/docs",
+        "apps/sentiment/mkdocs.yml",
+        "apps/sentiment/MODEL_CARD.md",
+        "apps/sentiment/README.md",
+        "apps/backstage/.dockerignore",
+        "apps/backstage/.yarnrc.yml",
+        "apps/backstage/.yarn",
+        "apps/backstage/Dockerfile",
+        "apps/backstage/app-config.production.yaml",
+        "apps/backstage/app-config.yaml",
+        "apps/backstage/backstage.json",
+        "apps/backstage/catalog",
+        "apps/backstage/catalog-info.yaml",
+        "apps/backstage/package.json",
+        "apps/backstage/packages",
+        "apps/backstage/plugins",
+        "apps/backstage/tsconfig.json",
+        "apps/backstage/yarn.lock"
+      ],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "grafana-victorialogs",
+      "hcl_key": "grafana",
+      "image_name": "grafana-victorialogs",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local Grafana image with a mirrored VictoriaLogs plugin; plugin version is checked separately by check-component-version.sh"
+      }
+    },
+    {
+      "id": "idp-core",
+      "hcl_key": "idp-core",
+      "image_name": "idp-core",
+      "default_tag": "latest",
+      "fingerprint_sources": [
+        "apps/idp-core/.dockerignore",
+        "apps/idp-core/Dockerfile",
+        "apps/idp-core/Dockerfile.dockerignore",
+        "apps/idp-core/app",
+        "apps/idp-core/pyproject.toml",
+        "apps/idp-core/uv.lock",
+        "catalog/platform-apps.json"
+      ],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "keycloak",
+      "hcl_key": "keycloak",
+      "image_name": "keycloak",
+      "default_tag": "latest",
+      "external_ref": false,
+      "fingerprint_sources": [
+        "apps/keycloak/.dockerignore",
+        "apps/keycloak/Dockerfile"
+      ],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    }
+  ],
+  "workload_images": [
+    {
+      "id": "sentiment-api",
+      "hcl_key": "sentiment-api",
+      "image_name": "sentiment-api",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "sentiment-auth-ui",
+      "hcl_key": "sentiment-auth-ui",
+      "image_name": "sentiment-auth-ui",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "subnetcalc-api-fastapi-container-app",
+      "hcl_key": "subnetcalc-api-fastapi-container-app",
+      "image_name": "subnetcalc-api-fastapi-container-app",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "subnetcalc-apim-simulator",
+      "hcl_key": "subnetcalc-apim-simulator",
+      "image_name": "subnetcalc-apim-simulator",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "platform-mcp",
+      "hcl_key": "platform-mcp",
+      "image_name": "platform-mcp",
+      "default_tag": "latest",
+      "fingerprint_sources": [
+        "apps/platform-mcp/.dockerignore",
+        "apps/platform-mcp/Dockerfile",
+        "apps/platform-mcp/Dockerfile.dockerignore",
+        "apps/platform-mcp/platform_mcp",
+        "apps/platform-mcp/pyproject.toml",
+        "apps/platform-mcp/uv.lock"
+      ],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "subnetcalc-frontend-react",
+      "hcl_key": "subnetcalc-frontend-react",
+      "image_name": "subnetcalc-frontend-react",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "subnetcalc-frontend-typescript-vite",
+      "hcl_key": "subnetcalc-frontend-typescript-vite",
+      "image_name": "subnetcalc-frontend-typescript-vite",
+      "default_tag": "latest",
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "internal-non-comparable",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    }
+  ],
+  "variant_registry_hosts": {
+    "kind": "host.docker.internal:5002",
+    "lima": "host.lima.internal:5002",
+    "slicer": "192.168.64.1:5002"
+  }
+}

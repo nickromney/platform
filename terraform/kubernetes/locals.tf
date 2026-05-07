@@ -360,7 +360,7 @@ locals {
     [for f in sort(fileset(local.stack_dir, "cluster-policies/**")) : filesha256("${local.stack_dir}/${f}")],
     [for f in sort(fileset(local.stack_dir, "templates/otel-gateway/**")) : filesha256("${local.stack_dir}/${f}")]
   )))
-  policies_repo_render_hash = sha1(jsonencode({
+  policies_repo_render_contract = {
     content_hash                           = local.policies_repo_content_hash
     repo_owner                             = local.gitea_repo_owner
     repo_is_org                            = local.gitea_repo_owner_is_org
@@ -372,8 +372,8 @@ locals {
     enable_policies                        = var.enable_policies
     enable_gateway_tls                     = var.enable_gateway_tls
     gateway_https_host_port                = var.gateway_https_host_port
-    admin_route_allowlist_cidrs            = local.admin_route_allowlist_cidrs_effective
-    gateway_trusted_proxy_cidrs            = local.gateway_trusted_proxy_cidrs_effective
+    admin_route_allowlist_cidrs            = join(",", local.admin_route_allowlist_cidrs_effective)
+    gateway_trusted_proxy_cidrs            = join(",", local.gateway_trusted_proxy_cidrs_effective)
     enable_cert_manager                    = var.enable_cert_manager
     enable_actions_runner                  = var.enable_actions_runner
     enable_app_repo_sentiment              = var.enable_app_repo_sentiment
@@ -429,7 +429,8 @@ locals {
     tempo_chart_version                    = var.tempo_chart_version
     victoria_logs_chart_version            = var.victoria_logs_chart_version
     signoz_auth_proxy_image                = local.signoz_auth_proxy_image_effective
-  }))
+  }
+  policies_repo_render_hash = sha1(jsonencode(local.policies_repo_render_contract))
 
   # The Kubernetes/Helm/kubectl providers validate config_path eagerly.
   # Stage 100 may run on machines without an existing kubeconfig file, so fall back

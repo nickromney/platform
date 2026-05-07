@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+WORKFLOW_OPTIONS_FILE="${REPO_ROOT}/kubernetes/workflow/options.json"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
@@ -14,8 +15,7 @@ AUTO_APPROVE="0"
 TFVARS_FILE=""
 SAVE_PROFILE_NAME=""
 PROFILES_DIR=""
-APP_SENTIMENT=""
-APP_SUBNETCALC=""
+APP_OVERRIDES=()
 PRESET_RESOURCE_PROFILE="default"
 PRESET_IMAGE_DISTRIBUTION="default"
 PRESET_NETWORK_PROFILE="default"
@@ -52,8 +52,7 @@ Workflow options:
                                     network-profile, observability-stack,
                                     identity-stack, app-set
   --set option=value              Custom option override rendered to generated tfvars
-  --app sentiment=on|off          Override sentiment app repo/workload toggle
-  --app subnetcalc=on|off         Override subnetcalc app repo/workload toggle
+  --app NAME=on|off               Override an app repo/workload toggle listed by options
   --tfvars-file PATH              Generated tfvars path (default: .run/operator/<variant>-stage<stage>.tfvars)
   --auto-approve                  Add AUTO_APPROVE=1 for apply/reset-capable workflows
   --output text|json              Output format (default: text)
@@ -77,12 +76,11 @@ require_value() {
 }
 
 target_path() {
-  case "$1" in
-    kind) printf 'kubernetes/kind' ;;
-    lima) printf 'kubernetes/lima' ;;
-    slicer) printf 'kubernetes/slicer' ;;
-    *) return 1 ;;
-  esac
+  local path=""
+
+  path="$(jq -r --arg id "$1" '.variants[] | select(.id == $id) | .path // empty' "${WORKFLOW_OPTIONS_FILE}")"
+  [[ -n "${path}" ]] || return 1
+  printf '%s' "${path}"
 }
 
 target_state_lock_file() {
@@ -95,357 +93,48 @@ target_state_lock_file() {
 }
 
 workflow_options_json() {
-  jq -n '{
-    schema_version: "0.2",
-    variants: [
-      {
-        id: "kind",
-        path: "kubernetes/kind",
-        label: "kind",
-        family: "local",
-        class: "local-created-cluster",
-        lifecycle_mode: "create",
-        state_scope: "single-local",
-        contexts: ["local-substrate", "platform-stack"],
-        contract_outputs: ["cluster-access", "ingress", "registry", "cni", "identity", "resource-sizing", "lifecycle"],
-        readiness: {command: "make -C kubernetes/kind prereqs"}
-      },
-      {
-        id: "lima",
-        path: "kubernetes/lima",
-        label: "lima",
-        family: "local",
-        class: "local-created-cluster",
-        lifecycle_mode: "create",
-        state_scope: "single-local",
-        contexts: ["local-substrate", "platform-stack"],
-        contract_outputs: ["cluster-access", "ingress", "registry", "cni", "identity", "resource-sizing", "lifecycle"],
-        readiness: {command: "make -C kubernetes/lima prereqs"}
-      },
-      {
-        id: "slicer",
-        path: "kubernetes/slicer",
-        label: "slicer",
-        family: "local",
-        class: "local-created-cluster",
-        lifecycle_mode: "create",
-        state_scope: "single-local",
-        contexts: ["local-substrate", "platform-stack"],
-        contract_outputs: ["cluster-access", "ingress", "registry", "cni", "identity", "resource-sizing", "lifecycle"],
-        readiness: {command: "make -C kubernetes/slicer prereqs"}
-      }
-    ],
-    variant_classes: [
-      {
-        id: "local-created-cluster",
-        label: "Local created cluster",
-        supported_now: true,
-        lifecycle_mode: "create",
-        state_scope: "single-local",
-        description: "The repo creates and owns a local Kubernetes runtime."
-      },
-      {
-        id: "attached-existing-cluster",
-        label: "Attached existing cluster",
-        supported_now: false,
-        lifecycle_mode: "attach",
-        state_scope: "external",
-        description: "A future adapter consumes kubeconfig and cluster facts from outside this repo."
-      },
-      {
-        id: "provider-managed-cluster",
-        label: "Provider managed cluster",
-        supported_now: false,
-        lifecycle_mode: "create",
-        state_scope: "per-context",
-        description: "A future adapter creates a managed Kubernetes control plane behind the same platform contracts."
-      },
-      {
-        id: "provider-infra-plus-cluster",
-        label: "Provider infrastructure plus cluster",
-        supported_now: false,
-        lifecycle_mode: "create",
-        state_scope: "per-context",
-        description: "A future adapter owns network, identity, and cluster contexts separately."
-      }
-    ],
-    contexts: [
-      {
-        id: "local-substrate",
-        label: "Local substrate",
-        state_scope: "single-local",
-        lifecycle_mode: "create",
-        stages: ["100"],
-        provides: ["cluster-access", "ingress", "registry", "resource-sizing", "lifecycle"],
-        consumes: []
-      },
-      {
-        id: "platform-stack",
-        label: "Platform stack",
-        state_scope: "single-local",
-        lifecycle_mode: "create",
-        stages: ["200", "300", "400", "500", "600", "700", "800", "900"],
-        provides: ["cni", "gitops", "apps", "observability", "identity"],
-        consumes: ["cluster-access", "ingress", "registry", "resource-sizing"]
-      }
-    ],
-    contracts: [
-      {
-        id: "cluster-access",
-        label: "Cluster access",
-        facts: ["kubeconfig_path", "kubeconfig_context", "cluster_name"],
-        source: "variant_adapter"
-      },
-      {
-        id: "ingress",
-        label: "Ingress and host access",
-        facts: ["public_hosts", "gateway_class", "host_access_path"],
-        source: "variant_adapter"
-      },
-      {
-        id: "registry",
-        label: "Image distribution",
-        facts: ["push_registry", "runtime_registry", "image_distribution_mode"],
-        source: "variant_adapter"
-      },
-      {
-        id: "cni",
-        label: "Container networking",
-        facts: ["cni_provider", "network_policy_provider", "hubble_available"],
-        source: "platform_stack"
-      },
-      {
-        id: "gitops",
-        label: "GitOps",
-        facts: ["gitops_controller", "policy_repository", "sync_model"],
-        source: "platform_stack"
-      },
-      {
-        id: "apps",
-        label: "Applications",
-        facts: ["enabled_apps", "custom_app_sources", "deployment_read_model"],
-        source: "platform_stack"
-      },
-      {
-        id: "observability",
-        label: "Observability",
-        facts: ["metrics_stack", "logs_stack", "dashboard_urls"],
-        source: "platform_stack"
-      },
-      {
-        id: "identity",
-        label: "Identity",
-        facts: ["identity_provider", "oidc_issuer", "session_store"],
-        source: "platform_stack"
-      },
-      {
-        id: "resource-sizing",
-        label: "Resource sizing",
-        facts: ["worker_count", "memory", "node_pool_shape"],
-        source: "variant_adapter"
-      },
-      {
-        id: "lifecycle",
-        label: "Lifecycle",
-        facts: ["lifecycle_mode", "state_scope", "rebuild_risk"],
-        source: "workflow_schema"
-      }
-    ],
-    stages: [
-      {id:"100", label:"cluster", context:"local-substrate", contracts:["cluster-access", "ingress", "registry", "resource-sizing", "lifecycle"]},
-      {id:"200", label:"cilium", context:"platform-stack", contracts:["cluster-access", "cni"]},
-      {id:"300", label:"hubble", context:"platform-stack", contracts:["cluster-access", "cni"]},
-      {id:"400", label:"argocd", context:"platform-stack", contracts:["cluster-access", "gitops"]},
-      {id:"500", label:"gitea", context:"platform-stack", contracts:["cluster-access", "registry", "gitops"]},
-      {id:"600", label:"policies", context:"platform-stack", contracts:["cluster-access", "cni"]},
-      {id:"700", label:"app-repos", context:"platform-stack", contracts:["cluster-access", "registry", "apps"]},
-      {id:"800", label:"observability", context:"platform-stack", contracts:["cluster-access", "ingress", "observability"]},
-      {id:"900", label:"sso", context:"platform-stack", contracts:["cluster-access", "ingress", "identity"]}
-    ],
-    actions: ["readiness", "plan", "apply", "reset", "state-reset", "status", "show-urls", "check-health", "check-security", "check-rbac"],
-    apps: ["sentiment", "subnetcalc"],
-    status_facets: ["cluster-access", "nodes", "cni", "ingress", "gitops", "apps", "observability", "identity", "logs"],
-    source_precedence: ["stage_baseline", "variant_defaults", "resource_profile", "image_distribution", "network_profile", "observability_stack", "identity_stack", "app_set", "custom_overrides"],
-    external_dependency_sources: ["created_by_previous_context", "provided_by_user", "discovered", "not_applicable"],
-    preset_groups: [
-      {
-        id: "resource_profile",
-        label: "Resource profile",
-        default: "default",
-        merge_order: 30,
-        presets: ["default", "minimal", "local-12gb", "local-idp-12gb", "airplane"]
-      },
-      {
-        id: "image_distribution",
-        label: "Image distribution",
-        default: "default",
-        merge_order: 40,
-        presets: ["default", "pull", "local-cache", "preload", "baked", "airplane"]
-      },
-      {
-        id: "network_profile",
-        label: "Network profile",
-        default: "default",
-        merge_order: 50,
-        presets: ["default", "cilium", "default-cni"]
-      },
-      {
-        id: "observability_stack",
-        label: "Observability stack",
-        default: "default",
-        merge_order: 60,
-        introduced_at_stage: "800",
-        presets: ["default", "victoria", "lgtm", "minimal-observability", "none"]
-      },
-      {
-        id: "identity_stack",
-        label: "Identity stack",
-        default: "default",
-        merge_order: 70,
-        introduced_at_stage: "900",
-        presets: ["default", "keycloak", "dex"]
-      },
-      {
-        id: "app_set",
-        label: "App set",
-        default: "default",
-        merge_order: 80,
-        introduced_at_stage: "700",
-        presets: ["default", "reference-apps", "no-reference-apps", "sentiment-only"]
-      }
-    ],
-    presets: [
-      {id: "default", group: "resource_profile", label: "Stage defaults", variants: ["kind", "lima", "slicer"], overlay: {}},
-      {id: "minimal", group: "resource_profile", label: "Minimal", variants: ["kind", "lima", "slicer"], overlay: {enable_backstage: false, enable_prometheus: false, enable_grafana: false, enable_loki: false, enable_victoria_logs: false, enable_tempo: false}},
-      {id: "local-12gb", group: "resource_profile", label: "Local 12 GB", variants: ["kind", "lima", "slicer"], overlay: {enable_backstage: false}},
-      {id: "local-idp-12gb", group: "resource_profile", label: "Local IDP, 12 GB", variants: ["kind"], overlay: {enable_backstage: true, enable_prometheus: false, enable_grafana: false, enable_loki: false, enable_victoria_logs: false, enable_tempo: false, enable_app_repo_sentiment: true, enable_app_repo_subnetcalc: false}},
-      {id: "airplane", group: "resource_profile", label: "Airplane", variants: ["kind", "lima", "slicer"], overlay: {enable_image_preload: true, enable_host_local_registry: true}},
-      {id: "pull", group: "image_distribution", label: "Pull from upstream", variants: ["kind", "lima", "slicer"], overlay: {enable_host_local_registry: false, enable_image_preload: false}},
-      {id: "local-cache", group: "image_distribution", label: "Local registry cache", variants: ["kind", "lima", "slicer"], overlay: {enable_host_local_registry: true, host_local_registry_scheme: "http"}},
-      {id: "preload", group: "image_distribution", label: "Preload images", variants: ["kind"], overlay: {enable_image_preload: true}},
-      {id: "baked", group: "image_distribution", label: "Baked node image", variants: ["kind"], overlay: {}},
-      {id: "airplane", group: "image_distribution", label: "Airplane cache", variants: ["kind", "lima", "slicer"], overlay: {enable_host_local_registry: true, enable_image_preload: true}},
-      {id: "cilium", group: "network_profile", label: "Cilium", variants: ["kind", "lima", "slicer"], overlay: {}},
-      {id: "default-cni", group: "network_profile", label: "Default CNI", variants: ["slicer"], overlay: {}},
-      {id: "victoria", group: "observability_stack", label: "VictoriaLogs", variants: ["kind", "lima", "slicer"], introduced_at_stage: "800", overlay: {enable_prometheus: true, enable_grafana: true, enable_victoria_logs: true, enable_loki: false, enable_tempo: false}},
-      {id: "lgtm", group: "observability_stack", label: "LGTM", variants: ["kind", "lima", "slicer"], introduced_at_stage: "800", overlay: {enable_prometheus: true, enable_grafana: true, enable_loki: true, enable_tempo: true, enable_victoria_logs: false}},
-      {id: "minimal-observability", group: "observability_stack", label: "Minimal observability", variants: ["kind", "lima", "slicer"], introduced_at_stage: "800", overlay: {enable_prometheus: false, enable_grafana: false, enable_loki: false, enable_victoria_logs: false, enable_tempo: false}},
-      {id: "none", group: "observability_stack", label: "No optional observability", variants: ["kind", "lima", "slicer"], introduced_at_stage: "800", overlay: {enable_prometheus: false, enable_grafana: false, enable_loki: false, enable_victoria_logs: false, enable_tempo: false}},
-      {id: "keycloak", group: "identity_stack", label: "Keycloak", variants: ["kind", "lima", "slicer"], introduced_at_stage: "900", overlay: {sso_provider: "keycloak"}},
-      {id: "dex", group: "identity_stack", label: "Dex", variants: ["kind", "lima", "slicer"], introduced_at_stage: "900", overlay: {sso_provider: "dex"}},
-      {id: "reference-apps", group: "app_set", label: "Reference apps", variants: ["kind", "lima", "slicer"], introduced_at_stage: "700", overlay: {enable_app_repo_sentiment: true, enable_app_repo_subnetcalc: true}},
-      {id: "no-reference-apps", group: "app_set", label: "No reference apps", variants: ["kind", "lima", "slicer"], introduced_at_stage: "700", overlay: {enable_app_repo_sentiment: false, enable_app_repo_subnetcalc: false}},
-      {id: "sentiment-only", group: "app_set", label: "Sentiment only", variants: ["kind", "lima", "slicer"], introduced_at_stage: "700", overlay: {enable_app_repo_sentiment: true, enable_app_repo_subnetcalc: false}}
-    ],
-    configuration_options: [
-      {
-        id: "worker_count",
-        stage: "100",
-        context: "local-substrate",
-        contract: "resource-sizing",
-        variants: ["kind", "lima", "slicer"],
-        portability: "local-only",
-        rebuild_risk: "cluster-rebuild",
-        dependency_source: "not_applicable"
-      },
-      {
-        id: "memory",
-        stage: "100",
-        context: "local-substrate",
-        contract: "resource-sizing",
-        variants: ["kind", "lima", "slicer"],
-        portability: "variant-specific",
-        rebuild_risk: "cluster-rebuild",
-        dependency_source: "not_applicable"
-      },
-      {
-        id: "image_distribution_mode",
-        stage: "100",
-        context: "local-substrate",
-        contract: "registry",
-        variants: ["kind", "lima", "slicer"],
-        portability: "adapter-contract",
-        rebuild_risk: "workload-rollout",
-        dependency_source: "discovered"
-      },
-      {
-        id: "enable_app_repo_sentiment",
-        stage: "700",
-        context: "platform-stack",
-        contract: "apps",
-        variants: ["kind", "lima", "slicer"],
-        portability: "portable",
-        rebuild_risk: "workload-rollout",
-        dependency_source: "not_applicable"
-      },
-      {
-        id: "enable_app_repo_subnetcalc",
-        stage: "700",
-        context: "platform-stack",
-        contract: "apps",
-        variants: ["kind", "lima", "slicer"],
-        portability: "portable",
-        rebuild_risk: "workload-rollout",
-        dependency_source: "not_applicable"
-      },
-      {
-        id: "observability_stack",
-        stage: "800",
-        context: "platform-stack",
-        contract: "observability",
-        variants: ["kind", "lima", "slicer"],
-        portability: "portable",
-        rebuild_risk: "workload-rollout",
-        dependency_source: "not_applicable"
-      },
-      {
-        id: "identity_stack",
-        stage: "900",
-        context: "platform-stack",
-        contract: "identity",
-        variants: ["kind", "lima", "slicer"],
-        portability: "adapter-contract",
-        rebuild_risk: "service-reconfigure",
-        dependency_source: "not_applicable"
-      }
-    ],
-    compatibility_aliases: [],
-    profiles: []
-  }'
+  jq '.' "${WORKFLOW_OPTIONS_FILE}"
 }
 
 validate_target() {
-  target_path "$1" >/dev/null || die_usage "Invalid --variant '${1}'. Expected one of: kind, lima, slicer"
+  local expected=""
+
+  if ! target_path "$1" >/dev/null; then
+    expected="$(jq -r '[.variants[].id] | join(", ")' "${WORKFLOW_OPTIONS_FILE}")"
+    die_usage "Invalid --variant '${1}'. Expected one of: ${expected}"
+  fi
 }
 
 validate_stage() {
-  case "${TARGET}:$1" in
-    *:100|*:200|*:300|*:400|*:500|*:600|*:700|*:800|*:900) ;;
-    *:950-local-idp) die_usage "Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb" ;;
-    *) die_usage "Invalid --stage '${1}'. Expected one of: 100, 200, 300, 400, 500, 600, 700, 800, 900" ;;
-  esac
+  local expected=""
+
+  if [[ "$1" = "950-local-idp" ]]; then
+    die_usage "Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb"
+  fi
+  if ! jq -e --arg id "$1" '.stages[] | select(.id == $id)' "${WORKFLOW_OPTIONS_FILE}" >/dev/null; then
+    expected="$(jq -r '[.stages[].id] | join(", ")' "${WORKFLOW_OPTIONS_FILE}")"
+    die_usage "Invalid --stage '${1}'. Expected one of: ${expected}"
+  fi
 }
 
 validate_action() {
-  case "$1" in
-    readiness|prereqs|plan|apply|reset|state-reset|status|show-urls|check-health|check-security|check-rbac) ;;
-    *) die_usage "Invalid --action '${1}'. Expected one of: readiness, plan, apply, reset, state-reset, status, show-urls, check-health, check-security, check-rbac" ;;
-  esac
+  local expected=""
+
+  if [[ "$1" = "prereqs" ]]; then
+    return 0
+  fi
+  if ! jq -e --arg id "$1" '.actions[] | select(. == $id)' "${WORKFLOW_OPTIONS_FILE}" >/dev/null; then
+    expected="$(jq -r '[.actions[] | select(. != "reset")] | join(", ")' "${WORKFLOW_OPTIONS_FILE}")"
+    die_usage "Invalid --action '${1}'. Expected one of: ${expected}"
+  fi
 }
 
 action_uses_stage() {
-  case "$1" in
-    plan|apply|check-health|check-security|check-rbac) return 0 ;;
-    readiness|prereqs|reset|state-reset|status|show-urls) return 1 ;;
-    *) return 1 ;;
-  esac
+  [[ "$(jq -r --arg id "$1" '.action_metadata[]? | select(.id == $id) | .uses_stage // false' "${WORKFLOW_OPTIONS_FILE}")" = "true" ]]
 }
 
 action_uses_auto_approve() {
-  case "$1" in
-    apply|reset|state-reset) return 0 ;;
-    *) return 1 ;;
-  esac
+  [[ "$(jq -r --arg id "$1" '.action_metadata[]? | select(.id == $id) | .uses_auto_approve // false' "${WORKFLOW_OPTIONS_FILE}")" = "true" ]]
 }
 
 default_profiles_dir() {
@@ -477,6 +166,7 @@ set_app_override() {
   local app="${spec%%=*}"
   local raw_value="${spec#*=}"
   local value=""
+  local expected=""
 
   if [[ "${app}" = "${spec}" || -z "${raw_value}" ]]; then
     die_usage "Invalid --app '${spec}'. Expected name=on|off"
@@ -484,11 +174,12 @@ set_app_override() {
 
   value="$(normalize_app_value "${raw_value}")" || die_usage "Invalid --app '${spec}'. Expected value on|off"
 
-  case "${app}" in
-    sentiment) APP_SENTIMENT="${value}" ;;
-    subnetcalc) APP_SUBNETCALC="${value}" ;;
-    *) die_usage "Invalid --app '${app}'. Expected one of: sentiment, subnetcalc" ;;
-  esac
+  if ! jq -e --arg app "${app}" '.apps[] | select(. == $app)' "${WORKFLOW_OPTIONS_FILE}" >/dev/null; then
+    expected="$(jq -r '.apps | join(", ")' "${WORKFLOW_OPTIONS_FILE}")"
+    die_usage "Invalid --app '${app}'. Expected one of: ${expected}"
+  fi
+
+  APP_OVERRIDES+=("${app}=${value}")
 }
 
 normalize_group_name() {
@@ -500,38 +191,35 @@ set_preset() {
   local raw_group="${spec%%=*}"
   local value="${spec#*=}"
   local group=""
+  local var_name=""
+  local valid_group=""
+  local valid_value=""
 
   if [[ "${raw_group}" = "${spec}" || -z "${value}" ]]; then
     die_usage "Invalid --preset '${spec}'. Expected group=value"
   fi
 
   group="$(normalize_group_name "${raw_group}")"
-  case "${group}:${value}" in
-    resource_profile:default|resource_profile:minimal|resource_profile:local-12gb|resource_profile:local-idp-12gb|resource_profile:airplane)
-      PRESET_RESOURCE_PROFILE="${value}"
-      ;;
-    image_distribution:default|image_distribution:pull|image_distribution:local-cache|image_distribution:preload|image_distribution:baked|image_distribution:airplane)
-      PRESET_IMAGE_DISTRIBUTION="${value}"
-      ;;
-    network_profile:default|network_profile:cilium|network_profile:default-cni)
-      PRESET_NETWORK_PROFILE="${value}"
-      ;;
-    observability_stack:default|observability_stack:victoria|observability_stack:lgtm|observability_stack:minimal-observability|observability_stack:none)
-      PRESET_OBSERVABILITY_STACK="${value}"
-      ;;
-    identity_stack:default|identity_stack:keycloak|identity_stack:dex)
-      PRESET_IDENTITY_STACK="${value}"
-      ;;
-    app_set:default|app_set:reference-apps|app_set:no-reference-apps|app_set:sentiment-only)
-      PRESET_APP_SET="${value}"
-      ;;
-    resource_profile:*|image_distribution:*|network_profile:*|observability_stack:*|identity_stack:*|app_set:*)
-      die_usage "Invalid --preset '${spec}'. Unsupported value for ${raw_group}"
-      ;;
-    *)
-      die_usage "Invalid --preset group '${raw_group}'. Expected one of: resource-profile, image-distribution, network-profile, observability-stack, identity-stack, app-set"
-      ;;
+  valid_group="$(jq -r --arg group "${group}" '.preset_groups[] | select(.id == $group) | .id // empty' "${WORKFLOW_OPTIONS_FILE}")"
+  if [[ -z "${valid_group}" ]]; then
+    die_usage "Invalid --preset group '${raw_group}'. Expected one of: $(jq -r '[.preset_groups[].id | gsub("_"; "-")] | join(", ")' "${WORKFLOW_OPTIONS_FILE}")"
+  fi
+
+  valid_value="$(jq -r --arg group "${group}" --arg value "${value}" '.preset_groups[] | select(.id == $group) | .presets[] | select(. == $value)' "${WORKFLOW_OPTIONS_FILE}")"
+  if [[ -z "${valid_value}" ]]; then
+    die_usage "Invalid --preset '${spec}'. Unsupported value for ${raw_group}"
+  fi
+
+  case "${group}" in
+    resource_profile) var_name="PRESET_RESOURCE_PROFILE" ;;
+    image_distribution) var_name="PRESET_IMAGE_DISTRIBUTION" ;;
+    network_profile) var_name="PRESET_NETWORK_PROFILE" ;;
+    observability_stack) var_name="PRESET_OBSERVABILITY_STACK" ;;
+    identity_stack) var_name="PRESET_IDENTITY_STACK" ;;
+    app_set) var_name="PRESET_APP_SET" ;;
+    *) die_usage "Invalid --preset group '${raw_group}'. Expected one of: resource-profile, image-distribution, network-profile, observability-stack, identity-stack, app-set" ;;
   esac
+  printf -v "${var_name}" '%s' "${value}"
 }
 
 stage_number() {
@@ -620,14 +308,19 @@ default_tfvars_file() {
 }
 
 has_tfvars_overrides() {
-  [[ -n "${APP_SENTIMENT}" ||
-    -n "${APP_SUBNETCALC}" ||
+  [[ "${#APP_OVERRIDES[@]}" -gt 0 ||
     "${PRESET_RESOURCE_PROFILE}" != "default" ||
     "${PRESET_IMAGE_DISTRIBUTION}" != "default" ||
     "${PRESET_OBSERVABILITY_STACK}" != "default" ||
     "${PRESET_IDENTITY_STACK}" != "default" ||
     "${PRESET_APP_SET}" != "default" ||
     "${#CUSTOM_OVERRIDES[@]}" -gt 0 ]]
+}
+
+app_tfvar_name() {
+  local app="$1"
+
+  printf 'enable_app_repo_%s' "${app//-/_}"
 }
 
 local_registry_runtime_host() {
@@ -659,153 +352,71 @@ render_assignment() {
   printf '%s = %s\n\n' "${key}" "${rendered}"
 }
 
-render_local_idp_12gb_overlay() {
+render_hcl_literal() {
+  local value_json="$1"
+
+  jq -nr --argjson value "${value_json}" '
+    def hcl_key:
+      if test("^[A-Za-z_][A-Za-z0-9_]*$") then . else @json end;
+    def hcl:
+      if type == "boolean" or type == "number" then tostring
+      elif type == "object" then
+        "{\n" + (to_entries | map("  " + (.key | hcl_key) + " = " + (.value | hcl)) | join("\n")) + "\n}"
+      else @json
+      end;
+    $value | hcl
+  '
+}
+
+render_assignment_json() {
+  local key="$1"
+  local value_json="$2"
+  local source="$3"
+
+  printf '# Source: %s\n' "${source}"
+  printf '%s = %s\n\n' "${key}" "$(render_hcl_literal "${value_json}")"
+}
+
+render_preset_overlay() {
+  local group="$1"
+  local preset="$2"
+  local source="preset ${group//_/-}=${preset}"
   local registry_host=""
+  local entry=""
+  local key=""
+  local value_json=""
 
+  [[ "${preset}" != "default" ]] || return 0
   registry_host="$(local_registry_runtime_host)"
-  render_assignment enable_argocd true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_gitea true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_gateway_tls true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_cert_manager true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_sso true "preset resource-profile=local-idp-12gb"
-  render_assignment sso_provider keycloak "preset resource-profile=local-idp-12gb"
-  render_assignment enable_argocd_oidc true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_app_of_apps false "preset resource-profile=local-idp-12gb"
-  render_assignment argocd_applicationset_enabled false "preset resource-profile=local-idp-12gb"
-  render_assignment argocd_notifications_enabled false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_app_repo_sentiment true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_app_repo_subnetcalc false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_backstage true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_host_local_registry true "preset resource-profile=local-idp-12gb"
-  render_assignment host_local_registry_host "${registry_host}" "preset resource-profile=local-idp-12gb"
-  render_assignment host_local_registry_scheme http "preset resource-profile=local-idp-12gb"
-  render_assignment prefer_external_platform_images true "preset resource-profile=local-idp-12gb"
-  render_assignment prefer_external_workload_images true "preset resource-profile=local-idp-12gb"
-  render_assignment enable_actions_runner false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_apps_dir_mount false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_docker_socket_mount false "preset resource-profile=local-idp-12gb"
-  cat <<EOF
-# Source: preset resource-profile=local-idp-12gb
-external_platform_image_refs = {
-  "backstage" = "${registry_host}/platform/backstage:latest"
-  "idp-core" = "${registry_host}/platform/idp-core:latest"
-}
 
-# Source: preset resource-profile=local-idp-12gb
-external_workload_image_refs = {
-  "sentiment-api" = "${registry_host}/platform/sentiment-api:latest"
-  "sentiment-auth-ui" = "${registry_host}/platform/sentiment-auth-ui:latest"
-}
-
-EOF
-  render_assignment enable_signoz false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_prometheus false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_grafana false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_loki false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_victoria_logs false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_tempo false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_observability_agent false "preset resource-profile=local-idp-12gb"
-  render_assignment enable_headlamp false "preset resource-profile=local-idp-12gb"
+  jq -c \
+    --arg group "${group}" \
+    --arg preset "${preset}" \
+    --arg registry_host "${registry_host}" '
+      def subvars:
+        if type == "object" then with_entries(.value |= subvars)
+        elif type == "array" then map(subvars)
+        elif type == "string" then gsub("\\$\\{local_registry_runtime_host\\}"; $registry_host)
+        else . end;
+      .presets[]
+      | select(.group == $group and .id == $preset)
+      | .overlay
+      | subvars
+      | to_entries[]
+    ' "${WORKFLOW_OPTIONS_FILE}" |
+    while IFS= read -r entry; do
+      key="$(jq -r '.key' <<<"${entry}")"
+      value_json="$(jq -c '.value' <<<"${entry}")"
+      render_assignment_json "${key}" "${value_json}" "${source}"
+    done
 }
 
 render_preset_tfvars() {
-  local registry_host=""
-
-  case "${PRESET_RESOURCE_PROFILE}" in
-    minimal)
-      render_assignment enable_backstage false "preset resource-profile=minimal"
-      render_assignment enable_prometheus false "preset resource-profile=minimal"
-      render_assignment enable_grafana false "preset resource-profile=minimal"
-      render_assignment enable_loki false "preset resource-profile=minimal"
-      render_assignment enable_victoria_logs false "preset resource-profile=minimal"
-      render_assignment enable_tempo false "preset resource-profile=minimal"
-      ;;
-    local-12gb)
-      render_assignment enable_backstage false "preset resource-profile=local-12gb"
-      ;;
-    local-idp-12gb)
-      render_local_idp_12gb_overlay
-      ;;
-    airplane)
-      render_assignment enable_image_preload true "preset resource-profile=airplane"
-      render_assignment enable_host_local_registry true "preset resource-profile=airplane"
-      render_assignment host_local_registry_scheme http "preset resource-profile=airplane"
-      render_assignment host_local_registry_host "$(local_registry_runtime_host)" "preset resource-profile=airplane"
-      ;;
-    default) ;;
-  esac
-
-  case "${PRESET_IMAGE_DISTRIBUTION}" in
-    pull)
-      render_assignment enable_host_local_registry false "preset image-distribution=pull"
-      render_assignment enable_image_preload false "preset image-distribution=pull"
-      ;;
-    local-cache)
-      registry_host="$(local_registry_runtime_host)"
-      render_assignment enable_host_local_registry true "preset image-distribution=local-cache"
-      render_assignment host_local_registry_host "${registry_host}" "preset image-distribution=local-cache"
-      render_assignment host_local_registry_scheme http "preset image-distribution=local-cache"
-      ;;
-    preload)
-      render_assignment enable_image_preload true "preset image-distribution=preload"
-      ;;
-    airplane)
-      registry_host="$(local_registry_runtime_host)"
-      render_assignment enable_host_local_registry true "preset image-distribution=airplane"
-      render_assignment enable_image_preload true "preset image-distribution=airplane"
-      render_assignment host_local_registry_host "${registry_host}" "preset image-distribution=airplane"
-      render_assignment host_local_registry_scheme http "preset image-distribution=airplane"
-      ;;
-    baked|default) ;;
-  esac
-
-  case "${PRESET_OBSERVABILITY_STACK}" in
-    victoria)
-      render_assignment enable_prometheus true "preset observability-stack=victoria"
-      render_assignment enable_grafana true "preset observability-stack=victoria"
-      render_assignment enable_victoria_logs true "preset observability-stack=victoria"
-      render_assignment enable_loki false "preset observability-stack=victoria"
-      render_assignment enable_tempo false "preset observability-stack=victoria"
-      ;;
-    lgtm)
-      render_assignment enable_prometheus true "preset observability-stack=lgtm"
-      render_assignment enable_grafana true "preset observability-stack=lgtm"
-      render_assignment enable_loki true "preset observability-stack=lgtm"
-      render_assignment enable_tempo true "preset observability-stack=lgtm"
-      render_assignment enable_victoria_logs false "preset observability-stack=lgtm"
-      ;;
-    minimal-observability|none)
-      render_assignment enable_prometheus false "preset observability-stack=${PRESET_OBSERVABILITY_STACK}"
-      render_assignment enable_grafana false "preset observability-stack=${PRESET_OBSERVABILITY_STACK}"
-      render_assignment enable_loki false "preset observability-stack=${PRESET_OBSERVABILITY_STACK}"
-      render_assignment enable_victoria_logs false "preset observability-stack=${PRESET_OBSERVABILITY_STACK}"
-      render_assignment enable_tempo false "preset observability-stack=${PRESET_OBSERVABILITY_STACK}"
-      ;;
-    default) ;;
-  esac
-
-  case "${PRESET_IDENTITY_STACK}" in
-    keycloak|dex)
-      render_assignment sso_provider "${PRESET_IDENTITY_STACK}" "preset identity-stack=${PRESET_IDENTITY_STACK}"
-      ;;
-    default) ;;
-  esac
-
-  case "${PRESET_APP_SET}" in
-    reference-apps)
-      render_assignment enable_app_repo_sentiment true "preset app-set=reference-apps"
-      render_assignment enable_app_repo_subnetcalc true "preset app-set=reference-apps"
-      ;;
-    no-reference-apps)
-      render_assignment enable_app_repo_sentiment false "preset app-set=no-reference-apps"
-      render_assignment enable_app_repo_subnetcalc false "preset app-set=no-reference-apps"
-      ;;
-    sentiment-only)
-      render_assignment enable_app_repo_sentiment true "preset app-set=sentiment-only"
-      render_assignment enable_app_repo_subnetcalc false "preset app-set=sentiment-only"
-      ;;
-    default) ;;
-  esac
+  render_preset_overlay resource_profile "${PRESET_RESOURCE_PROFILE}"
+  render_preset_overlay image_distribution "${PRESET_IMAGE_DISTRIBUTION}"
+  render_preset_overlay observability_stack "${PRESET_OBSERVABILITY_STACK}"
+  render_preset_overlay identity_stack "${PRESET_IDENTITY_STACK}"
+  render_preset_overlay app_set "${PRESET_APP_SET}"
 }
 
 render_custom_overrides() {
@@ -846,6 +457,18 @@ custom_overrides_json() {
   printf '%s\n' "${CUSTOM_OVERRIDES[@]}" | jq -R 'split("=") | {id: .[0], value: (.[1:] | join("="))}' | jq -s '.'
 }
 
+app_overrides_json() {
+  local override=""
+
+  if [[ "${#APP_OVERRIDES[@]}" -eq 0 ]]; then
+    printf '{}'
+    return 0
+  fi
+  printf '%s\n' "${APP_OVERRIDES[@]}" |
+    jq -R 'split("=") | {(.[0]): (.[1] == "true")}' |
+    jq -s 'add'
+}
+
 warnings_json() {
   local warnings=()
   local override=""
@@ -879,16 +502,19 @@ preset_summary_text() {
 }
 
 render_tfvars() {
+  local override=""
+  local app=""
+  local value=""
+
   printf '# Generated by scripts/platform-workflow.sh; safe to delete.\n'
   printf '# Variant: %s, stage: %s\n' "${TARGET}" "${STAGE}"
   printf '\n'
   render_preset_tfvars
-  if [[ -n "${APP_SENTIMENT}" ]]; then
-    render_assignment enable_app_repo_sentiment "${APP_SENTIMENT}" "custom app override"
-  fi
-  if [[ -n "${APP_SUBNETCALC}" ]]; then
-    render_assignment enable_app_repo_subnetcalc "${APP_SUBNETCALC}" "custom app override"
-  fi
+  for override in "${APP_OVERRIDES[@]}"; do
+    app="${override%%=*}"
+    value="${override#*=}"
+    render_assignment "$(app_tfvar_name "${app}")" "${value}" "custom app override"
+  done
   render_custom_overrides
 }
 
@@ -1028,59 +654,31 @@ command_string() {
 print_options() {
   case "${OUTPUT_FORMAT}" in
     text)
-      cat <<'EOF'
-Variants:
-  kind    local-created-cluster  kubernetes/kind
-  lima    local-created-cluster  kubernetes/lima
-  slicer  local-created-cluster  kubernetes/slicer
-
-Variant classes:
-  local-created-cluster          supported now
-  attached-existing-cluster      future adapter contract
-  provider-managed-cluster       future adapter contract
-  provider-infra-plus-cluster    future adapter contract
-
-Stages:
-  100 cluster
-  200 cilium
-  300 hubble
-  400 argocd
-  500 gitea
-  600 policies
-  700 app-repos
-  800 observability
-  900 sso
-
-Actions:
-  readiness
-  plan
-  apply
-  status
-  show-urls
-  reset
-  state-reset
-  check-health
-  check-security
-  check-rbac
-
-App toggles:
-  sentiment=on|off
-  subnetcalc=on|off
-
-Preset groups:
-  resource-profile=default|minimal|local-12gb|local-idp-12gb|airplane
-  image-distribution=default|pull|local-cache|preload|baked|airplane
-  network-profile=default|cilium|default-cni
-  observability-stack=default|victoria|lgtm|minimal-observability|none
-  identity-stack=default|keycloak|dex
-  app-set=default|reference-apps|no-reference-apps|sentiment-only
-
-Custom overrides:
-  --set worker_count=2
-  --set enable_backstage=off
-  --set enable_app_repo_subnetcalc=off
-
-EOF
+      jq -r '
+        "Variants:",
+        (.variants[] | "  \(.id)    \(.class)  \(.path)"),
+        "",
+        "Variant classes:",
+        (.variant_classes[] | "  \(.id)  " + (if .supported_now then "supported now" else "future adapter contract" end)),
+        "",
+        "Stages:",
+        (.stages[] | "  \(.id) \(.label)"),
+        "",
+        "Actions:",
+        (.actions[] | "  \(.)"),
+        "",
+        "App toggles:",
+        (.apps[] | "  \(.)=on|off"),
+        "",
+        "Preset groups:",
+        (.preset_groups[] | "  \(.id | gsub("_"; "-"))=\(.presets | join("|"))"),
+        "",
+        "Custom overrides:",
+        "  --set worker_count=2",
+        "  --set enable_backstage=off",
+        "  --set enable_app_repo_subnetcalc=off",
+        ""
+      ' "${WORKFLOW_OPTIONS_FILE}"
       ;;
     json)
       workflow_options_json
@@ -1131,8 +729,7 @@ print_preview() {
         --argjson custom_overrides "$(custom_overrides_json)" \
         --argjson warnings "$(warnings_json)" \
         --argjson has_tfvars "$(has_tfvars_overrides && printf true || printf false)" \
-        --argjson app_sentiment "$(if [[ -n "${APP_SENTIMENT}" ]]; then printf '%s' "${APP_SENTIMENT}"; else printf null; fi)" \
-        --argjson app_subnetcalc "$(if [[ -n "${APP_SUBNETCALC}" ]]; then printf '%s' "${APP_SUBNETCALC}"; else printf null; fi)" \
+        --argjson app_overrides "$(app_overrides_json)" \
         '{
           variant: ($options.variants[] | select(.id == $variant_id)),
           stack_path: $stack_path,
@@ -1160,10 +757,7 @@ print_preview() {
           presets: $presets,
           custom_overrides: $custom_overrides,
           warnings: $warnings,
-          app_overrides: {
-            sentiment: $app_sentiment,
-            subnetcalc: $app_subnetcalc
-          },
+          app_overrides: $app_overrides,
           command: $command
         }'
       ;;

@@ -892,7 +892,7 @@ check-app: workflow-validate-stage
 	if [ -n "$${HOST:-}" ]; then host_flag="--host $${HOST}"; fi; \
 	ext_flag=""; \
 	if [ "$${EXTENDED:-0}" = "1" ]; then ext_flag="--extended"; fi; \
-	"$(STACK_DIR)/scripts/check-app.sh" $(READONLY_MODE_FLAG) $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
+	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-app.sh" $(READONLY_MODE_FLAG) $$vf --app "$${APP}" $$host_flag $$path_flag $$ext_flag
 
 .PHONY: check-sso
 check-sso: workflow-validate-stage

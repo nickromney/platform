@@ -80,6 +80,9 @@ HTTPROUTE_NS="gateway-routes"
 HTTPROUTE_NAME=""
 SSO_NS="sso"
 OAUTH2_PROXY_NAME=""
+APP_ARGOCD_NAME=""
+OAUTH2_PROXY_ARGOCD_NAME=""
+APP_SERVICE_PATTERN=""
 
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
@@ -210,7 +213,13 @@ fi
 if [[ -z "${HOST}" ]]; then
   # Heuristic: many workloads use env subdomains (sentiment.dev, subnetcalc.uat, etc) while their
   # Argo app names use "-dev"/"-uat". Default HOST should "just work" for these too.
-  if [[ "${APP}" == "dex" ]]; then
+  if [[ "${APP}" == "portal" ]]; then
+    HOST="portal.${PLATFORM_BASE_DOMAIN}"
+  elif [[ "${APP}" == "portal-api" ]]; then
+    HOST="portal-api.${PLATFORM_BASE_DOMAIN}"
+  elif [[ "${APP}" == "mcp-console" ]]; then
+    HOST="mcp-console.${PLATFORM_BASE_DOMAIN}"
+  elif [[ "${APP}" == "dex" ]]; then
     HOST="dex.${PLATFORM_ADMIN_BASE_DOMAIN}"
   elif [[ "${APP}" =~ -dev$ ]]; then
     base="${APP%-dev}"
@@ -228,7 +237,52 @@ if [[ -z "${HTTPROUTE_NAME}" ]]; then
 fi
 
 if [[ -z "${OAUTH2_PROXY_NAME}" ]]; then
-  OAUTH2_PROXY_NAME="oauth2-proxy-${APP}"
+  case "${APP}" in
+    portal)
+      OAUTH2_PROXY_NAME="oauth2-proxy-backstage"
+      ;;
+    portal-api)
+      OAUTH2_PROXY_NAME="oauth2-proxy-idp-core"
+      ;;
+    *)
+      OAUTH2_PROXY_NAME="oauth2-proxy-${APP}"
+      ;;
+  esac
+fi
+
+if [[ -z "${APP_ARGOCD_NAME}" ]]; then
+  case "${APP}" in
+    portal|portal-api)
+      APP_ARGOCD_NAME="idp"
+      ;;
+    mcp-console)
+      APP_ARGOCD_NAME="mcp"
+      ;;
+    *)
+      APP_ARGOCD_NAME="${APP}"
+      ;;
+  esac
+fi
+
+if [[ -z "${OAUTH2_PROXY_ARGOCD_NAME}" ]]; then
+  OAUTH2_PROXY_ARGOCD_NAME="${OAUTH2_PROXY_NAME}"
+fi
+
+if [[ -z "${APP_SERVICE_PATTERN}" ]]; then
+  case "${APP}" in
+    portal)
+      APP_SERVICE_PATTERN="portal|backstage"
+      ;;
+    portal-api)
+      APP_SERVICE_PATTERN="portal-api|idp-core"
+      ;;
+    mcp-console)
+      APP_SERVICE_PATTERN="mcp-console|mcp-inspector|platform-mcp"
+      ;;
+    *)
+      APP_SERVICE_PATTERN="${APP}"
+      ;;
+  esac
 fi
 
 require kubectl
@@ -378,6 +432,8 @@ print_kv "probe_target" "$(resolve_probe_target)"
 print_kv "argocd_ns" "${ARGOCD_NS}"
 print_kv "httproute" "${HTTPROUTE_NS}/${HTTPROUTE_NAME}"
 print_kv "oauth2_proxy" "${SSO_NS}/${OAUTH2_PROXY_NAME}"
+print_kv "app_argocd" "${APP_ARGOCD_NAME}"
+print_kv "oauth2_argocd" "${OAUTH2_PROXY_ARGOCD_NAME}"
 if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
   print_kv "tfvars" "$(printf '%s\n' "${TFVARS_FILES[@]}" | paste -sd ', ' -)"
 fi
@@ -392,13 +448,13 @@ curl_local "https://${HOST}:${HOST_PORT}${PATH_TO_CHECK}"
 section "Argo CD Applications"
 print_argocd_app "app-of-apps"
 print_argocd_app "platform-gateway-routes"
-print_argocd_app "${APP}"
-print_argocd_app "${OAUTH2_PROXY_NAME}"
+print_argocd_app "${APP_ARGOCD_NAME}"
+print_argocd_app "${OAUTH2_PROXY_ARGOCD_NAME}"
 
-APP_NS="$(get_app_destination_namespace "${APP}")"
+APP_NS="$(get_app_destination_namespace "${APP_ARGOCD_NAME}")"
 if [[ -z "${APP_NS}" ]]; then
   # As a fallback, try the oauth2-proxy app (if the actual app is GitOps-managed and absent from ArgoCD).
-  APP_NS="$(get_app_destination_namespace "${OAUTH2_PROXY_NAME}")"
+  APP_NS="$(get_app_destination_namespace "${OAUTH2_PROXY_ARGOCD_NAME}")"
 fi
 
 if [[ -n "${APP_NS}" ]]; then
@@ -407,7 +463,7 @@ if [[ -n "${APP_NS}" ]]; then
   if [[ "${EXTENDED}" -eq 1 ]]; then
     maybe kubectl -n "${APP_NS}" get deploy,sts,svc -o wide
   else
-    maybe kubectl -n "${APP_NS}" get deploy,sts -o wide | grep -E "${APP}|signoz|clickhouse|otel" || true
+    maybe kubectl -n "${APP_NS}" get deploy,sts -o wide | grep -E "${APP_SERVICE_PATTERN}|signoz|clickhouse|otel" || true
   fi
 else
   warn "Could not infer destination namespace from Argo CD for app=${APP}; skipping app namespace pod listing"
@@ -421,7 +477,7 @@ maybe kubectl -n "${SSO_NS}" get svc "${OAUTH2_PROXY_NAME}" -o wide
 print_endpointslices_for_service "${SSO_NS}" "${OAUTH2_PROXY_NAME}"
 if [[ -n "${APP_NS}" ]]; then
   # Best-effort: show services that look relevant in the destination namespace.
-  maybe kubectl -n "${APP_NS}" get svc -o wide | grep -E "(^NAME|${APP}|signoz)" || true
+  maybe kubectl -n "${APP_NS}" get svc -o wide | grep -E "(^NAME|${APP_SERVICE_PATTERN}|signoz)" || true
 fi
 
 section "HTTPRoute"
@@ -478,7 +534,7 @@ if [[ -n "${APP_NS}" && ( "${EXTENDED}" -eq 1 || "${APP}" == "signoz" ) ]]; then
     tail_deploy_logs "${APP_NS}" "signoz-otel-collector"
   else
     # Generic heuristic: tail logs from deployments whose name matches the app string.
-    for d in $(kubectl -n "${APP_NS}" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E "${APP}" || true); do
+    for d in $(kubectl -n "${APP_NS}" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E "${APP_SERVICE_PATTERN}" || true); do
       tail_deploy_logs "${APP_NS}" "${d}"
     done
   fi

@@ -318,6 +318,7 @@ import os
 
 repo_root = Path(os.environ["REPO_ROOT"])
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 
 assert "source_fingerprint_tag()" in build_script
 assert "idp_core_source_tag=" in build_script
@@ -335,15 +336,15 @@ assert "backstage_image_tag=" in render_script
 assert "write_external_platform_images()" in render_script
 assert "prefer_external_platform_images = true" in render_script
 assert "external_platform_image_refs = {" in render_script
-assert "apps/platform-mcp/platform_mcp" in render_script
-assert "apps/idp-core/app" in render_script
-assert "apps/backstage/packages" in render_script
-assert "apps/apim-simulator/catalog-info.yaml" in build_script
-assert "apps/apim-simulator/catalog-info.yaml" in render_script
-assert "platform/platform-mcp:${platform_mcp_image_tag}" in render_script
-assert "platform/backstage:${backstage_image_tag:-latest}" in render_script
-assert "platform/idp-core:${idp_core_image_tag}" in render_script
-assert "platform/grafana-victorialogs:latest" in render_script
+assert "apps/platform-mcp/platform_mcp" in image_catalog
+assert "apps/idp-core/app" in image_catalog
+assert "apps/backstage/packages" in image_catalog
+assert "apps/apim-simulator/catalog-info.yaml" in image_catalog
+assert "image_catalog_source_tag workload platform-mcp" in render_script
+assert "image_catalog_source_tag platform backstage" in render_script
+assert "image_catalog_source_tag platform idp-core" in render_script
+assert "image_catalog_hcl_refs platform" in render_script
+assert "image_catalog_hcl_refs workload" in render_script
 
 print("validated local platform IDP source fingerprint cache keys")
 PY
@@ -352,29 +353,80 @@ PY
   [[ "${output}" == *"validated local platform IDP source fingerprint cache keys"* ]]
 }
 
-@test "Lima and Slicer targets route local platform IDP images through their host cache" {
+@test "image catalog entries declare version-check policy" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
+import json
 import os
 
 repo_root = Path(os.environ["REPO_ROOT"])
+catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
 
-expectations = {
-    "kubernetes/lima/targets/lima.tfvars": "host.lima.internal:5002",
-    "kubernetes/slicer/targets/slicer.tfvars": "192.168.64.1:5002",
+allowed_modes = {
+    "internal-non-comparable",
+    "external-latest",
+    "pinned-digest",
+    "checked-elsewhere",
 }
 
-for relative_path, registry_host in expectations.items():
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    assert "prefer_external_platform_images = true" in content, relative_path
-    assert f'"idp-core"   = "{registry_host}/platform/idp-core:latest"' in content, relative_path
-    assert f'backstage   = "{registry_host}/platform/backstage:latest"' in content, relative_path
+validated = 0
+for category in ("platform_images", "workload_images"):
+    for image in catalog[category]:
+        policy = image.get("version_check")
+        assert isinstance(policy, dict), f"{category}.{image['id']} missing version_check"
+        mode = policy.get("mode")
+        reason = str(policy.get("reason", "")).strip()
+        assert mode in allowed_modes, f"{category}.{image['id']} has unsupported version_check mode {mode!r}"
+        assert reason, f"{category}.{image['id']} version_check must explain the policy"
+        if image.get("default_tag") == "latest":
+            assert mode in {"internal-non-comparable", "checked-elsewhere"}, (
+                f"{category}.{image['id']} uses floating latest without an explicit non-comparable/elsewhere policy"
+            )
+        validated += 1
 
-print("validated Lima and Slicer IDP image cache refs")
+print(f"validated {validated} image catalog version-check policies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Lima and Slicer IDP image cache refs"* ]]
+  [[ "${output}" == *"validated 11 image catalog version-check policies"* ]]
+}
+
+@test "Lima and Slicer external image refs match the image catalog" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+import subprocess
+import sys
+
+repo_root = Path(os.environ["REPO_ROOT"])
+validator = repo_root / "kubernetes/workflow/validate-image-catalog-target-refs.py"
+catalog = repo_root / "kubernetes/workflow/image-catalog.json"
+
+expectations = {
+    "lima": repo_root / "kubernetes/lima/targets/lima.tfvars",
+    "slicer": repo_root / "kubernetes/slicer/targets/slicer.tfvars",
+}
+
+for target, tfvars in expectations.items():
+    subprocess.run(
+        [
+            sys.executable,
+            str(validator),
+            "--catalog",
+            str(catalog),
+            "--target",
+            target,
+            "--tfvars",
+            str(tfvars),
+        ],
+        check=True,
+    )
+
+print("validated Lima and Slicer external image refs against image catalog")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Lima and Slicer external image refs against image catalog"* ]]
 }
 
 @test "local platform IDP cache hits are not invalidated by unrelated git commits" {
