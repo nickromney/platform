@@ -1,0 +1,69 @@
+{
+  "schema_version": "platform.variant/v1",
+  "id": "kind",
+  "path": "kubernetes/kind",
+  "label": "kind",
+  "guided_label": "Kind",
+  "class": "local-created-cluster",
+  "family": "local",
+  "lifecycle_mode": "create",
+  "state_scope": "single-local",
+  "contexts": ["local-substrate", "platform-stack"],
+  "execution_adapter": {
+    "type": "make",
+    "make_dir": "kubernetes/kind"
+  },
+  "state": {
+    "runtime_scope": "kind",
+    "state_file": "terraform/.run/kubernetes/terraform.tfstate",
+    "state_lock_file": "terraform/.run/kubernetes/.terraform.tfstate.lock.info"
+  },
+  "cluster_access": {
+    "kubeconfig_path": "~/.kube/kind-kind-local.yaml",
+    "kubeconfig_context": "kind-kind-local",
+    "cluster_name": "kind-local"
+  },
+  "stage_ladder": {
+    "stages_dir": "kubernetes/kind/stages",
+    "target_profile_file": "kubernetes/kind/targets/kind.tfvars",
+    "stage_files": {
+      "100": "kubernetes/kind/stages/100-cluster.tfvars",
+      "200": "kubernetes/kind/stages/200-cilium.tfvars",
+      "300": "kubernetes/kind/stages/300-hubble.tfvars",
+      "400": "kubernetes/kind/stages/400-argocd.tfvars",
+      "500": "kubernetes/kind/stages/500-gitea.tfvars",
+      "600": "kubernetes/kind/stages/600-policies.tfvars",
+      "700": "kubernetes/kind/stages/700-app-repos.tfvars",
+      "800": "kubernetes/kind/stages/800-gateway-tls.tfvars",
+      "900": "kubernetes/kind/stages/900-sso.tfvars"
+    }
+  },
+  "readiness": {
+    "command": "make -C kubernetes/kind prereqs",
+    "facets": ["operator_prereqs", "active_variant", "cluster_access", "host_access_path", "stage_contracts", "blockers"]
+  },
+  "blockers": {
+    "conflicting_variants": ["lima", "slicer"],
+    "checks": ["check-lima-stopped", "check-slicer-stopped"]
+  },
+  "registry": {
+    "runtime_host": "host.docker.internal:5002",
+    "push_host": "127.0.0.1:5002",
+    "scheme": "http",
+    "image_distribution_modes": ["load", "registry", "hybrid", "baked"],
+    "default_image_distribution_mode": "registry"
+  },
+  "host_access_path": {
+    "mode": "kind-nodeports",
+    "gateway_host_port": 443,
+    "gateway_target_port": 30070,
+    "shared_host_ports": [443, 30022, 30080, 30090, 31235, 3301, 3302],
+    "requires_proxy": false,
+    "requires_forward_process": false,
+    "can_degrade": false
+  },
+  "network_profile": {
+    "default": "cilium",
+    "allowed": ["cilium"]
+  }
+}

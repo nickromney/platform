@@ -45,6 +45,7 @@ EOF
 }
 
 script_name="$(basename "$0")"
+shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
     if [[ "$1" == "--dry-run" ]]; then

@@ -180,7 +180,7 @@ setup() {
   run "${SCRIPT}" preview --execute --variant lima --stage 900 --preset resource-profile=local-idp-12gb
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Preset resource-profile=local-idp-12gb is only available for variant kind"* ]]
+  [[ "${output}" == *"Preset resource-profile=local-idp-12gb is not available for variant lima"* ]]
 
   run "${SCRIPT}" preview --execute --variant kind --stage 700 --preset observability-stack=lgtm
 
@@ -190,7 +190,7 @@ setup() {
   run "${SCRIPT}" preview --execute --variant kind --stage 100 --preset network-profile=default-cni
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Preset network-profile=default-cni is only available for variant slicer"* ]]
+  [[ "${output}" == *"Preset network-profile=default-cni is not available for variant kind"* ]]
 }
 
 @test "platform workflow rejects removed 950-local-idp stage" {

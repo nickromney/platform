@@ -84,6 +84,26 @@ check-platform-env: check-platform-env-file
 		exit 1; \
 	fi
 
+VARIANT_CONTRACT_ID ?= $(STACK_RUNTIME_SCOPE)
+VARIANT_CONTRACT_PATH ?= kubernetes/$(VARIANT_CONTRACT_ID)
+VARIANT_CONTRACT_REGISTRY_RUNTIME_HOST ?= $(if $(KIND_LOCAL_IMAGE_CACHE_HOST),$(KIND_LOCAL_IMAGE_CACHE_HOST),$(LOCAL_IMAGE_CACHE_HOST))
+VARIANT_CONTRACT_REGISTRY_PUSH_HOST ?= $(if $(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST),$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST),$(LOCAL_IMAGE_CACHE_PUSH_HOST))
+VARIANT_CONTRACT_REGISTRY_SCHEME ?= $(if $(LOCAL_IMAGE_CACHE_SCHEME),$(LOCAL_IMAGE_CACHE_SCHEME),http)
+
+.PHONY: variant-contract-print
+variant-contract-print:
+	@jq -n \
+		--arg id "$(VARIANT_CONTRACT_ID)" \
+		--arg path "$(VARIANT_CONTRACT_PATH)" \
+		--arg state_file "$(abspath $(STATE_FILE))" \
+		--arg state_lock_file "$(abspath $(STATE_LOCK_FILE))" \
+		--arg kubeconfig_path "$(KUBECONFIG_PATH)" \
+		--arg kubeconfig_context "$(KUBECONFIG_CONTEXT)" \
+		--arg registry_runtime_host "$(VARIANT_CONTRACT_REGISTRY_RUNTIME_HOST)" \
+		--arg registry_push_host "$(VARIANT_CONTRACT_REGISTRY_PUSH_HOST)" \
+		--arg registry_scheme "$(VARIANT_CONTRACT_REGISTRY_SCHEME)" \
+		'{id: $$id, path: $$path, state: {state_file: $$state_file, state_lock_file: $$state_lock_file}, cluster_access: {kubeconfig_path: $$kubeconfig_path, kubeconfig_context: $$kubeconfig_context}, registry: {runtime_host: $$registry_runtime_host, push_host: $$registry_push_host, scheme: $$registry_scheme}}'
+
 .DEFAULT:
 	@set -euo pipefail; \
 	echo "Unknown make goal '$@'." >&2; \
