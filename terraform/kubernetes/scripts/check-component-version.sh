@@ -3150,9 +3150,47 @@ emit_json_report() {
     printf '%s\n' "${component_rows}" | \
       tsv_rows_to_json_array '["component","deployed","codebase","latest","deploy_tag","code_tag","preferred_tag","latest_tag","status"]' | \
       jq '
+        def component_status_code($row):
+          if (
+            $row.deployed != "" and $row.deployed != "Unavailable" and
+            $row.codebase != "" and $row.latest != "" and
+            $row.deployed == $row.codebase and $row.codebase == $row.latest
+          ) then
+            "current"
+          elif ($row.deployed == "" and $row.codebase != "" and $row.latest != "" and $row.codebase == $row.latest) then
+            "not_deployed_current"
+          elif $row.deployed == "Unavailable" then
+            "deployed_unknown"
+          elif ($row.deployed != "" and $row.codebase != "" and $row.deployed != $row.codebase) then
+            "deployed_drift"
+          elif ($row.codebase != "" and $row.latest != "" and $row.codebase != $row.latest) then
+            "update_available"
+          elif $row.codebase == "" then
+            "codebase_unknown"
+          elif $row.latest == "" then
+            "latest_unknown"
+          elif $row.deployed == "" then
+            "not_deployed"
+          else
+            "follow_up"
+          end;
+        def component_status_group($code):
+          if ($code == "current" or $code == "not_deployed_current") then
+            "current"
+          elif $code == "update_available" then
+            "update"
+          elif $code == "deployed_drift" then
+            "drift"
+          else
+            "follow_up"
+          end;
         map(
-          . + {
+          . as $row
+          | (component_status_code($row)) as $status_code
+          | . + {
             status_text: .status,
+            status_code: $status_code,
+            status_group: component_status_group($status_code),
             update_available: (.codebase != "" and .latest != "" and .codebase != .latest),
             deployed_available: (.deployed != "" and .deployed != "Unavailable")
           }
@@ -3341,6 +3379,7 @@ emit_json_report() {
         summary: {
           component_count: ($components | length),
           component_update_count: ($components | map(select(.update_available == true)) | length),
+          component_status_counts: count_by_status_code($components),
           dependency_count: ($app_dependencies | length),
           dependency_update_count: ($app_dependencies | map(select(.status_text == "update available")) | length),
           dependency_cooldown_count: ($app_dependencies | map(select(.status_text == "cooldown active")) | length),

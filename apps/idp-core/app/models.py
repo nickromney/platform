@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from app.environment_requests import DEFAULT_ENVIRONMENT_ACTION, DEFAULT_ENVIRONMENT_TYPE, ENVIRONMENT_ACTION_PATTERN
+
 
 class RuntimeInfo(BaseModel):
     name: str
@@ -8,10 +10,10 @@ class RuntimeInfo(BaseModel):
 
 class EnvironmentRequest(BaseModel):
     runtime: str
-    action: str = Field(default="create", pattern="^(create|delete)$")
+    action: str = Field(default=DEFAULT_ENVIRONMENT_ACTION, pattern=ENVIRONMENT_ACTION_PATTERN)
     app: str = Field(min_length=1)
     environment: str = Field(min_length=1)
-    environment_type: str = "development"
+    environment_type: str = DEFAULT_ENVIRONMENT_TYPE
 
 
 class DeploymentRequest(BaseModel):

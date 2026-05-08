@@ -11,7 +11,10 @@ class CatalogModel(BaseModel):
 
 class EnvironmentSpec(CatalogModel):
     name: str | None = None
+    type: str | None = None
+    namespace: str | None = None
     route: str | None = None
+    rbac: dict[str, Any] = Field(default_factory=dict)
     deployment: dict[str, Any] = Field(default_factory=dict)
     health: Any = None
     sync: Any = None
@@ -34,6 +37,8 @@ class ApplicationSpec(CatalogModel):
     name: str | None = None
     display_name: str | None = None
     owner: str | None = None
+    lifecycle: str | None = None
+    source: dict[str, Any] = Field(default_factory=dict)
     deployment: dict[str, Any] = Field(default_factory=dict)
     environments: list[EnvironmentSpec] = Field(default_factory=list)
     secrets: list[SecretSpec] = Field(default_factory=list)
@@ -70,6 +75,20 @@ class ScorecardRecord(CatalogModel):
     has_health_endpoint: bool = False
     has_network_policy: bool = False
     has_owner: bool = False
+
+
+class ApplicationSurfaceRecord(CatalogModel):
+    app: str | None = None
+    display_name: str | None = None
+    owner: str | None = None
+    lifecycle: str | None = None
+    environment: str | None = None
+    environment_type: str | None = None
+    namespace: str | None = None
+    route: str | None = None
+    rbac_group: str | None = None
+    source_path: str | None = None
+    kubernetes_label_selector: str | None = None
 
 
 def load_catalog(path: Path) -> CatalogDocument:
@@ -130,6 +149,30 @@ def scorecard_records(catalog: CatalogDocument) -> list[ScorecardRecord]:
                 }
             )
         )
+    return records
+
+
+def application_surface_records(catalog: CatalogDocument) -> list[ApplicationSurfaceRecord]:
+    records: list[ApplicationSurfaceRecord] = []
+    for app_spec in application_specs(catalog):
+        for environment in app_spec.environments:
+            if not environment.route:
+                continue
+            records.append(
+                ApplicationSurfaceRecord(
+                    app=app_spec.name,
+                    display_name=app_spec.display_name,
+                    owner=app_spec.owner,
+                    lifecycle=app_spec.lifecycle,
+                    environment=environment.name,
+                    environment_type=environment.type,
+                    namespace=environment.namespace,
+                    route=environment.route,
+                    rbac_group=_optional_string(environment.rbac.get("group")),
+                    source_path=_optional_string(app_spec.source.get("path")),
+                    kubernetes_label_selector=f"app={app_spec.name}" if app_spec.name else None,
+                )
+            )
     return records
 
 

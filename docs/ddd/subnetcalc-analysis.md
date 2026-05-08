@@ -112,7 +112,7 @@ and [test_auth.py](../../apps/subnetcalc/api-fastapi-container-app/tests/test_au
 
 ## APIM Is A Separate Supporting Context
 
-The APIM simulator is not just a helper library. It has its own language:
+The APIM simulator is a separate supporting service with its own language:
 
 - route host matching
 - version routing

@@ -1077,7 +1077,7 @@ test:
 	@$(MAKE) test-shell
 	@$(MAKE) test-bats
 	@$(MAKE) prepare-state
-	@cd "$(STACK_DIR)" && tofu init -backend=false -input=false && tofu test
+	@"$(STACK_DIR)/scripts/run-opentofu-tests.sh" --execute --module-dir "$(STACK_DIR)"
 
 .PHONY: test-idempotence
 test-idempotence: WORKFLOW_REQUIRE_STAGE_FILE=1

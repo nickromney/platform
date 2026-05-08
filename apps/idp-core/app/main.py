@@ -8,6 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.adapters import StatusProvider, get_adapter, list_adapters
 from app.audit import AuditWriter
 from app.catalog import deployment_records, load_catalog, scorecard_records, secret_bindings
+from app.environment_requests import (
+    DEFAULT_ENVIRONMENT_ACTION,
+    ENVIRONMENT_DELETE_ACTION,
+    environment_event,
+    environment_portal_action,
+)
 from app.models import DeploymentRequest, EnvironmentRequest, ScaffoldRequest, SecretRequest, WorkflowResponse
 from app.paths import discover_repo_root
 
@@ -114,11 +120,12 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH, status_provider: Status
 
     @app.get("/api/v1/actions")
     def actions() -> dict[str, object]:
+        runtime = active_adapter().name
         return {
             "actions": [
-                {"id": "environment.create", "label": "Create environment", "runtime": active_adapter().name, "dry_run": True},
-                {"id": "deployment.promote", "label": "Promote deployment", "runtime": active_adapter().name, "dry_run": True},
-                {"id": "app.scaffold", "label": "Scaffold app", "runtime": active_adapter().name, "dry_run": True},
+                environment_portal_action(runtime),
+                {"id": "deployment.promote", "label": "Promote deployment", "runtime": runtime, "dry_run": True},
+                {"id": "app.scaffold", "label": "Scaffold app", "runtime": runtime, "dry_run": True},
             ]
         }
 
@@ -126,17 +133,17 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH, status_provider: Status
     def create_environment(request: EnvironmentRequest, dry_run: bool = True) -> dict[str, object]:
         if not dry_run:
             raise HTTPException(status_code=501, detail="apply mode is not implemented")
-        request.action = "create"
+        request.action = DEFAULT_ENVIRONMENT_ACTION
         adapter = adapter_for(request.runtime)
-        return workflow_response("environment.create", adapter.name, adapter.plan_environment(request), request.model_dump())
+        return workflow_response(environment_event(request.action), adapter.name, adapter.plan_environment(request), request.model_dump())
 
     @app.delete("/api/v1/environments/{app_name}/{environment}")
     def delete_environment(app_name: str, environment: str, runtime: str = "kind", dry_run: bool = True) -> dict[str, object]:
         if not dry_run:
             raise HTTPException(status_code=501, detail="apply mode is not implemented")
         adapter = adapter_for(runtime)
-        request = EnvironmentRequest(runtime=runtime, action="delete", app=app_name, environment=environment)
-        return workflow_response("environment.delete", adapter.name, adapter.plan_environment(request), request.model_dump())
+        request = EnvironmentRequest(runtime=runtime, action=ENVIRONMENT_DELETE_ACTION, app=app_name, environment=environment)
+        return workflow_response(environment_event(request.action), adapter.name, adapter.plan_environment(request), request.model_dump())
 
     @app.post("/api/v1/deployments/promote")
     def promote_deployment(request: DeploymentRequest, dry_run: bool = True) -> dict[str, object]:
@@ -160,7 +167,7 @@ def create_app(*, audit_path: Path = DEFAULT_AUDIT_PATH, status_provider: Status
             raise HTTPException(status_code=501, detail="apply mode is not implemented")
         adapter = adapter_for(request.runtime)
         plan = adapter.plan_environment(
-            EnvironmentRequest(runtime=request.runtime, action="create", app=request.app, environment="dev")
+            EnvironmentRequest(runtime=request.runtime, action=DEFAULT_ENVIRONMENT_ACTION, app=request.app, environment="dev")
         )
         plan.summary = f"would scaffold app {request.app} for {request.owner} on {adapter.name}"
         return workflow_response("app.scaffold", adapter.name, plan, request.model_dump())

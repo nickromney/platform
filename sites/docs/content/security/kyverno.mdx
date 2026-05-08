@@ -37,7 +37,8 @@ that inheritance path: namespace labels are enough to trigger the default
 network-policy scaffold.
 
 `protect-default-deny.yaml` then prevents deletion of the generated default-deny
-policy in isolated namespaces. This is enforced, not just reported.
+policy in isolated namespaces. Kyverno blocks the change instead of reporting it
+after the fact.
 
 ## Required App Labels
 

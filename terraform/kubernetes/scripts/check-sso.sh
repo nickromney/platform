@@ -16,10 +16,13 @@ ok() { echo "OK   $*"; }
 
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
-Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--extended]
+Usage: @SCRIPT_NAME@ [--var-file PATH] [--host-port PORT] [--contract] [--extended]
 
 Checks the selected OIDC provider + oauth2-proxy SSO plumbing with an emphasis on Gitea.
 This is a read-only diagnostic script.
+
+Options:
+  --contract  Print the identity/access edge facts as JSON and exit before live checks.
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -38,6 +41,7 @@ STACK_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 TFVARS_FILES=()
 HOST_PORT=""
 EXTENDED="${EXTENDED:-0}"
+CONTRACT=0
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
   if shell_cli_handle_standard_flag usage "$1"; then
@@ -53,6 +57,10 @@ while [[ $# -gt 0 ]]; do
     --host-port)
       HOST_PORT="${2:-}"
       shift 2
+      ;;
+    --contract)
+      CONTRACT=1
+      shift
       ;;
     -x|--extended|--debug)
       EXTENDED=1
@@ -171,9 +179,6 @@ print_http_head() {
   fi
 }
 
-require_cmd kubectl
-require_cmd jq
-
 if [[ -z "${HOST_PORT}" ]]; then
   HOST_PORT=$(tfvar_get "" gateway_https_host_port)
 fi
@@ -202,6 +207,12 @@ SSO_PROVIDER="$(tfvar_get "" sso_provider)"
 KEYCLOAK_REALM="$(tfvar_get "" keycloak_realm)"
 [[ -n "${KEYCLOAK_REALM}" ]] || KEYCLOAK_REALM="platform"
 EXPECTED_APIM_AUDIENCE="${PLATFORM_APIM_OIDC_AUDIENCE:-apim-simulator}"
+EXPECTED_GROUPS_CLAIM="${PLATFORM_SSO_GROUPS_CLAIM:-groups}"
+EXPECTED_ADMIN_GROUP="${PLATFORM_SSO_ADMIN_GROUP:-${PLATFORM_RBAC_ADMIN_GROUP:-platform-admins}}"
+EXPECTED_VIEWER_GROUP="${PLATFORM_SSO_VIEWER_GROUP:-${PLATFORM_RBAC_VIEWER_GROUP:-platform-viewers}}"
+EXPECTED_RBAC_ADMIN_USER="${PLATFORM_RBAC_ADMIN_USER:-demo@admin.test}"
+EXPECTED_RBAC_VIEWER_USER="${PLATFORM_RBAC_VIEWER_USER:-demo@dev.test}"
+EXPECTED_KUBERNETES_OIDC_CLIENT_ID="${PLATFORM_RBAC_KUBERNETES_OIDC_CLIENT_ID:-headlamp}"
 if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
   OIDC_DEPLOYMENT="keycloak"
   EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/realms/${KEYCLOAK_REALM}"
@@ -215,6 +226,92 @@ else
   EXPECTED_TOKEN_URL="http://dex.sso.svc.cluster.local:5556/dex/token"
   EXPECTED_JWKS_URL="http://dex.sso.svc.cluster.local:5556/dex/keys"
 fi
+
+print_identity_access_edge_contract() {
+  require_cmd jq
+
+  jq -n \
+    --arg schema_version "platform.identity-access-edge/v1" \
+    --arg provider "${SSO_PROVIDER}" \
+    --arg deployment "${OIDC_DEPLOYMENT}" \
+    --arg realm "${KEYCLOAK_REALM}" \
+    --arg groups_claim "${EXPECTED_GROUPS_CLAIM}" \
+    --arg issuer_url "${EXPECTED_OIDC_ISSUER_URL}" \
+    --arg profile_url "${EXPECTED_PROFILE_URL}" \
+    --arg token_url "${EXPECTED_TOKEN_URL}" \
+    --arg jwks_url "${EXPECTED_JWKS_URL}" \
+    --arg admin_group "${EXPECTED_ADMIN_GROUP}" \
+    --arg viewer_group "${EXPECTED_VIEWER_GROUP}" \
+    --arg apim_audience "${EXPECTED_APIM_AUDIENCE}" \
+    --arg admin_user "${EXPECTED_RBAC_ADMIN_USER}" \
+    --arg viewer_user "${EXPECTED_RBAC_VIEWER_USER}" \
+    --arg kubernetes_client_id "${EXPECTED_KUBERNETES_OIDC_CLIENT_ID}" \
+    '{
+      schema_version: $schema_version,
+      interface: "check-sso.sh",
+      oidc_provider: {
+        provider: $provider,
+        deployment: $deployment,
+        realm: $realm,
+        groups_claim: $groups_claim,
+        issuer_url: $issuer_url,
+        profile_url: $profile_url,
+        token_url: $token_url,
+        jwks_url: $jwks_url
+      },
+      access_groups: {
+        admin: $admin_group,
+        viewer: $viewer_group
+      },
+      resource_servers: {
+        apim: {
+          audience: $apim_audience,
+          issuer_url: $issuer_url,
+          jwks_url: $jwks_url
+        }
+      },
+      browser_edges: [
+        {
+          name: "gitea",
+          kind: "oauth2-proxy",
+          deployment: "oauth2-proxy-gitea",
+          groups_claim: $groups_claim,
+          allowed_groups: [$admin_group],
+          issuer_url: $issuer_url
+        },
+        {
+          name: "headlamp",
+          kind: "kubernetes-oidc",
+          client_id: $kubernetes_client_id,
+          groups_claim: $groups_claim,
+          allowed_groups: [$viewer_group, $admin_group],
+          issuer_url: $issuer_url
+        },
+        {
+          name: "apim",
+          kind: "resource-server",
+          audience: $apim_audience,
+          issuer_url: $issuer_url,
+          jwks_url: $jwks_url
+        }
+      ],
+      kubernetes_rbac: {
+        admin_user: $admin_user,
+        viewer_user: $viewer_user,
+        admin_group: $admin_group,
+        viewer_group: $viewer_group,
+        token_client_id: $kubernetes_client_id
+      }
+    }'
+}
+
+if [[ "${CONTRACT}" -eq 1 ]]; then
+  print_identity_access_edge_contract
+  exit 0
+fi
+
+require_cmd kubectl
+require_cmd jq
 
 EXPECTED_CLUSTER_NAME="$(tfvar_get "" cluster_name)"
 EXPECT_KIND_PROVISIONING="$(tfvar_get "" provision_kind_cluster)"
@@ -302,8 +399,8 @@ if kubectl -n sso get deploy oauth2-proxy-gitea >/dev/null 2>&1; then
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-jwks-url=${EXPECTED_JWKS_URL}"
   expect_deploy_arg sso oauth2-proxy-gitea "--skip-oidc-discovery=true"
   expect_deploy_arg sso oauth2-proxy-gitea "--oidc-email-claim=email"
-  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-groups-claim=groups"
-  expect_deploy_arg sso oauth2-proxy-gitea "--allowed-group=platform-admins"
+  expect_deploy_arg sso oauth2-proxy-gitea "--oidc-groups-claim=${EXPECTED_GROUPS_CLAIM}"
+  expect_deploy_arg sso oauth2-proxy-gitea "--allowed-group=${EXPECTED_ADMIN_GROUP}"
   expect_deploy_arg sso oauth2-proxy-gitea "--user-id-claim=email"
   expect_deploy_arg sso oauth2-proxy-gitea "--pass-user-headers=true"
   warn_if_deploy_arg_present sso oauth2-proxy-gitea "--email-domain=admin.test" "oauth2-proxy-gitea still uses email-domain instead of group RBAC"

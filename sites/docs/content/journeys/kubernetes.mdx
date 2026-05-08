@@ -53,7 +53,7 @@ kubectl -n dev get svc sentiment-router sentiment-api sentiment-auth-ui
 kubectl -n gateway-routes describe httproute sentiment-dev
 ```
 
-The important pattern is that Kubernetes is not just pods. The platform uses
+Kubernetes work in this platform extends beyond pod status. The platform uses
 labels to make policy possible, services to create stable in-cluster names,
 PVCs for local state, and HTTPRoutes to attach app traffic to the gateway.
 

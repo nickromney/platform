@@ -261,6 +261,36 @@ EOF
   [[ "${output}" =~ codebase\ ==\ latest\ \(0\.118\.0\) ]]
 }
 
+@test "check-version JSON component records include stable status codes" {
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_FORMAT=json
+    source '${SCRIPT}'
+    CLUSTER_OK=1
+    EXPECT_KIND_PROVISIONING=false
+    EXPECTED_CLUSTER_NAME=kind-local
+    CODE_ARGOCD_IMAGE_REF=''
+    CODE_ARGOCD_IMAGE_REPO=''
+    CONFIGURED_ARGOCD_IMAGE_STATUS=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_REF=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=''
+
+    current_row=\"\$(print_row 'current chart' '1.0.0' '1.0.0' '1.0.0' '' '' '' '' '0')\"
+    update_row=\"\$(print_row 'stale chart' '1.0.0' '1.0.0' '1.1.0' '' '' '' '' '0')\"
+    component_rows=\"\$(printf '%s\n%s\n' \"\${current_row}\" \"\${update_row}\")\"
+
+    emit_json_report \"\${component_rows}\" '' '' '' '' | jq -r '
+      . as \$report
+      | (\$report.components[] | [.component, .status_code, .status_group] | @tsv),
+        \"summary=\" + ((\$report.summary.component_status_counts.update_available // 0) | tostring)
+    '
+  "
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'current chart\tcurrent\tcurrent'* ]]
+  [[ "${output}" == *$'stale chart\tupdate_available\tupdate'* ]]
+  [[ "${output}" == *"summary=1"* ]]
+}
+
 @test "check-version renders long tags with aligned spacing" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.8-debian13\tv3.3.8\tok' \$'cert-manager\tv1.20.2\tv1.20.2\tok' | render_tsv_table"
 

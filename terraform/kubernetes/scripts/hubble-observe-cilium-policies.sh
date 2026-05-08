@@ -94,6 +94,10 @@ Options:
       Write results under DIR. Default:
       <repo>/.run/hubble-observe-<kube-context>/<timestamp>
 
+  --contract
+      Print the Cilium policy observation loop facts as JSON and exit before
+      Kubernetes access or Hubble capture.
+
   --promote-to-module
       Copy generated candidate manifests into `cilium-module/sources/<category>/`
       and render matching `categories/<category>/` files.
@@ -238,6 +242,76 @@ run_command_with_progress() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 not found in PATH"
+}
+
+print_observation_contract() {
+  local module_root_value="${module_root:-${DEFAULT_MODULE_ROOT}}"
+
+  require_cmd jq
+
+  jq -n \
+    --arg schema_version "platform.cilium-policy-observation/v1" \
+    --arg capture_strategy "${capture_strategy}" \
+    --arg since_value "${since_value}" \
+    --arg sample_target "${sample_target}" \
+    --arg sample_min "${sample_min}" \
+    --arg iterations "${iterations}" \
+    --arg namespace_workers "${namespace_workers}" \
+    --arg sleep_between "${sleep_between}" \
+    --arg progress_every "${progress_every}" \
+    --arg row_threshold "${row_threshold}" \
+    --arg capture_mode "${capture_mode}" \
+    --arg world_egress_mode "${world_egress_mode}" \
+    --arg promote_to_module "${promote_to_module}" \
+    --arg module_root "${module_root_value}" \
+    '{
+      schema_version: $schema_version,
+      interface: "hubble-observe-cilium-policies.sh",
+      capture: {
+        strategy: $capture_strategy,
+        default_strategy: "adaptive",
+        strategy_modes: ["adaptive", "last", "since"],
+        since: $since_value,
+        sample_target: ($sample_target | tonumber),
+        sample_min: ($sample_min | tonumber),
+        iterations: ($iterations | tonumber),
+        namespace_workers: ($namespace_workers | tonumber),
+        sleep_between_seconds: ($sleep_between | tonumber),
+        progress_heartbeat_seconds: ($progress_every | tonumber),
+        mode: $capture_mode,
+        field_mask_profile: "policy-observe",
+        verdict: "FORWARDED",
+        reply_traffic_removed: true
+      },
+      summarization: {
+        reports: ["edges", "world"],
+        aggregate_by: "workload",
+        directions: ["ingress", "egress"],
+        row_threshold: ($row_threshold | tonumber),
+        fallback_mode: "namespace"
+      },
+      candidate_policies: {
+        manifest_kind: "CiliumNetworkPolicy",
+        directions: ["ingress", "egress"],
+        world_egress_mode: $world_egress_mode,
+        annotations: {
+          "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy",
+          "platform.publiccloudexperiments.net/hubble-policy-candidate": "true",
+          "platform.publiccloudexperiments.net/hubble-policy-direction": "ingress|egress",
+          "platform.publiccloudexperiments.net/hubble-policy-mode": "workload|namespace",
+          "platform.publiccloudexperiments.net/hubble-policy-row-count": "observed-summary-rows",
+          "platform.publiccloudexperiments.net/hubble-policy-since": $since_value,
+          "platform.publiccloudexperiments.net/hubble-policy-iterations": $iterations,
+          "platform.publiccloudexperiments.net/hubble-policy-capture-mode": $capture_mode
+        },
+        promotion: {
+          enabled: ($promote_to_module == "1"),
+          module_root: $module_root,
+          source_path: "sources/<namespace>/",
+          rendered_category_path: "categories/<namespace>/"
+        }
+      }
+    }'
 }
 
 kubectl_can_i() {
@@ -2564,6 +2638,7 @@ row_threshold="100"
 capture_mode="flows"
 world_egress_mode="observed"
 output_dir=""
+print_contract=0
 promote_to_module=0
 module_root=""
 force_module_overwrite=0
@@ -2669,6 +2744,10 @@ while [[ $# -gt 0 ]]; do
       output_dir="${2:-}"
       shift 2
       ;;
+    --contract)
+      print_contract=1
+      shift
+      ;;
     --promote-to-module)
       promote_to_module=1
       shift
@@ -2750,6 +2829,15 @@ fi
 
 if [[ "${promote_to_module}" -eq 1 && -z "${module_root}" ]]; then
   module_root="${DEFAULT_MODULE_ROOT}"
+fi
+
+if [[ "${print_contract}" -eq 1 ]]; then
+  if [[ "${dry_run}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would print Cilium policy observation contract"
+    exit 0
+  fi
+  print_observation_contract
+  exit 0
 fi
 
 if [[ "${dry_run}" -eq 1 ]]; then
