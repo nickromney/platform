@@ -1,0 +1,15 @@
+{
+  "properties": {
+    "config": {
+      "properties": {
+        "sessionTTL": {
+          "type": "integer",
+          "description": "The time in seconds for the session to be valid",
+          "default": 86400,
+          "minimum": 0,
+          "maximum": 31536000
+        }
+      }
+    }
+  }
+}

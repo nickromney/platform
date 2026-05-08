@@ -4,7 +4,7 @@
 
 - Status: Draft
 - Date: 2026-05-06
-- Last reviewed: 2026-05-07
+- Last reviewed: 2026-05-08
 - Scope: Local Stack Operations architecture review
 - Source process: `improve-codebase-architecture`
 
@@ -997,9 +997,31 @@ Additional findings deliberately left out of this pass:
     and make catalog build loops resolve their default build tag from the Image
     Catalog Module. Implemented for kind, Lima, Slicer, Docker Desktop, workflow
     presets, and generated target projections.
+23. Add full rendered-tree golden fixtures for the policy repo after the pure
+    renderer exists, covering the complete `apps/` and `cluster-policies/`
+    output for a small set of GitOps render contracts. Implemented with
+    `kubernetes/kind/tests/fixtures/policy-render` and full-tree BATS
+    comparisons in `kubernetes/kind/tests/sync-gitea-policies.bats`.
+
+## APIM Simulator Readiness Review
+
+Reviewed before APIM simulator feature work on 2026-05-08.
+
+The outstanding architecture-deepening list does not contain a pending APIM
+contract Module refactor that should block simulator feature work. The one
+active finding was path ownership drift: older docs and shared Compose wiring
+still described `apps/subnetcalc/apim-simulator` as a vendored runtime subset,
+while the live source now lives at `apps/apim-simulator`.
+
+Decision:
+
+- `apps/apim-simulator` is the APIM simulator source for this repo.
+- Subnetcalc consumes APIM through the API mediation Seam; it does not own a
+  vendored APIM subtree.
+- ADR 0007 records this as the breaking change that supersedes ADR 0005.
+- Runtime wiring and current docs should point at `apps/apim-simulator`; only
+  historical/superseded records should mention the removed vendor path.
 
 ## Next Architecture Deepening Items
 
-1. Add full rendered-tree golden fixtures for the policy repo after the pure
-    renderer exists, covering the complete `apps/` and `cluster-policies/`
-    output for a small set of GitOps render contracts.
+No pending architecture deepening items are currently recorded in this note.

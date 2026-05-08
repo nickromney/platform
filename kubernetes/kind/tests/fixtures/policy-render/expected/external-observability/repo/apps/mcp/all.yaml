@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-mcp
+spec:
+  template:
+    spec:
+      containers:
+        - name: platform-mcp
+          image: host.docker.internal:5002/platform/platform-mcp:golden

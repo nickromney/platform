@@ -1,0 +1,5 @@
+resources:
+  - httproute-gitea.yaml
+  - httproute-hubble.yaml
+  - httproute-kyverno.yaml
+  - referencegrant-hubble.yaml

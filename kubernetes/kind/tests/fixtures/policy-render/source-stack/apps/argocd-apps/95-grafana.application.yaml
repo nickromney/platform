@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+spec:
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: grafana
+    targetRevision: 1.0.0
+    helm:
+      values: |
+        image:
+          registry: __GRAFANA_IMAGE_REGISTRY__
+          repository: __GRAFANA_IMAGE_REPOSITORY__
+          tag: __GRAFANA_IMAGE_TAG__
+        sidecar:
+          image:
+            registry: __GRAFANA_SIDECAR_IMAGE_REGISTRY__
+            repository: __GRAFANA_SIDECAR_IMAGE_REPOSITORY__
+            tag: __GRAFANA_SIDECAR_IMAGE_TAG__
+__GRAFANA_PLUGINS_VALUES__
+        livenessProbe:
+          initialDelaySeconds: __GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__

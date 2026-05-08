@@ -172,7 +172,7 @@ outside the request path above.
   same APIM runtime can be configured with a different issuer or no identity
   provider at all.
 - **Contract evidence:**
-  [`apps/subnetcalc/apim-simulator/contracts/contract_matrix.yml`](../../apps/subnetcalc/apim-simulator/contracts/contract_matrix.yml)
+  [`apps/apim-simulator/contracts/contract_matrix.yml`](../../apps/apim-simulator/contracts/contract_matrix.yml)
   is the canonical record of APIM contract IDs (`GW-HEALTH`,
   `ROUTE-HOST-MATCH`, `ROUTE-VERSION-HEADER`, and so on).
 - **Safe pre-launch changes:** adding new contract IDs with

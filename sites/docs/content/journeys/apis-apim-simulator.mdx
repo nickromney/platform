@@ -1,6 +1,6 @@
 ---
 title: Learn APIs With APIM Simulator
-description: A light-touch APIM simulator journey using Subnetcalc, gateway routes, OIDC headers, and the vendored simulator.
+description: A light-touch APIM simulator journey using Subnetcalc, gateway routes, OIDC headers, and the integrated simulator.
 ---
 
 # Learn APIs With APIM Simulator
@@ -8,8 +8,8 @@ description: A light-touch APIM simulator journey using Subnetcalc, gateway rout
 Outcome: understand the platform API path at a high level: a browser hits a
 protected app route, the app router forwards API calls to the APIM simulator,
 and the simulator forwards to the backend API. This is intentionally light
-touch because the standalone `apim-simulator` repo owns the deeper product
-surface.
+touch because `apps/apim-simulator` owns the deeper product surface inside this
+repo.
 
 <ThemeImage
   lightSrc="/diagrams/generated/journeys-apis-apim-simulator-1-light.svg"
@@ -52,11 +52,12 @@ rg -n "subnetcalc-apim-simulator|Authorization|Ocp-Apim" \
   terraform/kubernetes/apps/workloads/base/all.yaml
 ```
 
-The vendored simulator metadata tells you which standalone repo revision was
-copied into this platform repo:
+The simulator source, contracts, examples, tests, and tutorials live in the
+platform repo:
 
 ```bash
-cat apps/subnetcalc/apim-simulator.vendor.json
+ls apps/apim-simulator
+sed -n '1,120p' apps/apim-simulator/contracts/contract_matrix.yml
 ```
 
 ## Source
@@ -65,9 +66,9 @@ cat apps/subnetcalc/apim-simulator.vendor.json
 | --- | --- |
 | [`terraform/kubernetes/apps/apim/all.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/apim/all.yaml) | APIM namespace, ConfigMap, Deployment, and Service. |
 | [`terraform/kubernetes/apps/workloads/base/all.yaml`](https://github.com/nickromney/platform/blob/main/terraform/kubernetes/apps/workloads/base/all.yaml) | Subnetcalc router forwards `/api` to APIM simulator. |
-| [`apps/subnetcalc/apim-simulator`](https://github.com/nickromney/platform/tree/main/apps/subnetcalc/apim-simulator) | Vendored runtime subset from the standalone repo. |
-| [`apps/subnetcalc/scripts/vendor-apim-simulator.sh`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/scripts/vendor-apim-simulator.sh) | Refreshes the vendored simulator. |
-| [`apps/subnetcalc/apim-simulator.vendor.json`](https://github.com/nickromney/platform/blob/main/apps/subnetcalc/apim-simulator.vendor.json) | Records origin and pinned revision. |
+| [`apps/apim-simulator`](https://github.com/nickromney/platform/tree/main/apps/apim-simulator) | Integrated simulator source, examples, tests, docs, and app-local compose workflows. |
+| [`apps/apim-simulator/contracts/contract_matrix.yml`](https://github.com/nickromney/platform/blob/main/apps/apim-simulator/contracts/contract_matrix.yml) | Canonical APIM simulator contract matrix for supported and partial behaviour. |
+| [`kubernetes/workflow/image-catalog.json`](https://github.com/nickromney/platform/blob/main/kubernetes/workflow/image-catalog.json) | Source-controlled image contract that builds the APIM simulator image for local variants. |
 
 ## Try One Change
 
@@ -86,15 +87,14 @@ kubectl -n uat get svc subnetcalc-api
 ```
 
 <Callout type="warning">
-  Do not treat the vendored simulator copy as the source of truth. Make
-  meaningful APIM simulator changes in the standalone `apim-simulator` repo,
-  then vendor a pinned runtime subset back into this platform.
+  Treat `apps/apim-simulator` as the APIM simulator source for this repo.
+  Changing APIM contract behaviour means updating the contract matrix and
+  focused simulator tests in the same change.
 </Callout>
 
 ## Closure Slice
 
-The deep simulator work still belongs in the standalone `apim-simulator` repo,
-but the platform now carries a product-shaped contract example:
+The platform carries a product-shaped APIM contract example:
 
 | Artifact | Purpose |
 | --- | --- |
@@ -106,7 +106,7 @@ but the platform now carries a product-shaped contract example:
 ```bash
 kubectl -n apim get cm subnetcalc-apim-simulator-config -o yaml
 kubectl -n apim logs deploy/subnetcalc-apim-simulator | rg "subnetcalc-api"
-cd apps/subnetcalc/apim-simulator && uv run pytest
+cd apps/apim-simulator && uv run pytest
 ```
 
 Use the example to identify which parts of the API contract belong to APIM and

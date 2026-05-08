@@ -13,7 +13,8 @@ They are retrospective on purpose:
 - later history added `kubernetes/lima`, `kubernetes/slicer`, status/TUI
   workflows, and the current DDD glossary
 - `apim-simulator` remained a separate repo first, then became a vendored
-  runtime subset inside `apps/subnetcalc`
+  runtime subset inside `apps/subnetcalc`, and now lives as the integrated
+  supporting context at `apps/apim-simulator`
 
 The DDD docs under [`../ddd`](../ddd/README.md) define the current language and
 contracts. These ADRs explain why the repo ended up with that shape.
@@ -24,8 +25,9 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0002: Use cumulative stages and a reference variant](./0002-cumulative-stages-and-reference-variant.md)
 - [ADR 0003: Separate app domain cores from delivery, identity, and mediation](./0003-separate-domain-cores-from-supporting-contexts.md)
 - [ADR 0004: Converge on DDD language without breaking shipped contracts](./0004-converge-language-freeze-contracts.md)
-- [ADR 0005: Vendor APIM simulator as a supporting context runtime](./0005-vendor-apim-simulator-runtime.md)
+- [ADR 0005: Vendor APIM simulator as a supporting context runtime](./0005-vendor-apim-simulator-runtime.md) (superseded)
 - [ADR 0006: Treat make, status, and TUI as the operator-facing application service boundary](./0006-operator-application-service-boundary.md)
+- [ADR 0007: Integrate APIM simulator as an in-repo supporting context](./0007-integrate-apim-simulator-supporting-context.md)
 
 ## How To Read These
 

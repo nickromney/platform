@@ -1,0 +1,19 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sample-policy
+  annotations:
+    platform.publiccloudexperiments.net/console: https://argocd.admin.core.example.test
+spec:
+  endpointSelector: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hardened-helper
+spec:
+  template:
+    spec:
+      containers:
+        - name: helper
+          image: registry.core.example.test/dhi/library/helper:1.0.0

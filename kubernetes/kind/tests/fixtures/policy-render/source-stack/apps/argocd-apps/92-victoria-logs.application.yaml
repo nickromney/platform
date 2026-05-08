@@ -1,0 +1,9 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: victoria-logs
+spec:
+  source:
+    repoURL: https://victoriametrics.github.io/helm-charts
+    chart: victoria-logs-single
+    targetRevision: 1.0.0

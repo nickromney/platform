@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: sentiment-api
+          image: host.docker.internal:5002/platform/sentiment-api:golden
+        - name: sentiment-auth-ui
+          image: host.docker.internal:5002/platform/sentiment-auth-ui:golden

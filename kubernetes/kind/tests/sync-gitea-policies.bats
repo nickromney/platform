@@ -275,6 +275,32 @@ spec:
 EOF
 }
 
+copy_policy_render_fixture_stack() {
+  local stack_dir="$1"
+  local fixture_root="${REPO_ROOT}/kubernetes/kind/tests/fixtures/policy-render/source-stack"
+
+  rm -rf "${stack_dir}"
+  mkdir -p "$(dirname "${stack_dir}")"
+  cp -R "${fixture_root}" "${stack_dir}"
+}
+
+assert_policy_render_tree_matches_golden() {
+  local case_name="$1"
+  local fixture_root="${REPO_ROOT}/kubernetes/kind/tests/fixtures/policy-render"
+  local stack_dir="${BATS_TEST_TMPDIR}/stack-${case_name}"
+  local actual_root="${BATS_TEST_TMPDIR}/render-${case_name}"
+  local expected_repo="${fixture_root}/expected/${case_name}/repo"
+  local contract_file="${fixture_root}/contracts/${case_name}.json"
+
+  copy_policy_render_fixture_stack "${stack_dir}"
+
+  run bash -lc "export STACK_DIR='${stack_dir}' GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; render_policy_repo_tree '${actual_root}' >/dev/null"
+  [ "${status}" -eq 0 ]
+
+  run bash -lc "diff -ruN '${expected_repo}/apps' '${actual_root}/repo/apps' && diff -ruN '${expected_repo}/cluster-policies' '${actual_root}/repo/cluster-policies'"
+  [ "${status}" -eq 0 ]
+}
+
 @test "rewrite_external_argocd_apps_to_vendored_charts vendors and rewrites external chart apps" {
   apps_dir="${BATS_TEST_TMPDIR}/apps"
   vendor_root="${BATS_TEST_TMPDIR}/vendor"
@@ -404,6 +430,14 @@ EOF
   [[ "${output}" != *"push_rendered_repo"* ]]
   [[ "${output}" != *"wait_for_gitea"* ]]
   [[ "${output}" != *"refresh_gitea_git_access"* ]]
+}
+
+@test "render_policy_repo_tree matches full golden tree for minimal contract" {
+  assert_policy_render_tree_matches_golden "minimal"
+}
+
+@test "render_policy_repo_tree matches full golden tree for external observability contract" {
+  assert_policy_render_tree_matches_golden "external-observability"
 }
 
 @test "GitOps feature Terraform test has a bounded runner" {

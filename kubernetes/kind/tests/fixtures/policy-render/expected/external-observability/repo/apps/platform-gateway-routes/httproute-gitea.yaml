@@ -1,0 +1,29 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitea
+spec:
+  hostnames:
+    - gitea.admin.obs.example.test
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: X-Forwarded-Host
+                value: gitea.admin.obs.example.test:8443
+              - name: X-Forwarded-Port
+                value: "8443"
+              - name: X-Forwarded-Proto
+                value: https
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: oauth2-proxy-gitea
+          namespace: sso
+          port: 4180
+          weight: 1

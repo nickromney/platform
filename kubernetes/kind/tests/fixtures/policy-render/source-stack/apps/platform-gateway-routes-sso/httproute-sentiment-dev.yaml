@@ -1,0 +1,11 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sentiment-dev
+spec:
+  hostnames:
+    - sentiment.dev.127.0.0.1.sslip.io
+  rules:
+    - backendRefs:
+        - name: oauth2-proxy-sentiment-dev
+          namespace: sso

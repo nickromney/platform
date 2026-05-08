@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: sentiment-api
+          image: localhost:30090/platform/sentiment-api:latest
+        - name: sentiment-auth-ui
+          image: localhost:30090/platform/sentiment-auth-ui:latest

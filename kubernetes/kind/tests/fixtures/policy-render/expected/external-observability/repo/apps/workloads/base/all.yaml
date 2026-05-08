@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-base
+spec:
+  template:
+    spec:
+      containers:
+        - name: sentiment-api
+          image: host.docker.internal:5002/platform/sentiment-api:golden
+        - name: subnetcalc-frontend-typescript-vite
+          image: host.docker.internal:5002/platform/subnetcalc-frontend-typescript-vite:golden
