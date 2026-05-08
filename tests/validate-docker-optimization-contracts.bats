@@ -222,6 +222,7 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 dockerfile = (repo_root / "kubernetes/kind/images/grafana-victorialogs/Dockerfile").read_text(encoding="utf-8")
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
 
 assert 'grafana_victoria_logs_plugin_version' in variables_tf, "missing explicit plugin version variable"
@@ -230,8 +231,10 @@ assert "curl -fsSL" not in dockerfile, dockerfile
 assert "apk add" not in dockerfile, dockerfile
 assert "busybox unzip" in dockerfile, dockerfile
 assert "COPY " in dockerfile and "victorialogs.zip" in dockerfile, dockerfile
-assert "tf_default_from_variables grafana_victoria_logs_plugin_version" in build_script, build_script
-assert "tf_default_from_variables grafana_victoria_logs_plugin_sha256" in build_script, build_script
+assert '"terraform_version_variable": "grafana_victoria_logs_plugin_version"' in image_catalog, image_catalog
+assert '"terraform_sha256_variable": "grafana_victoria_logs_plugin_sha256"' in image_catalog, image_catalog
+assert 'tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_VERSION_VAR}"' in build_script, build_script
+assert 'tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_SHA256_VAR}"' in build_script, build_script
 assert "shasum -a 256" in build_script, build_script
 
 print("validated grafana plugin archive mirroring contract")
@@ -250,6 +253,7 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 sync_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea.sh").read_text(encoding="utf-8")
 policies_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh").read_text(encoding="utf-8")
 gitops_tf = (repo_root / "terraform/kubernetes/gitops.tf").read_text(encoding="utf-8")
@@ -261,42 +265,32 @@ for image_name, dockerfile_path in {
     "backstage": "apps/backstage/Dockerfile",
     "platform-mcp": "apps/platform-mcp/Dockerfile",
 }.items():
-    assert f'"{image_name}"' in build_script, image_name
-    assert dockerfile_path in build_script, dockerfile_path
-    if image_name == "idp-core":
-        assert f'"${{REPO_ROOT}}" \\\n  "${{REPO_ROOT}}/{dockerfile_path}"' in build_script, dockerfile_path
-    elif image_name == "backstage":
-        assert '"${REPO_ROOT}/apps/backstage"' in build_script
-        assert '"${REPO_ROOT}/apps/backstage/Dockerfile"' in build_script
-    else:
-        assert f'"${{REPO_ROOT}}" \\\n  "${{REPO_ROOT}}/{dockerfile_path}"' in build_script, dockerfile_path
-    if image_name == "platform-mcp":
-        assert f'lookup(var.external_workload_image_refs, "{image_name}", "")' in locals_tf, image_name
-    else:
-        assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
+    assert f'"id": "{image_name}"' in image_catalog, image_name
+    assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
     assert image_name in variables_tf, image_name
 
 assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in sync_script
 assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in sync_script
+assert "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP" in sync_script
 assert "export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false" in sync_script
 assert "resolve_external_workload_image()" in sync_script
-assert "export_external_workload_image EXTERNAL_IMAGE_PLATFORM_MCP platform-mcp" in sync_script
-assert "EXTERNAL_IMAGE_PLATFORM_MCP" in gitops_tf
 assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in policies_script
 assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in policies_script
-assert "EXTERNAL_IMAGE_PLATFORM_MCP" in policies_script
+assert "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP" in policies_script
+assert "EXTERNAL_IMAGE_PLATFORM_MCP" not in policies_script
 assert "ensure_grafana_dashboard_provider_paths" in policies_script
 assert "/^    path:[[:space:]]*/" in policies_script
 assert "/var/lib/grafana/dashboards/default" in policies_script
 assert "/var/lib/grafana/dashboards/kubernetes" in policies_script
 assert "/var/lib/grafana/dashboards/cilium" in policies_script
 assert "/var/lib/grafana/dashboards/argocd" in policies_script
-assert 'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")' in gitops_tf
-assert 'EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")' in gitops_tf
-assert 'EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")' in gitops_tf
-assert 'replace_image_ref "${idp_manifest}" "backstage" "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}"' in policies_script
-assert 'replace_image_ref "${idp_manifest}" "idp-core" "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}"' in policies_script
-assert 'replace_image_ref "${workload_file}" "platform-mcp" "${EXTERNAL_IMAGE_PLATFORM_MCP}"' in policies_script
+assert 'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")' not in gitops_tf
+assert 'EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")' not in gitops_tf
+assert 'EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")' not in gitops_tf
+assert "GITOPS_RENDER_CONTRACT_FILE" in gitops_tf
+assert "render_external_image_inputs" in policies_script
+assert 'replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"' in policies_script
+assert 'replace_image_ref "${workload_file}" "${image_name}" "${image_ref}"' in policies_script
 assert "external_platform_backstage" in locals_tf
 assert "external_platform_idp_core" in locals_tf
 assert "external_platform_mcp" in locals_tf
@@ -319,15 +313,17 @@ import os
 repo_root = Path(os.environ["REPO_ROOT"])
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
 image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
+catalog_lib = (repo_root / "kubernetes/workflow/image-catalog-lib.sh").read_text(encoding="utf-8")
+image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
 
-assert "source_fingerprint_tag()" in build_script
+assert "source_fingerprint_tag()" in catalog_lib
 assert "idp_core_source_tag=" in build_script
 assert "backstage_source_tag=" in build_script
 assert "platform_mcp_source_tag=" in build_script
-assert '"idp-core" \\' in build_script and '"${idp_core_source_tag}"' in build_script
-assert '"backstage" \\' in build_script and '"${backstage_source_tag}"' in build_script
-assert '"platform-mcp" \\' in build_script and '"${platform_mcp_source_tag}"' in build_script
-assert 'tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in build_script
+assert 'image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"' in build_script
+assert 'image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"' in build_script
+assert 'image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"' in build_script
+assert 'image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in image_build_lib
 
 render_script = (repo_root / "kubernetes/kind/scripts/render-operator-overrides.sh").read_text(encoding="utf-8")
 assert "platform_mcp_image_tag=" in render_script
@@ -340,7 +336,7 @@ assert "apps/platform-mcp/platform_mcp" in image_catalog
 assert "apps/idp-core/app" in image_catalog
 assert "apps/backstage/packages" in image_catalog
 assert "apps/apim-simulator/catalog-info.yaml" in image_catalog
-assert "image_catalog_source_tag workload platform-mcp" in render_script
+assert "image_catalog_source_tag platform platform-mcp" in render_script
 assert "image_catalog_source_tag platform backstage" in render_script
 assert "image_catalog_source_tag platform idp-core" in render_script
 assert "image_catalog_hcl_refs platform" in render_script
@@ -353,6 +349,194 @@ PY
   [[ "${output}" == *"validated local platform IDP source fingerprint cache keys"* ]]
 }
 
+@test "image catalog owns local platform build specs" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import json
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
+build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
+
+expected = {
+    "idp-core": {
+        "context": ".",
+        "dockerfile": "apps/idp-core/Dockerfile",
+        "tag": "default",
+    },
+    "platform-mcp": {
+        "context": ".",
+        "dockerfile": "apps/platform-mcp/Dockerfile",
+        "tag": "default",
+        "builder": "platform",
+    },
+    "backstage": {
+        "context": "generated-backstage",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+    },
+    "keycloak": {
+        "context": "apps/keycloak",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+    },
+}
+
+images = {
+    image["id"]: image
+    for category in ("platform_images", "workload_images")
+    for image in catalog[category]
+}
+
+for image_id, build in expected.items():
+    catalog_build = images[image_id].get("build")
+    assert catalog_build == build, f"{image_id} catalog build spec drifted: {catalog_build!r}"
+
+assert "image_build_catalog_build_and_push" in build_script
+assert "image_catalog_build_field" in image_build_lib
+assert "image_catalog_default_tag" in image_build_lib
+assert '"${REPO_ROOT}/apps/idp-core/Dockerfile"' not in build_script
+assert '"${REPO_ROOT}/apps/platform-mcp/Dockerfile"' not in build_script
+assert '"${REPO_ROOT}/apps/keycloak/Dockerfile"' not in build_script
+
+print("validated image catalog local platform build specs")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated image catalog local platform build specs"* ]]
+}
+
+@test "image catalog owns local workload build specs for variant builders" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import json
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
+
+expected = {
+    "sentiment-api": {
+        "context": "apps/sentiment/api-sentiment",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+        "args": [{"name": "SENTIMENT_MODEL_ID", "env": "SENTIMENT_MODEL_ID"}],
+    },
+    "sentiment-auth-ui": {
+        "context": "apps/sentiment/frontend-react-vite/sentiment-auth-ui",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+    },
+    "subnetcalc-api-fastapi-container-app": {
+        "context": "apps/subnetcalc/api-fastapi-container-app",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+    },
+    "subnetcalc-apim-simulator": {
+        "context": "apps/apim-simulator",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+    },
+    "subnetcalc-frontend-react": {
+        "context": "apps/subnetcalc",
+        "dockerfile": "apps/subnetcalc/frontend-react/Dockerfile",
+        "tag": "default",
+    },
+    "subnetcalc-frontend-typescript-vite": {
+        "context": "apps/subnetcalc",
+        "dockerfile": "apps/subnetcalc/frontend-typescript-vite/Dockerfile",
+        "tag": "default",
+    },
+}
+
+workloads = {image["id"]: image for image in catalog["workload_images"]}
+for image_id, build in expected.items():
+    catalog_build = workloads[image_id].get("build")
+    assert catalog_build == build, f"{image_id} catalog build spec drifted: {catalog_build!r}"
+
+scripts = [
+    repo_root / "kubernetes/kind/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
+]
+image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
+hard_coded_paths = [
+    "apps/sentiment/api-sentiment/Dockerfile",
+    "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile",
+    "apps/subnetcalc/api-fastapi-container-app/Dockerfile",
+    "apps/apim-simulator/Dockerfile",
+    "apps/subnetcalc/frontend-react/Dockerfile",
+    "apps/subnetcalc/frontend-typescript-vite/Dockerfile",
+]
+
+for script in scripts:
+    content = script.read_text(encoding="utf-8")
+    assert "image_build_catalog_build_loop workload workload" in content, script
+    assert "kubernetes/workflow/image-build-lib.sh" in content, script
+    for hard_coded_path in hard_coded_paths:
+        assert hard_coded_path not in content, (script, hard_coded_path)
+
+assert "image_catalog_build_specs" in image_build_lib
+assert "image_catalog_build_arg_specs" in image_build_lib
+assert "image_catalog_default_tag" in image_build_lib
+assert "image_build_catalog_build_and_push" in image_build_lib
+assert '"${TAG:-latest}"' not in image_build_lib[image_build_lib.index("image_build_catalog_build_loop()"):]
+
+print("validated catalog-owned workload build specs for variant builders")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated catalog-owned workload build specs for variant builders"* ]]
+}
+
+@test "image catalog owns Grafana VictoriaLogs plugin image build inputs" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import json
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
+build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+
+grafana = next(image for image in catalog["platform_images"] if image["id"] == "grafana-victorialogs")
+build = grafana["build"]
+
+assert build["grafana_base_image"] == {
+    "source": "docker.io/grafana/grafana",
+    "tag": "12.3.1",
+    "cache_repo": "platform-cache/grafana-grafana",
+}
+assert build["plugin_fetch_image"] == {
+    "source": "docker.io/library/alpine",
+    "tag": "3.22",
+    "cache_repo": "platform-cache/library-alpine",
+}
+assert build["plugin_archive"]["terraform_version_variable"] == "grafana_victoria_logs_plugin_version"
+assert build["plugin_archive"]["terraform_sha256_variable"] == "grafana_victoria_logs_plugin_sha256"
+assert build["plugin_archive"]["url_template"].count("{version}") == 2
+assert build["plugin_archive"]["cache_dir"] == ".run/kind/plugin-cache"
+assert build["version_tag_strategy"] == "grafana-tag-plus-plugin-version"
+
+for removed_default in (
+    'GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-12.3.1}"',
+    'PLUGIN_FETCH_IMAGE_SOURCE="${PLUGIN_FETCH_IMAGE_SOURCE:-docker.io/library/alpine:3.22}"',
+    'GRAFANA_BASE_IMAGE_SOURCE="${GRAFANA_BASE_IMAGE_SOURCE:-docker.io/grafana/grafana:${GRAFANA_IMAGE_TAG}}"',
+):
+    assert removed_default not in build_script, removed_default
+
+assert "image_catalog_build_json platform grafana-victorialogs" in build_script
+assert "catalog_grafana_build_value" in build_script
+
+print("validated catalog-owned Grafana VictoriaLogs plugin build inputs")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated catalog-owned Grafana VictoriaLogs plugin build inputs"* ]]
+}
+
 @test "image catalog entries declare version-check policy" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
@@ -363,10 +547,11 @@ repo_root = Path(os.environ["REPO_ROOT"])
 catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
 
 allowed_modes = {
-    "internal-non-comparable",
-    "external-latest",
+    "local",
+    "external",
     "pinned-digest",
     "checked-elsewhere",
+    "non-comparable",
 }
 
 validated = 0
@@ -378,10 +563,9 @@ for category in ("platform_images", "workload_images"):
         reason = str(policy.get("reason", "")).strip()
         assert mode in allowed_modes, f"{category}.{image['id']} has unsupported version_check mode {mode!r}"
         assert reason, f"{category}.{image['id']} version_check must explain the policy"
-        if image.get("default_tag") == "latest":
-            assert mode in {"internal-non-comparable", "checked-elsewhere"}, (
-                f"{category}.{image['id']} uses floating latest without an explicit non-comparable/elsewhere policy"
-            )
+        assert image.get("default_tag") != "latest", (
+            f"{category}.{image['id']} must pin its local registry default tag"
+        )
         validated += 1
 
 print(f"validated {validated} image catalog version-check policies")
@@ -429,6 +613,48 @@ PY
   [[ "${output}" == *"validated Lima and Slicer external image refs against image catalog"* ]]
 }
 
+@test "image catalog renders target tfvars external image projection" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+import subprocess
+import sys
+
+repo_root = Path(os.environ["REPO_ROOT"])
+validator = repo_root / "kubernetes/workflow/validate-image-catalog-target-refs.py"
+catalog = repo_root / "kubernetes/workflow/image-catalog.json"
+script_text = validator.read_text(encoding="utf-8")
+
+assert "--print-expected" in script_text
+
+for target, host in {
+    "lima": "host.lima.internal:5002",
+    "slicer": "192.168.64.1:5002",
+}.items():
+    rendered = subprocess.check_output(
+        [
+            sys.executable,
+            str(validator),
+            "--catalog",
+            str(catalog),
+            "--target",
+            target,
+            "--print-expected",
+        ],
+        text=True,
+    )
+    assert "external_platform_image_refs = {" in rendered, target
+    assert "external_workload_image_refs = {" in rendered, target
+    assert f'"platform-mcp" = "{host}/platform/platform-mcp:0.1.0"' in rendered, rendered
+    assert '"sentiment-api"' in rendered and f'{host}/platform/sentiment-api:0.1.0' in rendered, rendered
+
+print("validated generated target tfvars projection from image catalog")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated generated target tfvars projection from image catalog"* ]]
+}
+
 @test "local platform IDP cache hits are not invalidated by unrelated git commits" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
@@ -436,20 +662,106 @@ import os
 
 repo_root = Path(os.environ["REPO_ROOT"])
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
 
-skip_start = build_script.index('if [ "${FORCE_REBUILD}" != "1" ]')
-skip_end = build_script.index('echo "OK   cached ${version_ref}"', skip_start)
-skip_condition = build_script[skip_start:skip_end]
+skip_start = image_build_lib.index("image_build_cache_hit()")
+skip_end = image_build_lib.index("return 0", skip_start)
+skip_condition = image_build_lib[skip_start:skip_end]
 
 assert "${fingerprint_tag}" in skip_condition
-assert "${commit_tag}" not in skip_condition
-assert 'docker_push_local_registry "${commit_ref}"' in build_script
+assert 'IMAGE_BUILD_REQUIRE_COMMIT_TAG:-0}" = "1"' in skip_condition
+assert "IMAGE_BUILD_REQUIRE_COMMIT_TAG=1" not in build_script
+assert 'image_build_push_optional_tag "${build_ref}" "${commit_ref}"' in image_build_lib
 
 print("validated local platform IDP cache hits ignore unrelated git commits")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated local platform IDP cache hits ignore unrelated git commits"* ]]
+}
+
+@test "image catalog shared image builder adapter owns variant build mechanics" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+shared = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
+
+required_functions = [
+    "image_build_prepare_args()",
+    "image_build_cache_hit()",
+    "image_build_build_and_push_cached()",
+    "image_build_catalog_build_loop()",
+]
+for function_name in required_functions:
+    assert function_name in shared, function_name
+
+scripts = [
+    repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh",
+    repo_root / "kubernetes/kind/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
+]
+for script in scripts:
+    content = script.read_text(encoding="utf-8")
+    assert "kubernetes/workflow/image-build-lib.sh" in content, script
+    assert "image_build_catalog_build_loop" in content or "image_build_catalog_build_and_push" in content, script
+
+workload_scripts = scripts[1:]
+for script in workload_scripts:
+    content = script.read_text(encoding="utf-8")
+    for duplicated_function in (
+        "build_and_push()",
+        "catalog_build_context()",
+        "catalog_dockerfile_path()",
+        "catalog_prepare_build_args()",
+        "catalog_build_and_push()",
+    ):
+        assert duplicated_function not in content, (script, duplicated_function)
+
+print("validated shared image builder adapter ownership")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image builder adapter ownership"* ]]
+}
+
+@test "image catalog context adapter owns generated Backstage build context" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+context_lib = (repo_root / "kubernetes/workflow/image-catalog-context-lib.sh").read_text(encoding="utf-8")
+image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
+platform_builder = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+
+for fragment in (
+    "image_catalog_prepare_build_context_adapter()",
+    "image_catalog_prepare_backstage_build_context()",
+    "copy_backstage_app_catalog()",
+    "generated-backstage",
+    "apps/apim-simulator/catalog-info.yaml",
+):
+    assert fragment in context_lib, fragment
+
+for duplicated_fragment in (
+    "copy_backstage_app_catalog()",
+    "copy_backstage_apim_simulator_catalog()",
+    'cp -R "${REPO_ROOT}/apps/backstage/."',
+    'copy_backstage_app_catalog "${context_dir}" "subnetcalc"',
+):
+    assert duplicated_fragment not in platform_builder, duplicated_fragment
+
+assert "kubernetes/workflow/image-catalog-context-lib.sh" in platform_builder
+assert "image_catalog_prepare_build_context_adapter" in image_build_lib
+
+print("validated image catalog Backstage context adapter")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated image catalog Backstage context adapter"* ]]
 }
 
 @test "platform MCP Docker image uses DHI bases and installs gzip for pinned D2 tarball extraction" {

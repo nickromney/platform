@@ -10,7 +10,7 @@ setup() {
 @test "variant contracts match workflow option variants" {
   run bash -c '
     set -euo pipefail
-    options_json="$("${RENDER_OPTIONS}")"
+    options_json="$("${RENDER_OPTIONS}" --execute)"
     option_ids="$(jq -r ".variants | map(.id) | sort | join(\" \")" <<<"${options_json}")"
     contract_ids="$(find "${VARIANTS_DIR}" -name variant.json -maxdepth 2 -type f -print | sort | xargs jq -r ".id" | sort | tr "\n" " " | sed "s/ $//")"
     [ "${option_ids}" = "${contract_ids}" ]

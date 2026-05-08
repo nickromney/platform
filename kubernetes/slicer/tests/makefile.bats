@@ -126,7 +126,7 @@ setup() {
 }
 
 @test "slicer target profile rewrites platform-mcp to the local image cache" {
-  run grep -Fn 'platform-mcp                         = "192.168.64.1:5002/platform/platform-mcp:latest"' \
+  run grep -Fn '"platform-mcp" = "192.168.64.1:5002/platform/platform-mcp:0.1.0"' \
     "${REPO_ROOT}/kubernetes/slicer/targets/slicer.tfvars"
 
   [ "${status}" -eq 0 ]

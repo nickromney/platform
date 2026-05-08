@@ -15,6 +15,7 @@ on:
 env:
   DOCKER_HOST: unix:///var/run/docker.sock
   WORKDIR: /tmp/subnet-calculator
+  APP_REPO_NAME: subnetcalc
 
 jobs:
   build:
@@ -40,7 +41,7 @@ jobs:
             "${proto}" "${host}" "${REGISTRY_USERNAME}" "${REGISTRY_PWD}" \
             | git credential-store store
 
-          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/subnet-calculator.git" "${WORKDIR}"
+          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/${APP_REPO_NAME}.git" "${WORKDIR}"
           cd "${WORKDIR}" && git checkout main
 
       - name: Log in to registry

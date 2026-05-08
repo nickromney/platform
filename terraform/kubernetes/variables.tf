@@ -1181,7 +1181,7 @@ variable "prefer_external_workload_images" {
 }
 
 variable "external_workload_image_refs" {
-  description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api-fastapi-container-app, subnetcalc-apim-simulator, platform-mcp, subnetcalc-frontend-react, subnetcalc-frontend-typescript-vite)."
+  description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api-fastapi-container-app, subnetcalc-apim-simulator, subnetcalc-frontend-react, subnetcalc-frontend-typescript-vite)."
   type        = map(string)
   default     = {}
 }
@@ -1199,15 +1199,15 @@ variable "enable_backstage" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, grafana, hardened-registry, idp-core, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["backstage", "grafana", "hardened-registry", "idp-core", "signoz-auth-proxy"], key)
+      contains(["backstage", "grafana", "hardened-registry", "idp-core", "platform-mcp", "signoz-auth-proxy"], key)
     ])
-    error_message = "external_platform_image_refs supports only: backstage, grafana, hardened-registry, idp-core, signoz-auth-proxy."
+    error_message = "external_platform_image_refs supports only: backstage, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
   }
 }

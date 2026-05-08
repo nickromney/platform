@@ -12,9 +12,8 @@ TARGET_LABEL="${TARGET_LABEL:-target}"
 PORT_CHECKS="${PORT_CHECKS:-}"
 
 usage() {
+  shell_cli_usage_line " [--var-file PATH]... [--dry-run] [--execute]"
   cat <<EOF
-Usage: ${0##*/} [--var-file PATH]... [--dry-run] [--execute]
-
 Checks whether the host ports required for a target are free.
 
 Set TARGET_LABEL and PORT_CHECKS in the environment. PORT_CHECKS must be a

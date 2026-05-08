@@ -127,6 +127,154 @@ EOF
   touch "${SSH_PRIVATE_KEY_PATH}"
 }
 
+create_minimal_policy_stack() {
+  local stack_dir="$1"
+  mkdir -p \
+    "${stack_dir}/scripts" \
+    "${stack_dir}/cluster-policies" \
+    "${stack_dir}/apps/argocd-apps" \
+    "${stack_dir}/apps/idp" \
+    "${stack_dir}/apps/platform-gateway" \
+    "${stack_dir}/apps/platform-gateway-routes" \
+    "${stack_dir}/apps/platform-gateway-routes-sso"
+
+  cat >"${stack_dir}/scripts/gitea-local-access.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+gitea_local_access_setup() { return 0; }
+gitea_local_access_reset() { return 0; }
+gitea_local_access_cleanup() { return 0; }
+EOF
+
+  cat >"${stack_dir}/apps/argocd-apps/95-grafana.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+spec:
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: grafana
+    targetRevision: 9.4.5
+    helm:
+      values: |
+        image:
+          registry: __GRAFANA_IMAGE_REGISTRY__
+          repository: __GRAFANA_IMAGE_REPOSITORY__
+          tag: __GRAFANA_IMAGE_TAG__
+        sidecar:
+          image:
+            registry: __GRAFANA_SIDECAR_IMAGE_REGISTRY__
+            repository: __GRAFANA_SIDECAR_IMAGE_REPOSITORY__
+            tag: __GRAFANA_SIDECAR_IMAGE_TAG__
+__GRAFANA_PLUGINS_VALUES__
+        livenessProbe:
+          initialDelaySeconds: __GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__
+EOF
+
+  cat >"${stack_dir}/apps/idp/all.yaml" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idp-core
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backstage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage
+EOF
+
+  cat >"${stack_dir}/apps/platform-gateway-routes/kustomization.yaml" <<'EOF'
+resources:
+  - httproute-gitea.yaml
+  - httproute-hubble.yaml
+  - referencegrant-hubble.yaml
+EOF
+  cat >"${stack_dir}/apps/platform-gateway-routes/httproute-gitea.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitea
+spec:
+  hostnames:
+    - gitea.admin.127.0.0.1.sslip.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: oauth2-proxy-gitea
+          namespace: sso
+          port: 4180
+          weight: 1
+EOF
+  touch \
+    "${stack_dir}/apps/platform-gateway-routes/httproute-hubble.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes/referencegrant-hubble.yaml"
+
+  cat >"${stack_dir}/apps/platform-gateway-routes-sso/kustomization.yaml" <<'EOF'
+resources:
+  - httproute-portal.yaml
+  - httproute-portal-api.yaml
+  - httproute-hubble.yaml
+  - httproute-grafana.yaml
+  - httproute-signoz.yaml
+  - httproute-sentiment-dev.yaml
+  - httproute-subnetcalc-dev.yaml
+  - referencegrant-sso.yaml
+  - referencegrant-hubble.yaml
+  - referencegrant-signoz-sso.yaml
+EOF
+  touch \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-portal.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-portal-api.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-hubble.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-grafana.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-signoz.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-sentiment-dev.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-subnetcalc-dev.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-hubble.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-signoz-sso.yaml"
+  cat >"${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-sso.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+spec:
+  to:
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-backstage
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-hubble
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-idp-core
+EOF
+  cat >"${stack_dir}/apps/platform-gateway-routes-sso/observabilitypolicy-tracing.yaml" <<'EOF'
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: hubble
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: portal-api
+EOF
+}
+
 @test "rewrite_external_argocd_apps_to_vendored_charts vendors and rewrites external chart apps" {
   apps_dir="${BATS_TEST_TMPDIR}/apps"
   vendor_root="${BATS_TEST_TMPDIR}/vendor"
@@ -244,6 +392,33 @@ EOF
   [[ "${output}" == *"-o IdentityAgent=none"* ]]
   [[ "${output}" == *"-o BatchMode=yes"* ]]
   [[ "${output}" == *"-o ConnectTimeout=5"* ]]
+}
+
+@test "render_policy_repo_tree is callable without Gitea push runtime env" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack-render-only"
+  create_minimal_policy_stack "${stack_dir}"
+
+  run bash -lc "unset GITEA_ADMIN_USERNAME GITEA_ADMIN_PWD GITEA_SSH_USERNAME GITEA_REPO_OWNER GITEA_REPO_NAME DEPLOY_KEY_TITLE DEPLOY_PUBLIC_KEY SSH_PRIVATE_KEY_PATH GITEA_HTTP_BASE GITEA_SSH_HOST GITEA_SSH_PORT; export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=true ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-only' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-only/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; declare -f render_policy_repo_tree"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"push_rendered_repo"* ]]
+  [[ "${output}" != *"wait_for_gitea"* ]]
+  [[ "${output}" != *"refresh_gitea_git_access"* ]]
+}
+
+@test "GitOps feature Terraform test has a bounded runner" {
+  runner="${REPO_ROOT}/terraform/kubernetes/scripts/tofu-test-gitops-features.sh"
+  content="$(cat "${runner}")"
+
+  [[ "${content}" == *"TOFU_GITOPS_FEATURES_TEST_TIMEOUT_SECONDS"* ]]
+  [[ "${content}" == *"tests/gitops_features.tftest.hcl"* ]]
+  [[ "${content}" == *"list_tofu_processes"* ]]
+  [[ "${content}" == *"kill_process_tree"* ]]
+  [[ "${content}" == *"return 124"* ]]
+
+  run "${runner}" --dry-run
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"would run bounded tofu test -filter=tests/gitops_features.tftest.hcl"* ]]
 }
 
 @test "rewrite_external_argocd_apps_to_vendored_charts rejects unpinned external chart versions" {
@@ -441,6 +616,140 @@ EOF
   [ "${output}" = "$(printf 'false\ntrue\ntrue\ntrue\ntrue\nhost.docker.internal:5002/platform/sentiment-api:contract\ntrue\nhost.docker.internal:5002/platform/backstage:contract\nplatform/grafana-victorialogs\n111')" ]
 }
 
+@test "sync-gitea-policies contract renders external image tree changes" {
+  repo_dir="${BATS_TEST_TMPDIR}/repo"
+  workload_file="${repo_dir}/apps/sentiment/dev/all.yaml"
+  idp_manifest="${repo_dir}/apps/idp/all.yaml"
+  mcp_manifest="${repo_dir}/apps/mcp/all.yaml"
+  signoz_manifest="${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
+  contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
+  mkdir -p "$(dirname "${workload_file}")" "$(dirname "${idp_manifest}")" "$(dirname "${mcp_manifest}")" "$(dirname "${signoz_manifest}")"
+
+  cat >"${workload_file}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: sentiment-api
+          image: platform/sentiment-api:latest
+EOF
+  cat >"${idp_manifest}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: idp-core
+          image: platform/idp-core:latest
+        - name: backstage
+          image: platform/backstage:latest
+EOF
+  cat >"${mcp_manifest}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: platform-mcp
+          image: localhost:30090/platform/platform-mcp:latest
+EOF
+  cat >"${signoz_manifest}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: signoz-auth-proxy
+          image: ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
+EOF
+  cat >"${contract_file}" <<'EOF'
+{
+  "prefer_external_images": true,
+  "external_sentiment_api": "host.docker.internal:5002/platform/sentiment-api:golden",
+  "external_platform_mcp": "host.docker.internal:5002/platform/platform-mcp:golden",
+  "prefer_external_platform": true,
+  "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:golden",
+  "external_platform_backstage": "host.docker.internal:5002/platform/backstage:golden",
+  "external_platform_signoz_auth": "host.docker.internal:5002/platform/signoz-auth-proxy:golden"
+}
+EOF
+
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; apply_external_workload_images '${workload_file}'; apply_external_platform_images '${repo_dir}'; cat '${workload_file}' '${idp_manifest}' '${mcp_manifest}' '${signoz_manifest}'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(cat <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: sentiment-api
+          image: host.docker.internal:5002/platform/sentiment-api:golden
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: idp-core
+          image: host.docker.internal:5002/platform/idp-core:golden
+        - name: backstage
+          image: host.docker.internal:5002/platform/backstage:golden
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: platform-mcp
+          image: host.docker.internal:5002/platform/platform-mcp:golden
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: signoz-auth-proxy
+          image: host.docker.internal:5002/platform/signoz-auth-proxy:golden
+EOF
+)" ]
+}
+
+@test "platform-mcp can render from platform image refs without workload shortcuts" {
+  repo_dir="${BATS_TEST_TMPDIR}/repo"
+  mcp_manifest="${repo_dir}/apps/mcp/all.yaml"
+  contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
+  mkdir -p "$(dirname "${mcp_manifest}")"
+  cat >"${mcp_manifest}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: platform-mcp
+          image: localhost:30090/platform/platform-mcp:latest
+EOF
+  cat >"${contract_file}" <<'EOF'
+{
+  "prefer_external_images": false,
+  "prefer_external_platform": true,
+  "external_platform_mcp": "host.docker.internal:5002/platform/platform-mcp:0.1.0"
+}
+EOF
+
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; apply_external_workload_images '${mcp_manifest}'; apply_external_platform_images '${repo_dir}'; cat '${mcp_manifest}'"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq "image: host.docker.internal:5002/platform/platform-mcp:0.1.0" <<<"${output}"
+}
+
 @test "render_grafana_application_manifest injects Grafana image and plugin values" {
   app_file="${BATS_TEST_TMPDIR}/95-grafana.application.yaml"
 
@@ -517,4 +826,216 @@ EOF
   grep -Fq "repository: platform/grafana-victorialogs" "${app_file}"
   grep -Fq "tag: 12.3.1-v0.26.3" "${app_file}"
   grep -Fq "plugins: []" "${app_file}"
+}
+
+@test "external image render-input module maps contract defaults and manifest replacements" {
+  run bash -lc "source '${SCRIPT}'; render_external_image_inputs"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"workload|EXTERNAL_IMAGE_SENTIMENT_API|external_sentiment_api|sentiment-api"* ]]
+  [[ "${output}" == *"workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT|external_subnetcalc_fe_ts|subnetcalc-frontend-typescript-vite"* ]]
+  [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp"* ]]
+  [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core"* ]]
+  [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY|external_platform_signoz_auth|signoz-auth-proxy"* ]]
+}
+
+@test "GitOps render-input module maps enablement and host contract defaults" {
+  run bash -lc "source '${SCRIPT}'; render_gitops_render_inputs"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"bool|ENABLE_HUBBLE|enable_hubble|true"* ]]
+  [[ "${output}" == *"bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false"* ]]
+  [[ "${output}" == *"string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io"* ]]
+  [[ "${output}" == *"string|ARGOCD_PUBLIC_HOST|argocd_public_host|"* ]]
+  [[ "${output}" == *"string|POLICIES_REPO_URL_CLUSTER|policies_repo_url_cluster|"* ]]
+  [[ "${output}" == *"string|MCP_PUBLIC_HOST|mcp_public_host|"* ]]
+  [[ "${output}" == *"chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version"* ]]
+}
+
+@test "Terraform policies sync leaves chart and observability render values in GitOps contract" {
+  gitops_tf="${REPO_ROOT}/terraform/kubernetes/gitops.tf"
+  sync_block="$(sed -n '/resource \"null_resource\" \"sync_gitea_policies_repo\"/,/^}/p' "${gitops_tf}")"
+
+  [[ "${sync_block}" == *"GITOPS_RENDER_CONTRACT_FILE"* ]]
+  for env_name in \
+    ENABLE_HUBBLE \
+    ENABLE_POLICIES \
+    ENABLE_GATEWAY_TLS \
+    GATEWAY_HTTPS_HOST_PORT \
+    PLATFORM_BASE_DOMAIN \
+    PLATFORM_ADMIN_BASE_DOMAIN \
+    ARGOCD_PUBLIC_HOST \
+    DEX_PUBLIC_HOST \
+    GITEA_PUBLIC_HOST \
+    GRAFANA_PUBLIC_HOST \
+    HEADLAMP_PUBLIC_HOST \
+    HUBBLE_PUBLIC_HOST \
+    KYVERNO_PUBLIC_HOST \
+    SIGNOZ_PUBLIC_HOST \
+    SENTIMENT_DEV_PUBLIC_HOST \
+    SENTIMENT_UAT_PUBLIC_HOST \
+    SUBNETCALC_DEV_PUBLIC_HOST \
+    SUBNETCALC_UAT_PUBLIC_HOST \
+    MCP_PUBLIC_HOST \
+    MCP_CONSOLE_PUBLIC_HOST \
+    ADMIN_ROUTE_ALLOWLIST_CIDRS \
+    GATEWAY_TRUSTED_PROXY_CIDRS \
+    ENABLE_CERT_MANAGER \
+    ENABLE_ACTIONS_RUNNER \
+    ENABLE_APP_REPO_SENTIMENT \
+    ENABLE_APP_REPO_SUBNETCALC \
+    ENABLE_PROMETHEUS \
+    ENABLE_GRAFANA \
+    ENABLE_LOKI \
+    ENABLE_VICTORIA_LOGS \
+    ENABLE_TEMPO \
+    ENABLE_SIGNOZ \
+    ENABLE_OTEL_GATEWAY \
+    ENABLE_HEADLAMP \
+    ENABLE_BACKSTAGE \
+    ENABLE_OBSERVABILITY_AGENT \
+    HARDENED_IMAGE_REGISTRY \
+    POLICIES_REPO_URL_CLUSTER \
+    CERT_MANAGER_CHART_VERSION \
+    DEX_CHART_VERSION \
+    GRAFANA_CHART_VERSION \
+    GRAFANA_IMAGE_REGISTRY \
+    GRAFANA_IMAGE_REPOSITORY \
+    GRAFANA_IMAGE_TAG \
+    GRAFANA_SIDECAR_IMAGE_REGISTRY \
+    GRAFANA_SIDECAR_IMAGE_REPOSITORY \
+    GRAFANA_SIDECAR_IMAGE_TAG \
+    GRAFANA_VICTORIA_LOGS_PLUGIN_URL \
+    GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS \
+    HEADLAMP_CHART_VERSION \
+    KYVERNO_CHART_VERSION \
+    LOKI_CHART_VERSION \
+    OAUTH2_PROXY_CHART_VERSION \
+    OPENTELEMETRY_COLLECTOR_CHART_VERSION \
+    POLICY_REPORTER_CHART_VERSION \
+    PROMETHEUS_CHART_VERSION \
+    SIGNOZ_CHART_VERSION \
+    TEMPO_CHART_VERSION \
+    VICTORIA_LOGS_CHART_VERSION \
+    SIGNOZ_AUTH_PROXY_IMAGE; do
+    [[ "${sync_block}" != *"${env_name}"* ]]
+  done
+}
+
+@test "render_repo golden renders gateway route host, forwarded headers, and admin allowlist" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack-render"
+  create_minimal_policy_stack "${stack_dir}"
+
+  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' GATEWAY_HTTPS_HOST_PORT='8443' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16' ENABLE_HUBBLE=true ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=true ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_BACKSTAGE=true ENABLE_PROMETHEUS=true; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; printf '%s\n' '---ALLOWLIST---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/snippetsfilter-admin-allowlist.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(cat <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitea
+spec:
+  hostnames:
+    - gitea.admin.apps.example.test
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: X-Forwarded-Host
+                value: gitea.admin.apps.example.test:8443
+              - name: X-Forwarded-Port
+                value: "8443"
+              - name: X-Forwarded-Proto
+                value: https
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: oauth2-proxy-gitea
+          namespace: sso
+          port: 4180
+          weight: 1
+---ALLOWLIST---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: admin-allowlist
+  namespace: gateway-routes
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        allow 10.0.0.0/8;
+        allow 192.168.0.0/16;
+        deny all;
+EOF
+)" ]
+}
+
+@test "render_repo golden prunes disabled SSO routes and Backstage resources" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack-render"
+  create_minimal_policy_stack "${stack_dir}"
+
+  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/idp/all.yaml'; printf '%s\n' '---KUSTOMIZATION---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(cat <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idp-core
+---KUSTOMIZATION---
+resources:
+  - httproute-portal-api.yaml
+  - referencegrant-sso.yaml
+---GRANT---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+spec:
+  to:
+    - group: ""
+      kind: Service
+      name: oauth2-proxy-idp-core
+EOF
+)" ]
+}
+
+@test "render_repo golden renders Grafana chart values from GitOps contract" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack-render"
+  contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
+  create_minimal_policy_stack "${stack_dir}"
+  cat >"${contract_file}" <<'EOF'
+{
+  "enable_prometheus": true,
+  "enable_grafana": true,
+  "grafana_chart_version": "9.9.9",
+  "grafana_image_registry": "registry.example.test",
+  "grafana_image_repository": "platform/grafana-victorialogs",
+  "grafana_image_tag": "12.3.4-contract",
+  "grafana_sidecar_image_registry": "sidecar.example.test",
+  "grafana_sidecar_image_repository": "platform/k8s-sidecar",
+  "grafana_sidecar_image_tag": "2.3.4-contract",
+  "grafana_victoria_logs_plugin_url": "",
+  "grafana_liveness_initial_delay_seconds": 77
+}
+EOF
+
+  run bash -lc "export STACK_DIR='${stack_dir}' GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/95-grafana.application.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"repoURL: ${POLICIES_REPO_URL_CLUSTER}"* ]]
+  [[ "${output}" == *"targetRevision: main"* ]]
+  [[ "${output}" == *"path: apps/vendor/charts/grafana"* ]]
+  [[ "${output}" == *"registry: registry.example.test"* ]]
+  [[ "${output}" == *"repository: platform/grafana-victorialogs"* ]]
+  [[ "${output}" == *"tag: 12.3.4-contract"* ]]
+  [[ "${output}" == *"registry: sidecar.example.test"* ]]
+  [[ "${output}" == *"repository: platform/k8s-sidecar"* ]]
+  [[ "${output}" == *"tag: 2.3.4-contract"* ]]
+  [[ "${output}" == *"plugins: []"* ]]
+  [[ "${output}" == *"initialDelaySeconds: 77"* ]]
 }

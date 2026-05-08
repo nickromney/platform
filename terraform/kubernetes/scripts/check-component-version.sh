@@ -425,6 +425,8 @@ HTTP_FETCH_CACHE_DIR="${HTTP_FETCH_CACHE_DIR:-${CHECK_VERSION_CACHE_DIR:-}}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
 
 tfvar_get_from_file() {
   local file="$1"
@@ -1304,6 +1306,14 @@ image_ref_repository() {
 
 image_ref_is_internal() {
   local image_ref="$1"
+  local catalog_status=""
+
+  catalog_status="$(image_catalog_version_check_status_for_ref "${image_ref}" 2>/dev/null || true)"
+  case "${catalog_status}" in
+    local|checked-elsewhere|non-comparable)
+      return 0
+      ;;
+  esac
 
   case "${image_ref}" in
     *\$\{*|localhost:*|127.0.0.1:*|platform/*|platform-*|subnetcalc-*|apim-simulator*|csharp-*)
@@ -2262,26 +2272,93 @@ print_row() {
     "$name" "${deployed:-}" "$codebase" "$latest" "${deployed_tag:-}" "${codebase_tag:-}" "${dhi_tag:-}" "${latest_tag:-}" "$status"
 }
 
+preload_alignment_source_enabled() {
+  local enabled_by="$1"
+
+  case "${enabled_by}" in
+    "")
+      return 0
+      ;;
+    EXPECT_PROMETHEUS)
+      [ "${EXPECT_PROMETHEUS:-false}" = "true" ]
+      ;;
+    EXPECT_GRAFANA)
+      [ "${EXPECT_GRAFANA:-false}" = "true" ]
+      ;;
+    EXPECT_LOKI)
+      [ "${EXPECT_LOKI:-false}" = "true" ]
+      ;;
+    EXPECT_TEMPO)
+      [ "${EXPECT_TEMPO:-false}" = "true" ]
+      ;;
+    EXPECT_VICTORIA_LOGS)
+      [ "${EXPECT_VICTORIA_LOGS:-false}" = "true" ]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+preload_alignment_expected_value() {
+  local expected_source="$1"
+
+  case "${expected_source}" in
+    argocd_image_ref) echo "${PRELOAD_EXPECTED_ARGOCD_IMAGE_REF:-}" ;;
+    prometheus_chart_app_version) echo "${PRELOAD_EXPECTED_PROMETHEUS_TAG:-}" ;;
+    grafana_chart_app_version) echo "${PRELOAD_EXPECTED_GRAFANA_TAG:-}" ;;
+    loki_chart_app_version) echo "${PRELOAD_EXPECTED_LOKI_TAG:-}" ;;
+    tempo_chart_app_version) echo "${PRELOAD_EXPECTED_TEMPO_TAG:-}" ;;
+    victoria_logs_chart_app_version) echo "${PRELOAD_EXPECTED_VICTORIA_LOGS_TAG:-}" ;;
+    *) echo "" ;;
+  esac
+}
+
 check_preload_image_version_alignment() {
   local preload_file="${PRELOAD_IMAGES_FILE}"
-  local expected_argocd_image_ref="$1"
-  local expected_prometheus_tag="$2"
-  local expected_grafana_tag="$3"
-  local expected_loki_tag="$4"
-  local expected_tempo_tag="$5"
-  local expected_victoria_logs_tag="$6"
+  local image_id=""
+  local component=""
+  local alignment_kind=""
+  local line_regex=""
+  local tag_extract_sed=""
+  local expected_source=""
+  local _latest_lookup_policy=""
+  local _checked_elsewhere=""
+  local _preload_alignment_policy=""
+  local _reason=""
+  local enabled_by=""
+  local expected_value=""
+
+  PRELOAD_EXPECTED_ARGOCD_IMAGE_REF="$1"
+  PRELOAD_EXPECTED_PROMETHEUS_TAG="$2"
+  PRELOAD_EXPECTED_GRAFANA_TAG="$3"
+  PRELOAD_EXPECTED_LOKI_TAG="$4"
+  PRELOAD_EXPECTED_TEMPO_TAG="$5"
+  PRELOAD_EXPECTED_VICTORIA_LOGS_TAG="$6"
 
   if [ ! -f "${preload_file}" ]; then
     warn "preload image list not found at ${preload_file}"
     return 0
   fi
 
-  check_preload_image_ref_alignment "${preload_file}" "ArgoCD" '^[[:space:]]*((dhi\.io/argocd)|(quay\.io/argoproj/argocd)):' "${expected_argocd_image_ref}"
-  if [ "${EXPECT_PROMETHEUS:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Prometheus" '^[[:space:]]*quay\.io/prometheus/prometheus:' 's|^[[:space:]]*quay\.io/prometheus/prometheus:([^[:space:]]+).*|\1|' "${expected_prometheus_tag}"; fi
-  if [ "${EXPECT_GRAFANA:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Grafana" '^[[:space:]]*(docker\.io/)?grafana/grafana:' 's|^[[:space:]]*(docker\.io/)?grafana/grafana:([^[:space:]]+).*|\2|' "${expected_grafana_tag}"; fi
-  if [ "${EXPECT_LOKI:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Loki" '^[[:space:]]*(docker\.io/)?grafana/loki:' 's|^[[:space:]]*(docker\.io/)?grafana/loki:([^[:space:]]+).*|\2|' "${expected_loki_tag}"; fi
-  if [ "${EXPECT_TEMPO:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "Tempo" '^[[:space:]]*(docker\.io/)?grafana/tempo:' 's|^[[:space:]]*(docker\.io/)?grafana/tempo:([^[:space:]]+).*|\2|' "${expected_tempo_tag}"; fi
-  if [ "${EXPECT_VICTORIA_LOGS:-false}" = "true" ]; then check_preload_repo_tag_alignment "${preload_file}" "VictoriaLogs" '^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:' 's|^[[:space:]]*(docker\.io/)?victoriametrics/victoria-logs:([^[:space:]]+).*|\2|' "${expected_victoria_logs_tag}"; fi
+  while IFS=$'\t' read -r image_id component alignment_kind line_regex tag_extract_sed expected_source _latest_lookup_policy _checked_elsewhere _preload_alignment_policy _reason enabled_by; do
+    [ -n "${image_id}" ] || continue
+    preload_alignment_source_enabled "${enabled_by}" || continue
+    expected_value="$(preload_alignment_expected_value "${expected_source}")"
+
+    case "${alignment_kind}" in
+      exact-ref)
+        check_preload_image_ref_alignment "${preload_file}" "${component}" "${line_regex}" "${expected_value}"
+        ;;
+      repo-tag)
+        check_preload_repo_tag_alignment "${preload_file}" "${component}" "${line_regex}" "${tag_extract_sed}" "${expected_value}"
+        ;;
+      *)
+        warn "preload image check skipped for ${component}: unsupported catalog alignment kind ${alignment_kind:-missing}"
+        ;;
+    esac
+  done < <(image_catalog_preload_alignment_projection)
+
   echo ""
 }
 

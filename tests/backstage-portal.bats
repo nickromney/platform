@@ -413,18 +413,23 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
 variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
 gitops_tf = (repo_root / "terraform/kubernetes/gitops.tf").read_text(encoding="utf-8")
 policies_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh").read_text(encoding="utf-8")
 
-assert '"backstage"' in build_script
-assert "apps/backstage/Dockerfile" in build_script
 assert "backstage_source_tag=" in build_script
+assert '"id": "backstage"' in image_catalog
+assert '"context": "generated-backstage"' in image_catalog
+assert '"dockerfile": "Dockerfile"' in image_catalog
+assert "apps/backstage/Dockerfile" in image_catalog
 assert 'lookup(var.external_platform_image_refs, "backstage", "")' in locals_tf
 assert "backstage" in variables_tf
-assert 'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE' in gitops_tf
-assert 'replace_image_ref "${idp_manifest}" "backstage" "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}"' in policies_script
+assert "GITOPS_RENDER_CONTRACT_FILE" in gitops_tf
+assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in policies_script
+assert "external_platform_backstage" in policies_script
+assert 'replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"' in policies_script
 
 for target, registry_host in {
     "kind": "host.docker.internal:5002",
@@ -432,7 +437,7 @@ for target, registry_host in {
     "slicer": "192.168.64.1:5002",
 }.items():
     tfvars = (repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars").read_text(encoding="utf-8")
-    assert f'backstage   = "{registry_host}/platform/backstage:latest"' in tfvars
+    assert f'backstage      = "{registry_host}/platform/backstage:1.0.0"' in tfvars
 
 print("validated Backstage local image flow")
 PY

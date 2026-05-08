@@ -23,7 +23,6 @@ shell_cli_handle_standard_no_args usage \
   "would fetch or read-through-cache a Gitea Actions runner token" \
   "$@"
 
-command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v jq >/dev/null 2>&1 || fail "jq not found"
 
 query="$(cat)"
@@ -58,6 +57,8 @@ gitea_local_access_setup http
 
 request_runner_token() {
   local body_file http_code
+  command -v curl >/dev/null 2>&1 || fail "curl not found for runner token API request"
+
   body_file="$(mktemp)"
   http_code="$(
     curl -sS -o "$body_file" -w "%{http_code}" --connect-timeout 2 --max-time 10 \
@@ -109,11 +110,38 @@ read_existing_runner_token() {
   printf '%s\n' "${token}"
 }
 
+generate_runner_token_with_cli() {
+  local namespace="${GITEA_NAMESPACE:-gitea}"
+  local deployment="${GITEA_DEPLOYMENT:-gitea}"
+  local container="${GITEA_CONTAINER:-gitea}"
+  local output token
+
+  command -v kubectl >/dev/null 2>&1 || return 1
+
+  output="$(
+    kubectl "${KUBECTL_ARGS[@]}" -n "${namespace}" exec "deploy/${deployment}" -c "${container}" -- \
+      gitea actions generate-runner-token 2>/dev/null || true
+  )"
+
+  token="$(printf '%s\n' "${output}" | sed -nE 's/^[[:space:]]*([A-Za-z0-9._=-]+)[[:space:]]*$/\1/p' | head -n 1)"
+  [[ -n "${token}" ]] || return 1
+
+  printf '%s\n' "${token}"
+}
+
 if existing_token="$(read_existing_runner_token)"; then
   log "reusing existing in-cluster runner token"
   jq -cn --arg token "${existing_token}" '{token: $token}'
   exit 0
 fi
+
+if generated_token="$(generate_runner_token_with_cli)"; then
+  log "generated runner token via in-cluster Gitea CLI"
+  jq -cn --arg token "${generated_token}" '{token: $token}'
+  exit 0
+fi
+
+command -v curl >/dev/null 2>&1 || fail "curl not found for runner token API fallback"
 
 for _ in {1..60}; do
   code="$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 5 \

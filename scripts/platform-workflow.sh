@@ -118,7 +118,7 @@ render_workflow_options() {
   local tmp_file="${WORKFLOW_OPTIONS_FILE}.$$.tmp"
 
   mkdir -p "$(dirname "${WORKFLOW_OPTIONS_FILE}")"
-  "${WORKFLOW_OPTIONS_RENDERER}" >"${tmp_file}"
+  "${WORKFLOW_OPTIONS_RENDERER}" --execute >"${tmp_file}"
   mv "${tmp_file}" "${WORKFLOW_OPTIONS_FILE}"
 }
 

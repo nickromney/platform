@@ -5,7 +5,7 @@
 # Show help message
 show_help() {
     cat << EOF
-Usage: $0 [OPTIONS]
+Usage: $(shell_cli_script_name) [OPTIONS]
 
 Test the subnet calculator API endpoints.
 
@@ -18,11 +18,11 @@ OPTIONS:
     --help, -h      Show this help message
 
 EXAMPLES:
-    $0 --execute                      # Smoke test on local API (port 7071)
-    $0 --detailed --execute           # All endpoints on local API (port 7071)
-    $0 --container --execute          # Smoke test on containerized API (port 8080)
-    $0 --detailed --container --execute  # All endpoints on container
-    $0 --detailed --base-url https://your-api.azurewebsites.net/api --execute
+    $(shell_cli_script_name) --execute                      # Smoke test on local API (port 7071)
+    $(shell_cli_script_name) --detailed --execute           # All endpoints on local API (port 7071)
+    $(shell_cli_script_name) --container --execute          # Smoke test on containerized API (port 8080)
+    $(shell_cli_script_name) --detailed --container --execute  # All endpoints on container
+    $(shell_cli_script_name) --detailed --base-url https://your-api.azurewebsites.net/api --execute
 
 REQUIREMENTS:
     - API must be running before executing tests

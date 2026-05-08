@@ -34,13 +34,13 @@ enable_apps_dir_mount           = false
 enable_docker_socket_mount      = false
 
 external_platform_image_refs = {
-  backstage   = "host.docker.internal:5002/platform/backstage:latest"
-  "idp-core"   = "host.docker.internal:5002/platform/idp-core:latest"
+  backstage   = "host.docker.internal:5002/platform/backstage:1.0.0"
+  "idp-core"   = "host.docker.internal:5002/platform/idp-core:0.1.0"
 }
 
 external_workload_image_refs = {
-  sentiment-api     = "host.docker.internal:5002/platform/sentiment-api:latest"
-  sentiment-auth-ui = "host.docker.internal:5002/platform/sentiment-auth-ui:latest"
+  sentiment-api     = "host.docker.internal:5002/platform/sentiment-api:0.1.0"
+  sentiment-auth-ui = "host.docker.internal:5002/platform/sentiment-auth-ui:0.1.0"
 }
 
 # Disable heavyweight and optional observability surfaces.

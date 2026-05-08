@@ -16,18 +16,27 @@ import yaml
 
 repo_root = Path(os.environ["REPO_ROOT"])
 
+contract_path = repo_root / "terraform/kubernetes/contracts/review-environment.json"
+contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
 namespaces = (repo_root / "terraform/kubernetes/namespaces.tf").read_text(encoding="utf-8")
 locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
 gitea_tf = (repo_root / "terraform/kubernetes/gitea.tf").read_text(encoding="utf-8")
 cert = yaml.safe_load((repo_root / "terraform/kubernetes/apps/cert-manager-config/platform-gateway-cert.yaml").read_text(encoding="utf-8"))
 
+assert contract["namespace"] == "review"
+assert contract["registry_secret_name"] == "gitea-registry-creds"
+assert contract["wildcard_subdomain"] == "review"
+assert contract["runner_labels"] == ["self-hosted", "in-cluster", "review-env"]
+assert "review_environment_contract_source" in locals_tf
+assert "contracts/review-environment.json" in locals_tf
 assert "enable_review_environments" in locals_tf
 assert "enable_review_environments           = var.enable_argocd && var.enable_gitea" in locals_tf
 assert 'resource "kubernetes_namespace_v1" "review"' in namespaces
+assert 'name = local.review_environment_contract.namespace' in namespaces
 assert '"platform.publiccloudexperiments.net/namespace-role"      = "application"' in namespaces
-assert '"platform.publiccloudexperiments.net/environment"         = "review"' in namespaces
+assert '"platform.publiccloudexperiments.net/environment"         = local.review_environment_contract.namespace' in namespaces
 assert '"platform.publiccloudexperiments.net/environment-purpose" = "branch-preview"' in namespaces
-assert 'local.enable_review_environments ? ["review"] : []' in locals_tf
+assert "local.enable_review_environments ? [local.review_environment_contract.namespace] : []" in locals_tf
 assert "kubernetes_namespace_v1.review" in gitea_tf
 assert "*.review.127.0.0.1.sslip.io" in cert["spec"]["dnsNames"]
 
@@ -106,12 +115,13 @@ workflow_text = workflow_path.read_text(encoding="utf-8")
 build_workflow_text = build_workflow_path.read_text(encoding="utf-8")
 workflow = yaml.safe_load(workflow_text)
 build_workflow = yaml.safe_load(build_workflow_text)
+contract = yaml.safe_load((repo_root / "terraform/kubernetes/contracts/review-environment.json").read_text(encoding="utf-8"))
 
-assert workflow["jobs"]["review"]["runs-on"] == ["self-hosted", "in-cluster", "review-env"]
+assert workflow["jobs"]["review"]["runs-on"] == contract["runner_labels"]
 assert build_workflow["jobs"]["images"]["runs-on"] == ["self-hosted", "in-cluster"]
 assert "ubuntu-latest" not in workflow_text
 assert "ubuntu-latest" not in build_workflow_text
-assert workflow["jobs"]["review"]["env"]["REVIEW_NAMESPACE"] == "review"
+assert workflow["jobs"]["review"]["env"]["REVIEW_NAMESPACE"] == contract["namespace"]
 assert "kubectl create namespace" not in workflow_text
 assert "delete:" in workflow_text
 assert "REVIEW_REF_TYPE" in workflow_text
@@ -119,7 +129,7 @@ assert "REGISTRY_HOST must be provided" in workflow_text
 assert "docker login" in workflow_text
 assert "docker push" in workflow_text
 assert "imagePullSecrets" in workflow_text
-assert "gitea-registry-creds" in workflow_text
+assert contract["registry_secret_name"] in workflow_text
 assert "team: ${APP_TEAM}" in workflow_text
 assert "platform.local/review-environment" in workflow_text
 assert "tier: frontend" in workflow_text
@@ -133,7 +143,7 @@ assert "kubectl -n \"${REVIEW_NAMESPACE}\" delete deployment,service" in workflo
 assert "kubectl -n \"${REVIEW_NAMESPACE}\" delete ciliumnetworkpolicy" in workflow_text
 assert "kubectl -n \"${REVIEW_NAMESPACE}\" delete referencegrant" in workflow_text
 assert "kubectl -n gateway-routes delete httproute" in workflow_text
-assert "${APP_NAME}-${slug}.review.127.0.0.1.sslip.io" in workflow_text
+assert f"${{APP_NAME}}-${{slug}}.{contract['wildcard_subdomain']}.127.0.0.1.sslip.io" in workflow_text
 
 print("validated generated review workflow substrate usage")
 PY

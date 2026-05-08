@@ -2,6 +2,11 @@
 # shellcheck shell=bash
 
 shell_cli_script_name() {
+  if [[ -n "${SHELL_CLI_SCRIPT_NAME_OVERRIDE:-}" ]]; then
+    printf '%s\n' "${SHELL_CLI_SCRIPT_NAME_OVERRIDE}"
+    return 0
+  fi
+
   basename "$0"
 }
 

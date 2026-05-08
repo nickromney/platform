@@ -103,6 +103,108 @@ setup() {
   [[ "${output}" == *'$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"'* || "${output}" == *'make $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"'* ]]
 }
 
+@test "kind conflict preflight allows a running slicer vm with no host bindings" {
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
+  cat >"${TEST_BIN}/slicer" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "vm" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
+  printf '[{"hostname":"slicer-1","status":"Running"}]\n'
+fi
+EOF
+  chmod +x "${TEST_BIN}/slicer"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/ps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ps"
+
+  cat >"${TEST_BIN}/lsof" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+  *" -iTCP:443 "*|*" -iTCP:30080 "*)
+    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/lsof"
+
+  run env KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/slicer.sock" \
+    make -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "kind conflict preflight allows running Lima VMs with no host bindings" {
+  cat >"${TEST_BIN}/limactl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "list" ]]; then
+  printf 'k3s-node-1 Running 127.0.0.1:60022\n'
+fi
+EOF
+  chmod +x "${TEST_BIN}/limactl"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/slicer" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/slicer"
+
+  cat >"${TEST_BIN}/ps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ps"
+
+  cat >"${TEST_BIN}/lsof" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+  *" -iTCP:443 "*|*" -iTCP:30080 "*)
+    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/lsof"
+
+  run env KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/slicer.sock" \
+    make -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
 @test "kind check-health forwards PLATFORM_TFVARS to the health script" {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900 \
     PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
@@ -327,13 +429,21 @@ setup() {
   run grep -Fn './catalog/apps/apim-simulator/catalog-info.yaml' "${prod_config}"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "subnetcalc"' "${image_build}"
+  context_lib="${REPO_ROOT}/kubernetes/workflow/image-catalog-context-lib.sh"
+
+  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "subnetcalc"' "${context_lib}"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'copy_backstage_apim_simulator_catalog "${context_dir}"' "${image_build}"
+  run grep -Fn 'copy_backstage_apim_simulator_catalog "${context_dir}"' "${context_lib}"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "sentiment"' "${image_build}"
+  run grep -Fn 'copy_backstage_app_catalog "${context_dir}" "sentiment"' "${context_lib}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kubernetes/workflow/image-catalog-context-lib.sh' "${image_build}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'image_catalog_prepare_build_context_adapter' "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
   [ "${status}" -eq 0 ]
 }
 

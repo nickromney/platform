@@ -36,7 +36,29 @@ setup() {
   grep -F 'enable_apps_dir_mount = false' "${OUTPUT_FILE}"
   grep -F 'enable_docker_socket_mount = false' "${OUTPUT_FILE}"
   grep -F 'prefer_external_workload_images = true' "${OUTPUT_FILE}"
-  grep -F 'sentiment-api                        = "host.docker.internal:5002/platform/sentiment-api:latest"' "${OUTPUT_FILE}"
+  grep -F '"sentiment-api"                      = "host.docker.internal:5002/platform/sentiment-api:0.1.0"' "${OUTPUT_FILE}"
+  grep -E '"platform-mcp"[[:space:]]+= "host\.docker\.internal:5002/platform/platform-mcp:' "${OUTPUT_FILE}"
+}
+
+@test "generated registry mode operator overrides match the image catalog" {
+  run env \
+    KIND_OPERATOR_OVERRIDES_FILE="${OUTPUT_FILE}" \
+    KIND_IMAGE_DISTRIBUTION_MODE=registry \
+    KIND_LOCAL_IMAGE_CACHE_HOST=host.docker.internal:5002 \
+    KIND_ENABLE_BACKSTAGE=on \
+    "${RENDER_SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+
+  run uv run --isolated python \
+    "${REPO_ROOT}/kubernetes/workflow/validate-image-catalog-target-refs.py" \
+    --catalog "${REPO_ROOT}/kubernetes/workflow/image-catalog.json" \
+    --target kind \
+    --tfvars "${OUTPUT_FILE}" \
+    --allow-source-tags
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated kind external image refs against image catalog"* ]]
 }
 
 @test "render-operator-overrides auto disables Backstage below the Docker memory floor" {

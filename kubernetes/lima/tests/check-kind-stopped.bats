@@ -57,3 +57,31 @@ EOF
 
   [ "${status}" -eq 0 ]
 }
+
+@test "returns success when kind-local has no shared host bindings" {
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "ps" ]]; then
+    last_arg=""
+    for arg in "$@"; do
+      last_arg="${arg}"
+    done
+  case "${last_arg}" in
+    '{{.Names}}')
+      printf 'kind-local-control-plane\nkind-local-worker\n'
+      ;;
+    '{{.Names}}|{{.Ports}}')
+      printf 'kind-local-control-plane|127.0.0.1:6443->6443/tcp\n'
+      printf 'kind-local-worker|\n'
+      ;;
+  esac
+fi
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  run "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}

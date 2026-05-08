@@ -10,4 +10,4 @@ if [[ ! -x "${NEW_SCRIPT}" ]]; then
 fi
 
 echo "hubble-audit-cilium-policies.sh: renamed to hubble-observe-cilium-policies.sh; forwarding" >&2
-exec "${NEW_SCRIPT}" "$@"
+SHELL_CLI_SCRIPT_NAME_OVERRIDE="${0##*/}" exec "${NEW_SCRIPT}" "$@"

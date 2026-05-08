@@ -108,6 +108,12 @@ temporary `kubectl port-forward` tunnels instead of assuming
 is still useful for stable localhost UI surfaces and health checks, but it is
 no longer the hidden prerequisite for stage `500+` applies.
 
+The cross-target preflight is based on shared localhost bindings, not VM
+existence. The `slicer-1` VM can stay running while kind uses its default
+localhost bindings, and Slicer can coexist with Lima VMs that have no active
+gateway proxy. Release Slicer bindings with
+`make -C kubernetes/slicer stop-host-forwards` instead of pausing the VM.
+
 If you need those tunnels manually while debugging from the host, run:
 
 ```bash

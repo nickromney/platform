@@ -738,9 +738,10 @@ Implemented first pass:
   tags, source fingerprint inputs, and variant registry hosts.
 - Added `kubernetes/workflow/image-catalog-lib.sh` as a small Bash Adapter
   library for current shell scripts.
-- Added an explicit `version_check` policy to each catalog image so floating
-  local `latest` tags are declared as internal/non-comparable instead of being
-  silently outside `check-component-version.sh` semantics.
+- Added an explicit `version_check` policy to each catalog image and moved
+  local catalog `default_tag` values to version pins. Checked-in target tfvars
+  and generated workflow presets now render pinned local registry refs instead
+  of `latest`.
 - Made `kubernetes/kind/scripts/render-operator-overrides.sh` derive
   source-fingerprint tags and generated external image ref maps from the image
   catalog.
@@ -755,19 +756,67 @@ Implemented first pass:
 - Added a catalog target-ref validator so Lima and Slicer external platform and
   workload image refs are checked against the image catalog instead of silently
   duplicating catalog values.
+- Added catalog-owned `build` specs for `idp-core`, `platform-mcp`,
+  `backstage`, and `keycloak`, then made the kind local platform image builder
+  resolve build context and Dockerfile facts from the Image Catalog Module
+  instead of hard-coding those procedural build calls.
+- Added catalog-owned workload build specs for `sentiment-api`,
+  `sentiment-auth-ui`, subnetcalc frontends, subnetcalc API, APIM simulator,
+  and the platform MCP image. Kind, Lima, and Slicer workload image builders now
+  iterate the Image Catalog Module instead of carrying their own build list.
+- Moved Grafana VictoriaLogs plugin image build inputs into the catalog,
+  including base image refs, cache repos, plugin fetch image refs, archive
+  verification inputs, and version tag strategy.
+- Added an Image Catalog version-check projection consumed by
+  `check-component-version.sh` so local and checked-elsewhere image policies
+  are read from the catalog Interface.
+- Added generated kind operator override validation against the catalog, with
+  explicit allowance for source-fingerprint tags where the catalog owns
+  fingerprint inputs.
+- Corrected `platform-mcp` classification so the Image Catalog treats it as a
+  platform image for kind, Lima, and Slicer external refs. The real kind
+  `reset / 100 apply / 900 apply` path now renders `platform-mcp` from the host
+  local platform cache and converges `mcp` to Synced/Healthy instead of pulling
+  a missing Gitea workload image.
+- Added `kubernetes/workflow/image-build-lib.sh` as the shared image-builder
+  Adapter for Docker command assembly, build-arg resolution, cache-hit checks,
+  tag pushing, and catalog build loops. Kind, Lima, and Slicer workload image
+  builders now expose only variant runtime facts and consume that Adapter.
+- Moved catalog build default-tag resolution into the Image Catalog Module, so
+  catalog build loops build the pinned catalog tag by default instead of
+  carrying `TAG=latest` through each variant builder.
+- Added `kubernetes/workflow/image-catalog-context-lib.sh` as the generated
+  build-context preparation Adapter. The Backstage catalog-copy rules now live
+  next to the Image Catalog context Interface instead of inside the kind
+  platform image builder.
+- Extended the Image Catalog version-check projection with
+  `preload_alignment_images`, including external latest lookup policy,
+  checked-elsewhere metadata, and preload alignment policy for Argo CD,
+  Prometheus, Grafana, Loki, Tempo, and VictoriaLogs. `check-component-version.sh`
+  now drives those preload image checks from the catalog projection instead of
+  hard-coding each image matcher in its preload loop.
+- Extended the target-ref validator into a generator with `--print-expected`,
+  so Lima and Slicer external platform/workload image maps can be rendered from
+  the catalog Interface and compared against the checked-in target tfvars.
 
 Additional findings deliberately left out of this pass:
 
-- Build loops are still procedural in `build-local-platform-images.sh`; the
-  catalog now owns fingerprint inputs, but Dockerfile/context/build-arg
-  execution remains in the script.
+- Build execution is still procedural in the variant image builder scripts; the
+  catalog now owns build specs, fingerprint inputs, Grafana plugin inputs,
+  shared Docker command assembly, cache probing, build-arg resolution, and
+  generated Backstage context preparation. Grafana plugin archive preparation
+  remains a kind platform image-builder Implementation detail.
 - `keycloak_image` is a dedicated Terraform input rather than part of
   `external_platform_image_refs`, so the catalog marks Keycloak as not rendered
   into the external platform image map.
-- `check-component-version.sh` still owns external image latest lookup,
-  deployed/codebase/latest reporting, and preload image alignment. The catalog
-  now declares that its local images are intentionally non-comparable, but it
-  does not yet replace the version checker image Interface.
+- `check-component-version.sh` still owns deployed/codebase/latest reporting
+  and the external image audit over arbitrary Dockerfiles/manifests. The
+  catalog now classifies local catalog image refs and drives preload alignment
+  policy for known chart-backed images, but it does not replace the full
+  version checker image Interface.
+- Base GitOps manifests may still contain in-cluster placeholder refs such as
+  `localhost:30090/...:latest`; those are render inputs, not catalog default
+  tags or target tfvars refs.
 
 ### 3. Deepen GitOps Rendering Behind A Render Contract
 
@@ -808,13 +857,149 @@ Implemented first slice:
   variables.
 - Added a BATS test proving render inputs can come from the GitOps render
   contract.
+- Removed Terraform's duplicate external image env assignments from the
+  policies repo sync path so external workload/platform image refs now travel
+  through `GITOPS_RENDER_CONTRACT_FILE` on the Terraform Adapter path while the
+  shell renderer keeps env fallback compatibility for direct calls.
+- Added a golden rendered-tree BATS test for contract-driven external workload
+  and platform image rewrites.
+- Added a Terraform test asserting external image refs are present in
+  `local.policies_repo_render_contract` and that
+  `local.policies_repo_render_hash` is derived from the contract JSON.
+- Promoted external image contract key, env fallback, image id, and manifest
+  group mappings into a render-input table inside `sync-gitea-policies.sh`.
+- Removed chart, Grafana, VictoriaLogs plugin, and Signoz auth image render env
+  duplication from `null_resource.sync_gitea_policies_repo`; those values now
+  travel through `GITOPS_RENDER_CONTRACT_FILE` on the Terraform Adapter path.
+- Added golden rendered-tree tests for gateway route host/header rendering,
+  SSO and Backstage pruning, and Grafana chart values from the GitOps render
+  contract.
+- Added `local.app_repo_sync_contracts`, generated app repo sync contract JSON
+  files, and a shared `sync-gitea-app-repo.sh` Adapter for sentiment and
+  subnetcalc repo sync.
+- Added a shared `review-environment-dispatch.sh` Module for Gitea Actions
+  workflow dispatch and retry handling, then wired the sentiment/subnetcalc
+  image wait paths through it.
+- Added a review environment contract assertion covering namespace, registry
+  secret, wildcard certificate SAN, runner labels, and branch workflow
+  dispatch alignment.
+- Promoted GitOps enablement and host render inputs into the same render-input
+  table pattern used for external images. Terraform now carries those render
+  values through `GITOPS_RENDER_CONTRACT_FILE`, while the policy repo sync
+  environment is reduced to runtime Adapter details such as Gitea access,
+  deploy keys, kubeconfig, and script paths.
+- Split the policy repo renderer into a pure `render_policy_repo_tree` Adapter
+  that writes a rendered directory and a separate Gitea push runtime Adapter.
+  The pure renderer can now be sourced and exercised without Gitea admin
+  credentials, deploy keys, or local access setup.
+- Added a shared `wait-app-image-readiness.sh` Module for Gitea commit polling,
+  Actions runner readiness, registry tag polling, workflow failure handling,
+  and policies repo tag polling.
+- Added generated app image readiness contract JSON files for sentiment and
+  subnetcalc, paralleling app repo sync contracts. The Terraform wait resources
+  now delegate repo, workflow, image, policy, and failure-consequence facts to
+  the shared helper instead of carrying duplicated heredocs.
+- Added `terraform/kubernetes/contracts/review-environment.json` as the
+  source-controlled review environment substrate contract. Terraform reads this
+  contract for namespace, registry secret, runner labels, and wildcard review
+  certificate SAN derivation, and the Backstage template test now verifies the
+  scaffolded workflow remains aligned with the same contract.
+- Added `terraform/kubernetes/scripts/tofu-test-gitops-features.sh`, a bounded
+  runner for `tests/gitops_features.tftest.hcl` that emits OpenTofu/provider
+  diagnostics and terminates lingering processes when the test exceeds its
+  wall-clock budget.
 
 Additional findings deliberately left out of this pass:
 
-- The shell renderer still exposes the old env Interface for compatibility and
-  tests. The contract path is now available, but the env Interface has not been
-  deleted.
-- Golden contract and rendered-tree tests are still future work. The current
-  test proves contract loading, not full rendered output equivalence.
-- App repo sync and review-environment workflow dispatch remain separate
-  procedural Terraform local-exec paths.
+- The shell renderer still exposes the old render env Interface for
+  compatibility and direct-call tests. Terraform now uses the contract for
+  external image refs, enablement, host values, chart versions, Grafana values,
+  and Signoz auth image. Gitea push runtime values are isolated from pure
+  rendering.
+- Golden contract and rendered-tree tests now cover external images, gateway
+  routes, SSO pruning, Backstage pruning, and Grafana chart values. Full render
+  output is still not frozen as a repository tree fixture.
+- App repo sync, review workflow dispatch, app image readiness, and review
+  environment substrate facts now have shared contract Modules.
+
+## Completed Follow-Up Items
+
+1. Extend the Image Catalog Module to own workload build specs for
+   `sentiment-api`, `sentiment-auth-ui`, subnetcalc frontends, subnetcalc API,
+   and APIM simulator, then make variant workload image builders consume that
+   Interface. Implemented.
+2. Move Grafana VictoriaLogs plugin image build inputs into the Image Catalog
+   Module, including base image refs, plugin fetch image refs, plugin archive
+   policy, and version tag strategy. Implemented.
+3. Add an Image Catalog version-check projection used by
+   `check-component-version.sh` so local, external, checked-elsewhere, and
+   non-comparable policies are read from one Module. Implemented for local
+   catalog image classification.
+4. Add generated kind operator override validation against
+   `kubernetes/workflow/image-catalog.json`, matching the existing Lima/Slicer
+   target-ref validator. Implemented.
+5. Promote GitOps external image env fallback mapping into a small render-input
+   Module inside `sync-gitea-policies.sh`, so contract keys, env fallback names,
+   and manifest replacement ids live in one table. Implemented.
+6. Remove more Terraform render env vars from
+   `null_resource.sync_gitea_policies_repo`, starting with chart versions and
+   observability image values already present in `local.policies_repo_render_contract`.
+   Implemented for chart versions, Grafana values, VictoriaLogs plugin URL, and
+   Signoz auth image.
+7. Add golden GitOps render tests for gateway routes, SSO route pruning,
+   Backstage removal, and Grafana chart value rendering. Implemented.
+8. Move app repo sync contracts for `sentiment` and `subnetcalc` into a shared
+   app repo sync Module instead of duplicating Terraform local-exec scripts.
+   Implemented.
+9. Factor workflow dispatch and retry handling for app repositories into a
+   shared review-environment dispatch Module with a testable Interface.
+   Implemented.
+10. Add a review environment contract test that proves namespace, registry
+    secret, wildcard certificate SAN, runner labels, and branch workflow
+    dispatch stay aligned. Implemented.
+11. Correct `platform-mcp` as a platform image across kind, Lima, and Slicer
+    external refs, and prove the fix with the real kind stage-900 apply path.
+    Implemented.
+12. Promote GitOps enablement and host render inputs into a render-input table
+    and remove those render-only values from the Terraform policy sync env
+    Interface. Implemented.
+13. Deepen the variant image builder Module further by moving Docker command
+    assembly, cache-hit checks, and build-arg resolution behind one shared
+    shell Adapter instead of keeping near-identical functions in kind, Lima,
+    and Slicer. Implemented.
+14. Move generated Backstage build-context assembly into an Image Catalog
+    context-preparation Adapter so catalog facts and context copy rules stay in
+    one Module. Implemented.
+15. Extend the Image Catalog version-check projection to include external
+    latest lookup policy, preload alignment policy, and checked-elsewhere
+    metadata for non-local images. Implemented for chart-backed preload image
+    alignment.
+16. Finish the generated catalog projection for target tfvars and kind operator
+    overrides so HCL ref maps are rendered from one Module instead of corrected
+    by hand and tested after the fact. Implemented for Lima/Slicer target
+    tfvars and the existing kind operator override renderer.
+17. Split policy repo rendering into a pure rendered-tree Adapter that writes
+    to a directory and a separate Gitea push Adapter, so golden tests can cover
+    the full tree without Gitea runtime details. Implemented.
+18. Replace the sentiment/subnetcalc wait-image heredocs with a shared app
+    image readiness Module for Gitea API polling, runner readiness, registry
+    tag polling, and policy repo tag polling. Implemented.
+19. Add contract JSON files for app image readiness, paralleling app repo sync
+    contracts, so sentiment and subnetcalc wait paths stop hand-assembling
+    repo, image, policy, and consequence facts. Implemented.
+20. Move review environment substrate facts into a source-controlled contract
+    file consumed by Terraform, the Backstage template, and tests, instead of a
+    Terraform-only local. Implemented.
+21. Add a bounded Terraform test strategy for GitOps feature tests so provider
+    hangs produce actionable diagnostics without masking completed assertions.
+    Implemented with a timeout wrapper for `tests/gitops_features.tftest.hcl`.
+22. Replace local catalog `latest` defaults with version-pinned default tags
+    and make catalog build loops resolve their default build tag from the Image
+    Catalog Module. Implemented for kind, Lima, Slicer, Docker Desktop, workflow
+    presets, and generated target projections.
+
+## Next Architecture Deepening Items
+
+1. Add full rendered-tree golden fixtures for the policy repo after the pure
+    renderer exists, covering the complete `apps/` and `cluster-policies/`
+    output for a small set of GitOps render contracts.

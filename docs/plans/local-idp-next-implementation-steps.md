@@ -134,7 +134,8 @@ Ownership:
 
 Accuracy note:
 
-- Source manifests currently use `localhost:30090/platform/idp-*.latest`.
+- Source manifests currently use in-cluster placeholder refs such as
+  `localhost:30090/platform/idp-core:latest`.
   That is the Gitea registry shape, but it is not a safe first-boot source for
   host-built IDP images.
 - The stage-900 Make flow already builds platform shortcut images into the
@@ -144,17 +145,17 @@ Accuracy note:
 
 Expected pushed refs:
 
-- Host push target: `127.0.0.1:5002/platform/idp-core:latest`
-- Host push target: `127.0.0.1:5002/platform/backstage:latest`
+- Host push target: `127.0.0.1:5002/platform/idp-core:0.1.0`
+- Host push target: `127.0.0.1:5002/platform/backstage:1.0.0`
 
 Expected rendered pull refs:
 
-- kind: `host.docker.internal:5002/platform/idp-core:latest`
-- kind: `host.docker.internal:5002/platform/backstage:latest`
-- Lima: `host.lima.internal:5002/platform/idp-core:latest`
-- Lima: `host.lima.internal:5002/platform/backstage:latest`
-- Slicer: `192.168.64.1:5002/platform/idp-core:latest`
-- Slicer: `192.168.64.1:5002/platform/backstage:latest`
+- kind: `host.docker.internal:5002/platform/idp-core:0.1.0`
+- kind: `host.docker.internal:5002/platform/backstage:1.0.0`
+- Lima: `host.lima.internal:5002/platform/idp-core:0.1.0`
+- Lima: `host.lima.internal:5002/platform/backstage:1.0.0`
+- Slicer: `192.168.64.1:5002/platform/idp-core:0.1.0`
+- Slicer: `192.168.64.1:5002/platform/backstage:1.0.0`
 
 Red tests:
 
@@ -168,8 +169,8 @@ Red tests:
 Green implementation:
 
 - Extend `build-local-platform-images.sh` to build and push:
-  - `platform/idp-core:latest`
-  - `platform/backstage:latest`
+  - `platform/idp-core:0.1.0`
+  - `platform/backstage:1.0.0`
 - Add `idp-core` and `backstage` to the supported
   `external_platform_image_refs` keys.
 - Add target-specific external platform image refs to kind, Lima, and Slicer.

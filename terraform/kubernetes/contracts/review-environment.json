@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1",
+  "namespace": "review",
+  "registry_secret_name": "gitea-registry-creds",
+  "wildcard_subdomain": "review",
+  "runner_labels": ["self-hosted", "in-cluster", "review-env"],
+  "main_branch": "main"
+}

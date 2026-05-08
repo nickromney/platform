@@ -9,8 +9,9 @@ usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]
 
-Checks whether the local kind cluster is still running and exits non-zero when
-it would conflict with Lima or Slicer startup.
+Checks whether the local kind cluster publishes shared host ports and exits
+non-zero when those bindings would conflict with Lima or Slicer startup. A
+running kind cluster without shared host bindings is allowed to coexist.
 
 $(shell_cli_standard_options)
 EOF
@@ -58,18 +59,20 @@ if [[ -z "${running_kind_nodes}" ]]; then
   exit 0
 fi
 
-echo "kind-local is still running." >&2
-echo "Stop it before starting Lima or Slicer on this host:" >&2
+if [[ -z "${running_kind_conflicting_ports}" ]]; then
+  exit 0
+fi
+
+echo "kind-local shared host bindings are still active." >&2
+echo "Stop kind before assuming the shared localhost ports are free:" >&2
 echo "  make -C kubernetes/kind stop-kind" >&2
 echo "" >&2
-if [[ -n "${running_kind_conflicting_ports}" ]]; then
-  echo "Conflicting shared host ports for Lima/Slicer:" >&2
-  while IFS= read -r host_port; do
-    [[ -z "${host_port}" ]] && continue
-    printf '  %s\n' "${host_port}" >&2
-  done <<< "${running_kind_conflicting_ports}"
-  echo "" >&2
-fi
+echo "Conflicting shared host ports for Lima/Slicer:" >&2
+while IFS= read -r host_port; do
+  [[ -z "${host_port}" ]] && continue
+  printf '  %s\n' "${host_port}" >&2
+done <<< "${running_kind_conflicting_ports}"
+echo "" >&2
 if [[ -n "${running_kind_other_ports}" ]]; then
   echo "Other published kind host ports:" >&2
   while IFS= read -r host_port; do

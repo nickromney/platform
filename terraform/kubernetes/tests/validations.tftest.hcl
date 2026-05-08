@@ -28,6 +28,26 @@ run "kind_stack_dir_anchors_generated_files" {
   }
 }
 
+run "relative_preload_image_list_path_anchors_to_stack_dir" {
+  command = plan
+
+  variables {
+    provision_kind_cluster  = false
+    cni_provider            = "none"
+    enable_hubble           = false
+    enable_argocd           = false
+    enable_gitea            = false
+    enable_signoz           = false
+    kind_stack_dir          = "/tmp/platform-stack/terraform/kubernetes"
+    preload_image_list_path = "../../kubernetes/kind/preload-images.txt"
+  }
+
+  assert {
+    condition     = local.preload_image_list_path_effective == "/tmp/platform-stack/kubernetes/kind/preload-images.txt"
+    error_message = "Expected relative preload_image_list_path to resolve from local.stack_dir, not from the OpenTofu working directory"
+  }
+}
+
 run "headlamp_requires_argocd" {
   command = plan
 
@@ -171,8 +191,8 @@ run "app_repo_sentiment_allows_external_images_without_runner" {
     enable_app_repo_sentiment       = true
     prefer_external_workload_images = true
     external_workload_image_refs = {
-      "sentiment-api"     = "host.lima.internal:5002/platform/sentiment-api:latest"
-      "sentiment-auth-ui" = "host.lima.internal:5002/platform/sentiment-auth-ui:latest"
+      "sentiment-api"     = "host.lima.internal:5002/platform/sentiment-api:0.1.0"
+      "sentiment-auth-ui" = "host.lima.internal:5002/platform/sentiment-auth-ui:0.1.0"
     }
   }
 }
@@ -192,9 +212,9 @@ run "app_repo_subnetcalc_allows_external_images_without_runner" {
     enable_app_repo_subnetcalc      = true
     prefer_external_workload_images = true
     external_workload_image_refs = {
-      "subnetcalc-api-fastapi-container-app" = "host.lima.internal:5002/platform/subnetcalc-api-fastapi-container-app:latest"
-      "subnetcalc-apim-simulator"            = "host.lima.internal:5002/platform/subnetcalc-apim-simulator:latest"
-      "subnetcalc-frontend-typescript-vite"  = "host.lima.internal:5002/platform/subnetcalc-frontend-typescript-vite:latest"
+      "subnetcalc-api-fastapi-container-app" = "host.lima.internal:5002/platform/subnetcalc-api-fastapi-container-app:1.0.0"
+      "subnetcalc-apim-simulator"            = "host.lima.internal:5002/platform/subnetcalc-apim-simulator:0.4.0"
+      "subnetcalc-frontend-typescript-vite"  = "host.lima.internal:5002/platform/subnetcalc-frontend-typescript-vite:1.0.0"
     }
   }
 }
@@ -211,19 +231,25 @@ run "external_platform_images_accepts_idp_refs" {
     host_local_registry_host        = "host.docker.internal:5002"
     prefer_external_platform_images = true
     external_platform_image_refs = {
-      backstage   = "host.docker.internal:5002/platform/backstage:latest"
-      grafana      = "host.docker.internal:5002/platform/grafana-victorialogs:latest"
-      "idp-core"   = "host.docker.internal:5002/platform/idp-core:latest"
+      backstage      = "host.docker.internal:5002/platform/backstage:1.0.0"
+      grafana         = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.26.3"
+      "idp-core"      = "host.docker.internal:5002/platform/idp-core:0.1.0"
+      "platform-mcp" = "host.docker.internal:5002/platform/platform-mcp:0.1.0"
     }
   }
 
   assert {
-    condition     = local.external_platform_idp_core == "host.docker.internal:5002/platform/idp-core:latest"
+    condition     = local.external_platform_idp_core == "host.docker.internal:5002/platform/idp-core:0.1.0"
     error_message = "Expected idp-core external platform image ref to be accepted and exposed through locals"
   }
 
   assert {
-    condition     = local.external_platform_backstage == "host.docker.internal:5002/platform/backstage:latest"
+    condition     = local.external_platform_backstage == "host.docker.internal:5002/platform/backstage:1.0.0"
     error_message = "Expected backstage external platform image ref to be accepted and exposed through locals"
+  }
+
+  assert {
+    condition     = local.external_platform_mcp == "host.docker.internal:5002/platform/platform-mcp:0.1.0"
+    error_message = "Expected platform-mcp external platform image ref to be accepted and exposed through locals"
   }
 }

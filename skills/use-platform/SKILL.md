@@ -143,9 +143,16 @@ Use these state probes while an `apply` is in flight:
 
 Use the preflight checks to explain immediate failure modes instead of waiting on them:
 
-- `make -C kubernetes/lima check-kind-stopped` tells you Lima is blocked because kind is still active.
-- `make -C kubernetes/kind check-lima-stopped` and `make -C kubernetes/kind check-slicer-stopped` tell you kind is blocked by another local cluster target.
-- `make -C kubernetes/slicer check-kind-stopped` and `make -C kubernetes/slicer check-lima-stopped` tell you Slicer is blocked by another local cluster target.
+- `make -C kubernetes/lima check-kind-stopped` tells you Lima is blocked because kind has active shared localhost bindings.
+- `make -C kubernetes/kind check-lima-stopped` and `make -C kubernetes/kind check-slicer-stopped` tell you kind is blocked by another target's active shared localhost bindings.
+- `make -C kubernetes/slicer check-kind-stopped` and `make -C kubernetes/slicer check-lima-stopped` tell you Slicer is blocked by another target's active shared localhost bindings.
+
+The blocker checks are binding-based, not VM-existence-based. A running Lima VM
+without `limavm-platform-gateway-443`, a running `slicer-1` VM without Slicer
+host forwards or `slicer-platform-gateway-443`, and a kind cluster without
+published shared host ports are allowed to coexist. Stop only the binding helper
+when that is enough: `make -C kubernetes/lima stop-host-gateway-proxy` or
+`make -C kubernetes/slicer stop-host-forwards`.
 
 Rule of thumb: keep the original `apply` running until it either exits successfully or surfaces a concrete hard error. Use the `check-*` and `status` targets to understand what it is waiting for.
 

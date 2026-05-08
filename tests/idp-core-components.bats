@@ -516,6 +516,7 @@ repo_root = Path(os.environ["REPO_ROOT"])
 dockerfile = (repo_root / "apps/keycloak/Dockerfile").read_text(encoding="utf-8")
 sso_tf = (repo_root / "terraform/kubernetes/sso.tf").read_text(encoding="utf-8")
 build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 
 assert "FROM quay.io/keycloak/keycloak:26.6.1 AS builder" in dockerfile
 assert "ENV KC_DB=postgres" in dockerfile
@@ -530,8 +531,10 @@ assert "image: ${var.keycloak_image}" in sso_tf
 assert "- --optimized" in sso_tf
 
 assert "keycloak_source_tag=" in build_script
-assert '"keycloak" \\' in build_script
-assert "apps/keycloak/Dockerfile" in build_script
+assert '"id": "keycloak"' in image_catalog
+assert '"context": "apps/keycloak"' in image_catalog
+assert '"dockerfile": "Dockerfile"' in image_catalog
+assert '"default_tag": "26.6.1"' in image_catalog
 
 for target, registry_host in {
     "kind": "host.docker.internal:5002",
@@ -539,7 +542,7 @@ for target, registry_host in {
     "slicer": "192.168.64.1:5002",
 }.items():
     tfvars = (repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars").read_text(encoding="utf-8")
-    assert f'keycloak_image = "{registry_host}/platform/keycloak:latest"' in tfvars, (target, tfvars)
+    assert f'keycloak_image = "{registry_host}/platform/keycloak:26.6.1"' in tfvars, (target, tfvars)
 
 print("validated optimized Keycloak container contract")
 PY

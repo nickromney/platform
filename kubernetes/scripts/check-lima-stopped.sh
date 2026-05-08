@@ -15,8 +15,9 @@ usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]
 
-Checks whether Lima VMs or host proxy containers are still running and exits
-non-zero when they would conflict with another local runtime.
+Checks whether Lima host proxy containers are still running and exits non-zero
+when they would conflict with another local runtime. A running Lima VM without
+host bindings is allowed to coexist.
 
 $(shell_cli_standard_options)
 EOF
@@ -73,15 +74,15 @@ if command -v docker >/dev/null 2>&1; then
   )"
 fi
 
-if [[ -z "${running_lima_vms}" && -z "${running_lima_proxies}" ]]; then
+if [[ -z "${running_lima_proxies}" ]]; then
   exit 0
 fi
 
 active_shared_ports="$(shared_ports_in_use)"
 
-echo "Lima is still running." >&2
-echo "Stop it before assuming the shared localhost ports are free:" >&2
-echo "  make -C kubernetes/lima stop-lima" >&2
+echo "Lima host bindings are still active." >&2
+echo "Stop them before assuming the shared localhost ports are free:" >&2
+echo "  make -C kubernetes/lima stop-host-gateway-proxy" >&2
 echo "" >&2
 
 if [[ -n "${active_shared_ports}" ]]; then

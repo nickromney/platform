@@ -450,12 +450,18 @@ scripts = (
     "kubernetes/slicer/scripts/build-local-workload-images.sh",
 )
 
-needle = '--build-arg "SENTIMENT_MODEL_ID=${SENTIMENT_MODEL_ID}"'
+shared = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
+catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
+
+assert '"name": "SENTIMENT_MODEL_ID"' in catalog
+assert '"env": "SENTIMENT_MODEL_ID"' in catalog
+assert 'IMAGE_BUILD_ARGS+=(--build-arg "${arg_name}=${arg_value}")' in shared
+assert 'arg_value="${!env_name-${arg_value}}"' in shared
 
 for relative_path in scripts:
     content = (repo_root / relative_path).read_text(encoding="utf-8")
-    assert 'SENTIMENT_MODEL_ID="${SENTIMENT_MODEL_ID:-}"' in content, relative_path
-    assert needle in content, relative_path
+    assert "kubernetes/workflow/image-build-lib.sh" in content, relative_path
+    assert "image_build_catalog_build_loop workload workload" in content, relative_path
 
 print(f"validated {len(scripts)} local workload builder(s)")
 PY
