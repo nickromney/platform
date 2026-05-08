@@ -79,6 +79,39 @@ EOF
   [[ "${output}" == *"INFO dry-run: would do the safe thing"* ]]
 }
 
+@test "shell audit rejects shared-helper entrypoints with mismatched descriptor metadata" {
+  write_tracked_executable_file "scripts/described.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--shell-entrypoint-descriptor" ]]; then
+  printf '%s\n' '{"schema_version":"shell-entrypoint/v1","name":"old-name.sh","path":"scripts/described.sh","supports":["--help","--dry-run","--execute"],"default_mode":"dry-run"}'
+  exit 0
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
+usage() {
+  cat <<USAGE
+Usage: described.sh [--dry-run] [--execute]
+
+$(shell_cli_standard_options)
+USAGE
+}
+
+shell_cli_handle_standard_no_args usage "would do the safe thing" "$@"
+EOF
+
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"executable shell entrypoints must expose valid descriptor metadata"* ]]
+  [[ "${output}" == *"scripts/described.sh"* ]]
+  [[ "${output}" == *"descriptor name old-name.sh did not match described.sh"* ]]
+}
+
 @test "shell audit rejects usage names that do not match the executable basename" {
   write_tracked_executable_file "scripts/renamed.sh" <<'EOF'
 #!/usr/bin/env bash

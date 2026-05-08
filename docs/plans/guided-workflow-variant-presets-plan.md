@@ -244,8 +244,8 @@ Schema implication:
 
 The APIM simulator must be represented explicitly.
 
-It is already a service catalog entry and a deployed platform/demo capability,
-not just an incidental part of subnetcalc. The option schema should distinguish:
+It is already a service catalog entry and a deployed platform/demo capability.
+Treat it as a first-class platform surface in the option schema:
 
 - `apim-simulator` as API mediation/platform capability
 - `subnetcalc` as a reference workload that may use APIM

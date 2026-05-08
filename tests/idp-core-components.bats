@@ -21,6 +21,35 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "identity and access edge contract exposes OIDC RBAC and API audience facts" {
+  jq_path="$(command -v jq)"
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  ln -sf "${jq_path}" "${BATS_TEST_TMPDIR}/bin/jq"
+
+  run env PATH="${BATS_TEST_TMPDIR}/bin:/usr/bin:/bin" \
+    /bin/bash "${REPO_ROOT}/terraform/kubernetes/scripts/check-sso.sh" \
+    --execute \
+    --contract \
+    --host-port 443
+
+  [ "${status}" -eq 0 ]
+  identity_contract="${output}"
+
+  run jq -e '
+    .schema_version == "platform.identity-access-edge/v1" and
+    .oidc_provider.provider == "keycloak" and
+    .oidc_provider.groups_claim == "groups" and
+    .oidc_provider.issuer_url == "https://keycloak.127.0.0.1.sslip.io/realms/platform" and
+    .access_groups.admin == "platform-admins" and
+    .access_groups.viewer == "platform-viewers" and
+    .resource_servers.apim.audience == "apim-simulator" and
+    any(.browser_edges[]; .name == "gitea" and (.allowed_groups | index("platform-admins"))) and
+    .kubernetes_rbac.token_client_id == "headlamp"
+  ' <<<"${identity_contract}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "hello-platform is a real checked-in workload with dev and UAT promotion overlays" {
   for path in \
     terraform/kubernetes/apps/workloads/hello-platform/all.yaml \

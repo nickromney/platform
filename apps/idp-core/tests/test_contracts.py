@@ -1,5 +1,51 @@
-from app.contracts import openapi_contract_summary, runtime_adapter_contract
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from app.contracts import (
+    environment_request_capabilities,
+    openapi_contract_summary,
+    runtime_adapter_contract,
+    runtime_capabilities,
+)
 from app.main import create_app
+
+
+def test_runtime_and_environment_request_capabilities_are_public_contracts(tmp_path: Path) -> None:
+    runtime = runtime_capabilities()
+    environment_request = environment_request_capabilities()
+    contract = runtime_adapter_contract()
+
+    assert runtime == {
+        "environment_request": True,
+        "deployment_plan": True,
+        "secret_plan": True,
+        "status_projection": True,
+    }
+    assert environment_request == {
+        "schema_version": "platform.environment_request_capabilities/v1",
+        "workflow": "environment",
+        "dry_run": True,
+        "supported_actions": ["create", "delete"],
+        "default_action": "create",
+        "default_environment_type": "development",
+        "required_fields": ["runtime", "app", "environment"],
+        "optional_fields": ["action", "environment_type"],
+    }
+    assert contract["capabilities"] == runtime
+    assert contract["environment_request"] == environment_request
+
+    client = TestClient(create_app(audit_path=tmp_path / "audit.jsonl"))
+    response = client.get("/api/v1/actions")
+
+    assert response.status_code == 200
+    environment_action = next(action for action in response.json()["actions"] if action["id"] == "environment.create")
+    assert environment_action == {
+        "id": "environment.create",
+        "label": "Create environment",
+        "runtime": "kind",
+        "dry_run": environment_request["dry_run"],
+    }
 
 
 def test_runtime_adapter_contract_lists_supported_runtimes_and_slicer_gap() -> None:

@@ -8,9 +8,16 @@ type CatalogEntity = {
   metadata?: {
     name?: string;
     annotations?: Record<string, string>;
+    links?: Array<{
+      title?: string;
+      url?: string;
+    }>;
   };
   spec?: {
     type?: string;
+    lifecycle?: string;
+    owner?: string;
+    system?: string;
     providesApis?: string[];
     consumesApis?: string[];
   };
@@ -33,6 +40,23 @@ function gauge(name: string, labels: Record<string, string>, value: number): str
     .map(([key, labelValue]) => `${key}="${metricNameLabel(labelValue)}"`)
     .join(',');
   return `${name}{${renderedLabels}} ${value}`;
+}
+
+function linkKind(title: string | undefined, url: string | undefined): string {
+  const normalizedTitle = (title || '').toLowerCase();
+  const normalizedUrl = url || '';
+  if (
+    normalizedUrl.includes('/d/') ||
+    normalizedTitle.includes('observability') ||
+    normalizedTitle.includes('golden signals') ||
+    normalizedTitle.includes('grafana')
+  ) {
+    return 'observability';
+  }
+  if (normalizedUrl.startsWith('http://') || normalizedUrl.startsWith('https://')) {
+    return 'application';
+  }
+  return 'other';
 }
 
 function configuredCatalogFiles(): string[] {
@@ -93,6 +117,46 @@ export function renderCatalogMetrics(): string {
   }
   for (const [type, count] of [...componentTypeCounts.entries()].sort()) {
     lines.push(gauge('backstage_catalog_components_total', { type }, count));
+  }
+
+  lines.push(
+    '# HELP backstage_catalog_component_locality_total Backstage components with ownership and lifecycle locality labels.',
+    '# TYPE backstage_catalog_component_locality_total gauge',
+  );
+  for (const component of [...components].sort((left, right) =>
+    (left.metadata?.name || '').localeCompare(right.metadata?.name || ''),
+  )) {
+    lines.push(
+      gauge(
+        'backstage_catalog_component_locality_total',
+        {
+          component: component.metadata?.name || 'unknown',
+          owner: component.spec?.owner || 'unknown',
+          lifecycle: component.spec?.lifecycle || 'unknown',
+          system: component.spec?.system || 'unknown',
+          type: component.spec?.type || 'unknown',
+        },
+        1,
+      ),
+    );
+  }
+
+  const componentLinkCounts = new Map<string, number>();
+  for (const component of components) {
+    const componentName = component.metadata?.name || 'unknown';
+    for (const link of component.metadata?.links || []) {
+      const kind = linkKind(link.title, link.url);
+      const key = `${componentName}\u0000${kind}`;
+      componentLinkCounts.set(key, (componentLinkCounts.get(key) || 0) + 1);
+    }
+  }
+  lines.push(
+    '# HELP backstage_catalog_component_links_total Backstage component links grouped by consumer contract kind.',
+    '# TYPE backstage_catalog_component_links_total gauge',
+  );
+  for (const [key, count] of [...componentLinkCounts.entries()].sort()) {
+    const [component, kind] = key.split('\u0000');
+    lines.push(gauge('backstage_catalog_component_links_total', { component, kind }, count));
   }
 
   const annotationMetrics = [

@@ -56,6 +56,7 @@ unexpected_python=()
 yaml_module_usage=()
 bash4_feature_usage=()
 interface_failures=()
+descriptor_failures=()
 library_entrypoint_failures=()
 scope_paths=()
 
@@ -242,6 +243,72 @@ usage_output_names_entrypoint() {
   ' <<<"${output}"
 }
 
+entrypoint_sources_shell_cli_helper() {
+  local file="$1"
+
+  grep -Eq '(^|[[:space:]])(source|\.)[[:space:]]+.*shell-cli\.sh' "${file}" \
+    && grep -Eq 'shell_cli_handle_standard_no_args|shell_cli_parse_standard_only' "${file}"
+}
+
+json_descriptor_field() {
+  local json="$1"
+  local field="$2"
+
+  printf '%s\n' "${json}" | sed -n "s/.*\"${field}\":\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+validate_entrypoint_descriptor() {
+  local rel="$1"
+  local file="$2"
+  local expected_name="${rel##*/}"
+  local descriptor=""
+  local descriptor_name=""
+  local descriptor_path=""
+  local failures=""
+
+  entrypoint_sources_shell_cli_helper "${file}" || return 0
+
+  if ! run_interface_probe "${file}" --shell-entrypoint-descriptor; then
+    descriptor_failures+=("${rel}: descriptor probe (${SHELL_AUDIT_LAST_ERROR})")
+    return 0
+  fi
+
+  descriptor="$(printf '%s\n' "${SHELL_AUDIT_LAST_OUTPUT}" | sed -n '1p')"
+  descriptor_name="$(json_descriptor_field "${descriptor}" "name")"
+  descriptor_path="$(json_descriptor_field "${descriptor}" "path")"
+
+  if [[ "${descriptor}" != *'"schema_version":"shell-entrypoint/v1"'* ]]; then
+    failures="descriptor schema_version was not shell-entrypoint/v1"
+  fi
+
+  if [[ -z "${descriptor_name}" ]]; then
+    if [[ -n "${failures}" ]]; then failures="${failures}; "; fi
+    failures="${failures}descriptor name was missing"
+  elif [[ "${descriptor_name}" != "${expected_name}" ]]; then
+    if [[ -n "${failures}" ]]; then failures="${failures}; "; fi
+    failures="${failures}descriptor name ${descriptor_name} did not match ${expected_name}"
+  fi
+
+  if [[ -z "${descriptor_path}" ]]; then
+    if [[ -n "${failures}" ]]; then failures="${failures}; "; fi
+    failures="${failures}descriptor path was missing"
+  fi
+
+  if [[ "${descriptor}" != *'"supports":["--help","--dry-run","--execute"]'* ]]; then
+    if [[ -n "${failures}" ]]; then failures="${failures}; "; fi
+    failures="${failures}descriptor supports did not list the standard flags"
+  fi
+
+  if [[ "${descriptor}" != *'"default_mode":"dry-run"'* ]]; then
+    if [[ -n "${failures}" ]]; then failures="${failures}; "; fi
+    failures="${failures}descriptor default_mode was not dry-run"
+  fi
+
+  if [[ -n "${failures}" ]]; then
+    descriptor_failures+=("${rel}: ${failures}")
+  fi
+}
+
 validate_entrypoint_interface() {
   local rel="$1"
   local file="$2"
@@ -321,6 +388,7 @@ while IFS= read -r -d '' rel; do
   elif [[ -x "${file}" ]]; then
     entrypoint_count=$((entrypoint_count + 1))
     validate_entrypoint_interface "${rel}" "${file}"
+    validate_entrypoint_descriptor "${rel}" "${file}"
   fi
 
   if python_matches="$(python_execution_matches "${file}" 2>/dev/null)" && [[ -n "${python_matches}" ]]; then
@@ -344,6 +412,12 @@ done < <(list_shell_scripts)
 if [[ "${#interface_failures[@]}" -gt 0 ]]; then
   printf 'FAIL shell audit: executable shell entrypoints must support --help, --dry-run, and --execute without prerequisites:\n' >&2
   printf '  %s\n' "${interface_failures[@]}" >&2
+  exit 1
+fi
+
+if [[ "${#descriptor_failures[@]}" -gt 0 ]]; then
+  printf 'FAIL shell audit: executable shell entrypoints must expose valid descriptor metadata:\n' >&2
+  printf '  %s\n' "${descriptor_failures[@]}" >&2
   exit 1
 fi
 

@@ -8,6 +8,8 @@ CLI safety contract.
 - `-h`, `--help` prints usage and exits `0`.
 - `--dry-run` prints a summary and exits `0` before side effects.
 - `--execute` is required for real execution across executable entrypoints.
+- `--shell-entrypoint-descriptor` prints a compact JSON descriptor for audit
+  tooling.
 - Bare invocation should print help plus the same preview output as `--dry-run`,
   then exit `0`.
 
@@ -29,6 +31,12 @@ CLI safety contract.
 Bash entrypoints can source
 [`scripts/lib/shell-cli.sh`](../scripts/lib/shell-cli.sh) for shared error and
 standard-flag handling.
+
+The shared Bash helper also provides the descriptor response consumed by
+[`scripts/audit-shell-scripts.sh`](../scripts/audit-shell-scripts.sh) for
+entrypoints that use the standard parser helpers. The descriptor schema is
+currently `shell-entrypoint/v1` with the script basename, invoked path,
+supported standard flags, and `dry-run` default mode.
 
 Use `shell_cli_parse_standard_only usage "$@"`, then call
 `shell_cli_maybe_execute_or_preview_summary usage "..."` before the first side

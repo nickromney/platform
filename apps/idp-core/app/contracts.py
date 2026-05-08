@@ -1,8 +1,20 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from app.adapters import MakefileRuntimeAdapter, RuntimeAdapter, list_adapters
+from app.environment_requests import environment_request_capabilities
+
+RUNTIME_CAPABILITY_FLAGS: Final[dict[str, bool]] = {
+    "environment_request": True,
+    "deployment_plan": True,
+    "secret_plan": True,
+    "status_projection": True,
+}
+
+
+def runtime_capabilities() -> dict[str, bool]:
+    return dict(RUNTIME_CAPABILITY_FLAGS)
 
 
 def runtime_adapter_contract(adapters: list[RuntimeAdapter] | None = None) -> dict[str, object]:
@@ -14,12 +26,7 @@ def runtime_adapter_contract(adapters: list[RuntimeAdapter] | None = None) -> di
         runtime: dict[str, object] = {
             "name": adapter.name,
             "description": adapter.description,
-            "capabilities": {
-                "environment_request": True,
-                "deployment_plan": True,
-                "secret_plan": True,
-                "status_projection": True,
-            },
+            "capabilities": runtime_capabilities(),
         }
         if isinstance(adapter, MakefileRuntimeAdapter):
             runtime["execution_adapter"] = {
@@ -44,6 +51,8 @@ def runtime_adapter_contract(adapters: list[RuntimeAdapter] | None = None) -> di
 
     return {
         "schema_version": "platform.portal_runtime_contract/v1",
+        "capabilities": runtime_capabilities(),
+        "environment_request": environment_request_capabilities(),
         "runtimes": runtimes,
         "gaps": gaps,
     }

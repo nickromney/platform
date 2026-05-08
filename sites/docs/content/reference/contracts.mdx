@@ -6,9 +6,9 @@ description: Stable interfaces between operators, IaC, GitOps, apps, routes, ide
 # Contracts
 
 This project is easiest to change when each layer keeps a clear contract. A
-contract is not just a file format; it is the promise another layer relies on.
-When a change crosses one of these boundaries, update the implementation,
-validation, and docs together.
+contract is the promise another layer relies on; a file format is one expression
+of that promise. When a change crosses one of these boundaries, update the
+implementation, validation, and docs together.
 
 ## Contract Map
 
@@ -99,7 +99,7 @@ when unauthenticated.
 | APIM API routes | Validate the APIM audience and policy requirements. |
 | MCP route | Gateway API to APIM simulator to `platform-mcp` service. |
 | Kubernetes API RBAC | Verified through explicit `kubectl auth can-i` checks. |
-| Headlamp | Requires an authenticated Kubernetes session, not just a browser login. |
+| Headlamp | Requires an authenticated Kubernetes session after browser login completes. |
 
 ## App Contract
 

@@ -60,11 +60,32 @@ shell_cli_print_dry_run_summary() {
   printf 'INFO dry-run: %s\n' "$*"
 }
 
+shell_cli_json_string() {
+  local value="$1"
+
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  printf '"%s"' "${value}"
+}
+
+shell_cli_entrypoint_descriptor() {
+  local script_path="$0"
+
+  printf '{"schema_version":"shell-entrypoint/v1","name":'
+  shell_cli_json_string "$(shell_cli_script_name)"
+  printf ',"path":'
+  shell_cli_json_string "${script_path}"
+  printf ',"supports":["--help","--dry-run","--execute"],"default_mode":"dry-run"}\n'
+}
+
 shell_cli_standard_options() {
   cat <<'EOF'
 Options:
   --dry-run  Show a summary and exit before side effects
   --execute  Execute the script body; without it the script prints help and/or preview output
+  --shell-entrypoint-descriptor
+             Print machine-readable entrypoint contract metadata
   -h, --help Show this message
 EOF
 }
@@ -90,6 +111,10 @@ shell_cli_handle_standard_flag() {
     --execute)
       SHELL_CLI_EXECUTE=1
       return 0
+      ;;
+    --shell-entrypoint-descriptor)
+      shell_cli_entrypoint_descriptor
+      exit 0
       ;;
   esac
 

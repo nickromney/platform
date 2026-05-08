@@ -136,6 +136,34 @@ EOF
   [ ! -f "${KUBECTL_LOG}" ]
 }
 
+@test "hubble-observe-cilium-policies contract exposes capture summary and candidate policy facts" {
+  run /bin/bash "${SCRIPT_DIR}/hubble-observe-cilium-policies.sh" \
+    --execute \
+    --contract \
+    --capture-strategy adaptive \
+    --since 30s \
+    --iterations 1 \
+    --namespace sso
+
+  [ "${status}" -eq 0 ]
+  observation_contract="${output}"
+
+  run jq -e '
+    .schema_version == "platform.cilium-policy-observation/v1" and
+    .capture.strategy == "adaptive" and
+    .capture.default_strategy == "adaptive" and
+    .capture.field_mask_profile == "policy-observe" and
+    .capture.verdict == "FORWARDED" and
+    .capture.reply_traffic_removed == true and
+    (.summarization.reports | index("edges") and index("world")) and
+    (.candidate_policies.directions | index("ingress") and index("egress")) and
+    .candidate_policies.annotations["platform.publiccloudexperiments.net/hubble-policy-candidate"] == "true" and
+    .candidate_policies.annotations["platform.publiccloudexperiments.net/hubble-policy-capture-mode"] == "flows"
+  ' <<<"${observation_contract}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "hubble-observe-cilium-policies includes all namespaces by default and supports explicit exclusions" {
   cat > "${SCRIPT_DIR}/hubble-capture-flows.sh" <<'EOF'
 #!/usr/bin/env bash
