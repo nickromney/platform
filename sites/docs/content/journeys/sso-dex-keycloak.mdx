@@ -75,7 +75,7 @@ rg -n "sso_provider|sso_provider_is_dex|argocd_app_dex" terraform/kubernetes
 The APIM simulator is a resource server in the Kubernetes path:
 
 ```bash
-rg -n "sso_apim_audience|apim-simulator-audience|OIDC_AUDIENCE" terraform/kubernetes apps/subnetcalc/apim-simulator
+rg -n "sso_apim_audience|apim-simulator-audience|OIDC_AUDIENCE" terraform/kubernetes apps/apim-simulator
 ```
 
 ## Source
@@ -143,7 +143,7 @@ Additional implemented boundaries:
 | Gitea | SSO route is present, but internal group-aware RBAC is not claimed complete. |
 | Grafana | Auth-proxy login is present for observability; group-aware product RBAC is not the proof point. |
 | SigNoz | Optional heavier path only; not part of the active stage-900 SSO/RBAC success story. |
-| Subnetcalc and APIM | Keycloak is used by the Kubernetes platform path; Subnetcalc remains deployable to other platforms and the APIM simulator remains a standalone project contract. |
+| Subnetcalc and APIM | Keycloak is used by the Kubernetes platform path; Subnetcalc remains deployable to other platforms and the APIM simulator remains an integrated supporting context contract. |
 
 ### Acceptance Checks
 

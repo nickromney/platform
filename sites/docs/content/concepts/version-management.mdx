@@ -39,7 +39,7 @@ The default posture is:
 | Kubernetes runtime | Kind stage tfvars and `K3S_VERSION` in Lima/Slicer Makefiles | Runtime bumps are explicit per local runtime instead of hidden behind a moving default. |
 | Terraform providers | `terraform/kubernetes` provider constraints and lock state | Provider audits are separate from chart/image audits. |
 | Helm charts, images, and CRDs | Terraform Kubernetes stack variables, rendered GitOps manifests, and vendored chart paths | The stack version audit checks chart and app versions instead of relying on memory. |
-| Vendored support code | Vendoring metadata such as `apim-simulator.vendor.json` | Vendored code records the requested ref and resolved commit. |
+| Integrated support code | App-local lockfiles, contract matrices, and image catalog entries such as `apps/apim-simulator` | Integrated support code is versioned and audited in this repo instead of refreshed through vendoring metadata. |
 
 This is the part that makes the free repo valuable: version movement is treated
 as a platform operation, not as casual dependency churn.

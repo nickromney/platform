@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: admin-allowlist
+  namespace: gateway-routes
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        allow all;

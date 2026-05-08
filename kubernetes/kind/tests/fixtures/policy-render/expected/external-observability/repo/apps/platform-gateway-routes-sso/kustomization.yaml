@@ -1,0 +1,9 @@
+resources:
+  - httproute-portal.yaml
+  - httproute-portal-api.yaml
+  - httproute-hubble.yaml
+  - httproute-grafana.yaml
+  - httproute-sentiment-dev.yaml
+  - httproute-subnetcalc-dev.yaml
+  - referencegrant-sso.yaml
+  - referencegrant-hubble.yaml

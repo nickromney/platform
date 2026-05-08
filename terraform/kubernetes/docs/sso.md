@@ -20,7 +20,7 @@ High-level design:
    not treat `oauth2-proxy` as the API audience.
 6. **Portability**: subnetcalc keeps its non-Keycloak auth modes for other
    platforms. The Keycloak wiring lives in the Kubernetes stage path, not in
-   the subnetcalc domain core or the standalone APIM simulator contract.
+   the subnetcalc domain core or the integrated APIM simulator contract.
 
 ## Demo login
 

@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idp-core
+spec:
+  template:
+    spec:
+      containers:
+        - name: idp-core
+          image: localhost:30090/platform/idp-core:latest
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backstage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+spec:
+  template:
+    spec:
+      containers:
+        - name: backstage
+          image: localhost:30090/platform/backstage:latest
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage

@@ -57,9 +57,10 @@ without rewriting the subnet calculation domain each time.
 Keycloak is the Kubernetes stage-900 IdP, not a dependency of the subnet
 calculation domain. The app keeps anonymous, JWT, Easy Auth, SWA/App Service,
 and APIM-mediated variants so it can still be deployed to platforms such as
-Azure without depending on the local Keycloak stack. The vendored APIM
-simulator remains a separate project contract; the platform path configures it
-to validate Keycloak access tokens with the `apim-simulator` audience.
+Azure without depending on the local Keycloak stack. The integrated APIM
+simulator remains a separate supporting context contract; the platform path
+configures it to validate Keycloak access tokens with the `apim-simulator`
+audience.
 
 ## Request Paths
 
@@ -101,9 +102,9 @@ The platform path adds controls that compose does not fully model:
 ## Common Mistakes
 
 <Callout type="warning">
-  Do not hand-edit the vendored `apim-simulator` subtree and expect those
-  changes to survive. Land source changes in the standalone simulator repo,
-  then re-vendor from an explicit tag or SHA.
+  APIM simulator source now lives at `apps/apim-simulator`. When changing
+  APIM behaviour, update that subtree's contract matrix and focused tests
+  alongside the platform path that consumes it.
 </Callout>
 
 - Run only one compose slice that owns the same ports.

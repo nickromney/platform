@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-base
+spec:
+  template:
+    spec:
+      containers:
+        - name: sentiment-api
+          image: localhost:30090/platform/sentiment-api:latest
+        - name: subnetcalc-frontend-typescript-vite
+          image: localhost:30090/platform/subnetcalc-frontend-typescript-vite:latest

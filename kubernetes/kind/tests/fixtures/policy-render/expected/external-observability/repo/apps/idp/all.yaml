@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idp-core
+spec:
+  template:
+    spec:
+      containers:
+        - name: idp-core
+          image: host.docker.internal:5002/platform/idp-core:golden
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backstage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+spec:
+  template:
+    spec:
+      containers:
+        - name: backstage
+          image: host.docker.internal:5002/platform/backstage:golden
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage

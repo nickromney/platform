@@ -1,0 +1,17 @@
+{
+  "admin_route_allowlist_cidrs": "",
+  "enable_app_repo_sentiment": false,
+  "enable_app_repo_subnetcalc": false,
+  "enable_backstage": false,
+  "enable_gateway_tls": true,
+  "enable_grafana": false,
+  "enable_hubble": false,
+  "enable_policies": false,
+  "enable_prometheus": false,
+  "enable_victoria_logs": false,
+  "gateway_https_host_port": "443",
+  "hardened_image_registry": "registry.core.example.test/dhi",
+  "platform_admin_base_domain": "admin.core.example.test",
+  "platform_base_domain": "core.example.test",
+  "repo_owner": "platform"
+}

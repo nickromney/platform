@@ -28,7 +28,7 @@ That split is already visible in the code:
 - the auth boundary sits in [auth_utils.py](../../apps/subnetcalc/api-fastapi-container-app/app/auth_utils.py)
 - the frontend orchestration sits in [client.ts](../../apps/subnetcalc/frontend-react/src/api/client.ts)
 - the APIM simulator has its own contract and policy language in
-  [contract_matrix.yml](../../apps/subnetcalc/apim-simulator/contracts/contract_matrix.yml)
+  [contract_matrix.yml](../../apps/apim-simulator/contracts/contract_matrix.yml)
 
 ## Observed User Capabilities
 

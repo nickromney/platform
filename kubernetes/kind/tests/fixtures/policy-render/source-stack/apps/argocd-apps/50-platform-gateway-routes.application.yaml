@@ -1,0 +1,9 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-gateway-routes
+spec:
+  source:
+    repoURL: ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git
+    path: apps/platform-gateway-routes
+    targetRevision: main

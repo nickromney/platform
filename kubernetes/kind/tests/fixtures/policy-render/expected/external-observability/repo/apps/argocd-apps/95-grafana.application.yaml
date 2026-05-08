@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+spec:
+  source:
+    repoURL: ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git
+    targetRevision: main
+    path: apps/vendor/charts/grafana
+    helm:
+      values: |
+        image:
+          registry: host.docker.internal:5002
+          repository: platform/grafana-victorialogs
+          tag: golden
+        sidecar:
+          image:
+            registry: quay.io
+            repository: kiwigrid/k8s-sidecar
+            tag: 2.5.0
+        plugins: []
+        livenessProbe:
+          initialDelaySeconds: 77

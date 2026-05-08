@@ -1,7 +1,15 @@
 # ADR 0005: Vendor APIM simulator as a supporting context runtime
 
-- Status: Accepted (retrospective)
+- Status: Superseded by [ADR 0007](./0007-integrate-apim-simulator-supporting-context.md)
 - Recorded: 2026-04-21
+
+## Supersession
+
+ADR 0007 replaces this vendoring decision. `apps/apim-simulator` is now the
+integrated APIM simulator source in this repo, including the source, contracts,
+examples, tests, docs, and app-local compose workflows. This ADR remains as
+historical context for why APIM was first kept outside the Subnetcalc domain
+tree.
 
 ## Context
 
@@ -51,7 +59,7 @@ Treat the vendored subtree as:
 
 ## Evidence
 
-- [apps/subnetcalc/apim-simulator.vendor.json](../../apps/subnetcalc/apim-simulator.vendor.json)
+- Historical path: `apps/subnetcalc/apim-simulator.vendor.json`
 - [apps/subnetcalc/README.md](../../apps/subnetcalc/README.md)
 - [docs/ddd/contracts.md](../ddd/contracts.md)
 - Current history: `e8230c5` introduced vendoring in `platform`; `548c260`

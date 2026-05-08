@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subnetcalc-apim-simulator
+spec:
+  template:
+    spec:
+      containers:
+        - name: apim
+          image: host.docker.internal:5002/platform/subnetcalc-apim-simulator:golden
