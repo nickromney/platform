@@ -36,100 +36,27 @@ resource "null_resource" "sync_gitea_policies_repo" {
   provisioner "local-exec" {
     command = "bash \"${local.stack_dir}/scripts/sync-gitea-policies.sh\" --execute"
     environment = {
-      STACK_DIR                                     = local.stack_dir
-      GITOPS_RENDER_CONTRACT_FILE                   = local_file.gitops_render_contract[0].filename
-      GITEA_LOCAL_ACCESS_MODE                       = local.gitea_local_access_mode_effective
-      GITEA_HTTP_NODE_PORT                          = tostring(var.gitea_http_node_port)
-      GITEA_HTTP_BASE                               = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME                          = var.gitea_admin_username
-      GITEA_ADMIN_PWD                               = var.gitea_admin_pwd
-      GITEA_SSH_USERNAME                            = var.gitea_ssh_username
-      GITEA_SSH_NODE_PORT                           = tostring(var.gitea_ssh_node_port)
-      GITEA_SSH_HOST                                = local.gitea_ssh_host_local
-      GITEA_SSH_PORT                                = tostring(var.gitea_ssh_node_port)
-      GITEA_NAMESPACE                               = kubernetes_namespace_v1.gitea[0].metadata[0].name
-      GITEA_REPO_OWNER                              = local.gitea_repo_owner
-      GITEA_REPO_OWNER_IS_ORG                       = tostring(local.gitea_repo_owner_is_org)
-      GITEA_REPO_OWNER_FALLBACK                     = local.gitea_repo_owner_fallback
-      GITEA_REPO_NAME                               = local.policies_repo_name
-      DEPLOY_KEY_TITLE                              = "argocd-policies-repo-key"
-      DEPLOY_PUBLIC_KEY                             = tls_private_key.policies_repo[0].public_key_openssh
-      SSH_PRIVATE_KEY_PATH                          = local.policies_repo_private_key_path
-      ENABLE_HUBBLE                                 = tostring(var.enable_hubble)
-      ENABLE_POLICIES                               = tostring(var.enable_policies)
-      ENABLE_GATEWAY_TLS                            = tostring(var.enable_gateway_tls)
-      GATEWAY_HTTPS_HOST_PORT                       = tostring(var.gateway_https_host_port)
-      PLATFORM_BASE_DOMAIN                          = local.platform_base_domain_effective
-      PLATFORM_ADMIN_BASE_DOMAIN                    = local.platform_admin_base_domain_effective
-      ARGOCD_PUBLIC_HOST                            = local.argocd_public_host
-      DEX_PUBLIC_HOST                               = local.dex_public_host
-      GITEA_PUBLIC_HOST                             = local.gitea_public_host
-      GRAFANA_PUBLIC_HOST                           = local.grafana_public_host
-      HEADLAMP_PUBLIC_HOST                          = local.headlamp_public_host
-      HUBBLE_PUBLIC_HOST                            = local.hubble_public_host
-      KYVERNO_PUBLIC_HOST                           = local.kyverno_public_host
-      SIGNOZ_PUBLIC_HOST                            = local.signoz_public_host
-      SENTIMENT_DEV_PUBLIC_HOST                     = local.sentiment_dev_public_host
-      SENTIMENT_UAT_PUBLIC_HOST                     = local.sentiment_uat_public_host
-      SUBNETCALC_DEV_PUBLIC_HOST                    = local.subnetcalc_dev_public_host
-      SUBNETCALC_UAT_PUBLIC_HOST                    = local.subnetcalc_uat_public_host
-      MCP_PUBLIC_HOST                               = local.mcp_public_host
-      MCP_CONSOLE_PUBLIC_HOST                       = local.mcp_console_public_host
-      ADMIN_ROUTE_ALLOWLIST_CIDRS                   = join(",", local.admin_route_allowlist_cidrs_effective)
-      GATEWAY_TRUSTED_PROXY_CIDRS                   = join(",", local.gateway_trusted_proxy_cidrs_effective)
-      ENABLE_CERT_MANAGER                           = tostring(var.enable_cert_manager)
-      ENABLE_ACTIONS_RUNNER                         = tostring(var.enable_actions_runner)
-      ENABLE_APP_REPO_SENTIMENT                     = tostring(var.enable_app_repo_sentiment)
-      ENABLE_APP_REPO_SUBNETCALC                    = tostring(var.enable_app_repo_subnetcalc)
-      ENABLE_PROMETHEUS                             = tostring(var.enable_prometheus)
-      ENABLE_GRAFANA                                = tostring(var.enable_grafana)
-      ENABLE_LOKI                                   = tostring(var.enable_loki)
-      ENABLE_VICTORIA_LOGS                          = tostring(var.enable_victoria_logs)
-      ENABLE_TEMPO                                  = tostring(var.enable_tempo)
-      ENABLE_SIGNOZ                                 = tostring(var.enable_signoz)
-      ENABLE_OTEL_GATEWAY                           = tostring(var.enable_otel_gateway)
-      ENABLE_HEADLAMP                               = tostring(var.enable_headlamp)
-      ENABLE_BACKSTAGE                              = tostring(var.enable_backstage)
-      ENABLE_OBSERVABILITY_AGENT                    = tostring(var.enable_observability_agent)
-      PREFER_EXTERNAL_WORKLOAD_IMAGES               = tostring(var.prefer_external_workload_images)
-      EXTERNAL_IMAGE_SENTIMENT_API                  = lookup(var.external_workload_image_refs, "sentiment-api", "")
-      EXTERNAL_IMAGE_SENTIMENT_AUTH_UI              = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
-      EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI         = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
-      EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR      = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
-      EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")
-      EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT      = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
-      EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
-      PREFER_EXTERNAL_PLATFORM_IMAGES               = tostring(var.prefer_external_platform_images)
-      EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")
-      EXTERNAL_PLATFORM_IMAGE_GRAFANA               = lookup(var.external_platform_image_refs, "grafana", "")
-      EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")
-      EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY     = lookup(var.external_platform_image_refs, "signoz-auth-proxy", "")
-      HARDENED_IMAGE_REGISTRY                       = local.hardened_image_registry_effective
-      POLICIES_REPO_URL_CLUSTER                     = local.policies_repo_url_cluster
-      CERT_MANAGER_CHART_VERSION                    = var.cert_manager_chart_version
-      DEX_CHART_VERSION                             = var.dex_chart_version
-      GRAFANA_CHART_VERSION                         = var.grafana_chart_version
-      GRAFANA_IMAGE_REGISTRY                        = local.grafana_image_registry_effective
-      GRAFANA_IMAGE_REPOSITORY                      = local.grafana_image_repository_effective
-      GRAFANA_IMAGE_TAG                             = local.grafana_image_tag_effective
-      GRAFANA_SIDECAR_IMAGE_REGISTRY                = var.grafana_sidecar_image_registry
-      GRAFANA_SIDECAR_IMAGE_REPOSITORY              = var.grafana_sidecar_image_repository
-      GRAFANA_SIDECAR_IMAGE_TAG                     = var.grafana_sidecar_image_tag
-      GRAFANA_VICTORIA_LOGS_PLUGIN_URL              = local.grafana_victoria_logs_plugin_url_effective
-      GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS        = tostring(var.grafana_liveness_initial_delay_seconds)
-      HEADLAMP_CHART_VERSION                        = var.headlamp_chart_version
-      KYVERNO_CHART_VERSION                         = var.kyverno_chart_version
-      LOKI_CHART_VERSION                            = var.loki_chart_version
-      OAUTH2_PROXY_CHART_VERSION                    = var.oauth2_proxy_chart_version
-      OPENTELEMETRY_COLLECTOR_CHART_VERSION         = var.opentelemetry_collector_chart_version
-      POLICY_REPORTER_CHART_VERSION                 = var.policy_reporter_chart_version
-      PROMETHEUS_CHART_VERSION                      = var.prometheus_chart_version
-      SIGNOZ_CHART_VERSION                          = var.signoz_chart_version
-      TEMPO_CHART_VERSION                           = var.tempo_chart_version
-      VICTORIA_LOGS_CHART_VERSION                   = var.victoria_logs_chart_version
-      SIGNOZ_AUTH_PROXY_IMAGE                       = local.signoz_auth_proxy_image_effective
-      KUBECONFIG                                    = local.kubeconfig_path_expanded
-      KUBECONFIG_CONTEXT                            = trimspace(var.kubeconfig_context)
+      STACK_DIR                   = local.stack_dir
+      GITOPS_RENDER_CONTRACT_FILE = local_file.gitops_render_contract[0].filename
+      GITEA_LOCAL_ACCESS_MODE     = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT        = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE             = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME        = var.gitea_admin_username
+      GITEA_ADMIN_PWD             = var.gitea_admin_pwd
+      GITEA_SSH_USERNAME          = var.gitea_ssh_username
+      GITEA_SSH_NODE_PORT         = tostring(var.gitea_ssh_node_port)
+      GITEA_SSH_HOST              = local.gitea_ssh_host_local
+      GITEA_SSH_PORT              = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE             = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      GITEA_REPO_OWNER            = local.gitea_repo_owner
+      GITEA_REPO_OWNER_IS_ORG     = tostring(local.gitea_repo_owner_is_org)
+      GITEA_REPO_OWNER_FALLBACK   = local.gitea_repo_owner_fallback
+      GITEA_REPO_NAME             = local.policies_repo_name
+      DEPLOY_KEY_TITLE            = "argocd-policies-repo-key"
+      DEPLOY_PUBLIC_KEY           = tls_private_key.policies_repo[0].public_key_openssh
+      SSH_PRIVATE_KEY_PATH        = local.policies_repo_private_key_path
+      KUBECONFIG                  = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT          = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -160,45 +87,47 @@ resource "local_sensitive_file" "app_repo_sentiment_private_key" {
   depends_on           = [tls_private_key.app_repo_sentiment]
 }
 
+resource "local_file" "app_repo_sync_contract_sentiment" {
+  count                = var.enable_app_repo_sentiment && var.enable_actions_runner ? 1 : 0
+  filename             = "${local.run_dir}/app-${local.sentiment_repo_name}-sync-contract.json"
+  content              = jsonencode(local.app_repo_sync_contracts.sentiment)
+  file_permission      = "0644"
+  directory_permission = "0700"
+}
+
 resource "null_resource" "sync_gitea_app_repo_sentiment" {
   count = var.enable_app_repo_sentiment && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash = local.sentiment_content_hash
-    public_key   = tls_private_key.app_repo_sentiment[0].public_key_openssh
-    script_sha   = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
-    gitea_http   = tostring(var.gitea_http_node_port)
-    gitea_ssh    = tostring(var.gitea_ssh_node_port)
-    gitea_access = local.gitea_local_access_mode_effective
-    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
-    repo_owner   = local.gitea_repo_owner
-    repo_is_org  = tostring(local.gitea_repo_owner_is_org)
+    contract_hash   = sha1(jsonencode(local.app_repo_sync_contracts.sentiment))
+    public_key      = tls_private_key.app_repo_sentiment[0].public_key_openssh
+    script_sha      = filesha256("${local.stack_dir}/scripts/sync-gitea-app-repo.sh")
+    sync_script_sha = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
+    gitea_http      = tostring(var.gitea_http_node_port)
+    gitea_ssh       = tostring(var.gitea_ssh_node_port)
+    gitea_access    = local.gitea_local_access_mode_effective
+    gitea_ns_uid    = kubernetes_namespace_v1.gitea[0].metadata[0].uid
   }
 
   provisioner "local-exec" {
-    command = "bash \"${local.stack_dir}/scripts/sync-gitea-repo.sh\""
+    command = "bash \"${local.stack_dir}/scripts/sync-gitea-app-repo.sh\" --execute"
     environment = {
-      STACK_DIR                 = local.stack_dir
-      SOURCE_DIR                = local.sentiment_source_dir
-      GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
-      GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
-      GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME      = var.gitea_admin_username
-      GITEA_ADMIN_PWD           = var.gitea_admin_pwd
-      GITEA_SSH_USERNAME        = var.gitea_ssh_username
-      GITEA_SSH_NODE_PORT       = tostring(var.gitea_ssh_node_port)
-      GITEA_SSH_HOST            = local.gitea_ssh_host_local
-      GITEA_SSH_PORT            = tostring(var.gitea_ssh_node_port)
-      GITEA_NAMESPACE           = kubernetes_namespace_v1.gitea[0].metadata[0].name
-      GITEA_REPO_OWNER          = local.gitea_repo_owner
-      GITEA_REPO_OWNER_IS_ORG   = tostring(local.gitea_repo_owner_is_org)
-      GITEA_REPO_OWNER_FALLBACK = local.gitea_repo_owner_fallback
-      GITEA_REPO_NAME           = local.sentiment_repo_name
-      DEPLOY_KEY_TITLE          = "ci-${local.sentiment_repo_name}-key"
-      DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_sentiment[0].public_key_openssh
-      SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_sentiment_private_key[0].filename
-      KUBECONFIG                = local.kubeconfig_path_expanded
-      KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
+      STACK_DIR                   = local.stack_dir
+      APP_REPO_SYNC_CONTRACT_FILE = local_file.app_repo_sync_contract_sentiment[0].filename
+      GITEA_LOCAL_ACCESS_MODE     = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT        = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE             = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME        = var.gitea_admin_username
+      GITEA_ADMIN_PWD             = var.gitea_admin_pwd
+      GITEA_SSH_USERNAME          = var.gitea_ssh_username
+      GITEA_SSH_NODE_PORT         = tostring(var.gitea_ssh_node_port)
+      GITEA_SSH_HOST              = local.gitea_ssh_host_local
+      GITEA_SSH_PORT              = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE             = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      DEPLOY_PUBLIC_KEY           = tls_private_key.app_repo_sentiment[0].public_key_openssh
+      SSH_PRIVATE_KEY_PATH        = local_sensitive_file.app_repo_sentiment_private_key[0].filename
+      KUBECONFIG                  = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT          = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -206,6 +135,7 @@ resource "null_resource" "sync_gitea_app_repo_sentiment" {
     kubectl_manifest.argocd_app_gitea,
     null_resource.gitea_org,
     local_sensitive_file.app_repo_sentiment_private_key,
+    local_file.app_repo_sync_contract_sentiment,
     # Ensure the runner is ready before pushing code that triggers workflows.
     null_resource.wait_gitea_actions_runner_ready,
     # Policies repo must be synced first (see sync_gitea_app_repo_subnetcalc).
@@ -227,45 +157,47 @@ resource "local_sensitive_file" "app_repo_subnetcalc_private_key" {
   depends_on           = [tls_private_key.app_repo_subnetcalc]
 }
 
+resource "local_file" "app_repo_sync_contract_subnetcalc" {
+  count                = var.enable_app_repo_subnetcalc && var.enable_actions_runner ? 1 : 0
+  filename             = "${local.run_dir}/app-${local.subnetcalc_repo_name}-sync-contract.json"
+  content              = jsonencode(local.app_repo_sync_contracts.subnetcalc)
+  file_permission      = "0644"
+  directory_permission = "0700"
+}
+
 resource "null_resource" "sync_gitea_app_repo_subnetcalc" {
   count = var.enable_app_repo_subnetcalc && var.enable_actions_runner ? 1 : 0
 
   triggers = {
-    content_hash = local.subnetcalc_content_hash
-    public_key   = tls_private_key.app_repo_subnetcalc[0].public_key_openssh
-    script_sha   = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
-    gitea_http   = tostring(var.gitea_http_node_port)
-    gitea_ssh    = tostring(var.gitea_ssh_node_port)
-    gitea_access = local.gitea_local_access_mode_effective
-    gitea_ns_uid = kubernetes_namespace_v1.gitea[0].metadata[0].uid
-    repo_owner   = local.gitea_repo_owner
-    repo_is_org  = tostring(local.gitea_repo_owner_is_org)
+    contract_hash   = sha1(jsonencode(local.app_repo_sync_contracts.subnetcalc))
+    public_key      = tls_private_key.app_repo_subnetcalc[0].public_key_openssh
+    script_sha      = filesha256("${local.stack_dir}/scripts/sync-gitea-app-repo.sh")
+    sync_script_sha = filesha256("${local.stack_dir}/scripts/sync-gitea-repo.sh")
+    gitea_http      = tostring(var.gitea_http_node_port)
+    gitea_ssh       = tostring(var.gitea_ssh_node_port)
+    gitea_access    = local.gitea_local_access_mode_effective
+    gitea_ns_uid    = kubernetes_namespace_v1.gitea[0].metadata[0].uid
   }
 
   provisioner "local-exec" {
-    command = "bash \"${local.stack_dir}/scripts/sync-gitea-repo.sh\""
+    command = "bash \"${local.stack_dir}/scripts/sync-gitea-app-repo.sh\" --execute"
     environment = {
-      STACK_DIR                 = local.stack_dir
-      SOURCE_DIR                = local.subnetcalc_source_dir
-      GITEA_LOCAL_ACCESS_MODE   = local.gitea_local_access_mode_effective
-      GITEA_HTTP_NODE_PORT      = tostring(var.gitea_http_node_port)
-      GITEA_HTTP_BASE           = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME      = var.gitea_admin_username
-      GITEA_ADMIN_PWD           = var.gitea_admin_pwd
-      GITEA_SSH_USERNAME        = var.gitea_ssh_username
-      GITEA_SSH_NODE_PORT       = tostring(var.gitea_ssh_node_port)
-      GITEA_SSH_HOST            = local.gitea_ssh_host_local
-      GITEA_SSH_PORT            = tostring(var.gitea_ssh_node_port)
-      GITEA_NAMESPACE           = kubernetes_namespace_v1.gitea[0].metadata[0].name
-      GITEA_REPO_OWNER          = local.gitea_repo_owner
-      GITEA_REPO_OWNER_IS_ORG   = tostring(local.gitea_repo_owner_is_org)
-      GITEA_REPO_OWNER_FALLBACK = local.gitea_repo_owner_fallback
-      GITEA_REPO_NAME           = local.subnetcalc_repo_name
-      DEPLOY_KEY_TITLE          = "ci-${local.subnetcalc_repo_name}-key"
-      DEPLOY_PUBLIC_KEY         = tls_private_key.app_repo_subnetcalc[0].public_key_openssh
-      SSH_PRIVATE_KEY_PATH      = local_sensitive_file.app_repo_subnetcalc_private_key[0].filename
-      KUBECONFIG                = local.kubeconfig_path_expanded
-      KUBECONFIG_CONTEXT        = trimspace(var.kubeconfig_context)
+      STACK_DIR                   = local.stack_dir
+      APP_REPO_SYNC_CONTRACT_FILE = local_file.app_repo_sync_contract_subnetcalc[0].filename
+      GITEA_LOCAL_ACCESS_MODE     = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT        = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE             = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME        = var.gitea_admin_username
+      GITEA_ADMIN_PWD             = var.gitea_admin_pwd
+      GITEA_SSH_USERNAME          = var.gitea_ssh_username
+      GITEA_SSH_NODE_PORT         = tostring(var.gitea_ssh_node_port)
+      GITEA_SSH_HOST              = local.gitea_ssh_host_local
+      GITEA_SSH_PORT              = tostring(var.gitea_ssh_node_port)
+      GITEA_NAMESPACE             = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      DEPLOY_PUBLIC_KEY           = tls_private_key.app_repo_subnetcalc[0].public_key_openssh
+      SSH_PRIVATE_KEY_PATH        = local_sensitive_file.app_repo_subnetcalc_private_key[0].filename
+      KUBECONFIG                  = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT          = trimspace(var.kubeconfig_context)
     }
   }
 
@@ -273,6 +205,7 @@ resource "null_resource" "sync_gitea_app_repo_subnetcalc" {
     kubectl_manifest.argocd_app_gitea,
     null_resource.gitea_org,
     local_sensitive_file.app_repo_subnetcalc_private_key,
+    local_file.app_repo_sync_contract_subnetcalc,
     # Ensure the runner is ready before pushing code that triggers workflows.
     # Without this, the workflow triggers before any runner can pick it up.
     null_resource.wait_gitea_actions_runner_ready,
@@ -286,11 +219,21 @@ resource "null_resource" "sync_gitea_app_repo_subnetcalc" {
 
 # Reference pattern: wait for app images + policy stamping to complete after a
 # full reset. Keep this scoped to the repos that feed live workloads.
+resource "local_file" "app_image_readiness_contract_subnetcalc" {
+  count                = var.enable_app_repo_subnetcalc && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
+  filename             = "${local.run_dir}/app-${local.subnetcalc_repo_name}-image-readiness-contract.json"
+  content              = jsonencode(local.app_image_readiness_contracts.subnetcalc)
+  file_permission      = "0644"
+  directory_permission = "0700"
+}
+
 resource "null_resource" "wait_subnetcalc_images" {
   count = var.enable_app_repo_subnetcalc && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
 
   triggers = {
     app_repo_sync       = null_resource.sync_gitea_app_repo_subnetcalc[0].id
+    contract_hash       = sha1(jsonencode(local.app_image_readiness_contracts.subnetcalc))
+    script_sha          = filesha256("${local.stack_dir}/scripts/wait-app-image-readiness.sh")
     registry_host       = var.gitea_registry_host
     registry_scheme     = var.gitea_registry_scheme
     repo_owner          = local.gitea_repo_owner
@@ -298,327 +241,40 @@ resource "null_resource" "wait_subnetcalc_images" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-set -euo pipefail
-
-require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
-require_cmd curl
-require_cmd jq
-require_cmd kubectl
-require_cmd git
-
-# shellcheck source=/dev/null
-source "${local.stack_dir}/scripts/gitea-local-access.sh"
-trap 'gitea_local_access_cleanup || true; policies_repo_cleanup || true' EXIT
-gitea_local_access_setup http
-
-GITEA_HTTP_BASE="$${GITEA_HTTP_BASE:?}"
-GITEA_ADMIN_USERNAME="$${GITEA_ADMIN_USERNAME:?}"
-GITEA_ADMIN_PWD="$${GITEA_ADMIN_PWD:?}"
-GITEA_REPO_OWNER="$${GITEA_REPO_OWNER:?}"
-REGISTRY_HOST="$${REGISTRY_HOST:?}"
-REGISTRY_SCHEME="$${REGISTRY_SCHEME:?}"
-REGISTRY_REPO_OWNER="$${REGISTRY_REPO_OWNER:?}"
-REGISTRY_USERNAME="$${REGISTRY_USERNAME:?}"
-REGISTRY_PWD="$${REGISTRY_PWD:?}"
-
-WAIT_SECONDS="$${WAIT_SECONDS:-600}"
-SLEEP_SECONDS="$${SLEEP_SECONDS:-5}"
-RUNNER_WAIT_SECONDS="$${RUNNER_WAIT_SECONDS:-900}"
-ARGOCD_NAMESPACE="$${ARGOCD_NAMESPACE:-argocd}"
-SUBNETCALC_WORKFLOW_ID="$${SUBNETCALC_WORKFLOW_ID:-build-images.yaml}"
-ACTIONS_RETRIGGERED_TAG=""
-POLICIES_REPO_DIR=""
-POLICIES_REPO_HOME=""
-
-policies_repo_cleanup() {
-  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}" ]; then
-    rm -rf "$${POLICIES_REPO_DIR}"
-  fi
-  if [ -n "$${POLICIES_REPO_HOME}" ] && [ -d "$${POLICIES_REPO_HOME}" ]; then
-    rm -rf "$${POLICIES_REPO_HOME}"
-  fi
-}
-
-decode_base64() {
-  if base64 --help 2>&1 | grep -q -- '-d'; then
-    base64 -d
-  else
-    base64 -D
-  fi
-}
-
-policies_repo_setup() {
-  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}/.git" ]; then
-    return 0
-  fi
-
-  local gitea_host repo_url
-  gitea_host="$${GITEA_HTTP_BASE#*://}"
-  gitea_host="$${gitea_host%%/*}"
-  gitea_host="$${gitea_host%%:*}"
-
-  POLICIES_REPO_HOME="$(mktemp -d)"
-  chmod 700 "$${POLICIES_REPO_HOME}"
-  cat >"$${POLICIES_REPO_HOME}/.netrc" <<EOF
-machine $${gitea_host}
-login $${GITEA_ADMIN_USERNAME}
-password $${GITEA_ADMIN_PWD}
-EOF
-  chmod 600 "$${POLICIES_REPO_HOME}/.netrc"
-
-  POLICIES_REPO_DIR="$(mktemp -d)"
-  repo_url="$${GITEA_HTTP_BASE}/$${GITEA_REPO_OWNER}/policies.git"
-  HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
-    git clone --quiet --depth=1 --branch main "$${repo_url}" "$${POLICIES_REPO_DIR}"
-}
-
-wait_for_gitea() {
-  local code
-  for i in {1..120}; do
-    code="$(curl -sS -o /dev/null -w "%%{http_code}" --connect-timeout 2 --max-time 5 \
-      "$${GITEA_HTTP_BASE}/api/v1/version" 2>/dev/null || echo 000)"
-    if [[ "$${code}" =~ ^[234][0-9][0-9]$ ]]; then
-      return 0
-    fi
-    echo "Waiting for Gitea API... ($i/120)" >&2
-    sleep 2
-  done
-  echo "Gitea API not reachable at $${GITEA_HTTP_BASE}" >&2
-  exit 1
-}
-
-wait_for_namespace() {
-  local ns="$1"
-  local waited=0
-  while [ "$${waited}" -lt "$${RUNNER_WAIT_SECONDS}" ]; do
-    if kubectl get ns "$${ns}" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-    waited=$((waited + 2))
-  done
-  echo "Timed out waiting for namespace $${ns}" >&2
-  exit 1
-}
-
-wait_for_deployment() {
-  local ns="$1"
-  local name="$2"
-  local waited=0
-  while [ "$${waited}" -lt "$${RUNNER_WAIT_SECONDS}" ]; do
-    if kubectl -n "$${ns}" get deploy "$${name}" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-    waited=$((waited + 2))
-  done
-  echo "Timed out waiting for deployment $${ns}/$${name}" >&2
-
-  if [ "$${ns}" = "gitea-runner" ] && [ "$${name}" = "act-runner" ]; then
-    echo "ArgoCD app status (gitea-actions-runner):" >&2
-    kubectl -n "$${ARGOCD_NAMESPACE}" get applications.argoproj.io gitea-actions-runner \
-      -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}' 2>/dev/null || true
-    kubectl -n "$${ARGOCD_NAMESPACE}" get applications.argoproj.io gitea-actions-runner \
-      -o jsonpath='{range .status.conditions[*]}{.type}{": "}{.message}{"\n"}{end}' 2>/dev/null || true
-  fi
-
-  exit 1
-}
-
-wait_for_runner() {
-  echo "Waiting for Gitea Actions runner (gitea-runner/act-runner)..."
-  wait_for_namespace "gitea-runner"
-  wait_for_deployment "gitea-runner" "act-runner"
-  if ! kubectl -n gitea-runner rollout status deploy/act-runner --timeout="$${RUNNER_WAIT_SECONDS}s"; then
-    echo "Gitea Actions runner not ready" >&2
-    kubectl -n gitea-runner get pods -o wide || true
-    exit 1
-  fi
-}
-
-latest_subnetcalc_sha() {
-  local waited=0
-  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-    local resp code json sha
-    resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-      "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/commits?limit=1" \
-      -w '\n%%{http_code}')"
-    code="$(printf '%s' "$${resp}" | tail -n 1)"
-    json="$(printf '%s' "$${resp}" | sed '$d')"
-
-    if [ "$${code}" = "200" ]; then
-      sha="$(printf '%s' "$${json}" | jq -r '.[0].sha // empty')"
-      if [ -n "$${sha}" ] && [ "$${sha}" != "null" ]; then
-        echo "$${sha}"
-        return 0
-      fi
-    elif [ "$${code}" = "409" ]; then
-      echo "subnetcalc repo has no commits yet; waiting..." >&2
-    else
-      echo "Unexpected HTTP $${code} from subnetcalc commits API" >&2
-    fi
-
-    sleep "$${SLEEP_SECONDS}"
-    waited=$((waited + SLEEP_SECONDS))
-  done
-
-  return 1
-}
-
-wait_for_tag() {
-  local image="$1"
-  local url="$${REGISTRY_SCHEME}://$${REGISTRY_HOST}/v2/$${REGISTRY_REPO_OWNER}/$${image}/tags/list"
-  local waited=0
-  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-    check_actions_failure "$${TAG}"
-    local json
-    json="$(curl -fsS -u "$${REGISTRY_USERNAME}:$${REGISTRY_PWD}" "$${url}" || true)"
-    if [ -n "$${json}" ] && ! echo "$${json}" | jq -e '.errors? | length > 0' >/dev/null 2>&1; then
-      if echo "$${json}" | jq -r '.tags[]?' | grep -qx "$${TAG}"; then
-        echo "Found $${image}:$${TAG} in registry"
-        return 0
-      fi
-    fi
-    sleep "$${SLEEP_SECONDS}"
-    waited=$((waited + SLEEP_SECONDS))
-  done
-  echo "Timed out waiting for $${image}:$${TAG} in registry" >&2
-  exit 1
-}
-
-wait_for_policies_tag() {
-  local file="$1"
-  local waited=0
-  policies_repo_setup
-  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-    check_actions_failure "$${TAG}"
-    local decoded
-    HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
-      git -C "$${POLICIES_REPO_DIR}" fetch --quiet origin main
-    decoded="$(
-      git -C "$${POLICIES_REPO_DIR}" show "FETCH_HEAD:$${file}" 2>/dev/null || true
-    )"
-    if [ -n "$${decoded}" ] && echo "$${decoded}" | grep -q "subnetcalc-frontend-typescript-vite:$${TAG}"; then
-      echo "Policies updated in $${file}"
-      return 0
-    fi
-    sleep "$${SLEEP_SECONDS}"
-    waited=$((waited + SLEEP_SECONDS))
-  done
-  echo "Timed out waiting for policies $${file} to reference $${TAG}" >&2
-  exit 1
-}
-
-dispatch_subnetcalc_workflow() {
-  local resp code body
-  resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-    -X POST \
-    -H "Content-Type: application/json" \
-    -d '{"ref":"main"}' \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/workflows/$${SUBNETCALC_WORKFLOW_ID}/dispatches" \
-    -w '\n%%{http_code}' || true)"
-  code="$(printf '%s' "$${resp}" | tail -n 1)"
-  body="$(printf '%s' "$${resp}" | sed '$d')"
-
-  if [ "$${code}" = "204" ] || [ "$${code}" = "201" ]; then
-    return 0
-  fi
-
-  echo "Failed to dispatch subnetcalc workflow ($${SUBNETCALC_WORKFLOW_ID}), HTTP $${code}" >&2
-  if [ -n "$${body}" ]; then
-    echo "$${body}" >&2
-  fi
-  return 1
-}
-
-check_actions_failure() {
-  local tag="$1"
-  local json status conclusion run_id run_url
-  json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/runs?limit=5" || true)"
-  if [ -z "$${json}" ]; then
-    return 0
-  fi
-  status="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .status' | head -n1)"
-  conclusion="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .conclusion' | head -n1)"
-  run_id="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .id // empty' | head -n1)"
-  run_url="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .html_url // empty' | head -n1)"
-  if [ "$${status}" = "completed" ] && [ -n "$${conclusion}" ] && [ "$${conclusion}" != "success" ]; then
-    if [ "$${ACTIONS_RETRIGGERED_TAG}" != "$${tag}" ]; then
-      echo "subnetcalc Actions run for $${tag} failed ($${conclusion}). Triggering one workflow_dispatch retry..." >&2
-      if dispatch_subnetcalc_workflow; then
-        ACTIONS_RETRIGGERED_TAG="$${tag}"
-        return 0
-      fi
-      echo "Automatic retry dispatch failed; surfacing workflow failure details." >&2
-    fi
-
-    echo "subnetcalc Actions run for $${tag} failed ($${conclusion}). Policies will not update until it succeeds." >&2
-    if [ -n "$${run_url}" ]; then
-      echo "Run URL: $${run_url}" >&2
-    fi
-    if [ -n "$${run_id}" ]; then
-      local job_json job_id excerpt
-      job_json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-        "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/runs/$${run_id}/jobs" || true)"
-      job_id="$(echo "$${job_json}" | jq -r '.jobs[0].id // empty')"
-      if [ -n "$${job_id}" ]; then
-        excerpt="$(
-          curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-            "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/subnetcalc/actions/jobs/$${job_id}/logs" 2>/dev/null \
-            | tr -d '\r' \
-            | grep -Ei "ERROR|failed to|\\bFailure\\b|exit status|timed out|timeout|denied|unauthorized|DeadlineExceeded" \
-            | tail -n 30 || true
-        )"
-        if [ -n "$${excerpt}" ]; then
-          echo "Failure excerpts (job $${job_id}):" >&2
-          printf '%s\n' "$${excerpt}" >&2
-        fi
-      fi
-    fi
-    exit 1
-  fi
-}
-
-wait_for_gitea
-wait_for_runner
-if ! sha="$(latest_subnetcalc_sha)"; then
-  echo "Failed to resolve subnetcalc commit SHA" >&2
-  exit 1
-fi
-TAG="$${sha:0:12}"
-echo "Waiting for subnetcalc images and policies to reach tag $${TAG}..."
-
-wait_for_tag "subnetcalc-frontend-typescript-vite"
-wait_for_policies_tag "apps/workloads/base/all.yaml"
-
-echo "Subnetcalc images and policies are ready for tag $${TAG}"
-EOT
-
+    command = "bash \"${local.stack_dir}/scripts/wait-app-image-readiness.sh\" --execute"
     environment = {
-      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
-      GITEA_HTTP_NODE_PORT    = tostring(var.gitea_http_node_port)
-      GITEA_HTTP_BASE         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME    = var.gitea_admin_username
-      GITEA_ADMIN_PWD         = var.gitea_admin_pwd
-      GITEA_REPO_OWNER        = local.gitea_repo_owner
-      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
-      REGISTRY_REPO_OWNER     = local.gitea_repo_owner
-      REGISTRY_HOST           = var.gitea_registry_host
-      REGISTRY_SCHEME         = var.gitea_registry_scheme
-      REGISTRY_USERNAME       = var.gitea_admin_username
-      REGISTRY_PWD            = var.gitea_admin_pwd
-      KUBECONFIG              = local.kubeconfig_path_expanded
-      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
+      STACK_DIR                         = local.stack_dir
+      APP_IMAGE_READINESS_CONTRACT_FILE = local_file.app_image_readiness_contract_subnetcalc[0].filename
+      GITEA_LOCAL_ACCESS_MODE           = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT              = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE                   = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME              = var.gitea_admin_username
+      GITEA_ADMIN_PWD                   = var.gitea_admin_pwd
+      GITEA_REPO_OWNER                  = local.gitea_repo_owner
+      GITEA_NAMESPACE                   = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      REGISTRY_REPO_OWNER               = local.gitea_repo_owner
+      REGISTRY_HOST                     = var.gitea_registry_host
+      REGISTRY_SCHEME                   = var.gitea_registry_scheme
+      REGISTRY_USERNAME                 = var.gitea_admin_username
+      REGISTRY_PWD                      = var.gitea_admin_pwd
+      KUBECONFIG                        = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT                = trimspace(var.kubeconfig_context)
     }
   }
 
   depends_on = [
     null_resource.sync_gitea_app_repo_subnetcalc,
     kubernetes_secret_v1.gitea_runner,
+    local_file.app_image_readiness_contract_subnetcalc,
   ]
+}
+
+resource "local_file" "app_image_readiness_contract_sentiment" {
+  count                = var.enable_app_repo_sentiment && var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
+  filename             = "${local.run_dir}/app-${local.sentiment_repo_name}-image-readiness-contract.json"
+  content              = jsonencode(local.app_image_readiness_contracts.sentiment)
+  file_permission      = "0644"
+  directory_permission = "0700"
 }
 
 resource "null_resource" "wait_sentiment_images" {
@@ -626,6 +282,8 @@ resource "null_resource" "wait_sentiment_images" {
 
   triggers = {
     app_repo_sync       = null_resource.sync_gitea_app_repo_sentiment[0].id
+    contract_hash       = sha1(jsonencode(local.app_image_readiness_contracts.sentiment))
+    script_sha          = filesha256("${local.stack_dir}/scripts/wait-app-image-readiness.sh")
     registry_host       = var.gitea_registry_host
     registry_scheme     = var.gitea_registry_scheme
     repo_owner          = local.gitea_repo_owner
@@ -633,351 +291,31 @@ resource "null_resource" "wait_sentiment_images" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<EOT
-set -euo pipefail
-
-require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "$1 not found in PATH" >&2; exit 1; }; }
-require_cmd curl
-require_cmd jq
-require_cmd kubectl
-require_cmd git
-
-# shellcheck source=/dev/null
-source "${local.stack_dir}/scripts/gitea-local-access.sh"
-trap 'gitea_local_access_cleanup || true; policies_repo_cleanup || true' EXIT
-gitea_local_access_setup http
-
-GITEA_HTTP_BASE="$${GITEA_HTTP_BASE:?}"
-GITEA_ADMIN_USERNAME="$${GITEA_ADMIN_USERNAME:?}"
-GITEA_ADMIN_PWD="$${GITEA_ADMIN_PWD:?}"
-GITEA_REPO_OWNER="$${GITEA_REPO_OWNER:?}"
-REGISTRY_HOST="$${REGISTRY_HOST:?}"
-REGISTRY_SCHEME="$${REGISTRY_SCHEME:?}"
-REGISTRY_REPO_OWNER="$${REGISTRY_REPO_OWNER:?}"
-REGISTRY_USERNAME="$${REGISTRY_USERNAME:?}"
-REGISTRY_PWD="$${REGISTRY_PWD:?}"
-
-WAIT_SECONDS="$${WAIT_SECONDS:-600}"
-SLEEP_SECONDS="$${SLEEP_SECONDS:-5}"
-RUNNER_WAIT_SECONDS="$${RUNNER_WAIT_SECONDS:-900}"
-ARGOCD_NAMESPACE="$${ARGOCD_NAMESPACE:-argocd}"
-SENTIMENT_WORKFLOW_ID="$${SENTIMENT_WORKFLOW_ID:-build-images.yaml}"
-ACTIONS_RETRIGGERED_TAG=""
-POLICIES_REPO_DIR=""
-POLICIES_REPO_HOME=""
-
-policies_repo_cleanup() {
-  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}" ]; then
-    rm -rf "$${POLICIES_REPO_DIR}"
-  fi
-  if [ -n "$${POLICIES_REPO_HOME}" ] && [ -d "$${POLICIES_REPO_HOME}" ]; then
-    rm -rf "$${POLICIES_REPO_HOME}"
-  fi
-}
-
-policies_repo_setup() {
-  if [ -n "$${POLICIES_REPO_DIR}" ] && [ -d "$${POLICIES_REPO_DIR}/.git" ]; then
-    return 0
-  fi
-
-  local gitea_host repo_url
-  gitea_host="$${GITEA_HTTP_BASE#*://}"
-  gitea_host="$${gitea_host%%/*}"
-  gitea_host="$${gitea_host%%:*}"
-
-  POLICIES_REPO_HOME="$(mktemp -d)"
-  chmod 700 "$${POLICIES_REPO_HOME}"
-  cat >"$${POLICIES_REPO_HOME}/.netrc" <<EOF
-machine $${gitea_host}
-login $${GITEA_ADMIN_USERNAME}
-password $${GITEA_ADMIN_PWD}
-EOF
-  chmod 600 "$${POLICIES_REPO_HOME}/.netrc"
-
-  POLICIES_REPO_DIR="$(mktemp -d)"
-  repo_url="$${GITEA_HTTP_BASE}/$${GITEA_REPO_OWNER}/policies.git"
-  HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
-    git clone --quiet --depth=1 --branch main "$${repo_url}" "$${POLICIES_REPO_DIR}"
-}
-
-wait_for_gitea() {
-  local code
-  for i in {1..120}; do
-    code="$(curl -sS -o /dev/null -w "%%{http_code}" --connect-timeout 2 --max-time 5 \
-      "$${GITEA_HTTP_BASE}/api/v1/version" 2>/dev/null || echo 000)"
-    if [[ "$${code}" =~ ^[234][0-9][0-9]$ ]]; then
-      return 0
-    fi
-    echo "Waiting for Gitea API... ($i/120)" >&2
-    sleep 2
-  done
-  echo "Gitea API not reachable at $${GITEA_HTTP_BASE}" >&2
-  exit 1
-}
-
-wait_for_namespace() {
-  local ns="$1"
-  local waited=0
-  while [ "$${waited}" -lt "$${RUNNER_WAIT_SECONDS}" ]; do
-    if kubectl get ns "$${ns}" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-    waited=$((waited + 2))
-  done
-  echo "Timed out waiting for namespace $${ns}" >&2
-  exit 1
-}
-
-wait_for_deployment() {
-  local ns="$1"
-  local name="$2"
-  local waited=0
-  while [ "$${waited}" -lt "$${RUNNER_WAIT_SECONDS}" ]; do
-    if kubectl -n "$${ns}" get deploy "$${name}" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-    waited=$((waited + 2))
-  done
-  echo "Timed out waiting for deployment $${ns}/$${name}" >&2
-
-  if [ "$${ns}" = "gitea-runner" ] && [ "$${name}" = "act-runner" ]; then
-    echo "ArgoCD app status (gitea-actions-runner):" >&2
-    kubectl -n "$${ARGOCD_NAMESPACE}" get applications.argoproj.io gitea-actions-runner \
-      -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}' 2>/dev/null || true
-    kubectl -n "$${ARGOCD_NAMESPACE}" get applications.argoproj.io gitea-actions-runner \
-      -o jsonpath='{range .status.conditions[*]}{.type}{": "}{.message}{"\n"}{end}' 2>/dev/null || true
-  fi
-
-  exit 1
-}
-
-wait_for_runner() {
-  echo "Waiting for Gitea Actions runner (gitea-runner/act-runner)..."
-  wait_for_namespace "gitea-runner"
-  wait_for_deployment "gitea-runner" "act-runner"
-  if ! kubectl -n gitea-runner rollout status deploy/act-runner --timeout="$${RUNNER_WAIT_SECONDS}s"; then
-    echo "Gitea Actions runner not ready" >&2
-    kubectl -n gitea-runner get pods -o wide || true
-    exit 1
-  fi
-}
-
-latest_sentiment_sha() {
-  local waited=0
-  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-    local resp code json sha
-    resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-      "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/commits?limit=1" \
-      -w '\n%%{http_code}')"
-    code="$(printf '%s' "$${resp}" | tail -n 1)"
-    json="$(printf '%s' "$${resp}" | sed '$d')"
-
-    if [ "$${code}" = "200" ]; then
-      sha="$(printf '%s' "$${json}" | jq -r '.[0].sha // empty')"
-      if [ -n "$${sha}" ] && [ "$${sha}" != "null" ]; then
-        echo "$${sha}"
-        return 0
-      fi
-    elif [ "$${code}" = "409" ]; then
-      echo "Sentiment repo has no commits yet; waiting..." >&2
-    else
-      echo "Unexpected HTTP $${code} from sentiment commits API" >&2
-    fi
-
-    sleep "$${SLEEP_SECONDS}"
-    waited=$((waited + SLEEP_SECONDS))
-  done
-
-  return 1
-}
-
-dispatch_sentiment_workflow() {
-  local resp code body
-  resp="$(curl -sS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-    -X POST \
-    -H "Content-Type: application/json" \
-    -d '{"ref":"main"}' \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/workflows/$${SENTIMENT_WORKFLOW_ID}/dispatches" \
-    -w '\n%%{http_code}' || true)"
-  code="$(printf '%s' "$${resp}" | tail -n 1)"
-  body="$(printf '%s' "$${resp}" | sed '$d')"
-
-  if [ "$${code}" = "204" ] || [ "$${code}" = "201" ]; then
-    return 0
-  fi
-
-  echo "Failed to dispatch sentiment workflow ($${SENTIMENT_WORKFLOW_ID}), HTTP $${code}" >&2
-  if [ -n "$${body}" ]; then
-    echo "$${body}" >&2
-  fi
-  return 1
-}
-
-check_actions_failure() {
-  local tag="$1"
-  local json status conclusion run_id run_url
-  json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/runs?limit=5" || true)"
-  if [ -z "$${json}" ]; then
-    return 0
-  fi
-  status="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .status' | head -n1)"
-  conclusion="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .conclusion' | head -n1)"
-  run_id="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .id // empty' | head -n1)"
-  run_url="$(echo "$${json}" | jq -r --arg tag "$${tag}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .html_url // empty' | head -n1)"
-  if [ "$${status}" = "completed" ] && [ -n "$${conclusion}" ] && [ "$${conclusion}" != "success" ]; then
-    if [ "$${ACTIONS_RETRIGGERED_TAG}" != "$${tag}" ]; then
-      echo "Sentiment Actions run for $${tag} failed ($${conclusion}). Triggering one workflow_dispatch retry..." >&2
-      if dispatch_sentiment_workflow; then
-        ACTIONS_RETRIGGERED_TAG="$${tag}"
-        return 0
-      fi
-      echo "Automatic retry dispatch failed; surfacing workflow failure details." >&2
-    fi
-
-    echo "Sentiment Actions run for $${tag} failed ($${conclusion}). Registry images will not appear until it succeeds." >&2
-    if [ -n "$${run_url}" ]; then
-      echo "Run URL: $${run_url}" >&2
-    fi
-    if [ -n "$${run_id}" ]; then
-      local job_json job_id excerpt
-      job_json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-        "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/runs/$${run_id}/jobs" || true)"
-      job_id="$(echo "$${job_json}" | jq -r '.jobs[0].id // empty')"
-      if [ -n "$${job_id}" ]; then
-        excerpt="$(
-          curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-            "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/jobs/$${job_id}/logs" 2>/dev/null \
-            | tr -d '\r' \
-            | grep -Ei "ERROR|failed to|\\bFailure\\b|exit status|timed out|timeout|denied|unauthorized|DeadlineExceeded" \
-            | tail -n 30 || true
-        )"
-        if [ -n "$${excerpt}" ]; then
-          echo "Failure excerpts (job $${job_id}):" >&2
-          printf '%s\n' "$${excerpt}" >&2
-        fi
-      fi
-    fi
-    exit 1
-  fi
-}
-
-ensure_sentiment_workflow_started() {
-  local json status conclusion
-  json="$(curl -fsS -u "$${GITEA_ADMIN_USERNAME}:$${GITEA_ADMIN_PWD}" \
-    "$${GITEA_HTTP_BASE}/api/v1/repos/$${GITEA_REPO_OWNER}/sentiment/actions/runs?limit=10" || true)"
-  if [ -n "$${json}" ]; then
-    status="$(echo "$${json}" | jq -r --arg tag "$${TAG}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .status' | head -n1)"
-    conclusion="$(echo "$${json}" | jq -r --arg tag "$${TAG}" '.workflow_runs[] | select(.head_sha | startswith($tag)) | .conclusion' | head -n1)"
-
-    if [ "$${status}" = "queued" ] || [ "$${status}" = "waiting" ] || [ "$${status}" = "running" ]; then
-      echo "Sentiment workflow already in progress for $${TAG}"
-      return 0
-    fi
-    if [ "$${status}" = "completed" ] && [ "$${conclusion}" = "success" ]; then
-      echo "Sentiment workflow already completed for $${TAG}"
-      return 0
-    fi
-    if [ "$${status}" = "completed" ] && [ -n "$${conclusion}" ] && [ "$${conclusion}" != "success" ]; then
-      echo "Sentiment workflow previously failed for $${TAG}; dispatching retry"
-      ACTIONS_RETRIGGERED_TAG="$${TAG}"
-      dispatch_sentiment_workflow
-      return 0
-    fi
-  fi
-
-  echo "No sentiment workflow run found for $${TAG}; dispatching build-images workflow"
-  ACTIONS_RETRIGGERED_TAG="$${TAG}"
-  dispatch_sentiment_workflow
-}
-
-wait_for_tag() {
-  local image="$1"
-  local url="$${REGISTRY_SCHEME}://$${REGISTRY_HOST}/v2/$${REGISTRY_REPO_OWNER}/$${image}/tags/list"
-  local waited=0
-  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-    check_actions_failure "$${TAG}"
-    local json
-    json="$(curl -fsS -u "$${REGISTRY_USERNAME}:$${REGISTRY_PWD}" "$${url}" || true)"
-    if [ -n "$${json}" ] && ! echo "$${json}" | jq -e '.errors? | length > 0' >/dev/null 2>&1; then
-      if echo "$${json}" | jq -r '.tags[]?' | grep -qx "$${TAG}"; then
-        echo "Found $${image}:$${TAG} in registry"
-        return 0
-      fi
-    fi
-    sleep "$${SLEEP_SECONDS}"
-    waited=$((waited + SLEEP_SECONDS))
-  done
-  echo "Timed out waiting for $${image}:$${TAG} in registry" >&2
-  exit 1
-}
-
-wait_for_policies_tag() {
-  local file="$1"
-  local waited=0
-  policies_repo_setup
-  while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-    check_actions_failure "$${TAG}"
-    local decoded
-    HOME="$${POLICIES_REPO_HOME}" GIT_TERMINAL_PROMPT=0 \
-      git -C "$${POLICIES_REPO_DIR}" fetch --quiet origin main
-    decoded="$(
-      git -C "$${POLICIES_REPO_DIR}" show "FETCH_HEAD:$${file}" 2>/dev/null || true
-    )"
-    if [ -n "$${decoded}" ] \
-      && echo "$${decoded}" | grep -q "sentiment-api:$${TAG}" \
-      && echo "$${decoded}" | grep -q "sentiment-auth-ui:$${TAG}"; then
-      echo "Policies updated in $${file}"
-      return 0
-    fi
-    sleep "$${SLEEP_SECONDS}"
-    waited=$((waited + SLEEP_SECONDS))
-  done
-  echo "Timed out waiting for policies $${file} to reference $${TAG}" >&2
-  exit 1
-}
-
-wait_for_gitea
-wait_for_runner
-if ! sha="$(latest_sentiment_sha)"; then
-  echo "Failed to resolve sentiment commit SHA" >&2
-  exit 1
-fi
-TAG="$${sha:0:12}"
-echo "Waiting for sentiment images and policies to reach tag $${TAG}..."
-
-ensure_sentiment_workflow_started
-wait_for_tag "sentiment-api"
-wait_for_tag "sentiment-auth-ui"
-wait_for_policies_tag "apps/workloads/base/all.yaml"
-
-echo "Sentiment images and policies are ready for tag $${TAG}"
-EOT
-
+    command = "bash \"${local.stack_dir}/scripts/wait-app-image-readiness.sh\" --execute"
     environment = {
-      GITEA_LOCAL_ACCESS_MODE = local.gitea_local_access_mode_effective
-      GITEA_HTTP_NODE_PORT    = tostring(var.gitea_http_node_port)
-      GITEA_HTTP_BASE         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
-      GITEA_ADMIN_USERNAME    = var.gitea_admin_username
-      GITEA_ADMIN_PWD         = var.gitea_admin_pwd
-      GITEA_REPO_OWNER        = local.gitea_repo_owner
-      GITEA_NAMESPACE         = kubernetes_namespace_v1.gitea[0].metadata[0].name
-      REGISTRY_REPO_OWNER     = local.gitea_repo_owner
-      REGISTRY_HOST           = var.gitea_registry_host
-      REGISTRY_SCHEME         = var.gitea_registry_scheme
-      REGISTRY_USERNAME       = var.gitea_admin_username
-      REGISTRY_PWD            = var.gitea_admin_pwd
-      KUBECONFIG              = local.kubeconfig_path_expanded
-      KUBECONFIG_CONTEXT      = trimspace(var.kubeconfig_context)
+      STACK_DIR                         = local.stack_dir
+      APP_IMAGE_READINESS_CONTRACT_FILE = local_file.app_image_readiness_contract_sentiment[0].filename
+      GITEA_LOCAL_ACCESS_MODE           = local.gitea_local_access_mode_effective
+      GITEA_HTTP_NODE_PORT              = tostring(var.gitea_http_node_port)
+      GITEA_HTTP_BASE                   = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"
+      GITEA_ADMIN_USERNAME              = var.gitea_admin_username
+      GITEA_ADMIN_PWD                   = var.gitea_admin_pwd
+      GITEA_REPO_OWNER                  = local.gitea_repo_owner
+      GITEA_NAMESPACE                   = kubernetes_namespace_v1.gitea[0].metadata[0].name
+      REGISTRY_REPO_OWNER               = local.gitea_repo_owner
+      REGISTRY_HOST                     = var.gitea_registry_host
+      REGISTRY_SCHEME                   = var.gitea_registry_scheme
+      REGISTRY_USERNAME                 = var.gitea_admin_username
+      REGISTRY_PWD                      = var.gitea_admin_pwd
+      KUBECONFIG                        = local.kubeconfig_path_expanded
+      KUBECONFIG_CONTEXT                = trimspace(var.kubeconfig_context)
     }
   }
 
   depends_on = [
     null_resource.sync_gitea_app_repo_sentiment,
     kubernetes_secret_v1.gitea_runner,
+    local_file.app_image_readiness_contract_sentiment,
   ]
 }
 
@@ -987,7 +325,7 @@ EOT
 
 data "external" "gitea_runner_token" {
   count   = var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? 1 : 0
-  program = ["/bin/bash", "${local.stack_dir}/scripts/fetch-gitea-runner-token.sh"]
+  program = ["/bin/bash", "${local.stack_dir}/scripts/fetch-gitea-runner-token.sh", "--execute"]
 
   query = {
     gitea_http_base         = "http://${local.gitea_http_host_local}:${var.gitea_http_node_port}"

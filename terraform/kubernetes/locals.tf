@@ -6,15 +6,19 @@ locals {
   module_repo_root     = abspath("${path.module}/../..")
   # Tests may point kind_stack_dir at a synthetic location that is useful for
   # output-path assertions but does not contain the repo helper scripts.
-  repo_root                         = fileexists("${local.repo_root_from_stack}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh") ? local.repo_root_from_stack : local.module_repo_root
-  kind_workers                      = range(var.worker_count)
-  kind_control_plane_container_name = "${var.cluster_name}-control-plane"
-  kind_config_path_expanded         = abspath(pathexpand(var.kind_config_path))
-  kubeconfig_path_expanded          = abspath(pathexpand(var.kubeconfig_path))
-  preload_image_list_path_effective = trimspace(var.preload_image_list_path) != "" ? abspath(pathexpand(var.preload_image_list_path)) : abspath("${local.repo_root}/kubernetes/kind/preload-images.txt")
-  monorepo_apps_dir                 = abspath("${local.repo_root}/apps")
-  runtime_artifact_scope            = trimspace(var.runtime_artifact_scope)
-  run_dir                           = local.runtime_artifact_scope != "" ? abspath("${local.stack_dir}/.run/${local.runtime_artifact_scope}") : abspath("${local.stack_dir}/.run")
+  repo_root                              = fileexists("${local.repo_root_from_stack}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh") ? local.repo_root_from_stack : local.module_repo_root
+  kind_workers                           = range(var.worker_count)
+  kind_control_plane_container_name      = "${var.cluster_name}-control-plane"
+  kind_config_path_expanded              = abspath(pathexpand(var.kind_config_path))
+  kubeconfig_path_expanded               = abspath(pathexpand(var.kubeconfig_path))
+  preload_image_list_path_input          = trimspace(var.preload_image_list_path)
+  preload_image_list_path_expanded_input = pathexpand(local.preload_image_list_path_input)
+  preload_image_list_path_effective = local.preload_image_list_path_input != "" ? abspath(
+    substr(local.preload_image_list_path_expanded_input, 0, 1) == "/" ? local.preload_image_list_path_expanded_input : "${local.stack_dir}/${local.preload_image_list_path_expanded_input}"
+  ) : abspath("${local.repo_root}/kubernetes/kind/preload-images.txt")
+  monorepo_apps_dir      = abspath("${local.repo_root}/apps")
+  runtime_artifact_scope = trimspace(var.runtime_artifact_scope)
+  run_dir                = local.runtime_artifact_scope != "" ? abspath("${local.stack_dir}/.run/${local.runtime_artifact_scope}") : abspath("${local.stack_dir}/.run")
 
   gitea_http_host_local             = "127.0.0.1"
   gitea_ssh_host_local              = "127.0.0.1"
@@ -193,6 +197,7 @@ locals {
   external_platform_hardened_registry  = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
   external_platform_idp_core           = trimspace(lookup(var.external_platform_image_refs, "idp-core", ""))
   external_platform_backstage          = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
+  external_platform_mcp                = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
   external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
@@ -256,12 +261,94 @@ locals {
     local.apps_dir_mount
   )
 
-  sentiment_repo_name     = "sentiment"
-  subnetcalc_repo_name    = "subnetcalc"
-  sentiment_source_dir    = var.sentiment_source_dir != "" ? abspath(pathexpand(var.sentiment_source_dir)) : abspath("${local.monorepo_apps_dir}/sentiment")
-  subnetcalc_source_dir   = var.subnetcalc_source_dir != "" ? abspath(pathexpand(var.subnetcalc_source_dir)) : abspath("${local.monorepo_apps_dir}/${local.subnetcalc_repo_name}")
-  sentiment_content_hash  = var.enable_app_repo_sentiment ? try(sha1(join("", [for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")])), "") : ""
-  subnetcalc_content_hash = var.enable_app_repo_subnetcalc ? try(sha1(join("", [for f in sort(fileset(local.subnetcalc_source_dir, "**")) : filesha256("${local.subnetcalc_source_dir}/${f}")])), "") : ""
+  sentiment_repo_name  = "sentiment"
+  subnetcalc_repo_name = "subnetcalc"
+  sentiment_source_dir = var.sentiment_source_dir != "" ? abspath(pathexpand(var.sentiment_source_dir)) : abspath("${local.monorepo_apps_dir}/sentiment")
+  subnetcalc_source_dir = var.subnetcalc_source_dir != "" ? abspath(pathexpand(var.subnetcalc_source_dir)) : abspath(
+    "${local.monorepo_apps_dir}/${local.subnetcalc_repo_name}"
+  )
+  subnetcalc_app_extra_source_dirs = [
+    {
+      source_dir = abspath("${local.monorepo_apps_dir}/apim-simulator")
+      target_dir = "apim-simulator"
+    }
+  ]
+  subnetcalc_projected_source_dirs = concat(
+    [
+      {
+        source_dir = local.subnetcalc_source_dir
+        target_dir = ""
+      }
+    ],
+    local.subnetcalc_app_extra_source_dirs
+  )
+  sentiment_content_hash = var.enable_app_repo_sentiment ? try(sha1(join("", [for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")])), "") : ""
+  subnetcalc_content_hash = var.enable_app_repo_subnetcalc ? try(sha1(join("", flatten([
+    for source in local.subnetcalc_projected_source_dirs : [
+      for f in sort(fileset(source.source_dir, "**")) : "${source.target_dir}/${f}:${filesha256("${source.source_dir}/${f}")}"
+    ]
+  ]))), "") : ""
+  app_repo_sync_contracts = {
+    sentiment = {
+      app_id              = "sentiment"
+      content_hash        = local.sentiment_content_hash
+      source_dir          = local.sentiment_source_dir
+      repo_name           = local.sentiment_repo_name
+      repo_owner          = local.gitea_repo_owner
+      repo_is_org         = local.gitea_repo_owner_is_org
+      repo_owner_fallback = local.gitea_repo_owner_fallback
+      deploy_key_title    = "ci-${local.sentiment_repo_name}-key"
+    }
+    subnetcalc = {
+      app_id              = "subnetcalc"
+      content_hash        = local.subnetcalc_content_hash
+      source_dir          = local.subnetcalc_source_dir
+      repo_name           = local.subnetcalc_repo_name
+      repo_owner          = local.gitea_repo_owner
+      repo_is_org         = local.gitea_repo_owner_is_org
+      repo_owner_fallback = local.gitea_repo_owner_fallback
+      deploy_key_title    = "ci-${local.subnetcalc_repo_name}-key"
+      extra_source_dirs   = local.subnetcalc_app_extra_source_dirs
+    }
+  }
+  app_image_readiness_contracts = {
+    sentiment = {
+      app_id                  = "sentiment"
+      repo_name               = local.sentiment_repo_name
+      display_name            = "Sentiment"
+      workflow_id             = "build-images.yaml"
+      workflow_ref            = "main"
+      ensure_workflow_started = true
+      failure_consequence     = "Registry images will not appear until it succeeds."
+      image_names             = ["sentiment-api", "sentiment-auth-ui"]
+      policy_checks = [
+        {
+          file            = "apps/workloads/base/all.yaml"
+          required_images = ["sentiment-api", "sentiment-auth-ui"]
+        }
+      ]
+    }
+    subnetcalc = {
+      app_id                  = "subnetcalc"
+      repo_name               = local.subnetcalc_repo_name
+      display_name            = "subnetcalc"
+      workflow_id             = "build-images.yaml"
+      workflow_ref            = "main"
+      ensure_workflow_started = false
+      failure_consequence     = "Policies will not update until it succeeds."
+      image_names             = ["subnetcalc-frontend-typescript-vite"]
+      policy_checks = [
+        {
+          file            = "apps/workloads/base/all.yaml"
+          required_images = ["subnetcalc-frontend-typescript-vite"]
+        }
+      ]
+    }
+  }
+  review_environment_contract_source = jsondecode(file("${local.repo_root}/terraform/kubernetes/contracts/review-environment.json"))
+  review_environment_contract = merge(local.review_environment_contract_source, {
+    wildcard_certificate_san = "*.${local.review_environment_contract_source.wildcard_subdomain}.${local.platform_base_domain_effective}"
+  })
   enable_sentiment_external_images = (
     var.prefer_external_workload_images &&
     lookup(var.external_workload_image_refs, "sentiment-api", "") != "" &&
@@ -352,7 +439,7 @@ locals {
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
     (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["apim"] : [],
     (var.enable_sso && var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["mcp"] : [],
-    local.enable_review_environments ? ["review"] : [],
+    local.enable_review_environments ? [local.review_environment_contract.namespace] : [],
   )))
 
   policies_repo_content_hash = sha1(join("", concat(
@@ -364,8 +451,21 @@ locals {
     content_hash                           = local.policies_repo_content_hash
     repo_owner                             = local.gitea_repo_owner
     repo_is_org                            = local.gitea_repo_owner_is_org
+    policies_repo_url_cluster              = local.policies_repo_url_cluster
     platform_base_domain                   = local.platform_base_domain_effective
     platform_admin_base_domain             = local.platform_admin_base_domain_effective
+    argocd_public_host                     = local.argocd_public_host
+    dex_public_host                        = local.dex_public_host
+    gitea_public_host                      = local.gitea_public_host
+    grafana_public_host                    = local.grafana_public_host
+    headlamp_public_host                   = local.headlamp_public_host
+    hubble_public_host                     = local.hubble_public_host
+    kyverno_public_host                    = local.kyverno_public_host
+    signoz_public_host                     = local.signoz_public_host
+    sentiment_dev_public_host              = local.sentiment_dev_public_host
+    sentiment_uat_public_host              = local.sentiment_uat_public_host
+    subnetcalc_dev_public_host             = local.subnetcalc_dev_public_host
+    subnetcalc_uat_public_host             = local.subnetcalc_uat_public_host
     sso_provider                           = local.sso_provider_effective
     keycloak_realm                         = local.keycloak_realm
     enable_hubble                          = var.enable_hubble
@@ -393,7 +493,7 @@ locals {
     external_sentiment_ui                  = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
     external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
-    external_platform_mcp                  = lookup(var.external_workload_image_refs, "platform-mcp", "")
+    external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
     external_subnetcalc_fe                 = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
     external_subnetcalc_fe_ts              = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
     mcp_public_host                        = local.mcp_public_host

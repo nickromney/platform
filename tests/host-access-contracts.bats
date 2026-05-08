@@ -10,7 +10,7 @@ setup() {
 @test "host access projection contains one contract per variant" {
   run bash -c '
     set -euo pipefail
-    projected_json="$("${HOST_ACCESS_RENDERER}")"
+    projected_json="$("${HOST_ACCESS_RENDERER}" --execute)"
     projected_ids="$(jq -r ".variants | map(.id) | sort | join(\" \")" <<<"${projected_json}")"
     variant_ids="$(find "${VARIANTS_DIR}" -mindepth 2 -maxdepth 2 -name variant.json -type f -print | sort | xargs jq -r ".id" | sort | tr "\n" " " | sed "s/ $//")"
 
@@ -28,7 +28,7 @@ setup() {
 @test "host access projection is sourced from variant host_access_path facts" {
   run bash -c '
     set -euo pipefail
-    projected_json="$("${HOST_ACCESS_RENDERER}")"
+    projected_json="$("${HOST_ACCESS_RENDERER}" --execute)"
 
     for variant in "${VARIANTS_DIR}"/*/variant.json; do
       id="$(jq -r ".id" "${variant}")"
@@ -54,7 +54,7 @@ setup() {
 @test "host access projection validates kind lima and slicer modes and process requirements" {
   run bash -c '
     set -euo pipefail
-    projected_json="$("${HOST_ACCESS_RENDERER}")"
+    projected_json="$("${HOST_ACCESS_RENDERER}" --execute)"
 
     jq -e "
       .variants[] | select(.id == \"kind\")
@@ -90,7 +90,7 @@ setup() {
 @test "host access projection validates gateway ports and shared host ports" {
   run bash -c '
     set -euo pipefail
-    projected_json="$("${HOST_ACCESS_RENDERER}")"
+    projected_json="$("${HOST_ACCESS_RENDERER}" --execute)"
     shared_ports="[443,30022,30080,30090,31235,3301,3302]"
 
     jq -e --argjson shared_ports "${shared_ports}" "

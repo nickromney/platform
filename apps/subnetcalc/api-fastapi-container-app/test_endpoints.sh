@@ -7,7 +7,7 @@ set -e
 # Show help message
 show_help() {
     cat << EOF
-Usage: $0 [OPTIONS]
+Usage: $(shell_cli_script_name) [OPTIONS]
 
 Test the Container App subnet calculator API endpoints with JWT authentication.
 
@@ -19,9 +19,9 @@ OPTIONS:
     --help, -h      Show this help message
 
 EXAMPLES:
-    $0 --execute                      # Smoke test on local API (port 8090)
-    $0 --detailed --execute           # All endpoints on local API (port 8090)
-    $0 --base-url http://localhost:8090/api --execute
+    $(shell_cli_script_name) --execute                      # Smoke test on local API (port 8090)
+    $(shell_cli_script_name) --detailed --execute           # All endpoints on local API (port 8090)
+    $(shell_cli_script_name) --base-url http://localhost:8090/api --execute
 
 REQUIREMENTS:
     - API must be running before executing tests

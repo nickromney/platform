@@ -3,6 +3,59 @@ variables {
   gitea_member_user_pwd = "test-member-password"
 }
 
+run "gitops_render_contract_includes_external_image_refs" {
+  command = plan
+
+  variables {
+    cni_provider                    = "none"
+    enable_hubble                   = false
+    enable_argocd                   = true
+    enable_gitea                    = true
+    enable_signoz                   = false
+    enable_sso                      = false
+    enable_app_repo_sentiment       = true
+    enable_backstage                = true
+    enable_host_local_registry      = true
+    prefer_external_workload_images = true
+    prefer_external_platform_images = true
+    external_workload_image_refs = {
+      sentiment-api     = "host.docker.internal:5002/platform/sentiment-api:golden"
+      sentiment-auth-ui = "host.docker.internal:5002/platform/sentiment-auth-ui:golden"
+    }
+    external_platform_image_refs = {
+      backstage         = "host.docker.internal:5002/platform/backstage:golden"
+      idp-core          = "host.docker.internal:5002/platform/idp-core:golden"
+      platform-mcp      = "host.docker.internal:5002/platform/platform-mcp:golden"
+      signoz-auth-proxy = "host.docker.internal:5002/platform/signoz-auth-proxy:golden"
+      grafana           = "host.docker.internal:5002/platform/grafana-victorialogs:golden"
+    }
+  }
+
+  assert {
+    condition     = local.policies_repo_render_contract.prefer_external_images == true && local.policies_repo_render_contract.external_sentiment_api == "host.docker.internal:5002/platform/sentiment-api:golden"
+    error_message = "Expected GitOps render contract to carry external workload image refs"
+  }
+
+  assert {
+    condition     = local.policies_repo_render_contract.prefer_external_platform == true && local.policies_repo_render_contract.external_platform_idp_core == "host.docker.internal:5002/platform/idp-core:golden"
+    error_message = "Expected GitOps render contract to carry external platform image refs"
+  }
+
+  assert {
+    condition = (
+      local.policies_repo_render_contract.argocd_public_host == local.argocd_public_host &&
+      local.policies_repo_render_contract.gitea_public_host == local.gitea_public_host &&
+      local.policies_repo_render_contract.policies_repo_url_cluster == local.policies_repo_url_cluster
+    )
+    error_message = "Expected GitOps render contract to carry host render inputs"
+  }
+
+  assert {
+    condition     = local.policies_repo_render_hash == sha1(jsonencode(local.policies_repo_render_contract))
+    error_message = "Expected GitOps render hash to be derived from the render contract"
+  }
+}
+
 run "actions_runner_enabled" {
   command = plan
 
@@ -404,6 +457,49 @@ run "app_repo_sentiment_enabled" {
   }
 }
 
+run "app_repo_sync_contracts_align" {
+  command = plan
+
+  variables {
+    cni_provider               = "none"
+    enable_hubble              = false
+    enable_argocd              = true
+    enable_gitea               = true
+    enable_signoz              = false
+    enable_sso                 = false
+    enable_actions_runner      = true
+    enable_app_repo_sentiment  = true
+    enable_app_repo_subnetcalc = true
+  }
+
+  assert {
+    condition = (
+      local.app_repo_sync_contracts.sentiment.repo_name == local.sentiment_repo_name &&
+      local.app_repo_sync_contracts.sentiment.source_dir == local.sentiment_source_dir &&
+      local.app_repo_sync_contracts.sentiment.deploy_key_title == "ci-${local.sentiment_repo_name}-key"
+    )
+    error_message = "Expected sentiment app repo sync facts to come from the shared app repo sync contract"
+  }
+
+  assert {
+    condition = (
+      local.app_repo_sync_contracts.subnetcalc.repo_name == local.subnetcalc_repo_name &&
+      local.app_repo_sync_contracts.subnetcalc.source_dir == local.subnetcalc_source_dir &&
+      local.app_repo_sync_contracts.subnetcalc.deploy_key_title == "ci-${local.subnetcalc_repo_name}-key"
+    )
+    error_message = "Expected subnetcalc app repo sync facts to come from the shared app repo sync contract"
+  }
+
+  assert {
+    condition = (
+      length(local_file.app_repo_sync_contract_sentiment) == 1 &&
+      jsondecode(local_file.app_repo_sync_contract_sentiment[0].content).repo_name == local.sentiment_repo_name &&
+      jsondecode(local_file.app_repo_sync_contract_subnetcalc[0].content).repo_name == local.subnetcalc_repo_name
+    )
+    error_message = "Expected Terraform to emit app repo sync contract JSON files for enabled app repos"
+  }
+}
+
 run "app_repo_subnetcalc_enabled" {
   command = plan
 
@@ -436,5 +532,58 @@ run "app_repo_subnetcalc_enabled" {
   assert {
     condition     = length(null_resource.wait_subnetcalc_images) == 1
     error_message = "Expected null_resource.wait_subnetcalc_images to exist when enable_app_repo_subnetcalc=true"
+  }
+}
+
+run "review_environment_contract_aligns_substrate_and_branch_workflow" {
+  command = plan
+
+  variables {
+    cni_provider          = "none"
+    enable_hubble         = false
+    enable_argocd         = true
+    enable_gitea          = true
+    enable_signoz         = false
+    enable_sso            = false
+    enable_gateway_tls    = true
+    enable_actions_runner = true
+  }
+
+  assert {
+    condition = (
+      length(kubernetes_namespace_v1.review) == 1 &&
+      kubernetes_namespace_v1.review[0].metadata[0].name == local.review_environment_contract.namespace
+    )
+    error_message = "Expected review namespace to match the review environment contract"
+  }
+
+  assert {
+    condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), local.review_environment_contract.namespace)
+    error_message = "Expected gitea-registry-creds to be created in the review namespace"
+  }
+
+  assert {
+    condition     = strcontains(file("${path.module}/apps/cert-manager-config/platform-gateway-cert.yaml"), "- '${local.review_environment_contract.wildcard_certificate_san}'")
+    error_message = "Expected platform gateway certificate SAN coverage for review environment wildcard hostnames"
+  }
+
+  assert {
+    condition = alltrue([
+      for label in local.review_environment_contract.runner_labels :
+      strcontains(file("${path.module}/apps/gitea-actions-runner/configmap.yaml"), "- \"${label}\"") &&
+      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), label)
+    ])
+    error_message = "Expected runner labels to stay aligned with the scaffolded review workflow"
+  }
+
+  assert {
+    condition = (
+      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "branches-ignore:\n      - ${local.review_environment_contract.main_branch}") &&
+      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "delete:") &&
+      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "REVIEW_NAMESPACE: ${local.review_environment_contract.namespace}") &&
+      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), "gitea-registry-creds") &&
+      strcontains(file("${path.module}/../../apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml"), ".review.127.0.0.1.sslip.io")
+    )
+    error_message = "Expected branch review workflow dispatch, namespace, registry secret, and host contract to stay aligned"
   }
 }

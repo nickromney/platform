@@ -21,7 +21,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
     cat << EOF
-Usage: $0 [--base-url URL] [--dry-run] [--execute]
+Usage: $(shell_cli_script_name) [--base-url URL] [--dry-run] [--execute]
 
 Integration test script for API authentication.
 
@@ -32,11 +32,11 @@ Options:
     --help, -h      Show this help message
 
 Positional compatibility:
-    $0 [BASE_URL]
+    $(shell_cli_script_name) [BASE_URL]
 
 Examples:
-    $0 --execute
-    $0 --base-url http://localhost:8080 --execute
+    $(shell_cli_script_name) --execute
+    $(shell_cli_script_name) --base-url http://localhost:8080 --execute
 EOF
 }
 

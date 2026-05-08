@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 ARG PYTHON_BUILD_IMAGE=dhi.io/python:3.13-debian13-dev
 ARG PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13
 FROM ${PYTHON_BUILD_IMAGE} AS builder

@@ -76,6 +76,21 @@ domain language.
 | runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `kind`, `lima`, and `generic_kubernetes`; future adapters may include Slicer, AKS, EKS, and bare-metal Kubernetes. |
 | status surface | CLI or dashboard view that summarizes current state | Current examples: `platform status`, variant `status` targets, Argo CD Applications, and Grafana Launchpad health tiles. |
 
+## Image Distribution Language
+
+| Term | Meaning in the solution | Aliases or ambiguity |
+| --- | --- | --- |
+| image catalog | source-controlled Image Distribution contract | Implemented as `kubernetes/workflow/image-catalog.json`; owns image ids, HCL keys, build specs, version policy, and variant registry hosts. |
+| image id | stable catalog key for one buildable image | Examples: `idp-core`, `platform-mcp`, `sentiment-api`; not necessarily the same as the image repository name. |
+| image build spec | catalog facts needed to build an image | Includes Docker context, Dockerfile, builder group, and build args. Variant scripts provide runtime facts such as cache host. |
+| catalog default tag | pinned tag rendered for checked-in local registry refs | Must not be `latest` for catalog images. Source-fingerprint tags may override this in generated kind operator tfvars when the catalog owns fingerprint inputs. |
+| source fingerprint tag | content-derived local image tag | Format is `src-<digest-prefix>`; used for platform images whose source inputs are fingerprinted before rendering operator overrides. |
+| external image ref | Terraform input for pulling a host-built image from a variant-reachable registry | Rendered in `external_platform_image_refs`, `external_workload_image_refs`, or dedicated inputs such as `keycloak_image`. |
+| local image cache | host-side registry used by local variants | Push host and runtime host can differ, for example `127.0.0.1:5002` for pushing and `host.docker.internal:5002` for kind pulls. |
+| runtime registry host | registry hostname visible from workloads or cluster nodes | Variant-specific: kind, Lima, and Slicer do not share the same pull hostname. |
+| push registry host | registry hostname used by host-side build scripts | Usually `127.0.0.1:5002` for local cache pushes. |
+| base manifest image ref | source repo placeholder image before render-time rewrites | May still use the in-cluster Gitea shape such as `localhost:30090/...:latest`; it is not the checked-in external image ref contract. |
+
 ## Ratified Stage Labels
 
 | Stage | Label | Notes |

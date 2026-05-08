@@ -608,12 +608,12 @@
         "enable_apps_dir_mount": false,
         "enable_docker_socket_mount": false,
         "external_platform_image_refs": {
-          "backstage": "${local_registry_runtime_host}/platform/backstage:latest",
-          "idp-core": "${local_registry_runtime_host}/platform/idp-core:latest"
+          "backstage": "${local_registry_runtime_host}/platform/backstage:1.0.0",
+          "idp-core": "${local_registry_runtime_host}/platform/idp-core:0.1.0"
         },
         "external_workload_image_refs": {
-          "sentiment-api": "${local_registry_runtime_host}/platform/sentiment-api:latest",
-          "sentiment-auth-ui": "${local_registry_runtime_host}/platform/sentiment-auth-ui:latest"
+          "sentiment-api": "${local_registry_runtime_host}/platform/sentiment-api:0.1.0",
+          "sentiment-auth-ui": "${local_registry_runtime_host}/platform/sentiment-auth-ui:0.1.0"
         },
         "enable_signoz": false,
         "enable_prometheus": false,

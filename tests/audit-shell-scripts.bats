@@ -79,6 +79,34 @@ EOF
   [[ "${output}" == *"INFO dry-run: would do the safe thing"* ]]
 }
 
+@test "shell audit rejects usage names that do not match the executable basename" {
+  write_tracked_executable_file "scripts/renamed.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
+usage() {
+  cat <<USAGE
+Usage: old-name.sh [--dry-run] [--execute]
+
+$(shell_cli_standard_options)
+USAGE
+}
+
+shell_cli_handle_standard_no_args usage "would do the safe thing" "$@"
+EOF
+
+  run env PATH="/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"executable shell entrypoints must support --help, --dry-run, and --execute"* ]]
+  [[ "${output}" == *"scripts/renamed.sh"* ]]
+  [[ "${output}" == *"Usage output did not name renamed.sh"* ]]
+}
+
 @test "shell audit ignores printed install hints" {
   write_tracked_file "scripts/install-hints.sh" <<'EOF'
 #!/usr/bin/env bash

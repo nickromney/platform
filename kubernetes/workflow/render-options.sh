@@ -5,20 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OPTIONS_BASE_FILE="${OPTIONS_BASE_FILE:-${SCRIPT_DIR}/options.json}"
 VARIANTS_DIR="${VARIANTS_DIR:-${REPO_ROOT}/kubernetes/variants}"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: render-options.sh
+  cat <<EOF
+Usage: ${0##*/} [--dry-run] [--execute]
 
 Renders the Kubernetes workflow options contract with variant facts sourced
 from kubernetes/variants/*/variant.json.
+
+$(shell_cli_standard_options)
 EOF
 }
 
-if [[ "${1-}" = "-h" || "${1-}" = "--help" ]]; then
-  usage
-  exit 0
-fi
+shell_cli_handle_standard_no_args usage "would render Kubernetes workflow options from ${OPTIONS_BASE_FILE} and ${VARIANTS_DIR}" "$@"
 
 contracts=()
 while IFS= read -r contract; do

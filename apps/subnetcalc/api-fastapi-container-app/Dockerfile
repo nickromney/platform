@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 # Stage 1: Build dependencies
 FROM dhi.io/python:3.13-debian13-dev AS builder
 

@@ -26,17 +26,23 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 fi
 
 : "${STACK_DIR:?STACK_DIR is required}"
-: "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
-: "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
-: "${GITEA_SSH_USERNAME:?GITEA_SSH_USERNAME is required (typically git)}"
-: "${GITEA_REPO_OWNER:?GITEA_REPO_OWNER is required}"
-: "${GITEA_REPO_NAME:?GITEA_REPO_NAME is required}"
-: "${DEPLOY_KEY_TITLE:?DEPLOY_KEY_TITLE is required}"
-: "${DEPLOY_PUBLIC_KEY:?DEPLOY_PUBLIC_KEY is required}"
-: "${SSH_PRIVATE_KEY_PATH:?SSH_PRIVATE_KEY_PATH is required}"
+GITEA_SSH_USERNAME="${GITEA_SSH_USERNAME:-git}"
+GITEA_REPO_OWNER="${GITEA_REPO_OWNER:-platform}"
+GITEA_REPO_NAME="${GITEA_REPO_NAME:-policies}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/tf-defaults.sh"
+
+require_gitea_runtime_env() {
+  : "${GITEA_ADMIN_USERNAME:?GITEA_ADMIN_USERNAME is required}"
+  : "${GITEA_ADMIN_PWD:?GITEA_ADMIN_PWD is required}"
+  : "${GITEA_SSH_USERNAME:?GITEA_SSH_USERNAME is required (typically git)}"
+  : "${GITEA_REPO_OWNER:?GITEA_REPO_OWNER is required}"
+  : "${GITEA_REPO_NAME:?GITEA_REPO_NAME is required}"
+  : "${DEPLOY_KEY_TITLE:?DEPLOY_KEY_TITLE is required}"
+  : "${DEPLOY_PUBLIC_KEY:?DEPLOY_PUBLIC_KEY is required}"
+  : "${SSH_PRIVATE_KEY_PATH:?SSH_PRIVATE_KEY_PATH is required}"
+}
 
 contract_value() {
   local key="$1"
@@ -49,23 +55,174 @@ contract_value() {
   jq -er --arg key "${key}" 'if has($key) then .[$key] | tostring else empty end' "${file}" 2>/dev/null || true
 }
 
+contract_has_key() {
+  local key="$1"
+  local file="${GITOPS_RENDER_CONTRACT_FILE:-}"
+
+  [[ -n "${file}" && -f "${file}" ]] || return 1
+  jq -e --arg key "${key}" 'has($key)' "${file}" >/dev/null 2>&1
+}
+
 contract_default() {
   local env_name="$1"
   local contract_key="$2"
   local fallback="${3:-}"
   local value=""
 
-  value="$(contract_value "${contract_key}")"
-  if [[ -z "${value}" ]]; then
-    local current=""
-    eval "current=\"\${${env_name}:-}\""
-    if [[ -n "${current}" ]]; then
-      return 0
-    fi
-    value="${fallback}"
+  if contract_has_key "${contract_key}"; then
+    value="$(contract_value "${contract_key}")"
+    printf -v "${env_name}" '%s' "${value}"
+    return 0
   fi
 
+  local current=""
+  eval "current=\"\${${env_name}:-}\""
+  if [[ -n "${current}" ]]; then
+    return 0
+  fi
+
+  value="${fallback}"
   printf -v "${env_name}" '%s' "${value}"
+}
+
+render_external_image_inputs() {
+  cat <<'EOF'
+workload|EXTERNAL_IMAGE_SENTIMENT_API|external_sentiment_api|sentiment-api|workload
+workload|EXTERNAL_IMAGE_SENTIMENT_AUTH_UI|external_sentiment_ui|sentiment-auth-ui|workload
+workload|EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI|external_subnetcalc_api|subnetcalc-api-fastapi-container-app|workload
+workload|EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR|external_subnetcalc_apim|subnetcalc-apim-simulator|workload
+workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT|external_subnetcalc_fe|subnetcalc-frontend-react|workload
+workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT|external_subnetcalc_fe_ts|subnetcalc-frontend-typescript-vite|workload
+platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp|mcp
+platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
+platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
+platform|EXTERNAL_PLATFORM_IMAGE_BACKSTAGE|external_platform_backstage|backstage|idp
+platform|EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY|external_platform_signoz_auth|signoz-auth-proxy|signoz
+EOF
+}
+
+load_external_image_contract_defaults() {
+  local scope env_name contract_key image_name manifest_group
+
+  while IFS='|' read -r scope env_name contract_key image_name manifest_group; do
+    [[ -n "${scope}" && -n "${env_name}" && -n "${contract_key}" && -n "${image_name}" && -n "${manifest_group}" ]] || continue
+    contract_default "${env_name}" "${contract_key}" ""
+  done < <(render_external_image_inputs)
+}
+
+render_gitops_render_inputs() {
+  cat <<'EOF'
+string|GITEA_REPO_OWNER|repo_owner|$GITEA_REPO_OWNER
+bool|GITEA_REPO_OWNER_IS_ORG|repo_is_org|false
+bool|ENABLE_HUBBLE|enable_hubble|true
+bool|ENABLE_POLICIES|enable_policies|true
+bool|ENABLE_GATEWAY_TLS|enable_gateway_tls|true
+string|GATEWAY_HTTPS_HOST_PORT|gateway_https_host_port|443
+string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io
+string|PLATFORM_ADMIN_BASE_DOMAIN|platform_admin_base_domain|$PLATFORM_BASE_DOMAIN
+string|POLICIES_REPO_URL_CLUSTER|policies_repo_url_cluster|
+string|ARGOCD_PUBLIC_HOST|argocd_public_host|
+string|DEX_PUBLIC_HOST|dex_public_host|
+string|GITEA_PUBLIC_HOST|gitea_public_host|
+string|GRAFANA_PUBLIC_HOST|grafana_public_host|
+string|HEADLAMP_PUBLIC_HOST|headlamp_public_host|
+string|HUBBLE_PUBLIC_HOST|hubble_public_host|
+string|KYVERNO_PUBLIC_HOST|kyverno_public_host|
+string|SIGNOZ_PUBLIC_HOST|signoz_public_host|
+string|SENTIMENT_DEV_PUBLIC_HOST|sentiment_dev_public_host|
+string|SENTIMENT_UAT_PUBLIC_HOST|sentiment_uat_public_host|
+string|SUBNETCALC_DEV_PUBLIC_HOST|subnetcalc_dev_public_host|
+string|SUBNETCALC_UAT_PUBLIC_HOST|subnetcalc_uat_public_host|
+string|ADMIN_ROUTE_ALLOWLIST_CIDRS|admin_route_allowlist_cidrs|
+string|GATEWAY_TRUSTED_PROXY_CIDRS|gateway_trusted_proxy_cidrs|
+bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
+bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
+bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
+bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
+bool|ENABLE_PROMETHEUS|enable_prometheus|false
+bool|ENABLE_GRAFANA|enable_grafana|false
+bool|ENABLE_LOKI|enable_loki|false
+bool|ENABLE_VICTORIA_LOGS|enable_victoria_logs|false
+bool|ENABLE_TEMPO|enable_tempo|false
+bool|ENABLE_SIGNOZ|enable_signoz|false
+bool|ENABLE_OTEL_GATEWAY|enable_otel_gateway|false
+bool|ENABLE_OBSERVABILITY_AGENT|enable_observability_agent|false
+bool|ENABLE_HEADLAMP|enable_headlamp|false
+bool|ENABLE_BACKSTAGE|enable_backstage|true
+bool|PREFER_EXTERNAL_WORKLOAD_IMAGES|prefer_external_images|false
+string|MCP_PUBLIC_HOST|mcp_public_host|
+string|MCP_CONSOLE_PUBLIC_HOST|mcp_console_public_host|
+bool|PREFER_EXTERNAL_PLATFORM_IMAGES|prefer_external_platform|false
+string|HARDENED_IMAGE_REGISTRY|hardened_image_registry|dhi.io
+chart|CERT_MANAGER_CHART_VERSION|cert_manager_chart_version|cert_manager_chart_version
+chart|DEX_CHART_VERSION|dex_chart_version|dex_chart_version
+chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version
+chart|HEADLAMP_CHART_VERSION|headlamp_chart_version|headlamp_chart_version
+chart|KYVERNO_CHART_VERSION|kyverno_chart_version|kyverno_chart_version
+chart|LOKI_CHART_VERSION|loki_chart_version|loki_chart_version
+chart|OAUTH2_PROXY_CHART_VERSION|oauth2_proxy_chart_version|oauth2_proxy_chart_version
+chart|OPENTELEMETRY_COLLECTOR_CHART_VERSION|otel_chart_version|opentelemetry_collector_chart_version
+chart|POLICY_REPORTER_CHART_VERSION|policy_reporter_chart_version|policy_reporter_chart_version
+chart|PROMETHEUS_CHART_VERSION|prometheus_chart_version|prometheus_chart_version
+chart|SIGNOZ_CHART_VERSION|signoz_chart_version|signoz_chart_version
+chart|TEMPO_CHART_VERSION|tempo_chart_version|tempo_chart_version
+chart|VICTORIA_LOGS_CHART_VERSION|victoria_logs_chart_version|victoria_logs_chart_version
+tfvar|GRAFANA_IMAGE_REGISTRY|grafana_image_registry|grafana_image_registry
+tfvar|GRAFANA_IMAGE_REPOSITORY|grafana_image_repository|grafana_image_repository
+tfvar|GRAFANA_IMAGE_TAG|grafana_image_tag|grafana_image_tag
+tfvar|GRAFANA_SIDECAR_IMAGE_REGISTRY|grafana_sidecar_image_registry|grafana_sidecar_image_registry
+tfvar|GRAFANA_SIDECAR_IMAGE_REPOSITORY|grafana_sidecar_image_repository|grafana_sidecar_image_repository
+tfvar|GRAFANA_SIDECAR_IMAGE_TAG|grafana_sidecar_image_tag|grafana_sidecar_image_tag
+tfvar|GRAFANA_VICTORIA_LOGS_PLUGIN_URL|grafana_victoria_logs_plugin_url|grafana_victoria_logs_plugin_url
+tfvar|GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS|grafana_liveness_initial_delay_seconds|grafana_liveness_initial_delay_seconds
+string|SIGNOZ_AUTH_PROXY_IMAGE|signoz_auth_proxy_image|ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
+EOF
+}
+
+gitops_render_input_fallback() {
+  local input_type="$1"
+  local fallback="$2"
+
+  case "${fallback}" in
+    '$GITEA_REPO_OWNER')
+      printf '%s\n' "${GITEA_REPO_OWNER}"
+      ;;
+    '$PLATFORM_BASE_DOMAIN')
+      printf '%s\n' "${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
+      ;;
+    *)
+      if [[ "${input_type}" == "chart" || "${input_type}" == "tfvar" ]]; then
+        tf_default_from_variables "${fallback}"
+      else
+        printf '%s\n' "${fallback}"
+      fi
+      ;;
+  esac
+}
+
+load_gitops_render_input_contract_defaults() {
+  local input_type env_name contract_key fallback default_value
+
+  while IFS='|' read -r input_type env_name contract_key fallback; do
+    [[ -n "${input_type}" && -n "${env_name}" && -n "${contract_key}" ]] || continue
+    default_value="$(gitops_render_input_fallback "${input_type}" "${fallback}")"
+    contract_default "${env_name}" "${contract_key}" "${default_value}"
+  done < <(render_gitops_render_inputs)
+}
+
+external_image_input_value() {
+  local wanted_scope="$1"
+  local wanted_image="$2"
+  local scope env_name contract_key image_name manifest_group value
+
+  while IFS='|' read -r scope env_name contract_key image_name manifest_group; do
+    [[ "${scope}" == "${wanted_scope}" && "${image_name}" == "${wanted_image}" ]] || continue
+    eval "value=\"\${${env_name}:-}\""
+    printf '%s\n' "${value}"
+    return 0
+  done < <(render_external_image_inputs)
+
+  printf '\n'
 }
 
 load_gitops_render_contract_defaults() {
@@ -77,68 +234,8 @@ load_gitops_render_contract_defaults() {
   [[ -f "${file}" ]] || fail "GITOPS_RENDER_CONTRACT_FILE not found: ${file}"
   command -v jq >/dev/null 2>&1 || fail "jq not found"
 
-  contract_default GITEA_REPO_OWNER repo_owner "${GITEA_REPO_OWNER}"
-  contract_default GITEA_REPO_OWNER_IS_ORG repo_is_org "${GITEA_REPO_OWNER_IS_ORG:-false}"
-  contract_default ENABLE_HUBBLE enable_hubble true
-  contract_default ENABLE_POLICIES enable_policies true
-  contract_default ENABLE_GATEWAY_TLS enable_gateway_tls true
-  contract_default GATEWAY_HTTPS_HOST_PORT gateway_https_host_port 443
-  contract_default PLATFORM_BASE_DOMAIN platform_base_domain 127.0.0.1.sslip.io
-  contract_default PLATFORM_ADMIN_BASE_DOMAIN platform_admin_base_domain "${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
-  contract_default ADMIN_ROUTE_ALLOWLIST_CIDRS admin_route_allowlist_cidrs ""
-  contract_default GATEWAY_TRUSTED_PROXY_CIDRS gateway_trusted_proxy_cidrs ""
-  contract_default ENABLE_CERT_MANAGER enable_cert_manager true
-  contract_default ENABLE_ACTIONS_RUNNER enable_actions_runner true
-  contract_default ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment false
-  contract_default ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnetcalc false
-  contract_default ENABLE_PROMETHEUS enable_prometheus false
-  contract_default ENABLE_GRAFANA enable_grafana false
-  contract_default ENABLE_LOKI enable_loki false
-  contract_default ENABLE_VICTORIA_LOGS enable_victoria_logs false
-  contract_default ENABLE_TEMPO enable_tempo false
-  contract_default ENABLE_SIGNOZ enable_signoz false
-  contract_default ENABLE_OTEL_GATEWAY enable_otel_gateway false
-  contract_default ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
-  contract_default ENABLE_HEADLAMP enable_headlamp false
-  contract_default ENABLE_BACKSTAGE enable_backstage true
-  contract_default PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_images false
-  contract_default EXTERNAL_IMAGE_SENTIMENT_API external_sentiment_api ""
-  contract_default EXTERNAL_IMAGE_SENTIMENT_AUTH_UI external_sentiment_ui ""
-  contract_default EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI external_subnetcalc_api ""
-  contract_default EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR external_subnetcalc_apim ""
-  contract_default EXTERNAL_IMAGE_PLATFORM_MCP external_platform_mcp ""
-  contract_default EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT external_subnetcalc_fe ""
-  contract_default EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT external_subnetcalc_fe_ts ""
-  contract_default MCP_PUBLIC_HOST mcp_public_host ""
-  contract_default MCP_CONSOLE_PUBLIC_HOST mcp_console_public_host ""
-  contract_default PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform false
-  contract_default EXTERNAL_PLATFORM_IMAGE_GRAFANA external_platform_grafana ""
-  contract_default EXTERNAL_PLATFORM_IMAGE_IDP_CORE external_platform_idp_core ""
-  contract_default EXTERNAL_PLATFORM_IMAGE_BACKSTAGE external_platform_backstage ""
-  contract_default EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY external_platform_signoz_auth ""
-  contract_default HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
-  contract_default CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
-  contract_default DEX_CHART_VERSION dex_chart_version "$(tf_default_from_variables dex_chart_version)"
-  contract_default GRAFANA_CHART_VERSION grafana_chart_version "$(tf_default_from_variables grafana_chart_version)"
-  contract_default GRAFANA_IMAGE_REGISTRY grafana_image_registry "$(tf_default_from_variables grafana_image_registry)"
-  contract_default GRAFANA_IMAGE_REPOSITORY grafana_image_repository "$(tf_default_from_variables grafana_image_repository)"
-  contract_default GRAFANA_IMAGE_TAG grafana_image_tag "$(tf_default_from_variables grafana_image_tag)"
-  contract_default GRAFANA_SIDECAR_IMAGE_REGISTRY grafana_sidecar_image_registry "$(tf_default_from_variables grafana_sidecar_image_registry)"
-  contract_default GRAFANA_SIDECAR_IMAGE_REPOSITORY grafana_sidecar_image_repository "$(tf_default_from_variables grafana_sidecar_image_repository)"
-  contract_default GRAFANA_SIDECAR_IMAGE_TAG grafana_sidecar_image_tag "$(tf_default_from_variables grafana_sidecar_image_tag)"
-  contract_default GRAFANA_VICTORIA_LOGS_PLUGIN_URL grafana_victoria_logs_plugin_url "$(tf_default_from_variables grafana_victoria_logs_plugin_url)"
-  contract_default GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS grafana_liveness_initial_delay_seconds "$(tf_default_from_variables grafana_liveness_initial_delay_seconds)"
-  contract_default HEADLAMP_CHART_VERSION headlamp_chart_version "$(tf_default_from_variables headlamp_chart_version)"
-  contract_default KYVERNO_CHART_VERSION kyverno_chart_version "$(tf_default_from_variables kyverno_chart_version)"
-  contract_default LOKI_CHART_VERSION loki_chart_version "$(tf_default_from_variables loki_chart_version)"
-  contract_default OAUTH2_PROXY_CHART_VERSION oauth2_proxy_chart_version "$(tf_default_from_variables oauth2_proxy_chart_version)"
-  contract_default OPENTELEMETRY_COLLECTOR_CHART_VERSION otel_chart_version "$(tf_default_from_variables opentelemetry_collector_chart_version)"
-  contract_default POLICY_REPORTER_CHART_VERSION policy_reporter_chart_version "$(tf_default_from_variables policy_reporter_chart_version)"
-  contract_default PROMETHEUS_CHART_VERSION prometheus_chart_version "$(tf_default_from_variables prometheus_chart_version)"
-  contract_default SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
-  contract_default TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
-  contract_default VICTORIA_LOGS_CHART_VERSION victoria_logs_chart_version "$(tf_default_from_variables victoria_logs_chart_version)"
-  contract_default SIGNOZ_AUTH_PROXY_IMAGE signoz_auth_proxy_image ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
+  load_gitops_render_input_contract_defaults
+  load_external_image_contract_defaults
 }
 
 load_gitops_render_contract_defaults
@@ -187,13 +284,13 @@ EXTERNAL_IMAGE_SENTIMENT_API="${EXTERNAL_IMAGE_SENTIMENT_API:-}"
 EXTERNAL_IMAGE_SENTIMENT_AUTH_UI="${EXTERNAL_IMAGE_SENTIMENT_AUTH_UI:-}"
 EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI="${EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI:-}"
 EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR="${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR:-}"
-EXTERNAL_IMAGE_PLATFORM_MCP="${EXTERNAL_IMAGE_PLATFORM_MCP:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
 PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
 EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
 EXTERNAL_PLATFORM_IMAGE_IDP_CORE="${EXTERNAL_PLATFORM_IMAGE_IDP_CORE:-}"
 EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE:-}"
+EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP="${EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP:-}"
 EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
 SIGNOZ_AUTH_PROXY_IMAGE="${SIGNOZ_AUTH_PROXY_IMAGE:-ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest}"
@@ -206,7 +303,9 @@ GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-$(tf_default_from_variables grafana_imag
 GRAFANA_SIDECAR_IMAGE_REGISTRY="${GRAFANA_SIDECAR_IMAGE_REGISTRY:-$(tf_default_from_variables grafana_sidecar_image_registry)}"
 GRAFANA_SIDECAR_IMAGE_REPOSITORY="${GRAFANA_SIDECAR_IMAGE_REPOSITORY:-$(tf_default_from_variables grafana_sidecar_image_repository)}"
 GRAFANA_SIDECAR_IMAGE_TAG="${GRAFANA_SIDECAR_IMAGE_TAG:-$(tf_default_from_variables grafana_sidecar_image_tag)}"
-GRAFANA_VICTORIA_LOGS_PLUGIN_URL="${GRAFANA_VICTORIA_LOGS_PLUGIN_URL:-$(tf_default_from_variables grafana_victoria_logs_plugin_url)}"
+if [[ -z "${GRAFANA_VICTORIA_LOGS_PLUGIN_URL+x}" ]]; then
+  GRAFANA_VICTORIA_LOGS_PLUGIN_URL="$(tf_default_from_variables grafana_victoria_logs_plugin_url)"
+fi
 GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS="${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS:-$(tf_default_from_variables grafana_liveness_initial_delay_seconds)}"
 HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-$(tf_default_from_variables headlamp_chart_version)}"
 KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-$(tf_default_from_variables kyverno_chart_version)}"
@@ -223,13 +322,24 @@ command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
 command -v helm >/dev/null 2>&1 || fail "helm not found"
 
-# shellcheck source=/dev/null
-source "${STACK_DIR}/scripts/gitea-local-access.sh"
-
+GITEA_LOCAL_ACCESS_LOADED=0
 tmp=""
+
+load_gitea_local_access() {
+  if [[ "${GITEA_LOCAL_ACCESS_LOADED}" == "1" ]]; then
+    return 0
+  fi
+
+  # shellcheck source=/dev/null
+  source "${STACK_DIR}/scripts/gitea-local-access.sh"
+  GITEA_LOCAL_ACCESS_LOADED=1
+}
+
 cleanup() {
   local d="${tmp:-}"
-  gitea_local_access_cleanup || true
+  if [[ "${GITEA_LOCAL_ACCESS_LOADED}" == "1" ]] && declare -F gitea_local_access_cleanup >/dev/null 2>&1; then
+    gitea_local_access_cleanup || true
+  fi
   if [[ -n "$d" && -d "$d" ]]; then
     rm -rf "$d"
   fi
@@ -276,6 +386,7 @@ gitea_git_ssh_command() {
 }
 
 refresh_gitea_git_access() {
+  load_gitea_local_access
   gitea_local_access_reset both
   : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
   : "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required after local access setup}"
@@ -659,18 +770,17 @@ vendor_direct_tf_only_charts() {
 
 apply_external_workload_images() {
   local workload_file="$1"
+  local scope env_name contract_key image_name manifest_group image_ref
 
   if ! is_true "${PREFER_EXTERNAL_WORKLOAD_IMAGES}"; then
     return 0
   fi
 
-  replace_image_ref "${workload_file}" "sentiment-api" "${EXTERNAL_IMAGE_SENTIMENT_API}"
-  replace_image_ref "${workload_file}" "sentiment-auth-ui" "${EXTERNAL_IMAGE_SENTIMENT_AUTH_UI}"
-  replace_image_ref "${workload_file}" "subnetcalc-api-fastapi-container-app" "${EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI}"
-  replace_image_ref "${workload_file}" "subnetcalc-apim-simulator" "${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR}"
-  replace_image_ref "${workload_file}" "platform-mcp" "${EXTERNAL_IMAGE_PLATFORM_MCP}"
-  replace_image_ref "${workload_file}" "subnetcalc-frontend-react" "${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT}"
-  replace_image_ref "${workload_file}" "subnetcalc-frontend-typescript-vite" "${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT}"
+  while IFS='|' read -r scope env_name contract_key image_name manifest_group; do
+    [[ "${scope}" == "workload" ]] || continue
+    eval "image_ref=\"\${${env_name}:-}\""
+    replace_image_ref "${workload_file}" "${image_name}" "${image_ref}"
+  done < <(render_external_image_inputs)
 }
 
 infer_external_platform_cache_ref() {
@@ -686,7 +796,9 @@ infer_external_platform_cache_ref() {
 apply_external_platform_images() {
   local root_dir="$1"
   local idp_manifest="${root_dir}/apps/idp/all.yaml"
+  local mcp_manifest="${root_dir}/apps/mcp/all.yaml"
   local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
+  local scope env_name contract_key image_name manifest_group image_ref manifest_file
 
   if ! is_true "${PREFER_EXTERNAL_PLATFORM_IMAGES}"; then
     return 0
@@ -708,9 +820,27 @@ apply_external_platform_images() {
     EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="$(infer_external_platform_cache_ref backstage)"
   fi
 
-  replace_image_ref "${idp_manifest}" "idp-core" "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}"
-  replace_image_ref "${idp_manifest}" "backstage" "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}"
-  replace_image_ref "${signoz_manifest}" "signoz-auth-proxy" "${SIGNOZ_AUTH_PROXY_IMAGE}"
+  while IFS='|' read -r scope env_name contract_key image_name manifest_group; do
+    [[ "${scope}" == "platform" ]] || continue
+    case "${manifest_group}" in
+      idp)
+        manifest_file="${idp_manifest}"
+        eval "image_ref=\"\${${env_name}:-}\""
+        ;;
+      mcp)
+        manifest_file="${mcp_manifest}"
+        eval "image_ref=\"\${${env_name}:-}\""
+        ;;
+      signoz)
+        manifest_file="${signoz_manifest}"
+        image_ref="${SIGNOZ_AUTH_PROXY_IMAGE}"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"
+  done < <(render_external_image_inputs)
 }
 
 render_grafana_application_manifest() {
@@ -1622,7 +1752,7 @@ EOF
   fi
 }
 
-render_repo() {
+render_policy_repo_tree() {
   local root_dir="$1"
   local repo_dir="${root_dir}/repo"
   local vendor_root="${repo_dir}/apps/vendor/charts"
@@ -1664,6 +1794,10 @@ render_repo() {
   rewrite_hardened_registry "${repo_dir}"
 
   printf '%s\n' "${repo_dir}"
+}
+
+render_repo() {
+  render_policy_repo_tree "$@"
 }
 
 clone_remote_repo() {
@@ -1764,6 +1898,8 @@ main() {
   local rendered_dir=""
 
   parse_args "$@"
+  require_gitea_runtime_env
+  load_gitea_local_access
   gitea_local_access_setup both
   : "${GITEA_HTTP_BASE:?GITEA_HTTP_BASE is required after local access setup}"
   : "${GITEA_SSH_HOST:?GITEA_SSH_HOST is required after local access setup}"

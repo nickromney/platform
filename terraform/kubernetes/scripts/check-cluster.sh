@@ -144,15 +144,15 @@ check_registry_images() {
 	echo "=== Docker Registry Images ==="
 
 	local images=(
-		"subnetcalc-frontend-typescript-vite:latest"
-		"subnetcalc-api-fastapi-container-app:latest"
-		"subnetcalc-apim-simulator:latest"
-		"sentiment-api:latest"
-		"sentiment-auth-ui:latest"
+		"subnetcalc-frontend-typescript-vite"
+		"subnetcalc-api-fastapi-container-app"
+		"subnetcalc-apim-simulator"
+		"sentiment-api"
+		"sentiment-auth-ui"
 	)
 
 	for img in "${images[@]}"; do
-		local name="${img%:*}"
+		local name="${img}"
 
 		local result
 		result=$(curl -s -u "${GITEA_USER}:${GITEA_PWD}" "http://${REGISTRY_HOST}/v2/platform/${name}/tags/list" 2>/dev/null | jq -r '.tags | if . then join(", ") else "NOT FOUND" end' 2>/dev/null || echo "ERROR")

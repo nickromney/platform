@@ -204,16 +204,56 @@ run_interface_probe() {
   return 0
 }
 
+usage_output_names_entrypoint() {
+  local output="$1"
+  local expected_name="$2"
+
+  awk -v expected_name="${expected_name}" '
+    function first_token(text, parts) {
+      sub(/^[[:space:]]+/, "", text)
+      if (text == "") {
+        return ""
+      }
+      split(text, parts, /[[:space:]]+/)
+      return parts[1]
+    }
+
+    /(^|[[:space:]])Usage:/ {
+      text = $0
+      sub(/^.*Usage:/, "", text)
+      token = first_token(text)
+      if (token == expected_name) {
+        found = 1
+      }
+      check_next = (token == "")
+      next
+    }
+
+    check_next && NF {
+      if ($1 == expected_name) {
+        found = 1
+      }
+      check_next = 0
+    }
+
+    END {
+      exit found ? 0 : 1
+    }
+  ' <<<"${output}"
+}
+
 validate_entrypoint_interface() {
   local rel="$1"
   local file="$2"
   local failures=""
+  local expected_name="${rel##*/}"
 
   if ! run_interface_probe "${file}"; then
     failures="bare invocation (${SHELL_AUDIT_LAST_ERROR})"
   elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- 'INFO dry-run:' <<<"${SHELL_AUDIT_LAST_OUTPUT}"; then
-    failures="bare invocation (output did not show help plus dry-run preview)"
+    || ! grep -Fq -- 'INFO dry-run:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
+    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
+    failures="bare invocation (output did not show help plus dry-run preview; Usage output did not name ${expected_name})"
   fi
 
   if ! run_interface_probe "${file}" --help; then
@@ -223,11 +263,12 @@ validate_entrypoint_interface() {
     failures="${failures}--help (${SHELL_AUDIT_LAST_ERROR})"
   elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
     || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}"; then
+    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
+    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     if [[ -n "${failures}" ]]; then
       failures="${failures}; "
     fi
-    failures="${failures}--help (output did not advertise the standard interface)"
+    failures="${failures}--help (output did not advertise the standard interface; Usage output did not name ${expected_name})"
   fi
 
   if ! run_interface_probe "${file}" --dry-run --help; then
@@ -237,11 +278,12 @@ validate_entrypoint_interface() {
     failures="${failures}--dry-run --help (${SHELL_AUDIT_LAST_ERROR})"
   elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
     || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}"; then
+    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
+    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     if [[ -n "${failures}" ]]; then
       failures="${failures}; "
     fi
-    failures="${failures}--dry-run --help (output did not advertise the standard interface)"
+    failures="${failures}--dry-run --help (output did not advertise the standard interface; Usage output did not name ${expected_name})"
   fi
 
   if ! run_interface_probe "${file}" --execute --help; then
@@ -251,11 +293,12 @@ validate_entrypoint_interface() {
     failures="${failures}--execute --help (${SHELL_AUDIT_LAST_ERROR})"
   elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
     || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}"; then
+    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
+    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     if [[ -n "${failures}" ]]; then
       failures="${failures}; "
     fi
-    failures="${failures}--execute --help (output did not advertise the standard interface)"
+    failures="${failures}--execute --help (output did not advertise the standard interface; Usage output did not name ${expected_name})"
   fi
 
   if [[ -n "${failures}" ]]; then

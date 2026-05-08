@@ -65,23 +65,6 @@ detect_docker_memory_bytes() {
   docker info --format '{{json .MemTotal}}' 2>/dev/null | tr -d '"'
 }
 
-source_fingerprint_tag() {
-  local digest
-
-  digest="$(
-    cd "${REPO_ROOT}"
-    find "$@" -type f -print |
-      LC_ALL=C sort |
-      while IFS= read -r source_file; do
-        printf '%s\n' "${source_file}"
-        shasum -a 256 "${source_file}"
-      done |
-      shasum -a 256 |
-      awk '{print $1}'
-  )"
-  printf 'src-%s' "${digest:0:20}"
-}
-
 backstage_enabled="false"
 backstage_detected_memory=""
 case "${backstage_mode}" in
@@ -108,7 +91,7 @@ esac
 mkdir -p "$(dirname "${output_file}")"
 
 platform_mcp_image_tag="$(
-  image_catalog_source_tag workload platform-mcp
+  image_catalog_source_tag platform platform-mcp
 )"
 idp_core_image_tag="$(
   image_catalog_source_tag platform idp-core
@@ -121,10 +104,21 @@ backstage_image_tag="$(
 image_namespace="$(image_catalog_namespace)"
 
 write_external_platform_images() {
+  local tag_overrides=()
+  if [ -n "${backstage_image_tag}" ]; then
+    tag_overrides+=("backstage=${backstage_image_tag}")
+  fi
+  if [ -n "${idp_core_image_tag}" ]; then
+    tag_overrides+=("idp-core=${idp_core_image_tag}")
+  fi
+  if [ -n "${platform_mcp_image_tag}" ]; then
+    tag_overrides+=("platform-mcp=${platform_mcp_image_tag}")
+  fi
+
   cat <<EOF
 prefer_external_platform_images = true
 external_platform_image_refs = {
-$(image_catalog_hcl_refs platform "${cache_host}" "${image_namespace}" "backstage=${backstage_image_tag:-latest}" "idp-core=${idp_core_image_tag}")
+$(image_catalog_hcl_refs platform "${cache_host}" "${image_namespace}" "${tag_overrides[@]}")
 }
 EOF
 }
@@ -152,7 +146,7 @@ enable_actions_runner = false
 $(write_external_platform_images)
 prefer_external_workload_images = true
 external_workload_image_refs = {
-$(image_catalog_hcl_refs workload "${cache_host}" "${image_namespace}" "platform-mcp=${platform_mcp_image_tag}")
+$(image_catalog_hcl_refs workload "${cache_host}" "${image_namespace}")
 }
 EOF
       ;;
@@ -170,7 +164,7 @@ $(write_external_platform_images)
 prefer_external_workload_images = true
 node_image = $(quote_hcl "${baked_node_image}")
 external_workload_image_refs = {
-$(image_catalog_hcl_refs workload "${cache_host}" "${image_namespace}" "platform-mcp=${platform_mcp_image_tag}")
+$(image_catalog_hcl_refs workload "${cache_host}" "${image_namespace}")
 }
 EOF
       ;;

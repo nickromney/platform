@@ -220,6 +220,31 @@ EOF
   [ "${output}" = "$(printf 'internal\nexternal\ndocker.io\ngitea/act_runner')" ]
 }
 
+@test "check-version reads image version-check policies from image catalog" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
+    image_catalog_version_check_projection | awk -F '\t' '\$2 == \"sentiment-api\" { print \$1, \$2, \$6 } \$2 == \"grafana-victorialogs\" { print \$1, \$2, \$6 }'; \
+    if image_ref_is_internal 'host.lima.internal:5002/platform/sentiment-api:0.1.0'; then echo catalog-local; else echo external; fi; \
+    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.26.3'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"workload sentiment-api local"* ]]
+  [[ "${output}" == *"platform grafana-victorialogs checked-elsewhere"* ]]
+  [[ "${output}" == *$'\ncatalog-local\n'* ]]
+  [[ "${output}" == *"checked-elsewhere"* ]]
+}
+
+@test "check-version drives preload alignment from image catalog projection" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
+    image_catalog_preload_alignment_projection | awk -F '\t' '\$1 == \"argocd\" { print \$1, \$2, \$3, \$7 } \$1 == \"prometheus\" { print \$1, \$2, \$3, \$7 }'; \
+    declare -f check_preload_image_version_alignment"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"argocd ArgoCD exact-ref preferred-image"* ]]
+  [[ "${output}" == *"prometheus Prometheus repo-tag chart-app-version"* ]]
+  [[ "${output}" == *"image_catalog_preload_alignment_projection"* ]]
+  [[ "${output}" != *'check_preload_repo_tag_alignment "${preload_file}" "Prometheus"'* ]]
+}
+
 @test "check-version reports not deployed current components as current" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; CLUSTER_OK=1; print_row 'signoz chart' '' '0.118.0' '0.118.0' '' 'v0.118.0' '' 'v0.118.0' '0'"
 

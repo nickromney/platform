@@ -17,10 +17,10 @@ hardened_image_registry         = "dhi.io"
 prefer_external_workload_images = true
 
 external_workload_image_refs = {
-  sentiment-api                        = "host.docker.internal:5002/platform/sentiment-api:latest"
-  sentiment-auth-ui                    = "host.docker.internal:5002/platform/sentiment-auth-ui:latest"
-  subnetcalc-api-fastapi-container-app = "host.docker.internal:5002/platform/subnetcalc-api-fastapi-container-app:latest"
-  subnetcalc-apim-simulator            = "host.docker.internal:5002/platform/subnetcalc-apim-simulator:latest"
-  subnetcalc-frontend-react            = "host.docker.internal:5002/platform/subnetcalc-frontend-react:latest"
-  subnetcalc-frontend-typescript-vite  = "host.docker.internal:5002/platform/subnetcalc-frontend-typescript-vite:latest"
+  sentiment-api                        = "host.docker.internal:5002/platform/sentiment-api:0.1.0"
+  sentiment-auth-ui                    = "host.docker.internal:5002/platform/sentiment-auth-ui:0.1.0"
+  subnetcalc-api-fastapi-container-app = "host.docker.internal:5002/platform/subnetcalc-api-fastapi-container-app:1.0.0"
+  subnetcalc-apim-simulator            = "host.docker.internal:5002/platform/subnetcalc-apim-simulator:0.4.0"
+  subnetcalc-frontend-react            = "host.docker.internal:5002/platform/subnetcalc-frontend-react:0.0.0"
+  subnetcalc-frontend-typescript-vite  = "host.docker.internal:5002/platform/subnetcalc-frontend-typescript-vite:1.0.0"
 }

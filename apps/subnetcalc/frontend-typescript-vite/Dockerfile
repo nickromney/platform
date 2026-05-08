@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 # Stage 1: Build
 FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder
 

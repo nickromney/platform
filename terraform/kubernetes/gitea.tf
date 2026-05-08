@@ -52,7 +52,7 @@ resource "kubernetes_secret_v1" "gitea_registry_creds" {
   for_each = var.enable_gitea ? local.registry_secret_namespaces_effective : toset([])
 
   metadata {
-    name      = "gitea-registry-creds"
+    name      = local.review_environment_contract.registry_secret_name
     namespace = each.value
   }
 

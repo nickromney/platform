@@ -7,9 +7,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 usage() {
-  cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
-Usage: @SCRIPT_NAME@ [options]
-
+  shell_cli_usage_line " [options]"
+  cat <<'EOF'
 Capture short Hubble flow windows across namespaces, summarise the observed
 traffic, and generate candidate ingress/egress Cilium policies under a
 timestamped output directory.

@@ -190,6 +190,14 @@ Stage 100 also reserves the host ports that later stages will use. The Kind port
 
 If any of those host ports are already taken on your machine, override them in a local tfvars file and pass that via `PLATFORM_TFVARS=...`. The preflight check in `make kind apply ...` uses [`check-kind-host-ports.sh`](scripts/check-kind-host-ports.sh) to catch conflicts before apply.
 
+Running Lima or Slicer VMs by themselves are not conflicts for kind. Kind only
+needs the shared localhost ports to be free, so `check-lima-stopped` fails when
+the Lima gateway proxy is active and `check-slicer-stopped` fails when Slicer
+host forwards or the Slicer gateway proxy are active. Use
+`make -C kubernetes/lima stop-host-gateway-proxy` or
+`make -C kubernetes/slicer stop-host-forwards` to release those bindings without
+stopping the VM.
+
 Expected behavior: after stage 100, the cluster exists, but node and pod readiness will look wrong because there is no CNI yet.
 
 ### Stage 200: add Cilium as the CNI

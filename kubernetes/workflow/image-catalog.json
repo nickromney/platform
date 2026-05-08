@@ -6,7 +6,12 @@
       "id": "backstage",
       "hcl_key": "backstage",
       "image_name": "backstage",
-      "default_tag": "latest",
+      "default_tag": "1.0.0",
+      "build": {
+        "context": "generated-backstage",
+        "dockerfile": "Dockerfile",
+        "tag": "default"
+      },
       "fingerprint_sources": [
         "apps/subnetcalc/catalog-info.yaml",
         "apps/subnetcalc/docs",
@@ -34,7 +39,7 @@
         "apps/backstage/yarn.lock"
       ],
       "version_check": {
-        "mode": "internal-non-comparable",
+        "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
@@ -42,18 +47,47 @@
       "id": "grafana-victorialogs",
       "hcl_key": "grafana",
       "image_name": "grafana-victorialogs",
-      "default_tag": "latest",
+      "default_tag": "12.3.1-v0.26.3",
+      "build": {
+        "context": "generated-grafana-victorialogs",
+        "dockerfile": "Dockerfile",
+        "tag": "grafana-plugin-version",
+        "grafana_base_image": {
+          "source": "docker.io/grafana/grafana",
+          "tag": "12.3.1",
+          "cache_repo": "platform-cache/grafana-grafana"
+        },
+        "plugin_fetch_image": {
+          "source": "docker.io/library/alpine",
+          "tag": "3.22",
+          "cache_repo": "platform-cache/library-alpine"
+        },
+        "plugin_archive": {
+          "terraform_version_variable": "grafana_victoria_logs_plugin_version",
+          "terraform_sha256_variable": "grafana_victoria_logs_plugin_sha256",
+          "url_template": "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v{version}/victoriametrics-logs-datasource-v{version}.zip",
+          "cache_dir": ".run/kind/plugin-cache",
+          "context_archive_name": "victorialogs.zip",
+          "verify": "sha256"
+        },
+        "version_tag_strategy": "grafana-tag-plus-plugin-version"
+      },
       "fingerprint_sources": [],
       "version_check": {
-        "mode": "internal-non-comparable",
-        "reason": "local Grafana image with a mirrored VictoriaLogs plugin; plugin version is checked separately by check-component-version.sh"
+        "mode": "checked-elsewhere",
+        "reason": "local Grafana image version is derived from catalog plugin inputs; the VictoriaLogs plugin release is reported by check-component-version.sh"
       }
     },
     {
       "id": "idp-core",
       "hcl_key": "idp-core",
       "image_name": "idp-core",
-      "default_tag": "latest",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "apps/idp-core/Dockerfile",
+        "tag": "default"
+      },
       "fingerprint_sources": [
         "apps/idp-core/.dockerignore",
         "apps/idp-core/Dockerfile",
@@ -64,7 +98,7 @@
         "catalog/platform-apps.json"
       ],
       "version_check": {
-        "mode": "internal-non-comparable",
+        "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
@@ -72,60 +106,19 @@
       "id": "keycloak",
       "hcl_key": "keycloak",
       "image_name": "keycloak",
-      "default_tag": "latest",
+      "default_tag": "26.6.1",
       "external_ref": false,
+      "build": {
+        "context": "apps/keycloak",
+        "dockerfile": "Dockerfile",
+        "tag": "default"
+      },
       "fingerprint_sources": [
         "apps/keycloak/.dockerignore",
         "apps/keycloak/Dockerfile"
       ],
       "version_check": {
-        "mode": "internal-non-comparable",
-        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
-      }
-    }
-  ],
-  "workload_images": [
-    {
-      "id": "sentiment-api",
-      "hcl_key": "sentiment-api",
-      "image_name": "sentiment-api",
-      "default_tag": "latest",
-      "fingerprint_sources": [],
-      "version_check": {
-        "mode": "internal-non-comparable",
-        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
-      }
-    },
-    {
-      "id": "sentiment-auth-ui",
-      "hcl_key": "sentiment-auth-ui",
-      "image_name": "sentiment-auth-ui",
-      "default_tag": "latest",
-      "fingerprint_sources": [],
-      "version_check": {
-        "mode": "internal-non-comparable",
-        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
-      }
-    },
-    {
-      "id": "subnetcalc-api-fastapi-container-app",
-      "hcl_key": "subnetcalc-api-fastapi-container-app",
-      "image_name": "subnetcalc-api-fastapi-container-app",
-      "default_tag": "latest",
-      "fingerprint_sources": [],
-      "version_check": {
-        "mode": "internal-non-comparable",
-        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
-      }
-    },
-    {
-      "id": "subnetcalc-apim-simulator",
-      "hcl_key": "subnetcalc-apim-simulator",
-      "image_name": "subnetcalc-apim-simulator",
-      "default_tag": "latest",
-      "fingerprint_sources": [],
-      "version_check": {
-        "mode": "internal-non-comparable",
+        "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
@@ -133,7 +126,13 @@
       "id": "platform-mcp",
       "hcl_key": "platform-mcp",
       "image_name": "platform-mcp",
-      "default_tag": "latest",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "apps/platform-mcp/Dockerfile",
+        "tag": "default",
+        "builder": "platform"
+      },
       "fingerprint_sources": [
         "apps/platform-mcp/.dockerignore",
         "apps/platform-mcp/Dockerfile",
@@ -143,7 +142,79 @@
         "apps/platform-mcp/uv.lock"
       ],
       "version_check": {
-        "mode": "internal-non-comparable",
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    }
+  ],
+  "workload_images": [
+    {
+      "id": "sentiment-api",
+      "hcl_key": "sentiment-api",
+      "image_name": "sentiment-api",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": "apps/sentiment/api-sentiment",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+        "args": [
+          {
+            "name": "SENTIMENT_MODEL_ID",
+            "env": "SENTIMENT_MODEL_ID"
+          }
+        ]
+      },
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "sentiment-auth-ui",
+      "hcl_key": "sentiment-auth-ui",
+      "image_name": "sentiment-auth-ui",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": "apps/sentiment/frontend-react-vite/sentiment-auth-ui",
+        "dockerfile": "Dockerfile",
+        "tag": "default"
+      },
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "subnetcalc-api-fastapi-container-app",
+      "hcl_key": "subnetcalc-api-fastapi-container-app",
+      "image_name": "subnetcalc-api-fastapi-container-app",
+      "default_tag": "1.0.0",
+      "build": {
+        "context": "apps/subnetcalc/api-fastapi-container-app",
+        "dockerfile": "Dockerfile",
+        "tag": "default"
+      },
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "subnetcalc-apim-simulator",
+      "hcl_key": "subnetcalc-apim-simulator",
+      "image_name": "subnetcalc-apim-simulator",
+      "default_tag": "0.4.0",
+      "build": {
+        "context": "apps/apim-simulator",
+        "dockerfile": "Dockerfile",
+        "tag": "default"
+      },
+      "fingerprint_sources": [],
+      "version_check": {
+        "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
@@ -151,10 +222,15 @@
       "id": "subnetcalc-frontend-react",
       "hcl_key": "subnetcalc-frontend-react",
       "image_name": "subnetcalc-frontend-react",
-      "default_tag": "latest",
+      "default_tag": "0.0.0",
+      "build": {
+        "context": "apps/subnetcalc",
+        "dockerfile": "apps/subnetcalc/frontend-react/Dockerfile",
+        "tag": "default"
+      },
       "fingerprint_sources": [],
       "version_check": {
-        "mode": "internal-non-comparable",
+        "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
@@ -162,11 +238,124 @@
       "id": "subnetcalc-frontend-typescript-vite",
       "hcl_key": "subnetcalc-frontend-typescript-vite",
       "image_name": "subnetcalc-frontend-typescript-vite",
-      "default_tag": "latest",
+      "default_tag": "1.0.0",
+      "build": {
+        "context": "apps/subnetcalc",
+        "dockerfile": "apps/subnetcalc/frontend-typescript-vite/Dockerfile",
+        "tag": "default"
+      },
       "fingerprint_sources": [],
       "version_check": {
-        "mode": "internal-non-comparable",
+        "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    }
+  ],
+  "preload_alignment_images": [
+    {
+      "id": "argocd",
+      "component": "ArgoCD",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "preferred-image",
+        "preload_alignment_policy": "exact-ref",
+        "checked_elsewhere": "preferred image availability and preload alignment sections",
+        "reason": "Argo CD may use a hardened preferred image ref instead of the chart appVersion tag"
+      },
+      "preload_alignment": {
+        "kind": "exact-ref",
+        "line_regex": "^[[:space:]]*((dhi\\.io/argocd)|(quay\\.io/argoproj/argocd)):",
+        "expected_source": "argocd_image_ref"
+      }
+    },
+    {
+      "id": "prometheus",
+      "component": "Prometheus",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "chart-app-version",
+        "preload_alignment_policy": "repo-tag",
+        "checked_elsewhere": "chart appVersion and preload alignment sections",
+        "reason": "Prometheus preload tags are expected to track the Helm chart appVersion"
+      },
+      "preload_alignment": {
+        "kind": "repo-tag",
+        "line_regex": "^[[:space:]]*quay\\.io/prometheus/prometheus:",
+        "tag_extract_sed": "s|^[[:space:]]*quay\\.io/prometheus/prometheus:([^[:space:]]+).*|\\1|",
+        "expected_source": "prometheus_chart_app_version",
+        "enabled_by": "EXPECT_PROMETHEUS"
+      }
+    },
+    {
+      "id": "grafana",
+      "component": "Grafana",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "chart-app-version",
+        "preload_alignment_policy": "repo-tag",
+        "checked_elsewhere": "chart appVersion and preload alignment sections",
+        "reason": "Grafana preload tags are expected to track the Helm chart appVersion"
+      },
+      "preload_alignment": {
+        "kind": "repo-tag",
+        "line_regex": "^[[:space:]]*(docker\\.io/)?grafana/grafana:",
+        "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?grafana/grafana:([^[:space:]]+).*|\\2|",
+        "expected_source": "grafana_chart_app_version",
+        "enabled_by": "EXPECT_GRAFANA"
+      }
+    },
+    {
+      "id": "loki",
+      "component": "Loki",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "chart-app-version",
+        "preload_alignment_policy": "repo-tag",
+        "checked_elsewhere": "chart appVersion and preload alignment sections",
+        "reason": "Loki preload tags are expected to track the Helm chart appVersion"
+      },
+      "preload_alignment": {
+        "kind": "repo-tag",
+        "line_regex": "^[[:space:]]*(docker\\.io/)?grafana/loki:",
+        "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?grafana/loki:([^[:space:]]+).*|\\2|",
+        "expected_source": "loki_chart_app_version",
+        "enabled_by": "EXPECT_LOKI"
+      }
+    },
+    {
+      "id": "tempo",
+      "component": "Tempo",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "chart-app-version",
+        "preload_alignment_policy": "repo-tag",
+        "checked_elsewhere": "chart appVersion and preload alignment sections",
+        "reason": "Tempo preload tags are expected to track the Helm chart appVersion"
+      },
+      "preload_alignment": {
+        "kind": "repo-tag",
+        "line_regex": "^[[:space:]]*(docker\\.io/)?grafana/tempo:",
+        "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?grafana/tempo:([^[:space:]]+).*|\\2|",
+        "expected_source": "tempo_chart_app_version",
+        "enabled_by": "EXPECT_TEMPO"
+      }
+    },
+    {
+      "id": "victoria-logs",
+      "component": "VictoriaLogs",
+      "version_check": {
+        "mode": "external",
+        "latest_lookup_policy": "chart-app-version",
+        "preload_alignment_policy": "repo-tag",
+        "checked_elsewhere": "chart appVersion and preload alignment sections",
+        "reason": "VictoriaLogs preload tags are expected to track the Helm chart appVersion"
+      },
+      "preload_alignment": {
+        "kind": "repo-tag",
+        "line_regex": "^[[:space:]]*(docker\\.io/)?victoriametrics/victoria-logs:",
+        "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?victoriametrics/victoria-logs:([^[:space:]]+).*|\\2|",
+        "expected_source": "victoria_logs_chart_app_version",
+        "enabled_by": "EXPECT_VICTORIA_LOGS"
       }
     }
   ],

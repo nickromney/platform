@@ -10,48 +10,58 @@ source "${SCRIPT_DIR}/local-cache-lib.sh"
 export VARIABLES_FILE="${VARIABLES_FILE:-${REPO_ROOT}/terraform/kubernetes/variables.tf}"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/terraform/kubernetes/scripts/tf-defaults.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-catalog-context-lib.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
+
+GRAFANA_CATALOG_BUILD_JSON="$(image_catalog_build_json platform grafana-victorialogs)"
+
+catalog_grafana_build_value() {
+  local filter="$1"
+
+  jq -r "${filter} // empty" <<<"${GRAFANA_CATALOG_BUILD_JSON}"
+}
+
+catalog_grafana_image_ref() {
+  local object_filter="$1"
+  local source=""
+  local tag=""
+
+  source="$(catalog_grafana_build_value "${object_filter}.source")"
+  tag="$(catalog_grafana_build_value "${object_filter}.tag")"
+  [ -n "${source}" ] || { echo "${0##*/}: missing ${object_filter}.source in image catalog" >&2; exit 1; }
+  [ -n "${tag}" ] || { echo "${0##*/}: missing ${object_filter}.tag in image catalog" >&2; exit 1; }
+  printf '%s:%s\n' "${source}" "${tag}"
+}
 
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 CACHE_BUILD_HOST="${CACHE_BUILD_HOST:-${CACHE_PUSH_HOST}}"
-BASE_IMAGE_NAMESPACE="${BASE_IMAGE_NAMESPACE:-platform-cache}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-platform}"
 TAG="${TAG:-latest}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
 ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
-GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-12.3.1}"
-GRAFANA_BASE_IMAGE_SOURCE="${GRAFANA_BASE_IMAGE_SOURCE:-docker.io/grafana/grafana:${GRAFANA_IMAGE_TAG}}"
-PLUGIN_FETCH_IMAGE_SOURCE="${PLUGIN_FETCH_IMAGE_SOURCE:-docker.io/library/alpine:3.22}"
-VICTORIA_LOGS_PLUGIN_VERSION="${VICTORIA_LOGS_PLUGIN_VERSION:-$(tf_default_from_variables grafana_victoria_logs_plugin_version)}"
-VICTORIA_LOGS_PLUGIN_SHA256="${VICTORIA_LOGS_PLUGIN_SHA256:-$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)}"
-VICTORIA_LOGS_PLUGIN_URL="${VICTORIA_LOGS_PLUGIN_URL:-https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v${VICTORIA_LOGS_PLUGIN_VERSION}/victoriametrics-logs-datasource-v${VICTORIA_LOGS_PLUGIN_VERSION}.zip}"
-PLUGIN_ARCHIVE_CACHE_DIR="${PLUGIN_ARCHIVE_CACHE_DIR:-${REPO_ROOT}/.run/kind/plugin-cache}"
+GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-$(catalog_grafana_build_value '.grafana_base_image.tag')}"
+GRAFANA_BASE_IMAGE_SOURCE="${GRAFANA_BASE_IMAGE_SOURCE:-$(catalog_grafana_image_ref '.grafana_base_image')}"
+GRAFANA_BASE_CACHE_REPO="${GRAFANA_BASE_CACHE_REPO:-$(catalog_grafana_build_value '.grafana_base_image.cache_repo')}"
+PLUGIN_FETCH_IMAGE_SOURCE="${PLUGIN_FETCH_IMAGE_SOURCE:-$(catalog_grafana_image_ref '.plugin_fetch_image')}"
+PLUGIN_FETCH_IMAGE_TAG="${PLUGIN_FETCH_IMAGE_TAG:-$(catalog_grafana_build_value '.plugin_fetch_image.tag')}"
+PLUGIN_FETCH_CACHE_REPO="${PLUGIN_FETCH_CACHE_REPO:-$(catalog_grafana_build_value '.plugin_fetch_image.cache_repo')}"
+VICTORIA_LOGS_PLUGIN_VERSION_VAR="$(catalog_grafana_build_value '.plugin_archive.terraform_version_variable')"
+VICTORIA_LOGS_PLUGIN_SHA256_VAR="$(catalog_grafana_build_value '.plugin_archive.terraform_sha256_variable')"
+VICTORIA_LOGS_PLUGIN_URL_TEMPLATE="$(catalog_grafana_build_value '.plugin_archive.url_template')"
+VICTORIA_LOGS_PLUGIN_VERSION="${VICTORIA_LOGS_PLUGIN_VERSION:-$(tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_VERSION_VAR}")}"
+VICTORIA_LOGS_PLUGIN_SHA256="${VICTORIA_LOGS_PLUGIN_SHA256:-$(tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_SHA256_VAR}")}"
+VICTORIA_LOGS_PLUGIN_URL_DEFAULT="${VICTORIA_LOGS_PLUGIN_URL_TEMPLATE//\{version\}/${VICTORIA_LOGS_PLUGIN_VERSION}}"
+VICTORIA_LOGS_PLUGIN_URL="${VICTORIA_LOGS_PLUGIN_URL:-${VICTORIA_LOGS_PLUGIN_URL_DEFAULT}}"
+PLUGIN_ARCHIVE_CACHE_DIR="${PLUGIN_ARCHIVE_CACHE_DIR:-${REPO_ROOT}/$(catalog_grafana_build_value '.plugin_archive.cache_dir')}"
+PLUGIN_CONTEXT_ARCHIVE_NAME="${PLUGIN_CONTEXT_ARCHIVE_NAME:-$(catalog_grafana_build_value '.plugin_archive.context_archive_name')}"
+GRAFANA_VERSION_TAG_STRATEGY="$(catalog_grafana_build_value '.version_tag_strategy')"
 PLUGIN_BUILD_CONTEXT_ROOT="${PLUGIN_BUILD_CONTEXT_ROOT:-${REPO_ROOT}/.run/kind/build-contexts}"
-TEMP_PATHS=()
 
-register_temp_path() {
-  local path="${1:-}"
-
-  [ -n "${path}" ] || return 0
-  TEMP_PATHS+=("${path}")
-}
-
-cleanup_temp_paths() {
-  local idx path
-
-  if [ "${#TEMP_PATHS[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  for ((idx=${#TEMP_PATHS[@]} - 1; idx >= 0; idx--)); do
-    path="${TEMP_PATHS[idx]}"
-    [ -n "${path}" ] || continue
-    if [ -e "${path}" ]; then
-      rm -rf "${path}"
-    fi
-  done
-}
-
-trap cleanup_temp_paths EXIT
+trap image_catalog_cleanup_temp_paths EXIT
 
 usage() {
   cat <<EOF
@@ -73,6 +83,7 @@ command -v shasum >/dev/null 2>&1 || { echo "${0##*/}: shasum not found" >&2; ex
 [ -n "${VICTORIA_LOGS_PLUGIN_SHA256}" ] || { echo "${0##*/}: grafana_victoria_logs_plugin_sha256 is empty" >&2; exit 1; }
 
 commit_tag="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"
+IMAGE_BUILD_COMMIT_TAG="${commit_tag}"
 
 prepare_grafana_plugin_archive() {
   local __resultvar="$1"
@@ -89,7 +100,7 @@ prepare_grafana_plugin_archive() {
   fi
 
   tmp_path="$(mktemp "${PLUGIN_ARCHIVE_CACHE_DIR}/.${archive_name}.XXXXXX")"
-  register_temp_path "${tmp_path}"
+  image_catalog_register_temp_path "${tmp_path}"
   echo "FETCH ${VICTORIA_LOGS_PLUGIN_URL} -> ${archive_path}"
   curl -fsSL "${VICTORIA_LOGS_PLUGIN_URL}" -o "${tmp_path}"
   printf '%s  %s\n' "${VICTORIA_LOGS_PLUGIN_SHA256}" "${tmp_path}" | shasum -a 256 -c - >/dev/null
@@ -105,142 +116,28 @@ prepare_grafana_build_context() {
 
   mkdir -p "${PLUGIN_BUILD_CONTEXT_ROOT}"
   context_dir="$(mktemp -d "${PLUGIN_BUILD_CONTEXT_ROOT}/grafana-victorialogs.XXXXXX")"
-  register_temp_path "${context_dir}"
+  image_catalog_register_temp_path "${context_dir}"
   cp "${REPO_ROOT}/kubernetes/kind/images/grafana-victorialogs/Dockerfile" "${context_dir}/Dockerfile"
-  cp "${archive_path}" "${context_dir}/victorialogs.zip"
+  cp "${archive_path}" "${context_dir}/${PLUGIN_CONTEXT_ARCHIVE_NAME:-victorialogs.zip}"
   printf -v "${__resultvar}" '%s' "${context_dir}"
 }
 
-copy_backstage_app_catalog() {
-  local context_dir="$1"
-  local app_name="$2"
-  local app_dir="${REPO_ROOT}/apps/${app_name}"
-  local target_dir="${context_dir}/catalog/apps/${app_name}"
+case "${GRAFANA_VERSION_TAG_STRATEGY}" in
+  grafana-tag-plus-plugin-version)
+    grafana_version_tag="${GRAFANA_IMAGE_TAG}-v${VICTORIA_LOGS_PLUGIN_VERSION}"
+    ;;
+  *)
+    echo "${0##*/}: unsupported Grafana version_tag_strategy=${GRAFANA_VERSION_TAG_STRATEGY}" >&2
+    exit 1
+    ;;
+esac
 
-  mkdir -p "${target_dir}"
-  cp "${app_dir}/catalog-info.yaml" "${target_dir}/catalog-info.yaml"
-  cp "${app_dir}/mkdocs.yml" "${target_dir}/mkdocs.yml"
-  cp "${app_dir}/README.md" "${target_dir}/README.md"
-  if [ -d "${app_dir}/docs" ]; then
-    cp -R "${app_dir}/docs" "${target_dir}/docs"
-  fi
-  if [ -f "${app_dir}/MODEL_CARD.md" ]; then
-    cp "${app_dir}/MODEL_CARD.md" "${target_dir}/MODEL_CARD.md"
-  fi
-}
-
-copy_backstage_apim_simulator_catalog() {
-  local context_dir="$1"
-  local source_file="${REPO_ROOT}/apps/apim-simulator/catalog-info.yaml"
-  local target_dir="${context_dir}/catalog/apps/apim-simulator"
-
-  mkdir -p "${target_dir}"
-  cp "${source_file}" "${target_dir}/catalog-info.yaml"
-}
-
-prepare_backstage_build_context() {
-  local __resultvar="$1"
-  local context_dir=""
-
-  mkdir -p "${PLUGIN_BUILD_CONTEXT_ROOT}"
-  context_dir="$(mktemp -d "${PLUGIN_BUILD_CONTEXT_ROOT}/backstage.XXXXXX")"
-  register_temp_path "${context_dir}"
-  [ -d "${REPO_ROOT}/apps/backstage" ] || { echo "${0##*/}: missing Backstage source directory" >&2; exit 1; }
-  cp -R "${REPO_ROOT}/apps/backstage/." "${context_dir}/"
-  cp "${REPO_ROOT}/apps/backstage/Dockerfile" "${context_dir}/Dockerfile"
-  copy_backstage_app_catalog "${context_dir}" "subnetcalc"
-  copy_backstage_apim_simulator_catalog "${context_dir}"
-  copy_backstage_app_catalog "${context_dir}" "sentiment"
-  printf -v "${__resultvar}" '%s' "${context_dir}"
-}
-
-build_and_push() {
-  local image_name="$1"
-  local build_context="$2"
-  local dockerfile_path="$3"
-  local version_tag="$4"
-  local fingerprint_tag="$5"
-  shift 5
-
-  local repo="${IMAGE_NAMESPACE}/${image_name}"
-  local build_ref="build-${image_name}:${version_tag}"
-  local latest_ref="${CACHE_PUSH_HOST}/${repo}:${TAG}"
-  local version_ref="${CACHE_PUSH_HOST}/${repo}:${version_tag}"
-  local commit_ref=""
-  local fingerprint_ref=""
-  local cmd=()
-
-  if [ -n "${commit_tag}" ]; then
-    commit_ref="${CACHE_PUSH_HOST}/${repo}:${commit_tag}"
-  fi
-  if [ -n "${fingerprint_tag}" ]; then
-    fingerprint_ref="${CACHE_PUSH_HOST}/${repo}:${fingerprint_tag}"
-  fi
-
-  if [ "${FORCE_REBUILD}" != "1" ] \
-    && tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${version_tag}" \
-    && tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${TAG}" \
-    && { [ -z "${fingerprint_tag}" ] || tag_exists_in_cache "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"; }; then
-    echo "OK   cached ${version_ref}"
-    return 0
-  fi
-
-  echo "BUILD ${image_name}"
-  # Build into a local staging tag first; the final registry push happens
-  # explicitly below and should not be part of the build/export step.
-  cmd=(-t "${build_ref}" -f "${dockerfile_path}")
-  while [[ $# -gt 0 ]]; do
-    cmd+=("$1")
-    shift
-  done
-  cmd+=("${build_context}")
-  docker_build_local "${cmd[@]}"
-
-  docker tag "${build_ref}" "${version_ref}"
-  docker tag "${build_ref}" "${latest_ref}"
-  docker_push_local_registry "${version_ref}"
-  docker_push_local_registry "${latest_ref}"
-
-  if [ -n "${commit_ref}" ]; then
-    docker tag "${build_ref}" "${commit_ref}"
-    docker_push_local_registry "${commit_ref}"
-  fi
-  if [ -n "${fingerprint_ref}" ]; then
-    docker tag "${build_ref}" "${fingerprint_ref}"
-    docker_push_local_registry "${fingerprint_ref}"
-  fi
-
-  echo "PUSH  ${version_ref}"
-}
-
-source_fingerprint_tag() {
-  local digest
-
-  digest="$(
-    cd "${REPO_ROOT}"
-    find "$@" -type f -print |
-      LC_ALL=C sort |
-      while IFS= read -r source_file; do
-        printf '%s\n' "${source_file}"
-        shasum -a 256 "${source_file}"
-      done |
-      shasum -a 256 |
-      awk '{print $1}'
-  )"
-  printf 'src-%s' "${digest:0:20}"
-}
-
-# shellcheck source=/dev/null
-source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
-
-grafana_version_tag="${GRAFANA_IMAGE_TAG}-v${VICTORIA_LOGS_PLUGIN_VERSION}"
-grafana_base_repo="${BASE_IMAGE_NAMESPACE}/grafana-grafana"
-plugin_fetch_repo="${BASE_IMAGE_NAMESPACE}/library-alpine"
+grafana_base_repo="${GRAFANA_BASE_CACHE_REPO}"
+plugin_fetch_repo="${PLUGIN_FETCH_CACHE_REPO}"
 grafana_base_ref="${CACHE_BUILD_HOST}/${grafana_base_repo}:${GRAFANA_IMAGE_TAG}"
-plugin_fetch_ref="${CACHE_BUILD_HOST}/${plugin_fetch_repo}:3.22"
+plugin_fetch_ref="${CACHE_BUILD_HOST}/${plugin_fetch_repo}:${PLUGIN_FETCH_IMAGE_TAG}"
 grafana_plugin_archive=""
 grafana_build_context=""
-backstage_build_context=""
 
 mirror_image_into_cache \
   "${GRAFANA_BASE_IMAGE_SOURCE}" \
@@ -253,13 +150,13 @@ mirror_image_into_cache \
   "${PLUGIN_FETCH_IMAGE_SOURCE}" \
   "${CACHE_PUSH_HOST}" \
   "${plugin_fetch_repo}" \
-  "3.22" \
+  "${PLUGIN_FETCH_IMAGE_TAG}" \
   "${FORCE_REBUILD}"
 
 prepare_grafana_plugin_archive grafana_plugin_archive
 prepare_grafana_build_context grafana_build_context "${grafana_plugin_archive}"
 
-build_and_push \
+image_build_build_and_push_cached \
   "grafana-victorialogs" \
   "${grafana_build_context}" \
   "${grafana_build_context}/Dockerfile" \
@@ -273,7 +170,7 @@ idp_core_source_tag="$(
   image_catalog_source_tag platform idp-core
 )"
 platform_mcp_source_tag="$(
-  image_catalog_source_tag workload platform-mcp
+  image_catalog_source_tag platform platform-mcp
 )"
 backstage_source_tag="$(
   if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
@@ -284,35 +181,14 @@ keycloak_source_tag="$(
   image_catalog_source_tag platform keycloak
 )"
 
-build_and_push \
-  "idp-core" \
-  "${REPO_ROOT}" \
-  "${REPO_ROOT}/apps/idp-core/Dockerfile" \
-  "${TAG}" \
-  "${idp_core_source_tag}"
+image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"
 
-build_and_push \
-  "platform-mcp" \
-  "${REPO_ROOT}" \
-  "${REPO_ROOT}/apps/platform-mcp/Dockerfile" \
-  "${TAG}" \
-  "${platform_mcp_source_tag}"
+image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"
 
 if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
-  prepare_backstage_build_context backstage_build_context
-  build_and_push \
-    "backstage" \
-    "${backstage_build_context}" \
-    "${backstage_build_context}/Dockerfile" \
-    "${TAG}" \
-    "${backstage_source_tag}"
+  image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"
 else
   echo "SKIP backstage (ENABLE_BACKSTAGE=false)"
 fi
 
-build_and_push \
-  "keycloak" \
-  "${REPO_ROOT}/apps/keycloak" \
-  "${REPO_ROOT}/apps/keycloak/Dockerfile" \
-  "${TAG}" \
-  "${keycloak_source_tag}"
+image_build_catalog_build_and_push platform keycloak keycloak "${keycloak_source_tag}"

@@ -42,7 +42,8 @@ EOF
   run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"make -C kubernetes/slicer stop-slicer"* ]]
+  [[ "${output}" == *"Slicer host bindings are still active."* ]]
+  [[ "${output}" == *"make -C kubernetes/slicer stop-host-forwards"* ]]
   [[ "${output}" == *"Shared host ports currently in use while Slicer is active:"* ]]
   [[ "${output}" != *"currently in use by Slicer"* ]]
   [[ "${output}" == *"127.0.0.1:443"* ]]
@@ -67,4 +68,47 @@ EOF
   run env SLICER_URL="${BATS_TEST_TMPDIR}/missing.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
+}
+
+@test "returns success when only the slicer vm is running without host bindings" {
+  cat >"${TEST_BIN}/slicer" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "vm" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
+  printf '[{"hostname":"slicer-1","status":"Running"}]\n'
+fi
+EOF
+  chmod +x "${TEST_BIN}/slicer"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/ps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ps"
+
+  cat >"${TEST_BIN}/lsof" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case " $* " in
+  *" -iTCP:443 "*|*" -iTCP:30080 "*)
+    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/lsof"
+
+  run env SLICER_URL="${BATS_TEST_TMPDIR}/slicer.sock" SLICER_SOCKET="${BATS_TEST_TMPDIR}/slicer.sock" "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }
