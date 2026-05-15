@@ -6,7 +6,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -806,6 +806,127 @@ def _quota_window_state(
     return entry, reset_at
 
 
+def _estimate_text_tokens(text: str) -> int:
+    stripped = text.strip()
+    if not stripped:
+        return 0
+    return max(1, (len(stripped) + 3) // 4)
+
+
+def _estimate_body_tokens(body: bytes) -> int:
+    if not body:
+        return 0
+    return _estimate_text_tokens(body.decode("utf-8", errors="replace"))
+
+
+def _response_usage_total_tokens(body: bytes) -> int | None:
+    if not body:
+        return None
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    total = usage.get("total_tokens")
+    if total is None:
+        prompt = usage.get("prompt_tokens")
+        completion = usage.get("completion_tokens")
+        if prompt is None or completion is None:
+            return None
+        total = int(prompt) + int(completion)
+    return max(0, int(total))
+
+
+def _token_rate_bucket(store: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    bucket = store.get(key)
+    if not isinstance(bucket, list):
+        bucket = []
+        store[key] = bucket
+    return bucket
+
+
+def _prune_token_rate_bucket(bucket: list[dict[str, Any]], now: float) -> None:
+    threshold = now - 60
+    bucket[:] = [
+        entry for entry in bucket if isinstance(entry, dict) and float(entry.get("timestamp") or 0) > threshold
+    ]
+
+
+def _token_rate_used(bucket: list[dict[str, Any]]) -> int:
+    return sum(max(0, int(entry.get("tokens") or 0)) for entry in bucket if isinstance(entry, dict))
+
+
+def _token_rate_retry_after(bucket: list[dict[str, Any]], now: float) -> int:
+    timestamps = [
+        float(entry.get("timestamp") or 0)
+        for entry in bucket
+        if isinstance(entry, dict) and int(entry.get("tokens") or 0) > 0
+    ]
+    if not timestamps:
+        return 60
+    return max(1, int((min(timestamps) + 60) - now))
+
+
+def _upsert_token_rate_entry(
+    bucket: list[dict[str, Any]],
+    *,
+    reservation_id: str,
+    timestamp: float,
+    tokens: int,
+) -> None:
+    for entry in bucket:
+        if isinstance(entry, dict) and entry.get("reservation_id") == reservation_id:
+            entry["tokens"] = tokens
+            entry["timestamp"] = timestamp
+            return
+    if tokens > 0:
+        bucket.append({"timestamp": timestamp, "tokens": tokens, "reservation_id": reservation_id})
+
+
+def _token_quota_window_bounds(now: float, period: str) -> tuple[float, int]:
+    dt = datetime.fromtimestamp(now, UTC)
+    normalized = period.strip().lower()
+    if normalized == "hourly":
+        start = dt.replace(minute=0, second=0, microsecond=0)
+        reset = start + timedelta(hours=1)
+    elif normalized == "daily":
+        start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        reset = start + timedelta(days=1)
+    elif normalized == "weekly":
+        start = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        reset = start + timedelta(days=7)
+    elif normalized == "monthly":
+        start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        reset = (
+            start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1)
+        )
+    elif normalized == "yearly":
+        start = dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        reset = start.replace(year=start.year + 1)
+    else:
+        raise HTTPException(status_code=500, detail=f"Unsupported token-quota-period: {period}")
+    return start.timestamp(), int(reset.timestamp())
+
+
+def _token_quota_window_state(
+    store: dict[str, Any],
+    key: str,
+    *,
+    now: float,
+    period: str,
+) -> tuple[dict[str, Any], int]:
+    window_start, reset_at = _token_quota_window_bounds(now, period)
+    entry = store.get(key)
+    if not isinstance(entry, dict) or entry.get("window_start") != window_start:
+        entry = {"window_start": window_start, "count": 0}
+        store[key] = entry
+    return entry, reset_at
+
+
 @dataclass(frozen=True)
 class RateLimitByKeyDeferred(DeferredPolicyAction):
     calls: str
@@ -1069,6 +1190,336 @@ class QuotaByKey(PolicyNode):
         if reset_at is not None:
             headers["retry-after"] = str(max(1, reset_at - int(now)))
         return ResponseSpec(status_code=403, headers=headers, body=b"Quota exceeded")
+
+
+@dataclass(frozen=True)
+class LlmTokenLimitDeferred(DeferredPolicyAction):
+    policy_name: str
+    counter_key: str
+    tokens_per_minute: str | None
+    token_quota: str | None
+    token_quota_period: str | None
+    retry_after_header_name: str | None
+    retry_after_variable_name: str | None
+    remaining_quota_tokens_header_name: str | None
+    remaining_quota_tokens_variable_name: str | None
+    remaining_tokens_header_name: str | None
+    remaining_tokens_variable_name: str | None
+    tokens_consumed_header_name: str | None
+    tokens_consumed_variable_name: str | None
+    reservation_id: str
+    reserved_tokens: int
+
+    def finalize(self, req: PolicyRequest, runtime: PolicyRuntime | None = None) -> None:
+        now = time.time()
+        counter_key = render_policy_value(self.counter_key, req, runtime)
+        if not counter_key:
+            return
+        consumed = _response_usage_total_tokens(req.response_body)
+        if consumed is None:
+            consumed = max(0, _estimate_body_tokens(req.body) + _estimate_body_tokens(req.response_body))
+
+        remaining_tokens: int | None = None
+        if self.tokens_per_minute is not None:
+            rate_store = req.variables.get("rate_limit_store")
+            if isinstance(rate_store, dict):
+                limit = max(1, _policy_int(self.tokens_per_minute, req, runtime, default=1))
+                bucket = _token_rate_bucket(rate_store, f"{self.policy_name}:tpm:{counter_key}")
+                _prune_token_rate_bucket(bucket, now)
+                _upsert_token_rate_entry(
+                    bucket,
+                    reservation_id=self.reservation_id,
+                    timestamp=now,
+                    tokens=consumed,
+                )
+                remaining_tokens = max(0, limit - _token_rate_used(bucket))
+
+        remaining_quota: int | None = None
+        if self.token_quota is not None and self.token_quota_period is not None:
+            quota_store = req.variables.get("quota_store")
+            if isinstance(quota_store, dict):
+                quota = max(1, _policy_int(self.token_quota, req, runtime, default=1))
+                period = render_policy_value(self.token_quota_period, req, runtime)
+                entry, _ = _token_quota_window_state(
+                    quota_store,
+                    f"{self.policy_name}:quota:{counter_key}",
+                    now=now,
+                    period=period,
+                )
+                current = max(0, int(entry.get("count") or 0)) + consumed - self.reserved_tokens
+                entry["count"] = max(0, current)
+                remaining_quota = max(0, quota - int(entry["count"]))
+
+        self._write_success_outputs(
+            req,
+            runtime,
+            consumed=consumed,
+            remaining_tokens=remaining_tokens,
+            remaining_quota=remaining_quota,
+        )
+        _record_step(
+            runtime,
+            self.policy_name,
+            {
+                "counter_key": counter_key,
+                "deferred": True,
+                "tokens_consumed": consumed,
+                "remaining_tokens": remaining_tokens,
+                "remaining_quota_tokens": remaining_quota,
+            },
+        )
+
+    def _write_success_outputs(
+        self,
+        req: PolicyRequest,
+        runtime: PolicyRuntime | None,
+        *,
+        consumed: int,
+        remaining_tokens: int | None,
+        remaining_quota: int | None,
+    ) -> None:
+        headers = _response_header_target(req)
+        if remaining_tokens is not None:
+            if self.remaining_tokens_variable_name:
+                req.variables[self.remaining_tokens_variable_name] = remaining_tokens
+                _record_variable_write(runtime, self.remaining_tokens_variable_name, remaining_tokens, self.policy_name)
+            if self.remaining_tokens_header_name:
+                headers[self.remaining_tokens_header_name.lower()] = str(remaining_tokens)
+        if remaining_quota is not None:
+            if self.remaining_quota_tokens_variable_name:
+                req.variables[self.remaining_quota_tokens_variable_name] = remaining_quota
+                _record_variable_write(
+                    runtime,
+                    self.remaining_quota_tokens_variable_name,
+                    remaining_quota,
+                    self.policy_name,
+                )
+            if self.remaining_quota_tokens_header_name:
+                headers[self.remaining_quota_tokens_header_name.lower()] = str(remaining_quota)
+        if self.tokens_consumed_variable_name:
+            req.variables[self.tokens_consumed_variable_name] = consumed
+            _record_variable_write(runtime, self.tokens_consumed_variable_name, consumed, self.policy_name)
+        if self.tokens_consumed_header_name:
+            headers[self.tokens_consumed_header_name.lower()] = str(consumed)
+
+
+@dataclass(frozen=True)
+class LlmTokenLimit(PolicyNode):
+    policy_name: str
+    counter_key: str
+    tokens_per_minute: str | None = None
+    token_quota: str | None = None
+    token_quota_period: str | None = None
+    estimate_prompt_tokens: str = "false"
+    retry_after_header_name: str | None = None
+    retry_after_variable_name: str | None = None
+    remaining_quota_tokens_header_name: str | None = None
+    remaining_quota_tokens_variable_name: str | None = None
+    remaining_tokens_header_name: str | None = None
+    remaining_tokens_variable_name: str | None = None
+    tokens_consumed_header_name: str | None = None
+    tokens_consumed_variable_name: str | None = None
+
+    def apply(self, req: PolicyRequest, runtime: PolicyRuntime | None = None) -> ResponseSpec | None:
+        counter_key = render_policy_value(self.counter_key, req, runtime)
+        if not counter_key:
+            raise HTTPException(status_code=500, detail=f"{self.policy_name} requires counter-key")
+        now = time.time()
+        estimate_prompt = _policy_bool(self.estimate_prompt_tokens, req, runtime, default=False)
+        prompt_tokens = _estimate_body_tokens(req.body) if estimate_prompt else 0
+        reservation_id = f"{id(req)}:{len(runtime.deferred_actions) if runtime is not None else 0}:{now:.9f}"
+
+        remaining_tokens, retry_after = self._apply_tpm(
+            req,
+            runtime,
+            counter_key=counter_key,
+            prompt_tokens=prompt_tokens,
+            reservation_id=reservation_id,
+            now=now,
+        )
+        if retry_after is not None:
+            return self._limit_response(
+                req,
+                runtime,
+                status_code=429,
+                message=b"Token rate limit exceeded",
+                retry_after=retry_after,
+                remaining_tokens=remaining_tokens,
+                remaining_quota=None,
+            )
+
+        remaining_quota, retry_after = self._apply_quota(
+            req,
+            runtime,
+            counter_key=counter_key,
+            prompt_tokens=prompt_tokens,
+            now=now,
+        )
+        if retry_after is not None:
+            return self._limit_response(
+                req,
+                runtime,
+                status_code=403,
+                message=b"Token quota exceeded",
+                retry_after=retry_after,
+                remaining_tokens=remaining_tokens,
+                remaining_quota=remaining_quota,
+            )
+
+        if runtime is not None:
+            runtime.deferred_actions.append(
+                LlmTokenLimitDeferred(
+                    policy_name=self.policy_name,
+                    counter_key=self.counter_key,
+                    tokens_per_minute=self.tokens_per_minute,
+                    token_quota=self.token_quota,
+                    token_quota_period=self.token_quota_period,
+                    retry_after_header_name=self.retry_after_header_name,
+                    retry_after_variable_name=self.retry_after_variable_name,
+                    remaining_quota_tokens_header_name=self.remaining_quota_tokens_header_name,
+                    remaining_quota_tokens_variable_name=self.remaining_quota_tokens_variable_name,
+                    remaining_tokens_header_name=self.remaining_tokens_header_name,
+                    remaining_tokens_variable_name=self.remaining_tokens_variable_name,
+                    tokens_consumed_header_name=self.tokens_consumed_header_name,
+                    tokens_consumed_variable_name=self.tokens_consumed_variable_name,
+                    reservation_id=reservation_id,
+                    reserved_tokens=prompt_tokens,
+                )
+            )
+        if runtime is None:
+            self._write_remaining_outputs(
+                req,
+                runtime,
+                remaining_tokens=remaining_tokens,
+                remaining_quota=remaining_quota,
+            )
+        _record_step(
+            runtime,
+            self.policy_name,
+            {
+                "counter_key": counter_key,
+                "deferred": True,
+                "estimated_prompt_tokens": prompt_tokens,
+                "remaining_tokens": remaining_tokens,
+                "remaining_quota_tokens": remaining_quota,
+            },
+        )
+        return None
+
+    def _apply_tpm(
+        self,
+        req: PolicyRequest,
+        runtime: PolicyRuntime | None,
+        *,
+        counter_key: str,
+        prompt_tokens: int,
+        reservation_id: str,
+        now: float,
+    ) -> tuple[int | None, int | None]:
+        if self.tokens_per_minute is None:
+            return None, None
+        store = req.variables.get("rate_limit_store")
+        if not isinstance(store, dict):
+            return None, None
+        limit = max(1, _policy_int(self.tokens_per_minute, req, runtime, default=1))
+        bucket = _token_rate_bucket(store, f"{self.policy_name}:tpm:{counter_key}")
+        _prune_token_rate_bucket(bucket, now)
+        used = _token_rate_used(bucket)
+        if used + prompt_tokens > limit or (prompt_tokens == 0 and used >= limit):
+            return max(0, limit - used - prompt_tokens), _token_rate_retry_after(bucket, now)
+        if prompt_tokens > 0:
+            bucket.append({"timestamp": now, "tokens": prompt_tokens, "reservation_id": reservation_id})
+            used += prompt_tokens
+        return max(0, limit - used), None
+
+    def _apply_quota(
+        self,
+        req: PolicyRequest,
+        runtime: PolicyRuntime | None,
+        *,
+        counter_key: str,
+        prompt_tokens: int,
+        now: float,
+    ) -> tuple[int | None, int | None]:
+        if self.token_quota is None or self.token_quota_period is None:
+            return None, None
+        store = req.variables.get("quota_store")
+        if not isinstance(store, dict):
+            return None, None
+        quota = max(1, _policy_int(self.token_quota, req, runtime, default=1))
+        period = render_policy_value(self.token_quota_period, req, runtime)
+        entry, reset_at = _token_quota_window_state(
+            store, f"{self.policy_name}:quota:{counter_key}", now=now, period=period
+        )
+        used = max(0, int(entry.get("count") or 0))
+        if used + prompt_tokens > quota or (prompt_tokens == 0 and used >= quota):
+            return max(0, quota - used - prompt_tokens), max(1, reset_at - int(now))
+        if prompt_tokens > 0:
+            used += prompt_tokens
+            entry["count"] = used
+        return max(0, quota - used), None
+
+    def _write_remaining_outputs(
+        self,
+        req: PolicyRequest,
+        runtime: PolicyRuntime | None,
+        *,
+        remaining_tokens: int | None,
+        remaining_quota: int | None,
+    ) -> None:
+        if remaining_tokens is not None:
+            if self.remaining_tokens_variable_name:
+                req.variables[self.remaining_tokens_variable_name] = remaining_tokens
+                _record_variable_write(runtime, self.remaining_tokens_variable_name, remaining_tokens, self.policy_name)
+            if self.remaining_tokens_header_name:
+                _queue_response_header(req, self.remaining_tokens_header_name, remaining_tokens)
+        if remaining_quota is not None:
+            if self.remaining_quota_tokens_variable_name:
+                req.variables[self.remaining_quota_tokens_variable_name] = remaining_quota
+                _record_variable_write(
+                    runtime,
+                    self.remaining_quota_tokens_variable_name,
+                    remaining_quota,
+                    self.policy_name,
+                )
+            if self.remaining_quota_tokens_header_name:
+                _queue_response_header(req, self.remaining_quota_tokens_header_name, remaining_quota)
+
+    def _limit_response(
+        self,
+        req: PolicyRequest,
+        runtime: PolicyRuntime | None,
+        *,
+        status_code: int,
+        message: bytes,
+        retry_after: int,
+        remaining_tokens: int | None,
+        remaining_quota: int | None,
+    ) -> ResponseSpec:
+        header_name = self.retry_after_header_name or "Retry-After"
+        if self.retry_after_variable_name:
+            req.variables[self.retry_after_variable_name] = retry_after
+            _record_variable_write(runtime, self.retry_after_variable_name, retry_after, self.policy_name)
+        headers = {"content-type": "text/plain", header_name.lower(): str(retry_after)}
+        if remaining_tokens is not None:
+            if self.remaining_tokens_variable_name:
+                req.variables[self.remaining_tokens_variable_name] = remaining_tokens
+                _record_variable_write(runtime, self.remaining_tokens_variable_name, remaining_tokens, self.policy_name)
+            if self.remaining_tokens_header_name:
+                headers[self.remaining_tokens_header_name.lower()] = str(remaining_tokens)
+        if remaining_quota is not None:
+            if self.remaining_quota_tokens_variable_name:
+                req.variables[self.remaining_quota_tokens_variable_name] = remaining_quota
+                _record_variable_write(
+                    runtime,
+                    self.remaining_quota_tokens_variable_name,
+                    remaining_quota,
+                    self.policy_name,
+                )
+            if self.remaining_quota_tokens_header_name:
+                headers[self.remaining_quota_tokens_header_name.lower()] = str(remaining_quota)
+        _record_step(runtime, self.policy_name, {"status": "limit_exceeded", "http_status": status_code})
+        return ResponseSpec(status_code=status_code, headers=headers, body=message)
 
 
 @dataclass(frozen=True)
@@ -1824,6 +2275,38 @@ def _parse_quota_by_key(el: ElementTree.Element) -> QuotaByKey:
     )
 
 
+def _parse_llm_token_limit(el: ElementTree.Element) -> LlmTokenLimit:
+    counter_key = (el.attrib.get("counter-key") or "").strip()
+    tokens_per_minute = (el.attrib.get("tokens-per-minute") or "").strip() or None
+    token_quota = (el.attrib.get("token-quota") or "").strip() or None
+    token_quota_period = (el.attrib.get("token-quota-period") or "").strip() or None
+    estimate_prompt_tokens = (el.attrib.get("estimate-prompt-tokens") or "").strip()
+    if not counter_key:
+        raise HTTPException(status_code=500, detail=f"{el.tag} requires counter-key")
+    if tokens_per_minute is None and (token_quota is None or token_quota_period is None):
+        raise HTTPException(status_code=500, detail=f"{el.tag} requires tokens-per-minute or token quota")
+    if token_quota is not None and token_quota_period is None:
+        raise HTTPException(status_code=500, detail=f"{el.tag} requires token-quota-period")
+    if not estimate_prompt_tokens:
+        raise HTTPException(status_code=500, detail=f"{el.tag} requires estimate-prompt-tokens")
+    return LlmTokenLimit(
+        policy_name=el.tag,
+        counter_key=counter_key,
+        tokens_per_minute=tokens_per_minute,
+        token_quota=token_quota,
+        token_quota_period=token_quota_period,
+        estimate_prompt_tokens=estimate_prompt_tokens,
+        retry_after_header_name=el.attrib.get("retry-after-header-name"),
+        retry_after_variable_name=el.attrib.get("retry-after-variable-name"),
+        remaining_quota_tokens_header_name=el.attrib.get("remaining-quota-tokens-header-name"),
+        remaining_quota_tokens_variable_name=el.attrib.get("remaining-quota-tokens-variable-name"),
+        remaining_tokens_header_name=el.attrib.get("remaining-tokens-header-name"),
+        remaining_tokens_variable_name=el.attrib.get("remaining-tokens-variable-name"),
+        tokens_consumed_header_name=el.attrib.get("tokens-consumed-header-name"),
+        tokens_consumed_variable_name=el.attrib.get("tokens-consumed-variable-name"),
+    )
+
+
 def _parse_cache_lookup(el: ElementTree.Element) -> CacheLookup:
     return CacheLookup(
         vary_by_headers=_vary_values(
@@ -2101,6 +2584,8 @@ def _parse_node(
         return _parse_quota(el)
     if tag == "quota-by-key":
         return _parse_quota_by_key(el)
+    if tag in {"llm-token-limit", "azure-openai-token-limit"}:
+        return _parse_llm_token_limit(el)
     if tag == "cache-lookup":
         return _parse_cache_lookup(el)
     if tag == "cache-store":

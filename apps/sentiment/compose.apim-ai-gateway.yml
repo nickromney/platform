@@ -1,0 +1,22 @@
+# Optional overlay: run sentiment inference through the local APIM simulator AI gateway.
+#
+# Start the APIM simulator AI gateway first:
+#   make -C ../apim-simulator up-ai-gateway
+#
+# Then start sentiment with:
+#   docker compose --env-file ../../.env -f compose.yml -f compose.apim-ai-gateway.yml up
+
+services:
+  sentiment-api:
+    build:
+      args:
+        SENTIMENT_PRELOAD_MODEL: "0"
+    environment:
+      - SENTIMENT_ANALYZER=apim-ai-gateway
+      - SENTIMENT_WARM_ON_START=0
+      - SENTIMENT_APIM_AI_GATEWAY_URL=${SENTIMENT_APIM_AI_GATEWAY_URL:-http://host.docker.internal:8000/ai/v1/chat/completions}
+      - SENTIMENT_APIM_AI_GATEWAY_MODEL=${SENTIMENT_APIM_AI_GATEWAY_MODEL:-gpt-4o-mini}
+      - SENTIMENT_APIM_AI_GATEWAY_TIMEOUT_MS=${SENTIMENT_APIM_AI_GATEWAY_TIMEOUT_MS:-15000}
+      - SENTIMENT_APIM_SUBSCRIPTION_KEY=${SENTIMENT_APIM_SUBSCRIPTION_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites up up-tls down logs ps smoke urls
+MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites up up-tls up-apim-ai-gateway down logs ps smoke smoke-apim-ai-gateway urls compose-config-apim-ai-gateway
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -22,8 +22,9 @@ APP_TLS_URL := $(APP_TLS_BASE_URL)/oauth2/sign_in
 KEYCLOAK_URL := http://localhost:8300
 COMPOSE := $(COMPOSE_CMD) -f compose.yml
 COMPOSE_TLS := $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
+COMPOSE_APIM_AI_GATEWAY := $(COMPOSE_CMD) -f compose.yml -f compose.apim-ai-gateway.yml
 
-.PHONY: help prereqs test update check-prerequisites build up up-tls down logs ps smoke urls
+.PHONY: help prereqs test update check-prerequisites build up up-tls up-apim-ai-gateway down logs ps smoke smoke-apim-ai-gateway urls compose-config-apim-ai-gateway
 
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
@@ -59,6 +60,13 @@ up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS U
 	@echo "Keycloak URL:  $(KEYCLOAK_URL)"
 	@echo "If the browser warns about the cert, run ./pki/gen-certs.sh and trust the local CA."
 
+up-apim-ai-gateway: check-prerequisites ## Start sentiment configured to call the APIM simulator AI gateway
+	@$(COMPOSE_APIM_AI_GATEWAY) up -d --build
+	@echo "Sentiment URL: $(APP_URL)"
+	@echo "Base URL:      $(APP_BASE_URL)"
+	@echo "APIM AI URL:   $${SENTIMENT_APIM_AI_GATEWAY_URL:-http://host.docker.internal:8000/ai/v1/chat/completions}"
+	@echo "Start the APIM simulator first with: make -C ../apim-simulator up-ai-gateway"
+
 urls: ## Print the local URLs for the app and Keycloak
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Sentiment TLS: $(APP_TLS_URL)"
@@ -74,6 +82,12 @@ ps: check-prerequisites ## Show compose container status
 smoke: check-prerequisites ## Run the local compose smoke test
 	@./tests/compose-smoke.sh --execute
 
+smoke-apim-ai-gateway: ## Smoke sentiment through the running APIM simulator AI gateway
+	@./tests/compose-apim-ai-gateway-smoke.sh --execute
+
+compose-config-apim-ai-gateway: ## Render compose config for the APIM AI gateway analyzer overlay
+	@PLATFORM_DEMO_PASSWORD="$${PLATFORM_DEMO_PASSWORD:-local-dev-password}" OAUTH2_PROXY_COOKIE_SECRET="$${OAUTH2_PROXY_COOKIE_SECRET:-0123456789abcdef0123456789abcdef}" $(COMPOSE_APIM_AI_GATEWAY) config
+
 ##@ Test
 test: ## Run the local compose smoke test
 	@$(MAKE) --no-print-directory smoke
@@ -86,3 +100,4 @@ update: ## Update Bun dependency locks for each sentiment dependency root
 ##@ Cleanup
 down: check-prerequisites ## Stop the compose stack
 	@$(COMPOSE) down --remove-orphans
+	@$(COMPOSE_APIM_AI_GATEWAY) down --remove-orphans

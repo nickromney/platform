@@ -80,6 +80,41 @@ PY
   [[ "${output}" == *"validated mcp cilium named dependencies"* ]]
 }
 
+@test "Sentiment backend policy allows MCP classify-only endpoint" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml").read_text())
+    if doc
+]
+backend = next(doc for doc in docs if doc["metadata"]["name"] == "sentiment-backend-ingress")
+ingress = backend["spec"]["ingress"]
+
+mcp_rules = [
+    rule for rule in ingress
+    for endpoint in rule.get("fromEndpoints", [])
+    if endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "mcp"
+    and endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "platform-mcp"
+]
+
+assert len(mcp_rules) == 1
+http_rules = mcp_rules[0]["toPorts"][0]["rules"]["http"]
+assert http_rules == [{"method": "POST", "path": "/api/v1/sentiment/classify"}]
+
+print("validated sentiment mcp classify ingress")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated sentiment mcp classify ingress"* ]]
+}
+
 @test "Kyverno audits shared namespace runtime hardening and discovery labels" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations

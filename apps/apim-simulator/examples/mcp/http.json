@@ -44,7 +44,8 @@
       "path_prefix": "/",
       "upstream_base_url": "http://mcp-server:8080",
       "upstream_path_prefix": "",
-      "product": "mcp"
+      "product": "mcp",
+      "policies_xml": "<policies><inbound><rate-limit-by-key calls=\"20\" renewal-period=\"60\" counter-key=\"@(context.Variables.GetValueOrDefault(&quot;consumer_id&quot;,&quot;anonymous&quot;))\" remaining-calls-header-name=\"X-MCP-Remaining-Calls\" retry-after-header-name=\"X-MCP-Retry-After\" /></inbound><backend /><outbound /><on-error /></policies>"
     }
   ]
 }

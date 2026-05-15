@@ -358,6 +358,28 @@ class BackendConfig(BaseModel):
     client_certificate_thumbprints: list[str] = Field(default_factory=list)
 
 
+class AIGatewayPriorityStrategy(StrEnum):
+    Priority = "priority"
+
+
+class AIGatewayCircuitBreakerConfig(BaseModel):
+    enabled: bool = True
+    trip_status_codes: list[int] = Field(default_factory=lambda: [429])
+    trip_status_code_ranges: list[str] = Field(default_factory=lambda: ["5xx"])
+    honor_retry_after: bool = True
+    open_duration_seconds: float = 30.0
+
+
+class AIGatewayDeploymentConfig(BaseModel):
+    backend_ids: list[str] = Field(default_factory=list)
+
+
+class AIGatewayConfig(BaseModel):
+    deployments: dict[str, AIGatewayDeploymentConfig] = Field(default_factory=dict)
+    strategy: AIGatewayPriorityStrategy = AIGatewayPriorityStrategy.Priority
+    circuit_breaker: AIGatewayCircuitBreakerConfig = Field(default_factory=AIGatewayCircuitBreakerConfig)
+
+
 class RouteConfig(BaseModel):
     name: str
     path_prefix: str
@@ -438,6 +460,7 @@ class GatewayConfig(BaseModel):
     policies_xml: str | None = None
     policies_xml_documents: list[str] = Field(default_factory=list)
     backends: dict[str, BackendConfig] = Field(default_factory=dict)
+    ai_gateway: AIGatewayConfig = Field(default_factory=AIGatewayConfig)
     apis: dict[str, ApiConfig] = Field(default_factory=dict)
     routes: list[RouteConfig] = Field(default_factory=list)
 

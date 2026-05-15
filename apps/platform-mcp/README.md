@@ -7,7 +7,7 @@ It serves Streamable HTTP on `/mcp` and exposes seven tools:
 - `platform_status`
 - `platform_catalog_list`
 - `subnetcalc_calculate`
-- `sentiment_classify`
+- `sentiment_classify` (calls the sentiment classify-only endpoint and does not persist comments)
 - `d2_validate`
 - `d2_format`
 - `d2_render`

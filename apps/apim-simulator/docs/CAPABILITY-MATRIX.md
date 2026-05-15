@@ -37,6 +37,7 @@ The management surface below is available when `tenant_access.enabled` is `true`
 | Edge HTTP compose path | Yes | N/A | [`compose.yml`](../compose.yml) + [`compose.edge.yml`](../compose.edge.yml) on `edge.apim.127.0.0.1.sslip.io:8088` |
 | Edge TLS compose path | Yes | N/A | [`compose.yml`](../compose.yml) + [`compose.edge.yml`](../compose.edge.yml) + [`compose.tls.yml`](../compose.tls.yml) on `edge.apim.127.0.0.1.sslip.io:9443` |
 | Private internal compose path | Yes | N/A | [`compose.yml`](../compose.yml) + [`compose.private.yml`](../compose.private.yml); smoke uses internal probe container |
+| AI gateway compose path | Partial | N/A | [`compose.ai-gateway.yml`](../compose.ai-gateway.yml) fronts mock, local, or external OpenAI-compatible model endpoints; [`compose.ai-gateway.llamacpp.yml`](../compose.ai-gateway.llamacpp.yml) points APIM at a host llama.cpp server; APIM does not host models |
 
 ## APIs and Operations
 
@@ -131,6 +132,8 @@ The management surface below is available when `tenant_access.enabled` is `true`
 | `rate-limit-by-key` | Yes | - | Supports literal and response-aware increment evaluation plus custom remaining/retry headers |
 | `quota` | Yes | - | Calls per renewal period |
 | `quota-by-key` | Partial | - | Supports call quotas and `first-period-start`; `bandwidth` remains unsupported |
+| `llm-token-limit` | Partial | - | Lightweight prompt estimate plus response `usage.total_tokens`; in-memory counters only |
+| `azure-openai-token-limit` | Partial | - | Alias of the local token-limit implementation for APIM policy compatibility |
 | `validate-jwt` | Yes | - | OpenID config, audiences, issuers, required claims, output token variables |
 | `authentication-basic` | Partial | - | Backend auth only |
 | `authentication-certificate` | Partial | - | Backend auth config |
@@ -154,8 +157,20 @@ The management surface below is available when `tenant_access.enabled` is `true`
 | Basic auth | Yes | - | `auth_type: basic` |
 | Client cert auth | Partial | - | `auth_type: client_certificate` |
 | Managed identity | Partial | - | `auth_type: managed_identity` |
-| Circuit breaker | No | - | Not implemented |
-| Load balancing | No | - | Single upstream |
+| Circuit breaker | Partial | - | AI gateway backend pools use in-memory circuit state for configured 429/5xx responses and `Retry-After` |
+| Load balancing | Partial | - | Priority-ordered AI gateway backend selection; general weighted/load-balanced pools are not implemented |
+
+## AI Gateway
+
+| Feature | Simulator | Terraform Resource | Notes |
+|---------|-----------|-------------------|-------|
+| OpenAI-compatible request routing | Partial | APIM policies/backends | Supports Azure-style `/openai/deployments/{deployment}/...` paths and OpenAI-style body `model` routing for completions, chat completions, embeddings, and responses |
+| Deployment backend pools | Partial | APIM backends plus policies | `ai_gateway.deployments.<name>.backend_ids` maps deployment names to ordered backend IDs |
+| Priority fallback | Partial | APIM backend pool/circuit-breaker policy shape | Retries the same request against the next configured backend when the selected backend trips the local breaker |
+| Token limits | Partial | `llm-token-limit`, `azure-openai-token-limit` | No tokenizer dependency; estimates prompt tokens and prefers response `usage.total_tokens` when present |
+| Semantic cache | No | APIM semantic cache policies | Not implemented; existing `cache-*` policies remain local in-memory HTTP/value cache only |
+| Foundry control plane | No | Azure AI Foundry / Azure OpenAI resources | The simulator does not provision or emulate Foundry deployments |
+| Model hosting | N/A | N/A | Model servers run outside the simulator, either as local processes/containers or external endpoints; `make smoke-ai-gateway-llamacpp` manages one small host llama.cpp runtime for local testing |
 
 ## Management Plane
 

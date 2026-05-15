@@ -70,6 +70,7 @@ spec:
     tags:
       - name: Health
       - name: Comments
+      - name: Sentiment
     paths:
       /api/v1/health:
         get:
@@ -111,6 +112,23 @@ spec:
                 application/json:
                   schema:
                     $ref: '#/components/schemas/Comment'
+      /api/v1/sentiment/classify:
+        post:
+          tags: [Sentiment]
+          summary: Classify sentiment without storing the submitted text
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ClassifySentimentRequest'
+          responses:
+            '200':
+              description: Sentiment classification result
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/SentimentClassification'
     components:
       schemas:
         HealthResponse:
@@ -121,22 +139,47 @@ spec:
               example: ok
         CreateCommentRequest:
           type: object
-          required: [comment]
+          required: [text]
           properties:
-            comment:
+            text:
               type: string
               example: The platform workflow was easy to follow.
+        ClassifySentimentRequest:
+          type: object
+          required: [text]
+          properties:
+            text:
+              type: string
+              example: The platform workflow was easy to follow.
+        SentimentClassification:
+          type: object
+          properties:
+            text:
+              type: string
+            label:
+              type: string
+              enum: [positive, negative, neutral]
+            confidence:
+              type: number
+              format: float
+            latency_ms:
+              type: number
+              format: float
         Comment:
           type: object
           properties:
-            id:
+            timestamp:
               type: string
-            comment:
+              format: date-time
+            text:
               type: string
-            sentiment:
+            label:
               type: string
-              enum: [positive, neutral, negative]
-            score:
+              enum: [positive, negative, neutral]
+            confidence:
+              type: number
+              format: float
+            latency_ms:
               type: number
               format: float
 ---

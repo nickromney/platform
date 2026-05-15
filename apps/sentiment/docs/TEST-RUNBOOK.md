@@ -19,6 +19,7 @@ flowchart TD
 - `cd apps/sentiment/api-sentiment && bun run test`
 - `cd apps/sentiment/frontend-react-vite/sentiment-auth-ui && bun run test && bun run build`
 - `make -C apps compose-smoke-sentiment`
+- `make -C apps/apim-simulator up-ai-gateway && make -C apps/sentiment smoke-apim-ai-gateway`
 
 Use this path for normal application changes. It covers the API, the authenticated UI build, and the minimal compose wiring.
 

@@ -47,6 +47,8 @@ def test_python_services_are_read_only_and_drop_capabilities() -> None:
         ("compose.hello.yml", "hello-api"),
         ("compose.todo.yml", "todo-api"),
         ("compose.todo.yml", "apim-simulator"),
+        ("compose.ai-gateway.yml", "ai-openai-primary"),
+        ("compose.ai-gateway.yml", "ai-openai-secondary"),
     ):
         service = _service(compose_file, service_name)
         assert service["read_only"] is True
@@ -109,6 +111,7 @@ def test_python_dockerfiles_accept_base_image_overrides() -> None:
         "examples/todo-app/api-fastapi-container-app/Dockerfile",
         "examples/mcp-server/Dockerfile",
         "examples/mock-backend/Dockerfile",
+        "examples/ai-gateway/mock-openai-backend/Dockerfile",
     ):
         contents = (REPO_ROOT / relative_path).read_text()
         assert "ARG PYTHON_RUNTIME_IMAGE" in contents

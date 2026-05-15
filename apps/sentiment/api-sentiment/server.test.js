@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
+import { parseApimSentimentContent } from './apim-ai-gateway.js'
 import {
   commentAnalysisPolicy,
   detectMixedSignals,
@@ -111,6 +112,46 @@ test('comments endpoints persist and return the newest records first', async () 
   )
 })
 
+test('sentiment classify endpoint analyzes without persisting a comment', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sentiment-api-'))
+  let analyzed = 0
+
+  await withServer(
+    {
+      dataDir: tempDir,
+      analyzeWithSst: async (text) => {
+        analyzed += 1
+        return {
+          label: SentimentLabel.POSITIVE,
+          confidence: 0.92,
+          latency_ms: 8,
+          echoed: text,
+        }
+      },
+    },
+    async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/api/v1/sentiment/classify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'clear and useful' }),
+      })
+
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), {
+        text: 'clear and useful',
+        label: SentimentLabel.POSITIVE,
+        confidence: 0.92,
+        latency_ms: 8,
+      })
+      assert.equal(analyzed, 1)
+
+      const listResponse = await fetch(`${baseUrl}/api/v1/comments?limit=25`)
+      assert.equal(listResponse.status, 200)
+      assert.deepEqual(await listResponse.json(), { items: [] })
+    },
+  )
+})
+
 test('resolveClassifierResult returns neutral for near-even polar scores', () => {
   const result = resolveClassifierResult([
     { label: 'POSITIVE', score: 0.58 },
@@ -176,6 +217,56 @@ test('createApp always uses the SST analyzer unless explicitly overridden', asyn
 
   assert.equal(result.label, SentimentLabel.NEUTRAL)
   assert.equal(analyzed, 1)
+})
+
+test('apim-ai-gateway analyzer posts OpenAI-compatible chat completions and normalizes the label', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sentiment-api-'))
+  const requests = []
+  const runtime = createApp({
+    dataDir: tempDir,
+    sentimentAnalyzer: 'apim-ai-gateway',
+    sentimentApimAiGatewayUrl: 'http://apim.test/ai/v1/chat/completions',
+    sentimentApimAiGatewayModel: 'gpt-4o-mini',
+    fetchImpl: async (url, options) => {
+      requests.push({
+        url,
+        headers: options.headers,
+        body: JSON.parse(options.body),
+      })
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: '{"label":"positive","confidence":0.91}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    },
+  })
+
+  const result = await runtime.analyzeSentiment('I love this small and fast demo.')
+
+  assert.equal(result.label, SentimentLabel.POSITIVE)
+  assert.equal(result.confidence, 0.91)
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, 'http://apim.test/ai/v1/chat/completions')
+  assert.equal(requests[0].body.model, 'gpt-4o-mini')
+  assert.equal(requests[0].body.messages.at(-1).content, 'I love this small and fast demo.')
+})
+
+test('apim-ai-gateway parser accepts fenced JSON and label-only content', () => {
+  assert.deepEqual(parseApimSentimentContent('```json\n{"sentiment":"negative","score":0.82}\n```'), {
+    label: SentimentLabel.NEGATIVE,
+    confidence: 0.82,
+  })
+  assert.deepEqual(parseApimSentimentContent('neutral'), {
+    label: SentimentLabel.NEUTRAL,
+    confidence: 0.7,
+  })
 })
 
 test('SentimentLabel defines the analyze path labels from the glossary module', async () => {

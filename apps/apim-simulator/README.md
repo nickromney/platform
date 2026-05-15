@@ -128,8 +128,9 @@ stays on a hardened runtime base.
 | Direct public gateway with OTEL | `make up-otel` | [http://localhost:8000](http://localhost:8000), [https://lgtm.apim.127.0.0.1.sslip.io:8443](https://lgtm.apim.127.0.0.1.sslip.io:8443) | You want logs, metrics, and traces immediately |
 | Todo demo with OTEL | `make up-todo-otel` | [http://localhost:3000](http://localhost:3000) | You want the richest browser-backed teaching flow |
 | Hello starter | `make up-hello` | [http://localhost:8000/api/hello](http://localhost:8000/api/hello) | You want the smallest backend scaffold behind APIM |
+| AI gateway example | `make up-ai-gateway` | [http://localhost:8000/ai/v1/chat/completions](http://localhost:8000/ai/v1/chat/completions) | You want APIM-style routing, fallback, and token limits in front of OpenAI-compatible local or external endpoints |
 | OIDC example | `make up-oidc` | [http://localhost:8000](http://localhost:8000) | You want JWT plus subscription flows |
-| MCP example | `make up-mcp` | [http://localhost:8000/mcp](http://localhost:8000/mcp) | You want an MCP server behind APIM |
+| MCP example | `make up-mcp` | [http://localhost:8000/mcp](http://localhost:8000/mcp) | You want a subscription-protected, rate-limited MCP server behind APIM |
 | Edge HTTP | `make up-edge` | [http://edge.apim.127.0.0.1.sslip.io:8088](http://edge.apim.127.0.0.1.sslip.io:8088) | You want forwarded-header and reverse-proxy behaviour |
 | Edge TLS | `make up-tls` | [https://edge.apim.127.0.0.1.sslip.io:9443](https://edge.apim.127.0.0.1.sslip.io:9443) | You want local TLS termination behaviour |
 | Private internal stack | `make up-private` | no host gateway port | You want the MCP stack reachable only from the internal compose network |
@@ -183,6 +184,37 @@ curl http://localhost:8000/apim/health
 curl http://localhost:8000/api/echo
 ```
 
+### Local AI Gateway
+
+The AI gateway example fronts OpenAI-compatible backends. The simulator does
+not host or emulate Foundry; it selects a configured backend for a deployment,
+applies lightweight token limits, trips in-memory circuit state for configured
+429/5xx responses, and retries the same request against the next backend when
+one is available.
+
+```bash
+make up-ai-gateway
+make smoke-ai-gateway
+```
+
+The shipped stack uses two tiny stdlib Python mock model endpoints so the local
+footprint stays close to the base simulator. Replace
+`examples/ai-gateway/apim.json` backend URLs with local model servers or
+external OpenAI-compatible endpoints when you want real inference behind the
+gateway shape. See [docs/AI-GATEWAY.md](docs/AI-GATEWAY.md) for the exact
+configuration shape and limits.
+
+For a real local model without vendoring model artifacts into the repo, use the
+llama.cpp-backed path:
+
+```bash
+make smoke-ai-gateway-llamacpp
+```
+
+That downloads the current prebuilt `llama-server` and the default small GGUF
+model into `.run/llamacpp/`, routes APIM to the host process, runs a direct chat
+completion, runs the sentiment APIM smoke, and prints the measured RSS summary.
+
 ## Run Many Stacks At Once
 
 The default `make up-*` targets keep the repo’s current ports and compose
@@ -214,7 +246,7 @@ make down-all
 ```
 
 `up-all` assigns a distinct slot to each stack automatically, including the
-todo, OIDC, edge, UI, hello, and private variants.
+todo, OIDC, edge, UI, hello, AI gateway, and private variants.
 
 ## Tutorial Mirror
 
@@ -378,7 +410,8 @@ curl -H "Ocp-Apim-Subscription-Key: aws-migration-demo-key" http://localhost:800
 
 ### MCP example
 
-Minimal streamable HTTP MCP server behind APIM:
+Minimal streamable HTTP MCP server behind APIM. The shipped config requires an
+APIM subscription key and rate-limits calls per authenticated consumer:
 
 ```bash
 make up-mcp
