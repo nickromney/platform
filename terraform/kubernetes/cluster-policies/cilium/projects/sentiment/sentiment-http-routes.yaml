@@ -33,6 +33,8 @@ spec:
                 path: "/api/v1/comments.*"
               - method: "POST"
                 path: "/api/v1/comments.*"
+              - method: "POST"
+                path: "/api/v1/sentiment/classify"
     - toEndpoints:
         - matchLabels:
             "k8s:project": kindlocal

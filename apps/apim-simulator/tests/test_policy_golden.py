@@ -9,6 +9,7 @@ from app.policy import (
     CacheRemoveValue,
     CacheStore,
     CacheStoreValue,
+    LlmTokenLimit,
     PolicyRequest,
     PolicyRuntime,
     QuotaByKey,
@@ -16,6 +17,7 @@ from app.policy import (
     apply_inbound,
     apply_on_error,
     apply_outbound,
+    finalize_deferred_actions,
     parse_policies_xml,
 )
 
@@ -392,6 +394,8 @@ def test_golden_policy_parses_policy_parity_v2_nodes() -> None:
   <inbound>
     <rate-limit-by-key calls="10" renewal-period="60" counter-key="user-a" />
     <quota-by-key calls="100" renewal-period="300" counter-key="user-a" first-period-start="2026-04-02T10:00:00Z" />
+    <llm-token-limit counter-key="user-a" tokens-per-minute="1000" estimate-prompt-tokens="false" />
+    <azure-openai-token-limit counter-key="user-a" token-quota="10000" token-quota-period="Monthly" estimate-prompt-tokens="false" />
     <cache-lookup vary-by-developer="true" vary-by-developer-groups="false" caching-type="internal">
       <vary-by-query-parameter>version;locale</vary-by-query-parameter>
     </cache-lookup>
@@ -410,8 +414,145 @@ def test_golden_policy_parses_policy_parity_v2_nodes() -> None:
 
     assert isinstance(doc.inbound[0], RateLimitByKey)
     assert isinstance(doc.inbound[1], QuotaByKey)
-    assert isinstance(doc.inbound[2], CacheLookup)
-    assert isinstance(doc.inbound[3], CacheLookupValue)
-    assert isinstance(doc.inbound[4], CacheRemoveValue)
+    assert isinstance(doc.inbound[2], LlmTokenLimit)
+    assert isinstance(doc.inbound[3], LlmTokenLimit)
+    assert isinstance(doc.inbound[4], CacheLookup)
+    assert isinstance(doc.inbound[5], CacheLookupValue)
+    assert isinstance(doc.inbound[6], CacheRemoveValue)
     assert isinstance(doc.outbound[0], CacheStore)
     assert isinstance(doc.outbound[1], CacheStoreValue)
+
+
+def test_golden_policy_llm_token_limit_finalizes_response_usage_and_blocks_tpm() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <llm-token-limit
+      counter-key="{header:x-user}"
+      tokens-per-minute="7"
+      token-quota="20"
+      token-quota-period="Hourly"
+      estimate-prompt-tokens="false"
+      retry-after-header-name="X-Retry"
+      retry-after-variable-name="retry_after"
+      remaining-tokens-header-name="X-Remaining-Tokens"
+      remaining-tokens-variable-name="remaining_tokens"
+      remaining-quota-tokens-header-name="X-Remaining-Quota"
+      remaining-quota-tokens-variable-name="remaining_quota"
+      tokens-consumed-header-name="X-Tokens-Consumed"
+      tokens-consumed-variable-name="tokens_consumed" />
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    stores: dict[str, object] = {"rate_limit_store": {}, "quota_store": {}}
+    runtime = PolicyRuntime()
+    req = PolicyRequest(
+        method="POST",
+        path="/chat",
+        query={},
+        headers={"x-user": "alice"},
+        variables=stores,
+        body=b'{"messages":[{"role":"user","content":"hello"}]}',
+    )
+
+    assert apply_inbound([doc], req, runtime=runtime) is None
+    req.response_headers = {}
+    req.response_body = b'{"usage":{"total_tokens":7},"choices":[]}'
+    finalize_deferred_actions(req, runtime)
+
+    assert req.response_headers["x-tokens-consumed"] == "7"
+    assert req.response_headers["x-remaining-tokens"] == "0"
+    assert req.response_headers["x-remaining-quota"] == "13"
+    assert req.variables["tokens_consumed"] == 7
+    assert req.variables["remaining_tokens"] == 0
+    assert req.variables["remaining_quota"] == 13
+
+    blocked = PolicyRequest(
+        method="POST",
+        path="/chat",
+        query={},
+        headers={"x-user": "alice"},
+        variables=stores,
+        body=b'{"messages":[{"role":"user","content":"again"}]}',
+    )
+    early = apply_inbound([doc], blocked, runtime=PolicyRuntime())
+    assert early is not None
+    assert early.status_code == 429
+    assert early.headers["x-remaining-tokens"] == "0"
+    assert early.headers["x-retry"]
+    assert blocked.variables["retry_after"] == int(early.headers["x-retry"])
+
+
+def test_golden_policy_azure_openai_token_limit_blocks_quota_with_403() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <azure-openai-token-limit
+      counter-key="tenant-a"
+      token-quota="5"
+      token-quota-period="Daily"
+      estimate-prompt-tokens="false"
+      remaining-quota-tokens-header-name="X-Remaining-Quota" />
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    stores: dict[str, object] = {"rate_limit_store": {}, "quota_store": {}}
+    runtime = PolicyRuntime()
+    req = PolicyRequest(method="POST", path="/chat", query={}, headers={}, variables=stores, body=b"{}")
+
+    assert apply_inbound([doc], req, runtime=runtime) is None
+    req.response_headers = {}
+    req.response_body = b'{"usage":{"prompt_tokens":2,"completion_tokens":4}}'
+    finalize_deferred_actions(req, runtime)
+    assert req.response_headers["x-remaining-quota"] == "0"
+
+    early = apply_inbound(
+        [doc],
+        PolicyRequest(method="POST", path="/chat", query={}, headers={}, variables=stores, body=b"{}"),
+        runtime=PolicyRuntime(),
+    )
+    assert early is not None
+    assert early.status_code == 403
+    assert early.headers["x-remaining-quota"] == "0"
+
+
+def test_golden_policy_llm_token_limit_estimates_prompt_tokens_before_backend() -> None:
+    doc = parse_policies_xml(
+        """\
+<policies>
+  <inbound>
+    <llm-token-limit
+      counter-key="tenant-a"
+      tokens-per-minute="1"
+      estimate-prompt-tokens="true"
+      remaining-tokens-header-name="X-Remaining-Tokens" />
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+    )
+    req = PolicyRequest(
+        method="POST",
+        path="/chat",
+        query={},
+        headers={},
+        variables={"rate_limit_store": {}, "quota_store": {}},
+        body=b"12345",
+    )
+
+    early = apply_inbound([doc], req, runtime=PolicyRuntime())
+    assert early is not None
+    assert early.status_code == 429
+    assert early.headers["x-remaining-tokens"] == "0"

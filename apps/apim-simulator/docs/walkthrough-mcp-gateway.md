@@ -2,7 +2,10 @@
 
 Generated from a live run against the local repository.
 
-`make up-mcp` fronts the example MCP server through APIM and keeps the simulator’s management surface available on the same gateway.
+`make up-mcp` fronts the example MCP server through APIM and keeps the simulator’s
+management surface available on the same gateway. The gateway enforces the MCP
+product subscription and a per-consumer call limit; the MCP server still owns
+tool discovery and tool execution.
 
 ```bash
 set -euo pipefail

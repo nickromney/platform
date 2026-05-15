@@ -22,6 +22,12 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
 
+from app.ai_gateway import (
+    AIGatewaySelection,
+    extract_openai_deployment_name,
+    record_ai_gateway_backend_response,
+    select_ai_gateway_backend,
+)
 from app.config import (
     ApiConfig,
     ApiReleaseConfig,
@@ -191,6 +197,34 @@ def _apply_claim_headers(headers: dict[str, str], claims: dict[str, Any]) -> Non
     headers["x-apim-auth-method"] = "oidc"
     headers["x-ms-client-principal"] = build_client_principal(claims)
     headers["x-ms-client-principal-name"] = str(claims.get("preferred_username", ""))
+
+
+def _first_string_claim(claims: dict[str, Any], names: tuple[str, ...]) -> str:
+    for name in names:
+        value = claims.get(name)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _consumer_context(auth: Any, *, allow_anonymous: bool) -> dict[str, str]:
+    if auth.subscription is not None:
+        return {
+            "id": auth.subscription.id,
+            "name": auth.subscription.name,
+            "type": "subscription",
+        }
+
+    if not allow_anonymous:
+        consumer_id = _first_string_claim(auth.claims, ("azp", "appid", "client_id", "sub"))
+        if consumer_id:
+            return {
+                "id": consumer_id,
+                "name": _first_string_claim(auth.claims, ("name", "preferred_username", "email")) or consumer_id,
+                "type": "jwt",
+            }
+
+    return {"id": "anonymous", "name": "anonymous", "type": "anonymous"}
 
 
 def _trace_payload(
@@ -683,6 +717,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         app.state.policy_value_cache = {}
         app.state.rate_limit_store = {}
         app.state.quota_store = {}
+        app.state.ai_gateway_circuit_state = {}
         app.state.trace_store = {}
         app.state.config_reload_fn = manager.reload_config
         app.state.startup_complete = True
@@ -2219,6 +2254,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         request.app.state.policy_value_cache = {}
         request.app.state.rate_limit_store = {}
         request.app.state.quota_store = {}
+        request.app.state.ai_gateway_circuit_state = {}
         request.app.state.trace_store = {}
 
         return {
@@ -2278,12 +2314,16 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     request.state.apim_result_reason = "subscription_not_authorized"
                     raise HTTPException(status_code=403, detail="Subscription not authorized for product")
 
+        consumer = _consumer_context(auth, allow_anonymous=cfg.allow_anonymous)
+
         set_current_span_attributes(
             **{
                 APIM_ROUTE_NAME_ATTR: route.name,
                 "apim.route.path_prefix": route.path_prefix,
                 "apim.subscription.present": auth.subscription is not None,
                 "apim.allowed_products.count": len(allowed_products),
+                "apim.consumer.id": consumer["id"],
+                "apim.consumer.type": consumer["type"],
             }
         )
 
@@ -2313,6 +2353,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             request.state.apim_result_reason = "request_body_too_large"
             raise HTTPException(status_code=413, detail="Request body too large")
         headers = {k.lower(): v for k, v in build_upstream_headers(request, auth).items()}
+        original_authorization = headers.get("authorization")
 
         correlation_id = getattr(request.state, "correlation_id", None) or request.headers.get("x-correlation-id")
         headers.setdefault("x-correlation-id", correlation_id)
@@ -2346,6 +2387,9 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                 "route": route.name,
                 "api_id": route.api_id or "",
                 "operation_id": route.operation_id or "",
+                "consumer_id": consumer["id"],
+                "consumer_name": consumer["name"],
+                "consumer_type": consumer["type"],
                 "subscription_id": auth.subscription.id if auth.subscription else "",
                 "products": auth.subscription_products,
                 "client_ip": client_ip,
@@ -2425,6 +2469,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             "forwarded_proto": forwarded_proto,
             "forwarded_for": forwarded_for,
             "client_ip": client_ip,
+            "consumer": consumer,
             "upstream_url": None,
         }
 
@@ -2552,6 +2597,30 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     request.state.apim_result_reason = "missing_required_claim"
                     raise HTTPException(status_code=403, detail="Missing required claim")
 
+        ai_selection: AIGatewaySelection | None = None
+        ai_deployment = extract_openai_deployment_name(policy_req.path, policy_req.body)
+        if ai_deployment and not policy_req.variables.get("selected_backend_id"):
+            ai_selection = select_ai_gateway_backend(
+                cfg,
+                ai_deployment,
+                request.app.state.ai_gateway_circuit_state,
+            )
+            if ai_selection is None:
+                if cfg.ai_gateway.deployments:
+                    raise HTTPException(status_code=400, detail=f"No AI gateway route for deployment {ai_deployment}")
+            elif not ai_selection.available:
+                request.state.apim_result_reason = "ai_gateway_no_backend"
+                set_current_span_attributes(**ai_selection.span_attributes())
+                raise HTTPException(status_code=503, detail=f"No available AI gateway backend for {ai_deployment}")
+            else:
+                policy_req.variables.update(ai_selection.policy_variables())
+                policy_req.variables["ai_gateway_deployment"] = ai_selection.deployment_name
+                policy_req.variables["ai_gateway_strategy"] = ai_selection.strategy
+                trace_base["ai_gateway"] = ai_selection.trace_metadata()
+                if trace_collector is not None:
+                    trace_collector.selected_backend = {"ai_gateway": ai_selection.trace_metadata()}
+                set_current_span_attributes(**ai_selection.span_attributes())
+
         upstream_base_url = route.upstream_base_url
         upstream_auth: tuple[str, str] | None = None
         selected_backend_url = str(policy_req.variables.get("selected_backend_url") or "")
@@ -2559,39 +2628,43 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         backend_id = selected_backend_id or (route.backend or "" if not selected_backend_url else "")
         if selected_backend_url:
             upstream_base_url = selected_backend_url
-        if backend_id:
-            backend = cfg.backends.get(backend_id)
+
+        def _apply_backend_selection(current_backend_id: str, *, selected_url: str = "") -> None:
+            nonlocal upstream_auth, upstream_base_url
+            backend = cfg.backends.get(current_backend_id)
+            if backend is None:
+                return
+            upstream_base_url = selected_url or (_render_backend_value(backend.url, policy_req, cfg) or backend.url)
+            policy_req.headers["x-apim-backend-id"] = current_backend_id
+            upstream_auth = None
+
+            auth_type = (backend.auth_type or "none").lower()
+            if auth_type == "basic":
+                username = _render_backend_value(backend.basic_username, policy_req, cfg)
+                password = _render_backend_value(backend.basic_password, policy_req, cfg)
+                if original_authorization is None and username and password:
+                    upstream_auth = (username, password)
+            elif auth_type == "managed_identity":
+                policy_req.headers.setdefault("x-apim-managed-identity", "true")
+                if backend.managed_identity_resource:
+                    policy_req.headers.setdefault(
+                        "x-apim-managed-identity-resource",
+                        _render_backend_value(backend.managed_identity_resource, policy_req, cfg),
+                    )
+            elif auth_type == "client_certificate":
+                policy_req.headers.setdefault("x-apim-client-certificate", "present")
+
+            if (
+                backend is not None
+                and backend.authorization_scheme
+                and backend.authorization_parameter
+                and original_authorization is None
+            ):
+                scheme = _render_backend_value(backend.authorization_scheme, policy_req, cfg) or ""
+                parameter = _render_backend_value(backend.authorization_parameter, policy_req, cfg) or ""
+                policy_req.headers["authorization"] = f"{scheme} {parameter}".strip()
+
             if backend is not None:
-                upstream_base_url = selected_backend_url or (
-                    _render_backend_value(backend.url, policy_req, cfg) or backend.url
-                )
-                policy_req.headers.setdefault("x-apim-backend-id", backend_id)
-
-                auth_type = (backend.auth_type or "none").lower()
-                if auth_type == "basic":
-                    username = _render_backend_value(backend.basic_username, policy_req, cfg)
-                    password = _render_backend_value(backend.basic_password, policy_req, cfg)
-                    if "authorization" not in policy_req.headers and username and password:
-                        upstream_auth = (username, password)
-                elif auth_type == "managed_identity":
-                    policy_req.headers.setdefault("x-apim-managed-identity", "true")
-                    if backend.managed_identity_resource:
-                        policy_req.headers.setdefault(
-                            "x-apim-managed-identity-resource",
-                            _render_backend_value(backend.managed_identity_resource, policy_req, cfg),
-                        )
-                elif auth_type == "client_certificate":
-                    policy_req.headers.setdefault("x-apim-client-certificate", "present")
-
-                if (
-                    backend.authorization_scheme
-                    and backend.authorization_parameter
-                    and "authorization" not in policy_req.headers
-                ):
-                    scheme = _render_backend_value(backend.authorization_scheme, policy_req, cfg) or ""
-                    parameter = _render_backend_value(backend.authorization_parameter, policy_req, cfg) or ""
-                    policy_req.headers["authorization"] = f"{scheme} {parameter}".strip()
-
                 for header_name, header_value in backend.header_credentials.items():
                     rendered = _render_backend_value(header_value, policy_req, cfg)
                     if rendered is not None:
@@ -2607,6 +2680,9 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                         "x-apim-client-certificate-thumbprints",
                         ",".join(backend.client_certificate_thumbprints),
                     )
+
+        if backend_id:
+            _apply_backend_selection(backend_id, selected_url=selected_backend_url)
 
         request.state.apim_backend_id = backend_id or "direct"
         set_current_span_attributes(
@@ -2626,6 +2702,32 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         policy_req.variables["upstream_url"] = upstream_url
 
         trace_base["upstream_url"] = upstream_url
+
+        def _activate_ai_selection(next_selection: AIGatewaySelection) -> None:
+            nonlocal ai_selection, upstream_base_url, upstream_url
+            ai_selection = next_selection
+            policy_req.variables.update(next_selection.policy_variables())
+            policy_req.variables["ai_gateway_deployment"] = next_selection.deployment_name
+            policy_req.variables["ai_gateway_strategy"] = next_selection.strategy
+            if next_selection.selected_backend_id:
+                _apply_backend_selection(
+                    next_selection.selected_backend_id,
+                    selected_url=next_selection.selected_backend_url or "",
+                )
+            policy_req.headers["x-apim-backend-id"] = next_selection.selected_backend_id or ""
+            request.state.apim_backend_id = next_selection.selected_backend_id or "direct"
+            upstream_url = route.build_upstream_url(policy_req.path, upstream_base_url=upstream_base_url)
+            policy_req.variables["upstream_url"] = upstream_url
+            trace_base["upstream_url"] = upstream_url
+            trace_base["ai_gateway"] = next_selection.trace_metadata()
+            if trace_collector is not None:
+                trace_collector.selected_backend = {"ai_gateway": next_selection.trace_metadata()}
+            set_current_span_attributes(
+                **{
+                    **next_selection.span_attributes(),
+                    APIM_BACKEND_ID_ATTR: request.state.apim_backend_id,
+                }
+            )
 
         policy_response_cache_active = bool(policy_req.variables.get("_policy_response_cache_active"))
         cache_key = None
@@ -2665,6 +2767,8 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
 
         timeout = httpx.Timeout(cfg.proxy_timeout_seconds)
         max_attempts = max(1, cfg.proxy_max_attempts)
+        if ai_selection is not None:
+            max_attempts = max(max_attempts, len(ai_selection.considered_backend_ids))
         last_exc: Exception | None = None
         upstream_response: httpx.Response | None = None
         start = time.perf_counter()
@@ -2688,6 +2792,30 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     break
                 continue
 
+            if ai_selection is not None and ai_selection.selected_backend_id and attempt < max_attempts:
+                circuit_result = record_ai_gateway_backend_response(
+                    cfg,
+                    ai_selection.selected_backend_id,
+                    int(upstream_response.status_code),
+                    dict(upstream_response.headers),
+                    request.app.state.ai_gateway_circuit_state,
+                )
+                if circuit_result.get("tripped"):
+                    next_selection = select_ai_gateway_backend(
+                        cfg,
+                        ai_selection.deployment_name,
+                        request.app.state.ai_gateway_circuit_state,
+                    )
+                    if (
+                        next_selection is not None
+                        and next_selection.available
+                        and next_selection.selected_backend_id != ai_selection.selected_backend_id
+                    ):
+                        await upstream_response.aclose()
+                        upstream_response = None
+                        _activate_ai_selection(next_selection)
+                        continue
+
             if upstream_response.status_code in cfg.proxy_retry_statuses and attempt < max_attempts:
                 await upstream_response.aclose()
                 upstream_response = None
@@ -2700,6 +2828,14 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         if upstream_response is None:
             request.state.apim_result_reason = "upstream_unavailable"
             request.state.apim_upstream_duration_seconds = elapsed_seconds
+            if ai_selection is not None and ai_selection.selected_backend_id:
+                record_ai_gateway_backend_response(
+                    cfg,
+                    ai_selection.selected_backend_id,
+                    503,
+                    {},
+                    request.app.state.ai_gateway_circuit_state,
+                )
             set_current_span_attributes(
                 **{
                     APIM_RESULT_REASON_ATTR: "upstream_unavailable",
@@ -2760,6 +2896,24 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         upstream_status_code = int(upstream_response.status_code)
         if not (100 <= upstream_status_code <= 599):
             raise HTTPException(status_code=502, detail="Backend API returned invalid status code")
+        if ai_selection is not None and ai_selection.selected_backend_id:
+            circuit_result = record_ai_gateway_backend_response(
+                cfg,
+                ai_selection.selected_backend_id,
+                upstream_status_code,
+                response_headers,
+                request.app.state.ai_gateway_circuit_state,
+            )
+            policy_req.variables["ai_gateway_circuit"] = circuit_result
+            response_headers.setdefault("x-apim-ai-deployment", ai_selection.deployment_name)
+            response_headers.setdefault("x-apim-ai-backend-id", ai_selection.selected_backend_id)
+            set_current_span_attributes(
+                **{
+                    "apim.ai_gateway.circuit.tripped": bool(circuit_result.get("tripped")),
+                    "apim.ai_gateway.deployment": ai_selection.deployment_name,
+                    "apim.ai_gateway.selected_backend_id": ai_selection.selected_backend_id,
+                }
+            )
         requires_buffering = cache_key is not None or policy_response_cache_active or not cfg.proxy_streaming
         content = b""
         if requires_buffering:

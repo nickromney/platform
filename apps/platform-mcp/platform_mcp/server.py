@@ -157,8 +157,15 @@ class ToolRuntime:
             )
 
         try:
-            data = await self.sentiment_client.post("/api/v1/comments", {"text": text})
-            return ok("sentiment_classify", data, ["Compare the label and confidence before acting on the result."])
+            data = await self.sentiment_client.post(
+                "/api/v1/sentiment/classify",
+                {"text": text},
+            )
+            return ok(
+                "sentiment_classify",
+                data,
+                ["Compare the label and confidence before acting on the result."],
+            )
         except Exception as exc:
             return exception_result("SENTIMENT_REQUEST_FAILED", "Sentiment API request failed.", exc)
 

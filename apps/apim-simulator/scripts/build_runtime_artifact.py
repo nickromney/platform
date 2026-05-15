@@ -75,11 +75,7 @@ def tracked_runtime_files(source_root: Path) -> list[Path]:
         if (source_root / path).is_file():
             files.add(path)
         elif (source_root / path).is_dir():
-            files.update(
-                child.relative_to(source_root)
-                for child in (source_root / path).rglob("*")
-                if child.is_file()
-            )
+            files.update(child.relative_to(source_root) for child in (source_root / path).rglob("*") if child.is_file())
     return sorted(files)
 
 

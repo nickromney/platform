@@ -10,15 +10,16 @@ FROM oven/bun:1.3.13 AS preload
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json config.js preload-model.js server.js telemetry.js comment-analysis-policy.js sentiment-label.js ./
+COPY package.json apim-ai-gateway.js config.js preload-model.js server.js telemetry.js comment-analysis-policy.js sentiment-label.js ./
 
 ARG SENTIMENT_MODEL_ID
+ARG SENTIMENT_PRELOAD_MODEL=1
 ENV NODE_ENV=production
 ENV SENTIMENT_MODEL_CACHE_DIR=/opt/transformers-cache
 ENV SENTIMENT_MODEL_ID=${SENTIMENT_MODEL_ID}
 
 RUN mkdir -p "${SENTIMENT_MODEL_CACHE_DIR}"
-RUN node preload-model.js
+RUN if [ "${SENTIMENT_PRELOAD_MODEL}" = "1" ]; then node preload-model.js; fi
 
 FROM dhi.io/node:22-debian13
 
@@ -28,7 +29,7 @@ ARG SENTIMENT_MODEL_ID
 
 COPY --chown=1000:1000 --from=deps /app/node_modules ./node_modules
 COPY --chown=1000:1000 --from=preload /opt/transformers-cache /opt/transformers-cache
-COPY --chown=1000:1000 package.json config.js server.js telemetry.js comment-analysis-policy.js sentiment-label.js ./
+COPY --chown=1000:1000 package.json apim-ai-gateway.js config.js server.js telemetry.js comment-analysis-policy.js sentiment-label.js ./
 
 ENV NODE_ENV=production
 ENV PORT=8080

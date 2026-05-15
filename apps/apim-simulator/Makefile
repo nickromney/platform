@@ -62,10 +62,11 @@ SMOKE_OIDC_BASE_URL ?= $(APIM_LOOPBACK_BASE_URL)
 SMOKE_OIDC_KEYCLOAK_BASE_URL ?= $(KEYCLOAK_BASE_URL)
 SMOKE_MCP_URL ?= $(APIM_BASE_URL)/mcp
 SMOKE_EDGE_BASE_URL ?= $(EDGE_HTTP_BASE_URL)
+SMOKE_AI_GATEWAY_BASE_URL ?= $(APIM_LOOPBACK_BASE_URL)
 KEYVAULT_BASE_URL ?= $(APIM_LOOPBACK_BASE_URL)
 PORTS ?= $(TODO_FRONTEND_PORT) $(GRAFANA_PORT) $(OTEL_GRPC_PORT) $(OTEL_HTTP_PORT) $(APIM_GATEWAY_PORT) $(EDGE_HTTP_PORT) $(EDGE_TLS_HTTP_PORT) $(EDGE_TLS_PORT) $(OPERATOR_CONSOLE_PORT) $(KEYCLOAK_PORT) $(if $(filter true,$(BACKSTAGE_ENABLED)),$(BACKSTAGE_PORT))
 UP_ALL_SLOT_BASE ?= 0
-UP_ALL_STACKS := up up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel
+UP_ALL_STACKS := up up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-ai-gateway up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel
 
 export STACK_SLOT STACK_SLOT_WIDTH PORT_OFFSET
 export APIM_GATEWAY_PORT GRAFANA_PORT OTEL_GRPC_PORT OTEL_HTTP_PORT KEYCLOAK_PORT OPERATOR_CONSOLE_PORT BACKSTAGE_PORT EDGE_HTTP_PORT EDGE_TLS_HTTP_PORT EDGE_TLS_PORT TODO_FRONTEND_PORT VITE_DEV_PORT
@@ -74,7 +75,7 @@ export APIM_BASE_URL APIM_LOOPBACK_BASE_URL GRAFANA_BASE_URL KEYCLOAK_BASE_URL O
 export TODO_FRONTEND_BASE_URL TODO_FRONTEND_BROWSER_URL TODO_FRONTEND_ORIGIN_LOCALHOST TODO_FRONTEND_ORIGIN_LOOPBACK TODO_APIM_BASE_URL TODO_APIM_PUBLIC_BASE_URL TODO_GRAFANA_BASE_URL TODO_OBSERVABILITY_DASHBOARD_URL
 export APIM_ALLOWED_ORIGIN_BROWSER_LOCALHOST APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE APIM_ALLOWED_ORIGIN_VITE APIM_ALLOWED_ORIGIN_GATEWAY
 export EDGE_HTTP_BASE_URL EDGE_TLS_BASE_URL
-export SMOKE_HELLO_BASE_URL SMOKE_HELLO_KEYCLOAK_BASE_URL SMOKE_OIDC_BASE_URL SMOKE_OIDC_KEYCLOAK_BASE_URL SMOKE_MCP_URL SMOKE_EDGE_BASE_URL
+export SMOKE_HELLO_BASE_URL SMOKE_HELLO_KEYCLOAK_BASE_URL SMOKE_OIDC_BASE_URL SMOKE_OIDC_KEYCLOAK_BASE_URL SMOKE_MCP_URL SMOKE_EDGE_BASE_URL SMOKE_AI_GATEWAY_BASE_URL
 export KEYVAULT_BASE_URL
 
 COMPOSE_BACKSTAGE_OVERLAY := $(if $(filter true,$(BACKSTAGE_ENABLED)),-f compose.backstage.yml --profile backstage)
@@ -93,10 +94,14 @@ COMPOSE_TODO := $(call compose_stack,todo) -f compose.todo.yml
 COMPOSE_TODO_OTEL := $(call compose_stack,todo-otel) -f compose.todo.yml -f compose.todo.otel.yml
 COMPOSE_BACKSTAGE := $(call compose_stack,backstage) -f compose.yml -f compose.public.yml -f compose.backstage.yml --profile backstage
 COMPOSE_KEYVAULT := $(call compose_stack,keyvault) -f compose.yml -f compose.public.yml -f compose.keyvault.yml
+COMPOSE_AI_GATEWAY := $(call compose_stack,ai-gateway) -f compose.yml -f compose.public.yml -f compose.ai-gateway.yml
+COMPOSE_AI_GATEWAY_OTEL := $(call compose_stack,ai-gateway-otel) -f compose.yml -f compose.public.yml -f compose.ai-gateway.yml -f compose.otel.yml
+COMPOSE_AI_GATEWAY_LLAMACPP := $(call compose_stack,ai-gateway-llamacpp) -f compose.yml -f compose.public.yml -f compose.ai-gateway.llamacpp.yml
 COMPOSE_ALL := $(call compose_stack,all) -f compose.yml -f compose.public.yml -f compose.edge.yml -f compose.tls.yml -f compose.private.yml -f compose.ui.yml -f compose.oidc.yml -f compose.mcp.yml
 DEV_CERTS := examples/edge/certs/$(APIM_EDGE_HOST).crt examples/edge/certs/$(APIM_EDGE_HOST).key
 HELP_FMT := "  %-34s %s\n"
 UV_RUN := uv run --project $(CURDIR)
+LLAMACPP_SCRIPT_ENV := PYTHONUNBUFFERED=1 COMPOSE_CMD="$(COMPOSE)" LLAMACPP_COMPOSE_PROJECT_ARGS="$(call compose_project_args,ai-gateway-llamacpp)" SMOKE_AI_GATEWAY_BASE_URL="$(SMOKE_AI_GATEWAY_BASE_URL)"
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
 LINT_MARKDOWN_SCRIPT ?= scripts/lint-markdown.sh
 LINT_BASH32_SCRIPT ?= scripts/check-bash32-compat.sh
@@ -105,7 +110,7 @@ CHECK_VERSION_SCRIPT ?= scripts/check-version.sh
 RELEASE_SCRIPT ?= scripts/release.sh
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 
-.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites ensure-certs install-hooks fmt lint lint-check lint-yaml lint-markdown lint-bash32 lint-shell frontend-check check-version update runtime-artifact release release-dry-run release-preview release-tag release-tag-dry-run build-backstage up up-all up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-backstage up-keyvault up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel down down-all logs logs-otel logs-oidc logs-mcp logs-private logs-hello logs-hello-otel logs-hello-oidc logs-todo logs-todo-otel logs-backstage logs-keyvault test test-python test-shell compat compat-report import-tofu verify-azure verify-otel verify-hello-otel verify-todo-otel check-host-ports check-private-port-clear smoke-oidc smoke-mcp smoke-edge smoke-tls smoke-private smoke-hello smoke-todo smoke-backstage smoke-keyvault smoke-tutorials-live test-todo-e2e test-todo-bruno test-todo-postman export-todo-har compose-config compose-config-otel compose-config-oidc compose-config-mcp compose-config-edge compose-config-tls compose-config-private compose-config-ui compose-config-backstage compose-config-keyvault compose-config-hello compose-config-hello-otel compose-config-hello-oidc compose-config-todo compose-config-todo-otel
+.PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites ensure-certs install-hooks fmt lint lint-check lint-yaml lint-markdown lint-bash32 lint-shell frontend-check check-version update runtime-artifact release release-dry-run release-preview release-tag release-tag-dry-run build-backstage setup-llamacpp up up-all up-otel up-oidc up-mcp up-edge up-tls up-private up-ui up-backstage up-keyvault up-ai-gateway up-ai-gateway-otel up-ai-gateway-llamacpp up-hello up-hello-subscription up-hello-otel up-hello-oidc up-hello-oidc-subscription up-todo up-todo-otel down down-all down-ai-gateway-llamacpp logs logs-otel logs-oidc logs-mcp logs-private logs-ai-gateway logs-ai-gateway-llamacpp logs-hello logs-hello-otel logs-hello-oidc logs-todo logs-todo-otel logs-backstage logs-keyvault test test-python test-shell compat compat-report import-tofu verify-azure verify-otel verify-hello-otel verify-todo-otel check-host-ports check-private-port-clear smoke-oidc smoke-mcp smoke-edge smoke-tls smoke-private smoke-ai-gateway smoke-ai-gateway-llamacpp smoke-hello smoke-todo smoke-backstage smoke-keyvault smoke-tutorials-live test-todo-e2e test-todo-bruno test-todo-postman export-todo-har llamacpp-status llamacpp-memory compose-config compose-config-otel compose-config-oidc compose-config-mcp compose-config-edge compose-config-tls compose-config-private compose-config-ui compose-config-backstage compose-config-keyvault compose-config-ai-gateway compose-config-ai-gateway-llamacpp compose-config-hello compose-config-hello-otel compose-config-hello-oidc compose-config-todo compose-config-todo-otel
 
 help:
 	@printf "Run:\n"
@@ -125,9 +130,13 @@ help:
 	@printf $(HELP_FMT) "up-tls" "Start the edge TLS MCP stack on $(APIM_EDGE_HOST):9443"
 	@printf $(HELP_FMT) "up-todo" "Start the Astro + APIM + FastAPI todo demo stack"
 	@printf $(HELP_FMT) "up-todo-otel" "Start the todo demo stack with LGTM at $(GRAFANA_BASE_URL)"
+	@printf $(HELP_FMT) "up-ai-gateway" "Start the local OpenAI-compatible AI gateway example"
+	@printf $(HELP_FMT) "up-ai-gateway-otel" "Start the AI gateway example with LGTM at $(GRAFANA_BASE_URL)"
+	@printf $(HELP_FMT) "up-ai-gateway-llamacpp" "Start the AI gateway example backed by host llama.cpp"
 	@printf $(HELP_FMT) "up-ui" "Start the operator console on localhost:3007"
 	@printf $(HELP_FMT) "up-backstage" "Start the optional Backstage API catalog portal on $(BACKSTAGE_BASE_URL)"
 	@printf $(HELP_FMT) "up-keyvault" "Start the direct public stack with local Key Vault persistence"
+	@printf $(HELP_FMT) "setup-llamacpp" "Download the local llama.cpp runtime and default GGUF model"
 	@printf $(HELP_FMT) "BACKSTAGE_ENABLED=true make up" "Start the direct public stack with the Backstage overlay"
 	@printf $(HELP_FMT) "up-all" "Start every compose stack at once using isolated slots"
 	@printf $(HELP_FMT) "down-all" "Stop every stack launched by up-all"
@@ -142,6 +151,8 @@ help:
 	@printf $(HELP_FMT) "logs-mcp" "Tail MCP stack logs"
 	@printf $(HELP_FMT) "logs-oidc" "Tail OIDC stack logs"
 	@printf $(HELP_FMT) "logs-otel" "Tail core stack logs with LGTM"
+	@printf $(HELP_FMT) "logs-ai-gateway" "Tail AI gateway example stack logs"
+	@printf $(HELP_FMT) "logs-ai-gateway-llamacpp" "Tail APIM logs for the llama.cpp-backed AI gateway stack"
 	@printf $(HELP_FMT) "logs-todo" "Tail todo demo stack logs"
 	@printf $(HELP_FMT) "logs-todo-otel" "Tail todo demo stack logs with LGTM"
 	@printf $(HELP_FMT) "logs-backstage" "Tail the optional Backstage portal stack logs"
@@ -149,6 +160,8 @@ help:
 	@printf "\nCode Quality and Tooling:\n"
 	@printf $(HELP_FMT) "check-version" "Check synchronized release versions and pinned upstream refs"
 	@printf $(HELP_FMT) "check-host-ports" "Check common local host ports before starting stacks"
+	@printf $(HELP_FMT) "llamacpp-memory" "Print current RSS for the managed llama-server process"
+	@printf $(HELP_FMT) "llamacpp-status" "Show managed llama.cpp runtime, pid, endpoint, and log paths"
 	@printf $(HELP_FMT) "prereqs" "Check Docker, mkcert, and local host ports before starting stacks"
 	@printf $(HELP_FMT) "compat" "Run the curated APIM sample compatibility harness"
 	@printf $(HELP_FMT) "compat-report" "Run static Terraform/APIM compatibility analysis (requires TOFU_SHOW=...)"
@@ -173,6 +186,8 @@ help:
 	@printf $(HELP_FMT) "smoke-mcp" "Run the end-to-end MCP smoke test against a running stack"
 	@printf $(HELP_FMT) "smoke-oidc" "Run the end-to-end OIDC smoke test against a running stack"
 	@printf $(HELP_FMT) "smoke-private" "Run the private-mode smoke test and internal probe"
+	@printf $(HELP_FMT) "smoke-ai-gateway" "Run the AI gateway example smoke test against a running stack"
+	@printf $(HELP_FMT) "smoke-ai-gateway-llamacpp" "Run APIM + sentiment through a real local llama.cpp model with RSS sampling"
 	@printf $(HELP_FMT) "smoke-tls" "Run the TLS edge smoke test using the generated local CA"
 	@printf $(HELP_FMT) "smoke-todo" "Run the APIM-backed todo demo smoke test"
 	@printf $(HELP_FMT) "smoke-backstage" "Check optional Backstage health and catalog import"
@@ -207,6 +222,8 @@ help:
 	@printf $(HELP_FMT) "compose-config-todo-otel" "Render docker compose config for the todo demo LGTM stack"
 	@printf $(HELP_FMT) "compose-config-ui" "Render docker compose config for the console stack"
 	@printf $(HELP_FMT) "compose-config-backstage" "Render docker compose config for the Backstage portal overlay"
+	@printf $(HELP_FMT) "compose-config-ai-gateway" "Render docker compose config for the AI gateway example"
+	@printf $(HELP_FMT) "compose-config-ai-gateway-llamacpp" "Render docker compose config for the llama.cpp AI gateway example"
 	@printf $(HELP_FMT) "compose-config-keyvault" "Render docker compose config for the Key Vault stack"
 
 prereqs: check-docker-prerequisites check-mkcert-prerequisites check-host-ports
@@ -262,6 +279,9 @@ build-backstage: check-docker-prerequisites
 	fi
 	$(COMPOSE_BACKSTAGE) build backstage
 
+setup-llamacpp:
+	$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py ensure
+
 up:
 	$(COMPOSE_CORE) up --build -d
 
@@ -291,6 +311,15 @@ up-backstage: build-backstage
 
 up-keyvault:
 	$(COMPOSE_KEYVAULT) up --build -d
+
+up-ai-gateway:
+	$(COMPOSE_AI_GATEWAY) up --build -d
+
+up-ai-gateway-otel:
+	$(COMPOSE_AI_GATEWAY_OTEL) up --build -d
+
+up-ai-gateway-llamacpp:
+	$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py up
 
 up-hello:
 	$(COMPOSE_HELLO) up --build -d
@@ -333,11 +362,18 @@ down:
 	$(COMPOSE_UI) down --remove-orphans
 	$(COMPOSE_BACKSTAGE) down --remove-orphans
 	$(COMPOSE_KEYVAULT) down --remove-orphans
+	$(COMPOSE_AI_GATEWAY) down --remove-orphans
+	$(COMPOSE_AI_GATEWAY_OTEL) down --remove-orphans
+	$(COMPOSE_AI_GATEWAY_LLAMACPP) down --remove-orphans
+	-$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py stop
 	$(COMPOSE_HELLO) down --remove-orphans
 	$(COMPOSE_HELLO_OTEL) down --remove-orphans
 	$(COMPOSE_HELLO_OIDC) down --remove-orphans
 	$(COMPOSE_TODO) down --remove-orphans
 	$(COMPOSE_TODO_OTEL) down --remove-orphans
+
+down-ai-gateway-llamacpp:
+	$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py down
 
 down-all:
 	@set -e; \
@@ -383,6 +419,18 @@ logs-backstage:
 
 logs-keyvault:
 	$(COMPOSE_KEYVAULT) logs -f apim-simulator mock-backend
+
+logs-ai-gateway:
+	$(COMPOSE_AI_GATEWAY) logs -f apim-simulator ai-openai-primary ai-openai-secondary
+
+logs-ai-gateway-llamacpp:
+	$(COMPOSE_AI_GATEWAY_LLAMACPP) logs -f apim-simulator mock-backend
+
+llamacpp-status:
+	$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py status
+
+llamacpp-memory:
+	$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py memory
 
 install-hooks:
 	git config core.hooksPath .githooks
@@ -516,6 +564,12 @@ smoke-backstage:
 smoke-keyvault:
 	KEYVAULT_BASE_URL="$(KEYVAULT_BASE_URL)" $(UV_RUN) python scripts/smoke_keyvault.py
 
+smoke-ai-gateway:
+	SMOKE_AI_GATEWAY_BASE_URL="$(SMOKE_AI_GATEWAY_BASE_URL)" $(UV_RUN) python scripts/smoke_ai_gateway.py
+
+smoke-ai-gateway-llamacpp:
+	$(LLAMACPP_SCRIPT_ENV) $(UV_RUN) python scripts/llamacpp_ai_gateway.py smoke
+
 smoke-tutorials-live:
 	APIM_BASE="$(APIM_BASE_URL)" GRAFANA_BASE="$(GRAFANA_BASE_URL)" OPERATOR_CONSOLE_BASE="$(OPERATOR_CONSOLE_URL)" ./scripts/run_tutorial_smoke.sh --execute
 
@@ -572,6 +626,12 @@ compose-config-backstage:
 
 compose-config-keyvault:
 	$(COMPOSE_KEYVAULT) config
+
+compose-config-ai-gateway:
+	$(COMPOSE_AI_GATEWAY) config
+
+compose-config-ai-gateway-llamacpp:
+	$(COMPOSE_AI_GATEWAY_LLAMACPP) config
 
 compose-config-hello:
 	$(COMPOSE_HELLO) config

@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { env as transformersEnv, pipeline } from '@huggingface/transformers'
 import { SpanStatusCode, metrics, trace } from '@opentelemetry/api'
 import apiLogs from '@opentelemetry/api-logs'
+import { analyzeWithApimAiGateway } from './apim-ai-gateway.js'
 import { resolveClassifierResult } from './comment-analysis-policy.js'
 import { DEFAULT_SENTIMENT_MODEL_ID } from './config.js'
 import { normalizeSentimentLabel } from './sentiment-label.js'
@@ -85,6 +86,14 @@ function parseBoolean(value, fallback = false) {
   return fallback
 }
 
+function normalizeAnalyzer(value) {
+  const normalized = String(value || 'sst').trim().toLowerCase()
+  if (['apim-ai-gateway', 'apim', 'ai-gateway', 'openai'].includes(normalized)) {
+    return 'apim-ai-gateway'
+  }
+  return 'sst'
+}
+
 function createConfig(options = {}) {
   const port = Number.parseInt(String(options.port ?? process.env.PORT ?? '8080'), 10)
   const dataDir = options.dataDir ?? process.env.DATA_DIR ?? '/data'
@@ -107,6 +116,22 @@ function createConfig(options = {}) {
     options.sentimentNeutralMargin ?? process.env.SENTIMENT_NEUTRAL_MARGIN,
     0.45,
   )
+  const sentimentAnalyzer = normalizeAnalyzer(options.sentimentAnalyzer ?? process.env.SENTIMENT_ANALYZER)
+  const sentimentApimAiGatewayUrl =
+    options.sentimentApimAiGatewayUrl ??
+    process.env.SENTIMENT_APIM_AI_GATEWAY_URL ??
+    'http://localhost:8000/ai/v1/chat/completions'
+  const sentimentApimAiGatewayModel =
+    options.sentimentApimAiGatewayModel ??
+    process.env.SENTIMENT_APIM_AI_GATEWAY_MODEL ??
+    'gpt-4o-mini'
+  const apimTimeoutMs = Number.parseInt(
+    String(options.sentimentApimAiGatewayTimeoutMs ?? process.env.SENTIMENT_APIM_AI_GATEWAY_TIMEOUT_MS ?? '15000'),
+    10,
+  )
+  const sentimentApimAiGatewayTimeoutMs = Number.isFinite(apimTimeoutMs) ? Math.max(1, apimTimeoutMs) : 15000
+  const sentimentApimSubscriptionKey =
+    options.sentimentApimSubscriptionKey ?? process.env.SENTIMENT_APIM_SUBSCRIPTION_KEY ?? ''
 
   return {
     port,
@@ -117,6 +142,11 @@ function createConfig(options = {}) {
     sentimentModelLocalOnly,
     sentimentWarmOnStart,
     sentimentNeutralMargin,
+    sentimentAnalyzer,
+    sentimentApimAiGatewayUrl,
+    sentimentApimAiGatewayModel,
+    sentimentApimAiGatewayTimeoutMs,
+    sentimentApimSubscriptionKey,
   }
 }
 
@@ -248,8 +278,61 @@ export function createApp(options = {}) {
         },
       ))
 
+  const analyzeWithApim =
+    options.analyzeWithApim ??
+    (async (text) =>
+      tracer.startActiveSpan(
+        'sentiment.classify',
+        {
+          attributes: {
+            'sentiment.backend': 'apim-ai-gateway',
+            'sentiment.model': config.sentimentApimAiGatewayModel,
+            'sentiment.apim.url': config.sentimentApimAiGatewayUrl,
+          },
+        },
+        async (span) => {
+          try {
+            const result = await analyzeWithApimAiGateway(text, config, {
+              fetchImpl: options.fetchImpl,
+            })
+
+            sentimentInferenceLatencyMs.record(result.latency_ms, {
+              'sentiment.backend': 'apim-ai-gateway',
+              'sentiment.label': result.label,
+            })
+
+            span.setAttribute('sentiment.latency_ms', result.latency_ms)
+            span.setAttribute('sentiment.label', result.label)
+            span.setAttribute('sentiment.confidence', result.confidence)
+
+            otelLogger.emit({
+              severityText: 'INFO',
+              body: 'apim ai gateway sentiment inference complete',
+              attributes: {
+                'sentiment.backend': 'apim-ai-gateway',
+                'sentiment.model': config.sentimentApimAiGatewayModel,
+                'sentiment.label': result.label,
+              },
+            })
+
+            return result
+          } catch (error) {
+            span.recordException(error)
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: error?.message || 'apim_ai_gateway_error',
+            })
+            throw error
+          } finally {
+            span.end()
+          }
+        },
+      ))
+
+  const defaultAnalyzer = config.sentimentAnalyzer === 'apim-ai-gateway' ? analyzeWithApim : analyzeWithSst
+
   const analyzeSentiment = async (text) => {
-    const result = await (options.analyzeSentiment ?? analyzeWithSst)(text)
+    const result = await (options.analyzeSentiment ?? defaultAnalyzer)(text)
     return {
       ...result,
       label: normalizeSentimentLabel(result?.label),
@@ -260,6 +343,9 @@ export function createApp(options = {}) {
     options.warmSentimentBackend ??
     (async () => {
       if (!config.sentimentWarmOnStart) {
+        return
+      }
+      if (config.sentimentAnalyzer !== 'sst') {
         return
       }
 
@@ -283,6 +369,26 @@ export function createApp(options = {}) {
     const limit = Math.max(1, Math.min(200, Number.parseInt(String(req.query.limit || '25'), 10)))
     const items = await readLastRecords(limit)
     res.json({ items })
+  })
+
+  app.post('/api/v1/sentiment/classify', async (req, res) => {
+    try {
+      const text = req.body?.text
+      if (typeof text !== 'string' || !text.trim()) {
+        res.status(400).json({ error: 'text is required' })
+        return
+      }
+
+      const { label, confidence, latency_ms } = await analyzeSentiment(text)
+      res.json({
+        text,
+        label,
+        confidence,
+        latency_ms,
+      })
+    } catch (error) {
+      res.status(500).json({ error: error?.message || String(error) })
+    }
   })
 
   app.post('/api/v1/comments', async (req, res) => {
@@ -323,6 +429,7 @@ export function createApp(options = {}) {
     appendRecord,
     analyzeSentiment,
     analyzeWithSst,
+    analyzeWithApim,
     warmSentimentBackend,
   }
 }

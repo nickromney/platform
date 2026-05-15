@@ -21,7 +21,16 @@ from jwt.algorithms import RSAAlgorithm
 from starlette.requests import Request
 
 import app.main as app_main
+from app.ai_gateway import (
+    extract_openai_deployment_name,
+    record_ai_gateway_backend_response,
+    select_ai_gateway_backend,
+    select_ai_gateway_backend_for_path,
+)
 from app.config import (
+    AIGatewayCircuitBreakerConfig,
+    AIGatewayConfig,
+    AIGatewayDeploymentConfig,
     ApiConfig,
     ApiReleaseConfig,
     ApiRevisionConfig,
@@ -115,6 +124,250 @@ def _make_cached_request() -> tuple[SimpleNamespace, Request]:
         "app": app,
     }
     return app, Request(scope, receive)
+
+
+def test_ai_gateway_extracts_openai_deployment_names_from_paths() -> None:
+    assert extract_openai_deployment_name("/openai/deployments/gpt-4o/chat/completions") == "gpt-4o"
+    assert extract_openai_deployment_name("/v1/deployments/gpt-4o-mini/responses") == "gpt-4o-mini"
+    assert extract_openai_deployment_name("/engines/legacy/completions") == "legacy"
+    assert extract_openai_deployment_name("/v1/chat/completions") is None
+    assert extract_openai_deployment_name("/v1/chat/completions", b'{"model":"gpt-small"}') == "gpt-small"
+
+
+def test_ai_gateway_selects_first_available_backend_by_priority() -> None:
+    cfg = GatewayConfig(
+        backends={
+            "east": BackendConfig(url=_http_url("east.openai.local")),
+            "west": BackendConfig(url=_http_url("west.openai.local")),
+        },
+        ai_gateway=AIGatewayConfig(
+            deployments={"gpt-4o": AIGatewayDeploymentConfig(backend_ids=["missing", "east", "west"])}
+        ),
+    )
+
+    selected = select_ai_gateway_backend(cfg, "gpt-4o", {}, now=100.0)
+
+    assert selected is not None
+    assert selected.available is True
+    assert selected.policy_variables() == {
+        "selected_backend_id": "east",
+        "selected_backend_url": _http_url("east.openai.local"),
+    }
+    assert selected.span_attributes()["apim.ai_gateway.selected_backend_id"] == "east"
+    assert selected.trace_metadata()["skipped_backends"] == [{"backend_id": "missing", "reason": "unknown_backend"}]
+
+
+def test_ai_gateway_skips_open_circuits_and_recovers_when_window_expires() -> None:
+    cfg = GatewayConfig(
+        backends={
+            "east": BackendConfig(url=_http_url("east.openai.local")),
+            "west": BackendConfig(url=_http_url("west.openai.local")),
+        },
+        ai_gateway=AIGatewayConfig(deployments={"gpt-4o": AIGatewayDeploymentConfig(backend_ids=["east", "west"])}),
+    )
+    circuit_state: dict[str, dict[str, Any]] = {}
+
+    trip = record_ai_gateway_backend_response(
+        cfg,
+        "east",
+        429,
+        {"Retry-After": "10"},
+        circuit_state,
+        now=100.0,
+    )
+    selected = select_ai_gateway_backend_for_path(
+        cfg, "/openai/deployments/gpt-4o/chat/completions", circuit_state, now=101.0
+    )
+    recovered = select_ai_gateway_backend(cfg, "gpt-4o", circuit_state, now=111.0)
+
+    assert trip["tripped"] is True
+    assert trip["open_until"] == 110.0
+    assert selected is not None
+    assert selected.selected_backend_id == "west"
+    assert selected.skipped_backends == ({"backend_id": "east", "reason": "circuit_open", "open_until": 110.0},)
+    assert recovered is not None
+    assert recovered.selected_backend_id == "east"
+    assert circuit_state == {}
+
+
+def test_ai_gateway_circuit_breaker_trips_for_configured_5xx_range() -> None:
+    cfg = GatewayConfig(
+        ai_gateway=AIGatewayConfig(
+            circuit_breaker=AIGatewayCircuitBreakerConfig(
+                trip_status_codes=[],
+                trip_status_code_ranges=["500-599"],
+                honor_retry_after=False,
+                open_duration_seconds=3.0,
+            )
+        )
+    )
+    circuit_state: dict[str, dict[str, Any]] = {}
+
+    trip = record_ai_gateway_backend_response(cfg, "east", 503, {}, circuit_state, now=10.0)
+    close = record_ai_gateway_backend_response(cfg, "east", 200, {}, circuit_state, now=11.0)
+
+    assert trip["tripped"] is True
+    assert circuit_state == {}
+    assert close == {"backend_id": "east", "tripped": False, "reason": "status_not_configured"}
+
+
+def test_gateway_proxy_ai_gateway_selects_backend_from_body_model_and_falls_back_on_429() -> None:
+    seen_hosts: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen_hosts.append(req.url.host or "")
+        if req.url.host == "primary.openai.local" and req.headers.get("x-force-primary-429") == "true":
+            return httpx.Response(429, headers={"Retry-After": "10"}, json={"error": {"message": "primary busy"}})
+        return httpx.Response(
+            200,
+            json={
+                "backend": req.url.host,
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            proxy_streaming=False,
+            backends={
+                "primary": BackendConfig(url=_http_url("primary.openai.local")),
+                "secondary": BackendConfig(url=_http_url("secondary.openai.local")),
+            },
+            ai_gateway=AIGatewayConfig(
+                deployments={"gpt-small": AIGatewayDeploymentConfig(backend_ids=["primary", "secondary"])}
+            ),
+            routes=[RouteConfig(name="ai", path_prefix="/ai", upstream_base_url=_http_url("primary.openai.local"))],
+        ),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/ai/v1/chat/completions",
+            headers={"x-force-primary-429": "true"},
+            json={"model": "gpt-small", "messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert resp.status_code == 200
+    assert resp.headers["x-apim-ai-deployment"] == "gpt-small"
+    assert resp.headers["x-apim-ai-backend-id"] == "secondary"
+    assert resp.json()["backend"] == "secondary.openai.local"
+    assert seen_hosts == ["primary.openai.local", "secondary.openai.local"]
+
+
+def test_gateway_proxy_ai_gateway_rejects_unknown_body_model() -> None:
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            backends={"primary": BackendConfig(url=_http_url("primary.openai.local"))},
+            ai_gateway=AIGatewayConfig(deployments={"gpt-small": AIGatewayDeploymentConfig(backend_ids=["primary"])}),
+            routes=[RouteConfig(name="ai", path_prefix="/ai", upstream_base_url=_http_url("primary.openai.local"))],
+        ),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200))),
+    )
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/ai/v1/chat/completions",
+            json={"model": "not-configured", "messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert resp.status_code == 400
+    assert "No AI gateway route" in resp.json()["detail"]
+
+
+def test_ai_gateway_token_limits_are_isolated_by_authenticated_consumer() -> None:
+    seen_subscription_keys: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen_subscription_keys.append(req.headers.get("ocp-apim-subscription-key", ""))
+        return httpx.Response(
+            200,
+            json={
+                "model": "small-chat",
+                "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+                "usage": {"prompt_tokens": 8, "completion_tokens": 7, "total_tokens": 15},
+            },
+        )
+
+    policy = """\
+<policies>
+  <inbound>
+    <llm-token-limit
+      counter-key="@(context.Variables.GetValueOrDefault(&quot;consumer_id&quot;,&quot;anonymous&quot;))"
+      tokens-per-minute="20"
+      estimate-prompt-tokens="true"
+      remaining-tokens-header-name="X-Remaining-Tokens"
+      tokens-consumed-header-name="X-Tokens-Consumed" />
+  </inbound>
+  <backend />
+  <outbound />
+  <on-error />
+</policies>
+"""
+
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            proxy_streaming=False,
+            products={"ai-agents": ProductConfig(name="AI Agents", require_subscription=True)},
+            subscription=SubscriptionConfig(
+                required=True,
+                subscriptions={
+                    "cluster-agent-a": Subscription(
+                        id="cluster-agent-a",
+                        name="cluster-agent-a",
+                        keys=SubscriptionKeyPair(primary="agent-a-key", secondary="agent-a-key-2"),
+                        products=["ai-agents"],
+                    ),
+                    "cluster-agent-b": Subscription(
+                        id="cluster-agent-b",
+                        name="cluster-agent-b",
+                        keys=SubscriptionKeyPair(primary="agent-b-key", secondary="agent-b-key-2"),
+                        products=["ai-agents"],
+                    ),
+                },
+            ),
+            backends={"llm": BackendConfig(url=_http_url("llm.local"))},
+            ai_gateway=AIGatewayConfig(deployments={"small-chat": AIGatewayDeploymentConfig(backend_ids=["llm"])}),
+            routes=[
+                RouteConfig(
+                    name="ai",
+                    path_prefix="/ai",
+                    upstream_base_url=_http_url("llm.local"),
+                    product="ai-agents",
+                    policies_xml=policy,
+                )
+            ],
+        ),
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    payload = {"model": "small-chat", "messages": [{"role": "user", "content": "hello"}]}
+    followup_payload = {"model": "small-chat", "messages": [{"role": "user", "content": "hello"}]}
+
+    with TestClient(app) as client:
+        first = client.post(
+            "/ai/v1/chat/completions",
+            headers={"Ocp-Apim-Subscription-Key": "agent-a-key"},
+            json=payload,
+        )
+        second = client.post(
+            "/ai/v1/chat/completions",
+            headers={"Ocp-Apim-Subscription-Key": "agent-a-key"},
+            json=followup_payload,
+        )
+        third = client.post(
+            "/ai/v1/chat/completions",
+            headers={"Ocp-Apim-Subscription-Key": "agent-b-key"},
+            json=followup_payload,
+        )
+
+    assert first.status_code == 200
+    assert first.headers["x-tokens-consumed"] == "15"
+    assert second.status_code == 429
+    assert third.status_code == 200
+    assert seen_subscription_keys == ["agent-a-key", "agent-b-key"]
 
 
 @pytest.mark.contract("GW-HEALTH")
@@ -1607,6 +1860,44 @@ def test_shipped_example_configs_enable_management_plane() -> None:
         with TestClient(app) as client:
             resp = client.get("/apim/management/status", headers={"X-Apim-Tenant-Key": "local-dev-tenant-key"})
         assert resp.status_code == 200, path.name
+
+
+def test_mcp_example_rate_limits_by_authenticated_consumer() -> None:
+    root = Path(__file__).resolve().parents[1]
+    cfg = GatewayConfig.model_validate(
+        json.loads((root / "examples" / "mcp" / "http.json").read_text(encoding="utf-8"))
+    )
+    cfg.proxy_streaming = False
+    cfg.subscription.subscriptions["mcp-agent-b"] = Subscription(
+        id="sub-mcp-agent-b",
+        name="mcp-agent-b",
+        keys=SubscriptionKeyPair(primary="mcp-agent-b-key", secondary="mcp-agent-b-key-secondary"),
+        products=["mcp"],
+        created_by="publisher",
+    )
+    seen_subscription_keys: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen_subscription_keys.append(req.headers.get("ocp-apim-subscription-key", ""))
+        return httpx.Response(200, json={"jsonrpc": "2.0", "result": {"ok": True}})
+
+    app = create_app(config=cfg, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+    with TestClient(app) as client:
+        allowed = [
+            client.post("/mcp", headers={"Ocp-Apim-Subscription-Key": "mcp-demo-key"}, json={"id": index})
+            for index in range(20)
+        ]
+        limited = client.post("/mcp", headers={"Ocp-Apim-Subscription-Key": "mcp-demo-key"}, json={"id": 21})
+        other_consumer = client.post(
+            "/mcp", headers={"Ocp-Apim-Subscription-Key": "mcp-agent-b-key"}, json={"id": "other"}
+        )
+
+    assert [resp.status_code for resp in allowed] == [200] * 20
+    assert limited.status_code == 429
+    assert limited.headers["x-mcp-remaining-calls"] == "0"
+    assert other_consumer.status_code == 200
+    assert seen_subscription_keys == ["mcp-demo-key"] * 20 + ["mcp-agent-b-key"]
 
 
 def test_management_plane_rotate_subscription_key_updates_gateway_lookup() -> None:

@@ -64,7 +64,7 @@ def runtime() -> ToolRuntime:
         ),
         sentiment_client=FakeApiClient(
             {
-                ("POST", "/api/v1/comments"): {
+                ("POST", "/api/v1/sentiment/classify"): {
                     "text": "clear and useful",
                     "label": "positive",
                     "confidence": 0.98,
@@ -148,7 +148,9 @@ async def test_sentiment_classify_uses_mocked_http_client() -> None:
 
     assert result["status"] == "ok"
     assert result["data"]["label"] == "positive"
-    assert tools.sentiment_client.calls == [("POST", "/api/v1/comments", {"text": "clear and useful"})]
+    assert tools.sentiment_client.calls == [
+        ("POST", "/api/v1/sentiment/classify", {"text": "clear and useful"})
+    ]
 
 
 @pytest.mark.asyncio
