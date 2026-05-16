@@ -41,6 +41,8 @@ start_server() {
   [[ "${output}" == *'"contracts"'* ]]
   [[ "${output}" == *'"kubernetes/kind"'* ]]
   [[ "${output}" == *'"local-created-cluster"'* ]]
+  [[ "${output}" == *'"variant_contract"'* ]]
+  [[ "${output}" == *'"state_lock_file"'* ]]
   [[ "${output}" != *'"targets"'* ]]
   [[ "${output}" != *'"950-local-idp"'* ]]
 }

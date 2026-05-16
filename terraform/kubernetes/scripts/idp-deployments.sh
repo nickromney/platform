@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 CATALOG_FILE="${PLATFORM_APP_CATALOG:-${REPO_ROOT}/catalog/platform-apps.json}"
 DEPLOYMENT_FORMAT="${DEPLOYMENT_FORMAT:-json}"
+READ_MODEL_SCRIPT="${IDP_CATALOG_READ_MODEL_SCRIPT:-${SCRIPT_DIR}/idp-catalog-read-model.sh}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
@@ -40,35 +41,8 @@ done
 
 shell_cli_maybe_execute_or_preview_summary usage "would inspect the IDP deployment read model"
 
-command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
-[[ -f "${CATALOG_FILE}" ]] || fail "catalog not found: ${CATALOG_FILE}"
-
 case "${DEPLOYMENT_FORMAT}" in
-  json)
-    jq '{
-      schema_version: "platform.idp.deployment-read-model/v1",
-      deployments: [
-        .applications[]
-        | . as $app
-        | .environments[]
-        | {
-            app: $app.name,
-            owner: $app.owner,
-            environment: .name,
-            namespace: .namespace,
-            route: .route,
-            controller: $app.deployment.controller,
-            strategy: $app.deployment.strategy,
-            rbac_group: .rbac.group
-          }
-      ]
-    }' "${CATALOG_FILE}"
-    ;;
-  text)
-    jq -r '.applications[] as $app | .environments[] | [$app.name, .name, .namespace, .route, .rbac.group] | @tsv' "${CATALOG_FILE}" |
-      awk 'BEGIN { printf "%-18s %-10s %-12s %-56s %s\n", "APP", "ENV", "NAMESPACE", "ROUTE", "RBAC_GROUP" }
-           { printf "%-18s %-10s %-12s %-56s %s\n", $1, $2, $3, $4, $5 }'
-    ;;
+  json|text) PLATFORM_APP_CATALOG="${CATALOG_FILE}" "${READ_MODEL_SCRIPT}" --execute --projection deployments --format "${DEPLOYMENT_FORMAT}" ;;
   *)
     fail "Unknown --format ${DEPLOYMENT_FORMAT}; expected json or text"
     ;;

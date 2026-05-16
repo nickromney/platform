@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 CATALOG_FILE="${PLATFORM_APP_CATALOG:-${REPO_ROOT}/catalog/platform-apps.json}"
 CATALOG_FORMAT="${CATALOG_FORMAT:-text}"
+READ_MODEL_SCRIPT="${IDP_CATALOG_READ_MODEL_SCRIPT:-${SCRIPT_DIR}/idp-catalog-read-model.sh}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
@@ -40,22 +41,8 @@ done
 
 shell_cli_maybe_execute_or_preview_summary usage "would inspect the IDP service catalog"
 
-command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
-[[ -f "${CATALOG_FILE}" ]] || fail "catalog not found: ${CATALOG_FILE}"
-
 case "${CATALOG_FORMAT}" in
-  json)
-    jq '.' "${CATALOG_FILE}"
-    ;;
-  text)
-    jq -r '
-      .applications[]
-      | [.name, .owner, .lifecycle, (.environments | map(.name + ":" + .rbac.group) | join(",")), (.secrets | map(.name) | join(","))]
-      | @tsv
-    ' "${CATALOG_FILE}" |
-      awk 'BEGIN { printf "%-18s %-14s %-10s %-72s %s\n", "APP", "OWNER", "LIFECYCLE", "ENVIRONMENT_RBAC", "SECRETS" }
-           { printf "%-18s %-14s %-10s %-72s %s\n", $1, $2, $3, $4, $5 }'
-    ;;
+  json|text) PLATFORM_APP_CATALOG="${CATALOG_FILE}" "${READ_MODEL_SCRIPT}" --execute --projection catalog --format "${CATALOG_FORMAT}" ;;
   *)
     fail "Unknown --format ${CATALOG_FORMAT}; expected text or json"
     ;;
