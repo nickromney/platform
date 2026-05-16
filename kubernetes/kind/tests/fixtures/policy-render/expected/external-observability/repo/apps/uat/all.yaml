@@ -6,9 +6,9 @@ spec:
   template:
     spec:
       containers:
-        - name: subnetcalc-api-fastapi-container-app
+        - name: subnetcalc-api
           image: host.docker.internal:5002/platform/subnetcalc-api:golden
         - name: subnetcalc-frontend-react
           image: host.docker.internal:5002/platform/subnetcalc-frontend-react:golden
-        - name: subnetcalc-frontend-typescript-vite
-          image: host.docker.internal:5002/platform/subnetcalc-frontend-typescript-vite:golden
+        - name: subnetcalc-frontend
+          image: host.docker.internal:5002/platform/subnetcalc-frontend:golden

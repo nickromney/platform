@@ -5,8 +5,8 @@ import json
 import os
 import sys
 from typing import Any
-
-import httpx
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 
 def build_headers(token: str | None) -> dict[str, str]:
@@ -28,28 +28,43 @@ def rpc(method: str, params: dict[str, Any] | None = None, request_id: int = 1) 
 
 def list_tools(url: str, token: str | None, timeout_seconds: float) -> list[str]:
     headers = build_headers(token)
-    with httpx.Client(timeout=timeout_seconds, verify=False) as client:
-        client.post(
-            url,
-            headers=headers,
-            json=rpc(
-                "initialize",
-                {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": {"name": "platform-mcp-smoke", "version": "0.1.0"},
-                },
-                request_id=1,
-            ),
-        ).raise_for_status()
-        response = client.post(url, headers=headers, json=rpc("tools/list", request_id=2))
-        response.raise_for_status()
-        body = response.json()
+    post_json(
+        url,
+        headers,
+        rpc(
+            "initialize",
+            {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "platform-mcp-smoke", "version": "0.1.0"},
+            },
+            request_id=1,
+        ),
+        timeout_seconds,
+    )
+    body = post_json(url, headers, rpc("tools/list", request_id=2), timeout_seconds)
 
     if "error" in body:
         raise RuntimeError(json.dumps(body["error"], sort_keys=True))
     tools = body.get("result", {}).get("tools", [])
     return sorted(tool["name"] for tool in tools)
+
+
+def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            body = response.read()
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+
+    return json.loads(body.decode("utf-8") or "{}")
 
 
 def main(argv: list[str] | None = None) -> int:

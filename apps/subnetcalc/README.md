@@ -10,11 +10,22 @@ A full-stack IPv4/IPv6 subnet calculator with multiple backend and frontend impl
 
 ## Quick Start
 
-Compose workflows in this directory now read `OAUTH2_PROXY_COOKIE_SECRET` from
-the repo root `.env`. On Apple Silicon, the repo-local `make` targets also set
-`SUBNETCALC_LOCAL_PLATFORM=linux/arm64` so the local compose stack runs natively
-instead of forcing `linux/amd64` emulation. Copy the template before using the
-`make` or raw Compose commands below:
+The default subnet calculator is now the minimal Go implementation in
+[`app-go/`](app-go/). It builds one small image and runs as two microservices:
+
+- `subnetcalc-backend` with `RUNTIME_ROLE=backend`
+- `subnetcalc-frontend` with `RUNTIME_ROLE=frontend`
+
+The frontend is vanilla HTML/CSS/JavaScript and proxies `/api/*` to the
+backend. The backend uses Go stdlib plus one intentional OIDC dependency for
+server-side JWT validation. No npm, Vite, React, Flask, or FastAPI dependency
+install is needed for the default path.
+
+Compose workflows that use the legacy OIDC/oauth2-proxy profiles still read
+`OAUTH2_PROXY_COOKIE_SECRET` from the repo root `.env`. On Apple Silicon, the
+repo-local `make` targets also set `SUBNETCALC_LOCAL_PLATFORM=linux/arm64` so
+the local compose stack runs natively instead of forcing `linux/amd64`
+emulation. Copy the template before using the legacy profile commands:
 
 ```bash
 cp ../../.env.example ../../.env
@@ -22,19 +33,18 @@ cp ../../.env.example ../../.env
 
 ### Run Baseline Compose
 
-The default [`compose.yml`](compose.yml) path now starts the fast baseline
-container-app family only. This is the recommended local loop when you want one
-backend kept warm and to swap frontends quickly.
+The default [`compose.yml`](compose.yml) path starts the Go frontend and backend
+microservices.
 
 ```bash
 # Start the default happy path from this directory
 make start-compose-happy
 
-# Or bring up only the shared backend, then swap frontends
+# Or bring up only the backend
 make start-compose-backend-container
-make start-compose-frontend-vite
-make start-compose-frontend-react
-make start-compose-frontend-static
+
+# Run the default verification
+make test
 ```
 
 ### Run Full Demo Topology
@@ -52,7 +62,7 @@ make start-compose-full
 # Or with Docker
 docker compose --env-file ../../.env --profile function-family --profile oidc --profile mock-easyauth up -d
 
-# Or from this directory, start the default stack-04
+# Or from this directory, start the default Go two-service stack
 make up
 ```
 

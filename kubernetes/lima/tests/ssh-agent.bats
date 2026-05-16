@@ -170,3 +170,43 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"sock=<> args=install --ip 127.0.0.1 --ssh-port 60022"* ]]
 }
+
+@test "ensure-k3s-api-tunnel starts an SSH tunnel on the managed API port" {
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  export READY_FILE="${BATS_TEST_TMPDIR}/ready"
+  export SSH_LOG="${BATS_TEST_TMPDIR}/ssh.log"
+  mkdir -p "${HOME}/.lima/k3s-node-1"
+  touch "${HOME}/.lima/k3s-node-1/ssh.config"
+
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ -f "${READY_FILE}" ]; then
+  exit 0
+fi
+exit 28
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  cat >"${TEST_BIN}/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${SSH_LOG}"
+: >"${READY_FILE}"
+sleep 30
+EOF
+  chmod +x "${TEST_BIN}/ssh"
+
+  run env \
+    LIMA_INSTANCE_PREFIX="k3s-node" \
+    LIMA_K3S_API_TUNNEL_PORT="16443" \
+    LIMA_K3S_API_TUNNEL_STATE_DIR="${BATS_TEST_TMPDIR}/state" \
+    "${REPO_ROOT}/kubernetes/lima/scripts/ensure-k3s-api-tunnel.sh" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"OK   Lima k3s API tunnel: https://127.0.0.1:16443"* ]]
+
+  run cat "${SSH_LOG}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"-L 127.0.0.1:16443:127.0.0.1:6443 lima-k3s-node-1"* ]]
+}

@@ -19,7 +19,6 @@ services:
       context: ./ui
       dockerfile: Dockerfile
       args:
-        UI_BUILD_IMAGE: ${UI_BUILD_IMAGE:-node:22-alpine}
         NGINX_RUNTIME_IMAGE: ${NGINX_RUNTIME_IMAGE:-dhi.io/nginx:1.29.5-debian13}
         NGINX_UID: ${NGINX_UID:-101}
         NGINX_GID: ${NGINX_GID:-101}

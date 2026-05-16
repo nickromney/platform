@@ -142,10 +142,8 @@ if [[ ${#files[@]} -eq 0 ]]; then
 fi
 
 images=(
-  "subnetcalc-api-fastapi-container-app"
-  "subnetcalc-apim-simulator"
-  "subnetcalc-frontend-react"
-  "subnetcalc-frontend-typescript-vite"
+  "subnetcalc-api"
+  "subnetcalc-frontend"
 )
 
 rewrite_files() {

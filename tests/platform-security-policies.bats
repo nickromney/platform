@@ -80,6 +80,48 @@ PY
   [[ "${output}" == *"validated mcp cilium named dependencies"* ]]
 }
 
+@test "Nginx gateway policy allows Kubernetes API discovery without broad egress" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy_path = repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/nginx-gateway-hardened.yaml"
+policy = yaml.safe_load(policy_path.read_text())
+spec = policy["spec"]
+egress = spec["egress"]
+
+selector = spec["endpointSelector"]["matchLabels"]
+assert selector["k8s:io.kubernetes.pod.namespace"] == "nginx-gateway"
+assert selector["k8s:app.kubernetes.io/name"] == "nginx-gateway"
+
+assert any("kube-apiserver" in rule.get("toEntities", []) for rule in egress), "nginx gateway must reach Kubernetes API"
+assert any(
+    service.get("k8sService", {}).get("namespace") == "default"
+    and service.get("k8sService", {}).get("serviceName") == "kubernetes"
+    for rule in egress
+    for service in rule.get("toServices", [])
+), "nginx gateway must allow the default/kubernetes service path"
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:k8s-app") == "kube-dns"
+    for rule in egress
+    for endpoint in rule.get("toEndpoints", [])
+), "nginx gateway should keep DNS egress explicit"
+
+assert all("world" not in rule.get("toEntities", []) for rule in egress)
+assert all("0.0.0.0/0" not in str(rule) for rule in egress)
+
+print("validated nginx gateway cilium api egress")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated nginx gateway cilium api egress"* ]]
+}
+
 @test "Sentiment backend policy allows MCP classify-only endpoint" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations

@@ -1,7 +1,9 @@
 # Compose configuration for Subnet Calculator
 # Works with both podman-compose and docker compose
 #
-# Default `compose up` now starts only the baseline container-app family.
+# Default `compose up` now starts the minimal Go subnetcalc pair:
+#   - subnetcalc-backend: backend API role
+#   - subnetcalc-frontend: frontend static/proxy role
 # The heavier function/JWT, OIDC/APIM/oauth2-proxy, and mock Easy Auth services
 # are opt-in via compose profiles:
 #   --profile function-family
@@ -111,6 +113,53 @@ x-nginx-runtime-hardening: &nginx-runtime-hardening
     - /var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532
 
 services:
+  subnetcalc-backend:
+    <<: *app-runtime-hardening
+    build:
+      context: ./app-go
+      dockerfile: Dockerfile
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
+    image: subnetcalc-go:latest
+    ports:
+      - "8090:8080"
+    environment:
+      - RUNTIME_ROLE=backend
+      - AUTH_METHOD=${SUBNETCALC_AUTH_METHOD:-none}
+      - OIDC_ISSUER_URL=${SUBNETCALC_OIDC_ISSUER_URL:-}
+      - OIDC_CLIENT_ID=${SUBNETCALC_OIDC_CLIENT_ID:-}
+      - PORT=8080
+      - HOME=/tmp
+    healthcheck:
+      test: ["CMD", "/subnetcalc", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
+  subnetcalc-frontend:
+    <<: *app-runtime-hardening
+    image: subnetcalc-go:latest
+    build:
+      context: ./app-go
+      dockerfile: Dockerfile
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
+    ports:
+      - "8003:8080"
+    environment:
+      - RUNTIME_ROLE=frontend
+      - BACKEND_URL=http://subnetcalc-backend:8080
+      - PORT=8080
+      - HOME=/tmp
+    depends_on:
+      subnetcalc-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/subnetcalc", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
   api-fastapi-azure-function:
     profiles: ["function-family"]
     build:

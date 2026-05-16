@@ -3,7 +3,7 @@
 This example is the smallest full-stack app in the repository that proves the
 browser-facing APIM path:
 
-`Browser -> Astro frontend -> apim-simulator -> FastAPI todo API`
+`Browser -> static frontend -> apim-simulator -> FastAPI todo API`
 
 It is intentionally container-first and environment-configured so the frontend,
 gateway, backend, and OTEL stack can be exercised together with one set of
@@ -28,6 +28,11 @@ make down
 
 The browser entrypoint is `http://localhost:3000`. The APIM gateway is
 `http://localhost:8000`.
+
+The frontend is plain `index.html`, `styles.css`, and `app.js` served by nginx.
+The container still renders `runtime-config.js` from environment variables at
+startup, so the same static files work against local Compose or a later
+Kubernetes ingress without an npm build.
 
 `make up-todo-otel` adds [LGTM](https://github.com/grafana/docker-otel-lgtm) on [https://lgtm.apim.127.0.0.1.sslip.io:8443](https://lgtm.apim.127.0.0.1.sslip.io:8443) and exports OTEL
 telemetry from both the gateway and the toy FastAPI backend over OTLP HTTP.

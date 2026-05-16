@@ -867,7 +867,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"workload|EXTERNAL_IMAGE_SENTIMENT_API|external_sentiment_api|sentiment-api"* ]]
-  [[ "${output}" == *"workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT|external_subnetcalc_fe_ts|subnetcalc-frontend-typescript-vite"* ]]
+  [[ "${output}" == *"workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY|external_platform_signoz_auth|signoz-auth-proxy"* ]]

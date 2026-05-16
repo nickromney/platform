@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IPv4 Subnet Calculator</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>IPv4 Subnet Calculator</h1>
+        <p>Vanilla HTML, CSS, JavaScript, and a Go API.</p>
+      </header>
+
+      <section id="api-status" class="notice">Checking API...</section>
+
+      <form id="lookup-form">
+        <label for="ip-address">IP Address or CIDR Range</label>
+        <div class="form-row">
+          <input id="ip-address" name="address" placeholder="e.g., 192.168.1.1 or 10.0.0.0/24" required>
+          <select id="cloud-mode" name="mode">
+            <option value="Standard">Standard</option>
+            <option value="AWS">AWS</option>
+            <option value="Azure" selected>Azure</option>
+            <option value="OCI">OCI</option>
+          </select>
+          <button id="lookup-btn" type="submit">Lookup</button>
+        </div>
+        <div class="examples" aria-label="Examples">
+          <button type="button" data-example="10.0.0.0/24">RFC1918: 10.0.0.0/24</button>
+          <button type="button" data-example="100.64.0.1">RFC6598: 100.64.0.1</button>
+          <button type="button" data-example="8.8.8.8">Public: 8.8.8.8</button>
+          <button type="button" data-example="104.16.1.1">Cloudflare: 104.16.1.1</button>
+          <button type="button" data-example="192.168.1.0/24">Network: 192.168.1.0/24</button>
+        </div>
+      </form>
+
+      <section id="auth-panel">
+        <h2>Identity</h2>
+        <form id="identity-form">
+          <p id="auth-state">Not signed in.</p>
+          <input id="token-input" name="token" type="password" autocomplete="off" placeholder="Paste bearer token">
+          <button id="whoami-btn" type="submit">Validate Token</button>
+        </form>
+      </section>
+
+      <section id="results" hidden>
+        <h2>Results</h2>
+        <div id="results-content"></div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

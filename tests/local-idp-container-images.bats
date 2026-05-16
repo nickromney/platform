@@ -5,7 +5,7 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-@test "idp-core image contract uses uv, port 8080, non-root, and an explicit catalog path" {
+@test "idp-core image contract uses Go, port 8080, non-root, and an explicit catalog path" {
   dockerfile="${REPO_ROOT}/apps/idp-core/Dockerfile"
   dockerignore="${REPO_ROOT}/apps/idp-core/.dockerignore"
   dockerfile_ignore="${dockerfile}.dockerignore"
@@ -14,22 +14,20 @@ setup() {
   [ -f "${dockerignore}" ]
   [ -f "${dockerfile_ignore}" ]
 
-  run rg -n 'ghcr.io/astral-sh/uv|uv sync --frozen|EXPOSE 8080|USER 65532:65532|HOME=/tmp|IDP_CATALOG_PATH=/app/catalog/platform-apps.json|catalog/platform-apps.json|--port", "8080"' "${dockerfile}"
+  run rg -n 'FROM alpine:3\.22|EXPOSE 8080|USER 65532:65532|HOME=/tmp|PORT=8080|IDP_CATALOG_PATH=/app/catalog/platform-apps.json|catalog/platform-apps.json|/usr/local/bin/idp-core' "${dockerfile}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"ghcr.io/astral-sh/uv"* ]]
-  [[ "${output}" == *"uv sync --frozen"* ]]
+  [[ "${output}" == *"FROM alpine:3.22"* ]]
   [[ "${output}" == *"EXPOSE 8080"* ]]
   [[ "${output}" == *"USER 65532:65532"* ]]
   [[ "${output}" == *"HOME=/tmp"* ]]
+  [[ "${output}" == *"PORT=8080"* ]]
   [[ "${output}" == *"IDP_CATALOG_PATH=/app/catalog/platform-apps.json"* ]]
   [[ "${output}" == *"catalog/platform-apps.json"* ]]
-  [[ "${output}" == *"--port\", \"8080\""* ]]
+  [[ "${output}" == *"/usr/local/bin/idp-core"* ]]
 
   for pattern in \
     '^\*\*$' \
-    '^!apps/idp-core/app/\*\*$' \
-    '^!apps/idp-core/pyproject\.toml$' \
-    '^!apps/idp-core/uv\.lock$' \
+    '^!apps/idp-core/app-go/\.run/idp-core$' \
     '^!catalog/platform-apps\.json$'
   do
     run rg -n "${pattern}" "${dockerfile_ignore}"
@@ -48,6 +46,23 @@ setup() {
     run rg -n "${pattern}" "${dockerignore}"
     [ "${status}" -eq 0 ]
   done
+
+  [ -f "${REPO_ROOT}/apps/idp-core/app-go/go.mod" ]
+  run rg -n '^module platform\.local/idp-core$|^go 1\.26$' "${REPO_ROOT}/apps/idp-core/app-go/go.mod"
+  [ "${status}" -eq 0 ]
+}
+
+@test "idp-core linux build follows the target host architecture by default" {
+  makefile="${REPO_ROOT}/apps/idp-core/app-go/Makefile"
+
+  [ -f "${makefile}" ]
+  run rg -n 'IDP_GOARCH \?= \$\(shell uname -m \| sed .*x86_64/amd64.*aarch64/arm64|GOOS=linux GOARCH=\$\$\{GOARCH:-\$\(IDP_GOARCH\)\}' "${makefile}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"IDP_GOARCH ?="* ]]
+  [[ "${output}" == *'GOARCH=$${GOARCH:-$(IDP_GOARCH)}'* ]]
+
+  run rg -n 'GOOS=linux GOARCH=amd64' "${makefile}"
+  [ "${status}" -ne 0 ]
 }
 
 @test "Backstage image contract builds with Yarn and uses a hardened DHI Node runtime" {

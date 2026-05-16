@@ -87,6 +87,7 @@ PY
   policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml"
 
   grep -Fq 'host.docker.internal:5002/*' "${policy}"
+  grep -Fq '192.168.64.1:5002/*' "${policy}"
   grep -Fq 'docker.io/bitnamilegacy/*' "${policy}"
   grep -Fq 'docker.io/grafana/*' "${policy}"
   grep -Fq 'docker.io/victoriametrics/*' "${policy}"

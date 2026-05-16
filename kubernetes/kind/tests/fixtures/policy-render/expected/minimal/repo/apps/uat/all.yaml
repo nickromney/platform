@@ -6,9 +6,9 @@ spec:
   template:
     spec:
       containers:
-        - name: subnetcalc-api-fastapi-container-app
-          image: localhost:30090/platform/subnetcalc-api-fastapi-container-app:latest
+        - name: subnetcalc-api
+          image: localhost:30090/platform/subnetcalc-api:latest
         - name: subnetcalc-frontend-react
           image: localhost:30090/platform/subnetcalc-frontend-react:latest
-        - name: subnetcalc-frontend-typescript-vite
-          image: localhost:30090/platform/subnetcalc-frontend-typescript-vite:latest
+        - name: subnetcalc-frontend
+          image: localhost:30090/platform/subnetcalc-frontend:latest

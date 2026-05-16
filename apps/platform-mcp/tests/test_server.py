@@ -75,6 +75,14 @@ def runtime() -> ToolRuntime:
     )
 
 
+def test_runtime_dependency_manifest_keeps_only_targeted_protocol_deps() -> None:
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"httpx' not in pyproject
+    assert '"mcp==1.27.0"' in pyproject
+    assert '"starlette==1.0.0"' in pyproject
+
+
 @pytest.mark.asyncio
 async def test_tools_list_includes_required_tools_from_fastmcp_registry() -> None:
     mcp = create_mcp_server(runtime())

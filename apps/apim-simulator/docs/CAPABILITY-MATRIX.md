@@ -230,7 +230,7 @@ The management surface below is available when `tenant_access.enabled` is `true`
 
 | Feature | Simulator | Terraform Resource | Notes |
 |---------|-----------|-------------------|-------|
-| Operator console | Yes | N/A | [`ui/`](../ui/) Vite + React app |
+| Operator console | Yes | N/A | [`ui/`](../ui/) static HTML/CSS/JavaScript app |
 | Policy editor | Yes | N/A | Uses management policy endpoints |
 | Trace viewer | Yes | N/A | Uses trace lookup and trace summary endpoints |
 | Replay console | Yes | N/A | Uses management replay endpoint |

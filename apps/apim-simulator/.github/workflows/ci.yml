@@ -15,7 +15,6 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.13"
-  NODE_VERSION: "22"
   MKCERT_VERSION: "v1.4.4"
 
 jobs:
@@ -145,15 +144,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            ui/package-lock.json
-            examples/todo-app/frontend-astro/package-lock.json
 
       - name: Run frontend checks
         run: make frontend-check

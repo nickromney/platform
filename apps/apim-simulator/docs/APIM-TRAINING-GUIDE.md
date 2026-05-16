@@ -80,7 +80,7 @@ flowchart LR
 For the todo demo, that becomes:
 
 ```text
-Browser -> Astro frontend -> apim-simulator -> FastAPI todo API
+Browser -> static frontend -> apim-simulator -> FastAPI todo API
                                         \
                                          -> [Grafana LGTM](https://github.com/grafana/docker-otel-lgtm) stack
 ```

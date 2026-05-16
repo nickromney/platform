@@ -68,10 +68,12 @@ done
 shell_cli_maybe_execute_or_preview_summary usage \
   "would resolve APIM simulator release version from source ${SOURCE_REPO}"
 
-if [[ ! -d "${SOURCE_REPO}/.git" ]]; then
-  echo "release_version.sh: source is not a git checkout: ${SOURCE_REPO}" >&2
+if ! GIT_TOPLEVEL="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null)"; then
+  echo "release_version.sh: source is not inside a git checkout: ${SOURCE_REPO}" >&2
   exit 1
 fi
+GIT_PREFIX="$(git -C "${SOURCE_REPO}" rev-parse --show-prefix)"
+PYPROJECT_AT_COMMIT="${GIT_PREFIX}pyproject.toml"
 
 if [[ -n "${METADATA_FILE}" ]]; then
   if [[ ! -f "${METADATA_FILE}" ]]; then
@@ -103,7 +105,7 @@ if [[ -z "${COMMIT}" ]]; then
 fi
 
 VERSION="$(
-  python3 - "${SOURCE_REPO}" "${COMMIT}" <<'PY'
+  python3 - "${GIT_TOPLEVEL}" "${COMMIT}" "${PYPROJECT_AT_COMMIT}" <<'PY'
 import subprocess
 import sys
 import tomllib
@@ -111,14 +113,15 @@ from pathlib import Path
 
 repo = Path(sys.argv[1])
 commit = sys.argv[2]
+pyproject_path = sys.argv[3]
 
 try:
     payload = subprocess.check_output(
-        ["git", "-C", str(repo), "show", f"{commit}:pyproject.toml"],
+        ["git", "-C", str(repo), "show", f"{commit}:{pyproject_path}"],
         text=True,
     )
 except subprocess.CalledProcessError as exc:
-    raise SystemExit(f"release_version.sh: could not read pyproject.toml from {commit} in {repo}") from exc
+    raise SystemExit(f"release_version.sh: could not read {pyproject_path} from {commit} in {repo}") from exc
 
 print(tomllib.loads(payload)["project"]["version"])
 PY

@@ -104,8 +104,10 @@ setup() {
   [ "${status}" -eq 0 ]
 
   run rg -n 'exclude-newer = "7 days"' \
-    "${REPO_ROOT}/apps/idp-core/pyproject.toml" \
     "${REPO_ROOT}/apps/idp-mcp/pyproject.toml"
+  [ "${status}" -eq 0 ]
+
+  run rg -n '^go 1\.26$' "${REPO_ROOT}/apps/idp-core/app-go/go.mod"
   [ "${status}" -eq 0 ]
 }
 

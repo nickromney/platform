@@ -15,7 +15,6 @@ PINNED_ACTION_REFS = {
     "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
     "actions/setup-python": "a309ff8b426b58ec0e2a45f0f869d46889d02405",
     "astral-sh/setup-uv": "cec208311dfd045dd5311c1add060b2062131d57",
-    "actions/setup-node": "53b83947a5a98c8d113130e565377fae1a50d02f",
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
     "gitleaks/gitleaks-action": "ff98106e4c7b2bc287b24eaf42907196329070c7",
 }
@@ -196,10 +195,7 @@ def test_ci_runs_frontend_checks() -> None:
     ci = _load_yaml(".github/workflows/ci.yml")
     ui_job = ci["jobs"]["ui-build"]
     assert ui_job["name"] == "Frontend Checks"
-    setup_node = next(step for step in ui_job["steps"] if step["name"] == "Set up Node.js")
-    cache_paths = setup_node["with"]["cache-dependency-path"]
-    assert "ui/package-lock.json" in cache_paths
-    assert "examples/todo-app/frontend-astro/package-lock.json" in cache_paths
+    assert all(step["name"] != "Set up Node.js" for step in ui_job["steps"])
     run_checks = next(step for step in ui_job["steps"] if step["name"] == "Run frontend checks")
     assert run_checks["run"] == "make frontend-check"
 

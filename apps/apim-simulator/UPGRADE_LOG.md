@@ -6,7 +6,7 @@
 ## Summary
 
 - Updated the UI Vite stack to patched 7.x releases.
-- Rolled the Astro example forward to `astro@6.1.6` after suspending the example-level npm age gate.
+- Rolled the former Astro example forward to `astro@6.1.6` after suspending the example-level npm age gate. This package root was later removed when the todo frontend became static HTML/CSS/JS.
 - Verified the final tree with lint, tests, frontend build checks, and npm audit.
 
 ## Updates
@@ -36,7 +36,7 @@
 - `make test-python`
 - `make frontend-check`
 - `npm --prefix ui audit --json`
-- `npm --prefix examples/todo-app/frontend-astro audit --json`
+- Former check before the static frontend conversion: `npm --prefix examples/todo-app/frontend-astro audit --json`
 
 ## Notes
 

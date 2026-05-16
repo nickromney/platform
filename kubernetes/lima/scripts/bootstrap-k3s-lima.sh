@@ -37,6 +37,7 @@ local_image_cache_host="${LOCAL_IMAGE_CACHE_HOST:-host.lima.internal:5002}"
 local_image_cache_scheme="${LOCAL_IMAGE_CACHE_SCHEME:-http}"
 gitea_registry_host="${GITEA_REGISTRY_HOST:-localhost:30090}"
 gitea_registry_scheme="${GITEA_REGISTRY_SCHEME:-http}"
+k3s_api_host_port="${LIMA_K3S_API_TUNNEL_PORT:-16443}"
 
 find_bootstrap_client() {
   local candidate
@@ -330,7 +331,7 @@ write_kubeconfig_from_server() {
     return 1
   fi
 
-  rendered="$(printf '%s\n' "${rendered}" | sed -E "s#https://127\\.0\\.0\\.1:6443#https://${api_host}:6443#g")"
+  rendered="$(printf '%s\n' "${rendered}" | sed -E "s#https://127\\.0\\.0\\.1:6443#https://${api_host}:${k3s_api_host_port}#g")"
   printf '%s\n' "${rendered}" >"${tmp_file}"
   chmod 600 "${tmp_file}"
   mv "${tmp_file}" "${kubeconfig_path}"

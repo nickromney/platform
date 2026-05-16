@@ -12,15 +12,13 @@ setup() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Code Quality and Tooling:"* ]]
   [[ "${output}" == *"update"* ]]
-  [[ "${output}" == *"Update uv, npm, and Backstage Yarn locks"* ]]
+  [[ "${output}" == *"Update uv and Backstage Yarn locks"* ]]
 }
 
-@test "apim simulator update covers uv npm and backstage locks" {
+@test "apim simulator update covers uv and backstage locks" {
   run make -n -C "${APIM_ROOT}" update
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"uv lock"* ]]
-  [[ "${output}" == *"npm --prefix ui install --package-lock-only --ignore-scripts"* ]]
-  [[ "${output}" == *"npm --prefix examples/todo-app/frontend-astro install --package-lock-only --ignore-scripts"* ]]
   [[ "${output}" == *"cd backstage/app && yarn install --mode=update-lockfile"* ]]
 }

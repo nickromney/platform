@@ -646,7 +646,7 @@ EOF
 
   if [[ "$TODO_FRONTEND_PORT_REMAPPED" == "1" ]]; then
     sb_note "$DOC_EXAMPLES" <<'EOF'
-Port `3000` was already occupied during generation, so the todo sections in this captured run use an alternate frontend binding. The stack behavior is the same; only the host-facing Astro port changed.
+Port `3000` was already occupied during generation, so the todo sections in this captured run use an alternate frontend binding. The stack behavior is the same; only the host-facing static frontend port changed.
 EOF
   fi
 
@@ -836,7 +836,7 @@ EOF
 
   sb_note "$DOC_EXAMPLES" <<EOF
 ## Todo Demo
-\`make up-todo\` is the most user-facing stack in the repo: Astro frontend on \`$TODO_FRONTEND_BROWSER_URL\`, APIM on \`localhost:8000\`, and the FastAPI todo backend behind it.
+\`make up-todo\` is the most user-facing stack in the repo: static frontend on \`$TODO_FRONTEND_BROWSER_URL\`, APIM on \`localhost:8000\`, and the FastAPI todo backend behind it.
 EOF
 
   sb_exec "$DOC_EXAMPLES" <<'EOF'

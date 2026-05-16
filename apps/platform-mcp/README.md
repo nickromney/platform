@@ -2,6 +2,11 @@
 
 Python MCP server for the platform learning environment.
 
+The runtime intentionally keeps the MCP protocol SDK because Streamable HTTP
+compatibility and Inspector behavior are protocol surface, not app logic. The
+app-owned HTTP client and smoke client use the Python standard library so the
+direct runtime dependency list stays limited to the MCP stack.
+
 It serves Streamable HTTP on `/mcp` and exposes seven tools:
 
 - `platform_status`

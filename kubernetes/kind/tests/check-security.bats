@@ -37,3 +37,27 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "check-security waits for a real TLS handshake on the kind gateway port-forward" {
+  run grep -n 'wait_for_kind_gateway_tls_probe()' "${SECURITY_SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -n -- '-tls1_3' "${SECURITY_SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -n 'wait_for_kind_gateway_tls_probe "${local_port}"' "${SECURITY_SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "check-security prefers the live gateway host port before kind port-forward fallback" {
+  run grep -n 'gateway_port_has_tls13 "${GATEWAY_HTTPS_HOST_PORT}"' "${SECURITY_SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -n 'elif ensure_kind_gateway_probe; then' "${SECURITY_SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+}

@@ -30,7 +30,7 @@ Before running the simulator:
 - run `make prereqs` to verify Docker, `mkcert`, and the common local host ports are ready
 - make sure Docker Engine or Docker Desktop is running
 - use `uv` if you want to run smoke scripts, import helpers, or tests from the host
-- use `npm` only for the browser-facing demo checks such as Playwright, Bruno, or the UI toolchain
+- use `npm` only for optional API client tooling such as Bruno or Newman
 
 ## Dependency Cooldown
 
@@ -38,9 +38,11 @@ This repository carries repo-local dependency age gates so local installs and
 container builds do not rely on host dotfiles.
 
 - Python resolution via `uv` uses a seven-day cutoff in [`pyproject.toml`](pyproject.toml)
-- npm package roots ship local `.npmrc` with `min-release-age=7`, and individual example roots can temporarily override it when we intentionally roll a fresh release forward
-- frontend Dockerfiles copy `.npmrc` before `npm ci` so image builds keep the
-  same cooldown policy
+- npm package roots ship local `.npmrc` with `min-release-age=7`, and
+  individual example roots can temporarily override it when we intentionally
+  roll a fresh release forward
+- the operator console and todo demo frontend are static HTML/CSS/JS paths with
+  no npm build step
 
 ## Container Hardening
 
@@ -53,8 +55,8 @@ The stateless services now default to a tighter local runtime posture:
   writable state moved onto named volumes or `tmpfs`
 - `cap_drop: [ALL]`, `security_opt: ["no-new-privileges:true"]`, `tmpfs` for
   writable scratch paths, and `init: true` where it helps process handling
-- a prebuilt static operator console image instead of `npm install && vite dev`
-  inside the running container
+- prebuilt static operator console and todo frontend images instead of
+  `npm install` inside running containers
 - Docker Hardened runtime bases by default for the shipped Python and nginx
   images
 
@@ -382,7 +384,7 @@ make verify-hello-otel
 
 ### Todo demo
 
-Browser-backed APIM demo with Astro frontend and FastAPI backend:
+Browser-backed APIM demo with static HTML/CSS/JS frontend and FastAPI backend:
 
 ```bash
 make up-todo

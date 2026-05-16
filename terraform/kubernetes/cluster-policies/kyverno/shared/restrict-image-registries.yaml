@@ -10,7 +10,8 @@ metadata:
             lists under kubernetes/*/preload-images.txt,
         (b) built by Gitea Actions CI/CD (pushed to localhost:30090), or
         (c) built locally for supported local fallback paths (for example
-            host.lima.internal:5002 or host.docker.internal:5002).
+            host.lima.internal:5002, host.docker.internal:5002, or
+            192.168.64.1:5002).
       This policy is intentionally kept in Audit mode for teaching/demo use.
 spec:
   admission: true
@@ -41,8 +42,9 @@ spec:
           Only images from registries listed in kubernetes/*/preload-images.txt,
           images built by Gitea CI/CD (localhost:30090/*), Lima local-build
           images (host.lima.internal:5002/*), Docker Desktop local-build
-          images (host.docker.internal:5002/*), and explicit Docker Hub repos
-          required by the current staged platform set are allowed.
+          images (host.docker.internal:5002/*), Slicer local-build images
+          (192.168.64.1:5002/*), and explicit Docker Hub repos required by
+          the current staged platform set are allowed.
         foreach:
           - list: "request.object.spec.[initContainers, containers][]"
             deny:
@@ -56,6 +58,7 @@ spec:
                       # --- Local build caches ---
                       - "host.lima.internal:5002/*"
                       - "host.docker.internal:5002/*"
+                      - "192.168.64.1:5002/*"
                       - "192.168.65.254:5002/*"
                       # --- Registries present in kubernetes/*/preload-images.txt ---
                       - "quay.io/*"

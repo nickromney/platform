@@ -201,7 +201,7 @@ help:
 	@echo "  make idp-env ACTION=create APP=hello-platform ENV=preview-nr [DRY_RUN=1]"
 	@echo "  make idp-deployments                          Show the app/environment deployment read model"
 	@echo "  make idp-secrets                              Show app secret bindings and rotation posture"
-	@echo "  make idp-api                                  Start or preview the FastAPI IDP core"
+	@echo "  make idp-api                                  Start or preview the Go IDP core"
 	@echo "  make backstage                                Start or preview the Backstage developer portal"
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
 	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
@@ -809,9 +809,9 @@ idp-secrets:
 .PHONY: idp-api
 idp-api:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose FastAPI IDP core for kind at $(IDP_API_PUBLIC_URL)"; \
+		echo "INFO dry-run: would expose Go IDP core for kind at $(IDP_API_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-core && IDP_RUNTIME=kind IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) uv run uvicorn app.main:app --host 127.0.0.1 --port 8080"; \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-core/app-go && IDP_RUNTIME=kind IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) IDP_CATALOG_PATH=$(REPO_ROOT)/catalog/platform-apps.json go run ./cmd/idp-core"; \
 	fi
 
 .PHONY: backstage

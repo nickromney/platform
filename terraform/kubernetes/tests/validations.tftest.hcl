@@ -212,9 +212,8 @@ run "app_repo_subnetcalc_allows_external_images_without_runner" {
     enable_app_repo_subnetcalc      = true
     prefer_external_workload_images = true
     external_workload_image_refs = {
-      "subnetcalc-api-fastapi-container-app" = "host.lima.internal:5002/platform/subnetcalc-api-fastapi-container-app:1.0.0"
-      "subnetcalc-apim-simulator"            = "host.lima.internal:5002/platform/subnetcalc-apim-simulator:0.4.0"
-      "subnetcalc-frontend-typescript-vite"  = "host.lima.internal:5002/platform/subnetcalc-frontend-typescript-vite:1.0.0"
+      "subnetcalc-api"      = "host.lima.internal:5002/platform/subnetcalc-api:1.0.0"
+      "subnetcalc-frontend" = "host.lima.internal:5002/platform/subnetcalc-frontend:1.0.0"
     }
   }
 }
@@ -232,8 +231,8 @@ run "external_platform_images_accepts_idp_refs" {
     prefer_external_platform_images = true
     external_platform_image_refs = {
       backstage      = "host.docker.internal:5002/platform/backstage:1.0.0"
-      grafana         = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.26.3"
-      "idp-core"      = "host.docker.internal:5002/platform/idp-core:0.1.0"
+      grafana        = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.26.3"
+      "idp-core"     = "host.docker.internal:5002/platform/idp-core:0.1.0"
       "platform-mcp" = "host.docker.internal:5002/platform/platform-mcp:0.1.0"
     }
   }

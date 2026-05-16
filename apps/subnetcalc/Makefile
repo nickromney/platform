@@ -17,7 +17,7 @@ include ../../mk/compose.mk
 REPO_ROOT := $(abspath $(CURDIR)/../..)
 PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
 PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
-OAUTH2_PROXY_COOKIE_SECRET ?=
+OAUTH2_PROXY_COOKIE_SECRET ?= dev-cookie-secret-32-bytes-minimum
 HOST_ARCH := $(shell uname -m)
 ifeq ($(HOST_ARCH),arm64)
 SUBNETCALC_LOCAL_PLATFORM ?= linux/arm64
@@ -29,7 +29,12 @@ else
 SUBNETCALC_LOCAL_PLATFORM ?= linux/amd64
 SUBNETCALC_AZURE_FUNCTION_DOCKERFILE ?= Dockerfile
 endif
-PLATFORM_REQUIRED_ENV_VARS := OAUTH2_PROXY_COOKIE_SECRET
+ifeq ($(SUBNETCALC_LOCAL_PLATFORM),linux/arm64)
+SUBNETCALC_GOARCH := arm64
+else
+SUBNETCALC_GOARCH := amd64
+endif
+PLATFORM_REQUIRED_ENV_VARS :=
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
@@ -45,8 +50,8 @@ endif
   test-bruno-direct-full test-bruno-compose-full test-bruno-swa-full
 
 DEFAULT_STACK_URL := http://localhost:8003
-DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/docs
-CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/docs
+DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/health
+CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/health
 DEFAULT_COMPOSE_ENV := SUBNETCALC_LOCAL_PLATFORM=$(SUBNETCALC_LOCAL_PLATFORM) SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=$(SUBNETCALC_AZURE_FUNCTION_DOCKERFILE) OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 FULL_COMPOSE_PROFILES := --profile function-family --profile oidc --profile mock-easyauth
 
@@ -80,7 +85,8 @@ check-docker-prerequisites: ## Check that compose tooling is installed and runni
 	@$(MAKE) --no-print-directory check-prerequisites
 
 build: check-prerequisites ## Build the default compose images
-	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build api-fastapi-container-app frontend-typescript-vite
+	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app-go build-linux
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build subnetcalc-backend subnetcalc-frontend
 
 update: ## Update dependency locks across the subnetcalc app roots
 	@cd . && bun update --latest
@@ -94,15 +100,16 @@ update: ## Update dependency locks across the subnetcalc app roots
 
 ##@ Run
 up: check-prerequisites ## Start the default compose stack and print the local URL
-	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --build api-fastapi-container-app frontend-typescript-vite
+	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app-go build-linux
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --build subnetcalc-backend subnetcalc-frontend
 	@echo "Subnet Calculator URL: $(DEFAULT_STACK_URL)"
-	@echo "API docs:              $(DEFAULT_API_DOCS_URL)"
-	@echo "Default stack:         stack 04 (frontend-typescript-vite + api-fastapi-container-app)"
+	@echo "API health:            $(DEFAULT_API_DOCS_URL)"
+	@echo "Default stack:         subnetcalc-frontend + subnetcalc-backend (Go runtime roles)"
 
 urls: ## Print the default local URLs for the compose stack
 	@echo "Subnet Calculator URL: $(DEFAULT_STACK_URL)"
-	@echo "API docs:              $(DEFAULT_API_DOCS_URL)"
-	@echo "Default stack:         stack 04 (frontend-typescript-vite + api-fastapi-container-app)"
+	@echo "API health:            $(DEFAULT_API_DOCS_URL)"
+	@echo "Default stack:         subnetcalc-frontend + subnetcalc-backend (Go runtime roles)"
 
 logs: check-prerequisites ## Tail compose logs
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) logs -f --tail=200
@@ -194,17 +201,18 @@ build-compose-frontends: check-prerequisites ## Prebuild the container-app front
 	@echo "Prebuilding container-app frontend images..."
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build frontend-html-static frontend-python-flask-container-app frontend-typescript-vite frontend-react
 
-start-compose-backend-container: check-prerequisites ## Start only the shared container-app backend on port 8090
-	@echo "Starting shared container-app backend (port 8090)..."
-	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d api-fastapi-container-app
-	@echo "API docs: $(CONTAINER_APP_BACKEND_URL)"
+start-compose-backend-container: check-prerequisites ## Start only the Go backend microservice on port 8090
+	@echo "Starting subnetcalc backend microservice (port 8090)..."
+	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app-go build-linux
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --build subnetcalc-backend
+	@echo "API health: $(CONTAINER_APP_BACKEND_URL)"
 
-start-compose-happy: start-compose-backend-container ## Start the fast happy path: shared backend + TypeScript Vite frontend
-	@echo "Starting happy path frontend: TypeScript Vite (port 8003)..."
-	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --no-deps frontend-typescript-vite
+start-compose-happy: start-compose-backend-container ## Start the fast happy path: Go backend + Go frontend role
+	@echo "Starting subnetcalc frontend microservice (port 8003)..."
+	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --build subnetcalc-frontend
 	@echo "Subnet Calculator URL: http://localhost:8003"
-	@echo "API docs:              $(CONTAINER_APP_BACKEND_URL)"
-	@echo "Workflow:              backend stays warm; swap frontends with start-compose-frontend-*"
+	@echo "API health:            $(CONTAINER_APP_BACKEND_URL)"
+	@echo "Workflow:              two microservices from one minimal Go image"
 
 start-compose-frontend-static: start-compose-backend-container ## Swap in the static HTML frontend against the shared container-app backend
 	@echo "Starting static HTML frontend (port 8001) against the warm container-app backend..."
@@ -373,7 +381,7 @@ start-swa-all: start-swa-backends ## Print the three-SWA comparison workflow
 
 ##@ Testing
 test: ## Start, test, and clean up the default compose stack
-	@$(MAKE) --no-print-directory test-bruno-compose-full
+	@../../apps/subnetcalc/tests/compose-smoke.sh --execute
 
 
 test-bruno-direct: ## Run Bruno against the direct-launch stack

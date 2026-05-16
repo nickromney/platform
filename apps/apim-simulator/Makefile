@@ -128,7 +128,7 @@ help:
 	@printf $(HELP_FMT) "up-otel" "Start the direct public simulator stack with LGTM at $(GRAFANA_BASE_URL)"
 	@printf $(HELP_FMT) "up-private" "Start the private MCP stack without publishing the gateway host port"
 	@printf $(HELP_FMT) "up-tls" "Start the edge TLS MCP stack on $(APIM_EDGE_HOST):9443"
-	@printf $(HELP_FMT) "up-todo" "Start the Astro + APIM + FastAPI todo demo stack"
+	@printf $(HELP_FMT) "up-todo" "Start the static frontend + APIM + FastAPI todo demo stack"
 	@printf $(HELP_FMT) "up-todo-otel" "Start the todo demo stack with LGTM at $(GRAFANA_BASE_URL)"
 	@printf $(HELP_FMT) "up-ai-gateway" "Start the local OpenAI-compatible AI gateway example"
 	@printf $(HELP_FMT) "up-ai-gateway-otel" "Start the AI gateway example with LGTM at $(GRAFANA_BASE_URL)"
@@ -166,7 +166,7 @@ help:
 	@printf $(HELP_FMT) "compat" "Run the curated APIM sample compatibility harness"
 	@printf $(HELP_FMT) "compat-report" "Run static Terraform/APIM compatibility analysis (requires TOFU_SHOW=...)"
 	@printf $(HELP_FMT) "fmt" "Format Python code with Ruff"
-	@printf $(HELP_FMT) "frontend-check" "Run Biome, TypeScript, and Astro checks for repo frontends"
+	@printf $(HELP_FMT) "frontend-check" "Check the static operator console and todo demo frontend"
 	@printf $(HELP_FMT) "import-tofu" "Import a tofu show JSON file into a running simulator (requires TOFU_SHOW=...)"
 	@printf $(HELP_FMT) "install-hooks" "Enable the repo-managed git pre-commit hook"
 	@printf $(HELP_FMT) "lint" "Run repo-level lint checks without modifying files"
@@ -178,7 +178,7 @@ help:
 	@printf $(HELP_FMT) "test" "Run Python and shell tests"
 	@printf $(HELP_FMT) "test-python" "Run the Python test suite"
 	@printf $(HELP_FMT) "test-shell" "Run the shell script test suite with BATS"
-	@printf $(HELP_FMT) "update" "Update uv, npm, and Backstage Yarn locks"
+	@printf $(HELP_FMT) "update" "Update uv and Backstage Yarn locks"
 	@printf "\nVerification and Smoke:\n"
 	@printf $(HELP_FMT) "export-todo-har" "Capture the todo APIM flow as a HAR file for Proxyman"
 	@printf $(HELP_FMT) "smoke-edge" "Run the edge MCP and forwarded-header smoke test"
@@ -194,7 +194,7 @@ help:
 	@printf $(HELP_FMT) "smoke-keyvault" "Run the local Key Vault secrets and certificates smoke test"
 	@printf $(HELP_FMT) "smoke-tutorials-live" "Run all numbered tutorial scripts against live local stacks"
 	@printf $(HELP_FMT) "test-todo-bruno" "Run the Bruno collection against the running todo demo stack"
-	@printf $(HELP_FMT) "test-todo-e2e" "Run Playwright against the running todo demo stack"
+	@printf $(HELP_FMT) "test-todo-e2e" "Run the todo browser-path smoke against the running stack"
 	@printf $(HELP_FMT) "test-todo-postman" "Run the Postman collection against the running todo demo stack"
 	@printf $(HELP_FMT) "verify-azure" "Diff curated requests against simulator and live Azure APIM"
 	@printf $(HELP_FMT) "verify-hello-otel" "Verify OTEL signals for the LGTM-backed hello API starter"
@@ -463,18 +463,23 @@ lint-shell:
 	@"$(AUDIT_SHELL_SCRIPTS_SCRIPT)" --execute
 
 frontend-check:
-	npm --prefix ui ci
-	npm --prefix ui run check
-	npm --prefix examples/todo-app/frontend-astro ci
-	npm --prefix examples/todo-app/frontend-astro run check
+	test -f ui/index.html
+	test -f ui/app.js
+	test -f ui/styles.css
+	! test -f ui/package.json
+	test -f examples/todo-app/frontend-astro/index.html
+	test -f examples/todo-app/frontend-astro/app.js
+	test -f examples/todo-app/frontend-astro/styles.css
+	test -f examples/todo-app/frontend-astro/public/runtime-config.js
+	! test -f examples/todo-app/frontend-astro/package.json
+	! test -f examples/todo-app/frontend-astro/package-lock.json
+	! test -f examples/todo-app/frontend-astro/.npmrc
 
 check-version:
 	@"$(CHECK_VERSION_SCRIPT)" --execute
 
 update:
 	uv lock
-	npm --prefix ui install --package-lock-only --ignore-scripts
-	npm --prefix examples/todo-app/frontend-astro install --package-lock-only --ignore-scripts
 	cd backstage/app && yarn install --mode=update-lockfile
 
 check-host-ports:
@@ -574,9 +579,7 @@ smoke-tutorials-live:
 	APIM_BASE="$(APIM_BASE_URL)" GRAFANA_BASE="$(GRAFANA_BASE_URL)" OPERATOR_CONSOLE_BASE="$(OPERATOR_CONSOLE_URL)" ./scripts/run_tutorial_smoke.sh --execute
 
 test-todo-e2e:
-	npm --prefix examples/todo-app/frontend-astro ci
-	npm --prefix examples/todo-app/frontend-astro exec playwright install chromium
-	BASE_URL="$(TODO_FRONTEND_BASE_URL)" API_BASE_URL="$(TODO_APIM_PUBLIC_BASE_URL)" GRAFANA_BASE_URL="$(TODO_GRAFANA_BASE_URL)" npm --prefix examples/todo-app/frontend-astro run test:e2e
+	$(UV_RUN) python scripts/smoke_todo.py
 
 test-todo-bruno:
 	@tmp_env="$$(mktemp)"; \

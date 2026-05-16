@@ -18,10 +18,6 @@ RELEASE_FILES=(
   examples/hello-api/main.py
   examples/todo-app/api-fastapi-container-app/main.py
   examples/todo-app/api-clients/proxyman/todo-through-apim.har
-  ui/package.json
-  ui/package-lock.json
-  examples/todo-app/frontend-astro/package.json
-  examples/todo-app/frontend-astro/package-lock.json
 )
 
 usage() {
@@ -221,8 +217,6 @@ if [[ "${VERSION_ALREADY_CURRENT}" == "1" ]]; then
 else
   run "${UV_BIN}" run --project "${ROOT_DIR}" python scripts/bump_version.py "${VERSION}"
   run uv lock
-  run_in_dir "${ROOT_DIR}/ui" npm version "${VERSION}" --no-git-tag-version
-  run_in_dir "${ROOT_DIR}/examples/todo-app/frontend-astro" npm version "${VERSION}" --no-git-tag-version
 fi
 
 if [[ "${SKIP_CHECKS}" != "1" ]]; then

@@ -1122,13 +1122,12 @@ check "enable_app_repo_subnetcalc_requires_gitea_and_actions_runner" {
       var.enable_gitea && (
         var.enable_actions_runner || (
           var.prefer_external_workload_images &&
-          lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "") != "" &&
-          lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "") != "" &&
-          lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "") != ""
+          lookup(var.external_workload_image_refs, "subnetcalc-api", "") != "" &&
+          lookup(var.external_workload_image_refs, "subnetcalc-frontend", "") != ""
         )
       )
     )
-    error_message = "enable_app_repo_subnetcalc requires enable_gitea=true and either enable_actions_runner=true or explicit external subnetcalc API/APIM/TypeScript frontend image refs when prefer_external_workload_images=true."
+    error_message = "enable_app_repo_subnetcalc requires enable_gitea=true and either enable_actions_runner=true or explicit external subnetcalc API/frontend image refs when prefer_external_workload_images=true."
   }
 }
 
@@ -1181,7 +1180,7 @@ variable "prefer_external_workload_images" {
 }
 
 variable "external_workload_image_refs" {
-  description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api-fastapi-container-app, subnetcalc-apim-simulator, subnetcalc-frontend-react, subnetcalc-frontend-typescript-vite)."
+  description = "Optional external image references keyed by workload image name (sentiment-api, sentiment-auth-ui, subnetcalc-api, subnetcalc-frontend, plus deprecated legacy keys when explicitly enabled)."
   type        = map(string)
   default     = {}
 }

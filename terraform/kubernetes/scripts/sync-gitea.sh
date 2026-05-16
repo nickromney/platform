@@ -404,10 +404,10 @@ main() {
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_API sentiment-api
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
-  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI subnetcalc-api-fastapi-container-app
+  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API subnetcalc-api
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR subnetcalc-apim-simulator
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT subnetcalc-frontend-react
-  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT subnetcalc-frontend-typescript-vite
+  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND subnetcalc-frontend
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"

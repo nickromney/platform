@@ -2,9 +2,8 @@
 
 !apps/
 !apps/idp-core/
-!apps/idp-core/app/
-!apps/idp-core/app/**
-!apps/idp-core/pyproject.toml
-!apps/idp-core/uv.lock
+!apps/idp-core/app-go/
+!apps/idp-core/app-go/.run/
+!apps/idp-core/app-go/.run/idp-core
 !catalog/
 !catalog/platform-apps.json

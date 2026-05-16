@@ -59,28 +59,27 @@ services:
   sentiment-api:
     <<: *app-runtime-hardening
     build:
-      context: ./api-sentiment
+      context: ./app-go
       dockerfile: Dockerfile
-      args:
-        SENTIMENT_MODEL_ID: ${SENTIMENT_MODEL_ID:-}
     environment:
       - HOME=/tmp
-      - SENTIMENT_MODEL_ID
-      - SENTIMENT_MODEL_CACHE_DIR=/opt/transformers-cache
-      - SENTIMENT_MODEL_LOCAL_ONLY=1
-      - SENTIMENT_NEUTRAL_MARGIN=${SENTIMENT_NEUTRAL_MARGIN:-0.45}
+      - RUNTIME_ROLE=backend
+      - PORT=8080
       - DATA_DIR=/data
       - CSV_PATH=/data/comments.csv
     volumes:
       - ./data:/data
 
   sentiment-auth-frontend:
-    <<: *nginx-runtime-hardening
+    <<: *app-runtime-hardening
     build:
-      context: ./frontend-react-vite/sentiment-auth-ui
+      context: ./app-go
       dockerfile: Dockerfile
-      args:
-        VITE_KEYCLOAK_BASE_URL: http://localhost:8300
+    environment:
+      - HOME=/tmp
+      - RUNTIME_ROLE=frontend
+      - BACKEND_URL=http://sentiment-api:8080
+      - PORT=8080
     expose:
       - "8080"
 

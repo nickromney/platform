@@ -28,6 +28,7 @@ contracts. These ADRs explain why the repo ended up with that shape.
 - [ADR 0005: Vendor APIM simulator as a supporting context runtime](./0005-vendor-apim-simulator-runtime.md) (superseded)
 - [ADR 0006: Treat make, status, and TUI as the operator-facing application service boundary](./0006-operator-application-service-boundary.md)
 - [ADR 0007: Integrate APIM simulator as an in-repo supporting context](./0007-integrate-apim-simulator-supporting-context.md)
+- [ADR 0008: Default sample apps to minimal auditable runtimes](./0008-default-sample-apps-to-minimal-auditable-runtimes.md)
 
 ## How To Read These
 

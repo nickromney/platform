@@ -153,3 +153,26 @@ EOF
   [[ "${output}" == *"--remove-color"* ]]
   [[ "${output}" == *"--kubeconfig "* ]]
 }
+
+@test "default-deny protection allows namespace-controller cleanup" {
+  run python3 - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy = (repo_root / "terraform/kubernetes/cluster-policies/kyverno/shared/protect-default-deny.yaml").read_text(encoding="utf-8")
+
+assert "exclude:" in policy
+assert "subjects:" in policy
+assert "kind: User" in policy
+assert "name: system:kube-controller-manager" in policy
+assert "kind: ServiceAccount" in policy
+assert "name: namespace-controller" in policy
+assert "namespace: kube-system" in policy
+
+print("validated default-deny cleanup escape hatch")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated default-deny cleanup escape hatch"* ]]
+}

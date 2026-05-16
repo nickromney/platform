@@ -282,10 +282,23 @@ locals {
     ],
     local.subnetcalc_app_extra_source_dirs
   )
-  sentiment_content_hash = var.enable_app_repo_sentiment ? try(sha1(join("", [for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")])), "") : ""
+  app_repo_sync_excluded_path_segments = toset([
+    ".git",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".run",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+  ])
+  sentiment_content_hash = var.enable_app_repo_sentiment ? try(sha1(join("", [
+    for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")
+    if length(setintersection(toset(split("/", f)), local.app_repo_sync_excluded_path_segments)) == 0
+  ])), "") : ""
   subnetcalc_content_hash = var.enable_app_repo_subnetcalc ? try(sha1(join("", flatten([
     for source in local.subnetcalc_projected_source_dirs : [
       for f in sort(fileset(source.source_dir, "**")) : "${source.target_dir}/${f}:${filesha256("${source.source_dir}/${f}")}"
+      if length(setintersection(toset(split("/", f)), local.app_repo_sync_excluded_path_segments)) == 0
     ]
   ]))), "") : ""
   app_repo_sync_contracts = {
@@ -336,11 +349,11 @@ locals {
       workflow_ref            = "main"
       ensure_workflow_started = false
       failure_consequence     = "Policies will not update until it succeeds."
-      image_names             = ["subnetcalc-frontend-typescript-vite"]
+      image_names             = ["subnetcalc-api", "subnetcalc-frontend"]
       policy_checks = [
         {
           file            = "apps/workloads/base/all.yaml"
-          required_images = ["subnetcalc-frontend-typescript-vite"]
+          required_images = ["subnetcalc-api", "subnetcalc-frontend"]
         }
       ]
     }
@@ -356,9 +369,8 @@ locals {
   )
   enable_subnetcalc_external_images = (
     var.prefer_external_workload_images &&
-    lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "") != "" &&
-    lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "") != "" &&
-    lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "") != ""
+    lookup(var.external_workload_image_refs, "subnetcalc-api", "") != "" &&
+    lookup(var.external_workload_image_refs, "subnetcalc-frontend", "") != ""
   )
   # External image refs choose where workload images come from, but they should
   # not advance the teaching-stage rollout on their own. Stage files remain the
@@ -491,11 +503,11 @@ locals {
     prefer_external_images                 = var.prefer_external_workload_images
     external_sentiment_api                 = lookup(var.external_workload_image_refs, "sentiment-api", "")
     external_sentiment_ui                  = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
-    external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api-fastapi-container-app", "")
+    external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api", "")
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
     external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
     external_subnetcalc_fe                 = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
-    external_subnetcalc_fe_ts              = lookup(var.external_workload_image_refs, "subnetcalc-frontend-typescript-vite", "")
+    external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host
     prefer_external_platform               = var.prefer_external_platform_images

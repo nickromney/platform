@@ -38,7 +38,7 @@ kind: Component
 metadata:
   name: idp-core
   title: Portal API
-  description: FastAPI product API for catalog, runtime, environment, deployment, secret, and action contracts.
+  description: Go product API for catalog, runtime, environment, deployment, secret, and action contracts.
   annotations:
     backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/idp-core/
     backstage.io/kubernetes-label-selector: app=idp-core

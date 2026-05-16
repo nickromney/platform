@@ -1,1 +1,1 @@
-"""IDP core FastAPI application package."""
+"""Deprecated Python compatibility package for the IDP core service."""
