@@ -446,6 +446,9 @@ repo_root = Path(os.environ["REPO_ROOT"])
 
 scripts = (
     "kubernetes/kind/scripts/build-local-workload-images.sh",
+    "kubernetes/scripts/build-local-workload-images.sh",
+)
+wrappers = (
     "kubernetes/lima/scripts/build-local-workload-images.sh",
     "kubernetes/slicer/scripts/build-local-workload-images.sh",
 )
@@ -463,11 +466,15 @@ for relative_path in scripts:
     assert "kubernetes/workflow/image-build-lib.sh" in content, relative_path
     assert "image_build_catalog_build_loop workload workload" in content, relative_path
 
-print(f"validated {len(scripts)} local workload builder(s)")
+for relative_path in wrappers:
+    content = (repo_root / relative_path).read_text(encoding="utf-8")
+    assert "kubernetes/scripts/build-local-workload-images.sh" in content, relative_path
+
+print(f"validated {len(scripts) + len(wrappers)} local workload builder(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 3 local workload builder(s)"* ]]
+  [[ "${output}" == *"validated 4 local workload builder(s)"* ]]
 }
 
 @test "runtime-config frontends render into tmpfs-backed paths for read-only roots" {

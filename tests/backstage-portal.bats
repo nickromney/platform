@@ -131,7 +131,7 @@ build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images
 assert 'variable "enable_backstage"' in variables_tf
 assert "enable_backstage_effective" in locals_tf
 assert 'local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : []' in locals_tf
-assert "ENABLE_BACKSTAGE" in gitops_tf
+assert "enable_backstage                       = var.enable_backstage" in locals_tf
 assert "remove_backstage_idp_resources" in sync_script
 assert "httproute-portal.yaml" in sync_script
 assert "oauth2-proxy-backstage" in sync_script

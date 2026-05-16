@@ -6,8 +6,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 # shellcheck source=kubernetes/scripts/docker-local-registry-lib.sh
-source "${SCRIPT_DIR}/docker-local-registry-lib.sh"
-IMAGE_LIST_FILE="${IMAGE_LIST_FILE:-${REPO_ROOT}/kubernetes/kind/preload-images.txt}"
+source "${REPO_ROOT}/kubernetes/scripts/docker-local-registry-lib.sh"
+
+VARIANT_LABEL="${VARIANT_LABEL:-Kubernetes variant}"
+IMAGE_LIST_FILE="${IMAGE_LIST_FILE:-}"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
 OPTIONAL="${OPTIONAL:-0}"
 PRELOAD_IMAGES_SCRIPT="${PRELOAD_IMAGES_SCRIPT:-${REPO_ROOT}/terraform/kubernetes/scripts/preload-images.sh}"
@@ -18,7 +20,8 @@ usage() {
   cat <<EOF
 Usage: ${0##*/} [--dry-run] [--execute]
 
-Mirrors required preload images into the local Docker registry cache.
+Mirrors required ${VARIANT_LABEL} preload images into the local Docker registry
+cache.
 
 $(shell_cli_standard_options)
 EOF
@@ -34,18 +37,23 @@ skip_or_fail() {
   exit 1
 }
 
-shell_cli_handle_standard_no_args usage "would sync preload images from ${IMAGE_LIST_FILE} into ${CACHE_PUSH_HOST}" "$@"
+shell_cli_handle_standard_no_args usage "would sync ${VARIANT_LABEL} preload images from ${IMAGE_LIST_FILE:-<unset>} into ${CACHE_PUSH_HOST}" "$@"
 
+[ -n "${IMAGE_LIST_FILE}" ] || skip_or_fail "IMAGE_LIST_FILE is required"
 command -v curl >/dev/null 2>&1 || skip_or_fail "curl not found"
 registry_require_tools
 
-if ! docker info >/dev/null 2>&1; then
-  skip_or_fail "docker daemon not reachable"
-fi
-
 [ -f "${IMAGE_LIST_FILE}" ] || skip_or_fail "image list not found: ${IMAGE_LIST_FILE}"
 [ -f "${PRELOAD_IMAGES_SCRIPT}" ] || skip_or_fail "preload helper not found: ${PRELOAD_IMAGES_SCRIPT}"
-registry_assert_reachable "${CACHE_PUSH_HOST}" || skip_or_fail "local cache not reachable at http://${CACHE_PUSH_HOST}/v2/"
+http_fetch -fsS "http://${CACHE_PUSH_HOST}/v2/" >/dev/null 2>&1 || skip_or_fail "local cache not reachable at http://${CACHE_PUSH_HOST}/v2/"
+
+if [ -z "${DOCKER_CONFIG:-}" ]; then
+  docker_config_dir="$(mktemp -d)"
+  mkdir -p "${docker_config_dir}"
+  printf '{}\n' >"${docker_config_dir}/config.json"
+  export DOCKER_CONFIG="${docker_config_dir}"
+  trap 'rm -rf "${docker_config_dir}"' EXIT
+fi
 
 mirror_remote_image() {
   local source_ref="$1"
@@ -73,7 +81,7 @@ mirror_remote_image() {
     warn "could not tag ${source_ref} as ${cache_ref}"
     return 0
   fi
-  if ! docker_push_local_registry "${cache_ref}" 2>/dev/null; then
+  if ! docker push "${cache_ref}" >/dev/null 2>&1; then
     warn "could not push ${cache_ref}"
   fi
 }

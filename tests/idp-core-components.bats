@@ -21,6 +21,48 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "IDP deployment shell read model includes catalog deployment evidence" {
+  fixture_catalog="${BATS_TEST_TMPDIR}/platform-apps.json"
+  cat >"${fixture_catalog}" <<'JSON'
+{
+  "applications": [
+    {
+      "name": "fixture-service",
+      "owner": "team-platform",
+      "health": "/readyz",
+      "deployment": {
+        "controller": "argocd",
+        "strategy": "gitops",
+        "image": "registry.local/fixture:base",
+        "sync": "automated"
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "namespace": "dev",
+          "route": "https://fixture.dev.example.test",
+          "rbac": {"group": "app-fixture-dev"},
+          "deployment": {"image": "registry.local/fixture:dev"}
+        }
+      ]
+    }
+  ]
+}
+JSON
+
+  run env PLATFORM_APP_CATALOG="${fixture_catalog}" \
+    "${REPO_ROOT}/terraform/kubernetes/scripts/idp-deployments.sh" --execute --format json
+
+  [ "${status}" -eq 0 ]
+  run jq -e '
+    .schema_version == "platform.idp.deployment-read-model/v1" and
+    all(.deployments[]; has("app") and has("environment") and has("image") and has("health") and has("sync")) and
+    any(.deployments[]; .app == "fixture-service" and .environment == "dev" and .image == "registry.local/fixture:dev" and .health == "/readyz" and .sync == "automated")
+  ' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "identity and access edge contract exposes OIDC RBAC and API audience facts" {
   jq_path="$(command -v jq)"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"

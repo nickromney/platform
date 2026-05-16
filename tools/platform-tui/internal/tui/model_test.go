@@ -44,6 +44,16 @@ func selectLabel(m Model, t *testing.T, label string) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func writeExecutable(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 func drainRun(m Model, cmd tea.Cmd, t *testing.T) Model {
 	t.Helper()
 	for i := 0; i < 20 && cmd != nil; i++ {
@@ -78,6 +88,40 @@ func TestQQuitsImmediately(t *testing.T) {
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Fatalf("expected tea.QuitMsg, got %T", cmd())
+	}
+}
+
+func TestWorkflowOptionsPreferRenderedCoreOverStaticFile(t *testing.T) {
+	repoRoot := t.TempDir()
+	staticOptions := filepath.Join(repoRoot, "kubernetes", "workflow", "options.json")
+	if err := os.MkdirAll(filepath.Dir(staticOptions), 0o755); err != nil {
+		t.Fatalf("mkdir workflow options dir: %v", err)
+	}
+	if err := os.WriteFile(staticOptions, []byte(`{
+  "variants": [{"id": "kind", "path": "kubernetes/kind", "label": "stale static kind"}],
+  "stages": [{"id": "100", "label": "cluster"}],
+  "action_metadata": [{"id": "plan", "label": "plan"}],
+  "apps": ["sentiment"]
+}`), 0o644); err != nil {
+		t.Fatalf("write static options: %v", err)
+	}
+
+	workflowScript := filepath.Join(repoRoot, "workflow.sh")
+	writeExecutable(t, workflowScript, `#!/usr/bin/env bash
+set -euo pipefail
+cat <<'JSON'
+{
+  "variants": [{"id": "kind", "path": "kubernetes/kind", "label": "rendered kind"}],
+  "stages": [{"id": "100", "label": "cluster"}],
+  "action_metadata": [{"id": "plan", "label": "plan"}],
+  "apps": ["sentiment"]
+}
+JSON
+`)
+
+	m := New(Config{RepoRoot: repoRoot, WorkflowScript: workflowScript})
+	if got := m.options.Variants[0].Label; got != "rendered kind" {
+		t.Fatalf("expected rendered workflow options, got %q", got)
 	}
 }
 

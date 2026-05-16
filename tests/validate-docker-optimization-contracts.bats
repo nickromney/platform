@@ -458,6 +458,9 @@ for image_id, build in expected.items():
 
 scripts = [
     repo_root / "kubernetes/kind/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/scripts/build-local-workload-images.sh",
+]
+variant_wrappers = [
     repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
     repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
 ]
@@ -475,6 +478,12 @@ for script in scripts:
     content = script.read_text(encoding="utf-8")
     assert "image_build_catalog_build_loop workload workload" in content, script
     assert "kubernetes/workflow/image-build-lib.sh" in content, script
+    for hard_coded_path in hard_coded_paths:
+        assert hard_coded_path not in content, (script, hard_coded_path)
+
+for script in variant_wrappers:
+    content = script.read_text(encoding="utf-8")
+    assert "kubernetes/scripts/build-local-workload-images.sh" in content, script
     for hard_coded_path in hard_coded_paths:
         assert hard_coded_path not in content, (script, hard_coded_path)
 
@@ -700,15 +709,22 @@ for function_name in required_functions:
 scripts = [
     repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh",
     repo_root / "kubernetes/kind/scripts/build-local-workload-images.sh",
-    repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
-    repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/scripts/build-local-workload-images.sh",
 ]
 for script in scripts:
     content = script.read_text(encoding="utf-8")
     assert "kubernetes/workflow/image-build-lib.sh" in content, script
     assert "image_build_catalog_build_loop" in content or "image_build_catalog_build_and_push" in content, script
 
-workload_scripts = scripts[1:]
+variant_wrappers = [
+    repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
+    repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
+]
+for script in variant_wrappers:
+    content = script.read_text(encoding="utf-8")
+    assert "kubernetes/scripts/build-local-workload-images.sh" in content, script
+
+workload_scripts = scripts[1:] + variant_wrappers
 for script in workload_scripts:
     content = script.read_text(encoding="utf-8")
     for duplicated_function in (

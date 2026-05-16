@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 CATALOG_FILE="${PLATFORM_APP_CATALOG:-${REPO_ROOT}/catalog/platform-apps.json}"
 SECRET_FORMAT="${SECRET_FORMAT:-text}"
+READ_MODEL_SCRIPT="${IDP_CATALOG_READ_MODEL_SCRIPT:-${SCRIPT_DIR}/idp-catalog-read-model.sh}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
@@ -39,21 +40,8 @@ done
 
 shell_cli_maybe_execute_or_preview_summary usage "would inspect the IDP secret lifecycle model"
 
-command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
-[[ -f "${CATALOG_FILE}" ]] || fail "catalog not found: ${CATALOG_FILE}"
-
 case "${SECRET_FORMAT}" in
-  json)
-    jq '{
-      schema_version: "platform.idp.secret-bindings/v1",
-      secrets: [.applications[] as $app | $app.secrets[] | . + {app: $app.name, owner: $app.owner}]
-    }' "${CATALOG_FILE}"
-    ;;
-  text)
-    jq -r '.applications[] as $app | $app.secrets[] | [$app.name, .name, .binding, .rotation] | @tsv' "${CATALOG_FILE}" |
-      awk 'BEGIN { printf "%-18s %-34s %-14s %s\n", "APP", "SECRET", "BINDING", "ROTATION" }
-           { printf "%-18s %-34s %-14s %s\n", $1, $2, $3, $4 }'
-    ;;
+  json|text) PLATFORM_APP_CATALOG="${CATALOG_FILE}" "${READ_MODEL_SCRIPT}" --execute --projection secrets --format "${SECRET_FORMAT}" ;;
   *)
     fail "Unknown --format ${SECRET_FORMAT}; expected text or json"
     ;;

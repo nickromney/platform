@@ -28,7 +28,7 @@ EOF
 
   printf 'quay.io/argoproj/argocd:v3.3.4\n' >"${IMAGE_LIST_FILE}"
 
-  run env OPTIONAL=1 IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" "${SCRIPT}"
+  run env OPTIONAL=1 IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"local cache not reachable"* ]]
@@ -73,7 +73,7 @@ EOF
 
   printf 'python:3.13-slim\nquay.io/argoproj/argocd:v3.3.4\n' >"${IMAGE_LIST_FILE}"
 
-  run env IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" LOG_FILE="${LOG_FILE}" "${SCRIPT}"
+  run env IMAGE_LIST_FILE="${IMAGE_LIST_FILE}" CACHE_PUSH_HOST="127.0.0.1:5002" LOG_FILE="${LOG_FILE}" "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   grep -F 'tag python:3.13-slim 127.0.0.1:5002/library/python:3.13-slim' "${LOG_FILE}"

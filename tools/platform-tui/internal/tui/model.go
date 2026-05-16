@@ -201,6 +201,9 @@ func New(cfg Config) Model {
 }
 
 func loadWorkflowOptions(cfg Config) workflowOptions {
+	if options, ok := loadWorkflowOptionsFromScript(cfg); ok {
+		return options
+	}
 	for _, path := range workflowOptionsPaths(cfg) {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -209,9 +212,6 @@ func loadWorkflowOptions(cfg Config) workflowOptions {
 		if options, ok := parseWorkflowOptions(data); ok {
 			return options
 		}
-	}
-	if options, ok := loadWorkflowOptionsFromScript(cfg); ok {
-		return options
 	}
 	return fallbackWorkflowOptions()
 }
