@@ -567,12 +567,10 @@ async function keycloakAdminConsoleWorks(page: Page) {
 }
 
 async function sentimentSamplePositiveAndAnalyze(page: Page) {
-  // Try to align with the existing sentiment Playwright tests in apps/sentiment.
-  // Be tolerant to minor UI changes; prefer role/name selectors.
-  const heading = page.getByText('Sentiment Analysis (Authenticated UI)')
+  const heading = page.getByRole('heading', { name: /^Sentiment$/i })
   await expect(heading).toBeVisible({ timeout: 60_000 })
 
-  const samplePositive = page.getByRole('button', { name: 'Sample: Positive' })
+  const samplePositive = page.getByRole('button', { name: 'Positive sample' })
   const analyzeButton = page.getByRole('button', { name: 'Analyze' })
 
   await expect(samplePositive).toBeVisible({ timeout: 60_000 })
@@ -612,14 +610,10 @@ async function sentimentSamplePositiveAndAnalyze(page: Page) {
   expect(['positive', 'negative', 'neutral']).toContain(postResponseJson?.label)
   expect(typeof postResponseJson?.confidence).toBe('number')
 
-  // UI result: classification should render, with confidence/latency visible.
-  const lastResultValue = page.locator('.status .value')
-  await expect(lastResultValue).toContainText(/positive|negative|neutral/i, { timeout: 60_000 })
-  await expect(page.locator('.status .footnote')).toContainText(/Confidence:/i, { timeout: 60_000 })
-  await expect(page.locator('.status .footnote')).toContainText(/Latency:/i, { timeout: 60_000 })
-
-  const statusStrong = page.locator('.status .tag strong')
-  await expect(statusStrong).toContainText(/ok/i, { timeout: 60_000 })
+  const latestComment = page.locator('#comments article.comment').first()
+  await expect(latestComment.locator('.label')).toContainText(/positive|negative|neutral/i, { timeout: 60_000 })
+  await expect(latestComment.locator('.meta')).toContainText(/Confidence:/i, { timeout: 60_000 })
+  await expect(latestComment.locator('.meta')).toContainText(/Latency:/i, { timeout: 60_000 })
 }
 
 async function subnetcalcRfc1918Lookup(page: Page) {

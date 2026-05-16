@@ -43,7 +43,9 @@ LIMA_INSTANCE_PREFIX ?= k3s-node
 LIMA_VM_USER ?= $(USER)
 LIMA_CONFIG ?= $(MAKEFILE_DIR)config/lima-k3s-node.yaml
 LIMA_HOST_GATEWAY_PROXY_MODE ?= auto
+LIMA_K3S_API_TUNNEL_PORT ?= 16443
 LIMA_SHARED_HOST_PORTS := 443 30022 30080 30090 31235 3301 3302
+LIMA_SHARED_PORT_TUNNEL_PORTS ?= 30022 30070 30080 30090 30302 30443 31235
 K3SUP_CONTEXT ?= limavm-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
@@ -96,7 +98,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
@@ -113,6 +115,7 @@ export PLATFORM_DEMO_PASSWORD
 export PLATFORM_PROFILE_MODE
 export PLATFORM_PROFILE_DIR
 export PLATFORM_PROFILE_RUN_ID
+export LIMA_K3S_API_TUNNEL_PORT
 export PLATFORM_PROFILE_CAPTURE_DOCKER
 export PLATFORM_PROFILE_CAPTURE_KUBECTL
 export PLATFORM_PROFILE_KEEP_SUCCESS
@@ -180,7 +183,7 @@ help:
 	@echo "  make ensure-host-gateway-proxy"
 	@echo "  make env"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
-	@echo "  make idp-api                                  Start or preview the FastAPI IDP core"
+	@echo "  make idp-api                                  Start or preview the Go IDP core"
 	@echo "  make backstage                                Start or preview the Backstage developer portal"
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
 	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
@@ -242,8 +245,23 @@ check-stage-monotonicity:
 prepare-state:
 	@mkdir -p "$(dir $(STATE_FILE))"
 
+.PHONY: ensure-k3s-api-tunnel
+ensure-k3s-api-tunnel:
+	@LIMA_INSTANCE_PREFIX="$(LIMA_INSTANCE_PREFIX)" \
+	LIMA_K3S_API_TUNNEL_PORT="$(LIMA_K3S_API_TUNNEL_PORT)" \
+	"$(MAKEFILE_DIR)scripts/ensure-k3s-api-tunnel.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: ensure-k3s-shared-port-tunnels
+ensure-k3s-shared-port-tunnels:
+	@LIMA_INSTANCE_PREFIX="$(LIMA_INSTANCE_PREFIX)" \
+	LIMA_SHARED_PORT_TUNNEL_PORTS="$(LIMA_SHARED_PORT_TUNNEL_PORTS)" \
+	"$(MAKEFILE_DIR)scripts/ensure-k3s-shared-port-tunnels.sh" $(READONLY_MODE_FLAG)
+
 .PHONY: check-kubeconfig
 check-kubeconfig:
+	@if limactl list 2>/dev/null | awk '$$1=="$(LIMA_INSTANCE_PREFIX)-1" && $$2=="Running" { found=1 } END { exit found ? 0 : 1 }'; then \
+		$(MAKE) ensure-k3s-api-tunnel >/dev/null; \
+	fi
 	@set -euo pipefail; \
 	default_kubeconfig="$(DEFAULT_KUBECONFIG_PATH)"; \
 	"$(KUBECONFIG_HELPER)" --execute --action ensure-valid --kubeconfig "$$default_kubeconfig"; \
@@ -508,6 +526,7 @@ start:
 .PHONY: ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status
 ensure-host-gateway-proxy:
 	@$(MAKE) check-conflicting-clusters-stopped
+	@$(MAKE) ensure-k3s-shared-port-tunnels >/dev/null
 	@"$(HOST_GATEWAY_PROXY)" ensure $(READONLY_MODE_FLAG)
 
 stop-host-gateway-proxy:
@@ -689,10 +708,12 @@ apply: workflow-validate-stage
 		$(MAKE) check-conflicting-clusters-stopped; \
 		run_step "lima-vms-up" $(MAKE) lima-vms-up; \
 		run_step "bootstrap-k3s" $(MAKE) bootstrap-k3s; \
+		run_step "ensure-k3s-api-tunnel" $(MAKE) ensure-k3s-api-tunnel; \
 		run_step "check-kubeconfig" $(MAKE) check-kubeconfig; \
 		exit 0; \
 	fi; \
 	$(MAKE) check-conflicting-clusters-stopped; \
+	$(MAKE) ensure-k3s-api-tunnel >/dev/null; \
 	$(MAKE) check-kubeconfig >/dev/null; \
 	if ! KUBECONFIG="$(KUBECONFIG_PATH)" kubectl get nodes >/dev/null 2>&1; then \
 		echo "$(KUBECONFIG_CONTEXT) not reachable; bootstrapping via STAGE=100"; \
@@ -1042,9 +1063,9 @@ env:
 .PHONY: idp-api
 idp-api:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose FastAPI IDP core for lima at $(IDP_API_PUBLIC_URL)"; \
+		echo "INFO dry-run: would expose Go IDP core for lima at $(IDP_API_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-core && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) uv run uvicorn app.main:app --host 127.0.0.1 --port 8080"; \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-core/app-go && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) IDP_CATALOG_PATH=$(REPO_ROOT)/catalog/platform-apps.json go run ./cmd/idp-core"; \
 	fi
 
 .PHONY: backstage

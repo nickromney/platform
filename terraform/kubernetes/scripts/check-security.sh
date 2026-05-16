@@ -117,6 +117,39 @@ cleanup_kind_gateway_probe() {
   fi
 }
 
+wait_for_kind_gateway_tls_probe() {
+  local local_port="$1"
+  local host
+  host="$(admin_host argocd)"
+
+  have_cmd openssl || return 0
+
+  for _ in $(seq 1 25); do
+    if echo | openssl s_client \
+      -connect "127.0.0.1:${local_port}" \
+      -servername "${host}" \
+      -tls1_3 2>&1 | grep -q "TLSv1.3"; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+gateway_port_has_tls13() {
+  local local_port="$1"
+  local host
+  host="$(admin_host argocd)"
+
+  have_cmd openssl || return 1
+
+  echo | openssl s_client \
+    -connect "127.0.0.1:${local_port}" \
+    -servername "${host}" \
+    -tls1_3 2>&1 | grep -q "TLSv1.3"
+}
+
 ensure_kind_gateway_probe() {
   local local_port
   local -a port_candidates=(18443 19443 20443 21443)
@@ -137,11 +170,14 @@ ensure_kind_gateway_probe() {
 
     for _ in $(seq 1 25); do
       if grep -q "Forwarding from" "${KIND_GATEWAY_PROBE_LOG}" 2>/dev/null; then
-        if [[ "${KIND_GATEWAY_PROBE_WARNED}" -eq 0 ]]; then
-          warn "Using kubectl port-forward fallback for kind gateway TLS checks"
-          KIND_GATEWAY_PROBE_WARNED=1
+        if wait_for_kind_gateway_tls_probe "${local_port}"; then
+          if [[ "${KIND_GATEWAY_PROBE_WARNED}" -eq 0 ]]; then
+            warn "Using kubectl port-forward fallback for kind gateway TLS checks"
+            KIND_GATEWAY_PROBE_WARNED=1
+          fi
+          return 0
         fi
-        return 0
+        break
       fi
       if ! kill -0 "${KIND_GATEWAY_PROBE_PID}" >/dev/null 2>&1; then
         break
@@ -157,7 +193,9 @@ ensure_kind_gateway_probe() {
 }
 
 gateway_https_probe_port() {
-  if ensure_kind_gateway_probe; then
+  if gateway_port_has_tls13 "${GATEWAY_HTTPS_HOST_PORT}"; then
+    printf '%s\n' "${GATEWAY_HTTPS_HOST_PORT}"
+  elif ensure_kind_gateway_probe; then
     printf '%s\n' "${KIND_GATEWAY_PROBE_PORT}"
   else
     printf '%s\n' "${GATEWAY_HTTPS_HOST_PORT}"

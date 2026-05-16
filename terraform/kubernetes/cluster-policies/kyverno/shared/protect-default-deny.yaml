@@ -21,6 +21,14 @@ spec:
               namespaceSelector:
                 matchLabels:
                   kyverno.io/isolate: "true"
+      exclude:
+        any:
+          - subjects:
+              - kind: User
+                name: system:kube-controller-manager
+              - kind: ServiceAccount
+                name: namespace-controller
+                namespace: kube-system
       skipBackgroundRequests: true
       validate:
         message: default-deny NetworkPolicy is managed by Kyverno and cannot be deleted in isolated namespaces.

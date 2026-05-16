@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "api-sentiment/**"
-      - "frontend-react-vite/sentiment-auth-ui/**"
+      - "app-go/**"
+      - "update-sentiment-image-tags.sh"
       - ".gitea/workflows/**"
   workflow_dispatch:
 
@@ -46,23 +46,32 @@ jobs:
           : "${REGISTRY_HOST:?}"
           echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
 
-      - name: Build and push sentiment-api
+      - name: Build Go runtime binary
         run: |
           set -e
           cd "${WORKDIR}"
+          : "${APPS_DIR:?}"
+          docker run --rm \
+            -v "${APPS_DIR}/sentiment/app-go:/src" \
+            -w /src \
+            -e CGO_ENABLED=0 \
+            -e GOOS=linux \
+            -e GOARCH=amd64 \
+            golang:1.26-alpine \
+            sh -c 'mkdir -p .run && go build -trimpath -ldflags="-s -w" -o .run/sentiment ./cmd/sentiment'
+
+      - name: Build and push runtime images
+        run: |
+          set -e
+          cd "${WORKDIR}"
+          : "${APPS_DIR:?}"
           TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" ./api-sentiment
+          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${APPS_DIR}/sentiment/app-go"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:latest"
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}"
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:latest"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:latest"
-
-      - name: Build and push sentiment-auth-ui
-        run: |
-          set -e
-          cd "${WORKDIR}"
-          TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}" ./frontend-react-vite/sentiment-auth-ui
-          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:latest"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:latest"
 

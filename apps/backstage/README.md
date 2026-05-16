@@ -14,6 +14,11 @@ yarn start
 The app uses oauth2-proxy sign-in in the cluster and the local platform theme in
 `packages/app/src/modules/theme.tsx`.
 
+Portal is an intentional dependency-heavy exception in this learning repo. It
+uses Backstage's Yarn toolchain because the product being demonstrated is
+Backstage itself. Keep it resource-gated and out of lightweight app defaults;
+do not use it as the model for small sample apps.
+
 ## Review Environments
 
 Review environments should be orchestrated by Gitea Actions and Kubernetes, not

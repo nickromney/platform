@@ -8,9 +8,9 @@ include ../../mk/compose.mk
 REPO_ROOT := $(abspath $(CURDIR)/../..)
 PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
 PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
-PLATFORM_DEMO_PASSWORD ?=
-OAUTH2_PROXY_COOKIE_SECRET ?=
-PLATFORM_REQUIRED_ENV_VARS := PLATFORM_DEMO_PASSWORD OAUTH2_PROXY_COOKIE_SECRET
+PLATFORM_DEMO_PASSWORD ?= local-dev-password
+OAUTH2_PROXY_COOKIE_SECRET ?= 0123456789abcdef0123456789abcdef
+PLATFORM_REQUIRED_ENV_VARS :=
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
@@ -43,10 +43,12 @@ check-prerequisites: ## Check that a supported compose backend is installed and 
 	fi
 
 build: check-prerequisites ## Build the local compose images
+	@$(MAKE) --no-print-directory -C app-go build-linux
 	@$(COMPOSE) build
 
 ##@ Run
 up: check-prerequisites ## Start the authenticated compose stack and print the local URL
+	@$(MAKE) --no-print-directory -C app-go build-linux
 	@$(COMPOSE) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Base URL:      $(APP_BASE_URL)"
@@ -54,6 +56,7 @@ up: check-prerequisites ## Start the authenticated compose stack and print the l
 	@echo "Keycloak can take a couple of minutes to become ready on cold start."
 
 up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS URL
+	@$(MAKE) --no-print-directory -C app-go build-linux
 	@$(COMPOSE_TLS) up -d --build
 	@echo "Sentiment URL: $(APP_TLS_URL)"
 	@echo "Base URL:      $(APP_TLS_BASE_URL)"
@@ -61,6 +64,7 @@ up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS U
 	@echo "If the browser warns about the cert, run ./pki/gen-certs.sh and trust the local CA."
 
 up-apim-ai-gateway: check-prerequisites ## Start sentiment configured to call the APIM simulator AI gateway
+	@$(MAKE) --no-print-directory -C app-go build-linux
 	@$(COMPOSE_APIM_AI_GATEWAY) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Base URL:      $(APP_BASE_URL)"
@@ -93,8 +97,8 @@ test: ## Run the local compose smoke test
 	@$(MAKE) --no-print-directory smoke
 
 update: ## Update Bun dependency locks for each sentiment dependency root
-	@cd api-sentiment && bun update --latest
-	@cd frontend-react-vite/sentiment-auth-ui && bun update --latest
+	@echo "No dependency update required for the default Go sentiment runtime."
+	@echo "Legacy Bun roots remain in-tree only for compatibility/reference."
 	@cd frontend-typescript-vite && bun update --latest
 
 ##@ Cleanup

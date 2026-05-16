@@ -1,7 +1,7 @@
 [project]
 name = "idp-core"
 version = "0.1.0"
-description = "FastAPI IDP core dry-run workflow service"
+description = "Deprecated Python compatibility implementation of the IDP core dry-run workflow service"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.118.0",

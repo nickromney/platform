@@ -18,7 +18,7 @@
   "external_subnetcalc_api": "host.docker.internal:5002/platform/subnetcalc-api:golden",
   "external_subnetcalc_apim": "host.docker.internal:5002/platform/subnetcalc-apim-simulator:golden",
   "external_subnetcalc_fe": "host.docker.internal:5002/platform/subnetcalc-frontend-react:golden",
-  "external_subnetcalc_fe_ts": "host.docker.internal:5002/platform/subnetcalc-frontend-typescript-vite:golden",
+  "external_subnetcalc_frontend": "host.docker.internal:5002/platform/subnetcalc-frontend:golden",
   "gateway_https_host_port": "8443",
   "gateway_trusted_proxy_cidrs": "127.0.0.1/32, 10.244.0.0/16",
   "grafana_chart_version": "9.9.9",

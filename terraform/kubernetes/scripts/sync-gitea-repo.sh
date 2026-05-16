@@ -238,6 +238,9 @@ seed_repo() {
       --exclude 'node_modules' \
       --exclude '.venv' \
       --exclude '__pycache__' \
+      --exclude '.run' \
+      --exclude '.pytest_cache' \
+      --exclude '.ruff_cache' \
       "${SOURCE_DIR}/" "${tmp}/repo/"
   else
     cp -R "${SOURCE_DIR}/." "${tmp}/repo/"

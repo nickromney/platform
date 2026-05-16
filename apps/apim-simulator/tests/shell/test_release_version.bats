@@ -17,8 +17,10 @@ import tomllib
 
 repo = sys.argv[1]
 commit = sys.argv[2]
+git_top = subprocess.check_output(["git", "-C", repo, "rev-parse", "--show-toplevel"], text=True).strip()
+git_prefix = subprocess.check_output(["git", "-C", repo, "rev-parse", "--show-prefix"], text=True).strip()
 payload = subprocess.check_output(
-    ["git", "-C", repo, "show", f"{commit}:pyproject.toml"],
+    ["git", "-C", git_top, "show", f"{commit}:{git_prefix}pyproject.toml"],
     text=True,
 )
 print(tomllib.loads(payload)["project"]["version"])

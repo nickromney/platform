@@ -1040,10 +1040,18 @@ check_nodeport_http_surface() {
         return 0
         ;;
     esac
+    if [[ "${EXPECT_KIND_PROVISIONING}" != "true" && "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+      warn "${label} not reachable: ${local_url} (HTTP ${local_code}); node fallback ${node_url} (HTTP ${node_code}); relying on gateway URL checks for this target"
+      return 0
+    fi
     fail_soft "${label} not reachable: ${local_url} (HTTP ${local_code}); node fallback ${node_url} (HTTP ${node_code})"
     return 0
   fi
 
+  if [[ "${EXPECT_KIND_PROVISIONING}" != "true" && "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+    warn "${label} not reachable: ${local_url} (HTTP ${local_code}); relying on gateway URL checks for this target"
+    return 0
+  fi
   fail_soft "${label} not reachable: ${local_url} (HTTP ${local_code})"
 }
 

@@ -46,19 +46,42 @@ trap cleanup EXIT
 
 shell_cli_handle_standard_no_args usage "would run the subnetcalc compose smoke workflow" "$@"
 
+export OAUTH2_PROXY_COOKIE_SECRET="${OAUTH2_PROXY_COOKIE_SECRET:-dev-cookie-secret-32-bytes-minimum}"
+export OAUTH2_PROXY_CLIENT_SECRET="${OAUTH2_PROXY_CLIENT_SECRET:-dev-oauth-secret}"
+export STACK12_APIM_SUBSCRIPTION_KEY="${STACK12_APIM_SUBSCRIPTION_KEY:-dev-subscription-key}"
+export STACK12_ADMIN_APIM_SUBSCRIPTION_KEY="${STACK12_ADMIN_APIM_SUBSCRIPTION_KEY:-dev-admin-subscription-key}"
+if [ -z "${SUBNETCALC_LOCAL_PLATFORM:-}" ]; then
+  case "$(uname -m)" in
+    arm64|aarch64)
+      export SUBNETCALC_LOCAL_PLATFORM=linux/arm64
+      ;;
+    *)
+      export SUBNETCALC_LOCAL_PLATFORM=linux/amd64
+      ;;
+  esac
+fi
+case "${SUBNETCALC_LOCAL_PLATFORM}" in
+  linux/arm64)
+    export GOARCH=arm64
+    ;;
+  linux/amd64)
+    export GOARCH=amd64
+    ;;
+  *)
+    echo "compose-smoke: unsupported SUBNETCALC_LOCAL_PLATFORM=${SUBNETCALC_LOCAL_PLATFORM}" >&2
+    exit 1
+    ;;
+esac
+
+(cd "${APP_DIR}/app-go" && make build-linux)
+
 compose_cmd down --remove-orphans >/dev/null 2>&1 || true
-compose_cmd up -d --build api-fastapi-container-app frontend-typescript-vite
-compose_cmd up -d --build --no-deps frontend-react-jwt
+compose_cmd up -d --build subnetcalc-backend subnetcalc-frontend
 
 wait_for_url "http://localhost:8090/api/v1/health" "Container App API"
-wait_for_url "http://localhost:8003/" "TypeScript Vite frontend"
-wait_for_url "http://localhost:3002/" "React JWT frontend"
+wait_for_url "http://localhost:8003/" "Go frontend"
 
 curl -fsS "http://localhost:8003/" | grep -q "IPv4 Subnet Calculator"
-curl -fsS "http://localhost:8003/runtime-config.js" | grep -q 'AUTH_METHOD: "none"'
-curl -fsS "http://localhost:8003/runtime-config.js" | grep -q 'API_BASE_URL: "http://localhost:8090"'
-curl -fsS "http://localhost:3002/" | grep -q "IPv4 Subnet Calculator"
-curl -fsS "http://localhost:3002/runtime-config.js" | grep -q 'AUTH_METHOD: "jwt"'
-curl -fsS "http://localhost:3002/runtime-config.js" | grep -q 'JWT_PASSWORD: "demo-password"'
+curl -fsS "http://localhost:8003/api/v1/health" | grep -q '"service":"Subnet Calculator API (Go)"'
 
 echo "compose smoke passed for subnetcalc"

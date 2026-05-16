@@ -68,6 +68,9 @@ copy_app_repo_source_dir() {
       --exclude 'node_modules' \
       --exclude '.venv' \
       --exclude '__pycache__' \
+      --exclude '.run' \
+      --exclude '.pytest_cache' \
+      --exclude '.ruff_cache' \
       "${source}/" "${target}/"
   else
     cp -R "${source}/." "${target}/"

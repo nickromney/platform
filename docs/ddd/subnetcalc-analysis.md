@@ -2,8 +2,11 @@
 
 This is a deeper DDD pass over `subnetcalc`.
 
-The current implementation is spread across multiple frontend and backend
-shapes, but the domain core is much narrower than the hosting matrix.
+The historical implementation is spread across multiple frontend and backend
+shapes, but the domain core is much narrower than the hosting matrix. The
+default implementation now lives in `apps/subnetcalc/app-go` and runs as two
+microservices from one small Go image: a frontend role for vanilla static
+assets and a backend role for the API and OIDC token validation.
 
 ## Domain Core Versus Supporting Concerns
 
@@ -24,9 +27,10 @@ Supporting concerns are:
 
 That split is already visible in the code:
 
-- the core calculation rules sit in [subnets.py](../../apps/subnetcalc/api-fastapi-container-app/app/routers/subnets.py)
-- the auth boundary sits in [auth_utils.py](../../apps/subnetcalc/api-fastapi-container-app/app/auth_utils.py)
-- the frontend orchestration sits in [client.ts](../../apps/subnetcalc/frontend-react/src/api/client.ts)
+- the default core calculation rules sit in [calculator.go](../../apps/subnetcalc/app-go/internal/app/calculator.go)
+- the default auth boundary sits in [oidc.go](../../apps/subnetcalc/app-go/internal/app/oidc.go)
+- the default frontend orchestration sits in [app.js](../../apps/subnetcalc/app-go/internal/app/web/app.js)
+- legacy comparison variants still include FastAPI, Flask, Vite, and React
 - the APIM simulator has its own contract and policy language in
   [contract_matrix.yml](../../apps/apim-simulator/contracts/contract_matrix.yml)
 
@@ -88,12 +92,13 @@ The current tests already describe real domain rules:
 - IPv6 subnet calculation is a separate path and does not reuse the IPv4
   reservation rules.
 
-Those rules are visible in
-[test_subnets.py](../../apps/subnetcalc/api-fastapi-container-app/tests/test_subnets.py).
+Those rules are visible in the Go contract tests at
+[server_test.go](../../apps/subnetcalc/app-go/internal/app/server_test.go), with
+the older FastAPI tests retained as migration references.
 
 ## Auth Is A Boundary, Not The Core Model
 
-`subnetcalc` currently supports several auth methods:
+`subnetcalc` historically supported several auth methods:
 
 - none
 - API key
@@ -101,14 +106,15 @@ Those rules are visible in
 - Azure SWA
 - APIM
 
-That is important delivery behavior, but it is not the domain core. The current
-`get_current_user` dependency translates transport-specific identity into a
-simple caller identity string. That is the correct direction: keep header,
-token, and platform details out of subnet rules.
+That is important delivery behavior, but it is not the domain core. The default
+Go backend narrows the runtime auth surface to `none` and `oidc`. `oidc`
+validates bearer tokens server-side through `go-oidc`; the frontend may display
+selected claims from `/api/whoami`, but it is not authoritative. That keeps
+header, token, and platform details out of subnet rules.
 
-The current auth surface is visible in
-[auth_utils.py](../../apps/subnetcalc/api-fastapi-container-app/app/auth_utils.py)
-and [test_auth.py](../../apps/subnetcalc/api-fastapi-container-app/tests/test_auth.py).
+The default auth surface is visible in
+[oidc.go](../../apps/subnetcalc/app-go/internal/app/oidc.go) and
+[server_test.go](../../apps/subnetcalc/app-go/internal/app/server_test.go).
 
 ## APIM Is A Separate Supporting Context
 

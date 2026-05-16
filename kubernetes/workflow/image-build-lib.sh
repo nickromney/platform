@@ -77,6 +77,18 @@ image_build_prepare_args() {
   done < <(image_catalog_build_arg_specs "${category}" "${image_id}")
 }
 
+image_build_run_prebuild() {
+  local category="$1"
+  local image_id="$2"
+  local command=""
+
+  command="$(image_catalog_build_field "${category}" "${image_id}" prebuild)"
+  [ -n "${command}" ] || return 0
+
+  echo "PREBUILD ${image_id}: ${command}"
+  (cd "${REPO_ROOT}" && eval "${command}")
+}
+
 image_build_resolve_context() {
   local category="$1"
   local image_id="$2"
@@ -229,6 +241,7 @@ image_build_catalog_build_and_push() {
   fi
   context="$(image_catalog_build_field "${category}" "${image_id}" context)"
   dockerfile="$(image_catalog_build_field "${category}" "${image_id}" dockerfile)"
+  image_build_run_prebuild "${category}" "${image_id}"
   context_dir="$(image_build_resolve_context "${category}" "${image_id}" "${context}")"
   dockerfile_path="$(image_build_resolve_dockerfile "${category}" "${image_id}" "${context_dir}" "${dockerfile}")"
   image_build_prepare_args "${category}" "${image_id}"

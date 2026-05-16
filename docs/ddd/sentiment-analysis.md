@@ -21,9 +21,12 @@ Supporting concerns are:
 - Keycloak realm and OIDC login
 - edge routing between UI and API
 - CSV-backed persistence
-- SST model loading and warmup
+- legacy SST model loading and warmup
 
 The supporting stack is substantial, but the actual business model is compact.
+The default implementation now lives in `apps/sentiment/app-go`: one Go
+codebase and image, selected at runtime with `RUNTIME_ROLE=backend` or
+`RUNTIME_ROLE=frontend`.
 
 ## Observed User Capabilities
 
@@ -71,12 +74,13 @@ The current tests describe meaningful domain rules:
 - near-even positive and negative scores collapse to `neutral`
 - mixed wording can force `neutral` even when the raw scores are highly polar
 - clear positive and negative results stay polar
-- the default analyzer is the SST-based path unless explicitly overridden
-- warmup happens before the server begins listening
+- the default analyzer is a deterministic lexicon classifier
+- the historical SST-based path is now a legacy/model-backed experiment
 
 Those rules are visible in
-[server.test.js](../../apps/sentiment/api-sentiment/server.test.js) and
-[App.test.jsx](../../apps/sentiment/frontend-react-vite/sentiment-auth-ui/src/App.test.jsx).
+[server_test.go](../../apps/sentiment/app-go/internal/app/server_test.go). The
+older JavaScript tests remain useful as migration references for the deprecated
+Node API and Vite UI.
 
 ## The Most Interesting Domain Policy
 

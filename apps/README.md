@@ -12,6 +12,18 @@ This directory contains the source applications that feed the local platform dem
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)
 - [`apim-simulator/`](apim-simulator/) contains the local Azure API Management simulator used by the Kubernetes APIM gateway demo and by app-local compose workflows.
   It keeps its own standalone Docker Compose entrypoints, for example `make -C apps/apim-simulator up` and `make -C apps/apim-simulator smoke-hello`.
+- [`idp-core/`](idp-core/) contains the Portal API. The default shipped runtime
+  is the Go implementation under `idp-core/app-go`; the Python implementation is
+  retained as a deprecated compatibility reference.
+- [`idp-mcp/`](idp-mcp/) contains a small dependency-free stdlib MCP adapter for
+  the Portal API.
+- [`idp-sdk/`](idp-sdk/) contains a dependency-free browser `fetch` wrapper for
+  Portal clients.
+- [`platform-mcp/`](platform-mcp/) contains the production MCP service. It keeps
+  the MCP SDK as an intentional protocol dependency.
+- [`backstage/`](backstage/) contains Portal. It is an intentional Backstage
+  exception to the lightweight app rule and remains resource-gated in the local
+  Kubernetes profiles.
 
 ## Relationship To The Kubernetes Demos
 
@@ -52,10 +64,18 @@ make -C apps trivy-scan-all
 
 ## JavaScript Tooling
 
-The canonical JavaScript package manager in this repo is `bun`.
+The lightweight sample apps avoid JavaScript package managers in their default
+runtime paths. Portal is the exception: `apps/backstage` uses Backstage's
+Yarn-based toolchain because the framework owns that dependency model. Keep it
+out of lightweight app defaults and minimal profiles rather than trying to make
+Backstage dependency free.
 
-- Use `bun install` and `bun run ...` in app directories.
-- JavaScript package roots ship local `bunfig.toml` and `.npmrc` cooldown defaults, and Python app roots set `[tool.uv].exclude-newer = "7 days"`, so copied app directories and compose/Docker builds keep the same dependency age gate.
-- Use `bun x ...` for one-shot CLI tools such as Playwright or Bruno.
-- Default frontend Playwright suites are kept runnable in isolation; SWA-specific and other environment-coupled suites remain explicit opt-in commands rather than being folded into the default `test` target.
+- Use package-manager installs only in explicit legacy or product surfaces such
+  as Backstage, deprecated Vite examples, or one-shot API client tooling.
+- JavaScript package roots ship local `bunfig.toml` or `.npmrc` cooldown
+  defaults, and Python app roots set `[tool.uv].exclude-newer = "7 days"`, so
+  copied app directories and compose/Docker builds keep the same dependency age
+  gate.
+- Use one-shot package execution only for explicit tooling such as Bruno or
+  Newman collections.
 - Use `make -C apps compose-smoke` for the light compose wiring checks.

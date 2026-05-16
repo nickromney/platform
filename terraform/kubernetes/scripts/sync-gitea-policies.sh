@@ -89,10 +89,10 @@ render_external_image_inputs() {
   cat <<'EOF'
 workload|EXTERNAL_IMAGE_SENTIMENT_API|external_sentiment_api|sentiment-api|workload
 workload|EXTERNAL_IMAGE_SENTIMENT_AUTH_UI|external_sentiment_ui|sentiment-auth-ui|workload
-workload|EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI|external_subnetcalc_api|subnetcalc-api-fastapi-container-app|workload
+workload|EXTERNAL_IMAGE_SUBNETCALC_API|external_subnetcalc_api|subnetcalc-api|workload
 workload|EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR|external_subnetcalc_apim|subnetcalc-apim-simulator|workload
 workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT|external_subnetcalc_fe|subnetcalc-frontend-react|workload
-workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT|external_subnetcalc_fe_ts|subnetcalc-frontend-typescript-vite|workload
+workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend|workload
 platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp|mcp
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
 platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
@@ -282,10 +282,10 @@ ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
 PREFER_EXTERNAL_WORKLOAD_IMAGES="${PREFER_EXTERNAL_WORKLOAD_IMAGES:-false}"
 EXTERNAL_IMAGE_SENTIMENT_API="${EXTERNAL_IMAGE_SENTIMENT_API:-}"
 EXTERNAL_IMAGE_SENTIMENT_AUTH_UI="${EXTERNAL_IMAGE_SENTIMENT_AUTH_UI:-}"
-EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI="${EXTERNAL_IMAGE_SUBNETCALC_API_FASTAPI:-}"
+EXTERNAL_IMAGE_SUBNETCALC_API="${EXTERNAL_IMAGE_SUBNETCALC_API:-}"
 EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR="${EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR:-}"
 EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT:-}"
-EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_TYPESCRIPT:-}"
+EXTERNAL_IMAGE_SUBNETCALC_FRONTEND="${EXTERNAL_IMAGE_SUBNETCALC_FRONTEND:-}"
 PREFER_EXTERNAL_PLATFORM_IMAGES="${PREFER_EXTERNAL_PLATFORM_IMAGES:-false}"
 EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
 EXTERNAL_PLATFORM_IMAGE_IDP_CORE="${EXTERNAL_PLATFORM_IMAGE_IDP_CORE:-}"
@@ -430,11 +430,11 @@ rewrite_image_owner() {
   for image_name in \
     sentiment-api \
     sentiment-auth-ui \
-    subnetcalc-api-fastapi-container-app \
+    subnetcalc-api \
     subnetcalc-apim-simulator \
     platform-mcp \
     subnetcalc-frontend-react \
-    subnetcalc-frontend-typescript-vite; do
+    subnetcalc-frontend; do
     out="$(mktemp)"
     sed -E \
       "s|(image:[[:space:]]*[^[:space:]]*/)[^/]+/(${image_name}:)|\\1${IMAGE_REPO_OWNER}/\\2|g" \

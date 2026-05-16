@@ -1,8 +1,18 @@
 # Sentiment
 
 Local sentiment-analysis demo with a compose-first runtime that mirrors the
-same broad concerns as the Kubernetes demo: authenticated browser entry,
-frontend and API separation, and an SST-backed API runtime.
+same broad concerns as the Kubernetes demo: authenticated browser entry plus
+frontend and API separation.
+
+The default runtime is now [`app-go/`](app-go/). It builds one small Alpine
+image and runs as two microservices:
+
+- `sentiment-api` with `RUNTIME_ROLE=backend`
+- `sentiment-auth-frontend` with `RUNTIME_ROLE=frontend`
+
+The frontend is vanilla HTML/CSS/JavaScript. The backend uses Go stdlib and a
+deterministic lexicon classifier so the default path does not require npm,
+Vite, React, Node, or a model dependency tree.
 
 ## Start Here
 
@@ -16,9 +26,9 @@ frontend and API separation, and an SST-backed API runtime.
 - `keycloak` provides the local OIDC provider.
 - `oauth2-proxy` forces browser login before forwarding traffic upstream.
 - `edge` splits browser traffic between the static UI and the API.
-- `sentiment-api` runs the in-process SST sentiment classifier.
-- `compose.apim-ai-gateway.yml` can switch `sentiment-api` to call the local
-  APIM simulator AI gateway instead of loading SST in-process.
+- `sentiment-api` runs the Go backend role and owns classification.
+- `compose.apim-ai-gateway.yml` is retained as a legacy/model-backed experiment
+  path, but the default runtime no longer loads SST in-process.
 
 ## Quick Start
 

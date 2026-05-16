@@ -333,7 +333,9 @@ assert "write_external_platform_images()" in render_script
 assert "prefer_external_platform_images = true" in render_script
 assert "external_platform_image_refs = {" in render_script
 assert "apps/platform-mcp/platform_mcp" in image_catalog
-assert "apps/idp-core/app" in image_catalog
+assert "apps/idp-core/app-go/go.mod" in image_catalog
+assert "apps/idp-core/app-go/internal" in image_catalog
+assert "make -C apps/idp-core/app-go build-linux" in image_catalog
 assert "apps/backstage/packages" in image_catalog
 assert "apps/apim-simulator/catalog-info.yaml" in image_catalog
 assert "image_catalog_source_tag platform platform-mcp" in render_script
@@ -347,6 +349,35 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated local platform IDP source fingerprint cache keys"* ]]
+}
+
+@test "local Go workload image cache keys include embedded frontend sources" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import json
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
+workloads = {image["id"]: image for image in catalog["workload_images"]}
+
+expected_sources = {
+    "sentiment-api": ["apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
+    "sentiment-auth-ui": ["apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
+    "subnetcalc-api": ["apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/cmd"],
+    "subnetcalc-frontend": ["apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/internal/app/web"],
+}
+
+for image_id, expected in expected_sources.items():
+    sources = workloads[image_id].get("fingerprint_sources", [])
+    for source in expected:
+        assert source in sources, (image_id, source, sources)
+
+print("validated local Go workload source fingerprint cache keys")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go workload source fingerprint cache keys"* ]]
 }
 
 @test "image catalog owns local platform build specs" {
@@ -365,6 +396,7 @@ expected = {
         "context": ".",
         "dockerfile": "apps/idp-core/Dockerfile",
         "tag": "default",
+        "prebuild": "make -C apps/idp-core/app-go build-linux",
     },
     "platform-mcp": {
         "context": ".",
@@ -419,20 +451,22 @@ catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read
 
 expected = {
     "sentiment-api": {
-        "context": "apps/sentiment/api-sentiment",
+        "context": "apps/sentiment/app-go",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "args": [{"name": "SENTIMENT_MODEL_ID", "env": "SENTIMENT_MODEL_ID"}],
+        "prebuild": "make -C apps/sentiment/app-go build-linux",
     },
     "sentiment-auth-ui": {
-        "context": "apps/sentiment/frontend-react-vite/sentiment-auth-ui",
+        "context": "apps/sentiment/app-go",
         "dockerfile": "Dockerfile",
         "tag": "default",
+        "prebuild": "make -C apps/sentiment/app-go build-linux",
     },
-    "subnetcalc-api-fastapi-container-app": {
-        "context": "apps/subnetcalc/api-fastapi-container-app",
+    "subnetcalc-api": {
+        "context": "apps/subnetcalc/app-go",
         "dockerfile": "Dockerfile",
         "tag": "default",
+        "prebuild": "make -C apps/subnetcalc/app-go build-linux",
     },
     "subnetcalc-apim-simulator": {
         "context": "apps/apim-simulator",
@@ -444,10 +478,11 @@ expected = {
         "dockerfile": "apps/subnetcalc/frontend-react/Dockerfile",
         "tag": "default",
     },
-    "subnetcalc-frontend-typescript-vite": {
-        "context": "apps/subnetcalc",
-        "dockerfile": "apps/subnetcalc/frontend-typescript-vite/Dockerfile",
+    "subnetcalc-frontend": {
+        "context": "apps/subnetcalc/app-go",
+        "dockerfile": "Dockerfile",
         "tag": "default",
+        "prebuild": "make -C apps/subnetcalc/app-go build-linux",
     },
 }
 
@@ -491,6 +526,7 @@ assert "image_catalog_build_specs" in image_build_lib
 assert "image_catalog_build_arg_specs" in image_build_lib
 assert "image_catalog_default_tag" in image_build_lib
 assert "image_build_catalog_build_and_push" in image_build_lib
+assert "image_build_run_prebuild" in image_build_lib
 assert '"${TAG:-latest}"' not in image_build_lib[image_build_lib.index("image_build_catalog_build_loop()"):]
 
 print("validated catalog-owned workload build specs for variant builders")
@@ -778,6 +814,46 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated image catalog Backstage context adapter"* ]]
+}
+
+@test "generated Backstage image build passes a lean concrete Docker context" {
+  run bash -lc '
+    set -euo pipefail
+    cd "${REPO_ROOT}"
+    source kubernetes/workflow/image-catalog-lib.sh
+    source kubernetes/workflow/image-catalog-context-lib.sh
+    source kubernetes/workflow/image-build-lib.sh
+
+    export CACHE_PUSH_HOST=127.0.0.1:5002
+    export IMAGE_NAMESPACE=platform
+    export TAG=latest
+    export FORCE_REBUILD=1
+    export IMAGE_BUILD_CONTEXT_ARGS_FILE="${BATS_TEST_TMPDIR}/docker-build-args.txt"
+    export IMAGE_BUILD_CONTEXT_PATH_FILE="${BATS_TEST_TMPDIR}/docker-build-context.txt"
+
+    tag_exists_in_cache() { return 1; }
+    docker_push_local_registry() { :; }
+    docker() { :; }
+    docker_build_local() {
+      printf "%s\n" "$@" >"${IMAGE_BUILD_CONTEXT_ARGS_FILE}"
+      printf "%s\n" "${@: -1}" >"${IMAGE_BUILD_CONTEXT_PATH_FILE}"
+    }
+
+    image_build_catalog_build_and_push platform backstage backstage src-test 1.0.0
+
+    context_dir="$(cat "${IMAGE_BUILD_CONTEXT_PATH_FILE}")"
+    test -d "${context_dir}"
+    test -f "${context_dir}/Dockerfile"
+    test -f "${context_dir}/package.json"
+    test -d "${context_dir}/catalog/apps/subnetcalc"
+    test ! -e "${context_dir}/node_modules"
+    test ! -e "${context_dir}/.yarn/cache"
+    tail -n 1 "${IMAGE_BUILD_CONTEXT_ARGS_FILE}" | grep -Fx "${context_dir}" >/dev/null
+    echo "validated generated Backstage Docker context"
+  '
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated generated Backstage Docker context"* ]]
 }
 
 @test "platform MCP Docker image uses DHI bases and installs gzip for pinned D2 tarball extraction" {

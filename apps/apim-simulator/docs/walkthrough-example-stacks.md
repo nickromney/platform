@@ -923,7 +923,7 @@ rm -f "$verify_log"
 ```
 
 ## Todo Demo
-`make up-todo` is the most user-facing stack in the repo: Astro frontend on `http://localhost:3000`, APIM on `localhost:8000`, and the FastAPI todo backend behind it.
+`make up-todo` is the most user-facing stack in the repo: static frontend on `http://localhost:3000`, APIM on `localhost:8000`, and the FastAPI todo backend behind it.
 
 ```bash
 set -euo pipefail

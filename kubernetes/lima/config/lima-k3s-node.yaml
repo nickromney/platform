@@ -20,4 +20,23 @@ networks:
   # user-v2 avoids depending on a root-owned socket_vmnet installation.
   - lima: user-v2
 
+portForwards:
+  # These Kubernetes NodePorts are managed by repo-owned SSH tunnels instead of
+  # Lima's automatic port detection, which can leave host listeners that accept
+  # connections but do not forward traffic after k3s restarts.
+  - guestPort: 30022
+    ignore: true
+  - guestPort: 30070
+    ignore: true
+  - guestPort: 30080
+    ignore: true
+  - guestPort: 30090
+    ignore: true
+  - guestPort: 30302
+    ignore: true
+  - guestPort: 30443
+    ignore: true
+  - guestPort: 31235
+    ignore: true
+
 mounts: []

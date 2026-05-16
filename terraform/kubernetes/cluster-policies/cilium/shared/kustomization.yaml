@@ -21,4 +21,5 @@ resources:
   - sso-hardened.yaml
   - gitea-hardened.yaml
   - gitea-runner-hardened.yaml
+  - nginx-gateway-hardened.yaml
   - platform-gateway-hardened.yaml

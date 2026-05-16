@@ -237,10 +237,10 @@ prefer_external_workload_images = true
 external_workload_image_refs = {
   sentiment-api                          = "ghcr.io/<owner>/sentiment-api:main"
   sentiment-auth-ui                      = "ghcr.io/<owner>/sentiment-auth-ui:main"
-  subnetcalc-api-fastapi-container-app   = "ghcr.io/<owner>/subnetcalc-api-fastapi-container-app:main"
+  subnetcalc-api                         = "ghcr.io/<owner>/subnetcalc-api:main"
   subnetcalc-apim-simulator              = "ghcr.io/<owner>/subnetcalc-apim-simulator:main"
   subnetcalc-frontend-react              = "ghcr.io/<owner>/subnetcalc-frontend-react:main"
-  subnetcalc-frontend-typescript-vite    = "ghcr.io/<owner>/subnetcalc-frontend-typescript-vite:main"
+  subnetcalc-frontend                    = "ghcr.io/<owner>/subnetcalc-frontend:main"
 }
 ```
 

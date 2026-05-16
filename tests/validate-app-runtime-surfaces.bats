@@ -41,7 +41,7 @@ PY
   [[ "${output}" == *"validated 10 Dockerfile(s)"* ]]
 }
 
-@test "compose app services use hardened runtime settings and sentiment model build args" {
+@test "compose app services use hardened runtime settings" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -70,17 +70,12 @@ compose_expectations = {
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
             "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-            "build_args": {"SENTIMENT_MODEL_ID": "${SENTIMENT_MODEL_ID:-}"},
         },
         "sentiment-auth-frontend": {
             "read_only": True,
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
+            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
         },
         "edge": {
             "user": "65532:65532",
@@ -95,6 +90,18 @@ compose_expectations = {
         },
     },
     "apps/subnetcalc/compose.yml": {
+        "subnetcalc-backend": {
+            "read_only": True,
+            "cap_drop": ["ALL"],
+            "security_opt": ["no-new-privileges:true"],
+            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
+        },
+        "subnetcalc-frontend": {
+            "read_only": True,
+            "cap_drop": ["ALL"],
+            "security_opt": ["no-new-privileges:true"],
+            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
+        },
         "api-fastapi-container-app": {
             "read_only": True,
             "cap_drop": ["ALL"],
@@ -210,7 +217,7 @@ print(f"validated {validated} compose service(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 13 compose service(s)"* ]]
+  [[ "${output}" == *"validated 15 compose service(s)"* ]]
 }
 
 @test "model-backed sentiment workload has a bounded laptop runtime profile" {
@@ -435,7 +442,41 @@ PY
   [[ "${output}" == *"validated 6 workload deployment(s)"* ]]
 }
 
-@test "local workload image builders forward custom sentiment model ids" {
+@test "subnetcalc router sends browser API calls to the backend microservice" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8"))
+    if doc
+]
+
+config = next(
+    doc
+    for doc in docs
+    if doc.get("kind") == "ConfigMap" and doc.get("metadata", {}).get("name") == "subnetcalc-router-nginx"
+)
+nginx_conf = config["data"]["default.conf"]
+
+assert "location ^~ /api/" in nginx_conf
+assert "proxy_pass http://subnetcalc-api:8000;" in nginx_conf
+assert "subnetcalc-apim-simulator.apim.svc.cluster.local" not in nginx_conf
+
+print("validated subnetcalc API routing")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated subnetcalc API routing"* ]]
+}
+
+@test "local workload image builders run app prebuild hooks" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -456,10 +497,10 @@ wrappers = (
 shared = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
 catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 
-assert '"name": "SENTIMENT_MODEL_ID"' in catalog
-assert '"env": "SENTIMENT_MODEL_ID"' in catalog
-assert 'IMAGE_BUILD_ARGS+=(--build-arg "${arg_name}=${arg_value}")' in shared
-assert 'arg_value="${!env_name-${arg_value}}"' in shared
+assert '"prebuild": "make -C apps/sentiment/app-go build-linux"' in catalog
+assert '"prebuild": "make -C apps/subnetcalc/app-go build-linux"' in catalog
+assert "image_build_run_prebuild()" in shared
+assert 'image_build_run_prebuild "${category}" "${image_id}"' in shared
 
 for relative_path in scripts:
     content = (repo_root / relative_path).read_text(encoding="utf-8")
@@ -475,6 +516,71 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated 4 local workload builder(s)"* ]]
+}
+
+@test "app Gitea workflows build the default Go runtime images" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+checks = {
+    "apps/sentiment/.gitea/workflows/build-images.yaml": {
+        "required": [
+            '"app-go/**"',
+            "golang:1.26-alpine",
+            "-v \"${APPS_DIR}/sentiment/app-go:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${APPS_DIR}/sentiment/app-go\"",
+            "docker tag \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}\"",
+        ],
+        "forbidden": [
+            "-v \"${WORKDIR}/app-go:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./app-go",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./api-sentiment",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}\" ./frontend-react-vite/sentiment-auth-ui",
+        ],
+    },
+    "apps/subnetcalc/.gitea/workflows/build-images.yaml": {
+        "required": [
+            '"app-go/**"',
+            "golang:1.26-alpine",
+            "-v \"${APPS_DIR}/subnetcalc/app-go:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${APPS_DIR}/subnetcalc/app-go\"",
+            "docker tag \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}\"",
+        ],
+        "forbidden": [
+            "-v \"${WORKDIR}/app-go:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./app-go",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}\" -f ./frontend-typescript-vite/Dockerfile .",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./api-fastapi-container-app",
+        ],
+    },
+}
+
+for relative_path, spec in checks.items():
+    text = (repo_root / relative_path).read_text(encoding="utf-8")
+    for needle in spec["required"]:
+        assert needle in text, (relative_path, needle)
+    for needle in spec["forbidden"]:
+        assert needle not in text, (relative_path, needle)
+
+print(f"validated {len(checks)} Gitea workflow(s)")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 2 Gitea workflow(s)"* ]]
+}
+
+@test "cluster health treats non-kind NodePort hangs as gateway-backed warnings" {
+  local health_script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  run rg -n 'relying on gateway URL checks for this target' "${health_script}"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'EXPECT_KIND_PROVISIONING.*EXPECT_GATEWAY_TLS' "${health_script}"
+  [ "${status}" -eq 0 ]
 }
 
 @test "runtime-config frontends render into tmpfs-backed paths for read-only roots" {

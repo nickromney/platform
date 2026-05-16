@@ -4,10 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "api-fastapi-container-app/**"
-      - "apim-simulator/**"
-      - "frontend-typescript-vite/**"
-      - "shared-frontend/**"
+      - "app-go/**"
       - "scripts/**"
       - ".gitea/workflows/**"
   workflow_dispatch:
@@ -50,35 +47,34 @@ jobs:
           : "${REGISTRY_HOST:?}"
           echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
 
-      - name: Build and push api-fastapi-container-app
+      - name: Build Go runtime binary
         run: |
           set -e
           cd "${WORKDIR}"
-          TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api-fastapi-container-app:${TAG}" ./api-fastapi-container-app
-          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api-fastapi-container-app:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api-fastapi-container-app:latest"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api-fastapi-container-app:${TAG}"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api-fastapi-container-app:latest"
+          : "${APPS_DIR:?}"
+          docker run --rm \
+            -v "${APPS_DIR}/subnetcalc/app-go:/src" \
+            -w /src \
+            -e CGO_ENABLED=0 \
+            -e GOOS=linux \
+            -e GOARCH=amd64 \
+            golang:1.26-alpine \
+            sh -c 'mkdir -p .run && go build -trimpath -ldflags="-s -w" -o .run/subnetcalc ./cmd/subnetcalc'
 
-      - name: Build and push apim-simulator
+      - name: Build and push runtime images
         run: |
           set -e
           cd "${WORKDIR}"
+          : "${APPS_DIR:?}"
           TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" ./apim-simulator
-          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
-
-      - name: Build and push frontend-typescript-vite
-        run: |
-          set -e
-          cd "${WORKDIR}"
-          TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:${TAG}" -f ./frontend-typescript-vite/Dockerfile .
-          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:latest"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:${TAG}"
-          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend-typescript-vite:latest"
+          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${APPS_DIR}/subnetcalc/app-go"
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:latest"
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}"
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:latest"
 
       - name: Stamp manifests with new subnetcalc tags
         run: |

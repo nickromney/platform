@@ -68,14 +68,12 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            - name: RUNTIME_ROLE
+              value: "backend"
             - name: DATA_DIR
               value: "/data"
             - name: CSV_PATH
               value: "/data/comments.csv"
-            - name: SENTIMENT_MODEL_CACHE_DIR
-              value: "/opt/transformers-cache"
-            - name: SENTIMENT_MODEL_LOCAL_ONLY
-              value: "1"
             - name: OTEL_SERVICE_NAME
               value: "sentiment-api"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -200,6 +198,15 @@ spec:
         - name: ui
           image: localhost:30090/platform/sentiment-auth-ui:latest
           imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "8080"
+            - name: RUNTIME_ROLE
+              value: "frontend"
+            - name: BACKEND_URL
+              value: "http://sentiment-api:8080"
+            - name: HOME
+              value: /tmp
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -214,10 +221,6 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: nginx-cache
-              mountPath: /var/cache/nginx
-            - name: nginx-run
-              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /
@@ -226,10 +229,6 @@ spec:
             periodSeconds: 10
       volumes:
         - name: tmp
-          emptyDir: {}
-        - name: nginx-cache
-          emptyDir: {}
-        - name: nginx-run
           emptyDir: {}
 
 ---
@@ -443,11 +442,15 @@ spec:
         - name: gitea-registry-creds
       containers:
         - name: api
-          image: localhost:30090/platform/subnetcalc-api-fastapi-container-app:latest
+          image: localhost:30090/platform/subnetcalc-api:latest
           imagePullPolicy: Always
           env:
+            - name: RUNTIME_ROLE
+              value: "backend"
             - name: AUTH_METHOD
               value: "none"
+            - name: PORT
+              value: "8080"
             - name: OTEL_SERVICE_NAME
               value: "subnetcalc-api"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -458,7 +461,7 @@ spec:
               value: /tmp
           ports:
             - name: http
-              containerPort: 8000
+              containerPort: 8080
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -473,7 +476,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /api/v1/health
-              port: 8000
+              port: http
             initialDelaySeconds: 2
             periodSeconds: 5
             timeoutSeconds: 5
@@ -481,7 +484,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /api/v1/health
-              port: 8000
+              port: http
             initialDelaySeconds: 10
             periodSeconds: 15
             timeoutSeconds: 5
@@ -562,13 +565,19 @@ spec:
         - name: gitea-registry-creds
       containers:
         - name: ui
-          image: localhost:30090/platform/subnetcalc-frontend-typescript-vite:latest
+          image: localhost:30090/platform/subnetcalc-frontend:latest
           imagePullPolicy: Always
           env:
+            - name: RUNTIME_ROLE
+              value: "frontend"
+            - name: BACKEND_URL
+              value: "http://subnetcalc-api:8000"
+            - name: PORT
+              value: "8080"
             - name: AUTH_METHOD
               value: "gateway"
             - name: STACK_DESCRIPTION
-              value: "TypeScript + Vite + OAuth2 Proxy"
+              value: "Vanilla JS + Go frontend role + OAuth2 Proxy"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -583,10 +592,6 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: nginx-cache
-              mountPath: /var/cache/nginx
-            - name: nginx-run
-              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /
@@ -596,10 +601,6 @@ spec:
             timeoutSeconds: 5
       volumes:
         - name: tmp
-          emptyDir: {}
-        - name: nginx-cache
-          emptyDir: {}
-        - name: nginx-run
           emptyDir: {}
 
 ---
@@ -688,7 +689,7 @@ data:
         proxy_set_header X-Subnetcalc-Bypass-Subscription true;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;
+        proxy_pass http://subnetcalc-api:8000;
       }
 
       location = /api {

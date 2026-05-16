@@ -4,8 +4,7 @@ metadata:
   name: subnetcalc-router-http-routes
 spec:
   description: >-
-    The router never contacts subnetcalc-api directly. API traffic is proxied
-    to the APIM simulator which validates the JWT and forwards to the backend.
+    The router sends browser API traffic to the subnetcalc backend service.
     All other paths go to the frontend.
   endpointSelector:
     matchLabels:
@@ -17,15 +16,14 @@ spec:
   egress:
     - toEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": apim
             "k8s:project": kindlocal
             "k8s:team": dolphin
             "k8s:app": subnetcalc
-            "k8s:tier": gateway
-            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+            "k8s:tier": backend
+            "k8s:app.kubernetes.io/name": subnetcalc-api
       toPorts:
         - ports:
-            - port: "8000"
+            - port: "8080"
               protocol: TCP
           rules:
             http:
@@ -59,8 +57,7 @@ metadata:
   name: subnetcalc-api-http-routes
 spec:
   description: >-
-    The subnetcalc API receives traffic only from the APIM simulator,
-    never from the router directly.
+    The subnetcalc API receives browser traffic from the subnetcalc router.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal
@@ -71,15 +68,14 @@ spec:
   ingress:
     - fromEndpoints:
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": apim
             "k8s:project": kindlocal
             "k8s:team": dolphin
             "k8s:app": subnetcalc
             "k8s:tier": gateway
-            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+            "k8s:app.kubernetes.io/name": subnetcalc-router
       toPorts:
         - ports:
-            - port: "8000"
+            - port: "8080"
               protocol: TCP
           rules:
             http:

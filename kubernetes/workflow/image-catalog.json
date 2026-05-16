@@ -72,7 +72,13 @@
         },
         "version_tag_strategy": "grafana-tag-plus-plugin-version"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/sentiment/app-go/Dockerfile",
+        "apps/sentiment/app-go/Makefile",
+        "apps/sentiment/app-go/go.mod",
+        "apps/sentiment/app-go/cmd",
+        "apps/sentiment/app-go/internal"
+      ],
       "version_check": {
         "mode": "checked-elsewhere",
         "reason": "local Grafana image version is derived from catalog plugin inputs; the VictoriaLogs plugin release is reported by check-component-version.sh"
@@ -86,15 +92,17 @@
       "build": {
         "context": ".",
         "dockerfile": "apps/idp-core/Dockerfile",
-        "tag": "default"
+        "tag": "default",
+        "prebuild": "make -C apps/idp-core/app-go build-linux"
       },
       "fingerprint_sources": [
         "apps/idp-core/.dockerignore",
         "apps/idp-core/Dockerfile",
         "apps/idp-core/Dockerfile.dockerignore",
-        "apps/idp-core/app",
-        "apps/idp-core/pyproject.toml",
-        "apps/idp-core/uv.lock",
+        "apps/idp-core/app-go/Makefile",
+        "apps/idp-core/app-go/go.mod",
+        "apps/idp-core/app-go/cmd",
+        "apps/idp-core/app-go/internal",
         "catalog/platform-apps.json"
       ],
       "version_check": {
@@ -154,17 +162,18 @@
       "image_name": "sentiment-api",
       "default_tag": "0.1.0",
       "build": {
-        "context": "apps/sentiment/api-sentiment",
+        "context": "apps/sentiment/app-go",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "args": [
-          {
-            "name": "SENTIMENT_MODEL_ID",
-            "env": "SENTIMENT_MODEL_ID"
-          }
-        ]
+        "prebuild": "make -C apps/sentiment/app-go build-linux"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/sentiment/app-go/Dockerfile",
+        "apps/sentiment/app-go/Makefile",
+        "apps/sentiment/app-go/go.mod",
+        "apps/sentiment/app-go/cmd",
+        "apps/sentiment/app-go/internal"
+      ],
       "version_check": {
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
@@ -176,27 +185,42 @@
       "image_name": "sentiment-auth-ui",
       "default_tag": "0.1.0",
       "build": {
-        "context": "apps/sentiment/frontend-react-vite/sentiment-auth-ui",
+        "context": "apps/sentiment/app-go",
         "dockerfile": "Dockerfile",
-        "tag": "default"
+        "tag": "default",
+        "prebuild": "make -C apps/sentiment/app-go build-linux"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/sentiment/app-go/Dockerfile",
+        "apps/sentiment/app-go/Makefile",
+        "apps/sentiment/app-go/go.mod",
+        "apps/sentiment/app-go/cmd",
+        "apps/sentiment/app-go/internal"
+      ],
       "version_check": {
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
     {
-      "id": "subnetcalc-api-fastapi-container-app",
-      "hcl_key": "subnetcalc-api-fastapi-container-app",
-      "image_name": "subnetcalc-api-fastapi-container-app",
+      "id": "subnetcalc-api",
+      "hcl_key": "subnetcalc-api",
+      "image_name": "subnetcalc-api",
       "default_tag": "1.0.0",
       "build": {
-        "context": "apps/subnetcalc/api-fastapi-container-app",
+        "context": "apps/subnetcalc/app-go",
         "dockerfile": "Dockerfile",
-        "tag": "default"
+        "tag": "default",
+        "prebuild": "make -C apps/subnetcalc/app-go build-linux"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/subnetcalc/app-go/Dockerfile",
+        "apps/subnetcalc/app-go/Makefile",
+        "apps/subnetcalc/app-go/go.mod",
+        "apps/subnetcalc/app-go/cmd",
+        "apps/subnetcalc/app-go/internal",
+        "apps/subnetcalc/app-go/internal/app/web"
+      ],
       "version_check": {
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
@@ -212,7 +236,14 @@
         "dockerfile": "Dockerfile",
         "tag": "default"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/subnetcalc/app-go/Dockerfile",
+        "apps/subnetcalc/app-go/Makefile",
+        "apps/subnetcalc/app-go/go.mod",
+        "apps/subnetcalc/app-go/cmd",
+        "apps/subnetcalc/app-go/internal",
+        "apps/subnetcalc/app-go/internal/app/web"
+      ],
       "version_check": {
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
@@ -228,23 +259,38 @@
         "dockerfile": "apps/subnetcalc/frontend-react/Dockerfile",
         "tag": "default"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/subnetcalc/app-go/Dockerfile",
+        "apps/subnetcalc/app-go/Makefile",
+        "apps/subnetcalc/app-go/go.mod",
+        "apps/subnetcalc/app-go/cmd",
+        "apps/subnetcalc/app-go/internal",
+        "apps/subnetcalc/app-go/internal/app/web"
+      ],
       "version_check": {
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
     },
     {
-      "id": "subnetcalc-frontend-typescript-vite",
-      "hcl_key": "subnetcalc-frontend-typescript-vite",
-      "image_name": "subnetcalc-frontend-typescript-vite",
+      "id": "subnetcalc-frontend",
+      "hcl_key": "subnetcalc-frontend",
+      "image_name": "subnetcalc-frontend",
       "default_tag": "1.0.0",
       "build": {
-        "context": "apps/subnetcalc",
-        "dockerfile": "apps/subnetcalc/frontend-typescript-vite/Dockerfile",
-        "tag": "default"
+        "context": "apps/subnetcalc/app-go",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+        "prebuild": "make -C apps/subnetcalc/app-go build-linux"
       },
-      "fingerprint_sources": [],
+      "fingerprint_sources": [
+        "apps/subnetcalc/app-go/Dockerfile",
+        "apps/subnetcalc/app-go/Makefile",
+        "apps/subnetcalc/app-go/go.mod",
+        "apps/subnetcalc/app-go/cmd",
+        "apps/subnetcalc/app-go/internal",
+        "apps/subnetcalc/app-go/internal/app/web"
+      ],
       "version_check": {
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"

@@ -8,6 +8,79 @@ setup() {
   mkdir -p "${TEST_BIN}"
 }
 
+@test "subnetcalc Cilium policy allows router to call backend API directly" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all(
+        (repo_root / "terraform/kubernetes/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml").read_text(encoding="utf-8")
+    )
+    if doc
+]
+
+router_policy = next(doc for doc in docs if doc["metadata"]["name"] == "subnetcalc-router-http-routes")
+api_policy = next(doc for doc in docs if doc["metadata"]["name"] == "subnetcalc-api-http-routes")
+
+router_egress = router_policy["spec"]["egress"]
+router_api_rule = next(
+    rule
+    for rule in router_egress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
+    for rule in router_egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+assert not any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+    for rule in router_egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+assert any(
+    port.get("port") == "8080"
+    for to_ports in router_api_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+api_ingress = api_policy["spec"]["ingress"]
+api_router_rule = next(
+    rule
+    for rule in api_ingress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-router"
+        for endpoint in rule.get("fromEndpoints", [])
+    )
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-router"
+    for rule in api_ingress
+    for endpoint in rule.get("fromEndpoints", [])
+)
+assert any(
+    port.get("port") == "8080"
+    for to_ports in api_router_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+print("validated subnetcalc router-to-backend policy")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated subnetcalc router-to-backend policy"* ]]
+}
+
 @test "static validation renders policy manifests and kustomize overlays" {
   policy_root="${BATS_TEST_TMPDIR}/cilium"
   render_stub="${BATS_TEST_TMPDIR}/render.sh"

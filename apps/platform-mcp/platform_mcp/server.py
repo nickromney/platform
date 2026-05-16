@@ -5,11 +5,10 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-import httpx
 from mcp.server.fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-from .clients import ApiClient
+from .clients import ApiClient, ApiError
 from .d2 import D2ExecutionError, D2Runner
 from .observability import observed_tool_call, start_metrics_server
 
@@ -221,8 +220,8 @@ def error_result(
 
 def exception_result(code: str, message: str, exc: Exception) -> dict[str, Any]:
     data: dict[str, Any] = {"exception": type(exc).__name__}
-    if isinstance(exc, httpx.HTTPStatusError):
-        data.update({"status_code": exc.response.status_code, "response": exc.response.text[:1000]})
+    if isinstance(exc, ApiError):
+        data.update({"status_code": exc.status_code, "response": exc.response[:1000]})
     else:
         data["detail"] = str(exc)
     return error_result(code, message, data=data)

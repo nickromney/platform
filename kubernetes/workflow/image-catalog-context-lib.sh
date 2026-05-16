@@ -56,6 +56,33 @@ copy_backstage_apim_simulator_catalog() {
   cp "${source_file}" "${target_dir}/catalog-info.yaml"
 }
 
+copy_backstage_source_tree() {
+  local context_dir="$1"
+  local source_dir="${REPO_ROOT}/apps/backstage"
+  local root_file=""
+
+  for root_file in \
+    ".dockerignore" \
+    ".yarnrc.yml" \
+    "Dockerfile" \
+    "README.md" \
+    "app-config.production.yaml" \
+    "app-config.yaml" \
+    "backstage.json" \
+    "catalog-info.yaml" \
+    "package.json" \
+    "tsconfig.json" \
+    "yarn.lock"; do
+    cp "${source_dir}/${root_file}" "${context_dir}/${root_file}"
+  done
+
+  mkdir -p "${context_dir}/.yarn"
+  cp -R "${source_dir}/.yarn/releases" "${context_dir}/.yarn/releases"
+  cp -R "${source_dir}/catalog" "${context_dir}/catalog"
+  cp -R "${source_dir}/packages" "${context_dir}/packages"
+  cp -R "${source_dir}/plugins" "${context_dir}/plugins"
+}
+
 image_catalog_prepare_backstage_build_context() {
   local __resultvar="$1"
   local context_dir=""
@@ -66,8 +93,7 @@ image_catalog_prepare_backstage_build_context() {
   context_dir="$(mktemp -d "${context_root}/backstage.XXXXXX")"
   image_catalog_register_temp_path "${context_dir}"
   [ -d "${REPO_ROOT}/apps/backstage" ] || { echo "${0##*/}: missing Backstage source directory" >&2; exit 1; }
-  cp -R "${REPO_ROOT}/apps/backstage/." "${context_dir}/"
-  cp "${REPO_ROOT}/apps/backstage/Dockerfile" "${context_dir}/Dockerfile"
+  copy_backstage_source_tree "${context_dir}"
   copy_backstage_app_catalog "${context_dir}" "subnetcalc"
   copy_backstage_apim_simulator_catalog "${context_dir}"
   copy_backstage_app_catalog "${context_dir}" "sentiment"
@@ -79,12 +105,12 @@ image_catalog_prepare_build_context_adapter() {
   local category="$2"
   local image_id="$3"
   local context_name="$4"
-  local context_dir=""
+  local prepared_context_dir=""
 
   case "${category}:${image_id}:${context_name}" in
     "platform:backstage:generated-backstage")
-      image_catalog_prepare_backstage_build_context context_dir
-      printf -v "${__resultvar}" '%s' "${context_dir}"
+      image_catalog_prepare_backstage_build_context prepared_context_dir
+      printf -v "${__resultvar}" '%s' "${prepared_context_dir}"
       return 0
       ;;
   esac
