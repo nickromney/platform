@@ -4,8 +4,8 @@ Local sentiment-analysis demo with a compose-first runtime that mirrors the
 same broad concerns as the Kubernetes demo: authenticated browser entry plus
 frontend and API separation.
 
-The default runtime is now [`app-go/`](app-go/). It builds one small Alpine
-image and runs as two microservices:
+The default runtime is now [`app-go/`](app-go/). It builds one small DHI static
+image for the compiled Go binary and runs as two microservices:
 
 - `sentiment-api` with `RUNTIME_ROLE=backend`
 - `sentiment-auth-frontend` with `RUNTIME_ROLE=frontend`

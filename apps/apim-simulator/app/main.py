@@ -124,6 +124,7 @@ APIM_BACKEND_ID_ATTR = "apim.backend.id"
 APIM_TRACE_REQUESTED_ATTR = "apim.trace.requested"
 APIM_RESULT_REASON_ATTR = "apim.result.reason"
 APIM_UPSTREAM_ATTEMPTS_ATTR = "apim.upstream.attempts"
+DEFAULT_CORS_EXPOSE_HEADERS = ["x-apim-simulator", "x-apim-trace-id", "x-apim-trace", "x-correlation-id"]
 EMPTY_POLICY_XML = "<policies><inbound /><backend /><outbound /><on-error /></policies>"
 POLICY_SECTION_NAMES = ("inbound", "backend", "outbound", "on-error")
 _GATEWAY_METRICS: GatewayMetrics | None = None
@@ -761,7 +762,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["x-apim-simulator", "x-apim-trace-id", "x-correlation-id", "x-todo-demo-policy"],
+        expose_headers=[*DEFAULT_CORS_EXPOSE_HEADERS, *gateway_config.cors_expose_headers],
     )
 
     @app.middleware("http")

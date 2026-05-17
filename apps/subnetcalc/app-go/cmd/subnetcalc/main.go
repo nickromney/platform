@@ -18,20 +18,29 @@ func main() {
 	}
 
 	cfg := app.Config{
-		Addr:         env("PORT", "8080"),
-		AuthMode:     strings.ToLower(env("AUTH_METHOD", "none")),
-		RuntimeRole:  strings.ToLower(env("RUNTIME_ROLE", "all")),
-		BackendURL:   env("BACKEND_URL", ""),
-		OIDCIssuer:   env("OIDC_ISSUER_URL", ""),
-		OIDCClientID: env("OIDC_CLIENT_ID", ""),
+		Addr:            env("PORT", "8080"),
+		AuthMode:        strings.ToLower(env("AUTH_METHOD", "none")),
+		APIAuthMode:     strings.ToLower(env("API_AUTH_METHOD", "")),
+		RuntimeRole:     strings.ToLower(env("RUNTIME_ROLE", "all")),
+		BackendURL:      env("BACKEND_URL", ""),
+		OIDCIssuer:      firstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY"),
+		OIDCClientID:    env("OIDC_CLIENT_ID", ""),
+		OIDCAudience:    env("OIDC_AUDIENCE", ""),
+		OIDCJWKSURI:     env("OIDC_JWKS_URI", ""),
+		OIDCRedirect:    env("OIDC_REDIRECT_URI", ""),
+		NetworkHops:     env("NETWORK_HOPS", ""),
+		ShowNetworkPath: env("SHOW_NETWORK_PATH", ""),
 	}
 	if !strings.Contains(cfg.Addr, ":") {
 		cfg.Addr = ":" + cfg.Addr
 	}
+	if cfg.APIAuthMode == "" {
+		cfg.APIAuthMode = cfg.AuthMode
+	}
 
 	var verifier app.TokenVerifier
-	if cfg.AuthMode == "oidc" {
-		oidcVerifier, err := app.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, cfg.OIDCClientID)
+	if cfg.AuthMode == "oidc" && cfg.RuntimeRole != "frontend" {
+		oidcVerifier, err := app.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, firstString(cfg.OIDCAudience, cfg.OIDCClientID), cfg.OIDCJWKSURI)
 		if err != nil {
 			log.Fatalf("configure oidc: %v", err)
 		}
@@ -62,4 +71,22 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

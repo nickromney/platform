@@ -26,6 +26,10 @@
 #
 # Usage:
 #   podman-compose up                           # Start the baseline container-app family
+#   SUBNETCALC_BACKEND_AUTH_METHOD=oidc podman-compose up subnetcalc-backend subnetcalc-frontend
+#                                             # Public app-go frontend with JWT/OIDC-protected API
+#   SUBNETCALC_FRONTEND_AUTH_METHOD=oidc SUBNETCALC_BACKEND_AUTH_METHOD=oidc podman-compose up subnetcalc-backend subnetcalc-frontend keycloak
+#                                             # App-go frontend handles OIDC login; API validates JWT/OIDC
 #   podman-compose --profile function-family --profile oidc --profile mock-easyauth up
 #                                             # Start the full demo/integration topology
 #   podman-compose up api-fastapi-container-app frontend-html-static                  # local-stack-01
@@ -124,9 +128,11 @@ services:
       - "8090:8080"
     environment:
       - RUNTIME_ROLE=backend
-      - AUTH_METHOD=${SUBNETCALC_AUTH_METHOD:-none}
-      - OIDC_ISSUER_URL=${SUBNETCALC_OIDC_ISSUER_URL:-}
-      - OIDC_CLIENT_ID=${SUBNETCALC_OIDC_CLIENT_ID:-}
+      - AUTH_METHOD=${SUBNETCALC_BACKEND_AUTH_METHOD:-none}
+      - OIDC_ISSUER_URL=${SUBNETCALC_OIDC_ISSUER_URL:-http://localhost:8300/realms/subnetcalc}
+      - OIDC_AUDIENCE=${SUBNETCALC_OIDC_AUDIENCE:-api-app}
+      - OIDC_JWKS_URI=${SUBNETCALC_OIDC_JWKS_URI:-http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs}
+      - OIDC_CLIENT_ID=${SUBNETCALC_OIDC_CLIENT_ID:-frontend-app}
       - PORT=8080
       - HOME=/tmp
     healthcheck:
@@ -148,6 +154,15 @@ services:
     environment:
       - RUNTIME_ROLE=frontend
       - BACKEND_URL=http://subnetcalc-backend:8080
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-none}
+      - API_AUTH_METHOD=${SUBNETCALC_BACKEND_AUTH_METHOD:-none}
+      - OIDC_ISSUER_URL=${SUBNETCALC_OIDC_ISSUER_URL:-http://localhost:8300/realms/subnetcalc}
+      - OIDC_AUDIENCE=${SUBNETCALC_OIDC_AUDIENCE:-api-app}
+      - OIDC_JWKS_URI=${SUBNETCALC_OIDC_JWKS_URI:-http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs}
+      - OIDC_CLIENT_ID=${SUBNETCALC_OIDC_CLIENT_ID:-frontend-app}
+      - OIDC_REDIRECT_URI=${SUBNETCALC_OIDC_REDIRECT_URI:-http://localhost:8003/}
+      - SHOW_NETWORK_PATH=${SUBNETCALC_SHOW_NETWORK_PATH:-true}
+      - NETWORK_HOPS=${SUBNETCALC_NETWORK_HOPS:-}
       - PORT=8080
       - HOME=/tmp
     depends_on:

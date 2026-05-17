@@ -5,12 +5,18 @@ import "errors"
 var ErrInvalidToken = errors.New("invalid bearer token")
 
 type Config struct {
-	Addr         string
-	AuthMode     string
-	RuntimeRole  string
-	BackendURL   string
-	OIDCIssuer   string
-	OIDCClientID string
+	Addr            string
+	AuthMode        string
+	APIAuthMode     string
+	RuntimeRole     string
+	BackendURL      string
+	OIDCIssuer      string
+	OIDCClientID    string
+	OIDCAudience    string
+	OIDCJWKSURI     string
+	OIDCRedirect    string
+	NetworkHops     string
+	ShowNetworkPath string
 }
 
 type UserClaims struct {

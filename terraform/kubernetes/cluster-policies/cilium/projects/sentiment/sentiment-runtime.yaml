@@ -95,7 +95,7 @@ metadata:
   name: sentiment-api-egress
 spec:
   description: >-
-    Allow the sentiment API to emit OTEL data.
+    Allow the sentiment API to validate OIDC tokens and emit OTEL data.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal
@@ -104,6 +104,14 @@ spec:
       "k8s:tier": backend
       "k8s:app.kubernetes.io/name": sentiment-api
   egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/name": keycloak
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     - toEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": observability

@@ -27,6 +27,7 @@ data:
     {
       "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io", "https://mcp-console.127.0.0.1.sslip.io"],
       "allow_anonymous": false,
+      "trace_enabled": true,
       "oidc": {
         "issuer": "https://keycloak.127.0.0.1.sslip.io/realms/platform",
         "audience": "apim-simulator",

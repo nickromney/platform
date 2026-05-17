@@ -36,7 +36,7 @@ setup() {
   grep -F 'enable_apps_dir_mount = false' "${OUTPUT_FILE}"
   grep -F 'enable_docker_socket_mount = false' "${OUTPUT_FILE}"
   grep -F 'prefer_external_workload_images = true' "${OUTPUT_FILE}"
-  grep -F '"sentiment-api"                      = "host.docker.internal:5002/platform/sentiment-api:0.1.0"' "${OUTPUT_FILE}"
+  grep -E '"sentiment-api"[[:space:]]+= "host\.docker\.internal:5002/platform/sentiment-api:src-' "${OUTPUT_FILE}"
   grep -E '"platform-mcp"[[:space:]]+= "host\.docker\.internal:5002/platform/platform-mcp:' "${OUTPUT_FILE}"
 }
 

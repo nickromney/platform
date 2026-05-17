@@ -6,11 +6,19 @@ const paths = {
   subnet: "/api/v1/ipv4/subnet-info",
   whoami: "/api/whoami",
 };
+const oidcStorageKey = "subnetcalc.oidc";
+const oidcStateKey = "subnetcalc.oidc.state";
 
 document.addEventListener("DOMContentLoaded", () => {
-  checkHealth();
+  initializeTheme();
+  initializeAuth().catch((error) => {
+    document.getElementById("auth-state").textContent = `Sign-in failed: ${error.message}`;
+  }).finally(checkHealth);
   document.getElementById("lookup-form").addEventListener("submit", lookup);
   document.getElementById("identity-form").addEventListener("submit", whoami);
+  document.getElementById("theme-switcher").addEventListener("click", toggleTheme);
+  document.getElementById("login-btn").addEventListener("click", loginWithOidc);
+  document.getElementById("logout-btn").addEventListener("click", logoutFromOidc);
   document.querySelectorAll("[data-example]").forEach((button) => {
     button.addEventListener("click", () => {
       document.getElementById("ip-address").value = button.dataset.example;
@@ -18,13 +26,44 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+function runtimeConfig() {
+  return window.SUBNETCALC_RUNTIME_CONFIG || {};
+}
+
+async function initializeAuth() {
+  const config = runtimeConfig();
+  refreshAuthControls();
+  if (usesGatewayAuth()) {
+    await refreshGatewayIdentity();
+    return;
+  }
+  if (!apiRequiresOidcToken()) {
+    document.getElementById("auth-state").textContent = "API authentication is disabled for this environment.";
+    return;
+  }
+
+  if (new URLSearchParams(window.location.search).has("code")) {
+    await completeOidcLogin(config);
+  }
+  const token = storedOidcToken();
+  if (token) {
+    document.getElementById("token-input").value = token;
+    await refreshIdentity();
+  } else {
+    document.getElementById("auth-state").textContent = "Sign in before using the API. Backend API calls require a valid JWT.";
+  }
+}
+
 async function checkHealth() {
   const status = document.getElementById("api-status");
   try {
     const data = await getJSON(paths.health);
-    status.textContent = `API Status: ${data.status} | Backend: ${data.service} | Version: ${data.version}`;
+    const authState = data.server_side_token_validation ? "OIDC/JWT validated by backend" : "No auth mode";
+    status.textContent = `API Status: ${data.status} | Backend: ${data.service} | Version: ${data.version} | Auth: ${authState}`;
   } catch (error) {
-    status.textContent = `API unavailable: ${error.message}`;
+    status.textContent = authSessionExpired(error)
+      ? expiredSessionMessage()
+      : `API unavailable: ${error.message}`;
     status.classList.add("error");
   }
 }
@@ -36,6 +75,12 @@ async function lookup(event) {
   const results = document.getElementById("results");
   const content = document.getElementById("results-content");
   results.hidden = false;
+
+  if (!apiReadyForUserAction()) {
+    content.innerHTML = `<p class="error">${escapeHTML(authRequiredMessage())}</p>`;
+    return;
+  }
+
   content.textContent = "Loading...";
 
   try {
@@ -50,12 +95,20 @@ async function lookup(event) {
     content.innerHTML = renderResults(validation, privateCheck, cloudflare, subnet);
     content.insertAdjacentHTML("beforeend", renderPerformance(totalMs));
   } catch (error) {
-    content.innerHTML = `<p class="error">Error: ${escapeHTML(error.message)}</p>`;
+    content.innerHTML = `<p class="error">${escapeHTML(userFacingAPIError(error))}</p>`;
   }
 }
 
 async function whoami(event) {
   event.preventDefault();
+  await refreshIdentity();
+}
+
+async function refreshIdentity() {
+  if (usesGatewayAuth()) {
+    await refreshGatewayIdentity();
+    return;
+  }
   const token = document.getElementById("token-input").value.trim();
   const authState = document.getElementById("auth-state");
   try {
@@ -74,16 +127,271 @@ async function getJSON(path, headers = {}) {
 async function postJSON(path, body) {
   const response = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiRequestHeaders(),
     body: JSON.stringify(body),
   });
   return parseJSONResponse(response);
 }
 
+function apiRequestHeaders() {
+  return {
+    "Content-Type": "application/json",
+    ...apiTraceHeaders(),
+    ...apiAuthHeaders(),
+  };
+}
+
+function apiAuthHeaders() {
+  if (usesGatewayAuth()) {
+    return {};
+  }
+  const input = document.getElementById("token-input");
+  const token = input ? input.value.trim() : "";
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function refreshAuthControls() {
+  const gateway = usesGatewayAuth();
+  const showOidc = apiRequiresOidcToken() && !gateway;
+  const tokenInput = document.getElementById("token-input");
+  const whoamiButton = document.getElementById("whoami-btn");
+  document.getElementById("login-btn").hidden = !showOidc && !gateway;
+  document.getElementById("logout-btn").hidden = !showOidc && !gateway;
+  tokenInput.hidden = gateway;
+  whoamiButton.hidden = gateway;
+}
+
+function apiRequiresOidcToken() {
+  const config = runtimeConfig();
+  return config.authMethod === "oidc" || config.apiAuthMethod === "oidc";
+}
+
+function usesGatewayAuth() {
+  const config = runtimeConfig();
+  return config.authMethod === "gateway" || config.apiAuthMethod === "gateway";
+}
+
+function apiReadyForUserAction() {
+  return usesGatewayAuth() || !apiRequiresOidcToken() || Boolean(document.getElementById("token-input").value.trim());
+}
+
+function authRequiredMessage() {
+  return "Sign in before running API calls. The backend validates JWT/OIDC tokens, so the calculator will not submit unauthenticated API requests.";
+}
+
+function expiredSessionMessage() {
+  return "Session expired. Sign out and sign in again to refresh API access.";
+}
+
+function authSessionExpired(error) {
+  return usesGatewayAuth() && /invalid or expired access token/i.test(error.message || "");
+}
+
+function userFacingAPIError(error) {
+  return authSessionExpired(error) ? expiredSessionMessage() : `Error: ${error.message}`;
+}
+
+function apiTraceHeaders() {
+  return shouldShowNetworkPath() ? { "x-apim-trace": "true" } : {};
+}
+
+async function loginWithOidc() {
+  if (usesGatewayAuth()) {
+    window.location.assign("/.auth/login/sso");
+    return;
+  }
+  const config = requireOidcConfig();
+  const state = randomBase64Url(32);
+  const verifier = randomBase64Url(64);
+  const challenge = await sha256Base64Url(verifier);
+  sessionStorage.setItem(oidcStateKey, JSON.stringify({
+    state,
+    verifier,
+    returnUrl: `${window.location.pathname}${window.location.search}${window.location.hash}` || "/",
+  }));
+
+  const params = new URLSearchParams({
+    client_id: config.oidcClientId,
+    redirect_uri: oidcRedirect(config),
+    response_type: "code",
+    scope: "openid profile email",
+    state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+  });
+  window.location.assign(`${config.oidcAuthority}/protocol/openid-connect/auth?${params}`);
+}
+
+async function completeOidcLogin(config) {
+  const params = new URLSearchParams(window.location.search);
+  const stateRecord = JSON.parse(sessionStorage.getItem(oidcStateKey) || "{}");
+  if (!params.get("code") || params.get("state") !== stateRecord.state || !stateRecord.verifier) {
+    throw new Error("OIDC callback state did not match");
+  }
+
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    client_id: config.oidcClientId,
+    redirect_uri: oidcRedirect(config),
+    code: params.get("code"),
+    code_verifier: stateRecord.verifier,
+  });
+  const response = await fetch(`${config.oidcAuthority}/protocol/openid-connect/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const tokenSet = await response.json().catch(() => ({}));
+  if (!response.ok || !tokenSet.access_token) {
+    throw new Error(tokenSet.error_description || tokenSet.error || `OIDC token exchange failed with HTTP ${response.status}`);
+  }
+  localStorage.setItem(oidcStorageKey, JSON.stringify({
+    accessToken: tokenSet.access_token,
+    idToken: tokenSet.id_token || "",
+    expiresAt: Date.now() + Number(tokenSet.expires_in || 0) * 1000,
+  }));
+  sessionStorage.removeItem(oidcStateKey);
+  window.history.replaceState({}, document.title, stateRecord.returnUrl || "/");
+}
+
+function logoutFromOidc() {
+  if (usesGatewayAuth()) {
+    window.location.assign("/.auth/logout?post_logout_redirect_uri=/logged-out.html");
+    return;
+  }
+  const config = runtimeConfig();
+  const token = JSON.parse(localStorage.getItem(oidcStorageKey) || "{}");
+  localStorage.removeItem(oidcStorageKey);
+  document.getElementById("token-input").value = "";
+  document.getElementById("auth-state").textContent = "Not signed in.";
+  if (config.oidcAuthority && token.idToken) {
+    const params = new URLSearchParams({
+      id_token_hint: token.idToken,
+      post_logout_redirect_uri: new URL("/", window.location.origin).toString(),
+    });
+    window.location.assign(`${config.oidcAuthority}/protocol/openid-connect/logout?${params}`);
+  }
+}
+
+async function refreshGatewayIdentity() {
+  const authState = document.getElementById("auth-state");
+  try {
+    const response = await fetch("/.auth/me", { headers: { Accept: "application/json" } });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const session = normalizeGatewaySession(await response.json());
+    if (session) {
+      authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
+      document.getElementById("login-btn").hidden = true;
+      document.getElementById("logout-btn").hidden = false;
+      return;
+    }
+    authState.textContent = "Not signed in.";
+    document.getElementById("login-btn").hidden = false;
+    document.getElementById("logout-btn").hidden = true;
+  } catch (error) {
+    authState.textContent = `Unable to read gateway session: ${error.message}`;
+    document.getElementById("login-btn").hidden = false;
+    document.getElementById("logout-btn").hidden = true;
+  }
+}
+
+function normalizeGatewaySession(payload) {
+  if (Array.isArray(payload)) {
+    return payload[0] || null;
+  }
+  if (payload && payload.clientPrincipal) {
+    return payload.clientPrincipal;
+  }
+  return null;
+}
+
+function gatewayDisplayName(session) {
+  const claims = Array.isArray(session.claims) ? session.claims : [];
+  const claimValue = (name) => {
+    const found = claims.find((claim) => claim.typ === name || claim.type === name);
+    return found ? found.val || found.value : "";
+  };
+  return claimValue("name")
+    || claimValue("preferred_username")
+    || claimValue("email")
+    || session.userDetails
+    || session.user_id
+    || session.userId
+    || "authenticated user";
+}
+
+function storedOidcToken() {
+  const token = JSON.parse(localStorage.getItem(oidcStorageKey) || "{}");
+  if (!token.accessToken || (token.expiresAt && token.expiresAt <= Date.now() + 30000)) {
+    localStorage.removeItem(oidcStorageKey);
+    return "";
+  }
+  return token.accessToken;
+}
+
+function requireOidcConfig() {
+  const config = runtimeConfig();
+  if (!config.oidcAuthority || !config.oidcClientId) {
+    throw new Error("OIDC configuration missing");
+  }
+  return config;
+}
+
+function oidcRedirect(config) {
+  return config.oidcRedirect || new URL("/", window.location.origin).toString();
+}
+
+function randomBase64Url(byteCount) {
+  const bytes = new Uint8Array(byteCount);
+  crypto.getRandomValues(bytes);
+  return base64Url(bytes);
+}
+
+async function sha256Base64Url(value) {
+  const bytes = new TextEncoder().encode(value);
+  return base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+}
+
+function base64Url(bytes) {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function initializeTheme() {
+  const savedTheme = localStorage.getItem("theme") || "dark";
+  document.documentElement.setAttribute("data-theme", savedTheme);
+  updateThemeIcon(savedTheme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+  const nextTheme = currentTheme === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", nextTheme);
+  localStorage.setItem("theme", nextTheme);
+  updateThemeIcon(nextTheme);
+}
+
+function updateThemeIcon(theme) {
+  const icon = document.getElementById("theme-icon");
+  if (icon) {
+    icon.textContent = theme === "dark" ? "Light" : "Dark";
+  }
+}
+
 async function timedPostJSON(path, body) {
   const started = performance.now();
   const requestUtc = new Date().toISOString();
-  const data = await postJSON(path, body);
+  const response = await fetch(path, {
+    method: "POST",
+    headers: apiRequestHeaders(),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJSONResponse(response);
   const responseUtc = new Date().toISOString();
   return {
     data,
@@ -91,14 +399,48 @@ async function timedPostJSON(path, body) {
       durationMs: Math.round(performance.now() - started),
       requestUtc,
       responseUtc,
+      traceId: response.headers.get("x-apim-trace-id") || "",
+      correlationId: response.headers.get("x-correlation-id") || "",
+      apimTrace: decodeAPIMTrace(response.headers.get("x-apim-trace") || ""),
     },
   };
+}
+
+function shouldShowNetworkPath() {
+  const config = runtimeConfig();
+  return config.showNetworkPath !== false;
+}
+
+function configuredNetworkHops() {
+  const config = runtimeConfig();
+  if (Array.isArray(config.networkHops) && config.networkHops.every(isNetworkHop)) {
+    return config.networkHops;
+  }
+  return [
+    { label: "Browser", detail: window.location.origin, role: "Vanilla frontend" },
+    { label: "Subnet frontend", detail: "/api reverse proxy", role: "Static UI and same-origin API proxy" },
+    { label: "APIM simulator", detail: "x-apim-trace enabled by default", role: "Gateway policies, auth, routing, trace" },
+    { label: "Subnet API", detail: "/api/v1/ipv4/subnet-info", role: "Go backend with server-side token validation" },
+  ];
+}
+
+function isNetworkHop(value) {
+  return value && typeof value.label === "string" && typeof value.detail === "string";
+}
+
+function decodeAPIMTrace(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(atob(value));
+  } catch {
+    return null;
+  }
 }
 
 async function parseJSONResponse(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || `HTTP ${response.status}`);
+    throw new Error(data.detail || data.error || `HTTP ${response.status}`);
   }
   return data;
 }
@@ -153,17 +495,41 @@ function renderTable(rows) {
 }
 
 function renderTiming(timing) {
-  return `<details><summary>API Call Timing</summary>${renderTable([
+  const rows = [
     ["Duration", `${timing.durationMs}ms`],
     ["Request (UTC)", timing.requestUtc],
     ["Response (UTC)", timing.responseUtc],
-  ])}</details>`;
+  ];
+  if (timing.correlationId) rows.push(["Correlation ID", timing.correlationId]);
+  if (timing.traceId) rows.push(["APIM Trace ID", timing.traceId]);
+  if (timing.apimTrace) {
+    if (timing.apimTrace.route) rows.push(["APIM Route", timing.apimTrace.route]);
+    if (timing.apimTrace.upstream_url) rows.push(["APIM Upstream", timing.apimTrace.upstream_url]);
+    if (timing.apimTrace.elapsed_ms !== undefined) rows.push(["APIM Upstream Time", `${timing.apimTrace.elapsed_ms}ms`]);
+    if (timing.apimTrace.status !== undefined) rows.push(["APIM Status", timing.apimTrace.status]);
+  }
+  return `<details><summary>API Call Timing</summary>${renderTable(rows)}</details>`;
 }
 
 function renderPerformance(totalMs) {
-  return `<article><h3>Performance Timing</h3>${renderTable([
+  const networkPath = shouldShowNetworkPath() ? renderNetworkPath() : "";
+  return `<article class="performance-timing"><h3>Performance Timing</h3>${renderTable([
     ["Total Response Time", `${totalMs}ms (${(totalMs / 1000).toFixed(3)}s)`],
-  ])}</article>`;
+  ])}${networkPath}</article>`;
+}
+
+function renderNetworkPath() {
+  const hops = configuredNetworkHops();
+  return `<details>
+    <summary>Network Path (${hops.length} hops)</summary>
+    <div class="network-path">
+      ${hops.map((hop, index) => {
+        const arrow = index > 0 ? `<div class="hop-arrow">↓${String(hop.detail).includes("mTLS") ? " mTLS" : ""}</div>` : "";
+        const role = hop.role ? `<br><em>${escapeHTML(String(hop.role))}</em>` : "";
+        return `${arrow}<div class="hop"><strong>${escapeHTML(hop.label)}</strong><br><small>${escapeHTML(hop.detail)}</small>${role}</div>`;
+      }).join("")}
+    </div>
+  </details>`;
 }
 
 function escapeHTML(value) {

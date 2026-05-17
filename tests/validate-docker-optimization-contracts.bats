@@ -343,6 +343,10 @@ assert "image_catalog_source_tag platform backstage" in render_script
 assert "image_catalog_source_tag platform idp-core" in render_script
 assert "image_catalog_hcl_refs platform" in render_script
 assert "image_catalog_hcl_refs workload" in render_script
+assert "write_external_workload_images()" in render_script
+assert "image_catalog_external_ids workload" in render_script
+assert "image_catalog_source_tag workload" in render_script
+assert "image_catalog_external_ids()" in catalog_lib
 
 print("validated local platform IDP source fingerprint cache keys")
 PY
@@ -362,10 +366,10 @@ catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read
 workloads = {image["id"]: image for image in catalog["workload_images"]}
 
 expected_sources = {
-    "sentiment-api": ["apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
-    "sentiment-auth-ui": ["apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
-    "subnetcalc-api": ["apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/cmd"],
-    "subnetcalc-frontend": ["apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/internal/app/web"],
+    "sentiment-api": ["apps/sentiment/app-go/go.sum", "apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
+    "sentiment-auth-ui": ["apps/sentiment/app-go/go.sum", "apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
+    "subnetcalc-api": ["apps/subnetcalc/app-go/go.sum", "apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/cmd"],
+    "subnetcalc-frontend": ["apps/subnetcalc/app-go/go.sum", "apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/internal/app/web"],
 }
 
 for image_id, expected in expected_sources.items():
@@ -741,6 +745,10 @@ required_functions = [
 ]
 for function_name in required_functions:
     assert function_name in shared, function_name
+
+assert 'fingerprint_tag="$(image_catalog_source_tag "${category}" "${image_id}")"' in shared
+assert 'image_build_catalog_build_and_push "${category}" "${image_id}" "${image_name}"' in shared
+assert 'image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in shared
 
 scripts = [
     repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh",

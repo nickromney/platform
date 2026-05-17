@@ -192,12 +192,19 @@ apim_ingress_namespaces = {
     for endpoint in rule.get("fromEndpoints", [])
 }
 assert "platform-gateway" in apim_ingress_namespaces
-apim_egress_names = {
-    endpoint["matchLabels"].get("k8s:app.kubernetes.io/name")
+apim_egress = [
+    (rule, endpoint)
     for rule in apim_policy["spec"]["egress"]
     for endpoint in rule.get("toEndpoints", [])
-}
+]
+apim_egress_names = {endpoint["matchLabels"].get("k8s:app.kubernetes.io/name") for _, endpoint in apim_egress}
 assert "platform-mcp" in apim_egress_names
+subnetcalc_api_rule = next(
+    rule
+    for rule, endpoint in apim_egress
+    if endpoint["matchLabels"].get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
+)
+assert subnetcalc_api_rule["toPorts"][0]["ports"][0]["port"] == "8080"
 
 gateway_policy = one_policy(
     "terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml",

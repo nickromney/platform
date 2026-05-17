@@ -236,6 +236,9 @@ container = deployment["spec"]["template"]["spec"]["containers"][0]
 env = {item["name"]: str(item.get("value", "")) for item in container.get("env", [])}
 resources = container["resources"]
 
+assert env["AUTH_METHOD"] == "oidc", env
+assert env["OIDC_AUDIENCE"] == "sentiment-api", env
+assert env["OIDC_JWKS_URI"] == "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs", env
 assert env["MALLOC_ARENA_MAX"] == "2", env
 assert env["OMP_NUM_THREADS"] == "1", env
 assert resources["requests"]["memory"] == "768Mi", resources
@@ -442,7 +445,7 @@ PY
   [[ "${output}" == *"validated 6 workload deployment(s)"* ]]
 }
 
-@test "subnetcalc router sends browser API calls to the backend microservice" {
+@test "subnetcalc router protects the frontend and sends API calls through APIM" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -466,14 +469,105 @@ config = next(
 nginx_conf = config["data"]["default.conf"]
 
 assert "location ^~ /api/" in nginx_conf
-assert "proxy_pass http://subnetcalc-api:8000;" in nginx_conf
-assert "subnetcalc-apim-simulator.apim.svc.cluster.local" not in nginx_conf
+assert "proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;" in nginx_conf
+assert "set $apim_auth $http_authorization;" in nginx_conf
+assert 'proxy_set_header Authorization $apim_auth;' in nginx_conf
 
-print("validated subnetcalc API routing")
+assert "location / {" in nginx_conf
+assert 'set $auth_email $http_x_auth_request_email;' in nginx_conf
+assert 'if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }' in nginx_conf
+assert "proxy_pass http://subnetcalc-frontend:8080;" in nginx_conf
+
+print("validated subnetcalc frontend auth gate and API routing")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated subnetcalc API routing"* ]]
+  [[ "${output}" == *"validated subnetcalc frontend auth gate and API routing"* ]]
+}
+
+@test "sentiment router protects the frontend and forwards bearer tokens to the API" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8"))
+    if doc
+]
+
+frontend = next(
+    doc
+    for doc in docs
+    if doc.get("kind") == "Deployment" and doc.get("metadata", {}).get("name") == "sentiment-auth-ui"
+)
+frontend_env = {item["name"]: str(item.get("value", "")) for item in frontend["spec"]["template"]["spec"]["containers"][0].get("env", [])}
+assert frontend_env["AUTH_METHOD"] == "gateway", frontend_env
+assert frontend_env["API_AUTH_METHOD"] == "gateway", frontend_env
+
+config = next(
+    doc
+    for doc in docs
+    if doc.get("kind") == "ConfigMap" and doc.get("metadata", {}).get("name") == "sentiment-router-nginx"
+)
+nginx_conf = config["data"]["default.conf"]
+
+assert "location ^~ /api/" in nginx_conf
+assert "proxy_pass http://sentiment-api:8080;" in nginx_conf
+assert "set $api_auth $http_authorization;" in nginx_conf
+assert 'proxy_set_header Authorization $api_auth;' in nginx_conf
+
+assert "location / {" in nginx_conf
+assert 'set $auth_email $http_x_auth_request_email;' in nginx_conf
+assert 'if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }' in nginx_conf
+assert "proxy_pass http://sentiment-auth-ui:8080;" in nginx_conf
+
+print("validated sentiment frontend auth gate and API token forwarding")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated sentiment frontend auth gate and API token forwarding"* ]]
+}
+
+@test "app oauth2 proxies refresh forwarded access tokens before API use" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+sso_tf = (repo_root / "terraform/kubernetes/sso.tf").read_text(encoding="utf-8")
+
+for name in (
+    "oauth2-proxy-sentiment-dev",
+    "oauth2-proxy-sentiment-uat",
+    "oauth2-proxy-subnetcalc-dev",
+    "oauth2-proxy-subnetcalc-uat",
+):
+    start = sso_tf.index(f"name: {name}")
+    end = sso_tf.index("syncPolicy:", start)
+    block = sso_tf[start:end]
+    for expected in (
+        "--cookie-expire=4h",
+        "--cookie-refresh=1h",
+        "--skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$",
+        "--pass-access-token=true",
+        "--set-xauthrequest=true",
+        "--set-authorization-header=true",
+    ):
+        assert expected in block, (name, expected)
+
+print("validated app oauth2-proxy access-token refresh settings")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated app oauth2-proxy access-token refresh settings"* ]]
 }
 
 @test "local workload image builders run app prebuild hooks" {
@@ -499,6 +593,8 @@ catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encod
 
 assert '"prebuild": "make -C apps/sentiment/app-go build-linux"' in catalog
 assert '"prebuild": "make -C apps/subnetcalc/app-go build-linux"' in catalog
+assert '"apps/sentiment/app-go/go.sum"' in catalog
+assert '"apps/subnetcalc/app-go/go.sum"' in catalog
 assert "image_build_run_prebuild()" in shared
 assert 'image_build_run_prebuild "${category}" "${image_id}"' in shared
 

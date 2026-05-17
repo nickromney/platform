@@ -1,8 +1,4 @@
-FROM alpine:3.22
-
-RUN addgroup -S -g 65532 sentiment \
-    && adduser -S -D -H -u 65532 -G sentiment sentiment \
-    && apk add --no-cache ca-certificates
+FROM dhi.io/static:20260413-alpine3.23
 
 COPY .run/sentiment /sentiment
 

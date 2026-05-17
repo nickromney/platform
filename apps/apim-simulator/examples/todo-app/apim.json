@@ -1,5 +1,6 @@
 {
   "allowed_origins": ["${TODO_FRONTEND_ORIGIN_LOCALHOST}", "${TODO_FRONTEND_ORIGIN_LOOPBACK}", "http://localhost:4321"],
+  "cors_expose_headers": ["x-todo-demo-policy"],
   "allow_anonymous": true,
   "products": {
     "todo-demo": {

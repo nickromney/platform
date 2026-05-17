@@ -527,6 +527,7 @@ def test_trace_headers_and_trace_lookup_work() -> None:
         corr_id = resp.headers.get("x-correlation-id")
         assert trace_id
         assert corr_id
+        assert "x-apim-trace" in resp.headers
 
         trace = client.get(f"/apim/trace/{trace_id}")
 
@@ -535,6 +536,23 @@ def test_trace_headers_and_trace_lookup_work() -> None:
     payload = trace.json()
     assert payload["route"] == "r1"
     assert payload["correlation_id"] == corr_id
+
+
+def test_cors_exposed_headers_are_configurable() -> None:
+    config = GatewayConfig(allow_anonymous=True, cors_expose_headers=["x-example-policy"])
+    app = create_app(
+        config=config,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200))),
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/apim/health", headers={"origin": "http://localhost:3007"})
+
+    assert resp.status_code == 200
+    exposed = resp.headers["access-control-expose-headers"]
+    assert "x-apim-trace" in exposed
+    assert "x-example-policy" in exposed
+    assert "x-todo-demo-policy" not in exposed
 
 
 @pytest.mark.contract("AUTH-SUBSCRIPTION-REQUIRED")

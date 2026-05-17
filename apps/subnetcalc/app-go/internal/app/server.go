@@ -23,6 +23,9 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 	if cfg.AuthMode == "" {
 		cfg.AuthMode = "none"
 	}
+	if cfg.APIAuthMode == "" {
+		cfg.APIAuthMode = cfg.AuthMode
+	}
 	if cfg.RuntimeRole == "" {
 		cfg.RuntimeRole = "all"
 	}
@@ -33,11 +36,11 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 		mux.HandleFunc("GET /api/v1/health", server.health)
 		mux.HandleFunc("GET /api/v1/health/ready", server.ready)
 		mux.HandleFunc("GET /api/v1/health/live", server.live)
-		mux.HandleFunc("POST /api/v1/ipv4/validate", server.validateAddress)
-		mux.HandleFunc("POST /api/v1/ipv4/check-private", server.checkPrivate)
-		mux.HandleFunc("POST /api/v1/ipv4/check-cloudflare", server.checkCloudflare)
-		mux.HandleFunc("POST /api/v1/ipv4/subnet-info", server.subnetInfoIPv4)
-		mux.HandleFunc("POST /api/v1/ipv6/subnet-info", server.subnetInfoIPv6)
+		mux.Handle("POST /api/v1/ipv4/validate", server.requireAuth(http.HandlerFunc(server.validateAddress)))
+		mux.Handle("POST /api/v1/ipv4/check-private", server.requireAuth(http.HandlerFunc(server.checkPrivate)))
+		mux.Handle("POST /api/v1/ipv4/check-cloudflare", server.requireAuth(http.HandlerFunc(server.checkCloudflare)))
+		mux.Handle("POST /api/v1/ipv4/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv4)))
+		mux.Handle("POST /api/v1/ipv6/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv6)))
 		mux.HandleFunc("GET /api/whoami", server.whoami)
 		mux.HandleFunc("GET /api/v1/whoami", server.whoami)
 	}
@@ -45,6 +48,7 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 		mux.Handle("/api/", server.apiProxy())
 	}
 	if cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
+		mux.HandleFunc("GET /runtime-config.js", server.runtimeConfig)
 		mux.HandleFunc("GET /favicon.ico", server.favicon)
 		mux.HandleFunc("/", server.static)
 	}
@@ -88,6 +92,15 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, claims)
 }
 
+func (s *server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := s.currentUser(w, r); !ok {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (UserClaims, bool) {
 	if strings.EqualFold(s.cfg.AuthMode, "none") {
 		return UserClaims{Subject: "anonymous", Groups: []string{}}, true
@@ -125,7 +138,53 @@ func (s *server) static(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "static assets unavailable", http.StatusInternalServerError)
 		return
 	}
+	setFrontendCacheHeaders(w)
 	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
+}
+
+func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
+	redirectURI := s.cfg.OIDCRedirect
+	if redirectURI == "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		redirectURI = scheme + "://" + r.Host + "/"
+	}
+	payload := map[string]string{
+		"authMethod":    s.cfg.AuthMode,
+		"apiAuthMethod": s.cfg.APIAuthMode,
+		"oidcAuthority": strings.TrimRight(s.cfg.OIDCIssuer, "/"),
+		"oidcClientId":  s.cfg.OIDCClientID,
+		"oidcRedirect":  redirectURI,
+	}
+	runtimePayload := map[string]any{}
+	for key, value := range payload {
+		runtimePayload[key] = value
+	}
+	runtimePayload["showNetworkPath"] = parseBoolDefault(s.cfg.ShowNetworkPath, true)
+	if s.cfg.NetworkHops != "" {
+		var hops any
+		if err := json.Unmarshal([]byte(s.cfg.NetworkHops), &hops); err == nil {
+			runtimePayload["networkHops"] = hops
+		}
+	}
+	encoded, err := json.Marshal(runtimePayload)
+	if err != nil {
+		http.Error(w, "runtime config unavailable", http.StatusInternalServerError)
+		return
+	}
+	setFrontendCacheHeaders(w)
+	w.Header().Set("Content-Type", "application/javascript")
+	_, _ = w.Write([]byte("window.SUBNETCALC_RUNTIME_CONFIG = "))
+	_, _ = w.Write(encoded)
+	_, _ = w.Write([]byte(";\n"))
+}
+
+func setFrontendCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 }
 
 func (s *server) apiProxy() http.Handler {
@@ -162,6 +221,17 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func writeJSONHeader(w http.ResponseWriter, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+}
+
+func parseBoolDefault(value string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return fallback
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func logMiddleware(next http.Handler) http.Handler {

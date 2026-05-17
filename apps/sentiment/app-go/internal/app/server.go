@@ -3,6 +3,7 @@ package app
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -15,23 +16,34 @@ import (
 //go:embed web/*
 var web embed.FS
 
-func NewServer(cfg Config) http.Handler {
+func NewServer(cfg Config, verifier ...TokenVerifier) http.Handler {
+	if cfg.AuthMode == "" {
+		cfg.AuthMode = "none"
+	}
+	if cfg.APIAuthMode == "" {
+		cfg.APIAuthMode = cfg.AuthMode
+	}
 	if cfg.RuntimeRole == "" {
 		cfg.RuntimeRole = "all"
 	}
 
 	mux := http.NewServeMux()
-	srv := &server{cfg: cfg, store: newStore(cfg)}
+	var tokenVerifier TokenVerifier
+	if len(verifier) > 0 {
+		tokenVerifier = verifier[0]
+	}
+	srv := &server{cfg: cfg, store: newStore(cfg), verifier: tokenVerifier}
 	if cfg.RuntimeRole == "backend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /api/v1/health", srv.health)
-		mux.HandleFunc("GET /api/v1/comments", srv.listComments)
-		mux.HandleFunc("POST /api/v1/comments", srv.createComment)
-		mux.HandleFunc("POST /api/v1/sentiment/classify", srv.classifyOnly)
+		mux.Handle("GET /api/v1/comments", srv.requireAuth(http.HandlerFunc(srv.listComments)))
+		mux.Handle("POST /api/v1/comments", srv.requireAuth(http.HandlerFunc(srv.createComment)))
+		mux.Handle("POST /api/v1/sentiment/classify", srv.requireAuth(http.HandlerFunc(srv.classifyOnly)))
 	}
 	if cfg.RuntimeRole == "frontend" {
 		mux.Handle("/api/", srv.apiProxy())
 	}
 	if cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
+		mux.HandleFunc("GET /runtime-config.js", srv.runtimeConfig)
 		mux.HandleFunc("GET /favicon.ico", srv.favicon)
 		mux.HandleFunc("/", srv.static)
 	}
@@ -39,8 +51,9 @@ func NewServer(cfg Config) http.Handler {
 }
 
 type server struct {
-	cfg   Config
-	store store
+	cfg      Config
+	store    store
+	verifier TokenVerifier
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -48,7 +61,37 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":                       "ok",
+		"server_side_token_validation": s.cfg.AuthMode == "oidc",
+	})
+}
+
+func (s *server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.EqualFold(s.cfg.AuthMode, "none") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if s.verifier == nil {
+			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "OIDC verifier is not configured"})
+			return
+		}
+		token := bearerToken(r)
+		if token == "" {
+			writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "missing bearer token"})
+			return
+		}
+		if _, err := s.verifier.Verify(r.Context(), token); err != nil {
+			status := http.StatusUnauthorized
+			if !errors.Is(err, ErrInvalidToken) {
+				status = http.StatusBadGateway
+			}
+			writeJSON(w, status, errorResponse{Error: "invalid token"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *server) listComments(w http.ResponseWriter, r *http.Request) {
@@ -102,11 +145,35 @@ func (s *server) static(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "static assets unavailable", http.StatusInternalServerError)
 		return
 	}
+	setFrontendCacheHeaders(w)
 	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
 }
 
 func (s *server) favicon(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
+	payload := map[string]any{
+		"authMethod":    s.cfg.AuthMode,
+		"apiAuthMethod": s.cfg.APIAuthMode,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "runtime config unavailable", http.StatusInternalServerError)
+		return
+	}
+	setFrontendCacheHeaders(w)
+	w.Header().Set("Content-Type", "application/javascript")
+	_, _ = w.Write([]byte("window.SENTIMENT_RUNTIME_CONFIG = "))
+	_, _ = w.Write(encoded)
+	_, _ = w.Write([]byte(";\n"))
+}
+
+func setFrontendCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 }
 
 func (s *server) apiProxy() http.Handler {

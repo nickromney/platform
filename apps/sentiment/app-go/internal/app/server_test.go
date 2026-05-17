@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +18,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("health returned %d: %s", rec.Code, rec.Body.String())
 	}
-	if strings.TrimSpace(rec.Body.String()) != `{"status":"ok"}` {
+	if !strings.Contains(rec.Body.String(), `"status":"ok"`) || !strings.Contains(rec.Body.String(), `"server_side_token_validation":false`) {
 		t.Fatalf("unexpected health body: %s", rec.Body.String())
 	}
 
@@ -29,6 +30,24 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "<title>Sentiment (Authenticated)</title>") {
 		t.Fatalf("frontend title missing: %s", rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("frontend Cache-Control=%q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/logged-out.html", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logged-out page returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{"Signed out", "Sign in again", "/.auth/login/sso", "window.SENTIMENT_RUNTIME_CONFIG"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("logged-out page missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("logged-out Cache-Control=%q", got)
 	}
 }
 
@@ -103,6 +122,117 @@ func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("frontend role did not serve static assets: %d", rec.Code)
 	}
+}
+
+func TestAPIsRequireValidBearerTokenWhenOIDCEnabled(t *testing.T) {
+	srv := NewServer(
+		Config{RuntimeRole: "backend", AuthMode: "oidc", DataDir: t.TempDir()},
+		fakeVerifier{claims: UserClaims{Subject: "user-123", Groups: []string{"platform"}}},
+	)
+
+	post(t, srv, "/api/v1/comments", `{"text":"I love this."}`, http.StatusUnauthorized)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/comments", strings.NewReader(`{"text":"I love this."}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid token returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sentiment/classify", strings.NewReader(`{"text":"I love this."}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "bearer valid-token")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("lower-case bearer scheme returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/comments", strings.NewReader(`{"text":"I love this."}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("valid token returned %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRuntimeConfigExposesFrontendAndAPIAuthModes(t *testing.T) {
+	srv := NewServer(Config{RuntimeRole: "frontend", AuthMode: "none", APIAuthMode: "oidc"})
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("runtime config Cache-Control=%q", got)
+	}
+	body := rec.Body.String()
+	for _, text := range []string{`window.SENTIMENT_RUNTIME_CONFIG`, `"authMethod":"none"`, `"apiAuthMethod":"oidc"`} {
+		if !strings.Contains(body, text) {
+			t.Fatalf("runtime config missing %q in %s", text, body)
+		}
+	}
+}
+
+func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
+	indexHTML, err := web.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appJS, err := web.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, text := range []string{`data-theme="dark"`, `id="theme-switcher"`, `id="theme-icon"`, `id="user-info"`, `id="auth-state"`, `id="logout-btn"`} {
+		if !strings.Contains(string(indexHTML), text) {
+			t.Fatalf("frontend index missing %q", text)
+		}
+	}
+	for _, text := range []string{
+		"localStorage.getItem(\"theme\")",
+		"localStorage.setItem(\"theme\"",
+		"toggleTheme",
+		"window.SENTIMENT_RUNTIME_CONFIG",
+		"apiReadyForUserAction()",
+		"authRequiredMessage()",
+		"Sign in before using sentiment analysis",
+		"expiredSessionMessage()",
+		"Session expired. Sign out and sign in again to refresh API access.",
+		"authSessionExpired(error)",
+		"invalid or expired access token",
+		"API authentication is disabled for this environment",
+		"usesGatewayAuth()",
+		"fetchGatewaySession()",
+		"fetch(\"/.auth/me\"",
+		"gatewayDisplayName(session)",
+		"/.auth/logout?post_logout_redirect_uri=/logged-out.html",
+	} {
+		if !strings.Contains(string(appJS), text) {
+			t.Fatalf("frontend app.js missing %q", text)
+		}
+	}
+}
+
+type fakeVerifier struct {
+	claims UserClaims
+	err    error
+}
+
+func (v fakeVerifier) Verify(_ context.Context, token string) (UserClaims, error) {
+	if token != "valid-token" {
+		return UserClaims{}, ErrInvalidToken
+	}
+	if v.err != nil {
+		return UserClaims{}, v.err
+	}
+	return v.claims, nil
 }
 
 func post(t *testing.T, handler http.Handler, path string, body string, want int) *httptest.ResponseRecorder {

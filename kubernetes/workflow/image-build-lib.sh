@@ -239,6 +239,9 @@ image_build_catalog_build_and_push() {
   if [ -z "${version_tag}" ]; then
     version_tag="$(image_catalog_default_tag "${category}" "${image_id}")"
   fi
+  if [ -z "${fingerprint_tag}" ]; then
+    fingerprint_tag="$(image_catalog_source_tag "${category}" "${image_id}")"
+  fi
   context="$(image_catalog_build_field "${category}" "${image_id}" context)"
   dockerfile="$(image_catalog_build_field "${category}" "${image_id}" dockerfile)"
   image_build_run_prebuild "${category}" "${image_id}"

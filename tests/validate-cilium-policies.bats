@@ -8,7 +8,7 @@ setup() {
   mkdir -p "${TEST_BIN}"
 }
 
-@test "subnetcalc Cilium policy allows router to call backend API directly" {
+@test "subnetcalc Cilium policy sends router API traffic through APIM" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -25,60 +25,93 @@ docs = [
     )
     if doc
 ]
+shared_docs = [
+    doc
+    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml").read_text(encoding="utf-8"))
+    if doc
+]
 
 router_policy = next(doc for doc in docs if doc["metadata"]["name"] == "subnetcalc-router-http-routes")
 api_policy = next(doc for doc in docs if doc["metadata"]["name"] == "subnetcalc-api-http-routes")
+apim_policy = next(doc for doc in shared_docs if doc["metadata"]["name"] == "apim-baseline")
 
 router_egress = router_policy["spec"]["egress"]
-router_api_rule = next(
+router_apim_rule = next(
     rule
     for rule in router_egress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+    for rule in router_egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+assert not any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
+    for rule in router_egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+assert any(
+    port.get("port") == "8000"
+    for to_ports in router_apim_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+api_ingress = api_policy["spec"]["ingress"]
+api_apim_rule = next(
+    rule
+    for rule in api_ingress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+        for endpoint in rule.get("fromEndpoints", [])
+    )
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+    for rule in api_ingress
+    for endpoint in rule.get("fromEndpoints", [])
+)
+assert any(
+    port.get("port") == "8080"
+    for to_ports in api_apim_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+api_keycloak_rule = next(
+    rule
+    for rule in api_policy["spec"]["egress"]
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "keycloak"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+assert any(
+    port.get("port") == "8080"
+    for to_ports in api_keycloak_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+apim_api_rule = next(
+    rule
+    for rule in apim_policy["spec"]["egress"]
     if any(
         endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
         for endpoint in rule.get("toEndpoints", [])
     )
 )
 assert any(
-    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
-    for rule in router_egress
-    for endpoint in rule.get("toEndpoints", [])
-)
-assert not any(
-    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
-    for rule in router_egress
-    for endpoint in rule.get("toEndpoints", [])
-)
-assert any(
     port.get("port") == "8080"
-    for to_ports in router_api_rule.get("toPorts", [])
+    for to_ports in apim_api_rule.get("toPorts", [])
     for port in to_ports.get("ports", [])
 )
 
-api_ingress = api_policy["spec"]["ingress"]
-api_router_rule = next(
-    rule
-    for rule in api_ingress
-    if any(
-        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-router"
-        for endpoint in rule.get("fromEndpoints", [])
-    )
-)
-assert any(
-    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-router"
-    for rule in api_ingress
-    for endpoint in rule.get("fromEndpoints", [])
-)
-assert any(
-    port.get("port") == "8080"
-    for to_ports in api_router_rule.get("toPorts", [])
-    for port in to_ports.get("ports", [])
-)
-
-print("validated subnetcalc router-to-backend policy")
+print("validated subnetcalc router-to-apim-to-backend policy")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated subnetcalc router-to-backend policy"* ]]
+  [[ "${output}" == *"validated subnetcalc router-to-apim-to-backend policy"* ]]
 }
 
 @test "static validation renders policy manifests and kustomize overlays" {

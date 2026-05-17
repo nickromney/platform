@@ -12,15 +12,19 @@ type OIDCVerifier struct {
 	verifier *oidc.IDTokenVerifier
 }
 
-func NewOIDCVerifier(ctx context.Context, issuer, clientID string) (*OIDCVerifier, error) {
-	if issuer == "" || clientID == "" {
-		return nil, fmt.Errorf("OIDC_ISSUER_URL and OIDC_CLIENT_ID are required when AUTH_METHOD=oidc")
+func NewOIDCVerifier(ctx context.Context, issuer, audience, jwksURI string) (*OIDCVerifier, error) {
+	if issuer == "" || audience == "" {
+		return nil, fmt.Errorf("OIDC_ISSUER_URL and OIDC_AUDIENCE are required when AUTH_METHOD=oidc")
+	}
+	if jwksURI != "" {
+		keySet := oidc.NewRemoteKeySet(ctx, jwksURI)
+		return &OIDCVerifier{verifier: oidc.NewVerifier(issuer, keySet, &oidc.Config{ClientID: audience})}, nil
 	}
 	provider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
 		return nil, err
 	}
-	return &OIDCVerifier{verifier: provider.Verifier(&oidc.Config{ClientID: clientID})}, nil
+	return &OIDCVerifier{verifier: provider.Verifier(&oidc.Config{ClientID: audience})}, nil
 }
 
 func (v *OIDCVerifier) Verify(r *http.Request, token string) (UserClaims, error) {
