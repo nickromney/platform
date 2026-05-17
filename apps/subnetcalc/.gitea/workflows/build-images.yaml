@@ -58,7 +58,7 @@ jobs:
             -e CGO_ENABLED=0 \
             -e GOOS=linux \
             -e GOARCH=amd64 \
-            golang:1.26-alpine \
+            dhi.io/golang:1.26-alpine3.23-dev \
             sh -c 'mkdir -p .run && go build -trimpath -ldflags="-s -w" -o .run/subnetcalc ./cmd/subnetcalc'
 
       - name: Build and push runtime images

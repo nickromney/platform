@@ -621,7 +621,7 @@ async function subnetcalcRfc1918Lookup(page: Page) {
   const errors: Array<{ attempt: number; message: string; body: string }> = []
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const rfcBtn = page.getByRole('button', { name: /RFC1918:\s*10\.0\.0\.0\/24/i })
+    const rfcBtn = page.locator('button').filter({ hasText: /RFC1918:\s*10\.0\.0\.0\/24/i }).first()
     await expect(rfcBtn).toBeVisible({ timeout: 60_000 })
     await rfcBtn.click()
 

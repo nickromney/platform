@@ -55,6 +55,13 @@ image_catalog_source_tag() {
   source_fingerprint_tag "${sources[@]}"
 }
 
+image_catalog_external_ids() {
+  local category="$1"
+
+  image_catalog_require
+  jq -r ".${category}_images[] | select(.external_ref != false) | .id" "${IMAGE_CATALOG_FILE}"
+}
+
 image_catalog_build_field() {
   local category="$1"
   local image_id="$2"

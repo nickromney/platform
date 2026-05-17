@@ -70,6 +70,14 @@ spec:
               value: "8080"
             - name: RUNTIME_ROLE
               value: "backend"
+            - name: AUTH_METHOD
+              value: "oidc"
+            - name: OIDC_ISSUER_URL
+              value: "https://keycloak.127.0.0.1.sslip.io/realms/platform"
+            - name: OIDC_AUDIENCE
+              value: "sentiment-api"
+            - name: OIDC_JWKS_URI
+              value: "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs"
             - name: DATA_DIR
               value: "/data"
             - name: CSV_PATH
@@ -205,6 +213,10 @@ spec:
               value: "frontend"
             - name: BACKEND_URL
               value: "http://sentiment-api:8080"
+            - name: AUTH_METHOD
+              value: "gateway"
+            - name: API_AUTH_METHOD
+              value: "gateway"
             - name: HOME
               value: /tmp
           securityContext:
@@ -271,6 +283,36 @@ data:
     server {
       listen 8080;
       server_name _;
+      absolute_redirect off;
+
+      location = /.auth/me {
+        default_type application/json;
+        add_header Cache-Control "no-store";
+
+        set $user_email $http_x_auth_request_email;
+        if ($user_email = "") { set $user_email $http_x_forwarded_email; }
+
+        set $user_name $http_x_auth_request_user;
+        if ($user_name = "") { set $user_name $user_email; }
+
+        set $access_token_json null;
+        if ($http_x_auth_request_access_token != "") { set $access_token_json "\"$http_x_auth_request_access_token\""; }
+
+        set $forwarded_access_token_json null;
+        if ($http_x_forwarded_access_token != "") { set $forwarded_access_token_json "\"$http_x_forwarded_access_token\""; }
+
+        if ($access_token_json = null) { set $access_token_json $forwarded_access_token_json; }
+
+        return 200 "[{\"provider_name\":\"oauth2-proxy\",\"user_id\":\"$user_email\",\"access_token\":$access_token_json,\"claims\":[{\"typ\":\"name\",\"val\":\"$user_name\"},{\"typ\":\"email\",\"val\":\"$user_email\"},{\"typ\":\"preferred_username\",\"val\":\"$user_email\"}]}]";
+      }
+
+      location ~ ^/\.auth/login/ {
+        return 302 https://$host/oauth2/start?rd=/;
+      }
+
+      location = /.auth/logout {
+        return 302 https://$host/oauth2/sign_out?rd=/logged-out.html;
+      }
 
       location ^~ /api/ {
         proxy_connect_timeout 5s;
@@ -281,6 +323,13 @@ data:
         proxy_set_header Connection "";
 
         proxy_set_header Host $host;
+        set $api_token $http_x_auth_request_access_token;
+        if ($api_token = "") { set $api_token $http_x_forwarded_access_token; }
+
+        set $api_auth $http_authorization;
+        if ($api_auth = "") { set $api_auth "Bearer $api_token"; }
+        if ($api_auth = "Bearer ") { set $api_auth ""; }
+        proxy_set_header Authorization $api_auth;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_pass http://sentiment-api:8080;
@@ -290,7 +339,27 @@ data:
         return 301 /api/;
       }
 
+      location = /logged-out.html {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://sentiment-auth-ui:8080;
+      }
+
+      location = /favicon.ico {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://sentiment-auth-ui:8080;
+      }
+
       location / {
+        if ($http_user_agent ~* "kube-probe") { return 200; }
+
+        set $auth_email $http_x_auth_request_email;
+        if ($auth_email = "") { set $auth_email $http_x_forwarded_email; }
+        if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }
+
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -448,7 +517,13 @@ spec:
             - name: RUNTIME_ROLE
               value: "backend"
             - name: AUTH_METHOD
-              value: "none"
+              value: "oidc"
+            - name: OIDC_ISSUER_URL
+              value: "https://keycloak.127.0.0.1.sslip.io/realms/platform"
+            - name: OIDC_AUDIENCE
+              value: "apim-simulator"
+            - name: OIDC_JWKS_URI
+              value: "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs"
             - name: PORT
               value: "8080"
             - name: OTEL_SERVICE_NAME
@@ -576,8 +651,14 @@ spec:
               value: "8080"
             - name: AUTH_METHOD
               value: "gateway"
+            - name: API_AUTH_METHOD
+              value: "gateway"
             - name: STACK_DESCRIPTION
               value: "Vanilla JS + Go frontend role + OAuth2 Proxy"
+            - name: SHOW_NETWORK_PATH
+              value: "true"
+            - name: NETWORK_HOPS
+              value: '[{"label":"Browser","detail":"subnetcalc public host","role":"User agent"},{"label":"OAuth2 Proxy","detail":"SSO gate","role":"Session and access-token forwarding"},{"label":"Subnet router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},{"label":"APIM simulator","detail":"apim/subnetcalc-apim-simulator","role":"Gateway auth, policy, tracing"},{"label":"Subnet API","detail":"subnetcalc-api service","role":"Go backend validation and subnet calculation"}]'
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -689,7 +770,7 @@ data:
         proxy_set_header X-Subnetcalc-Bypass-Subscription true;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_pass http://subnetcalc-api:8000;
+        proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;
       }
 
       location = /api {

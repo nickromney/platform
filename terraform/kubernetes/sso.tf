@@ -584,6 +584,20 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           optionalClientScopes      = []
         },
         {
+          clientId                  = "sentiment-api"
+          name                      = "Sentiment API"
+          enabled                   = true
+          bearerOnly                = true
+          publicClient              = false
+          protocol                  = "openid-connect"
+          fullScopeAllowed          = false
+          standardFlowEnabled       = false
+          directAccessGrantsEnabled = false
+          serviceAccountsEnabled    = false
+          defaultClientScopes       = []
+          optionalClientScopes      = []
+        },
+        {
           clientId                  = "oauth2-proxy"
           name                      = "oauth2-proxy"
           enabled                   = true
@@ -632,6 +646,17 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
               consentRequired = false
               config = {
                 "included.client.audience" = "oauth2-proxy"
+                "id.token.claim"           = "false"
+                "access.token.claim"       = "true"
+              }
+            },
+            {
+              name            = "sentiment-api-audience"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-audience-mapper"
+              consentRequired = false
+              config = {
+                "included.client.audience" = "sentiment-api"
                 "id.token.claim"           = "false"
                 "access.token.claim"       = "true"
               }
@@ -2046,9 +2071,12 @@ spec:
           - --cookie-domain=${local.dev_cookie_domain}
           - --whitelist-domain=${local.dev_whitelist_domains}
           - --cookie-secure=true
+          - --cookie-expire=4h
+          - --cookie-refresh=1h
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
+          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2158,9 +2186,12 @@ spec:
           - --cookie-domain=${local.uat_cookie_domain}
           - --whitelist-domain=${local.uat_whitelist_domains}
           - --cookie-secure=true
+          - --cookie-expire=4h
+          - --cookie-refresh=1h
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
+          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2269,10 +2300,12 @@ spec:
           - --cookie-domain=${local.dev_cookie_domain}
           - --whitelist-domain=${local.dev_whitelist_domains}
           - --cookie-secure=true
+          - --cookie-expire=4h
+          - --cookie-refresh=1h
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2381,10 +2414,12 @@ spec:
           - --cookie-domain=${local.uat_cookie_domain}
           - --whitelist-domain=${local.uat_whitelist_domains}
           - --cookie-secure=true
+          - --cookie-expire=4h
+          - --cookie-refresh=1h
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$
+          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true

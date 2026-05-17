@@ -1,10 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM alpine:3.22
-
-RUN addgroup -S -g 65532 idp-core \
-    && adduser -S -D -H -u 65532 -G idp-core idp-core \
-    && apk add --no-cache ca-certificates
+FROM dhi.io/static:20260413-alpine3.23
 
 WORKDIR /app
 

@@ -137,6 +137,7 @@ docs = [
     if doc
 ]
 backend = next(doc for doc in docs if doc["metadata"]["name"] == "sentiment-backend-ingress")
+egress_policy = next(doc for doc in docs if doc["metadata"]["name"] == "sentiment-api-egress")
 ingress = backend["spec"]["ingress"]
 
 mcp_rules = [
@@ -150,11 +151,19 @@ assert len(mcp_rules) == 1
 http_rules = mcp_rules[0]["toPorts"][0]["rules"]["http"]
 assert http_rules == [{"method": "POST", "path": "/api/v1/sentiment/classify"}]
 
-print("validated sentiment mcp classify ingress")
+keycloak_rules = [
+    rule for rule in egress_policy["spec"]["egress"]
+    for endpoint in rule.get("toEndpoints", [])
+    if endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "keycloak"
+]
+assert len(keycloak_rules) == 1
+assert keycloak_rules[0]["toPorts"][0]["ports"][0]["port"] == "8080"
+
+print("validated sentiment mcp classify ingress and oidc egress")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated sentiment mcp classify ingress"* ]]
+  [[ "${output}" == *"validated sentiment mcp classify ingress and oidc egress"* ]]
 }
 
 @test "Kyverno audits shared namespace runtime hardening and discovery labels" {

@@ -432,6 +432,7 @@ class GatewayConfig(BaseModel):
     schema_version: int = 1
     service: ServiceMetadataConfig = Field(default_factory=ServiceMetadataConfig)
     allowed_origins: list[str] = Field(default_factory=lambda: [http_url("localhost:3007")])
+    cors_expose_headers: list[str] = Field(default_factory=list)
     allow_anonymous: bool = False
     client_certificate: ClientCertificateConfig = Field(default_factory=ClientCertificateConfig)
     oidc: OIDCConfig | None = None
@@ -609,6 +610,9 @@ def _default_config_from_env() -> GatewayConfig:
     allowed_origins = [
         origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", default_allowed_origins).split(",") if origin.strip()
     ]
+    cors_expose_headers = [
+        header.strip() for header in os.getenv("CORS_EXPOSE_HEADERS", "").split(",") if header.strip()
+    ]
     allow_anonymous = os.getenv("ALLOW_ANONYMOUS", "true").lower() == "true"
     oidc_values = {
         "OIDC_ISSUER": oidc_issuer,
@@ -648,6 +652,7 @@ def _default_config_from_env() -> GatewayConfig:
 
     return GatewayConfig(
         allowed_origins=allowed_origins or ["*"],
+        cors_expose_headers=cors_expose_headers,
         allow_anonymous=allow_anonymous,
         oidc=oidc_config,
         products={"default": ProductConfig(name="Default", require_subscription=bool(subscription_key))},

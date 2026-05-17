@@ -29,6 +29,24 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "IPv4 Subnet Calculator") {
 		t.Fatalf("frontend did not contain heading: %s", rec.Body.String())
 	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("frontend Cache-Control=%q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/logged-out.html", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logged-out page returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{"Signed out", "Sign in again", "/.auth/login/sso", "window.SUBNETCALC_RUNTIME_CONFIG"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("logged-out page missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("logged-out Cache-Control=%q", got)
+	}
 }
 
 func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
@@ -69,6 +87,7 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 		"Subnet Information",
 		"Performance Timing",
 		"API Call Timing",
+		"Network Path",
 		"Request (UTC)",
 		"Response (UTC)",
 		"Total Response Time",
@@ -204,6 +223,167 @@ func TestWhoamiRequiresValidBearerToken(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"preferred_username":"demo"`) {
 		t.Fatalf("safe claims missing: %s", rec.Body.String())
+	}
+}
+
+func TestRuntimeConfigExposesOIDCSettingsForVanillaFrontend(t *testing.T) {
+	srv := NewServer(Config{
+		AuthMode:     "oidc",
+		APIAuthMode:  "oidc",
+		OIDCIssuer:   "http://keycloak.example.test/realms/subnetcalc",
+		OIDCClientID: "frontend-app",
+		OIDCAudience: "api-app",
+		OIDCJWKSURI:  "http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs",
+		OIDCRedirect: "http://localhost:8003/",
+		NetworkHops:  `[{"label":"Browser","detail":"localhost","role":"client"}]`,
+	}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("runtime config Cache-Control=%q", got)
+	}
+	body := rec.Body.String()
+	for _, text := range []string{
+		`window.SUBNETCALC_RUNTIME_CONFIG`,
+		`"authMethod":"oidc"`,
+		`"apiAuthMethod":"oidc"`,
+		`"oidcAuthority":"http://keycloak.example.test/realms/subnetcalc"`,
+		`"oidcClientId":"frontend-app"`,
+		`"oidcRedirect":"http://localhost:8003/"`,
+		`"showNetworkPath":true`,
+		`"networkHops":[{"detail":"localhost","label":"Browser","role":"client"}]`,
+	} {
+		if !strings.Contains(body, text) {
+			t.Fatalf("runtime config missing %q in %s", text, body)
+		}
+	}
+}
+
+func TestRuntimeConfigCanDisableNetworkPath(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none", ShowNetworkPath: "false"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"showNetworkPath":false`) {
+		t.Fatalf("runtime config did not disable network path: %s", rec.Body.String())
+	}
+}
+
+func TestRuntimeConfigDefaultsAPIAuthMethodToFrontendAuthMethod(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "gateway"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"apiAuthMethod":"gateway"`) {
+		t.Fatalf("runtime config did not default API auth method: %s", rec.Body.String())
+	}
+}
+
+func TestOIDCVerifierCanUseSeparateJWKSURI(t *testing.T) {
+	verifier, err := NewOIDCVerifier(
+		t.Context(),
+		"http://localhost:8300/realms/subnetcalc",
+		"api-app",
+		"http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verifier == nil {
+		t.Fatal("verifier is nil")
+	}
+}
+
+func TestSubnetAPIsRequireValidBearerTokenWhenOIDCEnabled(t *testing.T) {
+	verifier := fakeVerifier{claims: UserClaims{Subject: "user-123", Groups: []string{"platform"}}}
+	srv := NewServer(Config{AuthMode: "oidc"}, verifier)
+	body := `{"address":"192.168.1.0/24"}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ipv4/validate", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("missing API token returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/ipv4/validate", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid API token returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/ipv4/validate", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("valid API token returned %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
+	indexHTML, err := web.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appJS, err := web.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, text := range []string{`id="theme-switcher"`, `id="theme-icon"`, `data-theme="dark"`, `/runtime-config.js`, `id="login-btn"`, `id="logout-btn"`} {
+		if !strings.Contains(string(indexHTML), text) {
+			t.Fatalf("frontend index missing %q", text)
+		}
+	}
+	for _, text := range []string{
+		"localStorage.getItem(\"theme\")",
+		"localStorage.setItem(\"theme\"",
+		"apiAuthHeaders()",
+		"apiRequiresOidcToken()",
+		"apiReadyForUserAction()",
+		"authRequiredMessage()",
+		"Sign in before running API calls",
+		"expiredSessionMessage()",
+		"Session expired. Sign out and sign in again to refresh API access.",
+		"authSessionExpired(error)",
+		"invalid or expired access token",
+		"apiTraceHeaders()",
+		"\"x-apim-trace\": \"true\"",
+		"Authorization: `Bearer ${token}`",
+		"usesGatewayAuth()",
+		"refreshGatewayIdentity()",
+		"tokenInput.hidden = gateway",
+		"whoamiButton.hidden = gateway",
+		"fetch(\"/.auth/me\"",
+		"gatewayDisplayName(session)",
+		"/.auth/logout?post_logout_redirect_uri=/logged-out.html",
+		"loginWithOidc",
+		"code_challenge_method: \"S256\"",
+		"/protocol/openid-connect/token",
+		"OIDC/JWT validated by backend",
+		"No auth mode",
+		"Network Path",
+		"APIM Trace ID",
+	} {
+		if !strings.Contains(string(appJS), text) {
+			t.Fatalf("frontend app.js missing %q", text)
+		}
 	}
 }
 

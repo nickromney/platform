@@ -1,10 +1,26 @@
 package app
 
+import "errors"
+
+var ErrInvalidToken = errors.New("invalid bearer token")
+
 type Config struct {
-	RuntimeRole string
-	BackendURL  string
-	DataDir     string
-	CSVPath     string
+	AuthMode     string
+	APIAuthMode  string
+	RuntimeRole  string
+	BackendURL   string
+	OIDCIssuer   string
+	OIDCAudience string
+	OIDCJWKSURI  string
+	DataDir      string
+	CSVPath      string
+}
+
+type UserClaims struct {
+	Subject           string   `json:"sub"`
+	PreferredUsername string   `json:"preferred_username,omitempty"`
+	Email             string   `json:"email,omitempty"`
+	Groups            []string `json:"groups"`
 }
 
 type Label string

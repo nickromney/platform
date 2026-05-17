@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -11,17 +12,34 @@ import (
 
 func main() {
 	cfg := app.Config{
-		RuntimeRole: strings.ToLower(env("RUNTIME_ROLE", "all")),
-		BackendURL:  env("BACKEND_URL", ""),
-		DataDir:     env("DATA_DIR", "/tmp/sentiment"),
-		CSVPath:     env("CSV_PATH", ""),
+		AuthMode:     strings.ToLower(env("AUTH_METHOD", "none")),
+		APIAuthMode:  strings.ToLower(env("API_AUTH_METHOD", "")),
+		RuntimeRole:  strings.ToLower(env("RUNTIME_ROLE", "all")),
+		BackendURL:   env("BACKEND_URL", ""),
+		OIDCIssuer:   firstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY"),
+		OIDCAudience: env("OIDC_AUDIENCE", ""),
+		OIDCJWKSURI:  env("OIDC_JWKS_URI", ""),
+		DataDir:      env("DATA_DIR", "/tmp/sentiment"),
+		CSVPath:      env("CSV_PATH", ""),
+	}
+	if cfg.APIAuthMode == "" {
+		cfg.APIAuthMode = cfg.AuthMode
 	}
 	addr := env("PORT", "8080")
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
 	}
-	log.Printf("sentiment listening on %s role=%s", addr, cfg.RuntimeRole)
-	if err := http.ListenAndServe(addr, app.NewServer(cfg)); err != nil {
+	var verifier app.TokenVerifier
+	if cfg.AuthMode == "oidc" && cfg.RuntimeRole != "frontend" {
+		oidcVerifier, err := app.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, cfg.OIDCAudience, cfg.OIDCJWKSURI)
+		if err != nil {
+			log.Fatalf("configure oidc: %v", err)
+		}
+		verifier = oidcVerifier
+	}
+
+	log.Printf("sentiment listening on %s role=%s auth=%s api_auth=%s", addr, cfg.RuntimeRole, cfg.AuthMode, cfg.APIAuthMode)
+	if err := http.ListenAndServe(addr, app.NewServer(cfg, verifier)); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -31,4 +49,13 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+	}
+	return ""
 }
