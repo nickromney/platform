@@ -50,6 +50,7 @@ export function createRuntimeConfig(env = process.env) {
   return {
     API_BASE_URL: env.API_BASE_URL || '',
     API_PROXY_ENABLED: env.API_PROXY_ENABLED || 'false',
+    BACKEND_URI: env.BACKEND_URI || env.PROXY_API_URL || env.API_BASE_URL || '',
     AUTH_METHOD: authMethod,
     AUTH_ENABLED: env.AUTH_ENABLED || (authMethod && authMethod !== 'none' ? 'true' : 'false'),
     JWT_USERNAME: env.JWT_USERNAME || '',

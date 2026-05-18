@@ -72,10 +72,25 @@ func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("frontend role did not serve static assets: %d", rec.Code)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec = httptest.NewRecorder()
+	frontend.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `"backendURL":"http://backend.example.test"`) {
+		t.Fatalf("runtime config did not expose frontend backend route: %s", rec.Body.String())
+	}
 }
 
 func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 	appJS, err := web.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexHTML, err := web.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	styleCSS, err := web.ReadFile("web/style.css")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +99,8 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 		"Validation",
 		"Private Address Check",
 		"Cloudflare Check",
+		"Provider Range Check",
+		"Network Plan",
 		"Subnet Information",
 		"Performance Timing",
 		"API Call Timing",
@@ -95,6 +112,16 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 	for _, text := range required {
 		if !strings.Contains(string(appJS), text) {
 			t.Fatalf("frontend app.js missing %q", text)
+		}
+	}
+	for _, text := range []string{"provider-form", "network-plan-form", "provider-ranges/check", "network-plan/allocate"} {
+		if !strings.Contains(string(indexHTML)+string(appJS), text) {
+			t.Fatalf("frontend missing %q", text)
+		}
+	}
+	for _, text := range []string{"box-sizing: border-box", "textarea"} {
+		if !strings.Contains(string(styleCSS), text) {
+			t.Fatalf("frontend CSS missing %q", text)
 		}
 	}
 }
@@ -195,6 +222,289 @@ func TestValidationPrivateCloudflareAndIPv6(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), tc.want) {
 			t.Fatalf("%s missing %s in %s", tc.path, tc.want, rec.Body.String())
 		}
+	}
+}
+
+func TestIPv6SubnetInfoUsesNetworkPrefixForTotalAddresses(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	tests := []struct {
+		network string
+		want    string
+	}{
+		{"2001:db8::/64", "18446744073709551616"},
+		{"2001:db8::/112", "65536"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.network, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/ipv6/subnet-info", strings.NewReader(`{"network":"`+tt.network+`"}`))
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+			}
+
+			var got map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["total_addresses"] != tt.want {
+				t.Fatalf("total_addresses=%v, want %s", got["total_addresses"], tt.want)
+			}
+		})
+	}
+}
+
+func TestCloudflareCheckIdentifiesTheProviderRange(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ipv4/check-cloudflare", strings.NewReader(`{"address":"104.16.0.1"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["provider"] != "cloudflare" {
+		t.Fatalf("provider=%v, want cloudflare", got["provider"])
+	}
+	if got["is_provider_range"] != true {
+		t.Fatalf("is_provider_range=%v, want true", got["is_provider_range"])
+	}
+}
+
+func TestProviderRangeCheckSupportsKnownProviders(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	tests := []struct {
+		name     string
+		provider string
+		address  string
+		want     bool
+	}{
+		{"aws", "aws", "3.5.140.1", true},
+		{"azure", "azure", "20.33.1.1", true},
+		{"stripe", "stripe", "3.18.12.63", true},
+		{"openai has no published ranges", "openai", "3.18.12.63", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := `{"provider":"` + tt.provider + `","address":"` + tt.address + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/check", strings.NewReader(body))
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+			}
+
+			var got map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["provider"] != tt.provider {
+				t.Fatalf("provider=%v, want %s", got["provider"], tt.provider)
+			}
+			if got["is_provider_range"] != tt.want {
+				t.Fatalf("is_provider_range=%v, want %v: %#v", got["is_provider_range"], tt.want, got)
+			}
+		})
+	}
+}
+
+func TestProviderRangeCacheCanBeInvalidated(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/cache/invalidate", strings.NewReader(`{"provider":"aws"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["provider"] != "aws" || got["cache_status"] != "invalidated" {
+		t.Fatalf("unexpected invalidation response: %#v", got)
+	}
+}
+
+func TestProviderRangeRefreshUsesConfiguredSourceAndCacheInvalidation(t *testing.T) {
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"prefixes":[{"ip_prefix":"203.0.113.0/24"}],"ipv6_prefixes":[]}`))
+	}))
+	defer source.Close()
+
+	srv := NewServer(Config{
+		AuthMode:             "none",
+		ProviderRangeSources: map[string]string{"aws": source.URL},
+	}, nil)
+
+	assertProviderMatch := func(want bool) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/check", strings.NewReader(`{"provider":"aws","address":"203.0.113.1"}`))
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("check status %d: %s", rec.Code, rec.Body.String())
+		}
+		var got map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got["is_provider_range"] != want {
+			t.Fatalf("is_provider_range=%v, want %v: %#v", got["is_provider_range"], want, got)
+		}
+	}
+
+	assertProviderMatch(false)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/cache/refresh", strings.NewReader(`{"provider":"aws"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh status %d: %s", rec.Code, rec.Body.String())
+	}
+	assertProviderMatch(true)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/cache/invalidate", strings.NewReader(`{"provider":"aws"}`))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalidate status %d: %s", rec.Code, rec.Body.String())
+	}
+	assertProviderMatch(false)
+}
+
+func TestProviderRangeRefreshParsesStripeAndAzureFeeds(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		payload  string
+		address  string
+	}{
+		{
+			name:     "stripe",
+			provider: "stripe",
+			payload:  `{"WEBHOOKS":["198.51.100.25"]}`,
+			address:  "198.51.100.25",
+		},
+		{
+			name:     "azure",
+			provider: "azure",
+			payload:  `{"values":[{"properties":{"addressPrefixes":["198.51.100.0/24","2001:db8:51::/48"]}}]}`,
+			address:  "2001:db8:51::1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.payload))
+			}))
+			defer source.Close()
+
+			srv := NewServer(Config{
+				AuthMode:             "none",
+				ProviderRangeSources: map[string]string{tt.provider: source.URL},
+			}, nil)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/cache/refresh", strings.NewReader(`{"provider":"`+tt.provider+`"}`))
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("refresh status %d: %s", rec.Code, rec.Body.String())
+			}
+
+			req = httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/check", strings.NewReader(`{"provider":"`+tt.provider+`","address":"`+tt.address+`"}`))
+			rec = httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("check status %d: %s", rec.Code, rec.Body.String())
+			}
+			var got map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["is_provider_range"] != true || got["range_source"] != "live-cache" {
+				t.Fatalf("unexpected provider match: %#v", got)
+			}
+		})
+	}
+}
+
+func TestNetworkPlanAllocatesHostRequirementsInsideParentNetwork(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	body := `{"parent":"10.0.0.0/24","mode":"Standard","requirements":[{"name":"web","hosts":50},{"name":"db","hosts":20}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/network-plan/allocate", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var got struct {
+		Parent      string `json:"parent"`
+		Allocations []struct {
+			Name            string `json:"name"`
+			Network         string `json:"network"`
+			PrefixLength    int    `json:"prefix_length"`
+			UsableAddresses uint64 `json:"usable_addresses"`
+		} `json:"allocations"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Parent != "10.0.0.0/24" {
+		t.Fatalf("parent=%q", got.Parent)
+	}
+	if len(got.Allocations) != 2 {
+		t.Fatalf("allocations=%#v", got.Allocations)
+	}
+	if got.Allocations[0].Name != "web" || got.Allocations[0].Network != "10.0.0.0/26" || got.Allocations[0].UsableAddresses != 62 {
+		t.Fatalf("unexpected first allocation: %#v", got.Allocations[0])
+	}
+	if got.Allocations[1].Name != "db" || got.Allocations[1].Network != "10.0.0.64/27" || got.Allocations[1].UsableAddresses != 30 {
+		t.Fatalf("unexpected second allocation: %#v", got.Allocations[1])
+	}
+}
+
+func TestNetworkPlanAllocationHonorsCloudModeReservations(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	body := `{"parent":"10.0.0.0/24","mode":"Azure","requirements":[{"name":"app","hosts":60}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/network-plan/allocate", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var got struct {
+		Allocations []struct {
+			Network         string `json:"network"`
+			UsableAddresses uint64 `json:"usable_addresses"`
+			FirstUsableIP   string `json:"first_usable_ip"`
+		} `json:"allocations"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Allocations) != 1 {
+		t.Fatalf("allocations=%#v", got.Allocations)
+	}
+	if got.Allocations[0].Network != "10.0.0.0/25" || got.Allocations[0].UsableAddresses != 123 || got.Allocations[0].FirstUsableIP != "10.0.0.4" {
+		t.Fatalf("unexpected allocation: %#v", got.Allocations[0])
 	}
 }
 
@@ -346,7 +656,7 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`id="theme-switcher"`, `id="theme-icon"`, `data-theme="dark"`, `/runtime-config.js`, `id="login-btn"`, `id="logout-btn"`} {
+	for _, text := range []string{`id="theme-switcher"`, `id="theme-icon"`, `data-theme="dark"`, `/runtime-config.js`, `id="login-btn"`, `id="logout-btn"`, `id="results" tabindex="-1" aria-live="polite"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
@@ -368,8 +678,13 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		"Authorization: `Bearer ${token}`",
 		"usesGatewayAuth()",
 		"refreshGatewayIdentity()",
+		"const showAuthPanel = showOidc || gateway",
+		`document.getElementById("auth-panel").hidden = !showAuthPanel`,
 		"tokenInput.hidden = gateway",
 		"whoamiButton.hidden = gateway",
+		"prepareResults()",
+		"focusResults()",
+		`document.getElementById("results").focus()`,
 		"fetch(\"/.auth/me\"",
 		"gatewayDisplayName(session)",
 		"/.auth/logout?post_logout_redirect_uri=/logged-out.html",
@@ -378,7 +693,12 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		"/protocol/openid-connect/token",
 		"OIDC/JWT validated by backend",
 		"No auth mode",
+		"Backend URI:",
+		"runtimeConfig().backendURL || \"same process\"",
 		"Network Path",
+		"const backendURL = config.backendURL || \"same process\"",
+		"const backendRole = config.apiAuthMethod === \"oidc\"",
+		"Static UI and same-origin API proxy",
 		"APIM Trace ID",
 	} {
 		if !strings.Contains(string(appJS), text) {

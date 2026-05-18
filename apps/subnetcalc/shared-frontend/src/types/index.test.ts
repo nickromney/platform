@@ -8,7 +8,10 @@ import type {
   CloudflareCheckResponse,
   CloudMode,
   HealthResponse,
+  NetworkPlanResponse,
   PrivateCheckResponse,
+  ProviderName,
+  ProviderRangeResponse,
   SubnetInfoResponse,
   ValidateResponse,
 } from './index'
@@ -21,6 +24,14 @@ describe('CloudMode type', () => {
     expect(modes).toContain('AWS')
     expect(modes).toContain('Azure')
     expect(modes).toContain('OCI')
+  })
+})
+
+describe('ProviderName type', () => {
+  it('should accept supported provider range names', () => {
+    const providers: ProviderName[] = ['cloudflare', 'aws', 'azure', 'stripe', 'openai']
+    expect(providers).toContain('aws')
+    expect(providers).toContain('openai')
   })
 })
 
@@ -123,6 +134,46 @@ describe('CloudflareCheckResponse', () => {
 
     expect(response.is_cloudflare).toBe(false)
     expect(response.matched_ranges).toEqual([])
+  })
+})
+
+describe('ProviderRangeResponse', () => {
+  it('should contain generic provider range check information', () => {
+    const response: ProviderRangeResponse = {
+      address: '3.5.140.1',
+      provider: 'aws',
+      is_provider_range: true,
+      ip_version: 4,
+      range_source: 'bundled',
+      matched_ranges: ['3.5.140.0/22'],
+    }
+
+    expect(response.provider).toBe('aws')
+    expect(response.is_provider_range).toBe(true)
+    expect(response.matched_ranges).toContain('3.5.140.0/22')
+  })
+})
+
+describe('NetworkPlanResponse', () => {
+  it('should contain network plan allocations', () => {
+    const response: NetworkPlanResponse = {
+      parent: '10.0.0.0/24',
+      mode: 'Azure',
+      allocations: [
+        {
+          name: 'web',
+          network: '10.0.0.0/25',
+          prefix_length: 25,
+          total_addresses: 128,
+          usable_addresses: 123,
+          first_usable_ip: '10.0.0.4',
+          last_usable_ip: '10.0.0.126',
+        },
+      ],
+    }
+
+    expect(response.allocations[0]?.network).toBe('10.0.0.0/25')
+    expect(response.allocations[0]?.usable_addresses).toBe(123)
   })
 })
 

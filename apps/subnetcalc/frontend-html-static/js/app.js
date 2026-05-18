@@ -51,13 +51,15 @@ async function checkApiHealth() {
         const endpointUrl = API_CONFIG.BASE_URL
             ? `${API_CONFIG.BASE_URL}${API_CONFIG.PATHS.HEALTH}`
             : `${window.location.origin}${API_CONFIG.PATHS.HEALTH}`;
+        const backendUri = window.RUNTIME_CONFIG?.BACKEND_URI || endpointUrl;
 
         statusDiv.className = 'alert alert-success';
         statusMsg.innerHTML = `
             <strong>API Status:</strong> ${data.status} |
             <strong>Backend:</strong> ${data.service} |
+            <strong>Backend URI:</strong> ${backendUri} |
             <strong>Version:</strong> ${data.version}<br>
-            <small>Frontend: <code>${window.location.origin}/</code> | Backend: <code>${endpointUrl}</code></small>
+            <small>Frontend: <code>${window.location.origin}/</code> | Backend URI: <code>${backendUri}</code></small>
         `;
         statusDiv.style.display = 'block';
     } catch (error) {

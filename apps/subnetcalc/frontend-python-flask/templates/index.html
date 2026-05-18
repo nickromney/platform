@@ -53,8 +53,9 @@
             <p>
                 <strong>API Status:</strong> {{ api_health.status }} |
                 <strong>Backend:</strong> {{ api_health.service }} |
+                <strong>Backend URI:</strong> {{ api_health.endpoint }} |
                 <strong>Version:</strong> {{ api_health.version }}<br>
-                <small>Frontend: <code>{{ request.host_url }}</code> | Backend: <code>{{ api_health.endpoint }}</code></small>
+                <small>Frontend: <code>{{ request.host_url }}</code> | Backend URI: <code>{{ api_health.endpoint }}</code></small>
             </p>
         </div>
         {% elif not api_down %}

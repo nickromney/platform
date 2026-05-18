@@ -34,6 +34,10 @@ const API_CONFIG = {
 
 // Override BASE_URL from environment variable if available
 // (Used when deploying to external API without nginx proxy)
-if (typeof window !== "undefined" && window.API_BASE_URL) {
-  API_CONFIG.BASE_URL = window.API_BASE_URL;
+if (typeof window !== "undefined") {
+  if (window.RUNTIME_CONFIG && window.RUNTIME_CONFIG.API_BASE_URL) {
+    API_CONFIG.BASE_URL = window.RUNTIME_CONFIG.API_BASE_URL;
+  } else if (window.API_BASE_URL) {
+    API_CONFIG.BASE_URL = window.API_BASE_URL;
+  }
 }

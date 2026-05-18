@@ -153,7 +153,7 @@ services:
       - "8003:8080"
     environment:
       - RUNTIME_ROLE=frontend
-      - BACKEND_URL=http://subnetcalc-backend:8080
+      - BACKEND_URL=${SUBNETCALC_GO_FRONTEND_BACKEND_URL:-http://subnetcalc-backend:8080}
       - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-none}
       - API_AUTH_METHOD=${SUBNETCALC_BACKEND_AUTH_METHOD:-none}
       - OIDC_ISSUER_URL=${SUBNETCALC_OIDC_ISSUER_URL:-http://localhost:8300/realms/subnetcalc}
@@ -165,9 +165,6 @@ services:
       - NETWORK_HOPS=${SUBNETCALC_NETWORK_HOPS:-}
       - PORT=8080
       - HOME=/tmp
-    depends_on:
-      subnetcalc-backend:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "/subnetcalc", "healthcheck"]
       interval: 10s
@@ -187,14 +184,14 @@ services:
       - "8080:8080"
     environment:
       # JWT Authentication with Argon2 hashed passwords
-      - AUTH_METHOD=jwt
+      - AUTH_METHOD=${SUBNETCALC_FUNCTION_AUTH_METHOD:-jwt}
       - JWT_SECRET_KEY=docker-compose-dev-secret-key-min-32-chars-long-12345
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
       # Argon2 hashed passwords: demo@dev.test=demo-password, demo@admin.test=demo-password
       - JWT_TEST_USERS={"demo@dev.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$oYwUidtZ9Y8t+NU9ccv+jw$$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI","demo@admin.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$oYwUidtZ9Y8t+NU9ccv+jw$$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}
-      # CORS origins for React frontend on port 3004
-      - CORS_ORIGINS=http://localhost:3004
+      # CORS origins for local compose matrix frontends
+      - CORS_ORIGINS=http://localhost:8000,http://localhost:8001,http://localhost:8002,http://localhost:8003,http://localhost:8004,http://localhost:3001,http://localhost:3002,http://localhost:3004,http://localhost:3005
       - WEBSITES_PORT=8080
       - ASPNETCORE_URLS=http://+:8080
     healthcheck:
@@ -219,7 +216,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - API_BASE_URL=http://api-fastapi-azure-function:8080/api/v1
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_INTERNAL_BASE_URL:-http://api-fastapi-azure-function:8080/api/v1}
       # JWT Authentication credentials
       - JWT_USERNAME=demo@dev.test
       - JWT_PASSWORD=demo-password
@@ -237,9 +234,11 @@ services:
     ports:
       - "8090:8000"
     environment:
-      # No authentication for local development (static frontend doesn't implement JWT)
-      # For JWT auth testing, use the standalone api-fastapi-container-app/compose.yml
-      - AUTH_METHOD=none
+      - AUTH_METHOD=${SUBNETCALC_CONTAINER_AUTH_METHOD:-none}
+      - JWT_SECRET_KEY=container-app-dev-secret-key-min-32-chars-long-12345
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - JWT_TEST_USERS={"demo@dev.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$oYwUidtZ9Y8t+NU9ccv+jw$$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI","demo@admin.test":"$$argon2id$$v=19$$m=65536,t=3,p=4$$oYwUidtZ9Y8t+NU9ccv+jw$$sR58KzbJfziRaUjyrWimkl+NExMX4W0CVw5aIy7PAkI"}
       # CORS origins for all frontends (container and local dev)
       # Container ports: 8001-8004 (static, flask, typescript, react)
       # Local dev ports: 3000-3002 (react/typescript dev), 5000 (flask dev), 5173-5174 (vite dev servers)
@@ -261,14 +260,17 @@ services:
   frontend-html-static:
     <<: *nginx-runtime-hardening
     build:
-      context: ./frontend-html-static
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./frontend-html-static/Dockerfile
+    platform: ${SUBNETCALC_LOCAL_PLATFORM:-linux/amd64}
     image: subnetcalc-frontend-html-static:latest
     ports:
       - "8001:8081"
-    depends_on:
-      api-fastapi-container-app:
-        condition: service_healthy
+    environment:
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-}
+      - API_PROXY_UPSTREAM=${SUBNETCALC_FRONTEND_API_PROXY_UPSTREAM:-http://api-fastapi-container-app:8000}
+      - NGINX_TEMPLATE_PATH=/usr/share/nginx/templates/subnetcalc.conf.template
+      - NGINX_CONFIG_OUT=/tmp/nginx.conf
 
   frontend-python-flask-container-app:
     <<: *app-runtime-hardening
@@ -280,11 +282,10 @@ services:
       - "8002:8000"
     environment:
       # Connect to Container App API (no JWT auth in compose)
-      - API_BASE_URL=http://api-fastapi-container-app:8000/api/v1
-      - STACK_NAME=Python Flask + Container App
-    depends_on:
-      api-fastapi-container-app:
-        condition: service_healthy
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_INTERNAL_BASE_URL:-http://api-fastapi-container-app:8000/api/v1}
+      - STACK_NAME=${SUBNETCALC_FRONTEND_STACK_NAME:-Python Flask + Container App}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-}
 
   frontend-typescript-vite:
     <<: *nginx-runtime-hardening
@@ -296,11 +297,10 @@ services:
     ports:
       - "8003:8080"
     environment:
-      - AUTH_METHOD=none
-      - API_BASE_URL=http://localhost:8090
-    depends_on:
-      api-fastapi-container-app:
-        condition: service_healthy
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-none}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-}
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-http://localhost:8090}
 
   frontend-typescript-vite-jwt:
     profiles: ["function-family"]
@@ -313,13 +313,10 @@ services:
     ports:
       - "3001:8080"
     environment:
-      - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo@dev.test
-      - JWT_PASSWORD=demo-password
-      - API_BASE_URL=http://localhost:8080
-    depends_on:
-      api-fastapi-azure-function:
-        condition: service_healthy
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-jwt}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-demo@dev.test}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-demo-password}
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-http://localhost:8080}
 
   frontend-react:
     <<: *nginx-runtime-hardening
@@ -331,11 +328,10 @@ services:
     ports:
       - "8004:8080"
     environment:
-      - API_BASE_URL=http://localhost:8090
-      - AUTH_METHOD=none
-    depends_on:
-      api-fastapi-container-app:
-        condition: service_healthy
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-http://localhost:8090}
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-none}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-}
 
   frontend-react-jwt:
     profiles: ["function-family"]
@@ -348,13 +344,10 @@ services:
     ports:
       - "3002:8080"
     environment:
-      - API_BASE_URL=http://localhost:8080
-      - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo@dev.test
-      - JWT_PASSWORD=demo-password
-    depends_on:
-      api-fastapi-azure-function:
-        condition: service_healthy
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-http://localhost:8080}
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-jwt}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-demo@dev.test}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-demo-password}
 
   frontend-react-msal:
     profiles: ["function-family"]
@@ -373,9 +366,6 @@ services:
       # Set these via environment variables or .env file:
       # - AZURE_CLIENT_ID=your-client-id
       # - AZURE_TENANT_ID=your-tenant-id
-    depends_on:
-      api-fastapi-azure-function:
-        condition: service_healthy
 
   frontend-react-server-jwt:
     profiles: ["function-family"]
@@ -391,13 +381,10 @@ services:
       # Runtime configuration injected via environment variables (like Azure Web App)
       - PORT=8080
       # Use localhost URL for browser access (client appends /api/v1/... paths)
-      - API_BASE_URL=http://localhost:8080
-      - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo@dev.test
-      - JWT_PASSWORD=demo-password
-    depends_on:
-      api-fastapi-azure-function:
-        condition: service_healthy
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-http://localhost:8080}
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-jwt}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-demo@dev.test}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-demo-password}
 
   frontend-react-proxy:
     profiles: ["function-family"]
@@ -412,19 +399,16 @@ services:
     environment:
       # Proxy /api/* requests through the Node/Vite host just like the Azure Web App stack
       - PORT=8080
-      - API_BASE_URL=
-      - API_PROXY_ENABLED=true
-      - PROXY_API_URL=http://api-fastapi-azure-function:8080
+      - API_BASE_URL=${SUBNETCALC_FRONTEND_API_BROWSER_BASE_URL:-}
+      - API_PROXY_ENABLED=${SUBNETCALC_FRONTEND_API_PROXY_ENABLED:-true}
+      - PROXY_API_URL=${SUBNETCALC_FRONTEND_API_PROXY_UPSTREAM:-http://api-fastapi-azure-function:8080}
       - PROXY_FORWARD_EASYAUTH_HEADERS=true
       # Enable the Managed Identity code path; token acquisition will fail locally
       # unless the container inherits Azure credentials (expected, logged as warning).
       - PROXY_MANAGED_IDENTITY_ENABLED=true
-      - AUTH_METHOD=jwt
-      - JWT_USERNAME=demo@dev.test
-      - JWT_PASSWORD=demo-password
-    depends_on:
-      api-fastapi-azure-function:
-        condition: service_healthy
+      - AUTH_METHOD=${SUBNETCALC_FRONTEND_AUTH_METHOD:-jwt}
+      - JWT_USERNAME=${SUBNETCALC_FRONTEND_JWT_USERNAME:-demo@dev.test}
+      - JWT_PASSWORD=${SUBNETCALC_FRONTEND_JWT_PASSWORD:-demo-password}
 
   # -----------------------------------------------------------------------------
   # Local Stack 11 - Keycloak OAuth2/OIDC Simulation

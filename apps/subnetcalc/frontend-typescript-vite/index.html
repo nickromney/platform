@@ -59,6 +59,55 @@
             </form>
         </section>
 
+        <section>
+            <form id="provider-form">
+                <h2>Provider Range Check</h2>
+                <label for="provider-address">Address</label>
+                <div class="form-row">
+                    <input
+                        type="text"
+                        id="provider-address"
+                        name="address"
+                        placeholder="e.g., 3.5.140.1 or 104.16.1.1"
+                        required
+                    />
+                    <select id="provider-name" name="provider">
+                        <option value="cloudflare">Cloudflare</option>
+                        <option value="aws">AWS</option>
+                        <option value="azure">Azure</option>
+                        <option value="stripe">Stripe</option>
+                        <option value="openai">OpenAI</option>
+                    </select>
+                    <button type="submit">Check</button>
+                </div>
+            </form>
+        </section>
+
+        <section>
+            <form id="network-plan-form">
+                <h2>Network Plan</h2>
+                <label for="plan-parent">Parent Network</label>
+                <div class="form-row">
+                    <input
+                        type="text"
+                        id="plan-parent"
+                        name="parent"
+                        placeholder="e.g., 10.0.0.0/24"
+                        required
+                    />
+                    <select id="plan-mode" name="mode">
+                        <option value="Standard">Standard</option>
+                        <option value="AWS">AWS</option>
+                        <option value="Azure" selected>Azure</option>
+                        <option value="OCI">OCI</option>
+                    </select>
+                </div>
+                <label for="plan-requirements">Host Requirements</label>
+                <textarea id="plan-requirements" name="requirements" rows="4" placeholder="web,60&#10;db,20" required></textarea>
+                <button type="submit">Allocate</button>
+            </form>
+        </section>
+
         <!-- Loading -->
         <div id="loading" style="display: none; text-align: center; margin: 2rem 0;">
             <div aria-busy="true"></div>

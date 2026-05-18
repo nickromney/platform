@@ -24,6 +24,7 @@ Environment Variables:
         JWT_TEST_USERS: JSON object with test users (development only)
 """
 
+import json
 import logging
 import os
 import sys
@@ -39,6 +40,8 @@ from ipaddress import (
     ip_address,
     ip_network,
 )
+from urllib.request import Request as URLRequest
+from urllib.request import urlopen
 
 import azure.functions as func
 import fastapi
@@ -58,6 +61,8 @@ from auth import (
     verify_test_user,
 )
 from cloudflare_ips import (
+    FALLBACK_IPV4_RANGES,
+    FALLBACK_IPV6_RANGES,
     get_cloudflare_ipv4_ranges,
     get_cloudflare_ipv6_ranges,
     is_using_live_cloudflare_ranges,
@@ -201,6 +206,26 @@ class ValidateRequest(BaseModel):
 class SubnetInfoRequest(BaseModel):
     network: str = Field(..., description="Network in CIDR notation")
     mode: str = Field(default="Azure", description="Cloud provider mode: Azure, AWS, OCI, or Standard")
+
+
+class ProviderRangeRequest(BaseModel):
+    provider: str = Field(..., description="Provider name")
+    address: str = Field(..., description="IP address or CIDR notation")
+
+
+class ProviderCacheRequest(BaseModel):
+    provider: str = Field(..., description="Provider name")
+
+
+class NetworkPlanRequirement(BaseModel):
+    name: str = Field(..., min_length=1)
+    hosts: int = Field(..., ge=1)
+
+
+class NetworkPlanRequest(BaseModel):
+    parent: str = Field(..., description="Parent IPv4 network in CIDR notation")
+    mode: str = Field(default="Azure", description="Cloud provider mode: Azure, AWS, OCI, or Standard")
+    requirements: list[NetworkPlanRequirement] = Field(..., min_length=1)
 
 
 # Create FastAPI app with OpenAPI documentation
@@ -726,6 +751,163 @@ RFC6598_RANGE = ip_network("100.64.0.0/10")
 # Cloudflare IP ranges are now dynamically fetched from cloudflare_ips module
 # See cloudflare_ips.py for implementation with fallback to hardcoded ranges
 
+VALID_MODES = {"Azure", "AWS", "OCI", "Standard"}
+PROVIDER_REQUEST_TIMEOUT = 20.0
+PROVIDERS = {
+    "cloudflare": {
+        "ipv4": tuple(FALLBACK_IPV4_RANGES),
+        "ipv6": tuple(FALLBACK_IPV6_RANGES),
+        "note": None,
+    },
+    "aws": {
+        "ipv4": (ip_network("3.5.140.0/22"),),
+        "ipv6": (ip_network("2600:1f14::/35"),),
+        "note": None,
+    },
+    "azure": {
+        "ipv4": (ip_network("20.33.0.0/16"),),
+        "ipv6": (),
+        "note": "Microsoft publishes Azure Service Tags as date-stamped JSON and authenticated API feeds.",
+    },
+    "stripe": {
+        "ipv4": (ip_network("3.18.12.63/32"), ip_network("3.130.192.231/32")),
+        "ipv6": (),
+        "note": None,
+    },
+    "openai": {
+        "ipv4": (),
+        "ipv6": (),
+        "note": "OpenAI does not publish an official provider IP range feed for general allowlisting.",
+    },
+}
+PROVIDER_SOURCE_URLS = {
+    "cloudflare": "https://www.cloudflare.com/ips-v4/",
+    "aws": "https://ip-ranges.amazonaws.com/ip-ranges.json",
+    "stripe": "https://stripe.com/files/ips/ips_webhooks.json",
+}
+_provider_live_cache = {}
+
+
+def _parse_address_or_network(address: str):
+    try:
+        if "/" in address:
+            return ip_network(address, strict=False)
+        return ip_address(address)
+    except (AddressValueError, NetmaskValueError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid IP address or network: {str(exc)}") from exc
+
+
+def _matches_provider_range(candidate, provider_range):
+    if isinstance(candidate, (IPv4Network, IPv6Network)):
+        return candidate.subnet_of(provider_range) or candidate.supernet_of(provider_range)
+    return candidate in provider_range
+
+
+def _parse_provider_range(value: str):
+    if "/" in value:
+        return ip_network(value, strict=False)
+    parsed_address = ip_address(value)
+    if isinstance(parsed_address, IPv4Address):
+        return ip_network(f"{parsed_address}/32", strict=False)
+    return ip_network(f"{parsed_address}/128", strict=False)
+
+
+def _split_provider_ranges(values: list[str]):
+    ipv4_ranges = []
+    ipv6_ranges = []
+    for value in values:
+        provider_range = _parse_provider_range(value)
+        if isinstance(provider_range, IPv4Network):
+            ipv4_ranges.append(provider_range)
+        else:
+            ipv6_ranges.append(provider_range)
+    return tuple(ipv4_ranges), tuple(ipv6_ranges)
+
+
+def _parse_provider_payload(provider: str, payload: bytes):
+    if provider == "cloudflare":
+        return _split_provider_ranges([line.strip() for line in payload.decode("utf-8").splitlines() if line.strip()])
+
+    data = json.loads(payload.decode("utf-8"))
+    if provider == "aws":
+        values = [item["ip_prefix"] for item in data.get("prefixes", []) if item.get("ip_prefix")]
+        values.extend(item["ipv6_prefix"] for item in data.get("ipv6_prefixes", []) if item.get("ipv6_prefix"))
+        return _split_provider_ranges(values)
+    if provider == "stripe":
+        values = []
+        for item in data.values():
+            if isinstance(item, list):
+                values.extend(str(value) for value in item)
+        return _split_provider_ranges(values)
+    if provider == "azure":
+        values = []
+        for item in data.get("values", []):
+            properties = item.get("properties", {})
+            values.extend(str(value) for value in properties.get("addressPrefixes", []))
+        return _split_provider_ranges(values)
+
+    raise HTTPException(status_code=400, detail=f"Provider does not support refresh: {provider}")
+
+
+def invalidate_provider_cache(provider: str) -> None:
+    _provider_live_cache.pop(provider.lower(), None)
+
+
+def _provider_ranges(provider_name: str, provider: dict):
+    live_ranges = _provider_live_cache.get(provider_name)
+    if live_ranges is not None:
+        return "live-cache", live_ranges[0], live_ranges[1]
+    return "bundled", provider["ipv4"], provider["ipv6"]
+
+
+def _validate_mode(mode: str) -> None:
+    if mode not in VALID_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode '{mode}'. Must be one of: Azure, AWS, OCI, Standard",
+        )
+
+
+def _first_usable_offset(mode: str, prefix_length: int) -> int:
+    if prefix_length >= 31:
+        return 0
+    if mode in {"Azure", "AWS"}:
+        return 4
+    if mode == "OCI":
+        return 2
+    return 1
+
+
+def _reserved_address_count(mode: str, prefix_length: int) -> int:
+    if prefix_length >= 31:
+        return 0
+    if mode in {"Azure", "AWS"}:
+        return 5
+    if mode == "OCI":
+        return 3
+    return 2
+
+
+def _usable_addresses(total_addresses: int, mode: str, prefix_length: int) -> int:
+    if prefix_length >= 31:
+        return total_addresses
+    return max(0, total_addresses - _reserved_address_count(mode, prefix_length))
+
+
+def _smallest_prefix_for_hosts(hosts: int, mode: str) -> int:
+    for prefix_length in range(32, -1, -1):
+        total_addresses = 1 << (32 - prefix_length)
+        if _usable_addresses(total_addresses, mode, prefix_length) >= hosts:
+            return prefix_length
+    raise HTTPException(status_code=400, detail=f"Host requirement is too large: {hosts}")
+
+
+def _align_to_block(address: int, block_size: int) -> int:
+    remainder = address % block_size
+    if remainder == 0:
+        return address
+    return address + (block_size - remainder)
+
 
 @api.get("/api/v1/health")
 async def health_check():
@@ -902,6 +1084,147 @@ async def check_cloudflare(request: ValidateRequest, current_user: str = Depends
 
     except (AddressValueError, NetmaskValueError, ValueError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid IP address or network: {str(e)}") from e
+
+
+@api.post("/api/v1/provider-ranges/check")
+async def check_provider_range(request: ProviderRangeRequest, current_user: str = Depends(get_current_user)):
+    """Check whether an address or CIDR belongs to a provider range."""
+    provider_name = request.provider.lower()
+    provider = PROVIDERS.get(provider_name)
+    if provider is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {request.provider}")
+
+    candidate = _parse_address_or_network(request.address)
+    range_source, ipv4_ranges, ipv6_ranges = _provider_ranges(provider_name, provider)
+    if isinstance(candidate, (IPv4Address, IPv4Network)):
+        ranges = ipv4_ranges
+        ip_version = 4
+    else:
+        ranges = ipv6_ranges
+        ip_version = 6
+
+    matched_ranges = [
+        str(provider_range) for provider_range in ranges if _matches_provider_range(candidate, provider_range)
+    ]
+    response = {
+        "address": request.address,
+        "provider": provider_name,
+        "is_provider_range": bool(matched_ranges),
+        "ip_version": ip_version,
+        "range_source": range_source,
+    }
+    if provider["note"]:
+        response["range_source_note"] = provider["note"]
+    if matched_ranges:
+        response["matched_ranges"] = matched_ranges
+    return response
+
+
+@api.post("/api/v1/provider-ranges/cache/invalidate")
+async def invalidate_provider_range_cache(request: ProviderCacheRequest, current_user: str = Depends(get_current_user)):
+    """Invalidate a provider's explicit live range cache."""
+    provider_name = request.provider.lower()
+    if provider_name not in PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {request.provider}")
+    invalidate_provider_cache(provider_name)
+    return {"provider": provider_name, "cache_status": "invalidated"}
+
+
+@api.post("/api/v1/provider-ranges/cache/refresh")
+async def refresh_provider_range_cache(request: ProviderCacheRequest, current_user: str = Depends(get_current_user)):
+    """Refresh a provider's live range cache from its configured source."""
+    provider_name = request.provider.lower()
+    if provider_name not in PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {request.provider}")
+    source_url = PROVIDER_SOURCE_URLS.get(provider_name)
+    if not source_url:
+        raise HTTPException(
+            status_code=400, detail=f"Provider does not have a configured refresh source: {provider_name}"
+        )
+
+    request_obj = URLRequest(source_url, headers={"User-Agent": "subnetcalc-api/1.0"})
+    with urlopen(request_obj, timeout=PROVIDER_REQUEST_TIMEOUT) as response:
+        payload = response.read()
+    ipv4_ranges, ipv6_ranges = _parse_provider_payload(provider_name, payload)
+    _provider_live_cache[provider_name] = (ipv4_ranges, ipv6_ranges)
+
+    return {
+        "provider": provider_name,
+        "cache_status": "refreshed",
+        "range_source": "live-cache",
+        "range_source_url": source_url,
+        "ipv4_range_count": len(ipv4_ranges),
+        "ipv6_range_count": len(ipv6_ranges),
+    }
+
+
+@api.post("/api/v1/network-plan/allocate")
+async def allocate_network_plan(request: NetworkPlanRequest, current_user: str = Depends(get_current_user)):
+    """Allocate IPv4 subnets for named host requirements."""
+    _validate_mode(request.mode)
+    try:
+        parent = ip_network(request.parent, strict=False)
+    except (AddressValueError, NetmaskValueError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid parent network: {str(exc)}") from exc
+
+    if not isinstance(parent, IPv4Network):
+        raise HTTPException(status_code=400, detail="Network planning currently supports IPv4 parent networks")
+
+    requirements = sorted(request.requirements, key=lambda requirement: requirement.hosts, reverse=True)
+    current_address = int(parent.network_address)
+    end_address = int(parent.broadcast_address)
+    allocations = []
+
+    for requirement in requirements:
+        prefix_length = _smallest_prefix_for_hosts(requirement.hosts, request.mode)
+        block_size = 1 << (32 - prefix_length)
+        network_start = _align_to_block(current_address, block_size)
+        network_end = network_start + block_size - 1
+        if network_end > end_address:
+            raise HTTPException(status_code=400, detail=f"Insufficient space for requirement: {requirement.name}")
+
+        network = IPv4Network((IPv4Address(network_start), prefix_length))
+        total_addresses = network.num_addresses
+        first_offset = _first_usable_offset(request.mode, prefix_length)
+        if prefix_length >= 31:
+            last_usable = network.network_address + (total_addresses - 1)
+        else:
+            last_usable = network.broadcast_address - 1
+
+        allocations.append(
+            {
+                "name": requirement.name,
+                "network": str(network),
+                "prefix_length": prefix_length,
+                "total_addresses": total_addresses,
+                "usable_addresses": _usable_addresses(total_addresses, request.mode, prefix_length),
+                "first_usable_ip": str(network.network_address + first_offset),
+                "last_usable_ip": str(last_usable),
+            }
+        )
+        current_address = network_end + 1
+
+    return {"parent": str(parent), "mode": request.mode, "allocations": allocations}
+
+
+@api.post("/api/v1/ipv6/subnet-info")
+async def ipv6_subnet_info(request: SubnetInfoRequest, current_user: str = Depends(get_current_user)):
+    """Calculate IPv6 subnet information."""
+    try:
+        network = ip_network(request.network, strict=False)
+    except (AddressValueError, NetmaskValueError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid network format: {str(exc)}") from exc
+
+    if not isinstance(network, IPv6Network):
+        raise HTTPException(status_code=400, detail="This endpoint only supports IPv6 networks")
+
+    return {
+        "network": request.network,
+        "network_address": str(network.network_address),
+        "prefix_length": network.prefixlen,
+        "total_addresses": str(network.num_addresses),
+        "note": "IPv6 subnets do not have reserved addresses like IPv4",
+    }
 
 
 @api.post("/api/v1/ipv4/subnet-info")

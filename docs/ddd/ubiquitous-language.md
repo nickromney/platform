@@ -164,11 +164,17 @@ deployment evidence, and scorecards. Current app/environment surfaces include
 | private range | RFC1918 address space | Private IPv4 space. |
 | shared address space | RFC6598 range | CGNAT/Shared space. |
 | Cloudflare range check | Cloudflare IP membership | Membership in Cloudflare-owned ranges. |
+| provider range | IP address space published by an external provider | Current provider is `cloudflare`; likely future providers include `aws`, `azure`, `openai`, and `stripe`. |
+| provider range check | membership in a provider range | Generalized form of a Cloudflare range check. |
+| provider range cache | cached provider range data used for membership checks | Large provider feeds such as AWS and Azure are refreshed explicitly, not pulled on every lookup. |
 | cloud mode | reservation rules for a target cloud | `Standard, AWS, Azure, OCI`. |
 | subnet info | calculated network facts | Result of the analysis. |
 | usable addresses | addresses available after reservation rules | Allocatable hosts. |
 | first usable IP | first allocatable host address | Start of usable range. |
 | last usable IP | last allocatable host address | End of usable range. |
+| network plan | proposed allocation of child networks inside a parent network | Planning concept from visual subnet design. |
+| host requirement | named desired usable-address count inside a network plan | Input to allocation. |
+| allocation | child network selected to satisfy a host requirement | Output of a network plan. |
 | lookup | the frontend's combined query over validation, private-range, Cloudflare, and subnet-info checks | Frontend orchestration term; not a backend domain concept pre-launch. |
 | API mediation | policy and forwarding layer | Implemented by APIM or simulators. |
 

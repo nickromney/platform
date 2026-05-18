@@ -3,7 +3,20 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { getApiPrefix, handleFetchError, isIpv6, parseJsonResponse } from './index'
+import type {
+  CloudflareCheckResponse,
+  CloudMode,
+  HealthResponse,
+  NetworkPlanRequirement,
+  NetworkPlanResponse,
+  PrivateCheckResponse,
+  ProviderName,
+  ProviderRangeResponse,
+  SubnetInfoResponse,
+  ValidateResponse,
+} from '../types'
+import type { IApiClient } from './index'
+import { getApiPrefix, handleFetchError, isIpv6, parseJsonResponse, performCoreLookup } from './index'
 
 describe('isIpv6', () => {
   it('should return true for IPv6 addresses', () => {
@@ -127,5 +140,122 @@ describe('parseJsonResponse', () => {
     await expect(parseJsonResponse(mockResponse)).rejects.toThrow(
       'Failed to parse API response. The API may be starting up or in an error state.'
     )
+  })
+})
+
+describe('performCoreLookup', () => {
+  class FakeApiClient implements IApiClient {
+    calls: string[] = []
+
+    getBaseUrl(): string {
+      return 'http://api.test'
+    }
+
+    async checkHealth(): Promise<HealthResponse> {
+      return { status: 'healthy', service: 'test', version: '1.0.0' }
+    }
+
+    async validateAddress(address: string): Promise<ValidateResponse> {
+      this.calls.push(`validate:${address}`)
+      return {
+        valid: true,
+        type: address.includes('/') ? 'network' : 'address',
+        address,
+        is_ipv4: !address.includes(':'),
+        is_ipv6: address.includes(':'),
+      }
+    }
+
+    async checkPrivate(address: string): Promise<PrivateCheckResponse> {
+      this.calls.push(`private:${address}`)
+      return { address, is_rfc1918: true, is_rfc6598: false }
+    }
+
+    async checkCloudflare(address: string): Promise<CloudflareCheckResponse> {
+      this.calls.push(`cloudflare:${address}`)
+      return { address, is_cloudflare: false, ip_version: address.includes(':') ? 6 : 4 }
+    }
+
+    async checkProviderRange(provider: ProviderName, address: string): Promise<ProviderRangeResponse> {
+      return {
+        address,
+        provider,
+        is_provider_range: provider === 'aws',
+        ip_version: address.includes(':') ? 6 : 4,
+        range_source: 'bundled',
+      }
+    }
+
+    async getSubnetInfo(network: string, mode: CloudMode): Promise<SubnetInfoResponse> {
+      this.calls.push(`subnet:${network}:${mode}`)
+      return {
+        network,
+        mode,
+        network_address: network.split('/')[0],
+        broadcast_address: null,
+        netmask: '255.255.255.0',
+        wildcard_mask: '0.0.0.255',
+        prefix_length: 24,
+        total_addresses: 256,
+        usable_addresses: 251,
+        first_usable_ip: '10.0.0.4',
+        last_usable_ip: '10.0.0.254',
+      }
+    }
+
+    async allocateNetworkPlan(
+      parent: string,
+      mode: CloudMode,
+      requirements: NetworkPlanRequirement[]
+    ): Promise<NetworkPlanResponse> {
+      return {
+        parent,
+        mode,
+        allocations: requirements.map((requirement) => ({
+          name: requirement.name,
+          network: '10.0.0.0/25',
+          prefix_length: 25,
+          total_addresses: 128,
+          usable_addresses: 123,
+          first_usable_ip: '10.0.0.4',
+          last_usable_ip: '10.0.0.126',
+        })),
+      }
+    }
+
+    async performLookup(address: string, mode: CloudMode) {
+      return performCoreLookup(this, address, mode)
+    }
+  }
+
+  it('orchestrates validate, private, cloudflare, subnet, and timings for IPv4 networks', async () => {
+    const client = new FakeApiClient()
+
+    const result = await performCoreLookup(client, '10.0.0.0/24', 'Azure')
+
+    expect(client.calls).toEqual([
+      'validate:10.0.0.0/24',
+      'private:10.0.0.0/24',
+      'cloudflare:10.0.0.0/24',
+      'subnet:10.0.0.0/24:Azure',
+    ])
+    expect(result.results.subnet?.usable_addresses).toBe(251)
+    expect(result.timing.apiCalls.map((call) => call.call)).toEqual([
+      'validate',
+      'checkPrivate',
+      'checkCloudflare',
+      'subnetInfo',
+    ])
+    expect(result.timing.totalDuration).toBeGreaterThanOrEqual(result.timing.overallDuration)
+  })
+
+  it('skips private checks for IPv6 addresses', async () => {
+    const client = new FakeApiClient()
+
+    const result = await performCoreLookup(client, '2001:db8::1', 'Standard')
+
+    expect(client.calls).toEqual(['validate:2001:db8::1', 'cloudflare:2001:db8::1'])
+    expect(result.results.private).toBeUndefined()
+    expect(result.results.subnet).toBeUndefined()
   })
 })

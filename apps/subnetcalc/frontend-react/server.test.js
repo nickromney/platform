@@ -169,6 +169,7 @@ test('server injects runtime config into the SPA shell from an injected dist dir
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
     assert.match(html, /window\.RUNTIME_CONFIG/);
     assert.match(html, /https:\/\/api\.example\.test/);
+    assert.match(html, /"BACKEND_URI":"https:\/\/api\.example\.test"/);
     assert.match(html, /"AUTH_METHOD":"oidc"/);
   } finally {
     await close(frontend.server);

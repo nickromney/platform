@@ -4,14 +4,15 @@ Pure client-side HTML/JavaScript/CSS implementation demonstrating the "old way" 
 
 ## Architecture
 
-This is a **static site** that makes direct API calls from the browser:
+This is a **static site** that can make direct API calls from the browser in
+local development, or use the nginx `/api/*` proxy in the compose image:
 
 ```text
 User's Browser
     ↓
 HTML/CSS/JavaScript (served as static files)
     ↓
-Direct API calls (visible in browser Network tab)
+Direct API calls or nginx /api/* proxy
     ↓
 FastAPI Backend (http://localhost:7071 or http://localhost:8080)
 ```
@@ -19,7 +20,8 @@ FastAPI Backend (http://localhost:7071 or http://localhost:8080)
 ### Key Characteristics
 
 - **No server-side rendering**: Pure HTML/JS/CSS files
-- **CORS required**: Browser security model enforces CORS headers
+- **CORS required for direct API mode**: The compose nginx proxy avoids browser
+  CORS by keeping requests same-origin
 - **Visible API calls**: All requests visible in browser DevTools Network tab
 - **No API key hiding**: Everything is client-side (suitable for public APIs)
 - **Deployment**: Can be hosted on any static file server
@@ -82,7 +84,8 @@ bun x http-server -p 8001
 
 ### API Endpoint
 
-Edit `js/config.js` to change the API URL:
+For direct local serving, edit `js/config.js` or set `window.API_BASE_URL`
+before loading it:
 
 ```javascript
 const API_CONFIG = {
@@ -98,6 +101,11 @@ const API_CONFIG = {
 | Azure Functions (local) | `http://localhost:7071` (default)    |
 | Docker Compose          | `http://localhost:8080`              |
 | Azure (production)      | `https://your-app.azurewebsites.net` |
+
+In compose, the image loads `/runtime-config.js` and renders
+`nginx.conf.template` at container startup. Set `API_BASE_URL` for browser
+runtime configuration and `API_PROXY_UPSTREAM` for the internal Docker network
+next-hop.
 
 ### Environment-Specific Configuration
 

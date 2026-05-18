@@ -26,6 +26,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.57b0",
     "opentelemetry-instrumentation-httpx>=0.57b0",
     "opentelemetry-sdk>=1.36.0",
+    "uvicorn>=0.46.0",
 ]
 
 [project.optional-dependencies]

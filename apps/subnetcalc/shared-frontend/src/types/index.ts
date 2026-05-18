@@ -10,6 +10,11 @@
 export type CloudMode = 'Standard' | 'AWS' | 'Azure' | 'OCI'
 
 /**
+ * Provider range sources supported by the generic provider range API
+ */
+export type ProviderName = 'cloudflare' | 'aws' | 'azure' | 'stripe' | 'openai'
+
+/**
  * Health check response from API
  */
 export interface HealthResponse {
@@ -55,6 +60,20 @@ export interface CloudflareCheckResponse {
 }
 
 /**
+ * Generic provider range check
+ */
+export interface ProviderRangeResponse {
+  address: string
+  provider: ProviderName
+  is_provider_range: boolean
+  ip_version: number
+  range_source: string
+  range_source_url?: string
+  range_source_note?: string
+  matched_ranges?: string[]
+}
+
+/**
  * Subnet information response
  */
 export interface SubnetInfoResponse {
@@ -70,6 +89,36 @@ export interface SubnetInfoResponse {
   first_usable_ip: string
   last_usable_ip: string
   note?: string
+}
+
+/**
+ * Host-count requirement for network planning
+ */
+export interface NetworkPlanRequirement {
+  name: string
+  hosts: number
+}
+
+/**
+ * One allocated network within a network plan
+ */
+export interface NetworkPlanAllocation {
+  name: string
+  network: string
+  prefix_length: number
+  total_addresses: number
+  usable_addresses: number
+  first_usable_ip: string
+  last_usable_ip: string
+}
+
+/**
+ * Network plan allocation response
+ */
+export interface NetworkPlanResponse {
+  parent: string
+  mode: CloudMode
+  allocations: NetworkPlanAllocation[]
 }
 
 /**

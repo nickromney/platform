@@ -31,7 +31,7 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 	}
 
 	mux := http.NewServeMux()
-	server := &server{cfg: cfg, verifier: verifier}
+	server := &server{cfg: cfg, verifier: verifier, analyzer: newSubnetAnalyzer(cfg.ProviderRangeSources)}
 	if cfg.RuntimeRole == "backend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /api/v1/health", server.health)
 		mux.HandleFunc("GET /api/v1/health/ready", server.ready)
@@ -39,6 +39,10 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 		mux.Handle("POST /api/v1/ipv4/validate", server.requireAuth(http.HandlerFunc(server.validateAddress)))
 		mux.Handle("POST /api/v1/ipv4/check-private", server.requireAuth(http.HandlerFunc(server.checkPrivate)))
 		mux.Handle("POST /api/v1/ipv4/check-cloudflare", server.requireAuth(http.HandlerFunc(server.checkCloudflare)))
+		mux.Handle("POST /api/v1/provider-ranges/check", server.requireAuth(http.HandlerFunc(server.checkProviderRange)))
+		mux.Handle("POST /api/v1/provider-ranges/cache/invalidate", server.requireAuth(http.HandlerFunc(server.invalidateProviderRangeCache)))
+		mux.Handle("POST /api/v1/provider-ranges/cache/refresh", server.requireAuth(http.HandlerFunc(server.refreshProviderRangeCache)))
+		mux.Handle("POST /api/v1/network-plan/allocate", server.requireAuth(http.HandlerFunc(server.allocateNetworkPlan)))
 		mux.Handle("POST /api/v1/ipv4/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv4)))
 		mux.Handle("POST /api/v1/ipv6/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv6)))
 		mux.HandleFunc("GET /api/whoami", server.whoami)
@@ -58,6 +62,7 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 type server struct {
 	cfg      Config
 	verifier TokenVerifier
+	analyzer *subnetAnalyzer
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -154,6 +159,7 @@ func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]string{
 		"authMethod":    s.cfg.AuthMode,
 		"apiAuthMethod": s.cfg.APIAuthMode,
+		"backendURL":    s.cfg.BackendURL,
 		"oidcAuthority": strings.TrimRight(s.cfg.OIDCIssuer, "/"),
 		"oidcClientId":  s.cfg.OIDCClientID,
 		"oidcRedirect":  redirectURI,

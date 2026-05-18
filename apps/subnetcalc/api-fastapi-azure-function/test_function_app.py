@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+import function_app
 from function_app import api
 
 # Create test client for FastAPI app
@@ -181,6 +182,88 @@ class TestCheckCloudflare:
         assert "detail" in body
 
 
+class TestProviderRanges:
+    """Tests for provider range endpoints."""
+
+    def test_provider_range_check_supports_known_provider(self):
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "3.5.140.1"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["provider"] == "aws"
+        assert body["is_provider_range"] is True
+        assert body["range_source"] == "bundled"
+        assert body["ip_version"] == 4
+        assert "3.5.140.0/22" in body["matched_ranges"]
+
+    def test_provider_range_refresh_and_invalidate_are_explicit(self, monkeypatch):
+        payload = b'{"prefixes":[{"ip_prefix":"203.0.113.0/24"}],"ipv6_prefixes":[]}'
+        calls = 0
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return payload
+
+        def fake_urlopen(_request, timeout):
+            nonlocal calls
+            calls += 1
+            assert timeout == function_app.PROVIDER_REQUEST_TIMEOUT
+            return FakeResponse()
+
+        monkeypatch.setitem(function_app.PROVIDER_SOURCE_URLS, "aws", "https://example.test/aws.json")
+        monkeypatch.setattr(function_app, "urlopen", fake_urlopen)
+        function_app.invalidate_provider_cache("aws")
+
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "203.0.113.1"})
+        assert response.status_code == 200
+        assert response.json()["is_provider_range"] is False
+        assert calls == 0
+
+        response = client.post("/api/v1/provider-ranges/cache/refresh", json={"provider": "aws"})
+        assert response.status_code == 200
+        assert response.json()["cache_status"] == "refreshed"
+        assert calls == 1
+
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "203.0.113.1"})
+        assert response.status_code == 200
+        assert response.json()["is_provider_range"] is True
+        assert response.json()["range_source"] == "live-cache"
+
+        response = client.post("/api/v1/provider-ranges/cache/invalidate", json={"provider": "aws"})
+        assert response.status_code == 200
+        assert response.json()["cache_status"] == "invalidated"
+
+
+class TestNetworkPlan:
+    """Tests for network plan allocation."""
+
+    def test_network_plan_allocates_host_requirements_with_cloud_reservations(self):
+        response = client.post(
+            "/api/v1/network-plan/allocate",
+            json={
+                "parent": "10.0.0.0/24",
+                "mode": "Azure",
+                "requirements": [{"name": "web", "hosts": 60}, {"name": "db", "hosts": 20}],
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["parent"] == "10.0.0.0/24"
+        assert body["mode"] == "Azure"
+        assert body["allocations"][0]["network"] == "10.0.0.0/25"
+        assert body["allocations"][0]["usable_addresses"] == 123
+        assert body["allocations"][0]["first_usable_ip"] == "10.0.0.4"
+        assert body["allocations"][1]["network"] == "10.0.0.128/27"
+        assert body["allocations"][1]["usable_addresses"] == 27
+
+
 class TestSubnetInfo:
     """Tests for subnet information endpoint"""
 
@@ -293,3 +376,16 @@ class TestSubnetInfo:
         assert response.status_code == 200
         body = response.json()
         assert body["wildcard_mask"] == "0.0.0.255"
+
+
+class TestIPv6SubnetInfo:
+    """Tests for IPv6 subnet information endpoint."""
+
+    def test_ipv6_subnet_info_uses_network_prefix_for_total_addresses(self):
+        response = client.post("/api/v1/ipv6/subnet-info", json={"network": "2001:db8::/112"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["network_address"] == "2001:db8::"
+        assert body["prefix_length"] == 112
+        assert body["total_addresses"] == "65536"

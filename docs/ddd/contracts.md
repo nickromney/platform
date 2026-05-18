@@ -128,6 +128,10 @@ outside the request path above.
   - `POST /api/v1/ipv4/check-private`
   - `POST /api/v1/ipv4/check-cloudflare`, `POST /api/v1/ipv6/check-cloudflare`
   - `POST /api/v1/ipv4/subnet-info`, `POST /api/v1/ipv6/subnet-info`
+  - `POST /api/v1/provider-ranges/check`
+  - `POST /api/v1/provider-ranges/cache/refresh`
+  - `POST /api/v1/provider-ranges/cache/invalidate`
+  - `POST /api/v1/network-plan/allocate`
   - `GET /api/v1/network/diagnostics` (routed deployment diagnostics)
 - **Shared types:** the React and TypeScript-Vite frontends both consume
   `@subnetcalc/shared-frontend`, which holds the wire types. That package is a
@@ -137,7 +141,11 @@ outside the request path above.
   composes `validate`, `check-private`, `check-cloudflare`, and `subnet-info`
   and records per-call timing. This stays a frontend concept pre-launch.
 - **Safe pre-launch changes:** adding new optional response fields; adding
-  new endpoints (including an additive `/lookup`).
+  new endpoints (including an additive `/lookup`). Cloudflare range check
+  responses may include provider-general fields such as `provider` and
+  `is_provider_range` while retaining the existing `is_cloudflare` field.
+  Provider range checks must use cached or bundled range data by default;
+  refreshing large provider feeds is an explicit cache operation.
 - **Breaking changes:** renaming any existing endpoint, changing a request
   field name, dropping a response field, narrowing accepted `mode` values,
   changing HTTP verbs.

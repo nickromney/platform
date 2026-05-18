@@ -31,6 +31,12 @@ body {
   margin: 0;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 main {
   width: min(1040px, calc(100% - 32px));
   margin: 0 auto;
@@ -75,10 +81,18 @@ button {
 }
 
 input,
-select {
+select,
+textarea {
   padding: 0 12px;
   background: var(--field);
   color: var(--text);
+}
+
+textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 12px;
+  resize: vertical;
 }
 
 button {
@@ -92,6 +106,10 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 160px 120px;
   gap: 10px;
+}
+
+.plan-row {
+  grid-template-columns: minmax(0, 1fr) 160px;
 }
 
 .examples {

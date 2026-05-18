@@ -50,6 +50,9 @@ func renderRuntimeConfig(outputPath string) error {
 		}},
 		{Key: "API_BASE_URL", EnvNames: []string{"API_BASE_URL", "VITE_API_BASE_URL", "VITE_API_URL"}},
 		{Key: "API_PROXY_ENABLED", EnvNames: []string{"API_PROXY_ENABLED", "VITE_API_PROXY_ENABLED"}, Default: "false"},
+		{Key: "BACKEND_URI", EnvNames: []string{"BACKEND_URI", "API_PROXY_UPSTREAM", "PROXY_API_URL", "VITE_BACKEND_URI"}, Derived: func(values map[string]string) string {
+			return values["API_BASE_URL"]
+		}},
 		{Key: "JWT_USERNAME", EnvNames: []string{"JWT_USERNAME", "VITE_JWT_USERNAME"}},
 		{Key: "JWT_PASSWORD", EnvNames: []string{"JWT_PASSWORD", "VITE_JWT_PASSWORD"}},
 		{Key: "AZURE_CLIENT_ID", EnvNames: []string{"AZURE_CLIENT_ID", "VITE_AZURE_CLIENT_ID"}},
@@ -107,11 +110,39 @@ func renderRuntimeConfig(outputPath string) error {
 	return os.WriteFile(outputPath, []byte(builder.String()), 0o644)
 }
 
+func renderTemplate(inputPath string, outputPath string) error {
+	templateBytes, err := os.ReadFile(inputPath)
+	if err != nil {
+		return err
+	}
+
+	rendered := os.Expand(string(templateBytes), func(key string) string {
+		if value, ok := os.LookupEnv(key); ok {
+			return value
+		}
+		return "$" + key
+	})
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(outputPath, []byte(rendered), 0o644)
+}
+
 func main() {
 	outputPath := firstNonEmpty(os.Getenv("RUNTIME_CONFIG_OUT"), "/tmp/runtime-config.js")
 	if err := renderRuntimeConfig(outputPath); err != nil {
 		fmt.Fprintf(os.Stderr, "runtime-config-entrypoint: %v\n", err)
 		os.Exit(1)
+	}
+
+	nginxTemplatePath := os.Getenv("NGINX_TEMPLATE_PATH")
+	if nginxTemplatePath != "" {
+		nginxConfigOut := firstNonEmpty(os.Getenv("NGINX_CONFIG_OUT"), "/tmp/nginx.conf")
+		if err := renderTemplate(nginxTemplatePath, nginxConfigOut); err != nil {
+			fmt.Fprintf(os.Stderr, "runtime-config-entrypoint: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if err := os.MkdirAll("/var/run/nginx", 0o755); err != nil {

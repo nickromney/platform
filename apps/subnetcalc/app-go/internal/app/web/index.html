@@ -42,6 +42,39 @@
         </div>
       </form>
 
+      <form id="provider-form">
+        <h2>Provider Range Check</h2>
+        <label for="provider-address">Address</label>
+        <div class="form-row">
+          <input id="provider-address" name="address" placeholder="e.g., 3.5.140.1 or 104.16.1.1" required>
+          <select id="provider-name" name="provider">
+            <option value="cloudflare">Cloudflare</option>
+            <option value="aws">AWS</option>
+            <option value="azure">Azure</option>
+            <option value="stripe">Stripe</option>
+            <option value="openai">OpenAI</option>
+          </select>
+          <button id="provider-btn" type="submit">Check</button>
+        </div>
+      </form>
+
+      <form id="network-plan-form">
+        <h2>Network Plan</h2>
+        <label for="plan-parent">Parent Network</label>
+        <div class="form-row plan-row">
+          <input id="plan-parent" name="parent" placeholder="e.g., 10.0.0.0/16" required>
+          <select id="plan-mode" name="mode">
+            <option value="Standard">Standard</option>
+            <option value="AWS">AWS</option>
+            <option value="Azure" selected>Azure</option>
+            <option value="OCI">OCI</option>
+          </select>
+        </div>
+        <label for="plan-requirements">Host Requirements</label>
+        <textarea id="plan-requirements" name="requirements" rows="4" placeholder="web,60&#10;db,20" required></textarea>
+        <button id="network-plan-btn" type="submit">Allocate</button>
+      </form>
+
       <section id="auth-panel">
         <h2>Identity</h2>
         <form id="identity-form">
@@ -55,7 +88,7 @@
         </form>
       </section>
 
-      <section id="results" hidden>
+      <section id="results" tabindex="-1" aria-live="polite" hidden>
         <h2>Results</h2>
         <div id="results-content"></div>
       </section>

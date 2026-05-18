@@ -1,0 +1,39 @@
+pid /tmp/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /dev/stdout;
+    sendfile on;
+
+    server {
+        listen 8081;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        location = /runtime-config.js {
+            alias /tmp/runtime-config.js;
+            add_header Cache-Control "no-store";
+            default_type application/javascript;
+        }
+
+        # Proxy API requests to the compose-selected backend.
+        location /api/ {
+            proxy_pass ${API_PROXY_UPSTREAM};
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Serve static files
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
