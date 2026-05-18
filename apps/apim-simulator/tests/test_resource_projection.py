@@ -17,6 +17,8 @@ from app.config import (
     GroupConfig,
     LoggerApplicationInsightsConfig,
     LoggerConfig,
+    McpEndpointConfig,
+    McpPropertiesConfig,
     NamedValueConfig,
     OperationConfig,
     OperationParameterConfig,
@@ -97,6 +99,16 @@ def test_project_summary_uses_service_scoped_ids_and_masks_secrets() -> None:
         ),
         named_values={"backend-secret": NamedValueConfig(value="super-secret-token", secret=True)},
         apis={
+            "platform-mcp": ApiConfig(
+                name="Platform MCP",
+                path="mcp",
+                upstream_base_url=http_url("platform-mcp.mcp.svc.cluster.local:8080"),
+                api_type="mcp",
+                mcp_properties=McpPropertiesConfig(
+                    transport_type="streamable",
+                    endpoints=[McpEndpointConfig(name="messages", uri_template="/mcp")],
+                ),
+            ),
             "hello": ApiConfig(
                 name="hello",
                 path="hello",
@@ -169,7 +181,7 @@ def test_project_summary_uses_service_scoped_ids_and_masks_secrets() -> None:
                         revision="2",
                     )
                 },
-            )
+            ),
         },
     )
     cfg.routes = cfg.materialize_routes()
@@ -187,7 +199,7 @@ def test_project_summary_uses_service_scoped_ids_and_masks_secrets() -> None:
             "default_ssl_binding": False,
         }
     ]
-    assert payload["service"]["counts"]["apis"] == 1
+    assert payload["service"]["counts"]["apis"] == 2
     assert payload["service"]["counts"]["operations"] == 1
     assert payload["service"]["counts"]["api_revisions"] == 2
     assert payload["service"]["counts"]["api_releases"] == 1
@@ -195,18 +207,19 @@ def test_project_summary_uses_service_scoped_ids_and_masks_secrets() -> None:
     assert payload["service"]["counts"]["diagnostics"] == 1
     assert payload["service"]["counts"]["tags"] == 1
     assert payload["service"]["counts"]["recent_traces"] == 1
-    assert payload["apis"][0]["resource_id"] == "service/lab-sim/apis/hello"
-    assert payload["apis"][0]["revision"] == "2"
-    assert payload["apis"][0]["tags"] == ["starter"]
-    assert payload["apis"][0]["operations"][0]["resource_id"] == "service/lab-sim/apis/hello/operations/getHello"
-    assert payload["apis"][0]["operations"][0]["tags"] == ["starter"]
-    assert payload["apis"][0]["operations"][0]["description"] == "Return a greeting"
-    assert payload["apis"][0]["operations"][0]["template_parameters"][0]["name"] == "name"
-    assert payload["apis"][0]["operations"][0]["request"]["headers"][0]["name"] == "x-trace-id"
-    assert payload["apis"][0]["operations"][0]["responses"][0]["representations"][0]["schema_id"] == "HelloResponse"
-    assert payload["apis"][0]["schemas"][0]["resource_id"] == "service/lab-sim/apis/hello/schemas/HelloResponse"
-    assert payload["apis"][0]["revisions"][0]["resource_id"] == "service/lab-sim/apis/hello/revisions/1"
-    assert payload["apis"][0]["releases"][0]["resource_id"] == "service/lab-sim/apis/hello/releases/public"
+    hello_api = next(api for api in payload["apis"] if api["id"] == "hello")
+    assert hello_api["resource_id"] == "service/lab-sim/apis/hello"
+    assert hello_api["revision"] == "2"
+    assert hello_api["tags"] == ["starter"]
+    assert hello_api["operations"][0]["resource_id"] == "service/lab-sim/apis/hello/operations/getHello"
+    assert hello_api["operations"][0]["tags"] == ["starter"]
+    assert hello_api["operations"][0]["description"] == "Return a greeting"
+    assert hello_api["operations"][0]["template_parameters"][0]["name"] == "name"
+    assert hello_api["operations"][0]["request"]["headers"][0]["name"] == "x-trace-id"
+    assert hello_api["operations"][0]["responses"][0]["representations"][0]["schema_id"] == "HelloResponse"
+    assert hello_api["schemas"][0]["resource_id"] == "service/lab-sim/apis/hello/schemas/HelloResponse"
+    assert hello_api["revisions"][0]["resource_id"] == "service/lab-sim/apis/hello/revisions/1"
+    assert hello_api["releases"][0]["resource_id"] == "service/lab-sim/apis/hello/releases/public"
     assert payload["tags"][0]["resource_id"] == "service/lab-sim/tags/starter"
     assert payload["products"][0]["groups"] == ["admins"]
     assert payload["users"][0]["groups"] == ["admins"]
@@ -218,6 +231,18 @@ def test_project_summary_uses_service_scoped_ids_and_masks_secrets() -> None:
     assert payload["diagnostics"][0]["logger_resource_id"] == "service/lab-sim/loggers/appinsights"
     assert payload["diagnostics"][0]["frontend_request"]["headers_to_log"] == ["content-type"]
     assert payload["subscriptions"][0]["resource_id"] == "service/lab-sim/subscriptions/starter-dev"
+
+    mcp_api = next(api for api in payload["apis"] if api["id"] == "platform-mcp")
+    assert mcp_api["type"] == "mcp"
+    assert mcp_api["api_type"] == "mcp"
+    assert mcp_api["mcpProperties"] == {
+        "transportType": "streamable",
+        "endpoints": [{"name": "messages", "uriTemplate": "/mcp"}],
+    }
+    assert mcp_api["mcp_properties"] == {
+        "transport_type": "streamable",
+        "endpoints": [{"name": "messages", "uri_template": "/mcp"}],
+    }
     assert payload["named_values"][0]["value"] == "***"
     assert payload["named_values"][0]["resolved"]["value"] == "***"
 

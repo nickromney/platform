@@ -42,6 +42,24 @@ data:
           }
         ]
       },
+      "apis": {
+        "platform-mcp": {
+          "name": "Platform MCP",
+          "path": "mcp",
+          "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
+          "upstream_path_prefix": "/mcp",
+          "type": "mcp",
+          "mcpProperties": {
+            "transportType": "streamable",
+            "endpoints": [
+              {
+                "name": "message",
+                "uriTemplate": "/mcp"
+              }
+            ]
+          }
+        }
+      },
       "routes": [
         {
           "name": "subnetcalc-api-dev",

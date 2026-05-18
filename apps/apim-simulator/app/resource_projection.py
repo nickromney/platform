@@ -114,14 +114,20 @@ def project_api_release(
 
 
 def project_api(config: GatewayConfig, api_id: str, api: ApiConfig) -> dict[str, Any]:
+    mcp_properties = api.mcp_properties.model_dump(mode="json") if api.mcp_properties is not None else None
     return {
         "id": api_id,
         "resource_id": nested_resource_id(config, "apis", api_id),
         "name": api.name,
         "path": api.path,
         "upstream_base_url": api.upstream_base_url,
+        "api_type": api.api_type,
+        "type": api.api_type,
         "upstream_path_prefix": api.upstream_path_prefix,
         "backend": api.backend,
+        "mcp_properties": mcp_properties,
+        "mcpProperties": _arm_mcp_properties(mcp_properties),
+        "a2a_properties": api.a2a_properties.model_dump(mode="json") if api.a2a_properties is not None else None,
         "products": api.products,
         "api_version_set": api.api_version_set,
         "api_version": api.api_version,
@@ -145,6 +151,18 @@ def project_api(config: GatewayConfig, api_id: str, api: ApiConfig) -> dict[str,
         ],
         "releases": [
             project_api_release(config, api_id, release_id, release) for release_id, release in api.releases.items()
+        ],
+    }
+
+
+def _arm_mcp_properties(mcp_properties: dict[str, Any] | None) -> dict[str, Any] | None:
+    if mcp_properties is None:
+        return None
+    return {
+        "transportType": mcp_properties.get("transport_type"),
+        "endpoints": [
+            {"name": endpoint.get("name"), "uriTemplate": endpoint.get("uri_template")}
+            for endpoint in mcp_properties.get("endpoints", [])
         ],
     }
 
