@@ -5,7 +5,7 @@ import os
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.urls import http_url
 
@@ -232,6 +232,42 @@ class ApiSchemaConfig(BaseModel):
     value: str | None = None
     definitions: dict[str, Any] = Field(default_factory=dict)
     components: dict[str, Any] = Field(default_factory=dict)
+
+
+class McpEndpointConfig(BaseModel):
+    # Mirrors ARM Microsoft.ApiManagement/service/apis mcpProperties.endpoints.
+    name: str
+    uri_template: str = Field(validation_alias=AliasChoices("uri_template", "uriTemplate"))
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.uri_template.startswith("/"):
+            raise ValueError("mcp endpoint uri_template must start with '/'")
+
+
+class McpPropertiesConfig(BaseModel):
+    # ARM allows 'sse' and 'streamable' for MCP API transportType.
+    transport_type: str = Field(validation_alias=AliasChoices("transport_type", "transportType"))
+    endpoints: list[McpEndpointConfig] = Field(default_factory=list)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.transport_type not in {"sse", "streamable"}:
+            raise ValueError("mcp transport_type must be 'sse' or 'streamable'")
+
+
+class A2APropertiesConfig(BaseModel):
+    # Portal-imported A2A APIs expose a card and mediate JSON-RPC runtime calls.
+    agent_id: str = Field(validation_alias=AliasChoices("agent_id", "agentId"))
+    agent_card_path: str = Field(
+        default="/.well-known/agent-card.json",
+        validation_alias=AliasChoices("agent_card_path", "agentCardPath"),
+    )
+    runtime_path: str = Field(default="/", validation_alias=AliasChoices("runtime_path", "runtimePath"))
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.agent_card_path.startswith("/"):
+            raise ValueError("a2a agent_card_path must start with '/'")
+        if not self.runtime_path.startswith("/"):
+            raise ValueError("a2a runtime_path must start with '/'")
 
 
 class ApiRevisionConfig(BaseModel):
@@ -466,10 +502,9 @@ class GatewayConfig(BaseModel):
     routes: list[RouteConfig] = Field(default_factory=list)
 
     def materialize_routes(self) -> list[RouteConfig]:
+        out: list[RouteConfig] = [route for route in self.routes if route.api_id is None]
         if not self.apis:
-            return list(self.routes)
-
-        out: list[RouteConfig] = []
+            return out
 
         def _url_template_prefix(url_template: str) -> str:
             templ = (url_template or "").strip()
@@ -579,8 +614,17 @@ class ApiConfig(BaseModel):
     name: str
     path: str
     upstream_base_url: str
+    api_type: str = Field(default="http", validation_alias=AliasChoices("api_type", "type", "apiType"))
     upstream_path_prefix: str = ""
     backend: str | None = None
+    mcp_properties: McpPropertiesConfig | None = Field(
+        default=None,
+        validation_alias=AliasChoices("mcp_properties", "mcpProperties"),
+    )
+    a2a_properties: A2APropertiesConfig | None = Field(
+        default=None,
+        validation_alias=AliasChoices("a2a_properties", "a2aProperties"),
+    )
     products: list[str] = Field(default_factory=list)
     api_version_set: str | None = None
     api_version: str | None = None

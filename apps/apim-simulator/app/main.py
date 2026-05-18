@@ -18,7 +18,7 @@ import httpx
 from defusedxml import ElementTree
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
 
@@ -360,6 +360,67 @@ def _cached_gateway_response(
     )
 
 
+def _api_public_base_url(request: Request, api: ApiConfig) -> str:
+    return f"{str(request.base_url).rstrip('/')}/{api.path.strip('/')}"
+
+
+def _rewrite_a2a_agent_card(card: dict[str, Any], *, request: Request, api: ApiConfig) -> dict[str, Any]:
+    rewritten = dict(card)
+    rewritten["url"] = _api_public_base_url(request, api)
+    rewritten["preferredTransport"] = "JSONRPC"
+    rewritten.pop("additionalInterfaces", None)
+    rewritten["securitySchemes"] = {
+        "apiKey": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "Ocp-Apim-Subscription-Key",
+        }
+    }
+    rewritten["security"] = [{"apiKey": []}]
+    return rewritten
+
+
+async def _a2a_agent_card_response(
+    *,
+    request: Request,
+    route: Any,
+    api: ApiConfig,
+    client: httpx.AsyncClient,
+    timeout: httpx.Timeout,
+) -> Response | None:
+    if api.api_type.lower() != "a2a" or api.a2a_properties is None:
+        return None
+
+    card_public_path = f"/{api.path.strip('/')}{api.a2a_properties.agent_card_path}"
+    if request.method != "GET" or request.url.path != card_public_path:
+        return None
+
+    upstream_url = route.build_upstream_url(request.url.path, upstream_base_url=route.upstream_base_url)
+    upstream_response = await client.get(upstream_url, timeout=timeout)
+    content_type = upstream_response.headers.get("content-type", "")
+    if upstream_response.status_code >= 400:
+        return Response(
+            content=upstream_response.content,
+            status_code=upstream_response.status_code,
+            headers=filter_response_headers(dict(upstream_response.headers)),
+            media_type=content_type or None,
+        )
+    try:
+        card = upstream_response.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail="A2A agent card backend returned invalid JSON") from exc
+    if not isinstance(card, dict):
+        raise HTTPException(status_code=502, detail="A2A agent card backend returned invalid card")
+
+    card.setdefault("id", api.a2a_properties.agent_id)
+    return Response(
+        content=json.dumps(_rewrite_a2a_agent_card(card, request=request, api=api)),
+        status_code=200,
+        headers={"x-apim-simulator": "apim-sim-full"},
+        media_type="application/json",
+    )
+
+
 def _render_backend_value(value: str | None, policy_req: PolicyRequest, cfg: GatewayConfig) -> str | None:
     if value is None:
         return None
@@ -488,8 +549,11 @@ class ApiUpsert(BaseModel):
     name: str | None = None
     path: str
     upstream_base_url: str
+    api_type: str = Field(default="http", validation_alias=AliasChoices("api_type", "type", "apiType"))
     upstream_path_prefix: str = ""
     backend: str | None = None
+    mcp_properties: Any | None = Field(default=None, validation_alias=AliasChoices("mcp_properties", "mcpProperties"))
+    a2a_properties: Any | None = Field(default=None, validation_alias=AliasChoices("a2a_properties", "a2aProperties"))
     products: list[str] = Field(default_factory=list)
     api_version_set: str | None = None
     api_version: str | None = None
@@ -1243,8 +1307,11 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             name=body.name or (existing.name if existing is not None else api_id),
             path=body.path or (existing.path if existing is not None else api_id),
             upstream_base_url=upstream_base_url,
+            api_type=existing.api_type if existing is not None else "http",
             upstream_path_prefix=body.upstream_path_prefix,
             backend=body.backend if body.backend is not None else (existing.backend if existing is not None else None),
+            mcp_properties=existing.mcp_properties if existing is not None else None,
+            a2a_properties=existing.a2a_properties if existing is not None else None,
             products=body.products
             if body.products is not None
             else (existing.products if existing is not None else []),
@@ -1304,8 +1371,11 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
             name=body.name or api_id,
             path=body.path,
             upstream_base_url=body.upstream_base_url,
+            api_type=body.api_type,
             upstream_path_prefix=body.upstream_path_prefix,
             backend=body.backend,
+            mcp_properties=body.mcp_properties,
+            a2a_properties=body.a2a_properties,
             products=body.products,
             api_version_set=body.api_version_set,
             api_version=body.api_version,
@@ -2415,6 +2485,23 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
         trace_id = f"trace-{int(time.time() * 1000)}" if trace_requested else None
         trace_collector = PolicyTraceCollector() if trace_requested else None
         client: httpx.AsyncClient = request.app.state.http_client
+        timeout = httpx.Timeout(cfg.proxy_timeout_seconds)
+
+        if route.api_id:
+            api = cfg.apis.get(route.api_id)
+            if api is not None:
+                a2a_card = await _a2a_agent_card_response(
+                    request=request,
+                    route=route,
+                    api=api,
+                    client=client,
+                    timeout=timeout,
+                )
+                if a2a_card is not None:
+                    request.state.apim_result_reason = "a2a_agent_card"
+                    request.state.apim_upstream_attempts = 1
+                    return a2a_card
+
         policy_runtime = PolicyRuntime(
             gateway_config=cfg,
             http_client=client,
@@ -2766,7 +2853,6 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     return cached_response
                 request.app.state.cache.pop(cache_key, None)
 
-        timeout = httpx.Timeout(cfg.proxy_timeout_seconds)
         max_attempts = max(1, cfg.proxy_max_attempts)
         if ai_selection is not None:
             max_attempts = max(max_attempts, len(ai_selection.considered_backend_ids))

@@ -28,6 +28,7 @@ from app.ai_gateway import (
     select_ai_gateway_backend_for_path,
 )
 from app.config import (
+    A2APropertiesConfig,
     AIGatewayCircuitBreakerConfig,
     AIGatewayConfig,
     AIGatewayDeploymentConfig,
@@ -1916,6 +1917,113 @@ def test_mcp_example_rate_limits_by_authenticated_consumer() -> None:
     assert limited.headers["x-mcp-remaining-calls"] == "0"
     assert other_consumer.status_code == 200
     assert seen_subscription_keys == ["mcp-demo-key"] * 20 + ["mcp-agent-b-key"]
+
+
+def test_a2a_api_rewrites_agent_card_for_json_rpc_and_subscription_key() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path == "/.well-known/agent-card.json"
+        return httpx.Response(
+            200,
+            json={
+                "id": "agent-42",
+                "name": "Backstage Helper",
+                "url": "http://backend-agent.local/a2a",
+                "preferredTransport": "SSE",
+                "additionalInterfaces": [{"transport": "SSE", "url": "http://backend-agent.local/sse"}],
+                "securitySchemes": {"oauth": {"type": "oauth2"}},
+                "security": [{"oauth": ["agent.read"]}],
+            },
+        )
+
+    config = GatewayConfig(
+        allow_anonymous=True,
+        products={"agents": ProductConfig(name="Agents", require_subscription=True)},
+        subscription=SubscriptionConfig(
+            required=True,
+            subscriptions={
+                "agent-client": Subscription(
+                    id="sub-agent-client",
+                    name="agent-client",
+                    keys=SubscriptionKeyPair(primary="agent-key", secondary="agent-key-2"),
+                    products=["agents"],
+                )
+            },
+        ),
+        apis={
+            "backstage-agent": ApiConfig(
+                name="Backstage Helper",
+                path="agents",
+                upstream_base_url=_http_url("backend-agent.local"),
+                api_type="a2a",
+                products=["agents"],
+                a2a_properties=A2APropertiesConfig(
+                    agent_id="agent-42",
+                    agent_card_path="/.well-known/agent-card.json",
+                    runtime_path="/a2a",
+                ),
+            )
+        },
+    )
+
+    app = create_app(config=config, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+    with TestClient(app, base_url="https://apim.example.test") as client:
+        missing = client.get("/agents/.well-known/agent-card.json")
+        resp = client.get("/agents/.well-known/agent-card.json", headers={"Ocp-Apim-Subscription-Key": "agent-key"})
+
+    assert missing.status_code == 401
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "id": "agent-42",
+        "name": "Backstage Helper",
+        "url": "https://apim.example.test/agents",
+        "preferredTransport": "JSONRPC",
+        "securitySchemes": {
+            "apiKey": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "Ocp-Apim-Subscription-Key",
+            }
+        },
+        "security": [{"apiKey": []}],
+    }
+
+
+def test_management_api_upsert_accepts_arm_mcp_api_shape() -> None:
+    app = create_app(
+        config=GatewayConfig(
+            allow_anonymous=True,
+            tenant_access=TenantAccessConfig(enabled=True, primary_key="tenant-key"),
+        )
+    )
+
+    with TestClient(app) as client:
+        resp = client.put(
+            "/apim/management/apis/platform-mcp",
+            headers={"X-Apim-Tenant-Key": "tenant-key"},
+            json={
+                "name": "Platform MCP",
+                "path": "mcp",
+                "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
+                "type": "mcp",
+                "mcpProperties": {
+                    "transportType": "streamable",
+                    "endpoints": [{"name": "message", "uriTemplate": "/mcp/messages"}],
+                },
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["type"] == "mcp"
+    assert resp.json()["api_type"] == "mcp"
+    assert resp.json()["mcpProperties"] == {
+        "transportType": "streamable",
+        "endpoints": [{"name": "message", "uriTemplate": "/mcp/messages"}],
+    }
+    assert resp.json()["mcp_properties"] == {
+        "transport_type": "streamable",
+        "endpoints": [{"name": "message", "uri_template": "/mcp/messages"}],
+    }
 
 
 def test_management_plane_rotate_subscription_key_updates_gateway_lookup() -> None:
