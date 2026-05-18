@@ -44,7 +44,7 @@ from .config import (
     get_auth_method,
     get_cors_origins,
 )
-from .routers import auth, health, network, subnets
+from .routers import auth, health, network, network_plan, provider_ranges, subnets
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -98,6 +98,7 @@ def configure_opentelemetry(app: FastAPI) -> None:
     _OTEL_CONFIGURED = True
     logger.info("OpenTelemetry enabled (service.name=%s endpoint=%s)", service_name, traces_endpoint)
 
+
 # Create FastAPI app
 app = FastAPI(
     title="Subnet Calculator API",
@@ -140,6 +141,8 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(subnets.router)
 app.include_router(subnets.router_ipv6)
+app.include_router(provider_ranges.router)
+app.include_router(network_plan.router)
 app.include_router(network.router)
 
 

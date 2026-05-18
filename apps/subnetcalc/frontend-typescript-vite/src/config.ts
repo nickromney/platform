@@ -3,6 +3,7 @@ declare global {
   interface Window {
     RUNTIME_CONFIG?: {
       API_BASE_URL?: string
+      BACKEND_URI?: string
       AUTH_METHOD?: 'none' | 'jwt' | 'entraid' | 'gateway' | 'oidc'
       AUTH_ENABLED?: string | boolean
       APIM_SUBSCRIPTION_KEY?: string
@@ -26,6 +27,7 @@ declare global {
       STACK_DESCRIPTION?: string
     }
     API_BASE_URL?: string
+    BACKEND_URI?: string
     AUTH_ENABLED?: string
     JWT_USERNAME?: string
     JWT_PASSWORD?: string
@@ -79,6 +81,12 @@ function parseBooleanFlag(value: unknown, fallback = false): boolean {
 export const API_CONFIG = {
   // Priority: Runtime config (window) > Build-time env (import.meta.env) > Default (empty for SWA proxy)
   baseUrl: runtimeConfig?.API_BASE_URL || import.meta.env.VITE_API_URL || '',
+  backendUri:
+    runtimeConfig?.BACKEND_URI ||
+    import.meta.env.VITE_BACKEND_URI ||
+    runtimeConfig?.API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    '',
   apimSubscriptionKey: runtimeConfig?.APIM_SUBSCRIPTION_KEY || import.meta.env.VITE_APIM_SUBSCRIPTION_KEY || '',
   auth: {
     enabled: getAuthMethod() === 'jwt',

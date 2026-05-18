@@ -69,3 +69,31 @@ class ValidateRequest(BaseModel):
     """Request model for IP address validation."""
 
     address: str = Field(..., description="IP address or CIDR notation")
+
+
+class ProviderRangeRequest(BaseModel):
+    """Request model for provider range checks."""
+
+    provider: str = Field(..., description="Provider name, such as cloudflare, aws, azure, stripe, or openai")
+    address: str = Field(..., description="IP address or CIDR notation")
+
+
+class ProviderCacheRequest(BaseModel):
+    """Request model for provider range cache operations."""
+
+    provider: str = Field(..., description="Provider name, such as cloudflare, aws, azure, stripe, or openai")
+
+
+class NetworkPlanRequirement(BaseModel):
+    """A named host-count requirement within a network plan."""
+
+    name: str = Field(..., min_length=1, description="Allocation name")
+    hosts: int = Field(..., ge=1, description="Required usable host count")
+
+
+class NetworkPlanRequest(BaseModel):
+    """Request model for network plan allocation."""
+
+    parent: str = Field(..., description="Parent IPv4 network in CIDR notation")
+    mode: CloudMode = Field(default=CloudMode.AZURE, description="Cloud reservation mode")
+    requirements: list[NetworkPlanRequirement] = Field(..., min_length=1)

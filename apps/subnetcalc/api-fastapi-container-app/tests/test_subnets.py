@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.routers import provider_ranges
 
 
 @pytest.fixture
@@ -145,6 +146,110 @@ class TestCheckCloudflare:
         """Test invalid address format."""
         response = client.post("/api/v1/ipv4/check-cloudflare", json={"address": "not-an-ip"})
         assert response.status_code == 400
+
+
+class TestProviderRanges:
+    """Tests for /api/v1/provider-ranges endpoints."""
+
+    def test_provider_range_check_supports_known_providers(self, client):
+        """Provider checks identify bundled provider ranges without live fetches."""
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "3.5.140.1"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["provider"] == "aws"
+        assert data["is_provider_range"] is True
+        assert data["range_source"] == "bundled"
+        assert data["ip_version"] == 4
+        assert "3.5.140.0/22" in data["matched_ranges"]
+
+    def test_provider_range_refresh_and_invalidate_use_explicit_cache(self, client, monkeypatch):
+        """Provider feeds are refreshed explicitly and fall back to bundled data after invalidation."""
+        payload = b'{"prefixes":[{"ip_prefix":"203.0.113.0/24"}],"ipv6_prefixes":[]}'
+        calls = 0
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return payload
+
+        def fake_urlopen(_request, timeout):
+            nonlocal calls
+            calls += 1
+            assert timeout == provider_ranges.REQUEST_TIMEOUT
+            return FakeResponse()
+
+        monkeypatch.setitem(provider_ranges.PROVIDER_SOURCE_URLS, "aws", "https://example.test/aws.json")
+        monkeypatch.setattr(provider_ranges, "urlopen", fake_urlopen)
+        provider_ranges.invalidate_provider_cache("aws")
+
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "203.0.113.1"})
+        assert response.status_code == 200
+        assert response.json()["is_provider_range"] is False
+        assert calls == 0
+
+        response = client.post("/api/v1/provider-ranges/cache/refresh", json={"provider": "aws"})
+        assert response.status_code == 200
+        assert response.json()["cache_status"] == "refreshed"
+        assert calls == 1
+
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "203.0.113.1"})
+        assert response.status_code == 200
+        assert response.json()["is_provider_range"] is True
+        assert response.json()["range_source"] == "live-cache"
+
+        response = client.post("/api/v1/provider-ranges/cache/invalidate", json={"provider": "aws"})
+        assert response.status_code == 200
+        assert response.json()["cache_status"] == "invalidated"
+
+        response = client.post("/api/v1/provider-ranges/check", json={"provider": "aws", "address": "203.0.113.1"})
+        assert response.status_code == 200
+        assert response.json()["is_provider_range"] is False
+
+
+class TestNetworkPlan:
+    """Tests for /api/v1/network-plan endpoints."""
+
+    def test_network_plan_allocates_host_requirements_with_cloud_reservations(self, client):
+        """Network planning allocates descending host requirements inside the parent network."""
+        response = client.post(
+            "/api/v1/network-plan/allocate",
+            json={
+                "parent": "10.0.0.0/24",
+                "mode": "Azure",
+                "requirements": [{"name": "web", "hosts": 60}, {"name": "db", "hosts": 20}],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["parent"] == "10.0.0.0/24"
+        assert data["mode"] == "Azure"
+        assert data["allocations"] == [
+            {
+                "name": "web",
+                "network": "10.0.0.0/25",
+                "prefix_length": 25,
+                "total_addresses": 128,
+                "usable_addresses": 123,
+                "first_usable_ip": "10.0.0.4",
+                "last_usable_ip": "10.0.0.126",
+            },
+            {
+                "name": "db",
+                "network": "10.0.0.128/27",
+                "prefix_length": 27,
+                "total_addresses": 32,
+                "usable_addresses": 27,
+                "first_usable_ip": "10.0.0.132",
+                "last_usable_ip": "10.0.0.158",
+            },
+        ]
 
 
 class TestIPv4SubnetCalculation:

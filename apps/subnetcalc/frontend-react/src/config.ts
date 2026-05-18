@@ -13,6 +13,7 @@ declare global {
   interface Window {
     RUNTIME_CONFIG?: {
       API_BASE_URL?: string
+      BACKEND_URI?: string
       AUTH_METHOD?: 'none' | 'easyauth' | 'msal' | 'entraid-swa' | 'jwt' | 'oidc'
       AZURE_CLIENT_ID?: string
       AZURE_TENANT_ID?: string
@@ -50,6 +51,7 @@ export interface AuthConfig {
 
 export interface AppConfig {
   apiBaseUrl: string
+  backendUri: string
   auth: AuthConfig
   stackName: string
   apiProxyEnabled: boolean
@@ -196,6 +198,7 @@ export function getAppConfig(): AppConfig {
 
   return {
     apiBaseUrl,
+    backendUri: window.RUNTIME_CONFIG?.BACKEND_URI || apiBaseUrl,
     auth: {
       method: authMethod,
       clientId,
@@ -256,6 +259,7 @@ export function getConfig(): AppConfig {
 
     _cachedConfig = {
       apiBaseUrl,
+      backendUri: window.RUNTIME_CONFIG?.BACKEND_URI || apiBaseUrl,
       auth: {
         method: authMethod,
         clientId: window.RUNTIME_CONFIG?.AZURE_CLIENT_ID ?? (import.meta.env.VITE_AZURE_CLIENT_ID || ''),

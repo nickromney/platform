@@ -3,20 +3,22 @@
  */
 
 import type { IApiClient } from '@subnetcalc/shared-frontend/api'
-import { handleFetchError, isIpv6, parseJsonResponse } from '@subnetcalc/shared-frontend/api'
+import { handleFetchError, parseJsonResponse, performCoreLookup } from '@subnetcalc/shared-frontend/api'
 import type { CloudMode } from '@subnetcalc/shared-frontend/types'
 import { TokenManager } from './auth'
 import { API_CONFIG, getAuthMethod } from './config'
 import { getGatewayAccessToken } from './entraid-auth'
 import { getOidcAccessToken } from './oidc-auth'
 import type {
-  ApiResults,
   CloudflareCheckResponse,
   HealthResponse,
-  LookupResult,
   LookupResultWithDiagnostics,
   NetworkDiagnosticsResponse,
+  NetworkPlanRequirement,
+  NetworkPlanResponse,
   PrivateCheckResponse,
+  ProviderName,
+  ProviderRangeResponse,
   SubnetInfoResponse,
   ValidateResponse,
 } from './types'
@@ -176,6 +178,32 @@ class ApiClient implements IApiClient {
     }
   }
 
+  async checkProviderRange(provider: ProviderName, address: string): Promise<ProviderRangeResponse> {
+    try {
+      const authHeaders = await this.getAuthHeaders()
+
+      const response = await fetch(`${this.baseUrl}/api/v1/provider-ranges/check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getBaseHeaders(),
+          ...authHeaders,
+        },
+        body: JSON.stringify({ provider, address }),
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!response.ok) {
+        const error = await parseJsonResponse<{ detail?: string }>(response).catch((): { detail?: string } => ({}))
+        throw new Error(error.detail || `Provider range check failed (HTTP ${response.status})`)
+      }
+
+      return parseJsonResponse<ProviderRangeResponse>(response)
+    } catch (error) {
+      return handleFetchError(error)
+    }
+  }
+
   async getSubnetInfo(network: string, mode: CloudMode): Promise<SubnetInfoResponse> {
     try {
       // Get auth headers if enabled
@@ -198,6 +226,36 @@ class ApiClient implements IApiClient {
       }
 
       return parseJsonResponse<SubnetInfoResponse>(response)
+    } catch (error) {
+      return handleFetchError(error)
+    }
+  }
+
+  async allocateNetworkPlan(
+    parent: string,
+    mode: CloudMode,
+    requirements: NetworkPlanRequirement[]
+  ): Promise<NetworkPlanResponse> {
+    try {
+      const authHeaders = await this.getAuthHeaders()
+
+      const response = await fetch(`${this.baseUrl}/api/v1/network-plan/allocate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getBaseHeaders(),
+          ...authHeaders,
+        },
+        body: JSON.stringify({ parent, mode, requirements }),
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!response.ok) {
+        const error = await parseJsonResponse<{ detail?: string }>(response).catch((): { detail?: string } => ({}))
+        throw new Error(error.detail || `Network plan allocation failed (HTTP ${response.status})`)
+      }
+
+      return parseJsonResponse<NetworkPlanResponse>(response)
     } catch (error) {
       return handleFetchError(error)
     }
@@ -248,70 +306,9 @@ class ApiClient implements IApiClient {
   }
 
   async performLookup(address: string, mode: CloudMode): Promise<LookupResultWithDiagnostics> {
-    const overallStart = performance.now()
-    const apiCalls: LookupResult['timing']['apiCalls'] = []
-    const results: ApiResults = {}
+    const coreLookup = await performCoreLookup(this, address, mode)
     let networkDiagnostics: NetworkDiagnosticsResponse | null = null
     let secondaryNetworkDiagnostics: NetworkDiagnosticsResponse | null = null
-
-    const isV6 = isIpv6(address)
-
-    // 1. Validate address
-    const validateStart = performance.now()
-    const validateRequestTime = new Date().toISOString()
-    results.validate = await this.validateAddress(address)
-    const validateDuration = performance.now() - validateStart
-    apiCalls.push({
-      call: 'validate',
-      requestTime: validateRequestTime,
-      responseTime: new Date().toISOString(),
-      duration: Math.round(validateDuration),
-    })
-
-    // 2. Check if RFC1918 (private) - IPv4 only
-    if (!isV6) {
-      try {
-        const privateStart = performance.now()
-        const privateRequestTime = new Date().toISOString()
-        results.private = await this.checkPrivate(address)
-        const privateDuration = performance.now() - privateStart
-        apiCalls.push({
-          call: 'checkPrivate',
-          requestTime: privateRequestTime,
-          responseTime: new Date().toISOString(),
-          duration: Math.round(privateDuration),
-        })
-      } catch (e) {
-        // IPv6 addresses don't support this endpoint
-        console.log('Private check skipped:', e)
-      }
-    }
-
-    // 3. Check if Cloudflare
-    const cloudflareStart = performance.now()
-    const cloudflareRequestTime = new Date().toISOString()
-    results.cloudflare = await this.checkCloudflare(address)
-    const cloudflareDuration = performance.now() - cloudflareStart
-    apiCalls.push({
-      call: 'checkCloudflare',
-      requestTime: cloudflareRequestTime,
-      responseTime: new Date().toISOString(),
-      duration: Math.round(cloudflareDuration),
-    })
-
-    // 4. Get subnet info if it's a network
-    if (results.validate.type === 'network') {
-      const subnetStart = performance.now()
-      const subnetRequestTime = new Date().toISOString()
-      results.subnet = await this.getSubnetInfo(address, mode)
-      const subnetDuration = performance.now() - subnetStart
-      apiCalls.push({
-        call: 'subnetInfo',
-        requestTime: subnetRequestTime,
-        responseTime: new Date().toISOString(),
-        duration: Math.round(subnetDuration),
-      })
-    }
 
     if (API_CONFIG.showNetworkPath) {
       try {
@@ -321,7 +318,7 @@ class ApiClient implements IApiClient {
         const secondaryDiagnosticsDuration = performance.now() - secondaryDiagnosticsStart
 
         if (secondaryNetworkDiagnostics) {
-          apiCalls.push({
+          coreLookup.timing.apiCalls.push({
             call: 'secondaryNetworkDiagnostics',
             requestTime: secondaryDiagnosticsRequestTime,
             responseTime: new Date().toISOString(),
@@ -338,7 +335,7 @@ class ApiClient implements IApiClient {
         networkDiagnostics = await this.getNetworkDiagnostics()
         const diagnosticsDuration = performance.now() - diagnosticsStart
 
-        apiCalls.push({
+        coreLookup.timing.apiCalls.push({
           call: 'networkDiagnostics',
           requestTime: diagnosticsRequestTime,
           responseTime: new Date().toISOString(),
@@ -349,17 +346,15 @@ class ApiClient implements IApiClient {
       }
     }
 
-    const overallDuration = performance.now() - overallStart
+    const totalDuration = coreLookup.timing.apiCalls.reduce((sum, call) => sum + call.duration, 0)
 
     return {
-      results,
+      ...coreLookup,
       networkDiagnostics,
       secondaryNetworkDiagnostics,
       timing: {
-        overallDuration: Math.round(overallDuration),
-        renderingDuration: 0, // Will be calculated by UI
-        totalDuration: Math.round(overallDuration),
-        apiCalls,
+        ...coreLookup.timing,
+        totalDuration: Math.max(coreLookup.timing.totalDuration, totalDuration),
       },
     }
   }

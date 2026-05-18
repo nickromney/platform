@@ -5,7 +5,7 @@
 import { API_CONFIG, getNetworkHops } from './config'
 import { type ClientPrincipal, getUserDisplayName, login, logout } from './entraid-auth'
 import { loginWithOidc, logoutFromOidc } from './oidc-auth'
-import type { ApiResults, NetworkDiagnosticsResponse } from './types'
+import type { ApiResults, NetworkDiagnosticsResponse, NetworkPlanResponse, ProviderRangeResponse } from './types'
 
 export function showElement(id: string): void {
   const element = document.getElementById(id)
@@ -43,6 +43,7 @@ export function showApiStatus(healthy: boolean, service?: string, version?: stri
 
   if (healthy && service && version) {
     const apiIngress = endpoint && endpoint !== '' ? endpoint : `${window.location.origin}/api`
+    const backendUri = API_CONFIG.backendUri || apiIngress
     const backendPathDetail = API_CONFIG.apiStatus.backendPathDetail
       ? `<br><small>${API_CONFIG.apiStatus.backendPathLabel}: <code>${escapeHtml(API_CONFIG.apiStatus.backendPathDetail)}</code></small>`
       : ''
@@ -50,9 +51,10 @@ export function showApiStatus(healthy: boolean, service?: string, version?: stri
     statusDiv.className = 'alert alert-success'
     statusDiv.innerHTML = `
       <strong>API Status:</strong> healthy |
-      <strong>Service:</strong> ${service} |
+      <strong>Backend:</strong> ${service} |
+      <strong>Backend URI:</strong> ${escapeHtml(backendUri)} |
       <strong>Version:</strong> ${version}<br>
-      <small>${API_CONFIG.apiStatus.frontendLabel}: <code>${window.location.origin}/</code> | ${API_CONFIG.apiStatus.ingressLabel}: <code>${escapeHtml(apiIngress)}</code></small>
+      <small>${API_CONFIG.apiStatus.frontendLabel}: <code>${window.location.origin}/</code> | Backend URI: <code>${escapeHtml(backendUri)}</code></small>
       ${backendPathDetail}
     `
   } else {
@@ -347,6 +349,98 @@ export function renderResults(
   showElement('results')
   hideLoading()
   hideElement('error')
+}
+
+function renderSinglePanel(title: string, body: string): void {
+  const resultsContent = document.getElementById('results-content')
+  if (!resultsContent) return
+
+  resultsContent.innerHTML = `
+    <article>
+      <h3>${escapeHtml(title)}</h3>
+      ${body}
+    </article>
+  `
+  showElement('results')
+  hideLoading()
+  hideElement('error')
+}
+
+export function renderProviderRange(
+  result: ProviderRangeResponse,
+  timing: { duration: number; requestTime: string; responseTime: string }
+): void {
+  renderSinglePanel(
+    'Provider Range Check',
+    `
+      <table>
+        <tr><th>Provider</th><td>${escapeHtml(result.provider)}</td></tr>
+        <tr><th>Address</th><td><code>${escapeHtml(result.address)}</code></td></tr>
+        <tr><th>Provider Range</th><td>${result.is_provider_range ? '✓ Yes' : '✗ No'}</td></tr>
+        <tr><th>IP Version</th><td>IPv${result.ip_version}</td></tr>
+        <tr><th>Range Source</th><td>${escapeHtml(result.range_source)}</td></tr>
+        ${
+          result.matched_ranges
+            ? `<tr><th>Matched Ranges</th><td>${result.matched_ranges.map((range) => `<code>${escapeHtml(range)}</code>`).join(', ')}</td></tr>`
+            : ''
+        }
+        ${
+          result.range_source_note
+            ? `<tr><th>Source Note</th><td>${escapeHtml(result.range_source_note)}</td></tr>`
+            : ''
+        }
+      </table>
+      <details>
+        <summary>API Call Timing</summary>
+        <table>
+          <tr><th>Duration</th><td><strong>${timing.duration}ms</strong></td></tr>
+          <tr><th>Request (UTC)</th><td>${timing.requestTime}</td></tr>
+          <tr><th>Response (UTC)</th><td>${timing.responseTime}</td></tr>
+        </table>
+      </details>
+    `
+  )
+}
+
+export function renderNetworkPlan(
+  result: NetworkPlanResponse,
+  timing: { duration: number; requestTime: string; responseTime: string }
+): void {
+  const allocationRows = result.allocations
+    .map(
+      (allocation) => `
+        <tr>
+          <td>${escapeHtml(allocation.name)}</td>
+          <td><code>${escapeHtml(allocation.network)}</code></td>
+          <td>${allocation.usable_addresses.toLocaleString()}</td>
+          <td><code>${escapeHtml(allocation.first_usable_ip)}</code> - <code>${escapeHtml(allocation.last_usable_ip)}</code></td>
+        </tr>
+      `
+    )
+    .join('')
+
+  renderSinglePanel(
+    'Network Plan',
+    `
+      <table>
+        <tr><th>Parent</th><td><code>${escapeHtml(result.parent)}</code></td></tr>
+        <tr><th>Mode</th><td>${escapeHtml(result.mode)}</td></tr>
+        <tr><th>Allocations</th><td>${result.allocations.length}</td></tr>
+      </table>
+      <table>
+        <thead><tr><th>Name</th><th>Network</th><th>Usable</th><th>Usable Range</th></tr></thead>
+        <tbody>${allocationRows}</tbody>
+      </table>
+      <details>
+        <summary>API Call Timing</summary>
+        <table>
+          <tr><th>Duration</th><td><strong>${timing.duration}ms</strong></td></tr>
+          <tr><th>Request (UTC)</th><td>${timing.requestTime}</td></tr>
+          <tr><th>Response (UTC)</th><td>${timing.responseTime}</td></tr>
+        </table>
+      </details>
+    `
+  )
 }
 
 /**

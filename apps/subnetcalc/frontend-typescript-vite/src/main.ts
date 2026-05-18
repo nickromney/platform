@@ -7,7 +7,16 @@ import { apiClient } from './api'
 import { getAuthMethod, getStackDescription } from './config'
 import { getCurrentUser } from './entraid-auth'
 import { initializeOidcSession } from './oidc-auth'
-import { renderResults, showApiStatus, showError, showLoading, showUserInfo } from './ui'
+import type { CloudMode, NetworkPlanRequirement, ProviderName } from './types'
+import {
+  renderNetworkPlan,
+  renderProviderRange,
+  renderResults,
+  showApiStatus,
+  showError,
+  showLoading,
+  showUserInfo,
+} from './ui'
 
 // Theme management
 function initTheme(): void {
@@ -95,6 +104,78 @@ async function handleSubmit(event: Event): Promise<void> {
   }
 }
 
+async function handleProviderSubmit(event: Event): Promise<void> {
+  event.preventDefault()
+
+  const form = event.target as HTMLFormElement
+  const formData = new FormData(form)
+  const address = formData.get('address') as string
+  const provider = formData.get('provider') as ProviderName
+  if (!address || !provider) {
+    showError('Provider and address are required')
+    return
+  }
+
+  showLoading()
+  try {
+    const requestTime = new Date().toISOString()
+    const start = performance.now()
+    const result = await apiClient.checkProviderRange(provider, address)
+    renderProviderRange(result, {
+      requestTime,
+      responseTime: new Date().toISOString(),
+      duration: Math.round(performance.now() - start),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred'
+    showError(`Error: ${message}`)
+  }
+}
+
+function parseRequirements(raw: string): NetworkPlanRequirement[] {
+  return raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, hosts] = line.split(',').map((part) => part.trim())
+      const hostCount = Number(hosts)
+      if (!name || !Number.isInteger(hostCount) || hostCount < 1) {
+        throw new Error(`Invalid host requirement: ${line}`)
+      }
+      return { name, hosts: hostCount }
+    })
+}
+
+async function handleNetworkPlanSubmit(event: Event): Promise<void> {
+  event.preventDefault()
+
+  const form = event.target as HTMLFormElement
+  const formData = new FormData(form)
+  const parent = formData.get('parent') as string
+  const mode = formData.get('mode') as CloudMode
+  const requirements = parseRequirements((formData.get('requirements') as string) || '')
+  if (!parent || requirements.length === 0) {
+    showError('Parent network and host requirements are required')
+    return
+  }
+
+  showLoading()
+  try {
+    const requestTime = new Date().toISOString()
+    const start = performance.now()
+    const result = await apiClient.allocateNetworkPlan(parent, mode, requirements)
+    renderNetworkPlan(result, {
+      requestTime,
+      responseTime: new Date().toISOString(),
+      duration: Math.round(performance.now() - start),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred'
+    showError(`Error: ${message}`)
+  }
+}
+
 // Example button clicks
 function handleExampleClick(event: Event): void {
   const button = event.target as HTMLButtonElement
@@ -141,6 +222,16 @@ async function init(): Promise<void> {
   const form = document.getElementById('lookup-form')
   if (form) {
     form.addEventListener('submit', handleSubmit)
+  }
+
+  const providerForm = document.getElementById('provider-form')
+  if (providerForm) {
+    providerForm.addEventListener('submit', handleProviderSubmit)
+  }
+
+  const networkPlanForm = document.getElementById('network-plan-form')
+  if (networkPlanForm) {
+    networkPlanForm.addEventListener('submit', handleNetworkPlanSubmit)
   }
 
   // Example buttons

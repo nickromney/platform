@@ -284,7 +284,7 @@ subnetcalc/
 │   ├── compose.yml              # Standalone compose file
 │   ├── test_frontend.py         # Playwright e2e tests
 │   ├── Dockerfile               # nginx-based image
-│   ├── nginx.conf               # API proxy configuration
+│   ├── nginx.conf.template      # Runtime-rendered API proxy configuration
 │   └── README.md
 ├── frontend-typescript-vite/    # TypeScript Vite Frontend (port 3000)
 │   ├── compose.yml              # Standalone compose file
@@ -378,11 +378,11 @@ The main `compose.yml` runs all six services (2 backends + 4 frontends):
 
 Both client-side frontends (Static HTML and TypeScript Vite) use nginx as a reverse proxy to avoid CORS issues:
 
-**Configuration** (`nginx.conf`):
+**Configuration** (`nginx.conf.template`):
 
 ```nginx
 location /api/ {
-    proxy_pass http://api-fastapi-container-app:8000;
+    proxy_pass ${API_PROXY_UPSTREAM};
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
 }

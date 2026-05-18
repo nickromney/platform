@@ -12,8 +12,13 @@ export type {
   CloudMode,
   HealthResponse,
   LookupResult,
+  NetworkPlanAllocation,
+  NetworkPlanRequirement,
+  NetworkPlanResponse,
   PerformanceTiming,
   PrivateCheckResponse,
+  ProviderName,
+  ProviderRangeResponse,
   SubnetInfoResponse,
   ValidateResponse,
 } from '@subnetcalc/shared-frontend'

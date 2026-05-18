@@ -3,6 +3,8 @@ const paths = {
   validate: "/api/v1/ipv4/validate",
   private: "/api/v1/ipv4/check-private",
   cloudflare: "/api/v1/ipv4/check-cloudflare",
+  providerRange: "/api/v1/provider-ranges/check",
+  networkPlan: "/api/v1/network-plan/allocate",
   subnet: "/api/v1/ipv4/subnet-info",
   whoami: "/api/whoami",
 };
@@ -15,6 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("auth-state").textContent = `Sign-in failed: ${error.message}`;
   }).finally(checkHealth);
   document.getElementById("lookup-form").addEventListener("submit", lookup);
+  document.getElementById("provider-form").addEventListener("submit", providerRangeCheck);
+  document.getElementById("network-plan-form").addEventListener("submit", allocateNetworkPlan);
   document.getElementById("identity-form").addEventListener("submit", whoami);
   document.getElementById("theme-switcher").addEventListener("click", toggleTheme);
   document.getElementById("login-btn").addEventListener("click", loginWithOidc);
@@ -59,7 +63,8 @@ async function checkHealth() {
   try {
     const data = await getJSON(paths.health);
     const authState = data.server_side_token_validation ? "OIDC/JWT validated by backend" : "No auth mode";
-    status.textContent = `API Status: ${data.status} | Backend: ${data.service} | Version: ${data.version} | Auth: ${authState}`;
+    const backendRoute = runtimeConfig().backendURL || "same process";
+    status.textContent = `API Status: ${data.status} | Backend: ${data.service} | Backend URI: ${backendRoute} | Version: ${data.version} | Auth: ${authState}`;
   } catch (error) {
     status.textContent = authSessionExpired(error)
       ? expiredSessionMessage()
@@ -72,12 +77,11 @@ async function lookup(event) {
   event.preventDefault();
   const address = document.getElementById("ip-address").value.trim();
   const mode = document.getElementById("cloud-mode").value;
-  const results = document.getElementById("results");
-  const content = document.getElementById("results-content");
-  results.hidden = false;
+  const content = prepareResults();
 
   if (!apiReadyForUserAction()) {
     content.innerHTML = `<p class="error">${escapeHTML(authRequiredMessage())}</p>`;
+    focusResults();
     return;
   }
 
@@ -97,11 +101,83 @@ async function lookup(event) {
   } catch (error) {
     content.innerHTML = `<p class="error">${escapeHTML(userFacingAPIError(error))}</p>`;
   }
+  focusResults();
 }
 
 async function whoami(event) {
   event.preventDefault();
   await refreshIdentity();
+}
+
+async function providerRangeCheck(event) {
+  event.preventDefault();
+  const address = document.getElementById("provider-address").value.trim();
+  const provider = document.getElementById("provider-name").value;
+  const content = prepareResults();
+
+  if (!apiReadyForUserAction()) {
+    content.innerHTML = `<p class="error">${escapeHTML(authRequiredMessage())}</p>`;
+    focusResults();
+    return;
+  }
+
+  content.textContent = "Loading...";
+  try {
+    const started = performance.now();
+    const providerRange = await timedPostJSON(paths.providerRange, { provider, address });
+    const totalMs = Math.round(performance.now() - started);
+    content.innerHTML = renderProviderRange(providerRange);
+    content.insertAdjacentHTML("beforeend", renderPerformance(totalMs));
+  } catch (error) {
+    content.innerHTML = `<p class="error">${escapeHTML(userFacingAPIError(error))}</p>`;
+  }
+  focusResults();
+}
+
+async function allocateNetworkPlan(event) {
+  event.preventDefault();
+  const parent = document.getElementById("plan-parent").value.trim();
+  const mode = document.getElementById("plan-mode").value;
+  const requirements = parseHostRequirements(document.getElementById("plan-requirements").value);
+  const content = prepareResults();
+
+  if (!apiReadyForUserAction()) {
+    content.innerHTML = `<p class="error">${escapeHTML(authRequiredMessage())}</p>`;
+    focusResults();
+    return;
+  }
+
+  content.textContent = "Loading...";
+  try {
+    const started = performance.now();
+    const plan = await timedPostJSON(paths.networkPlan, { parent, mode, requirements });
+    const totalMs = Math.round(performance.now() - started);
+    content.innerHTML = renderNetworkPlan(plan);
+    content.insertAdjacentHTML("beforeend", renderPerformance(totalMs));
+  } catch (error) {
+    content.innerHTML = `<p class="error">${escapeHTML(userFacingAPIError(error))}</p>`;
+  }
+  focusResults();
+}
+
+function prepareResults() {
+  const results = document.getElementById("results");
+  results.hidden = false;
+  return document.getElementById("results-content");
+}
+
+function focusResults() {
+  document.getElementById("results").focus();
+}
+
+function parseHostRequirements(value) {
+  return value.split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, hosts] = line.split(",").map((part) => part.trim());
+      return { name, hosts: Number(hosts) };
+    });
 }
 
 async function refreshIdentity() {
@@ -153,6 +229,8 @@ function apiAuthHeaders() {
 function refreshAuthControls() {
   const gateway = usesGatewayAuth();
   const showOidc = apiRequiresOidcToken() && !gateway;
+  const showAuthPanel = showOidc || gateway;
+  document.getElementById("auth-panel").hidden = !showAuthPanel;
   const tokenInput = document.getElementById("token-input");
   const whoamiButton = document.getElementById("whoami-btn");
   document.getElementById("login-btn").hidden = !showOidc && !gateway;
@@ -416,11 +494,14 @@ function configuredNetworkHops() {
   if (Array.isArray(config.networkHops) && config.networkHops.every(isNetworkHop)) {
     return config.networkHops;
   }
+  const backendURL = config.backendURL || "same process";
+  const backendRole = config.apiAuthMethod === "oidc"
+    ? "Go backend with server-side token validation"
+    : "Go backend";
   return [
     { label: "Browser", detail: window.location.origin, role: "Vanilla frontend" },
     { label: "Subnet frontend", detail: "/api reverse proxy", role: "Static UI and same-origin API proxy" },
-    { label: "APIM simulator", detail: "x-apim-trace enabled by default", role: "Gateway policies, auth, routing, trace" },
-    { label: "Subnet API", detail: "/api/v1/ipv4/subnet-info", role: "Go backend with server-side token validation" },
+    { label: "Subnet API", detail: backendURL, role: backendRole },
   ];
 }
 
@@ -484,6 +565,35 @@ function renderResults(validation, privateCheck, cloudflare, subnet) {
   }
 
   return sections.join("");
+}
+
+function renderProviderRange(providerRange) {
+  const matched = providerRange.data.matched_ranges || [];
+  const rows = [
+    ["Provider", providerRange.data.provider],
+    ["Address", providerRange.data.address],
+    ["Provider Range", providerRange.data.is_provider_range ? "Yes" : "No"],
+    ["IP Version", `IPv${providerRange.data.ip_version}`],
+    ["Range Source", providerRange.data.range_source],
+  ];
+  if (providerRange.data.range_source_url) rows.push(["Range Source URL", providerRange.data.range_source_url]);
+  if (providerRange.data.range_source_note) rows.push(["Range Source Note", providerRange.data.range_source_note]);
+  if (matched.length) rows.push(["Matched Ranges", matched.join(", ")]);
+  return renderArticle("Provider Range Check", rows, providerRange.timing);
+}
+
+function renderNetworkPlan(plan) {
+  const rows = [
+    ["Parent", plan.data.parent],
+    ["Mode", plan.data.mode],
+    ["Allocations", plan.data.allocations.length],
+  ];
+  const allocationRows = plan.data.allocations.map((allocation) => [
+    allocation.name,
+    `${allocation.network} (${allocation.usable_addresses.toLocaleString()} usable, ${allocation.first_usable_ip} - ${allocation.last_usable_ip})`,
+  ]);
+  return renderArticle("Network Plan", rows, plan.timing)
+    + `<article><h3>Allocations</h3>${renderTable(allocationRows)}</article>`;
 }
 
 function renderArticle(title, rows, timing) {

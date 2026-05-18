@@ -8,11 +8,25 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { APP_CONFIG } from '../config'
-import type { CloudMode, HealthResponse, LookupResult } from '../types'
+import type {
+  CloudMode,
+  HealthResponse,
+  LookupResult,
+  NetworkPlanRequirement,
+  NetworkPlanResponse,
+  ProviderName,
+  ProviderRangeResponse,
+} from '../types'
 
 interface SubnetCalculatorProps {
   theme: 'light' | 'dark'
   onToggleTheme: () => void
+}
+
+interface ApiTiming {
+  requestTime: string
+  responseTime: string
+  duration: number
 }
 
 export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps) {
@@ -25,6 +39,15 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<LookupResult | null>(null)
+  const [providerAddress, setProviderAddress] = useState('')
+  const [providerName, setProviderName] = useState<ProviderName>('cloudflare')
+  const [providerResult, setProviderResult] = useState<ProviderRangeResponse | null>(null)
+  const [providerTiming, setProviderTiming] = useState<ApiTiming | null>(null)
+  const [networkPlanParent, setNetworkPlanParent] = useState('')
+  const [networkPlanMode, setNetworkPlanMode] = useState<CloudMode>('Azure')
+  const [networkPlanRequirements, setNetworkPlanRequirements] = useState('web,60\ndb,20')
+  const [networkPlanResult, setNetworkPlanResult] = useState<NetworkPlanResponse | null>(null)
+  const [networkPlanTiming, setNetworkPlanTiming] = useState<ApiTiming | null>(null)
   const [apiHealth, setApiHealth] = useState<HealthResponse | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
   const [apiChecked, setApiChecked] = useState(false)
@@ -135,6 +158,10 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
     setIsLoading(true)
     setError(null)
     setResults(null)
+    setProviderResult(null)
+    setProviderTiming(null)
+    setNetworkPlanResult(null)
+    setNetworkPlanTiming(null)
 
     try {
       const result = await apiClient.performLookup(ipAddress, cloudMode)
@@ -148,6 +175,71 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
 
   const handleExampleClick = (address: string) => {
     setIpAddress(address)
+  }
+
+  const handleProviderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+    setResults(null)
+    setNetworkPlanResult(null)
+    setNetworkPlanTiming(null)
+
+    try {
+      const requestTime = new Date().toISOString()
+      const start = performance.now()
+      setProviderResult(await apiClient.checkProviderRange(providerName, providerAddress))
+      setProviderTiming({
+        requestTime,
+        responseTime: new Date().toISOString(),
+        duration: Math.round(performance.now() - start),
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const parseNetworkPlanRequirements = (): NetworkPlanRequirement[] => {
+    return networkPlanRequirements
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [name, hosts] = line.split(',').map(part => part.trim())
+        const hostCount = Number(hosts)
+        if (!name || !Number.isInteger(hostCount) || hostCount < 1) {
+          throw new Error(`Invalid host requirement: ${line}`)
+        }
+        return { name, hosts: hostCount }
+      })
+  }
+
+  const handleNetworkPlanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+    setResults(null)
+    setProviderResult(null)
+    setProviderTiming(null)
+
+    try {
+      const requestTime = new Date().toISOString()
+      const start = performance.now()
+      setNetworkPlanResult(
+        await apiClient.allocateNetworkPlan(networkPlanParent, networkPlanMode, parseNetworkPlanRequirements())
+      )
+      setNetworkPlanTiming({
+        requestTime,
+        responseTime: new Date().toISOString(),
+        duration: Math.round(performance.now() - start),
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   if (authLoading) {
@@ -201,11 +293,12 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
         {apiChecked && apiHealth && (
           <div id="api-status" className="alert alert-success">
             <strong>API Status:</strong> healthy | <strong>Backend:</strong> {apiHealth.service} |{' '}
+            <strong>Backend URI:</strong> {APP_CONFIG.backendUri || apiClient.getBaseUrl() || window.location.origin} |{' '}
             <strong>Version:</strong> {apiHealth.version}
             <br />
             <small>
-              Frontend: <code>{window.location.origin}/</code> | Backend:{' '}
-              <code>{apiClient.getBaseUrl() || window.location.origin}</code>
+              Frontend: <code>{window.location.origin}/</code> | Backend URI:{' '}
+              <code>{APP_CONFIG.backendUri || apiClient.getBaseUrl() || window.location.origin}</code>
             </small>
           </div>
         )}
@@ -275,6 +368,75 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
           </form>
         </section>
 
+        <section>
+          <form id="provider-form" onSubmit={handleProviderSubmit}>
+            <h2>Provider Range Check</h2>
+            <label htmlFor="provider-address">Address</label>
+            <div className="form-row">
+              <input
+                type="text"
+                id="provider-address"
+                value={providerAddress}
+                onChange={e => setProviderAddress(e.target.value)}
+                placeholder="e.g., 3.5.140.1 or 104.16.1.1"
+                required
+              />
+              <select
+                id="provider-name"
+                value={providerName}
+                onChange={e => setProviderName(e.target.value as ProviderName)}
+              >
+                <option value="cloudflare">Cloudflare</option>
+                <option value="aws">AWS</option>
+                <option value="azure">Azure</option>
+                <option value="stripe">Stripe</option>
+                <option value="openai">OpenAI</option>
+              </select>
+              <button type="submit" disabled={isLoading || !providerAddress}>
+                Check
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section>
+          <form id="network-plan-form" onSubmit={handleNetworkPlanSubmit}>
+            <h2>Network Plan</h2>
+            <label htmlFor="plan-parent">Parent Network</label>
+            <div className="form-row">
+              <input
+                type="text"
+                id="plan-parent"
+                value={networkPlanParent}
+                onChange={e => setNetworkPlanParent(e.target.value)}
+                placeholder="e.g., 10.0.0.0/24"
+                required
+              />
+              <select
+                id="plan-mode"
+                value={networkPlanMode}
+                onChange={e => setNetworkPlanMode(e.target.value as CloudMode)}
+              >
+                <option value="Standard">Standard</option>
+                <option value="AWS">AWS</option>
+                <option value="Azure">Azure</option>
+                <option value="OCI">OCI</option>
+              </select>
+            </div>
+            <label htmlFor="plan-requirements">Host Requirements</label>
+            <textarea
+              id="plan-requirements"
+              value={networkPlanRequirements}
+              onChange={e => setNetworkPlanRequirements(e.target.value)}
+              rows={4}
+              required
+            />
+            <button type="submit" disabled={isLoading || !networkPlanParent}>
+              Allocate
+            </button>
+          </form>
+        </section>
+
         {/* Loading */}
         {isLoading && (
           <output id="loading" style={{ display: 'block', textAlign: 'center', margin: '2rem 0' }}>
@@ -301,6 +463,150 @@ export function SubnetCalculator({ theme, onToggleTheme }: SubnetCalculatorProps
         )}
 
         {/* Results */}
+        {providerResult && (
+          <section id="provider-results" style={{ display: 'block' }}>
+            <h2>Provider Range Check</h2>
+            <article>
+              <table>
+                <tbody>
+                  <tr>
+                    <td>
+                      <strong>Provider</strong>
+                    </td>
+                    <td>{providerResult.provider}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Address</strong>
+                    </td>
+                    <td>{providerResult.address}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Provider Range</strong>
+                    </td>
+                    <td>{providerResult.is_provider_range ? 'Yes' : 'No'}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Range Source</strong>
+                    </td>
+                    <td>{providerResult.range_source}</td>
+                  </tr>
+                  {providerResult.matched_ranges && (
+                    <tr>
+                      <td>
+                        <strong>Matched Ranges</strong>
+                      </td>
+                      <td>{providerResult.matched_ranges.join(', ')}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              {providerTiming && (
+                <details>
+                  <summary>API Call Timing</summary>
+                  <table>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Duration</strong>
+                        </td>
+                        <td>{providerTiming.duration}ms</td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <strong>Request Time (UTC)</strong>
+                        </td>
+                        <td>{providerTiming.requestTime}</td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <strong>Response Time (UTC)</strong>
+                        </td>
+                        <td>{providerTiming.responseTime}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </details>
+              )}
+            </article>
+          </section>
+        )}
+
+        {networkPlanResult && (
+          <section id="network-plan-results" style={{ display: 'block' }}>
+            <h2>Network Plan</h2>
+            <article>
+              <table>
+                <tbody>
+                  <tr>
+                    <td>
+                      <strong>Parent</strong>
+                    </td>
+                    <td>{networkPlanResult.parent}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>Mode</strong>
+                    </td>
+                    <td>{networkPlanResult.mode}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Network</th>
+                    <th>Usable</th>
+                    <th>Usable Range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {networkPlanResult.allocations.map(allocation => (
+                    <tr key={`${allocation.name}-${allocation.network}`}>
+                      <td>{allocation.name}</td>
+                      <td>{allocation.network}</td>
+                      <td>{allocation.usable_addresses.toLocaleString()}</td>
+                      <td>
+                        {allocation.first_usable_ip} - {allocation.last_usable_ip}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {networkPlanTiming && (
+                <details>
+                  <summary>API Call Timing</summary>
+                  <table>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Duration</strong>
+                        </td>
+                        <td>{networkPlanTiming.duration}ms</td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <strong>Request Time (UTC)</strong>
+                        </td>
+                        <td>{networkPlanTiming.requestTime}</td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <strong>Response Time (UTC)</strong>
+                        </td>
+                        <td>{networkPlanTiming.responseTime}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </details>
+              )}
+            </article>
+          </section>
+        )}
+
         {results && (
           <section id="results" style={{ display: 'block' }}>
             <h2>Results</h2>

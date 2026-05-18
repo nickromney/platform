@@ -1,5 +1,6 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites check-docker-prerequisites clean-ports \
+MAKE_KNOWN_GOALS := help prereqs build test test-conformance update check-prerequisites check-docker-prerequisites clean-ports \
+  app-go-help app-go-test app-go-build app-go-run-backend app-go-run-frontend \
   up down urls logs ps \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
@@ -39,7 +40,9 @@ ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
 
-.PHONY: help prereqs test update check-prerequisites check-docker-prerequisites build clean-ports up down urls logs ps \
+.PHONY: help prereqs test test-conformance update check-prerequisites check-docker-prerequisites build clean-ports \
+  app-go-help app-go-test app-go-build app-go-run-backend app-go-run-frontend \
+  up down urls logs ps \
   start-direct-azure-function start-direct-container-app start-direct-flask start-direct-vite \
   start-direct-all-bg wait-direct-services \
   start-compose-all start-compose-01 start-compose-02 start-compose-03 start-compose-04 \
@@ -52,6 +55,7 @@ endif
 DEFAULT_STACK_URL := http://localhost:8003
 DEFAULT_API_DOCS_URL := http://localhost:8090/api/v1/health
 CONTAINER_APP_BACKEND_URL := http://localhost:8090/api/v1/health
+SUBNETCALC_CONFORMANCE_BASE_URL ?= http://localhost:8090
 DEFAULT_COMPOSE_ENV := SUBNETCALC_LOCAL_PLATFORM=$(SUBNETCALC_LOCAL_PLATFORM) SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=$(SUBNETCALC_AZURE_FUNCTION_DOCKERFILE) OAUTH2_PROXY_CLIENT_SECRET=dev-oauth-secret STACK12_APIM_SUBSCRIPTION_KEY=dev-subscription-key STACK12_ADMIN_APIM_SUBSCRIPTION_KEY=dev-admin-subscription-key
 FULL_COMPOSE_PROFILES := --profile function-family --profile oidc --profile mock-easyauth
 
@@ -97,6 +101,22 @@ update: ## Update dependency locks across the subnetcalc app roots
 	@cd api-fastapi-container-app && uv lock --upgrade && uv sync --extra dev
 	@$(MAKE) --no-print-directory -C frontend-html-static update
 	@$(MAKE) --no-print-directory -C frontend-python-flask update
+
+##@ App Go
+app-go-help: ## Show app-go Makefile targets
+	@$(MAKE) --no-print-directory -C app-go help
+
+app-go-test: ## Run app-go unit tests
+	@$(MAKE) --no-print-directory -C app-go test
+
+app-go-build: ## Build the app-go local binary
+	@$(MAKE) --no-print-directory -C app-go build
+
+app-go-run-backend: ## Run app-go backend directly on port 8090
+	@$(MAKE) --no-print-directory -C app-go run-backend
+
+app-go-run-frontend: ## Run app-go frontend directly on port 8003
+	@$(MAKE) --no-print-directory -C app-go run-frontend
 
 ##@ Run
 up: check-prerequisites ## Start the default compose stack and print the local URL
@@ -382,6 +402,9 @@ start-swa-all: start-swa-backends ## Print the three-SWA comparison workflow
 ##@ Testing
 test: ## Start, test, and clean up the default compose stack
 	@../../apps/subnetcalc/tests/compose-smoke.sh --execute
+
+test-conformance: ## Run the subnetcalc API contract harness against SUBNETCALC_CONFORMANCE_BASE_URL
+	@tests/conformance/subnetcalc_contract.py --base-url "$(SUBNETCALC_CONFORMANCE_BASE_URL)"
 
 
 test-bruno-direct: ## Run Bruno against the direct-launch stack
