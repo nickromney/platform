@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 )
@@ -11,8 +12,17 @@ type Config struct {
 	PublicBaseURL  string
 	MCPURL         string
 	MCPInternalURL string
+	MCPConnectors  []ConnectorConfig
 	LLMURL         string
 	LLMModel       string
+}
+
+type ConnectorConfig struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	InternalURL string `json:"internal_url"`
+	Auth        string `json:"auth"`
 }
 
 func ConfigFromEnv() Config {
@@ -36,6 +46,7 @@ func ConfigFromEnv() Config {
 		mcpURL = "http://localhost:18082/mcp"
 	}
 	mcpInternalURL := strings.TrimSpace(os.Getenv("MCP_INTERNAL_URL"))
+	mcpConnectors := parseConnectorConfigs(os.Getenv("MCP_CONNECTORS"))
 	llmURL := strings.TrimSpace(os.Getenv("LLM_URL"))
 	llmModel := strings.TrimSpace(os.Getenv("LLM_MODEL"))
 	return Config{
@@ -44,7 +55,32 @@ func ConfigFromEnv() Config {
 		PublicBaseURL:  publicBaseURL,
 		MCPURL:         mcpURL,
 		MCPInternalURL: mcpInternalURL,
+		MCPConnectors:  mcpConnectors,
 		LLMURL:         llmURL,
 		LLMModel:       llmModel,
 	}
+}
+
+func parseConnectorConfigs(raw string) []ConnectorConfig {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var configs []ConnectorConfig
+	if err := json.Unmarshal([]byte(raw), &configs); err != nil {
+		return nil
+	}
+	out := make([]ConnectorConfig, 0, len(configs))
+	for _, cfg := range configs {
+		cfg.ID = strings.TrimSpace(cfg.ID)
+		cfg.Name = strings.TrimSpace(cfg.Name)
+		cfg.URL = normalizeConnectorURL(cfg.URL)
+		cfg.InternalURL = normalizeConnectorURL(cfg.InternalURL)
+		cfg.Auth = strings.TrimSpace(cfg.Auth)
+		if cfg.URL == "" {
+			continue
+		}
+		out = append(out, cfg)
+	}
+	return out
 }

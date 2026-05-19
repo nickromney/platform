@@ -57,10 +57,9 @@ Backstage is the explicit exception. Portal demonstrates Backstage as a product,
 so its Yarn and plugin dependency graph is intentional and resource-gated
 rather than converted into a no-dependency sample app.
 
-The Platform MCP server is another narrow exception: the MCP protocol SDK is
-kept because it owns Streamable HTTP and Inspector compatibility. App-owned
-network calls should use the standard library unless a separate client
-dependency becomes justified.
+The Platform MCP server now follows the same lightweight runtime direction. The
+active implementation is the Go server under `apps/platform-mcp/app-go`, using
+Go stdlib HTTP and JSON for the current MCP surface.
 
 The smaller `apps/idp-mcp` adapter remains dependency-free and uses Python
 stdlib JSON and `urllib.request` directly.
@@ -72,7 +71,7 @@ stdlib JSON and `urllib.request` directly.
 - `apps/apim-simulator/ui` is a static nginx-served operator console.
 - `apps/idp-core/app-go` is the default portal API runtime.
 - `apps/backstage` is a documented Portal exception, not a sample-app template.
-- `apps/platform-mcp` keeps the MCP SDK as an intentional protocol dependency.
+- `apps/platform-mcp/app-go` is the active Platform MCP runtime.
 - `apps/idp-mcp` remains dependency-free.
 - `make -C apps/subnetcalc test` verifies the default Go two-service compose
   path.

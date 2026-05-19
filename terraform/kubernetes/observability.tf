@@ -1836,7 +1836,7 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {"h": 4, "w": 8, "x": 0, "y": 3},
                       "id": 2,
                       "options": {
-                        "content": "### Endpoints\n- MCP API: https://mcp.127.0.0.1.sslip.io/mcp\n- MCP Console: https://mcp-console.127.0.0.1.sslip.io\n- Smoke: `PLATFORM_MCP_BEARER_TOKEN=... uv run platform-mcp-smoke`",
+                        "content": "### Endpoints\n- MCP API: https://mcp.127.0.0.1.sslip.io/mcp\n- MCP Console: https://mcp-console.127.0.0.1.sslip.io\n- Smoke: `curl -fsS https://mcp.127.0.0.1.sslip.io/mcp -H \"Authorization: Bearer $${PLATFORM_MCP_BEARER_TOKEN}\" -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'`",
                         "mode": "markdown"
                       },
                       "title": "Operator links",

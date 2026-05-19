@@ -26,12 +26,12 @@ setup() {
   [[ "${output}" != *"Runner mode:"* ]]
 }
 
-@test "apps test delegates to the compose smoke workflow" {
+@test "apps test delegates to the default app checks" {
   run make -n -C "${REPO_ROOT}/apps" test
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"-C ./platform-mcp/app-go test"* ]]
   [[ "${output}" == *"compose-smoke"* ]]
-  [[ "${output}" == *"./platform-mcp/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./sentiment/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./subnetcalc/tests/compose-smoke.sh"* ]]
 }

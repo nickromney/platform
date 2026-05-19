@@ -120,11 +120,9 @@ sample apps and remains gated out of constrained local profiles. The companion
 
 ## Platform MCP
 
-`apps/platform-mcp` keeps the MCP protocol SDK as an intentional dependency.
-The server must remain compatible with Streamable HTTP MCP clients and the MCP
-Inspector, so replacing that protocol layer with handwritten JSON-RPC is out of
-scope for the no-dependency pass. App-owned HTTP calls and the smoke client use
-the Python standard library instead of a separate HTTP client dependency.
+`apps/platform-mcp` now ships only the Go implementation under `app-go`. It uses
+Go stdlib HTTP and JSON for the current Streamable HTTP MCP surface and keeps
+LLM access behind agentgateway through the `model_ping` tool.
 
 `apps/idp-mcp` is the smaller Portal API MCP adapter and already has zero
 runtime dependencies. It uses Python stdlib JSON and `urllib.request` directly.

@@ -973,6 +973,7 @@ async function mcpInspectorD2RenderAndExport(page: Page) {
 async function chatgptAddMcpOauthConnector(page: Page) {
   await expect(page.locator('body')).toContainText(/ChatGPT Sim/i, { timeout: 120_000 })
   await expect(page.locator('#mcp-url')).toContainText(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)
+  await expect(page.locator('#connector-list')).toContainText('Platform MCP via APIM', { timeout: 30_000 })
 
   await page.locator('#connector-name').fill('Platform MCP OAuth')
   await page.locator('#connector-url').fill(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)

@@ -49,6 +49,17 @@ spec:
               value: https://mcpserver.dev.127.0.0.1.sslip.io/mcp
             - name: MCP_INTERNAL_URL
               value: http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000/mcp
+            - name: MCP_CONNECTORS
+              value: |
+                [
+                  {
+                    "id": "platform-mcp",
+                    "name": "Platform MCP via APIM",
+                    "url": "https://mcpserver.dev.127.0.0.1.sslip.io/mcp",
+                    "internal_url": "http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000/mcp",
+                    "auth": "sso_bearer"
+                  }
+                ]
             - name: LLM_URL
               value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1/chat/completions
             - name: HOME

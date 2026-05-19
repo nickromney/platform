@@ -7,8 +7,8 @@ description: MCP server for platform learning, diagnostics, and tool-assisted wo
 
 `apps/platform-mcp` is the MCP server for the platform learning environment.
 It exposes Streamable HTTP on `/mcp`, a health endpoint, and Prometheus metrics.
-The local compose path is useful for server development; the Kubernetes path
-proves the routed, authenticated machine API surface.
+The active implementation is the Go server under `apps/platform-mcp/app-go`;
+the Kubernetes path proves the routed, authenticated machine API surface.
 
 ## Tool Surface
 
@@ -16,13 +16,9 @@ The current server exposes:
 
 | Tool | Purpose |
 | --- | --- |
-| `platform_status` | Report local platform status. |
-| `platform_catalog_list` | List platform catalog entries. |
-| `subnetcalc_calculate` | Exercise the subnet calculator domain. |
-| `sentiment_classify` | Exercise the sentiment classify-only API path without storing comments. |
 | `d2_validate` | Validate D2 diagram source. |
-| `d2_format` | Format D2 diagram source. |
 | `d2_render` | Render D2 diagrams. |
+| `model_ping` | Prove access to an OpenAI-compatible model endpoint through agentgateway. |
 
 The current MCP surface is workload-level diagnostics and learning tooling. It
 does not yet expose the guided platform workflow abstraction, such as "plan or
@@ -37,20 +33,17 @@ clients assemble low-level Terraform or Makefile details themselves.
 ## Local Development
 
 ```bash
-cd apps/platform-mcp
-uv run --extra dev pytest
-uv run platform-mcp
-docker compose -f compose.yml up -d --build
+make -C apps/platform-mcp/app-go test
+make -C apps/platform-mcp/app-go run
 ```
 
 Local endpoints:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `http://localhost:8089/mcp` | Streamable HTTP MCP endpoint. |
-| `http://localhost:8089/health` | Health check. |
-| `http://localhost:9099/metrics` | Metrics. |
-| `http://localhost:6274` | MCP Inspector. |
+| `http://localhost:8080/mcp` | Streamable HTTP MCP endpoint. |
+| `http://localhost:8080/health` | Health check. |
+| `http://localhost:9090/metrics` | Metrics. |
 
 ## Kubernetes Integration
 
@@ -72,7 +65,10 @@ pages where a redirect is expected.
 ```bash
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/kind check-app APP=mcp
-PLATFORM_MCP_BEARER_TOKEN=... uv run platform-mcp-smoke
+curl -fsS https://mcp.127.0.0.1.sslip.io/mcp \
+  -H "Authorization: Bearer ${PLATFORM_MCP_BEARER_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
 <Callout type="warning">

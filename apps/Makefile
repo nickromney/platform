@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc
+MAKE_KNOWN_GOALS := help prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-sentiment compose-smoke-subnetcalc platform-mcp-test
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 include ../mk/common.mk
@@ -7,7 +7,7 @@ include ../mk/common.mk
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 
-.PHONY: prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc
+.PHONY: prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-sentiment compose-smoke-subnetcalc platform-mcp-test
 
 ##@ Workflow
 prereqs: ## Check shared app workflow prerequisites without requiring Trivy
@@ -18,7 +18,7 @@ prereqs: ## Check shared app workflow prerequisites without requiring Trivy
 	@echo ""
 	@echo "Trivy remains opt-in. Use 'make trivy-prereqs' when you want scanning."
 
-test: ## Run the default app smoke checks
+test: platform-mcp-test ## Run the default app checks
 	@$(MAKE) --no-print-directory compose-smoke
 
 update: ## Update dependency locks across app roots using native package managers
@@ -48,7 +48,7 @@ trivy-scan-all: ## Scan local apps/, workload images, and the optional in-cluste
 	@SCAN_GITEA=1 "$(TRIVY_SCAN_SCRIPT)" --mode all --execute
 
 ##@ Smoke
-compose-smoke: compose-smoke-apim-simulator compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for app-local stacks
+compose-smoke: compose-smoke-apim-simulator compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for app-local stacks
 
 compose-smoke-apim-simulator: ## Run the APIM simulator direct public compose smoke check
 	@set -e; \
@@ -56,8 +56,8 @@ compose-smoke-apim-simulator: ## Run the APIM simulator direct public compose sm
 	$(MAKE) --no-print-directory -C ./apim-simulator up-hello; \
 	$(MAKE) --no-print-directory -C ./apim-simulator smoke-hello SMOKE_HELLO_MODE=anonymous
 
-compose-smoke-platform-mcp: ## Run the lightweight Platform MCP compose smoke check
-	@./platform-mcp/tests/compose-smoke.sh --execute
+platform-mcp-test: ## Run the Platform MCP Go unit tests
+	@$(MAKE) --no-print-directory -C ./platform-mcp/app-go test
 
 compose-smoke-sentiment: ## Run the lightweight sentiment compose smoke check
 	@./sentiment/tests/compose-smoke.sh --execute

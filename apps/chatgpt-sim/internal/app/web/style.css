@@ -125,6 +125,15 @@ p { color: var(--muted); margin-top: 6px; }
   margin-bottom: 6px;
 }
 
+.message-meta {
+  display: block;
+  margin: -2px 0 8px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .composer {
   border-top: 1px solid var(--line);
   padding: 16px;
