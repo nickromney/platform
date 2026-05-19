@@ -34,15 +34,7 @@ func NewServer(cfg Config, client HTTPDoer) http.Handler {
 		client = http.DefaultClient
 	}
 	s := &server{cfg: cfg, client: client, nextID: 2}
-	if cfg.MCPURL != "" {
-		s.connectors = []connector{{
-			ID:     "default",
-			Name:   "Local Go MCP",
-			URL:    cfg.MCPURL,
-			Auth:   "local_bearer",
-			Status: "configured",
-		}}
-	}
+	s.connectors = initialConnectors(cfg)
 	mux := http.NewServeMux()
 	switch cfg.Role {
 	case "mcp":
@@ -204,7 +196,7 @@ func (s *server) mcp(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) shellDiscovery(w http.ResponseWriter, r *http.Request) {
 	conn := s.defaultConnector()
-	discovery, err := s.discover(conn.URL, outboundAuthorization(r))
+	discovery, err := s.discoverConnector(conn, outboundAuthorization(r))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -227,13 +219,13 @@ func (s *server) shellChat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "connector not found"})
 		return
 	}
-	discovery, err := s.discover(conn.URL, outboundAuthorization(r))
+	discovery, err := s.discoverConnector(conn, outboundAuthorization(r))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	toolName, args := chooseTool(req.Tool, req.Message)
-	steps, result, selectedTool, err := s.callMCP(conn.URL, toolName, args, req.Tool, req.Message, outboundAuthorization(r))
+	steps, result, selectedTool, err := s.callConnectorMCP(conn, toolName, args, req.Tool, req.Message, outboundAuthorization(r))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -241,17 +233,18 @@ func (s *server) shellChat(w http.ResponseWriter, r *http.Request) {
 	toolName = selectedTool
 	assistant := deterministicReply(toolName, result)
 	model := map[string]string{"provider": "deterministic", "model": "go-local-rule"}
-	if s.cfg.LLMURL != "" {
+	if s.cfg.LLMURL != "" && toolName != "tools/list" {
 		var modelName string
 		assistant, modelName, err = s.completeWithLLM(req.Message, toolName, result)
 		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		if isUnusableAssistantText(assistant) {
 			assistant = deterministicReply(toolName, result)
+			model = map[string]string{"provider": "openai-compatible", "route": "agentgateway", "status": "unavailable", "error": err.Error()}
+		} else if isUnusableAssistantText(assistant) {
+			assistant = deterministicReply(toolName, result)
+			model = map[string]string{"provider": "openai-compatible", "model": modelName, "route": "agentgateway", "status": "fallback"}
+		} else {
+			model = map[string]string{"provider": "openai-compatible", "model": modelName, "route": "agentgateway", "status": "ok"}
 		}
-		model = map[string]string{"provider": "openai-compatible", "model": modelName, "route": "agentgateway"}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"assistant":      assistant,
@@ -500,6 +493,46 @@ func (s *server) addConnector(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, conn)
 }
 
+func initialConnectors(cfg Config) []connector {
+	if len(cfg.MCPConnectors) > 0 {
+		connectors := make([]connector, 0, len(cfg.MCPConnectors))
+		for idx, item := range cfg.MCPConnectors {
+			id := item.ID
+			if id == "" {
+				id = fmt.Sprintf("connector-%d", idx+1)
+			}
+			name := item.Name
+			if name == "" {
+				name = item.URL
+			}
+			auth := item.Auth
+			if auth == "" {
+				auth = "local_bearer"
+			}
+			connectors = append(connectors, connector{
+				ID:          id,
+				Name:        name,
+				URL:         item.URL,
+				InternalURL: item.InternalURL,
+				Auth:        auth,
+				Status:      "configured",
+			})
+		}
+		return connectors
+	}
+	if cfg.MCPURL == "" {
+		return nil
+	}
+	return []connector{{
+		ID:          "default",
+		Name:        "Local Go MCP",
+		URL:         cfg.MCPURL,
+		InternalURL: cfg.MCPInternalURL,
+		Auth:        "local_bearer",
+		Status:      "configured",
+	}}
+}
+
 func (s *server) deleteConnector(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" {
@@ -585,8 +618,16 @@ func (s *server) publicBaseURL(r *http.Request) string {
 }
 
 func (s *server) discover(mcpURL string, authorization string) (map[string]any, error) {
-	resolvedURL := s.resolveMCPURL(mcpURL)
-	hostOverride := s.mcpHostOverride(mcpURL)
+	return s.discoverResolved(mcpURL, "", authorization)
+}
+
+func (s *server) discoverConnector(conn connector, authorization string) (map[string]any, error) {
+	return s.discoverResolved(conn.URL, conn.InternalURL, authorization)
+}
+
+func (s *server) discoverResolved(mcpURL string, internalURL string, authorization string) (map[string]any, error) {
+	resolvedURL := s.resolveMCPURL(mcpURL, internalURL)
+	hostOverride := s.mcpHostOverride(mcpURL, internalURL)
 	base := strings.TrimSuffix(strings.TrimRight(resolvedURL, "/"), "/mcp")
 	protected, err := s.getJSONWithHost(base+"/.well-known/oauth-protected-resource/mcp", authorization, hostOverride)
 	if err != nil {
@@ -823,9 +864,46 @@ func loginScopesFromDiscovery(discovery map[string]any) []string {
 }
 
 func (s *server) callMCP(mcpURL string, toolName string, args map[string]any, requestedTool string, message string, authorization string) ([]map[string]any, map[string]any, string, error) {
-	hostOverride := s.mcpHostOverride(mcpURL)
-	mcpURL = s.resolveMCPURL(mcpURL)
-	if authorization == "" {
+	return s.callMCPResolved(mcpURL, "", toolName, args, requestedTool, message, authorization, true)
+}
+
+func (s *server) callConnectorMCP(conn connector, toolName string, args map[string]any, requestedTool string, message string, authorization string) ([]map[string]any, map[string]any, string, error) {
+	var err error
+	authorization, err = connectorAuthorization(conn, authorization)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return s.callMCPResolved(conn.URL, conn.InternalURL, toolName, args, requestedTool, message, authorization, connectorAllowsLocalBearerFallback(conn))
+}
+
+func connectorAuthorization(conn connector, forwardedAuthorization string) (string, error) {
+	forwardedAuthorization = strings.TrimSpace(forwardedAuthorization)
+	switch strings.ToLower(strings.TrimSpace(conn.Auth)) {
+	case "sso_bearer":
+		if forwardedAuthorization == "" {
+			return "", fmt.Errorf("connector %q requires an SSO bearer token, but oauth2-proxy did not forward one to ChatGPT Sim", conn.Name)
+		}
+		return forwardedAuthorization, nil
+	case "none", "anonymous":
+		return "", nil
+	default:
+		return forwardedAuthorization, nil
+	}
+}
+
+func connectorAllowsLocalBearerFallback(conn connector) bool {
+	switch strings.ToLower(strings.TrimSpace(conn.Auth)) {
+	case "none", "anonymous", "sso_bearer":
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *server) callMCPResolved(mcpURL string, internalURL string, toolName string, args map[string]any, requestedTool string, message string, authorization string, allowLocalBearerFallback bool) ([]map[string]any, map[string]any, string, error) {
+	hostOverride := s.mcpHostOverride(mcpURL, internalURL)
+	mcpURL = s.resolveMCPURL(mcpURL, internalURL)
+	if authorization == "" && allowLocalBearerFallback {
 		authorization = "Bearer local-chatgpt-go"
 	}
 	steps := []map[string]any{}
@@ -850,16 +928,20 @@ func (s *server) callMCP(mcpURL string, toolName string, args map[string]any, re
 			return nil, err
 		}
 		defer resp.Body.Close()
+		respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if err != nil {
+			return nil, err
+		}
 		var rpc map[string]any
-		if err := json.NewDecoder(resp.Body).Decode(&rpc); err != nil {
+		if err := json.Unmarshal(respBody, &rpc); err != nil {
 			return nil, err
 		}
 		steps = append(steps, map[string]any{"method": method, "status": resp.StatusCode, "response": rpc})
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
-			return nil, errors.New(resp.Status)
+			return nil, fmt.Errorf("%s from %s%s", resp.Status, method, httpErrorSuffix(rpc, respBody))
 		}
 		if _, ok := rpc["error"]; ok {
-			return nil, errors.New("json-rpc error from " + method)
+			return nil, errors.New("json-rpc error from " + method + rpcErrorSuffix(rpc["error"]))
 		}
 		return rpc, nil
 	}
@@ -894,8 +976,36 @@ func (s *server) callMCP(mcpURL string, toolName string, args map[string]any, re
 	return steps, map[string]any{}, toolName, nil
 }
 
-func (s *server) resolveMCPURL(mcpURL string) string {
-	if s.cfg.MCPInternalURL == "" {
+func rpcErrorSuffix(value any) string {
+	rpcError, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	message := stringValue(rpcError["message"])
+	if message == "unknown" || strings.TrimSpace(message) == "" {
+		return ""
+	}
+	return ": " + message
+}
+
+func httpErrorSuffix(rpc map[string]any, body []byte) string {
+	for _, key := range []string{"detail", "error", "message"} {
+		if value := stringValue(rpc[key]); value != "unknown" && strings.TrimSpace(value) != "" {
+			return ": " + value
+		}
+	}
+	text := strings.TrimSpace(string(body))
+	if text == "" {
+		return ""
+	}
+	if len(text) > 240 {
+		text = text[:240] + "..."
+	}
+	return ": " + text
+}
+
+func (s *server) resolveMCPURL(mcpURL string, internalURL string) string {
+	if internalURL == "" {
 		return mcpURL
 	}
 	parsed, err := url.Parse(mcpURL)
@@ -903,13 +1013,13 @@ func (s *server) resolveMCPURL(mcpURL string) string {
 		return mcpURL
 	}
 	if parsed.Host == "" || strings.Contains(parsed.Host, "mcpserver.") || strings.Contains(parsed.Host, "mcp.") {
-		return s.cfg.MCPInternalURL
+		return internalURL
 	}
 	return mcpURL
 }
 
-func (s *server) mcpHostOverride(mcpURL string) string {
-	if s.cfg.MCPInternalURL == "" {
+func (s *server) mcpHostOverride(mcpURL string, internalURL string) string {
+	if internalURL == "" {
 		return ""
 	}
 	parsed, err := url.Parse(mcpURL)
@@ -993,7 +1103,7 @@ func chooseTool(requested, message string) (string, map[string]any) {
 	}
 	lower := strings.ToLower(message)
 	switch {
-	case strings.Contains(lower, "what tools") || strings.Contains(lower, "which tools") || strings.Contains(lower, "tools did") || strings.Contains(lower, "discovered"):
+	case wantsDiscovery(lower):
 		return "tools/list", nil
 	case strings.Contains(lower, "who") || strings.Contains(lower, "identity"):
 		return "whoami", nil
@@ -1026,24 +1136,28 @@ func chooseAdvertisedTool(rpc map[string]any, message string) (string, map[strin
 	}
 	lower := strings.ToLower(message)
 	switch {
-	case strings.Contains(lower, "what tools") || strings.Contains(lower, "which tools") || strings.Contains(lower, "tools did") || strings.Contains(lower, "discovered"):
+	case wantsDiscovery(lower):
 		return "tools/list", nil
 	case strings.Contains(lower, "who") || strings.Contains(lower, "identity"):
-		if name, ok := has("whoami", "identity", "user_info", "userinfo", "profile", "me", "model_ping"); ok {
+		if name, ok := has("whoami", "identity", "user_info", "userinfo", "profile", "me"); ok {
 			return name, argsForTool(name, message)
 		}
+		return "tools/list", nil
 	case strings.Contains(lower, "route") || strings.Contains(lower, "path"):
-		if name, ok := has("route_trace", "explain_route", "collect_evidence", "model_ping"); ok {
+		if name, ok := has("route_trace", "explain_route", "collect_evidence"); ok {
 			return name, argsForTool(name, message)
 		}
+		return "tools/list", nil
 	case strings.Contains(lower, "security"):
-		if name, ok := has("security_posture", "collect_evidence", "model_ping"); ok {
+		if name, ok := has("security_posture", "collect_evidence"); ok {
 			return name, argsForTool(name, message)
 		}
+		return "tools/list", nil
 	case strings.Contains(lower, "health"):
-		if name, ok := has("service_health", "model_ping"); ok {
+		if name, ok := has("service_health"); ok {
 			return name, argsForTool(name, message)
 		}
+		return "tools/list", nil
 	case strings.Contains(lower, "catalog") || strings.Contains(lower, "model") || strings.Contains(lower, "infer") || strings.Contains(lower, "prompt"):
 		if name, ok := has("model_catalogue", "model_ping", "infer"); ok {
 			return name, argsForTool(name, message)
@@ -1056,6 +1170,23 @@ func chooseAdvertisedTool(rpc map[string]any, message string) (string, map[strin
 		return names[0], argsForTool(names[0], message)
 	}
 	return "tools/list", nil
+}
+
+func wantsDiscovery(lower string) bool {
+	if strings.Contains(lower, "what tools") ||
+		strings.Contains(lower, "which tools") ||
+		strings.Contains(lower, "tools did") ||
+		strings.Contains(lower, "discovered") {
+		return true
+	}
+	hasExampleVerb := strings.Contains(lower, "example") ||
+		strings.Contains(lower, "list") ||
+		strings.Contains(lower, "show") ||
+		strings.Contains(lower, "give me")
+	hasInventoryNoun := strings.Contains(lower, "route") ||
+		strings.Contains(lower, "tool") ||
+		strings.Contains(lower, "capabilit")
+	return hasExampleVerb && hasInventoryNoun
 }
 
 func advertisedToolNames(rpc map[string]any) []string {
@@ -1289,6 +1420,7 @@ type connector struct {
 	ID            string         `json:"id"`
 	Name          string         `json:"name"`
 	URL           string         `json:"url"`
+	InternalURL   string         `json:"internal_url,omitempty"`
 	Auth          string         `json:"auth"`
 	Status        string         `json:"status"`
 	ClientID      string         `json:"oauth_client_id,omitempty"`

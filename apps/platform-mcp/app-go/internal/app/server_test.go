@@ -263,6 +263,38 @@ func TestD2RenderReturnsSVGArtifactForMCPInspectorSmoke(t *testing.T) {
 	}
 }
 
+func TestMetricsExposeToolCallsForPrometheusScrape(t *testing.T) {
+	metrics = newToolMetrics()
+	srv := NewServer(Config{PublicBaseURL: "https://mcpserver.dev.127.0.0.1.sslip.io"})
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"d2_validate","arguments":{"source":"a -> b"}}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tools/call returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec = httptest.NewRecorder()
+	NewMetricsHandler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics returned %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"# HELP platform_mcp_tool_calls_total",
+		`platform_mcp_tool_calls_total{tool="d2_validate",status="ok"} 1`,
+		"platform_mcp_tool_duration_seconds_sum",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics missing %q: %s", want, body)
+		}
+	}
+}
+
 func TestModelPingEmitsOpenLLMetryCompatibleOTLPSpan(t *testing.T) {
 	spans := make(chan map[string]any, 1)
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

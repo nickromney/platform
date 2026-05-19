@@ -36,8 +36,10 @@ async function submitChat(event) {
       tool: document.getElementById("tool").value,
       connector_id: connectorSelect.value,
     });
-    appendMessage("assistant", "ChatGPT Sim", result.assistant);
+    const connector = result.connector || selectedConnectorSummary();
+    appendMessage("assistant", connectorLabel(connector), result.assistant, connectorMeta(connector));
     toolOutput.textContent = JSON.stringify({
+      connector,
       selected_tool: result.selected_tool,
       model: result.model,
       tool_arguments: result.tool_arguments,
@@ -48,7 +50,7 @@ async function submitChat(event) {
     statusEl.textContent = `Called ${result.selected_tool}`;
   } catch (error) {
     appendMessage("assistant", "ChatGPT Sim", `Error: ${error.message}`);
-    statusEl.textContent = "Error";
+    statusEl.textContent = `Error: ${error.message}`;
   }
 }
 
@@ -60,7 +62,7 @@ async function refreshDiscovery() {
     statusEl.textContent = "Ready";
   } catch (error) {
     discoveryOutput.textContent = JSON.stringify({ error: error.message }, null, 2);
-    statusEl.textContent = "Discovery failed";
+    statusEl.textContent = `Discovery failed: ${error.message}`;
   }
 }
 
@@ -158,16 +160,45 @@ function renderConnector(item) {
   `;
 }
 
-function appendMessage(kind, label, text) {
+function appendMessage(kind, label, text, meta) {
   const article = document.createElement("article");
   article.className = `message ${kind}`;
   const strong = document.createElement("strong");
   strong.textContent = label;
+  article.append(strong);
+  if (meta) {
+    const metaEl = document.createElement("span");
+    metaEl.className = "message-meta";
+    metaEl.textContent = meta;
+    article.append(metaEl);
+  }
   const body = document.createElement("div");
   body.textContent = text;
-  article.append(strong, body);
+  article.append(body);
   messages.append(article);
   messages.scrollTop = messages.scrollHeight;
+}
+
+function selectedConnectorSummary() {
+  const option = connectorSelect.selectedOptions && connectorSelect.selectedOptions[0];
+  return {
+    id: connectorSelect.value,
+    name: option ? option.textContent : connectorSelect.value,
+  };
+}
+
+function connectorLabel(connector) {
+  const name = connector && connector.name ? connector.name : "selected MCP";
+  return `ChatGPT Sim via ${name}`;
+}
+
+function connectorMeta(connector) {
+  if (!connector) return "";
+  const parts = [];
+  if (connector.id) parts.push(`id=${connector.id}`);
+  if (connector.auth) parts.push(`auth=${connector.auth}`);
+  if (connector.url) parts.push(connector.url);
+  return parts.join(" | ");
 }
 
 function escapeHTML(value) {

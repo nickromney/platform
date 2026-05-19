@@ -9,7 +9,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,11 +32,29 @@ type toolCallParams struct {
 	Arguments map[string]any `json:"arguments"`
 }
 
+var metrics = newToolMetrics()
+
+type toolMetrics struct {
+	mu           sync.Mutex
+	calls        map[string]int
+	durationSums map[string]float64
+}
+
+func newToolMetrics() *toolMetrics {
+	return &toolMetrics{
+		calls:        map[string]int{},
+		durationSums: map[string]float64{},
+	}
+}
+
 func NewServer(cfg Config) http.Handler {
 	if cfg.LLMBaseURL == "" || cfg.LLMModel == "" || cfg.ServiceName == "" || cfg.ServiceNamespace == "" {
 		defaults := ConfigFromEnv()
 		if cfg.Port == "" {
 			cfg.Port = defaults.Port
+		}
+		if cfg.MetricsPort == "" {
+			cfg.MetricsPort = defaults.MetricsPort
 		}
 		if cfg.PublicBaseURL == "" {
 			cfg.PublicBaseURL = defaults.PublicBaseURL
@@ -69,6 +89,15 @@ func NewServer(cfg Config) http.Handler {
 	mux.HandleFunc("POST /a2a", s.a2a)
 	mux.HandleFunc("POST /mcp", s.mcp)
 	return requestLog(mux)
+}
+
+func NewMetricsHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		_, _ = w.Write([]byte(metrics.render()))
+	})
+	return mux
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -211,25 +240,34 @@ func (s *server) mcp(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(req.Params, &params)
 		switch params.Name {
 		case "model_ping":
+			start := time.Now()
 			result, err := s.modelPing(r, params.Arguments)
 			if err != nil {
+				metrics.observe(params.Name, "error", time.Since(start))
 				writeRPCError(w, req.ID, -32000, err.Error())
 				return
 			}
+			metrics.observe(params.Name, "ok", time.Since(start))
 			writeRPC(w, req.ID, map[string]any{"content": []map[string]string{{"type": "text", "text": result}}})
 		case "d2_validate":
+			start := time.Now()
 			result, err := d2Validate(params.Arguments)
 			if err != nil {
+				metrics.observe(params.Name, "error", time.Since(start))
 				writeRPCError(w, req.ID, -32602, err.Error())
 				return
 			}
+			metrics.observe(params.Name, "ok", time.Since(start))
 			writeRPCTextPayload(w, req.ID, result)
 		case "d2_render":
+			start := time.Now()
 			result, err := d2Render(params.Arguments)
 			if err != nil {
+				metrics.observe(params.Name, "error", time.Since(start))
 				writeRPCError(w, req.ID, -32602, err.Error())
 				return
 			}
+			metrics.observe(params.Name, "ok", time.Since(start))
 			writeRPCTextPayload(w, req.ID, result)
 		default:
 			writeRPCError(w, req.ID, -32602, "unsupported tool")
@@ -403,6 +441,43 @@ func requestLog(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		log.Printf("mcp_request method=%s path=%s duration_ms=%d", r.Method, r.URL.Path, time.Since(start).Milliseconds())
 	})
+}
+
+func (m *toolMetrics) observe(tool string, status string, duration time.Duration) {
+	tool = strings.TrimSpace(tool)
+	status = strings.TrimSpace(status)
+	if tool == "" || status == "" {
+		return
+	}
+	key := tool + "\x00" + status
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls[key]++
+	m.durationSums[key] += duration.Seconds()
+}
+
+func (m *toolMetrics) render() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var keys []string
+	for key := range m.calls {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	b.WriteString("# HELP platform_mcp_tool_calls_total MCP tool calls by tool and status.\n")
+	b.WriteString("# TYPE platform_mcp_tool_calls_total counter\n")
+	for _, key := range keys {
+		tool, status, _ := strings.Cut(key, "\x00")
+		fmt.Fprintf(&b, "platform_mcp_tool_calls_total{tool=%q,status=%q} %d\n", tool, status, m.calls[key])
+	}
+	b.WriteString("# HELP platform_mcp_tool_duration_seconds_sum Total MCP tool call duration in seconds.\n")
+	b.WriteString("# TYPE platform_mcp_tool_duration_seconds_sum counter\n")
+	for _, key := range keys {
+		tool, status, _ := strings.Cut(key, "\x00")
+		fmt.Fprintf(&b, "platform_mcp_tool_duration_seconds_sum{tool=%q,status=%q} %.6f\n", tool, status, m.durationSums[key])
+	}
+	return b.String()
 }
 
 func (s *server) emitLLMSpan(r *http.Request, latency time.Duration, success bool, model string) {

@@ -7,6 +7,8 @@ import (
 
 type Config struct {
 	Port             string
+	MetricsEnabled   bool
+	MetricsPort      string
 	PublicBaseURL    string
 	LLMBaseURL       string
 	LLMModel         string
@@ -19,6 +21,8 @@ func ConfigFromEnv() Config {
 	port := env("PORT", "8080")
 	return Config{
 		Port:             port,
+		MetricsEnabled:   envBool("PLATFORM_MCP_METRICS_ENABLED", true),
+		MetricsPort:      env("PLATFORM_MCP_METRICS_PORT", "9090"),
 		PublicBaseURL:    strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:"+port), "/"),
 		LLMBaseURL:       strings.TrimRight(env("LLM_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"), "/"),
 		LLMModel:         env("LLM_MODEL", ""),
@@ -33,4 +37,16 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }

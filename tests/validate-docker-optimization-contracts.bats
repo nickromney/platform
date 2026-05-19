@@ -263,7 +263,7 @@ locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="u
 for image_name, dockerfile_path in {
     "idp-core": "apps/idp-core/Dockerfile",
     "backstage": "apps/backstage/Dockerfile",
-    "platform-mcp": "apps/platform-mcp/Dockerfile",
+    "platform-mcp": "apps/platform-mcp/app-go/Dockerfile",
 }.items():
     assert f'"id": "{image_name}"' in image_catalog, image_name
     assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
@@ -332,7 +332,7 @@ assert "backstage_image_tag=" in render_script
 assert "write_external_platform_images()" in render_script
 assert "prefer_external_platform_images = true" in render_script
 assert "external_platform_image_refs = {" in render_script
-assert "apps/platform-mcp/platform_mcp" in image_catalog
+assert "apps/platform-mcp/app-go/internal" in image_catalog
 assert "apps/idp-core/app-go/go.mod" in image_catalog
 assert "apps/idp-core/app-go/internal" in image_catalog
 assert "make -C apps/idp-core/app-go build-linux" in image_catalog
@@ -403,10 +403,10 @@ expected = {
         "prebuild": "make -C apps/idp-core/app-go build-linux",
     },
     "platform-mcp": {
-        "context": ".",
-        "dockerfile": "apps/platform-mcp/Dockerfile",
+        "context": "apps/platform-mcp/app-go",
+        "dockerfile": "Dockerfile",
         "tag": "default",
-        "builder": "platform",
+        "prebuild": "make -C apps/platform-mcp/app-go build-linux",
     },
     "backstage": {
         "context": "generated-backstage",
@@ -621,7 +621,7 @@ print(f"validated {validated} image catalog version-check policies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 11 image catalog version-check policies"* ]]
+  [[ "${output}" == *"validated 12 image catalog version-check policies"* ]]
 }
 
 @test "Lima and Slicer external image refs match the image catalog" {
@@ -864,23 +864,21 @@ PY
   [[ "${output}" == *"validated generated Backstage Docker context"* ]]
 }
 
-@test "platform MCP Docker image uses DHI bases and installs gzip for pinned D2 tarball extraction" {
+@test "platform MCP Docker image uses the Go single-binary runtime" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
 
 repo_root = Path(os.environ["REPO_ROOT"])
-dockerfile = (repo_root / "apps/platform-mcp/Dockerfile").read_text(encoding="utf-8")
+dockerfile = (repo_root / "apps/platform-mcp/app-go/Dockerfile").read_text(encoding="utf-8")
+makefile = (repo_root / "apps/platform-mcp/app-go/Makefile").read_text(encoding="utf-8")
 
-assert "FROM dhi.io/python:3.13-debian13-dev AS builder" in dockerfile
-assert "FROM dhi.io/python:3.13-debian13-dev AS d2" in dockerfile
-assert "FROM dhi.io/python:3.13-debian13 AS runtime" in dockerfile
-assert "ARG D2_VERSION=0.7.1" in dockerfile
-assert "sha256sum -c -" in dockerfile
-assert "apt-get install -y --no-install-recommends ca-certificates curl gzip tar" in dockerfile
-assert "mkdir -p /usr/local/bin" in dockerfile
-assert "tar -xzf /tmp/d2.tar.gz" in dockerfile
+assert "FROM dhi.io/static:20260413-alpine3.23" in dockerfile
+assert "COPY .run/platform-mcp /platform-mcp" in dockerfile
 assert "USER 65532:65532" in dockerfile
+assert "ENTRYPOINT [\"/platform-mcp\"]" in dockerfile
+assert "CGO_ENABLED=0 GOOS=linux" in makefile
+assert "go build -trimpath -ldflags=\"-s -w\"" in makefile
 
 print("validated platform MCP Docker image contract")
 PY

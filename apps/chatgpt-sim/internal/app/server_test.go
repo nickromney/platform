@@ -110,6 +110,9 @@ func TestChatUsesConfiguredOpenAICompatibleModelWithMCPContext(t *testing.T) {
 	if model["provider"] != "openai-compatible" || model["route"] != "agentgateway" {
 		t.Fatalf("model metadata=%#v", model)
 	}
+	if model["status"] != "ok" {
+		t.Fatalf("model status=%#v", model)
+	}
 	messages := llmRequest["messages"].([]any)
 	encodedMessages, _ := json.Marshal(messages)
 	if !strings.Contains(string(encodedMessages), "who am I?") || !strings.Contains(string(encodedMessages), "local-chatgpt-go-user") {
@@ -117,6 +120,75 @@ func TestChatUsesConfiguredOpenAICompatibleModelWithMCPContext(t *testing.T) {
 	}
 	if !strings.Contains(string(encodedMessages), "platform shell has already executed") || !strings.Contains(string(encodedMessages), "Observed MCP tool result") {
 		t.Fatalf("LLM request did not clearly ground the completion in an executed MCP call: %s", encodedMessages)
+	}
+}
+
+func TestChatFallsBackToMCPResultWhenAgentgatewayUnavailable(t *testing.T) {
+	mcp := httptest.NewServer(NewServer(Config{Role: "mcp"}, nil))
+	defer mcp.Close()
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+	}))
+	defer llm.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMURL: llm.URL + "/v1/chat/completions", LLMModel: "agentgateway-test-model"}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"who am I?","tool":"auto"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(payload["assistant"].(string), "local-chatgpt-go-user") {
+		t.Fatalf("assistant did not fall back to MCP result: %s", payload["assistant"])
+	}
+	model := payload["model"].(map[string]any)
+	if model["status"] != "unavailable" || !strings.Contains(model["error"].(string), "503") {
+		t.Fatalf("model metadata=%#v", model)
+	}
+}
+
+func TestIdentityQuestionListsToolsWhenMCPDoesNotAdvertiseIdentityTool(t *testing.T) {
+	tools := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"result": map[string]any{"tools": []any{
+			map[string]any{"name": "model_ping"},
+			map[string]any{"name": "d2_validate"},
+		}},
+	}
+
+	toolName, _ := chooseAdvertisedTool(tools, "what is your identity")
+	if toolName != "tools/list" {
+		t.Fatalf("toolName=%q", toolName)
+	}
+}
+
+func TestIntentQuestionListsToolsWhenMCPDoesNotAdvertiseMatchingTool(t *testing.T) {
+	tools := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"result": map[string]any{"tools": []any{
+			map[string]any{"name": "model_ping"},
+			map[string]any{"name": "d2_validate"},
+			map[string]any{"name": "d2_render"},
+		}},
+	}
+
+	for _, message := range []string{
+		"give me route evidence",
+		"tell me the security posture",
+		"is the service healthy",
+	} {
+		toolName, _ := chooseAdvertisedTool(tools, message)
+		if toolName != "tools/list" {
+			t.Fatalf("message %q selected %q", message, toolName)
+		}
 	}
 }
 
@@ -265,6 +337,83 @@ func TestSettingsCanAddMCPConnectorAndUseItForChat(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvSeedsAPIMGatedMCPConnector(t *testing.T) {
+	t.Setenv("MCP_CONNECTORS", `[
+		{"id":"platform-mcp","name":"Platform MCP via APIM","url":"https://mcpserver.dev.127.0.0.1.sslip.io/mcp","internal_url":"http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000/mcp"}
+	]`)
+	shell := NewServer(ConfigFromEnv(), nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/connectors", nil)
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list connectors returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Items []connector `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("seeded connector count=%d body=%s", len(payload.Items), rec.Body.String())
+	}
+	if payload.Items[0].ID != "platform-mcp" ||
+		payload.Items[0].Name != "Platform MCP via APIM" ||
+		payload.Items[0].URL != "https://mcpserver.dev.127.0.0.1.sslip.io/mcp" ||
+		payload.Items[0].InternalURL != "http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000/mcp" {
+		t.Fatalf("connector not seeded from MCP_CONNECTORS: %#v", payload.Items[0])
+	}
+}
+
+func TestConnectorWithoutInternalURLDoesNotUseGlobalMCPInternalURL(t *testing.T) {
+	s := &server{cfg: Config{MCPInternalURL: "http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000/mcp"}}
+	if got := s.resolveMCPURL("http://direct-mcp.dev.svc.cluster.local:8080/mcp", ""); got != "http://direct-mcp.dev.svc.cluster.local:8080/mcp" {
+		t.Fatalf("connector without internal URL used global MCP_INTERNAL_URL: %s", got)
+	}
+
+	var protectedHost string
+	var mcpHost string
+	directMCP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-protected-resource/mcp":
+			protectedHost = r.Host
+			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+		case "/mcp":
+			mcpHost = r.Host
+			NewServer(Config{Role: "mcp"}, nil).ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer directMCP.Close()
+	apim := httptest.NewServer(http.NotFoundHandler())
+	defer apim.Close()
+	shell := NewServer(Config{
+		Role:           "shell",
+		MCPURL:         "https://mcpserver.dev.127.0.0.1.sslip.io/mcp",
+		MCPInternalURL: apim.URL + "/mcp",
+		MCPConnectors: []ConnectorConfig{{
+			ID:   "direct-mcp",
+			Name: "Direct MCP",
+			URL:  directMCP.URL + "/mcp",
+		}},
+	}, directMCP.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"which tools do you have","tool":"auto"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if protectedHost == "" || mcpHost == "" {
+		t.Fatalf("direct MCP did not receive discovery and mcp calls: protected=%q mcp=%q", protectedHost, mcpHost)
+	}
+}
+
 func TestInternalMCPRoutePreservesExternalHostForAPIMRouting(t *testing.T) {
 	var protectedHost string
 	var mcpHost string
@@ -339,6 +488,63 @@ func TestChatForwardsSSOAccessTokenToMCP(t *testing.T) {
 	if gotAuth != "Bearer sso-token-value" {
 		t.Fatalf("Authorization forwarded to MCP=%q", gotAuth)
 	}
+}
+
+func TestSSOBearerConnectorDoesNotFallBackToLocalBearer(t *testing.T) {
+	mcp := httptest.NewServer(NewServer(Config{Role: "mcp"}, nil))
+	defer mcp.Close()
+	shell := NewServer(Config{
+		Role: "shell",
+		MCPConnectors: []ConnectorConfig{{
+			ID:   "platform-mcp",
+			Name: "Platform MCP via APIM",
+			URL:  mcp.URL + "/mcp",
+			Auth: "sso_bearer",
+		}},
+	}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"which tools do you have","tool":"tools/list","connector_id":"platform-mcp"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "requires an SSO bearer token") {
+		t.Fatalf("missing clear SSO token error: %s", rec.Body.String())
+	}
+}
+
+func TestMCPHTTPErrorIncludesResponseDetail(t *testing.T) {
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-protected-resource/mcp":
+			writeJSON(w, http.StatusOK, map[string]any{"resource": mcpResource(r), "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+		case "/mcp":
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"detail": "Invalid or expired access token"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mcp.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp"}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"which tools do you have","tool":"tools/list"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "401 Unauthorized from initialize: Invalid or expired access token") {
+		t.Fatalf("missing response detail in error: %s", rec.Body.String())
+	}
+}
+
+func mcpResource(r *http.Request) string {
+	return "http://" + r.Host + "/mcp"
 }
 
 func TestSettingsNormalizesBareMCPHostForChat(t *testing.T) {
@@ -605,6 +811,91 @@ func TestShellCanDiscussDiscoveredMCPTools(t *testing.T) {
 	}
 }
 
+func TestShellTreatsRouteExamplesAsDiscovery(t *testing.T) {
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			return
+		}
+		var req rpcRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		switch req.Method {
+		case "initialize":
+			writeRPC(w, req.ID, map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}})
+		case "tools/list":
+			writeRPC(w, req.ID, map[string]any{"tools": []map[string]any{{
+				"name":        "model_ping",
+				"description": "Validate model gateway routing.",
+				"inputSchema": map[string]any{"type": "object"},
+			}}})
+		case "tools/call":
+			t.Fatalf("route example discovery should not call a tool")
+		default:
+			writeRPCError(w, req.ID, -32601, "method not found")
+		}
+	}))
+	defer mcp.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp"}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"give me examples of routes you have","tool":"auto"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"selected_tool":"tools/list"`) ||
+		!strings.Contains(rec.Body.String(), "`model_ping`") {
+		t.Fatalf("chat did not answer route examples from discovered tools: %s", rec.Body.String())
+	}
+}
+
+func TestShellDiscoveryQuestionDoesNotRequireLLM(t *testing.T) {
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			return
+		}
+		var req rpcRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		switch req.Method {
+		case "initialize":
+			writeRPC(w, req.ID, map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}})
+		case "tools/list":
+			writeRPC(w, req.ID, map[string]any{"tools": []map[string]any{{
+				"name":        "route_trace",
+				"description": "Show the service route used for a request.",
+			}}})
+		default:
+			writeRPCError(w, req.ID, -32601, "method not found")
+		}
+	}))
+	defer mcp.Close()
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer llm.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMURL: llm.URL + "/v1/chat/completions"}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"which tools do you have","tool":"auto"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"selected_tool":"tools/list"`) ||
+		!strings.Contains(rec.Body.String(), "`route_trace`") {
+		t.Fatalf("chat did not answer discovery question from MCP tools: %s", rec.Body.String())
+	}
+}
+
 func TestAutoToolSelectionUsesAdvertisedMCPTools(t *testing.T) {
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
@@ -630,7 +921,7 @@ func TestAutoToolSelectionUsesAdvertisedMCPTools(t *testing.T) {
 			if params.Name != "model_ping" {
 				t.Fatalf("called unadvertised/fallback tool %q", params.Name)
 			}
-			if params.Arguments["prompt"] != "who am I?" {
+			if params.Arguments["prompt"] != "can the model respond?" {
 				t.Fatalf("prompt argument=%v", params.Arguments["prompt"])
 			}
 			writeRPC(w, req.ID, map[string]any{"content": []map[string]string{{"type": "text", "text": "model_ping ok"}}})
@@ -641,7 +932,7 @@ func TestAutoToolSelectionUsesAdvertisedMCPTools(t *testing.T) {
 	defer mcp.Close()
 	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp"}, mcp.Client())
 
-	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"who am I?","tool":"auto"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"can the model respond?","tool":"auto"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	shell.ServeHTTP(rec, req)
@@ -651,6 +942,43 @@ func TestAutoToolSelectionUsesAdvertisedMCPTools(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"selected_tool":"model_ping"`) {
 		t.Fatalf("chat did not select advertised model_ping tool: %s", rec.Body.String())
+	}
+}
+
+func TestChatReportsMCPJSONRPCErrorMessage(t *testing.T) {
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			return
+		}
+		var req rpcRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		switch req.Method {
+		case "initialize":
+			writeRPC(w, req.ID, map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}})
+		case "tools/list":
+			writeRPC(w, req.ID, map[string]any{"tools": []map[string]any{{"name": "model_ping", "description": "Ping model gateway."}}})
+		case "tools/call":
+			writeRPCError(w, req.ID, -32000, "llm gateway returned 503")
+		default:
+			writeRPCError(w, req.ID, -32601, "method not found")
+		}
+	}))
+	defer mcp.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp"}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"call the model","tool":"model_ping"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "json-rpc error from tools/call: llm gateway returned 503") {
+		t.Fatalf("chat did not report JSON-RPC error detail: %s", rec.Body.String())
 	}
 }
 

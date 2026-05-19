@@ -80,7 +80,7 @@ apim = by_kind_name(load_docs("terraform/kubernetes/apps/apim/all.yaml"), "Confi
 apim_config = json.loads(apim["data"]["config.json"])
 mcp_routes = [route for route in apim_config["routes"] if route["name"] == "platform-mcp"]
 assert len(mcp_routes) == 1
-assert mcp_routes[0]["host_match"] == ["mcp.127.0.0.1.sslip.io"]
+assert mcp_routes[0]["host_match"] == ["mcp.127.0.0.1.sslip.io", "mcpserver.dev.127.0.0.1.sslip.io"]
 assert mcp_routes[0]["path_prefix"] == "/mcp"
 assert mcp_routes[0]["upstream_base_url"] == "http://platform-mcp.mcp.svc.cluster.local:8080"
 assert apim_config["allow_anonymous"] is False
@@ -94,10 +94,13 @@ for relative_path in (
     routes.extend(load_docs(relative_path))
 
 mcp_route = by_kind_name(routes, "HTTPRoute", "mcp")
-assert mcp_route["spec"]["hostnames"] == ["mcp.127.0.0.1.sslip.io"]
-assert mcp_route["spec"]["rules"][0]["matches"][0]["path"]["value"] == "/mcp"
-assert mcp_route["spec"]["rules"][0]["backendRefs"][0]["name"] == "subnetcalc-apim-simulator"
-assert mcp_route["spec"]["rules"][0]["backendRefs"][0]["namespace"] == "apim"
+assert mcp_route["spec"]["hostnames"] == ["mcp.127.0.0.1.sslip.io", "mcpserver.dev.127.0.0.1.sslip.io"]
+route_by_path = {rule["matches"][0]["path"]["value"]: rule for rule in mcp_route["spec"]["rules"]}
+assert set(route_by_path) == {"/.well-known", "/mcp", "/a2a"}
+assert route_by_path["/mcp"]["backendRefs"][0]["name"] == "subnetcalc-apim-simulator"
+assert route_by_path["/mcp"]["backendRefs"][0]["namespace"] == "apim"
+assert route_by_path["/.well-known"]["backendRefs"][0]["name"] == "subnetcalc-apim-simulator"
+assert route_by_path["/a2a"]["backendRefs"][0]["namespace"] == "apim"
 
 console_route = by_kind_name(routes, "HTTPRoute", "mcp-console")
 assert console_route["spec"]["hostnames"] == ["mcp-console.127.0.0.1.sslip.io"]
@@ -254,7 +257,7 @@ assert 'mcp_public_host' in locals_tf
 assert 'mcp_console_public_host' in locals_tf
 assert '"oauth2-proxy-mcp-console"' in locals_tf
 assert '["mcp"]' in locals_tf
-assert '["oauth2-proxy-mcp-console"]' in locals_tf
+assert '"oauth2-proxy-mcp-console"' in locals_tf
 assert '"mcp"] : []' in locals_tf
 
 assert 'resource "kubectl_manifest" "namespace_mcp"' in workload_apps_tf

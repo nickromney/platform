@@ -10,6 +10,18 @@ import (
 
 func main() {
 	cfg := app.ConfigFromEnv()
+	if cfg.MetricsEnabled {
+		metricsAddr := cfg.MetricsPort
+		if !strings.Contains(metricsAddr, ":") {
+			metricsAddr = ":" + metricsAddr
+		}
+		go func() {
+			log.Printf("platform-mcp metrics listening on %s", metricsAddr)
+			if err := http.ListenAndServe(metricsAddr, app.NewMetricsHandler()); err != nil {
+				log.Printf("platform-mcp metrics server stopped: %v", err)
+			}
+		}()
+	}
 	addr := cfg.Port
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
