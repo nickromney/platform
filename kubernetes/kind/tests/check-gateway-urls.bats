@@ -76,6 +76,33 @@ esac
 EOF
   chmod +x "${TEST_BIN}/curl"
 
+  cat >"${TEST_BIN}/openssl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  s_client)
+    printf '%s\n' '-----BEGIN CERTIFICATE-----' 'stub' '-----END CERTIFICATE-----'
+    exit 0
+    ;;
+  x509)
+    if [[ "${*}" == *"-help"* ]]; then
+      printf '%s\n' 'Usage: x509 -checkhost host'
+      exit 0
+    fi
+    if [[ "${*}" == *"-checkhost"* ]]; then
+      printf '%s\n' 'Hostname matches certificate'
+      exit 0
+    fi
+    cat >/dev/null
+    printf '%s\n' '-----BEGIN CERTIFICATE-----' 'stub' '-----END CERTIFICATE-----'
+    exit 0
+    ;;
+esac
+echo "unexpected openssl invocation: $*" >&2
+exit 99
+EOF
+  chmod +x "${TEST_BIN}/openssl"
+
   cat >"${TEST_BIN}/kubectl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

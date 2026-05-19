@@ -34,8 +34,8 @@ enable_apps_dir_mount           = false
 enable_docker_socket_mount      = false
 
 external_platform_image_refs = {
-  backstage   = "host.docker.internal:5002/platform/backstage:1.0.0"
-  "idp-core"   = "host.docker.internal:5002/platform/idp-core:0.1.0"
+  backstage  = "host.docker.internal:5002/platform/backstage:1.0.0"
+  "idp-core" = "host.docker.internal:5002/platform/idp-core:0.1.0"
 }
 
 external_workload_image_refs = {

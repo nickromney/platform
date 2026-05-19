@@ -766,6 +766,67 @@ EOF
   [ ! -e "${kubectl_log}" ]
 }
 
+@test "kind check-version still audits versions when multiple tracked variants are active" {
+  stub_stack="${BATS_TEST_TMPDIR}/stack"
+  stub_scripts="${stub_stack}/scripts"
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  log_file="${BATS_TEST_TMPDIR}/check-version.log"
+  kubectl_log="${BATS_TEST_TMPDIR}/kubectl.log"
+  mkdir -p "${stub_scripts}"
+
+  cat >"${stub_scripts}/check-component-version.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'component audit invoked\n' >>"${log_file}"
+printf 'component audit ok\n'
+EOF
+  chmod +x "${stub_scripts}/check-component-version.sh"
+
+  cat >"${stub_scripts}/check-provider-version.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'provider audit invoked\n' >>"${log_file}"
+printf 'provider audit ok\n'
+EOF
+  chmod +x "${stub_scripts}/check-provider-version.sh"
+
+  cat >"${TEST_BIN}/ensure-kind-kubeconfig.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/ensure-kind-kubeconfig.sh"
+
+  cat >"${status_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"overall_state":"conflict","active_variant_path":null,"variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"running"}}}'
+EOF
+  chmod +x "${status_stub}"
+
+  cat >"${TEST_BIN}/kubectl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'kubectl %s\n' "\$*" >>"${kubectl_log}"
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-version \
+    STACK_DIR="${stub_stack}" \
+    ENSURE_KIND_KUBECONFIG="${TEST_BIN}/ensure-kind-kubeconfig.sh" \
+    PLATFORM_STATUS_SCRIPT="${status_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *$'WARN Multiple tracked platform surfaces are active on this machine; continuing with version audits.\nRunning component and chart version audit...'* ]]
+  [[ "${output}" == *"Running component and chart version audit..."* ]]
+  [[ "${output}" == *"component audit ok"* ]]
+  [[ "${output}" == *"provider audit ok"* ]]
+  run cat "${log_file}"
+  [ "${output}" = $'component audit invoked\nprovider audit invoked' ]
+  [ ! -e "${kubectl_log}" ]
+}
+
 @test "kind check-version positively reports that the expected cluster is active before the audit" {
   stub_stack="${BATS_TEST_TMPDIR}/stack"
   stub_scripts="${stub_stack}/scripts"
@@ -860,6 +921,13 @@ EOF
   [[ "${output}" == *"shellcheck ${REPO_ROOT}/kubernetes/kind/scripts/"* ]]
   [[ "${output}" == *"../../terraform/kubernetes/scripts/check-cluster-health.sh"* ]]
   [[ "${output}" == *"../../terraform/kubernetes/scripts/check-component-version.sh"* ]]
+}
+
+@test "kind test gives the OpenTofu phase enough time for the full module suite" {
+  run make -n -C "${REPO_ROOT}/kubernetes/kind" test
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'run-opentofu-tests.sh" --execute --module-dir "../../terraform/kubernetes" --timeout-seconds "600"'* ]]
 }
 
 @test "kind ensure-kind-running revives a stopped cluster before terraform" {

@@ -29,17 +29,17 @@ enable_gateway_tls              = true
 enable_cert_manager             = true
 enable_sso                      = true
 sso_provider                    = "keycloak"
-enable_argocd_oidc             = true
+enable_argocd_oidc              = true
 enable_app_of_apps              = false
 
-enable_apps_dir_mount      = true
-enable_docker_socket_mount = true
-docker_socket_path         = "/var/run/docker.sock"
-enable_actions_runner      = true
-enable_apim_simulator      = true
+enable_apps_dir_mount          = true
+enable_docker_socket_mount     = true
+docker_socket_path             = "/var/run/docker.sock"
+enable_actions_runner          = true
+enable_apim_simulator          = true
 enable_agentgateway_ai_gateway = true
-enable_app_repo_subnetcalc = true
-enable_app_repo_sentiment  = true
+enable_app_repo_subnetcalc     = true
+enable_app_repo_sentiment      = true
 
 argocd_namespace          = "argocd"
 gitea_admin_username      = "gitea-admin"
