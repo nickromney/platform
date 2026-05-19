@@ -1,0 +1,107 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: agentgateway-ai-gateway-hardened
+spec:
+  description: >-
+    Hardened policy for the agentgateway control plane and generated proxy
+    proxy. The control plane can reach Kubernetes and DNS. The data plane can
+    receive only platform-gateway traffic and can egress only to DNS, the
+    Kubernetes API, and approved OpenAI-compatible LLM endpoints.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": agentgateway-system
+  ingress:
+    # Kubelet health probes and local operator port-forward/debug paths.
+    - fromEntities:
+        - host
+        - remote-node
+    # Platform HTTPS gateway -> generated agentgateway proxy service.
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    # In-cluster AI clients call the OpenAI-compatible endpoint directly.
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": mcp
+            "k8s:app.kubernetes.io/name": platform-mcp
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": chatgpt
+            "k8s:app.kubernetes.io/name": chatgpt-sim
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    # Generated data-plane pods use xDS from the in-namespace agentgateway
+    # control-plane service.
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": agentgateway-system
+      toPorts:
+        - ports:
+            - port: "9978"
+              protocol: TCP
+            - port: "9092"
+              protocol: TCP
+            - port: "9093"
+              protocol: TCP
+    # Optional observability scrapes if the controller/proxy exposes metrics.
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": agentgateway-system
+      toPorts:
+        - ports:
+            - port: "9978"
+              protocol: TCP
+            - port: "9092"
+              protocol: TCP
+            - port: "9093"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: host.docker.internal
+        - matchName: api.openai.com
+        - matchName: api.x.ai
+        - matchName: api.anthropic.com
+        - matchName: generativelanguage.googleapis.com
+        - matchPattern: "*.openai.azure.com"
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP

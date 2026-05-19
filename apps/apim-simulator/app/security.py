@@ -245,7 +245,7 @@ def require_subscription_products(
 def authenticate_request(
     request: Request, config: GatewayConfig, oidc_verifiers: dict[str, OIDCVerifier], route: RouteConfig | None = None
 ) -> AuthContext:
-    if config.allow_anonymous:
+    if config.allow_anonymous or (route is not None and route.allow_anonymous is True):
         subscription = get_subscription_identity_optional(request, config, route)
         products = get_subscription_products_optional(request, config, route)
         issuer, audience = _default_issuer_audience(config)

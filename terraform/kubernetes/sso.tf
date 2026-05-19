@@ -607,24 +607,10 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
-          redirectUris = [
-            "${local.argocd_public_url}/oauth2/callback",
-            "${local.gitea_public_url}/oauth2/callback",
-            "${local.hubble_public_url}/oauth2/callback",
-            "${local.grafana_public_url}/oauth2/callback",
-            "${local.sentiment_dev_public_url}/oauth2/callback",
-            "${local.sentiment_uat_public_url}/oauth2/callback",
-            "${local.subnetcalc_dev_public_url}/oauth2/callback",
-            "${local.subnetcalc_uat_public_url}/oauth2/callback",
-            "${local.hello_platform_dev_public_url}/oauth2/callback",
-            "${local.hello_platform_uat_public_url}/oauth2/callback",
-            "${local.idp_portal_public_url}/oauth2/callback",
-            "${local.idp_api_public_url}/oauth2/callback",
-            "${local.mcp_console_public_url}/oauth2/callback",
-          ]
-          webOrigins           = ["+"]
-          defaultClientScopes  = ["web-origins", "acr", "profile", "basic", "email"]
-          optionalClientScopes = [local.sso_groups_claim]
+          redirectUris              = local.sso_oauth2_proxy_redirect_uris
+          webOrigins                = ["+"]
+          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email"]
+          optionalClientScopes      = [local.sso_groups_claim]
           protocolMappers = [
             {
               name            = "groups"
@@ -1166,19 +1152,7 @@ spec:
               name: "oauth2-proxy"
               secret: ${random_password.dex_oauth2_proxy_client_secret[0].result}
               redirectURIs:
-                - ${local.argocd_public_url}/oauth2/callback
-                - ${local.gitea_public_url}/oauth2/callback
-                - ${local.hubble_public_url}/oauth2/callback
-                - ${local.grafana_public_url}/oauth2/callback
-                - ${local.signoz_public_url}/oauth2/callback
-                - ${local.sentiment_dev_public_url}/oauth2/callback
-                - ${local.sentiment_uat_public_url}/oauth2/callback
-                - ${local.subnetcalc_dev_public_url}/oauth2/callback
-                - ${local.subnetcalc_uat_public_url}/oauth2/callback
-                - ${local.hello_platform_dev_public_url}/oauth2/callback
-                - ${local.hello_platform_uat_public_url}/oauth2/callback
-                - ${local.idp_portal_public_url}/oauth2/callback
-                - ${local.idp_api_public_url}/oauth2/callback
+${indent(16, join("\n", [for uri in local.sso_oauth2_proxy_redirect_uris : "- ${uri}"]))}
             - id: argocd
               name: "argocd"
               secret: ${random_password.dex_argocd_client_secret[0].result}
@@ -1630,6 +1604,7 @@ spec:
           redirect-url: ${local.gitea_public_url}/oauth2/callback
           upstream: http://gitea-http.gitea.svc.cluster.local:3000
           allowed-group: ${local.sso_admin_group}
+          prompt: login
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
@@ -1738,6 +1713,7 @@ spec:
           redirect-url: ${local.hubble_public_url}/oauth2/callback
           upstream: http://hubble-ui.kube-system.svc.cluster.local:80
           allowed-group: ${local.sso_admin_group}
+          prompt: login
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
@@ -1845,6 +1821,7 @@ spec:
           redirect-url: ${local.grafana_public_url}/oauth2/callback
           upstream: http://grafana.observability.svc.cluster.local:3000
           allowed-group: ${local.sso_admin_group}
+          prompt: login
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
@@ -2571,6 +2548,7 @@ resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
   for_each = var.enable_sso && var.enable_argocd ? merge(
     local.sso_idp_proxy_apps,
     local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
+    local.enable_mcp_effective ? local.sso_chatgpt_sim_proxy_apps : {},
   ) : {}
 
   yaml_body = <<__YAML__

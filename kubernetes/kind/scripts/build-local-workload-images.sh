@@ -33,7 +33,8 @@ shell_cli_handle_standard_no_args usage "would build and push local workload ima
 require_local_cache_tools
 assert_local_cache_reachable "${CACHE_PUSH_HOST}"
 
-IMAGE_BUILD_REQUIRE_COMMIT_TAG=1
+export IMAGE_BUILD_REQUIRE_COMMIT_TAG=1
 IMAGE_BUILD_COMMIT_TAG="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"
+export IMAGE_BUILD_COMMIT_TAG
 
 image_build_catalog_build_loop workload workload

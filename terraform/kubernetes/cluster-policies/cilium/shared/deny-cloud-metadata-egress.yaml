@@ -19,6 +19,7 @@ spec:
           - dev
           - uat
           - apim
+          - agentgateway-system
   egressDeny:
     - toCIDRSet:
         - cidr: 169.254.169.254/32

@@ -20,6 +20,7 @@ type Target = {
     | 'subnetcalc-rfc1918-lookup'
     | 'developer-portal'
     | 'developer-portal-api-json'
+    | 'chatgpt-add-mcp-oauth'
     | 'hubble-namespace-argocd'
     | 'mcp-inspector-d2-render-export'
     | 'signoz-logs-and-metrics'
@@ -177,6 +178,13 @@ if (INCLUDE_BACKSTAGE) {
 }
 
 if (INCLUDE_MCP) {
+  TARGETS.push({
+    name: 'chatgpt-sim',
+    url: platformUrl('chatgpt.dev'),
+    segment: 'dev',
+    flow: 'oauth2-proxy',
+    postLogin: 'chatgpt-add-mcp-oauth',
+  })
   TARGETS.push({
     name: 'mcp-console',
     url: platformUrl('mcp-console'),
@@ -975,6 +983,22 @@ async function mcpInspectorD2RenderAndExport(page: Page) {
   expect(download.suggestedFilename()).toBe('platform-mcp-d2-e2e.svg')
 }
 
+async function chatgptAddMcpOauthConnector(page: Page) {
+  await expect(page.locator('body')).toContainText(/ChatGPT Sim/i, { timeout: 120_000 })
+  await expect(page.locator('#mcp-url')).toContainText(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)
+
+  await page.locator('#connector-name').fill('Platform MCP OAuth')
+  await page.locator('#connector-url').fill(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)
+  await page.locator('#connector-auth').selectOption('oauth')
+  await page.locator('#connector-client-id').fill('oauth2-proxy')
+  await page.getByRole('button', { name: /^Add MCP$/ }).click()
+
+  await expect(page.locator('#connector-list')).toContainText(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`, { timeout: 30_000 })
+  await expect(page.locator('#connector-list')).toContainText(/OAuth:/)
+  await expect(page.locator('#discovery-output')).toContainText(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)
+  await expect(page.locator('#discovery-output')).toContainText(/authorization_servers|oauth_authorization_server/)
+}
+
 async function signozLogsExplorerHasContent(page: Page, baseUrl: string) {
   const u = new URL('/logs/logs-explorer', baseUrl)
   await gotoWithGatewayRetry(page, u.toString())
@@ -1216,6 +1240,9 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'developer-portal-api-json') {
           await portalApiJsonWorks(page)
+        }
+        if (t.postLogin === 'chatgpt-add-mcp-oauth') {
+          await chatgptAddMcpOauthConnector(page)
         }
         if (t.postLogin === 'hubble-namespace-argocd') {
           await hubbleChooseNamespaceArgocd(page, t.url)

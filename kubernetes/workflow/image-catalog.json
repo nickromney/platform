@@ -137,18 +137,42 @@
       "image_name": "platform-mcp",
       "default_tag": "0.1.0",
       "build": {
-        "context": ".",
-        "dockerfile": "apps/platform-mcp/Dockerfile",
+        "context": "apps/platform-mcp/app-go",
+        "dockerfile": "Dockerfile",
         "tag": "default",
-        "builder": "platform"
+        "prebuild": "make -C apps/platform-mcp/app-go build-linux"
       },
       "fingerprint_sources": [
-        "apps/platform-mcp/.dockerignore",
-        "apps/platform-mcp/Dockerfile",
-        "apps/platform-mcp/Dockerfile.dockerignore",
-        "apps/platform-mcp/platform_mcp",
-        "apps/platform-mcp/pyproject.toml",
-        "apps/platform-mcp/uv.lock"
+        "apps/platform-mcp/app-go/.dockerignore",
+        "apps/platform-mcp/app-go/Dockerfile",
+        "apps/platform-mcp/app-go/Makefile",
+        "apps/platform-mcp/app-go/go.mod",
+        "apps/platform-mcp/app-go/cmd",
+        "apps/platform-mcp/app-go/internal"
+      ],
+      "version_check": {
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
+      "id": "chatgpt-sim",
+      "hcl_key": "chatgpt-sim",
+      "image_name": "chatgpt-sim",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": "apps/chatgpt-sim",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+        "prebuild": "make -C apps/chatgpt-sim build-linux"
+      },
+      "fingerprint_sources": [
+        "apps/chatgpt-sim/.dockerignore",
+        "apps/chatgpt-sim/Dockerfile",
+        "apps/chatgpt-sim/Makefile",
+        "apps/chatgpt-sim/go.mod",
+        "apps/chatgpt-sim/cmd",
+        "apps/chatgpt-sim/internal"
       ],
       "version_check": {
         "mode": "local",
@@ -241,13 +265,11 @@
         "tag": "default"
       },
       "fingerprint_sources": [
-        "apps/subnetcalc/app-go/Dockerfile",
-        "apps/subnetcalc/app-go/Makefile",
-        "apps/subnetcalc/app-go/go.mod",
-        "apps/subnetcalc/app-go/go.sum",
-        "apps/subnetcalc/app-go/cmd",
-        "apps/subnetcalc/app-go/internal",
-        "apps/subnetcalc/app-go/internal/app/web"
+        "apps/apim-simulator/Dockerfile",
+        "apps/apim-simulator/pyproject.toml",
+        "apps/apim-simulator/uv.lock",
+        "apps/apim-simulator/app",
+        "apps/apim-simulator/examples"
       ],
       "version_check": {
         "mode": "local",

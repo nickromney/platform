@@ -1,5 +1,5 @@
 data "kubectl_file_documents" "gateway_api_crds" {
-  count = var.enable_gateway_tls ? 1 : 0
+  count = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? 1 : 0
 
   content = file("${local.stack_dir}/apps/nginx-gateway-fabric-crds/gateway-api-crds.yaml")
 }
@@ -11,14 +11,14 @@ data "kubectl_file_documents" "nginx_gateway_fabric_crds" {
 }
 
 locals {
-  gateway_bootstrap_crd_manifests = var.enable_gateway_tls ? merge(
+  gateway_bootstrap_crd_manifests = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? merge(
     data.kubectl_file_documents.gateway_api_crds[0].manifests,
-    data.kubectl_file_documents.nginx_gateway_fabric_crds[0].manifests,
+    var.enable_gateway_tls ? data.kubectl_file_documents.nginx_gateway_fabric_crds[0].manifests : {},
   ) : {}
 
-  gateway_bootstrap_crd_names = var.enable_gateway_tls ? sort(distinct(concat(
+  gateway_bootstrap_crd_names = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? sort(distinct(concat(
     [for doc in data.kubectl_file_documents.gateway_api_crds[0].documents : yamldecode(doc).metadata.name],
-    [for doc in data.kubectl_file_documents.nginx_gateway_fabric_crds[0].documents : yamldecode(doc).metadata.name],
+    var.enable_gateway_tls ? [for doc in data.kubectl_file_documents.nginx_gateway_fabric_crds[0].documents : yamldecode(doc).metadata.name] : [],
   ))) : []
 }
 
@@ -39,7 +39,7 @@ resource "kubectl_manifest" "gateway_bootstrap_crds" {
 }
 
 resource "null_resource" "wait_for_gateway_bootstrap_crds" {
-  count = var.enable_gateway_tls ? 1 : 0
+  count = var.enable_gateway_tls || var.enable_agentgateway_ai_gateway ? 1 : 0
 
   triggers = {
     crd_names          = join(",", local.gateway_bootstrap_crd_names)

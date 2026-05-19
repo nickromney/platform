@@ -36,6 +36,8 @@ enable_apps_dir_mount      = true
 enable_docker_socket_mount = true
 docker_socket_path         = "/var/run/docker.sock"
 enable_actions_runner      = true
+enable_apim_simulator      = true
+enable_agentgateway_ai_gateway = true
 enable_app_repo_subnetcalc = true
 enable_app_repo_sentiment  = true
 

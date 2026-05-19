@@ -32,6 +32,7 @@ spec:
                 - mcp
                 - observability
                 - sso
+                - agentgateway-system
                 - headlamp
                 - gitea
                 - gitea-runner
@@ -63,6 +64,7 @@ spec:
                       # --- Registries present in kubernetes/*/preload-images.txt ---
                       - "quay.io/*"
                       - "ghcr.io/*"
+                      - "cr.agentgateway.dev/*"
                       - "dhi.io/*"
                       - "ecr-public.aws.com/*"
                       - "docker.gitea.com/*"

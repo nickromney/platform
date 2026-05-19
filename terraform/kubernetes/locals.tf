@@ -104,6 +104,10 @@ locals {
   mcp_public_url                       = "https://${local.mcp_public_host}${local.gateway_https_host_port_suffix}"
   mcp_console_public_host              = "mcp-console.${local.platform_base_domain_effective}"
   mcp_console_public_url               = "https://${local.mcp_console_public_host}${local.gateway_https_host_port_suffix}"
+  chatgpt_sim_public_host              = "chatgpt.dev.${local.platform_base_domain_effective}"
+  chatgpt_sim_public_url               = "https://${local.chatgpt_sim_public_host}${local.gateway_https_host_port_suffix}"
+  agentgateway_ai_gateway_public_host  = "llm.${local.platform_base_domain_effective}"
+  agentgateway_ai_gateway_public_url   = "https://${local.agentgateway_ai_gateway_public_host}${local.gateway_https_host_port_suffix}"
   hello_platform_dev_public_host       = "hello-platform.dev.${local.platform_base_domain_effective}"
   hello_platform_dev_public_url        = "https://${local.hello_platform_dev_public_host}${local.gateway_https_host_port_suffix}"
   hello_platform_uat_public_host       = "hello-platform.uat.${local.platform_base_domain_effective}"
@@ -167,6 +171,34 @@ locals {
       whitelist_domain = local.portal_whitelist_domains
     }
   }
+  sso_chatgpt_sim_proxy_apps = {
+    chatgpt = {
+      name             = "oauth2-proxy-chatgpt-sim"
+      public_url       = local.chatgpt_sim_public_url
+      upstream         = "http://chatgpt-sim.chatgpt.svc.cluster.local:8080"
+      group            = local.sso_viewer_group
+      cookie_name      = "kind-v2-sso-chatgpt-sim"
+      cookie_domain    = local.dev_cookie_domain
+      whitelist_domain = local.dev_whitelist_domains
+    }
+  }
+  sso_oauth2_proxy_redirect_uris = distinct(concat(
+    [
+      "${local.argocd_public_url}/oauth2/callback",
+      "${local.gitea_public_url}/oauth2/callback",
+      "${local.hubble_public_url}/oauth2/callback",
+      "${local.grafana_public_url}/oauth2/callback",
+      "${local.signoz_public_url}/oauth2/callback",
+      "${local.sentiment_dev_public_url}/oauth2/callback",
+      "${local.sentiment_uat_public_url}/oauth2/callback",
+      "${local.subnetcalc_dev_public_url}/oauth2/callback",
+      "${local.subnetcalc_uat_public_url}/oauth2/callback",
+    ],
+    [for app in values(local.sso_hello_platform_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
+  ))
   admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
   admin_route_allowlist_enabled         = length(local.admin_route_allowlist_cidrs_effective) > 0
   gateway_trusted_proxy_cidrs_effective = [for cidr in var.gateway_trusted_proxy_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
@@ -198,6 +230,7 @@ locals {
   external_platform_idp_core           = trimspace(lookup(var.external_platform_image_refs, "idp-core", ""))
   external_platform_backstage          = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
   external_platform_mcp                = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
+  external_platform_chatgpt_sim        = trimspace(lookup(var.external_platform_image_refs, "chatgpt-sim", ""))
   external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
@@ -377,6 +410,8 @@ locals {
   # source of truth for when these workloads are introduced.
   enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment
   enable_subnetcalc_workloads_effective = var.enable_app_repo_subnetcalc
+  enable_apim_simulator_effective       = var.enable_apim_simulator || local.enable_subnetcalc_workloads_effective
+  enable_mcp_effective                  = var.enable_sso && (local.enable_apim_simulator_effective || var.enable_agentgateway_ai_gateway)
 
   policies_repo_name        = "policies"
   policies_repo_url_cluster = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/${local.gitea_repo_owner}/${local.policies_repo_name}.git"
@@ -406,6 +441,8 @@ locals {
     var.enable_actions_runner ||
     local.enable_sentiment_workloads_effective ||
     local.enable_subnetcalc_workloads_effective ||
+    local.enable_apim_simulator_effective ||
+    var.enable_agentgateway_ai_gateway ||
     local.enable_prometheus_effective ||
     local.enable_grafana_effective ||
     local.enable_loki_effective ||
@@ -430,10 +467,11 @@ locals {
     local.enable_loki_effective && var.enable_argocd && !var.enable_app_of_apps ? ["loki"] : [],
     local.enable_victoria_logs_effective && var.enable_argocd && !var.enable_app_of_apps ? ["victoria-logs"] : [],
     local.enable_otel_gateway_effective && var.enable_argocd && !var.enable_app_of_apps ? ["otel-collector-prometheus"] : [],
-    local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
+    local.enable_apim_simulator_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
+    var.enable_agentgateway_ai_gateway && var.enable_argocd && !var.enable_app_of_apps ? ["agentgateway-ai-gateway"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["idp"] : [],
-    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["mcp"] : [],
+    local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? ["mcp", "chatgpt-sim"] : [],
     var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
     var.enable_sso && var.enable_hubble && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hubble"] : [],
@@ -442,15 +480,16 @@ locals {
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
     var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat"], local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
-    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-mcp-console"] : [],
+    local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(
     var.registry_secret_namespaces,
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["dev"] : [],
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
-    (var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["apim"] : [],
-    (var.enable_sso && var.enable_argocd && local.enable_subnetcalc_workloads_effective) ? ["mcp"] : [],
+    (var.enable_argocd && local.enable_apim_simulator_effective) ? ["apim"] : [],
+    (var.enable_sso && var.enable_argocd && local.enable_mcp_effective) ? ["mcp"] : [],
+    (var.enable_sso && var.enable_argocd && local.enable_mcp_effective) ? ["chatgpt"] : [],
     local.enable_review_environments ? [local.review_environment_contract.namespace] : [],
   )))
 
@@ -490,6 +529,11 @@ locals {
     enable_actions_runner                  = var.enable_actions_runner
     enable_app_repo_sentiment              = var.enable_app_repo_sentiment
     enable_app_repo_subnetcalc             = var.enable_app_repo_subnetcalc
+    enable_apim_simulator                  = local.enable_apim_simulator_effective
+    enable_agentgateway_ai_gateway         = var.enable_agentgateway_ai_gateway
+    agentgateway_chart_version             = var.agentgateway_chart_version
+    agentgateway_namespace                 = var.agentgateway_namespace
+    agentgateway_ai_gateway_model          = var.agentgateway_ai_gateway_model
     enable_prometheus                      = var.enable_prometheus
     enable_grafana                         = var.enable_grafana
     enable_loki                            = var.enable_loki
@@ -506,10 +550,12 @@ locals {
     external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api", "")
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
     external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
+    external_platform_chatgpt_sim          = lookup(var.external_platform_image_refs, "chatgpt-sim", "")
     external_subnetcalc_fe                 = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
     external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host
+    agentgateway_ai_gateway_public_host    = local.agentgateway_ai_gateway_public_host
     prefer_external_platform               = var.prefer_external_platform_images
     host_local_registry_enabled            = local.host_local_registry_enabled
     host_local_registry_host               = local.host_local_registry_host_effective

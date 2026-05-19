@@ -1,11 +1,11 @@
 # Platform MCP
 
-Python MCP server for the platform learning environment.
+Platform MCP server for the platform learning environment.
 
-The runtime intentionally keeps the MCP protocol SDK because Streamable HTTP
-compatibility and Inspector behavior are protocol surface, not app logic. The
-app-owned HTTP client and smoke client use the Python standard library so the
-direct runtime dependency list stays limited to the MCP stack.
+The deployed kind image is built from [`app-go/`](app-go/) using the same
+single-binary, no runtime dependency pattern as the other `app-go` workloads.
+The legacy Python package remains here for local comparison while the
+Kubernetes path uses the Go implementation.
 
 It serves Streamable HTTP on `/mcp` and exposes seven tools:
 
@@ -17,7 +17,19 @@ It serves Streamable HTTP on `/mcp` and exposes seven tools:
 - `d2_format`
 - `d2_render`
 
-Run tests:
+Run deployed app tests:
+
+```bash
+make -C apps/platform-mcp/app-go test
+```
+
+Build the deployed image binary:
+
+```bash
+make -C apps/platform-mcp/app-go build-linux
+```
+
+Run legacy Python tests:
 
 ```bash
 uv run --extra dev pytest

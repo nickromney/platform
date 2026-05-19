@@ -285,6 +285,22 @@ probe_https_url() {
     curl_args=(--resolve "${host}:${HOST_PORT}:127.0.0.1")
   fi
 
+  if [[ "${url}" == https://llm.*"/v1/chat/completions" ]]; then
+    local models_url model_json model_name
+    models_url="${url%/chat/completions}/models"
+    model_json="$(curl -k -sS --max-time 5 "${curl_args[@]}" "${models_url}" 2>/dev/null || true)"
+    model_name="$(printf '%s\n' "${model_json}" | sed -nE 's/.*"id"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n 1)"
+    if [[ -z "${model_name}" ]]; then
+      PROBE_DETAIL="000 (could not discover OpenAI-compatible model from ${models_url})"
+      return 0
+    fi
+    curl_args+=(
+      -X POST
+      -H "Content-Type: application/json"
+      --data "{\"model\":\"${model_name}\",\"messages\":[{\"role\":\"user\",\"content\":\"health\"}],\"max_tokens\":1}"
+    )
+  fi
+
   tmp_err="$(mktemp)"
   set +e
   code="$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 5 "${curl_args[@]}" "${url}" 2>"${tmp_err}")"
@@ -311,6 +327,12 @@ probe_https_url() {
     return 0
   fi
 
+  if [[ "${url}" == https://llm.*"/v1/chat/completions" && ( "${code}" == "401" || "${code}" == "403" || "${code}" == "429" ) ]]; then
+    PROBE_OK=1
+    PROBE_DETAIL="${code} (agentgateway reached OpenAI-compatible backend)"
+    return 0
+  fi
+
   if [[ -n "${code}" && "${code}" != "000" ]]; then
     PROBE_DETAIL="${code}"
     return 0
@@ -334,6 +356,9 @@ probe_route_urls() {
   for entry in "${ROUTE_ENTRIES[@]}"; do
     host="${entry%%|*}"
     path="${entry#*|}"
+    if [[ "${host}" == llm.* && "${path}" == "/v1" ]]; then
+      path="/v1/chat/completions"
+    fi
     url="https://${host}${port_suffix}${path}"
 
     probe_https_url "${host}" "${url}"

@@ -43,6 +43,55 @@ run "sso_enabled_argocd_oidc_disabled" {
 
   assert {
     condition = alltrue([
+      length(setsubtract(
+        toset(concat(
+          [
+            "${local.argocd_public_url}/oauth2/callback",
+            "${local.gitea_public_url}/oauth2/callback",
+            "${local.hubble_public_url}/oauth2/callback",
+            "${local.grafana_public_url}/oauth2/callback",
+            "${local.signoz_public_url}/oauth2/callback",
+            "${local.sentiment_dev_public_url}/oauth2/callback",
+            "${local.sentiment_uat_public_url}/oauth2/callback",
+            "${local.subnetcalc_dev_public_url}/oauth2/callback",
+            "${local.subnetcalc_uat_public_url}/oauth2/callback",
+          ],
+          [for app in values(local.sso_hello_platform_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
+          [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
+        )),
+        toset(local.sso_oauth2_proxy_redirect_uris),
+      )) == 0,
+      contains(local.sso_oauth2_proxy_redirect_uris, "${local.chatgpt_sim_public_url}/oauth2/callback"),
+      contains(local.sso_oauth2_proxy_redirect_uris, "${local.mcp_console_public_url}/oauth2/callback"),
+      strcontains(file("${path.module}/sso.tf"), "redirectUris              = local.sso_oauth2_proxy_redirect_uris"),
+      strcontains(file("${path.module}/sso.tf"), "local.sso_oauth2_proxy_redirect_uris : \"- $${uri}\""),
+    ])
+    error_message = "Expected every oauth2-proxy callback URL, including future map-backed endpoints, to be present in the Keycloak oauth2-proxy client redirectUris"
+  }
+
+  assert {
+    condition = length(setsubtract(
+      toset(distinct([
+        for app in concat(
+          values(local.sso_hello_platform_proxy_apps),
+          values(local.sso_idp_proxy_apps),
+          values(local.sso_mcp_console_proxy_apps),
+          values(local.sso_chatgpt_sim_proxy_apps),
+        ) : split(".", split("://", app.upstream)[1])[1]
+      ])),
+      toset(compact(flatten([
+        for rule in yamldecode(file("${path.module}/cluster-policies/cilium/shared/sso-hardened.yaml")).spec.egress : [
+          for target in try(rule.toEndpoints, []) : try(target.matchLabels["k8s:io.kubernetes.pod.namespace"], "")
+        ]
+      ]))),
+    )) == 0
+    error_message = "Expected sso-hardened egress to allow every map-backed oauth2-proxy upstream namespace so authenticated apps do not fail with 502s"
+  }
+
+  assert {
+    condition = alltrue([
       length(kubernetes_secret_v1.keycloak_bootstrap_admin) == 1,
       length(kubernetes_secret_v1.keycloak_admin) == 1,
       kubernetes_secret_v1.keycloak_bootstrap_admin[0].data.username == "keycloak-bootstrap-admin",
@@ -111,6 +160,13 @@ run "sso_enabled_argocd_oidc_disabled" {
       !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "email-domain: \"admin.test\""),
     ])
     error_message = "Expected admin SSO proxies to use Keycloak org groups rather than admin email-domain shortcuts"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "prompt: login"),
+    ])
+    error_message = "Expected always-on admin-only oauth2-proxy apps to force an OIDC login prompt so a stale dev Keycloak session cannot silently produce an admin-site 403"
   }
 
   assert {

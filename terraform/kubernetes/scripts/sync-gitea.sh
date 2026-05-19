@@ -395,12 +395,14 @@ main() {
   export_resolved_bool ENABLE_OTEL_GATEWAY enable_otel_gateway false
   export_resolved_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
   export_resolved_bool ENABLE_HEADLAMP enable_headlamp true
+  export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_GRAFANA grafana
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_IDP_CORE idp-core
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_BACKSTAGE backstage
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP platform-mcp
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM chatgpt-sim
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_API sentiment-api
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
@@ -423,6 +425,9 @@ main() {
   export_resolved_string SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
   export_resolved_string TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
   export_resolved_string VICTORIA_LOGS_CHART_VERSION victoria_logs_chart_version "$(tf_default_from_variables victoria_logs_chart_version)"
+  export_resolved_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version "$(tf_default_from_variables agentgateway_chart_version)"
+  export_resolved_string AGENTGATEWAY_AI_GATEWAY_MODEL agentgateway_ai_gateway_model ""
+  export_resolved_string AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST agentgateway_ai_gateway_public_host ""
 
   exec "${delegate}" --execute
 }

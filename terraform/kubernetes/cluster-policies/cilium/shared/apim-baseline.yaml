@@ -47,6 +47,14 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": chatgpt
+            "k8s:app.kubernetes.io/name": chatgpt-sim
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
   egress:
     # DNS
     - toEndpoints:
