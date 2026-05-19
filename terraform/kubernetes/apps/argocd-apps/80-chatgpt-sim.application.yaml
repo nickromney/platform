@@ -13,7 +13,7 @@ spec:
     namespace: dev
     server: https://kubernetes.default.svc
   source:
-    repoURL: http://gitea-http.gitea.svc.cluster.local:3000/platform/platform-policies.git
+    repoURL: ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git
     targetRevision: main
     path: apps/chatgpt-sim
   syncPolicy:

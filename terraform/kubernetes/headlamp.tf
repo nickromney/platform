@@ -1,5 +1,5 @@
 resource "kubectl_manifest" "argocd_app_headlamp" {
-  count = var.enable_headlamp && var.enable_argocd ? 1 : 0
+  count = var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1

@@ -30,7 +30,7 @@ enable_cert_manager             = true
 enable_sso                      = true
 sso_provider                    = "keycloak"
 enable_argocd_oidc              = true
-enable_app_of_apps              = false
+enable_app_of_apps              = true
 
 enable_apps_dir_mount          = true
 enable_docker_socket_mount     = true

@@ -43,6 +43,14 @@ if [[ "${PLATFORM_DEVCONTAINER:-0}" == "1" ]]; then
 fi
 url="${*: -1}"
 case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
+  0:https://llm.127.0.0.1.sslip.io/v1/models)
+    if [[ "${MOCK_LLM_BACKEND_UNAVAILABLE:-0}" == "1" ]]; then
+      printf 'upstream call failed: Connect: Connection refused (os error 111)'
+      exit 0
+    fi
+    echo "unexpected llm model discovery without MOCK_LLM_BACKEND_UNAVAILABLE=1" >&2
+    exit 99
+    ;;
   0:https://headlamp.admin.127.0.0.1.sslip.io/)
     printf '302'
     exit 0
@@ -176,6 +184,10 @@ if [[ "${args}" == *"-n gateway-routes get httproute -o jsonpath="* ]] && printf
   if [[ "${MOCK_NO_ROUTES:-0}" == "1" ]]; then
     exit 0
   fi
+  if [[ "${MOCK_LLM_BACKEND_UNAVAILABLE:-0}" == "1" ]]; then
+    printf 'headlamp\nsubnetcalc-uat\nkeycloak\nagentgateway-ai-gateway\n'
+    exit 0
+  fi
   printf 'headlamp\nsubnetcalc-uat\nkeycloak\n'
   exit 0
 fi
@@ -231,6 +243,23 @@ if [[ "${args}" == *"-n gateway-routes get httproute keycloak -o jsonpath="* ]] 
   exit 0
 fi
 
+if [[ "${args}" == *"-n gateway-routes get httproute agentgateway-ai-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.spec.hostnames[*]'; then
+  printf 'llm.127.0.0.1.sslip.io'
+  exit 0
+fi
+if [[ "${args}" == *"-n gateway-routes get httproute agentgateway-ai-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="Accepted"'; then
+  printf 'True'
+  exit 0
+fi
+if [[ "${args}" == *"-n gateway-routes get httproute agentgateway-ai-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq 'type=="ResolvedRefs"'; then
+  printf 'True'
+  exit 0
+fi
+if [[ "${args}" == *"-n gateway-routes get httproute agentgateway-ai-gateway -o jsonpath="* ]] && printf '%s' "${args}" | grep -Fq '.path.value'; then
+  printf '/v1\n'
+  exit 0
+fi
+
 echo "unexpected kubectl invocation: $*" >&2
 exit 99
 EOF
@@ -269,4 +298,11 @@ EOF
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"No gateway route hostnames available to probe"* ]]
   [[ "${output}" != *"unbound variable"* ]]
+}
+
+@test "check-gateway-urls accepts agentgateway route when optional local LLM backend is absent" {
+  run env MOCK_LLM_BACKEND_UNAVAILABLE=1 "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"HTTPS https://llm.127.0.0.1.sslip.io/v1/chat/completions -> 503 (agentgateway reached; OpenAI-compatible backend unavailable)"* ]]
 }

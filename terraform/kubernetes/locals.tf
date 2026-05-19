@@ -431,31 +431,31 @@ locals {
   enable_gitops_repo = var.enable_gitea && var.enable_argocd && local.enable_gitops_repo_requested
   argocd_gitops_repo_app_names = compact(concat(
     var.enable_app_of_apps && local.enable_gitops_repo ? ["app-of-apps"] : [],
-    var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["kyverno", "kyverno-policies"] : [],
-    var.enable_policies && var.enable_cilium_policies && var.enable_argocd && !var.enable_app_of_apps ? ["cilium-policies"] : [],
-    var.enable_policies && var.enable_argocd && !var.enable_app_of_apps ? ["policy-reporter"] : [],
-    var.enable_cert_manager && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager"] : [],
-    var.enable_gateway_tls && var.enable_argocd && !var.enable_app_of_apps ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
-    var.enable_actions_runner && var.enable_gitea && var.enable_argocd && !var.enable_app_of_apps ? ["gitea-actions-runner"] : [],
-    local.enable_prometheus_effective && var.enable_argocd && !var.enable_app_of_apps ? ["prometheus"] : [],
-    local.enable_grafana_effective && var.enable_argocd && !var.enable_app_of_apps ? ["grafana"] : [],
-    local.enable_loki_effective && var.enable_argocd && !var.enable_app_of_apps ? ["loki"] : [],
-    local.enable_victoria_logs_effective && var.enable_argocd && !var.enable_app_of_apps ? ["victoria-logs"] : [],
-    local.enable_otel_gateway_effective && var.enable_argocd && !var.enable_app_of_apps ? ["otel-collector-prometheus"] : [],
-    local.enable_apim_simulator_effective && var.enable_argocd && !var.enable_app_of_apps ? ["apim"] : [],
-    var.enable_agentgateway_ai_gateway && var.enable_argocd && !var.enable_app_of_apps ? ["agentgateway-ai-gateway"] : [],
-    (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd && !var.enable_app_of_apps ? ["dev", "uat"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? ["idp"] : [],
-    local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? ["mcp", "chatgpt-sim"] : [],
-    var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? ["headlamp"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
-    var.enable_sso && var.enable_hubble && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-hubble"] : [],
-    var.enable_sso && var.enable_argocd && var.enable_grafana && !var.enable_app_of_apps ? ["oauth2-proxy-grafana"] : [],
-    var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
-    var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
-    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
-    local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
+    var.enable_policies && var.enable_argocd ? ["kyverno", "kyverno-policies"] : [],
+    var.enable_policies && var.enable_cilium_policies && var.enable_argocd ? ["cilium-policies"] : [],
+    var.enable_policies && var.enable_argocd ? ["policy-reporter"] : [],
+    var.enable_cert_manager && var.enable_argocd ? ["cert-manager"] : [],
+    var.enable_gateway_tls && var.enable_argocd ? ["cert-manager-config", "nginx-gateway-fabric", "platform-gateway", "platform-gateway-routes"] : [],
+    var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? ["gitea-actions-runner"] : [],
+    local.enable_prometheus_effective && var.enable_argocd ? ["prometheus"] : [],
+    local.enable_grafana_effective && var.enable_argocd ? ["grafana"] : [],
+    local.enable_loki_effective && var.enable_argocd ? ["loki"] : [],
+    local.enable_victoria_logs_effective && var.enable_argocd ? ["victoria-logs"] : [],
+    local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
+    local.enable_apim_simulator_effective && var.enable_argocd ? ["apim"] : [],
+    var.enable_agentgateway_ai_gateway && var.enable_argocd ? ["agentgateway-ai-gateway"] : [],
+    (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd ? ["dev", "uat"] : [],
+    var.enable_sso && var.enable_argocd ? ["idp"] : [],
+    local.enable_mcp_effective && var.enable_argocd ? ["mcp", "chatgpt-sim"] : [],
+    var.enable_headlamp && var.enable_argocd ? ["headlamp"] : [],
+    var.enable_sso && var.enable_argocd ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
+    var.enable_sso && var.enable_hubble && var.enable_argocd ? ["oauth2-proxy-hubble"] : [],
+    var.enable_sso && var.enable_argocd && var.enable_grafana ? ["oauth2-proxy-grafana"] : [],
+    var.enable_sso && var.enable_argocd && var.enable_signoz ? ["oauth2-proxy-signoz"] : [],
+    var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
+    var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
+    var.enable_sso && var.enable_argocd ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
+    local.enable_mcp_effective && var.enable_argocd ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(
@@ -481,6 +481,7 @@ locals {
     platform_admin_base_domain             = local.platform_admin_base_domain_effective
     argocd_public_host                     = local.argocd_public_host
     dex_public_host                        = local.dex_public_host
+    sso_public_url                         = local.sso_public_url
     gitea_public_host                      = local.gitea_public_host
     grafana_public_host                    = local.grafana_public_host
     headlamp_public_host                   = local.headlamp_public_host
@@ -516,7 +517,11 @@ locals {
     enable_signoz                          = var.enable_signoz
     enable_otel_gateway                    = var.enable_otel_gateway
     enable_headlamp                        = var.enable_headlamp
+    enable_sso                             = var.enable_sso
     enable_backstage                       = var.enable_backstage
+    headlamp_cluster_role_binding_create   = var.headlamp_cluster_role_binding_create
+    headlamp_oidc_skip_tls_verify          = var.headlamp_oidc_skip_tls_verify
+    headlamp_oidc_client_secret            = var.enable_sso && var.enable_headlamp ? random_password.dex_headlamp_client_secret[0].result : ""
     enable_observability_agent             = var.enable_observability_agent
     prefer_external_images                 = var.prefer_external_workload_images
     external_sentiment_api                 = lookup(var.external_workload_image_refs, "sentiment-api", "")

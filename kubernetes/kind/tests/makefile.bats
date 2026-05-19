@@ -1290,6 +1290,39 @@ EOF
   [[ "${output}" == *"OK   stage monotonicity"* ]]
 }
 
+@test "kind stages 500 and later default to app-of-apps control" {
+  run grep -Eq '^enable_app_of_apps[[:space:]]*=' "${REPO_ROOT}/kubernetes/kind/stages/400-argocd.tfvars"
+  [ "${status}" -ne 0 ]
+
+  for stage_file in \
+    500-gitea.tfvars \
+    600-policies.tfvars \
+    700-app-repos.tfvars \
+    800-gateway-tls.tfvars \
+    900-sso.tfvars
+  do
+    run grep -Eq '^enable_app_of_apps[[:space:]]*=[[:space:]]*true$' \
+      "${REPO_ROOT}/kubernetes/kind/stages/${stage_file}"
+    [ "${status}" -eq 0 ]
+  done
+}
+
+@test "Headlamp direct Application is disabled in app-of-apps mode" {
+  headlamp_tf="${REPO_ROOT}/terraform/kubernetes/headlamp.tf"
+
+  run bash -lc "grep -F 'count = var.enable_headlamp && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0' '${headlamp_tf}'"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind apply treats Backstage as disabled when SSO is disabled" {
+  makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  run grep -F 'enable_backstage=false' "${makefile}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind host port preflight passes when no listeners are present" {
   cat >"${TEST_BIN}/lsof" <<'EOF'
 #!/usr/bin/env bash

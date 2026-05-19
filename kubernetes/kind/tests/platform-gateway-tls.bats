@@ -175,6 +175,21 @@ PY
   grep -Fq "Kyverno admin gateway URL" "${script}"
 }
 
+@test "cluster health expected inventory includes app-of-apps managed policy apps" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'EXPECT_APP_OF_APPS=$(expected_from_tfvars enable_app_of_apps)' "${script}"
+  grep -Fq 'apps+=(app-of-apps)' "${script}"
+  grep -Fq 'EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"' "${script}"
+}
+
+@test "platform gateway policy allows direct Hubble UI route backend" {
+  policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml"
+
+  grep -Fq '"k8s:k8s-app": hubble-ui' "${policy}"
+  grep -Fq 'port: "8081"' "${policy}"
+}
+
 @test "gateway URL check verifies SNI certificate hostname coverage" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-gateway-urls.sh"
 

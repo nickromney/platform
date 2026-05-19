@@ -37,6 +37,10 @@ ok() { echo "${GREEN}✔${NC} $*"; }
 expected_argocd_apps() {
   local apps=()
 
+  if [[ "${EXPECT_APP_OF_APPS}" == "true" ]]; then
+    apps+=(app-of-apps)
+  fi
+
   if [[ "${EXPECT_GITEA}" == "true" ]]; then
     apps+=(gitea)
   fi
@@ -851,6 +855,7 @@ EXPECT_ARGOCD=$(expected_from_tfvars enable_argocd)
 EXPECT_GITEA=$(expected_from_tfvars enable_gitea)
 EXPECT_POLICIES=$(expected_from_tfvars enable_policies)
 EXPECT_CILIUM_POLICIES=$(expected_from_tfvars enable_cilium_policies)
+EXPECT_APP_OF_APPS=$(expected_from_tfvars enable_app_of_apps)
 EXPECT_CILIUM_POLICY_AUDIT_MODE=$(expected_from_tfvars enable_cilium_policy_audit_mode)
 EXPECT_SIGNOZ=$(expected_from_tfvars enable_signoz)
 EXPECT_LOKI=$(expected_from_tfvars enable_loki)
@@ -870,7 +875,9 @@ EXPECT_BACKSTAGE=$(expected_from_tfvars enable_backstage)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
-[[ -n "${EXPECT_CILIUM_POLICIES}" ]] || EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
+if [[ -z "${EXPECT_CILIUM_POLICIES}" || "${EXPECT_CILIUM_POLICIES}" == "unknown" ]]; then
+  EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
+fi
 [[ -n "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" ]] || EXPECT_CILIUM_POLICY_AUDIT_MODE="false"
 EXPECT_APIM_EFFECTIVE="${EXPECT_APIM_SIMULATOR}"
 if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
