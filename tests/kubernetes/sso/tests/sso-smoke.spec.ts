@@ -82,21 +82,14 @@ const GRAFANA_LAUNCHPAD_APPS = [
   { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
   { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
   { name: 'Kyverno Policy UI', url: platformUrl('kyverno.admin'), flow: 'none', segment: 'admin' },
-  { name: 'Hello Platform DEV', url: platformUrl('hello-platform.dev'), flow: 'oauth2-proxy', segment: 'dev' },
+  { name: 'ChatGPT Sim DEV', url: platformUrl('chatgpt.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'Sentiment DEV', url: platformUrl('sentiment.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'SubnetCalc DEV', url: platformUrl('subnetcalc.dev'), flow: 'oauth2-proxy', segment: 'dev' },
-  { name: 'Hello Platform UAT', url: platformUrl('hello-platform.uat'), flow: 'oauth2-proxy', segment: 'uat' },
   { name: 'Sentiment UAT', url: platformUrl('sentiment.uat'), flow: 'oauth2-proxy', segment: 'uat' },
   { name: 'SubnetCalc UAT', url: platformUrl('subnetcalc.uat'), flow: 'oauth2-proxy', segment: 'uat' },
 ] as const
 
 const BASE_TARGETS: Target[] = [
-  {
-    name: 'hello-platform-uat',
-    url: platformUrl('hello-platform.uat'),
-    segment: 'uat',
-    flow: 'oauth2-proxy',
-  },
   {
     name: 'subnetcalc-uat',
     url: platformUrl('subnetcalc.uat'),
@@ -117,12 +110,6 @@ const BASE_TARGETS: Target[] = [
     segment: 'dev',
     flow: 'oauth2-proxy',
     postLogin: 'sentiment-sample-positive',
-  },
-  {
-    name: 'hello-platform-dev',
-    url: platformUrl('hello-platform.dev'),
-    segment: 'dev',
-    flow: 'oauth2-proxy',
   },
   {
     name: 'subnetcalc-dev',
@@ -1194,7 +1181,7 @@ async function portalApiJsonWorks(page: Page) {
   expect(Array.isArray(catalog?.applications)).toBe(true)
   expect(catalog.applications.some((app: any) => app?.name === 'backstage')).toBe(true)
   expect(catalog.applications.some((app: any) => app?.name === 'idp-core')).toBe(true)
-  expect(catalog.applications.some((app: any) => app?.name === 'hello-platform')).toBe(true)
+  expect(catalog.applications.some((app: any) => app?.name === 'chatgpt-sim')).toBe(true)
 }
 
 async function attachLoggedInScreenshotIfEnabled(page: Page, testInfo: TestInfo, name: string) {

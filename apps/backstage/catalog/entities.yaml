@@ -90,21 +90,18 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: hello-platform
-  title: Hello Platform
-  description: Minimal workload proving the platform golden path across dev and UAT.
+  name: chatgpt-sim
+  title: ChatGPT Sim
+  description: SSO-protected ChatGPT-style demo for exercising local MCP and gateway flows.
   annotations:
-    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/hello-platform/
-    backstage.io/kubernetes-label-selector: app=hello-platform
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/chatgpt-sim/
+    backstage.io/kubernetes-label-selector: app=chatgpt-sim
   links:
-    - url: https://hello-platform.dev.127.0.0.1.sslip.io
+    - url: https://chatgpt.dev.127.0.0.1.sslip.io
       title: Dev
       icon: dashboard
-    - url: https://hello-platform.uat.127.0.0.1.sslip.io
-      title: UAT
-      icon: dashboard
 spec:
-  type: service
-  lifecycle: example
-  owner: group:default/team-dolphin
+  type: website
+  lifecycle: demo
+  owner: group:default/platform
   system: local-idp

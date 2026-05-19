@@ -59,10 +59,10 @@ manifests = {
             "mounts": {"/config/config.json": "configMap", "/tmp": "emptyDir"},
         },
     },
-    "terraform/kubernetes/apps/workloads/hello-platform/all.yaml": {
-        "hello-platform": {
-            "container": "app",
-            "mounts": {"/etc/hello-platform": "secret", "/tmp": "emptyDir"},
+    "terraform/kubernetes/apps/chatgpt-sim/all.yaml": {
+        "chatgpt-sim": {
+            "container": "server",
+            "mounts": {"/tmp": "emptyDir"},
         },
     },
     "terraform/kubernetes/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml": {

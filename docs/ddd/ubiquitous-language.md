@@ -119,7 +119,7 @@ domain language.
 | resource audience | token audience for an API or mediation layer that consumes bearer tokens | Stage `900` uses `apim-simulator` so APIM validates API tokens separately from the `oauth2-proxy` browser client. |
 | group claim | token/userinfo field carrying user groups | Current claim name is `groups`. |
 | platform role group | identity group mapped to platform tool authorization | Current groups are `platform-admins` and `platform-viewers`. |
-| application access group | identity group scoped to an app/environment pair | Current examples: `app-subnetcalc-dev`, `app-subnetcalc-uat`, `app-sentiment-dev`, `app-sentiment-uat`, `app-hello-platform-dev`, `app-hello-platform-uat`. |
+| application access group | identity group scoped to an app/environment pair | Current examples: `app-subnetcalc-dev`, `app-subnetcalc-uat`, `app-sentiment-dev`, `app-sentiment-uat`. |
 | RBAC mapping | translation from identity groups into product permissions | Argo CD maps platform groups to admin/read-only roles; Kubernetes RBAC checks use the OIDC group claim. |
 | auth method | the backend auth strategy | `none, api_key, jwt, azure_swa, apim, azure_ad`. |
 | session | authenticated browser state | Managed by secure browser cookies plus the SSO session store for Keycloak-backed Kubernetes paths. |
@@ -138,7 +138,7 @@ The platform now has a first-class service catalog at
 `catalog/platform-apps.json`. Treat that file as the source of intent for
 application ownership, environments, app/environment RBAC, secret bindings,
 deployment evidence, and scorecards. Current app/environment surfaces include
-`hello-platform-dev`, `hello-platform-uat`, `sentiment-dev`, `sentiment-uat`,
+`chatgpt-sim-dev`, `sentiment-dev`, `sentiment-uat`,
 `subnetcalc-dev`, and `subnetcalc-uat`.
 
 | Term | Meaning in the solution | Aliases or ambiguity |
@@ -149,7 +149,7 @@ deployment evidence, and scorecards. Current app/environment surfaces include
 | deployment record | read-side evidence of what is deployed where | Includes Argo CD app names, GitOps paths, image tags, and public URLs. |
 | secret binding | declared relationship between a workload and secret material it needs | Documents generated or imported secrets without publishing values. |
 | scorecard | lightweight readiness/security evidence attached to a catalog app | Current scorecards are source-controlled metadata, not a separate scoring service. |
-| app/environment RBAC | group-scoped authorization for a specific app in a specific environment | Implemented with groups such as `app-hello-platform-dev`; distinct from org-level platform roles. |
+| app/environment RBAC | group-scoped authorization for a specific app in a specific environment | Implemented with groups such as `app-subnetcalc-dev`; distinct from org-level platform roles. |
 | portable auth mode | app-level authentication mode that does not require the local Keycloak realm | `subnetcalc` retains `none`, `jwt`, `azure_swa`, `apim`, and OIDC configuration knobs for non-kind platforms. |
 
 ## Subnet Analysis Language

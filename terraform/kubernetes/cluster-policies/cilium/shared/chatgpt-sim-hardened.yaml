@@ -8,7 +8,7 @@ spec:
     permitted ingress source, and MCP discovery/tool calls must go via APIM.
   endpointSelector:
     matchLabels:
-      "k8s:io.kubernetes.pod.namespace": chatgpt
+      "k8s:io.kubernetes.pod.namespace": dev
       "k8s:app.kubernetes.io/name": chatgpt-sim
   ingress:
     - fromEndpoints:

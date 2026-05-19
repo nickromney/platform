@@ -222,7 +222,7 @@ metadata:
 spec:
   project: default
   destination:
-    namespace: chatgpt
+    namespace: dev
     server: https://kubernetes.default.svc
   source:
     repoURL: ${local.policies_repo_url_cluster}

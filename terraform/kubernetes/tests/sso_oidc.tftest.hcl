@@ -56,7 +56,6 @@ run "sso_enabled_argocd_oidc_disabled" {
             "${local.subnetcalc_dev_public_url}/oauth2/callback",
             "${local.subnetcalc_uat_public_url}/oauth2/callback",
           ],
-          [for app in values(local.sso_hello_platform_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
           [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
@@ -75,7 +74,6 @@ run "sso_enabled_argocd_oidc_disabled" {
     condition = length(setsubtract(
       toset(distinct([
         for app in concat(
-          values(local.sso_hello_platform_proxy_apps),
           values(local.sso_idp_proxy_apps),
           values(local.sso_mcp_console_proxy_apps),
           values(local.sso_chatgpt_sim_proxy_apps),
@@ -291,20 +289,5 @@ run "sso_with_subnetcalc_apps" {
       length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body)) == 0,
     ])
     error_message = "Expected subnetcalc oauth2-proxy to enforce app/environment groups plus platform-admins break-glass access instead of dev/uat email domains"
-  }
-
-  assert {
-    condition     = length(kubectl_manifest.argocd_app_oauth2_proxy_hello_platform) == 2
-    error_message = "Expected hello-platform dev and UAT oauth2-proxy Argo CD applications to exist"
-  }
-
-  assert {
-    condition = alltrue([
-      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("--allowed-group=app-hello-platform-dev", app.yaml_body)) > 0]) == 1,
-      length([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : app if length(regexall("--allowed-group=app-hello-platform-uat", app.yaml_body)) > 0]) == 1,
-      alltrue([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : length(regexall("--allowed-group=platform-admins", app.yaml_body)) > 0]),
-      alltrue([for app in kubectl_manifest.argocd_app_oauth2_proxy_hello_platform : length(regexall("email-domain: \\\"(dev|uat)\\.test\\\"", app.yaml_body)) == 0]),
-    ])
-    error_message = "Expected hello-platform oauth2-proxy apps to enforce app/environment groups plus platform-admins break-glass access instead of dev/uat email domains"
   }
 }
