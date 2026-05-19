@@ -109,6 +109,14 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": chatgpt
+            "k8s:app.kubernetes.io/name": chatgpt-sim
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
           matchExpressions:
             - key: "k8s:tier"

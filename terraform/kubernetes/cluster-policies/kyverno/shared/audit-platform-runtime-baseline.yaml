@@ -27,6 +27,7 @@ spec:
                 - apim
                 - dev
                 - idp
+                - agentgateway-system
                 - mcp
                 - sit
                 - uat
@@ -56,6 +57,7 @@ spec:
                 - apim
                 - dev
                 - idp
+                - agentgateway-system
                 - mcp
                 - sit
                 - uat
@@ -81,6 +83,7 @@ spec:
                 - apim
                 - dev
                 - idp
+                - agentgateway-system
                 - mcp
                 - sit
                 - uat
@@ -106,6 +109,7 @@ spec:
                 - apim
                 - dev
                 - idp
+                - agentgateway-system
                 - mcp
                 - sit
                 - uat
@@ -131,6 +135,7 @@ spec:
                 - apim
                 - dev
                 - idp
+                - agentgateway-system
                 - mcp
                 - sit
                 - uat

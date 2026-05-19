@@ -2385,7 +2385,7 @@ def create_app(*, config: GatewayConfig | None = None, http_client: httpx.AsyncC
                     request.state.apim_result_reason = "subscription_not_authorized"
                     raise HTTPException(status_code=403, detail="Subscription not authorized for product")
 
-        consumer = _consumer_context(auth, allow_anonymous=cfg.allow_anonymous)
+        consumer = _consumer_context(auth, allow_anonymous=cfg.allow_anonymous or route.allow_anonymous is True)
 
         set_current_span_attributes(
             **{

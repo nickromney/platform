@@ -1,5 +1,5 @@
 resource "kubectl_manifest" "argocd_app_apim" {
-  count = local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+  count = local.enable_apim_simulator_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1
@@ -76,7 +76,7 @@ __YAML__
 }
 
 resource "kubectl_manifest" "namespace_mcp" {
-  count = var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? 1 : 0
+  count = local.enable_mcp_effective && var.enable_argocd ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: v1
@@ -154,7 +154,7 @@ __YAML__
 }
 
 resource "kubectl_manifest" "argocd_app_mcp" {
-  count = var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+  count = local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 
   yaml_body = <<__YAML__
 apiVersion: argoproj.io/v1alpha1
@@ -203,6 +203,58 @@ __YAML__
     null_resource.argocd_repo_server_restart,
     kubectl_manifest.argocd_app_cilium_policies,
     kubectl_manifest.argocd_app_apim,
+  ]
+}
+
+resource "kubectl_manifest" "argocd_app_chatgpt_sim" {
+  count = local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chatgpt-sim
+  namespace: ${var.argocd_namespace}
+  annotations:
+    argocd.argoproj.io/sync-wave: "80"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: chatgpt
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: apps/chatgpt-sim
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = false
+
+  depends_on = [
+    kubectl_manifest.argocd_app_mcp,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
+    kubectl_manifest.argocd_app_cilium_policies,
   ]
 }
 

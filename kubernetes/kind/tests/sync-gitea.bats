@@ -29,3 +29,15 @@ setup() {
   [ "${status}" -eq 0 ]
   [ "${output}" = "0.120.0" ]
 }
+
+@test "sync-gitea.sh exports every platform image override consumed by the policies renderer" {
+  run grep -Fn 'export_external_platform_image EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM chatgpt-sim' "${SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "sync-gitea.sh exports agentgateway GitOps inputs consumed by the policies renderer" {
+  run bash -lc "grep -F 'export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false' '${SCRIPT}' && grep -F 'export_resolved_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version' '${SCRIPT}' && grep -F 'export_resolved_string AGENTGATEWAY_AI_GATEWAY_MODEL agentgateway_ai_gateway_model' '${SCRIPT}'"
+
+  [ "${status}" -eq 0 ]
+}

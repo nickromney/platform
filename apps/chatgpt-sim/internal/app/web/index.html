@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChatGPT Sim</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="conversation" aria-label="Conversation">
+        <header class="topbar">
+          <div>
+            <h1>ChatGPT Sim</h1>
+            <p>MCP connector shell for OAuth discovery and tool calls.</p>
+          </div>
+          <div class="topbar-actions">
+            <button id="discover" type="button">Refresh Discovery</button>
+            <a class="button secondary" href="/oauth2/sign_out?rd=/">Log out</a>
+          </div>
+        </header>
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <form id="chat-form" class="composer">
+          <textarea id="message" rows="3" placeholder="Ask for identity, route evidence, security posture, health, or inference"></textarea>
+          <div class="composer-actions">
+            <select id="connector"></select>
+            <select id="tool">
+              <option value="auto">Auto tool</option>
+              <option value="whoami">whoami</option>
+              <option value="route_trace">route_trace</option>
+              <option value="model_ping">model_ping</option>
+              <option value="model_catalogue">model_catalogue</option>
+              <option value="explain_route">explain_route</option>
+              <option value="service_health">service_health</option>
+              <option value="security_posture">security_posture</option>
+              <option value="collect_evidence">collect_evidence</option>
+              <option value="infer">infer</option>
+            </select>
+            <button type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+      <aside class="inspector" aria-label="MCP inspector">
+        <section class="panel">
+          <h2>Connectors</h2>
+          <form id="connector-form" class="settings-form">
+            <label for="connector-name">Name</label>
+            <input id="connector-name" name="name" placeholder="Local Go MCP">
+            <label for="connector-url">MCP Server URL</label>
+            <input id="connector-url" name="url" placeholder="http://localhost:18082/mcp">
+            <label for="connector-auth">Authentication</label>
+            <select id="connector-auth" name="auth">
+              <option value="local_bearer">Local bearer</option>
+              <option value="oauth">OAuth metadata</option>
+              <option value="none">No auth</option>
+            </select>
+            <label for="connector-client-id">OAuth Client ID</label>
+            <input id="connector-client-id" name="oauth_client_id" placeholder="Application client ID for login prompt">
+            <details class="advanced-auth">
+              <summary>OAuth advanced settings</summary>
+              <div class="advanced-grid">
+                <label for="connector-client-mode">Registration method</label>
+                <select id="connector-client-mode" name="oauth_client_mode">
+                  <option value="USER_DEFINED">User-Defined OAuth Client</option>
+                  <option value="DCR">Dynamic Client Registration (DCR)</option>
+                  <option value="CIMD">Client Identifier Metadata Document (CIMD)</option>
+                </select>
+                <label for="connector-client-secret">OAuth Client Secret</label>
+                <input id="connector-client-secret" name="oauth_client_secret" type="password" autocomplete="off" placeholder="Optional">
+                <label for="connector-token-auth-method">Token endpoint auth method</label>
+                <select id="connector-token-auth-method" name="oauth_token_endpoint_auth_method">
+                  <option value="">Discovered/default</option>
+                  <option value="none">none</option>
+                  <option value="client_secret_basic">client_secret_basic</option>
+                  <option value="client_secret_post">client_secret_post</option>
+                </select>
+                <label for="connector-requested-scopes">Default scopes</label>
+                <textarea id="connector-requested-scopes" name="oauth_requested_scopes" rows="3" placeholder="One value per line or comma-separated"></textarea>
+                <label for="connector-base-scopes">Base scopes</label>
+                <textarea id="connector-base-scopes" name="oauth_base_scopes" rows="2" placeholder="Always requested"></textarea>
+                <label for="connector-auth-url">Auth URL</label>
+                <input id="connector-auth-url" name="oauth_authorization_url" type="url" placeholder="https://example.com/authorize">
+                <label for="connector-token-url">Token URL</label>
+                <input id="connector-token-url" name="oauth_token_url" type="url" placeholder="https://example.com/token">
+                <label for="connector-registration-url">Registration URL</label>
+                <input id="connector-registration-url" name="oauth_registration_url" type="url" placeholder="https://example.com/register">
+                <label for="connector-auth-server-base">Authorization server base</label>
+                <input id="connector-auth-server-base" name="oauth_authorization_server_base" type="url" placeholder="https://example.com">
+                <label for="connector-resource">Resource</label>
+                <input id="connector-resource" name="oauth_resource" placeholder="urn:example:resource">
+                <label for="connector-oidc-config-url">OIDC configuration URL</label>
+                <input id="connector-oidc-config-url" name="oauth_oidc_configuration_url" type="url" placeholder="https://example.com/.well-known/openid-configuration">
+                <label for="connector-oidc-userinfo">OIDC userinfo endpoint</label>
+                <input id="connector-oidc-userinfo" name="oauth_oidc_userinfo_endpoint" type="url" placeholder="https://example.com/userinfo">
+                <label for="connector-oidc-scopes">OIDC scopes supported</label>
+                <textarea id="connector-oidc-scopes" name="oauth_oidc_scopes_supported" rows="2" placeholder="openid, profile, email"></textarea>
+              </div>
+            </details>
+            <button type="submit">Add MCP</button>
+          </form>
+          <div id="connector-list" class="connector-list"></div>
+        </section>
+        <section class="panel">
+          <h2>Connection</h2>
+          <dl>
+            <dt>MCP URL</dt><dd id="mcp-url">Loading</dd>
+            <dt>Model</dt><dd id="model-provider">Loading</dd>
+            <dt>Deps</dt><dd id="dependencies">Loading</dd>
+            <dt>Status</dt><dd id="status">Starting</dd>
+          </dl>
+        </section>
+        <section class="panel">
+          <h2>Last Tool</h2>
+          <pre id="tool-output">{}</pre>
+        </section>
+        <section class="panel">
+          <h2>Discovery</h2>
+          <pre id="discovery-output">{}</pre>
+        </section>
+      </aside>
+    </main>
+    <script src="/runtime-config.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

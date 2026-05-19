@@ -432,6 +432,7 @@ class RouteConfig(BaseModel):
     api_version: str | None = None
     subscription_header_names: list[str] | None = None
     subscription_query_param_names: list[str] | None = None
+    allow_anonymous: bool | None = None
     authz: RouteAuthzConfig | None = None
     policies_xml: str | None = None
     policies_xml_documents: list[str] = Field(default_factory=list)

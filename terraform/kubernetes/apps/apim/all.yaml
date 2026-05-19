@@ -25,8 +25,9 @@ metadata:
 data:
   config.json: |
     {
-      "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io", "https://mcp-console.127.0.0.1.sslip.io"],
+      "allowed_origins": ["https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io", "https://mcp-console.127.0.0.1.sslip.io", "https://chatgpt.dev.127.0.0.1.sslip.io"],
       "allow_anonymous": false,
+      "proxy_timeout_seconds": 120,
       "trace_enabled": true,
       "oidc": {
         "issuer": "https://keycloak.127.0.0.1.sslip.io/realms/platform",
@@ -58,6 +59,18 @@ data:
               }
             ]
           }
+        },
+        "platform-a2a": {
+          "name": "Platform A2A Agent",
+          "path": "a2a",
+          "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
+          "upstream_path_prefix": "/a2a",
+          "type": "a2a",
+          "a2aProperties": {
+            "agentId": "platform-mcp",
+            "agentCardPath": "/.well-known/agent-card.json",
+            "runtimePath": "/a2a"
+          }
         }
       },
       "routes": [
@@ -77,10 +90,25 @@ data:
         },
         {
           "name": "platform-mcp",
-          "host_match": ["mcp.127.0.0.1.sslip.io"],
+          "host_match": ["mcp.127.0.0.1.sslip.io", "mcpserver.dev.127.0.0.1.sslip.io"],
           "path_prefix": "/mcp",
           "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
           "upstream_path_prefix": "/mcp"
+        },
+        {
+          "name": "platform-mcp-oauth-metadata",
+          "host_match": ["mcp.127.0.0.1.sslip.io", "mcpserver.dev.127.0.0.1.sslip.io"],
+          "path_prefix": "/.well-known",
+          "allow_anonymous": true,
+          "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
+          "upstream_path_prefix": "/.well-known"
+        },
+        {
+          "name": "platform-a2a",
+          "host_match": ["mcp.127.0.0.1.sslip.io", "mcpserver.dev.127.0.0.1.sslip.io"],
+          "path_prefix": "/a2a",
+          "upstream_base_url": "http://platform-mcp.mcp.svc.cluster.local:8080",
+          "upstream_path_prefix": "/a2a"
         }
       ]
     }
@@ -116,6 +144,8 @@ spec:
         team: dolphin
         tier: gateway
         role: apim
+      annotations:
+        platform.publiccloudexperiments.net/config-revision: "proxy-timeout-120-a2a"
     spec:
       automountServiceAccountToken: false
       securityContext:

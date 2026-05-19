@@ -133,6 +133,7 @@ create_minimal_policy_stack() {
     "${stack_dir}/scripts" \
     "${stack_dir}/cluster-policies" \
     "${stack_dir}/apps/argocd-apps" \
+    "${stack_dir}/apps/agentgateway-ai-gateway" \
     "${stack_dir}/apps/idp" \
     "${stack_dir}/apps/platform-gateway" \
     "${stack_dir}/apps/platform-gateway-routes" \
@@ -171,6 +172,82 @@ __GRAFANA_PLUGINS_VALUES__
         livenessProbe:
           initialDelaySeconds: __GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__
 EOF
+  cat >"${stack_dir}/apps/argocd-apps/73-agentgateway-ai-gateway.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentgateway-ai-gateway
+spec:
+  source:
+    path: apps/agentgateway-ai-gateway
+EOF
+  cat >"${stack_dir}/apps/argocd-apps/68-agentgateway-crds.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentgateway-crds
+spec:
+  source:
+    repoURL: cr.agentgateway.dev/charts
+    chart: agentgateway-crds
+    targetRevision: v1.2.0
+EOF
+  cat >"${stack_dir}/apps/argocd-apps/69-agentgateway.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentgateway
+spec:
+  source:
+    repoURL: cr.agentgateway.dev/charts
+    chart: agentgateway
+    targetRevision: v1.2.0
+EOF
+
+  cat >"${stack_dir}/apps/agentgateway-ai-gateway/all.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentgateway-ai-gateway
+spec:
+  gatewayClassName: agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: agentgateway-ai-gateway
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: agentgateway-ai-gateway
+spec:
+  deployment:
+    spec:
+      template:
+        spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: agentgateway
+              securityContext:
+                seccompProfile:
+                  type: RuntimeDefault
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: local-openai-compatible
+spec:
+  static:
+    host: host.docker.internal
+    port: 8000
+  policies:
+    auth:
+      secretRef:
+        name: omlx-secret
+EOF
 
   cat >"${stack_dir}/apps/idp/all.yaml" <<'EOF'
 apiVersion: apps/v1
@@ -197,7 +274,9 @@ EOF
   cat >"${stack_dir}/apps/platform-gateway-routes/kustomization.yaml" <<'EOF'
 resources:
   - httproute-gitea.yaml
+  - httproute-agentgateway-ai-gateway.yaml
   - httproute-hubble.yaml
+  - referencegrant-agentgateway-ai-gateway.yaml
   - referencegrant-hubble.yaml
 EOF
   cat >"${stack_dir}/apps/platform-gateway-routes/httproute-gitea.yaml" <<'EOF'
@@ -221,6 +300,21 @@ spec:
           port: 4180
           weight: 1
 EOF
+  cat >"${stack_dir}/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: agentgateway-ai-gateway
+spec:
+  hostnames:
+    - llm.127.0.0.1.sslip.io
+EOF
+  cat >"${stack_dir}/apps/platform-gateway-routes/referencegrant-agentgateway-ai-gateway.yaml" <<'EOF'
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gateway-routes-agentgateway-ai-gateway
+EOF
   touch \
     "${stack_dir}/apps/platform-gateway-routes/httproute-hubble.yaml" \
     "${stack_dir}/apps/platform-gateway-routes/referencegrant-hubble.yaml"
@@ -232,9 +326,11 @@ resources:
   - httproute-hubble.yaml
   - httproute-grafana.yaml
   - httproute-signoz.yaml
+  - httproute-agentgateway-ai-gateway.yaml
   - httproute-sentiment-dev.yaml
   - httproute-subnetcalc-dev.yaml
   - referencegrant-sso.yaml
+  - referencegrant-agentgateway-ai-gateway.yaml
   - referencegrant-hubble.yaml
   - referencegrant-signoz-sso.yaml
 EOF
@@ -248,6 +344,10 @@ EOF
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-subnetcalc-dev.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-hubble.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-signoz-sso.yaml"
+  cp "${stack_dir}/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml"
+  cp "${stack_dir}/apps/platform-gateway-routes/referencegrant-agentgateway-ai-gateway.yaml" \
+    "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-agentgateway-ai-gateway.yaml"
   cat >"${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-sso.yaml" <<'EOF'
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
@@ -655,9 +755,10 @@ EOF
   workload_file="${repo_dir}/apps/sentiment/dev/all.yaml"
   idp_manifest="${repo_dir}/apps/idp/all.yaml"
   mcp_manifest="${repo_dir}/apps/mcp/all.yaml"
+  chatgpt_manifest="${repo_dir}/apps/chatgpt-sim/all.yaml"
   signoz_manifest="${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
   contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
-  mkdir -p "$(dirname "${workload_file}")" "$(dirname "${idp_manifest}")" "$(dirname "${mcp_manifest}")" "$(dirname "${signoz_manifest}")"
+  mkdir -p "$(dirname "${workload_file}")" "$(dirname "${idp_manifest}")" "$(dirname "${mcp_manifest}")" "$(dirname "${chatgpt_manifest}")" "$(dirname "${signoz_manifest}")"
 
   cat >"${workload_file}" <<'EOF'
 apiVersion: apps/v1
@@ -691,6 +792,16 @@ spec:
         - name: platform-mcp
           image: localhost:30090/platform/platform-mcp:latest
 EOF
+  cat >"${chatgpt_manifest}" <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: chatgpt-sim
+          image: localhost:30090/platform/chatgpt-sim:latest
+EOF
   cat >"${signoz_manifest}" <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -706,6 +817,7 @@ EOF
   "prefer_external_images": true,
   "external_sentiment_api": "host.docker.internal:5002/platform/sentiment-api:golden",
   "external_platform_mcp": "host.docker.internal:5002/platform/platform-mcp:golden",
+  "external_platform_chatgpt_sim": "host.docker.internal:5002/platform/chatgpt-sim:golden",
   "prefer_external_platform": true,
   "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:golden",
   "external_platform_backstage": "host.docker.internal:5002/platform/backstage:golden",
@@ -713,7 +825,7 @@ EOF
 }
 EOF
 
-  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; apply_external_workload_images '${workload_file}'; apply_external_platform_images '${repo_dir}'; cat '${workload_file}' '${idp_manifest}' '${mcp_manifest}' '${signoz_manifest}'"
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; apply_external_workload_images '${workload_file}'; apply_external_platform_images '${repo_dir}'; cat '${workload_file}' '${idp_manifest}' '${mcp_manifest}' '${chatgpt_manifest}' '${signoz_manifest}'"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -743,6 +855,14 @@ spec:
       containers:
         - name: platform-mcp
           image: host.docker.internal:5002/platform/platform-mcp:golden
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: chatgpt-sim
+          image: host.docker.internal:5002/platform/chatgpt-sim:golden
 apiVersion: apps/v1
 kind: Deployment
 spec:
@@ -883,6 +1003,11 @@ EOF
   [[ "${output}" == *"string|ARGOCD_PUBLIC_HOST|argocd_public_host|"* ]]
   [[ "${output}" == *"string|POLICIES_REPO_URL_CLUSTER|policies_repo_url_cluster|"* ]]
   [[ "${output}" == *"string|MCP_PUBLIC_HOST|mcp_public_host|"* ]]
+  [[ "${output}" == *"bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false"* ]]
+  [[ "${output}" == *"bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false"* ]]
+  [[ "${output}" == *"string|AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST|agentgateway_ai_gateway_public_host|"* ]]
+  [[ "${output}" == *"string|AGENTGATEWAY_AI_GATEWAY_MODEL|agentgateway_ai_gateway_model|"* ]]
+  [[ "${output}" == *"chart|AGENTGATEWAY_CHART_VERSION|agentgateway_chart_version|agentgateway_chart_version"* ]]
   [[ "${output}" == *"chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version"* ]]
 }
 
@@ -918,6 +1043,11 @@ EOF
     ENABLE_ACTIONS_RUNNER \
     ENABLE_APP_REPO_SENTIMENT \
     ENABLE_APP_REPO_SUBNETCALC \
+    ENABLE_APIM_SIMULATOR \
+    ENABLE_AGENTGATEWAY_AI_GATEWAY \
+    AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST \
+    AGENTGATEWAY_AI_GATEWAY_MODEL \
+    AGENTGATEWAY_CHART_VERSION \
     ENABLE_PROMETHEUS \
     ENABLE_GRAFANA \
     ENABLE_LOKI \
@@ -1036,6 +1166,39 @@ spec:
       name: oauth2-proxy-idp-core
 EOF
 )" ]
+}
+
+@test "render_repo prunes disabled agentgateway AI gateway resources" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack-render"
+  create_minimal_policy_stack "${stack_dir}"
+
+  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/68-agentgateway-crds.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/69-agentgateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/73-agentgateway-ai-gateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml'; ! grep -R 'agentgateway-ai-gateway' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso'"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "render_repo renders agentgateway AI gateway route from GitOps contract" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack-render"
+  contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
+  create_minimal_policy_stack "${stack_dir}"
+  cat >"${contract_file}" <<'EOF'
+{
+  "enable_agentgateway_ai_gateway": true,
+  "agentgateway_ai_gateway_public_host": "llm.apps.example.test"
+}
+EOF
+
+  run bash -lc "export STACK_DIR='${stack_dir}' GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/agentgateway-ai-gateway/all.yaml'; printf '%s\n' '---ROUTE---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"name: local-openai-compatible"* ]]
+  [[ "${output}" == *"host: host.docker.internal"* ]]
+  [[ "${output}" == *"port: 8000"* ]]
+  [[ "${output}" == *"llm.apps.example.test"* ]]
+  [[ "${output}" == *"kind: AgentgatewayParameters"* ]]
+  [[ "${output}" == *"parametersRef:"* ]]
+  [[ "${output}" == *"seccompProfile:"* ]]
+  [[ "${output}" == *"type: RuntimeDefault"* ]]
 }
 
 @test "render_repo golden renders Grafana chart values from GitOps contract" {

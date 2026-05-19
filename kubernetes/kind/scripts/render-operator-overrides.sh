@@ -93,6 +93,9 @@ mkdir -p "$(dirname "${output_file}")"
 platform_mcp_image_tag="$(
   image_catalog_source_tag platform platform-mcp
 )"
+chatgpt_sim_image_tag="$(
+  image_catalog_source_tag platform chatgpt-sim
+)"
 idp_core_image_tag="$(
   image_catalog_source_tag platform idp-core
 )"
@@ -113,6 +116,9 @@ write_external_platform_images() {
   fi
   if [ -n "${platform_mcp_image_tag}" ]; then
     tag_overrides+=("platform-mcp=${platform_mcp_image_tag}")
+  fi
+  if [ -n "${chatgpt_sim_image_tag}" ]; then
+    tag_overrides+=("chatgpt-sim=${chatgpt_sim_image_tag}")
   fi
 
   cat <<EOF

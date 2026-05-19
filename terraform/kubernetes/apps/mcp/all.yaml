@@ -53,7 +53,7 @@ spec:
         - name: gitea-registry-creds
       containers:
         - name: server
-          image: localhost:30090/platform/platform-mcp:latest
+          image: localhost:30090/platform/platform-mcp:0.1.1
           imagePullPolicy: IfNotPresent
           env:
             - name: PLATFORM_MCP_HOST
@@ -62,6 +62,10 @@ spec:
               value: "8080"
             - name: PLATFORM_MCP_PATH
               value: /mcp
+            - name: PUBLIC_BASE_URL
+              value: https://mcpserver.dev.127.0.0.1.sslip.io
+            - name: LLM_BASE_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
             - name: PLATFORM_MCP_LOG_FORMAT
               value: json
             - name: PLATFORM_MCP_METRICS_ENABLED
@@ -73,7 +77,9 @@ spec:
             - name: OTEL_SERVICE_NAMESPACE
               value: platform
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.version=0.1.0,k8s.namespace.name=mcp,k8s.deployment.name=platform-mcp
+              value: service.version=0.1.1,k8s.namespace.name=mcp,k8s.deployment.name=platform-mcp,telemetry.sdk.name=openllmetry
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector-prometheus.observability.svc.cluster.local:4318
             - name: IDP_API_BASE_URL
               value: http://idp-core.idp.svc.cluster.local:8080
             - name: SUBNETCALC_API_BASE_URL

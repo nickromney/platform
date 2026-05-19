@@ -94,6 +94,7 @@ workload|EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR|external_subnetcalc_apim|subne
 workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT|external_subnetcalc_fe|subnetcalc-frontend-react|workload
 workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend|workload
 platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp|mcp
+platform|EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM|external_platform_chatgpt_sim|chatgpt-sim|chatgpt
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
 platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
 platform|EXTERNAL_PLATFORM_IMAGE_BACKSTAGE|external_platform_backstage|backstage|idp
@@ -139,6 +140,8 @@ bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
 bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
 bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
 bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
+bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
+bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
 bool|ENABLE_PROMETHEUS|enable_prometheus|false
 bool|ENABLE_GRAFANA|enable_grafana|false
 bool|ENABLE_LOKI|enable_loki|false
@@ -152,8 +155,11 @@ bool|ENABLE_BACKSTAGE|enable_backstage|true
 bool|PREFER_EXTERNAL_WORKLOAD_IMAGES|prefer_external_images|false
 string|MCP_PUBLIC_HOST|mcp_public_host|
 string|MCP_CONSOLE_PUBLIC_HOST|mcp_console_public_host|
+string|AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST|agentgateway_ai_gateway_public_host|
+string|AGENTGATEWAY_AI_GATEWAY_MODEL|agentgateway_ai_gateway_model|
 bool|PREFER_EXTERNAL_PLATFORM_IMAGES|prefer_external_platform|false
 string|HARDENED_IMAGE_REGISTRY|hardened_image_registry|dhi.io
+chart|AGENTGATEWAY_CHART_VERSION|agentgateway_chart_version|agentgateway_chart_version
 chart|CERT_MANAGER_CHART_VERSION|cert_manager_chart_version|cert_manager_chart_version
 chart|DEX_CHART_VERSION|dex_chart_version|dex_chart_version
 chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version
@@ -263,12 +269,16 @@ SUBNETCALC_DEV_PUBLIC_HOST="${SUBNETCALC_DEV_PUBLIC_HOST:-subnetcalc.dev.${PLATF
 SUBNETCALC_UAT_PUBLIC_HOST="${SUBNETCALC_UAT_PUBLIC_HOST:-subnetcalc.uat.${PLATFORM_BASE_DOMAIN}}"
 MCP_PUBLIC_HOST="${MCP_PUBLIC_HOST:-mcp.${PLATFORM_BASE_DOMAIN}}"
 MCP_CONSOLE_PUBLIC_HOST="${MCP_CONSOLE_PUBLIC_HOST:-mcp-console.${PLATFORM_BASE_DOMAIN}}"
+AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST="${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST:-llm.${PLATFORM_BASE_DOMAIN}}"
+AGENTGATEWAY_AI_GATEWAY_MODEL="${AGENTGATEWAY_AI_GATEWAY_MODEL:-}"
 ADMIN_ROUTE_ALLOWLIST_CIDRS="${ADMIN_ROUTE_ALLOWLIST_CIDRS:-}"
 GATEWAY_TRUSTED_PROXY_CIDRS="${GATEWAY_TRUSTED_PROXY_CIDRS:-}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
+ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
+ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
 ENABLE_PROMETHEUS="${ENABLE_PROMETHEUS:-false}"
 ENABLE_GRAFANA="${ENABLE_GRAFANA:-false}"
 ENABLE_LOKI="${ENABLE_LOKI:-false}"
@@ -294,6 +304,7 @@ EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP="${EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP:-}"
 EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
 SIGNOZ_AUTH_PROXY_IMAGE="${SIGNOZ_AUTH_PROXY_IMAGE:-ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest}"
+AGENTGATEWAY_CHART_VERSION="${AGENTGATEWAY_CHART_VERSION:-$(tf_default_from_variables agentgateway_chart_version)}"
 CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-$(tf_default_from_variables cert_manager_chart_version)}"
 DEX_CHART_VERSION="${DEX_CHART_VERSION:-$(tf_default_from_variables dex_chart_version)}"
 GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-$(tf_default_from_variables grafana_chart_version)}"
@@ -433,6 +444,7 @@ rewrite_image_owner() {
     subnetcalc-api \
     subnetcalc-apim-simulator \
     platform-mcp \
+    chatgpt-sim \
     subnetcalc-frontend-react \
     subnetcalc-frontend; do
     out="$(mktemp)"
@@ -483,6 +495,7 @@ rewrite_public_hostnames() {
       -e "s|subnetcalc\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_UAT_PUBLIC_HOST}|g" \
       -e "s|mcp-console\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_CONSOLE_PUBLIC_HOST}|g" \
       -e "s|mcp\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_PUBLIC_HOST}|g" \
+      -e "s|llm\\.127\\.0\\.0\\.1\\.sslip\\.io|${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST}|g" \
       -e "s|127\\.0\\.0\\.1\\.sslip\\.io|${PLATFORM_BASE_DOMAIN}|g" \
       "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
@@ -629,6 +642,8 @@ chart_version_override_for_name() {
   local chart="$1"
 
   case "${chart}" in
+    agentgateway) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
+    agentgateway-crds) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     cert-manager) printf '%s\n' "${CERT_MANAGER_CHART_VERSION}" ;;
     dex) printf '%s\n' "${DEX_CHART_VERSION}" ;;
     grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
@@ -667,6 +682,10 @@ vendor_chart() {
   assert_pinned_chart_version "${chart}" "${version}"
   mkdir -p "${vendor_root}"
   rm -rf "${vendor_root:?}/${chart}"
+  if [[ "${repo_url}" == "cr.agentgateway.dev/charts" ]]; then
+    helm pull "oci://cr.agentgateway.dev/charts/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+    return 0
+  fi
   repo_name="vendor-$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
   helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
   helm repo update "${repo_name}" >/dev/null 2>&1 || true
@@ -797,6 +816,7 @@ apply_external_platform_images() {
   local root_dir="$1"
   local idp_manifest="${root_dir}/apps/idp/all.yaml"
   local mcp_manifest="${root_dir}/apps/mcp/all.yaml"
+  local chatgpt_manifest="${root_dir}/apps/chatgpt-sim/all.yaml"
   local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
   local scope env_name contract_key image_name manifest_group image_ref manifest_file
 
@@ -829,6 +849,10 @@ apply_external_platform_images() {
         ;;
       mcp)
         manifest_file="${mcp_manifest}"
+        eval "image_ref=\"\${${env_name}:-}\""
+        ;;
+      chatgpt)
+        manifest_file="${chatgpt_manifest}"
         eval "image_ref=\"\${${env_name}:-}\""
         ;;
       signoz)
@@ -1392,9 +1416,18 @@ prune_argocd_app_manifests() {
   fi
 
   if ! is_true "${ENABLE_APP_REPO_SENTIMENT}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
-    remove_if_present "${apps_dir}/72-apim.application.yaml"
     remove_if_present "${apps_dir}/74-dev.application.yaml"
     remove_if_present "${apps_dir}/76-uat.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+    remove_if_present "${apps_dir}/72-apim.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; then
+    remove_if_present "${apps_dir}/68-agentgateway-crds.application.yaml"
+    remove_if_present "${apps_dir}/69-agentgateway.application.yaml"
+    remove_if_present "${apps_dir}/73-agentgateway-ai-gateway.application.yaml"
   fi
 
   if ! is_true "${ENABLE_SIGNOZ}"; then
@@ -1516,6 +1549,13 @@ prune_gateway_routes_manifests() {
     remove_if_present "${routes_dir}/httproute-subnetcalc-uat.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-dev.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-uat.yaml"
+  fi
+
+  if ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; then
+    remove_if_present "${routes_dir}/httproute-agentgateway-ai-gateway.yaml"
+    remove_if_present "${routes_dir}/referencegrant-agentgateway-ai-gateway.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-agentgateway-ai-gateway.yaml"
+    remove_kustomization_entry "${kustomization_file}" "referencegrant-agentgateway-ai-gateway.yaml"
   fi
 }
 
@@ -1774,6 +1814,7 @@ render_policy_repo_tree() {
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/chatgpt-sim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"

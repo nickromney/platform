@@ -78,6 +78,7 @@ resource "kubernetes_secret_v1" "gitea_registry_creds" {
     kubernetes_namespace_v1.uat,
     kubernetes_namespace_v1.review,
     kubectl_manifest.namespace_mcp,
+    kubectl_manifest.namespace_chatgpt,
   ]
 }
 

@@ -83,7 +83,7 @@ command -v shasum >/dev/null 2>&1 || { echo "${0##*/}: shasum not found" >&2; ex
 [ -n "${VICTORIA_LOGS_PLUGIN_SHA256}" ] || { echo "${0##*/}: grafana_victoria_logs_plugin_sha256 is empty" >&2; exit 1; }
 
 commit_tag="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"
-IMAGE_BUILD_COMMIT_TAG="${commit_tag}"
+export IMAGE_BUILD_COMMIT_TAG="${commit_tag}"
 
 prepare_grafana_plugin_archive() {
   local __resultvar="$1"
@@ -172,6 +172,9 @@ idp_core_source_tag="$(
 platform_mcp_source_tag="$(
   image_catalog_source_tag platform platform-mcp
 )"
+chatgpt_sim_source_tag="$(
+  image_catalog_source_tag platform chatgpt-sim
+)"
 backstage_source_tag="$(
   if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
     image_catalog_source_tag platform backstage
@@ -184,6 +187,8 @@ keycloak_source_tag="$(
 image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"
 
 image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"
+
+image_build_catalog_build_and_push platform chatgpt-sim chatgpt-sim "${chatgpt_sim_source_tag}"
 
 if [ "${ENABLE_BACKSTAGE}" = "true" ]; then
   image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"

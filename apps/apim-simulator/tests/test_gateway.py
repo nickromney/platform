@@ -752,6 +752,48 @@ def test_subscription_bypass_allows_missing_key() -> None:
     assert resp.status_code == 200
 
 
+def test_route_allow_anonymous_bypasses_global_bearer_requirement() -> None:
+    issuer = _http_url("issuer.example")
+    audience = "api"
+    jwks, _private_key = _make_rsa_jwks()
+    config = GatewayConfig.model_validate(
+        {
+            "allow_anonymous": False,
+            "oidc": {"issuer": issuer, "audience": audience, "jwks": jwks},
+            "routes": [
+                {
+                    "name": "metadata",
+                    "path_prefix": "/.well-known",
+                    "allow_anonymous": True,
+                    "upstream_base_url": _http_url("upstream"),
+                    "upstream_path_prefix": "/.well-known",
+                },
+                {
+                    "name": "mcp",
+                    "path_prefix": "/mcp",
+                    "upstream_base_url": _http_url("upstream"),
+                    "upstream_path_prefix": "/mcp",
+                },
+            ],
+        }
+    )
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        return httpx.Response(200, json={"issuer": issuer})
+
+    app = create_app(config=config, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    with TestClient(app) as client:
+        metadata = client.get("/.well-known/oauth-protected-resource")
+        protected = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+
+    assert metadata.status_code == 200
+    assert protected.status_code == 401
+    assert len(seen) == 1
+    assert seen[0].url == httpx.URL(_http_url("upstream/.well-known/oauth-protected-resource"))
+
+
 def test_subscription_key_query_param_works() -> None:
     issuer = _http_url("issuer.example")
     audience = "api"

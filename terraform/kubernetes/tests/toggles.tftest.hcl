@@ -71,6 +71,7 @@ run "gitea_enabled" {
     gitea_chart_version  = "12.5.0"
     gitea_http_node_port = 30090
     gitea_ssh_node_port  = 30022
+    gitea_admin_pwd      = "test-admin-password"
   }
 
   assert {
@@ -104,6 +105,7 @@ run "signoz_enabled" {
     enable_gitea        = true
     enable_signoz       = true
     signoz_ui_node_port = 30301
+    gitea_admin_pwd     = "test-admin-password"
   }
 
   assert {
@@ -145,6 +147,7 @@ run "sso_enabled" {
     enable_headlamp    = true
     enable_sso         = true
     sso_provider       = "keycloak"
+    gitea_admin_pwd    = "test-admin-password"
 
     dex_chart_version          = "0.24.0"
     oauth2_proxy_chart_version = "10.1.4"

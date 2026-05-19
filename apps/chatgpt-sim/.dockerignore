@@ -1,0 +1,5 @@
+.git
+tmp
+Dockerfile
+*.test
+!.run/chatgpt-sim

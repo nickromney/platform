@@ -12,11 +12,34 @@ spec:
       sectionName: https
   hostnames:
     - mcp.127.0.0.1.sslip.io
+    - mcpserver.dev.127.0.0.1.sslip.io
   rules:
     - matches:
         - path:
             type: PathPrefix
+            value: /.well-known
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: subnetcalc-apim-simulator
+          namespace: apim
+          port: 8000
+          weight: 1
+    - matches:
+        - path:
+            type: PathPrefix
             value: /mcp
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: subnetcalc-apim-simulator
+          namespace: apim
+          port: 8000
+          weight: 1
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /a2a
       backendRefs:
         - group: ""
           kind: Service

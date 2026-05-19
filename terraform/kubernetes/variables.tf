@@ -872,6 +872,36 @@ variable "enable_app_repo_subnetcalc" {
   default     = false
 }
 
+variable "enable_apim_simulator" {
+  description = "Deploy the shared APIM simulator gateway independently of subnetcalc app repo seeding."
+  type        = bool
+  default     = false
+}
+
+variable "enable_agentgateway_ai_gateway" {
+  description = "Deploy agentgateway for OpenAI-compatible LLM, MCP, and agentic traffic experiments."
+  type        = bool
+  default     = false
+}
+
+variable "agentgateway_chart_version" {
+  description = "agentgateway Helm chart version for the AI gateway experiment."
+  type        = string
+  default     = "v1.2.0"
+}
+
+variable "agentgateway_namespace" {
+  description = "Namespace for the agentgateway control plane."
+  type        = string
+  default     = "agentgateway-system"
+}
+
+variable "agentgateway_ai_gateway_model" {
+  description = "Optional model label for local agentgateway LLM examples. Leave empty to discover from the OpenAI-compatible /v1/models endpoint."
+  type        = string
+  default     = ""
+}
+
 check "enable_cilium_wireguard_requires_cilium_provider" {
   assert {
     condition     = !var.enable_cilium_wireguard || lower(var.cni_provider) == "cilium"
@@ -1198,15 +1228,15 @@ variable "enable_backstage" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["backstage", "grafana", "hardened-registry", "idp-core", "platform-mcp", "signoz-auth-proxy"], key)
+      contains(["backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "platform-mcp", "signoz-auth-proxy"], key)
     ])
-    error_message = "external_platform_image_refs supports only: backstage, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
+    error_message = "external_platform_image_refs supports only: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
   }
 }

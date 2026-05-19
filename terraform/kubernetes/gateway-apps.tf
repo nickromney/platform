@@ -139,5 +139,6 @@ __YAML__
     kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat,
     kubectl_manifest.argocd_app_oauth2_proxy_idp,
     kubectl_manifest.argocd_app_mcp,
+    kubectl_manifest.argocd_app_agentgateway_ai_gateway,
   ]
 }
