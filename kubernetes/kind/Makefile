@@ -651,6 +651,7 @@ apply: workflow-validate-stage
 	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
+	if [ "$$enable_sso" != "true" ]; then enable_backstage=false; fi; \
 	cache_ensured=0; \
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 200 ]; then \
 		run_step "ensure-image-cache" $(MAKE) ensure-image-cache; \

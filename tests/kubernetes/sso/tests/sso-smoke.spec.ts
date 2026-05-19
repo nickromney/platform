@@ -1128,7 +1128,7 @@ async function developerPortalWorks(page: Page, traffic: BrowserApiTraffic) {
   await expect(page).toHaveURL((u) => u.hostname === PORTAL_HOSTNAME && (u.pathname === '/' || u.pathname.startsWith('/catalog')))
   await expectBodyToContain(page, /Developer Portal/i, 'Backstage catalog did not expose the Backstage portal component')
   await expectBodyToContain(page, /Portal API/i, 'Backstage catalog did not expose the IDP API component')
-  await expectBodyToContain(page, /Hello Platform/i, 'Backstage catalog did not expose workload catalog content')
+  await expectBodyToContain(page, /Sentiment|SubnetCalc/i, 'Backstage catalog did not expose workload catalog content')
 
   await expect
     .poll(() => traffic.responses.some(isBackstageCatalogApiResponse), {

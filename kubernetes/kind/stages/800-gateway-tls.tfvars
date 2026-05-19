@@ -14,6 +14,7 @@ enable_cilium_node_encryption   = false
 enable_hubble                   = true
 enable_argocd                   = true
 enable_gitea                    = true
+enable_app_of_apps              = true
 enable_policies                 = true
 enable_cilium_policy_audit_mode = false
 enable_prometheus               = true

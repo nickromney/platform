@@ -32,7 +32,7 @@ spec:
             "k8s:io.kubernetes.pod.namespace": mcp
             "k8s:app.kubernetes.io/name": platform-mcp
         - matchLabels:
-            "k8s:io.kubernetes.pod.namespace": chatgpt
+            "k8s:io.kubernetes.pod.namespace": dev
             "k8s:app.kubernetes.io/name": chatgpt-sim
       toPorts:
         - ports:

@@ -96,9 +96,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-immutable_keys=(
-  enable_app_of_apps
-)
+immutable_keys=()
 
 if [[ -n "${stages_dir}" ]]; then
   cat >"${stage_list_file}" <<EOF

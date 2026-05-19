@@ -12,6 +12,7 @@ cni_provider                    = "cilium"
 enable_hubble                   = true
 enable_argocd                   = true
 enable_gitea                    = true
+enable_app_of_apps              = true
 enable_policies                 = false
 enable_cilium_policy_audit_mode = false
 enable_signoz                   = false

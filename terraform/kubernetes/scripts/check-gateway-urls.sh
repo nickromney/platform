@@ -291,6 +291,11 @@ probe_https_url() {
     model_json="$(curl -k -sS --max-time 5 "${curl_args[@]}" "${models_url}" 2>/dev/null || true)"
     model_name="$(printf '%s\n' "${model_json}" | sed -nE 's/.*"id"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n 1)"
     if [[ -z "${model_name}" ]]; then
+      if printf '%s\n' "${model_json}" | grep -Fq "upstream call failed"; then
+        PROBE_OK=1
+        PROBE_DETAIL="503 (agentgateway reached; OpenAI-compatible backend unavailable)"
+        return 0
+      fi
       PROBE_DETAIL="000 (could not discover OpenAI-compatible model from ${models_url})"
       return 0
     fi

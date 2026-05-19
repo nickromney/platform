@@ -124,6 +124,7 @@ string|PLATFORM_ADMIN_BASE_DOMAIN|platform_admin_base_domain|$PLATFORM_BASE_DOMA
 string|POLICIES_REPO_URL_CLUSTER|policies_repo_url_cluster|
 string|ARGOCD_PUBLIC_HOST|argocd_public_host|
 string|DEX_PUBLIC_HOST|dex_public_host|
+string|SSO_PUBLIC_URL|sso_public_url|
 string|GITEA_PUBLIC_HOST|gitea_public_host|
 string|GRAFANA_PUBLIC_HOST|grafana_public_host|
 string|HEADLAMP_PUBLIC_HOST|headlamp_public_host|
@@ -151,7 +152,11 @@ bool|ENABLE_SIGNOZ|enable_signoz|false
 bool|ENABLE_OTEL_GATEWAY|enable_otel_gateway|false
 bool|ENABLE_OBSERVABILITY_AGENT|enable_observability_agent|false
 bool|ENABLE_HEADLAMP|enable_headlamp|false
+bool|ENABLE_SSO|enable_sso|false
 bool|ENABLE_BACKSTAGE|enable_backstage|true
+bool|HEADLAMP_CLUSTER_ROLE_BINDING_CREATE|headlamp_cluster_role_binding_create|true
+bool|HEADLAMP_OIDC_SKIP_TLS_VERIFY|headlamp_oidc_skip_tls_verify|true
+string|HEADLAMP_OIDC_CLIENT_SECRET|headlamp_oidc_client_secret|
 bool|PREFER_EXTERNAL_WORKLOAD_IMAGES|prefer_external_images|false
 string|MCP_PUBLIC_HOST|mcp_public_host|
 string|MCP_CONSOLE_PUBLIC_HOST|mcp_console_public_host|
@@ -257,6 +262,7 @@ PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
 PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
 ARGOCD_PUBLIC_HOST="${ARGOCD_PUBLIC_HOST:-argocd.admin.${PLATFORM_BASE_DOMAIN}}"
 DEX_PUBLIC_HOST="${DEX_PUBLIC_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+SSO_PUBLIC_URL="${SSO_PUBLIC_URL:-https://${DEX_PUBLIC_HOST}}"
 GITEA_PUBLIC_HOST="${GITEA_PUBLIC_HOST:-gitea.admin.${PLATFORM_BASE_DOMAIN}}"
 GRAFANA_PUBLIC_HOST="${GRAFANA_PUBLIC_HOST:-grafana.admin.${PLATFORM_BASE_DOMAIN}}"
 HEADLAMP_PUBLIC_HOST="${HEADLAMP_PUBLIC_HOST:-headlamp.admin.${PLATFORM_BASE_DOMAIN}}"
@@ -1378,6 +1384,133 @@ EOF
 EOF
 }
 
+render_headlamp_application_manifest() {
+  local apps_dir="$1"
+  local destination="${apps_dir}/85-headlamp.application.yaml"
+  local oidc_config_hash
+
+  if ! is_true "${ENABLE_HEADLAMP}"; then
+    remove_if_present "${destination}"
+    return 0
+  fi
+
+  oidc_config_hash="$(printf '%s|%s|%s|%s' "${SSO_PUBLIC_URL:-}" "${HEADLAMP_PUBLIC_HOST:-}" "${HEADLAMP_OIDC_CLIENT_SECRET:-}" "${HEADLAMP_OIDC_SKIP_TLS_VERIFY:-}" | shasum -a 256 | awk '{print $1}')"
+
+  cat > "${destination}" <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "85"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: headlamp
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: ${POLICIES_REPO_URL_CLUSTER}
+    targetRevision: main
+    path: apps/vendor/charts/headlamp
+    helm:
+      releaseName: headlamp
+      values: |
+        service:
+          port: 4466
+        clusterRoleBinding:
+          create: ${HEADLAMP_CLUSTER_ROLE_BINDING_CREATE:-true}
+        config:
+          watchPlugins: false
+          sessionTTL: 0
+EOF
+
+  if is_true "${ENABLE_SSO}"; then
+    cat >> "${destination}" <<EOF
+          oidc:
+            clientID: headlamp
+            clientSecret: "${HEADLAMP_OIDC_CLIENT_SECRET}"
+            issuerURL: ${SSO_PUBLIC_URL}
+            scopes: openid profile email groups
+            callbackURL: https://${HEADLAMP_PUBLIC_HOST}/oidc-callback
+          extraArgs:
+            - -oidc-ca-file=/headlamp-ca/ca.crt
+EOF
+    if is_true "${HEADLAMP_OIDC_SKIP_TLS_VERIFY}"; then
+      cat >> "${destination}" <<'EOF'
+            - -oidc-skip-tls-verify
+EOF
+    fi
+  fi
+
+  cat >> "${destination}" <<EOF
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+EOF
+
+  if is_true "${ENABLE_SSO}"; then
+    cat >> "${destination}" <<EOF
+        env:
+          - name: SSL_CERT_FILE
+            value: /headlamp-ca/ca.crt
+          - name: HEADLAMP_OIDC_CONFIG_HASH
+            value: "${oidc_config_hash}"
+        volumeMounts:
+          - name: headlamp-ca
+            mountPath: /headlamp-ca
+            readOnly: true
+        volumes:
+          - name: headlamp-ca
+            secret:
+              secretName: mkcert-ca
+              items:
+                - key: ca.crt
+                  path: ca.crt
+EOF
+  else
+    cat >> "${destination}" <<'EOF'
+        env: []
+        volumeMounts: []
+        volumes: []
+EOF
+  fi
+
+  cat >> "${destination}" <<'EOF'
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+EOF
+}
+
+render_platform_gateway_routes_application_manifest() {
+  local apps_dir="$1"
+  local destination="${apps_dir}/50-platform-gateway-routes.application.yaml"
+  local routes_path="apps/platform-gateway-routes"
+
+  if is_true "${ENABLE_SSO}"; then
+    routes_path="apps/platform-gateway-routes-sso"
+  fi
+
+  if [[ ! -f "${destination}" ]]; then
+    return 0
+  fi
+
+  sed -i.bak -E "s|^([[:space:]]*)path: apps/platform-gateway-routes(-sso)?[[:space:]]*$|\\1path: ${routes_path}|" "${destination}"
+  rm -f "${destination}.bak"
+}
+
 prune_argocd_app_manifests() {
   local apps_dir="$1"
   local otel_gateway_enabled="false"
@@ -1392,6 +1525,8 @@ prune_argocd_app_manifests() {
   fi
 
   render_otel_gateway_manifest "${apps_dir}"
+  render_headlamp_application_manifest "${apps_dir}"
+  render_platform_gateway_routes_application_manifest "${apps_dir}"
 
   if ! is_true "${ENABLE_POLICIES}"; then
     remove_if_present "${apps_dir}/31-policy-reporter.application.yaml"
@@ -1413,6 +1548,15 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_ACTIONS_RUNNER}"; then
     remove_if_present "${apps_dir}/60-gitea-actions-runner.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_SSO}"; then
+    remove_if_present "${apps_dir}/78-idp.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_SSO}" || { ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}" && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
+    remove_if_present "${apps_dir}/79-mcp.application.yaml"
+    remove_if_present "${apps_dir}/80-chatgpt-sim.application.yaml"
   fi
 
   if ! is_true "${ENABLE_APP_REPO_SENTIMENT}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
@@ -1470,6 +1614,10 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_OBSERVABILITY_AGENT}" || ! is_true "${ENABLE_SIGNOZ}"; then
     remove_if_present "${apps_dir}/100-otel-collector-agent.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_HEADLAMP}"; then
+    remove_if_present "${apps_dir}/85-headlamp.application.yaml"
   fi
 
   if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_LOKI}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_SIGNOZ}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then

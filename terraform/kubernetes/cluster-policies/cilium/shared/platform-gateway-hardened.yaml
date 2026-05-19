@@ -9,8 +9,8 @@ spec:
     Ingress: external clients via host/remote-node on :443 only.
     Egress: argocd-server on :8080, gitea on :3000, shared APIM on :8000,
     agentgateway AI gateway on :80/:8080, shared auth proxies on :4180,
-    application HTTP frontends on :8080, shared Keycloak on :5556, headlamp on
-    :4466, policy-reporter UI on :8080, DNS, kube-apiserver, and the
+    application HTTP frontends on :8080, shared Keycloak on :5556, Hubble UI on
+    :8081, headlamp on :4466, policy-reporter UI on :8080, DNS, kube-apiserver, and the
     nginx-gateway control-plane.
   endpointSelector:
     matchLabels:
@@ -134,6 +134,14 @@ spec:
       toPorts:
         - ports:
             - port: "4466"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": hubble-ui
+      toPorts:
+        - ports:
+            - port: "8081"
               protocol: TCP
     - toEndpoints:
         - matchLabels:

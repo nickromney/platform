@@ -1001,6 +1001,7 @@ EOF
   [[ "${output}" == *"bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false"* ]]
   [[ "${output}" == *"string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io"* ]]
   [[ "${output}" == *"string|ARGOCD_PUBLIC_HOST|argocd_public_host|"* ]]
+  [[ "${output}" == *"string|SSO_PUBLIC_URL|sso_public_url|"* ]]
   [[ "${output}" == *"string|POLICIES_REPO_URL_CLUSTER|policies_repo_url_cluster|"* ]]
   [[ "${output}" == *"string|MCP_PUBLIC_HOST|mcp_public_host|"* ]]
   [[ "${output}" == *"bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false"* ]]
@@ -1025,6 +1026,7 @@ EOF
     PLATFORM_ADMIN_BASE_DOMAIN \
     ARGOCD_PUBLIC_HOST \
     DEX_PUBLIC_HOST \
+    SSO_PUBLIC_URL \
     GITEA_PUBLIC_HOST \
     GRAFANA_PUBLIC_HOST \
     HEADLAMP_PUBLIC_HOST \
@@ -1084,6 +1086,108 @@ EOF
     SIGNOZ_AUTH_PROXY_IMAGE; do
     [[ "${sync_block}" != *"${env_name}"* ]]
   done
+}
+
+@test "Terraform policies sync waits for workload registry secrets before app-of-apps reconciliation" {
+  gitops_tf="${REPO_ROOT}/terraform/kubernetes/gitops.tf"
+  sync_block="$(awk '/resource \"null_resource\" \"sync_gitea_policies_repo\"/{capture=1} capture{print} /^# -----------------------------------------------------------------------------/{if (capture) exit}' "${gitops_tf}")"
+  gitea_tf="${REPO_ROOT}/terraform/kubernetes/gitea.tf"
+  registry_secret_block="$(awk '/resource \"kubernetes_secret_v1\" \"gitea_registry_creds\"/{capture=1} capture{print} /^resource \"kubectl_manifest\" \"argocd_app_gitea\"/{if (capture) exit}' "${gitea_tf}")"
+
+  [[ "${sync_block}" == *"kubernetes_secret_v1.gitea_registry_creds"* ]]
+  [[ "${registry_secret_block}" == *"kubernetes_namespace_v1.dev"* ]]
+  [[ "${registry_secret_block}" == *"kubernetes_namespace_v1.uat"* ]]
+  [[ "${registry_secret_block}" == *"kubernetes_namespace_v1.apim"* ]]
+  [[ "${registry_secret_block}" == *"kubectl_manifest.namespace_mcp"* ]]
+}
+
+@test "Terraform policies sync waits for app-of-apps workload support secrets" {
+  gitops_tf="${REPO_ROOT}/terraform/kubernetes/gitops.tf"
+  sync_block="$(awk '/resource \"null_resource\" \"sync_gitea_policies_repo\"/{capture=1} capture{print} /^# -----------------------------------------------------------------------------/{if (capture) exit}' "${gitops_tf}")"
+
+  [[ "${sync_block}" == *"kubernetes_secret_v1.backstage_gitea_credentials"* ]]
+  [[ "${sync_block}" == *"kubernetes_secret_v1.headlamp_mkcert_ca"* ]]
+}
+
+@test "Terraform refreshes repo-backed child apps in app-of-apps mode" {
+  locals_tf="${REPO_ROOT}/terraform/kubernetes/locals.tf"
+  app_names_block="$(awk '/argocd_gitops_repo_app_names = compact/{capture=1} capture{print} /^  \\)\\)/{if (capture) exit}' "${locals_tf}")"
+
+  [[ "${app_names_block}" == *'["app-of-apps"]'* ]]
+  [[ "${app_names_block}" == *'["cilium-policies"]'* ]]
+  [[ "${app_names_block}" == *'"platform-gateway-routes"'* ]]
+  [[ "${app_names_block}" != *'!var.enable_app_of_apps ? ["cilium-policies"]'* ]]
+  [[ "${app_names_block}" != *'!var.enable_app_of_apps ? ["platform-gateway-routes"]'* ]]
+}
+
+@test "app-of-apps render prunes SSO children when SSO is disabled" {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+  touch \
+    "${apps_dir}/78-idp.application.yaml" \
+    "${apps_dir}/79-mcp.application.yaml" \
+    "${apps_dir}/80-chatgpt-sim.application.yaml"
+
+  run bash -lc "export ENABLE_SSO=false ENABLE_HEADLAMP=false ENABLE_POLICIES=false ENABLE_CERT_MANAGER=false ENABLE_GATEWAY_TLS=false ENABLE_ACTIONS_RUNNER=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_GRAFANA=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_SIGNOZ=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'; find '${apps_dir}' -maxdepth 1 -type f -print"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"78-idp.application.yaml"* ]]
+  [[ "${output}" != *"79-mcp.application.yaml"* ]]
+  [[ "${output}" != *"80-chatgpt-sim.application.yaml"* ]]
+}
+
+@test "app-of-apps render creates Headlamp child application when enabled" {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+
+  run bash -lc "export POLICIES_REPO_URL_CLUSTER='ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git' ENABLE_HEADLAMP=true ENABLE_SSO=false HEADLAMP_CLUSTER_ROLE_BINDING_CREATE=true; source '${SCRIPT}'; render_headlamp_application_manifest '${apps_dir}'; cat '${apps_dir}/85-headlamp.application.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"name: headlamp"* ]]
+  [[ "${output}" == *"path: apps/vendor/charts/headlamp"* ]]
+  [[ "${output}" == *"CreateNamespace=false"* ]]
+}
+
+@test "app-of-apps render wires Headlamp OIDC to provider-aware SSO issuer" {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+
+  run bash -lc "export POLICIES_REPO_URL_CLUSTER='ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git' ENABLE_HEADLAMP=true ENABLE_SSO=true SSO_PUBLIC_URL='https://keycloak.127.0.0.1.sslip.io/realms/platform' HEADLAMP_PUBLIC_HOST='headlamp.admin.127.0.0.1.sslip.io' HEADLAMP_OIDC_CLIENT_SECRET='secret' HEADLAMP_CLUSTER_ROLE_BINDING_CREATE=true HEADLAMP_OIDC_SKIP_TLS_VERIFY=true; source '${SCRIPT}'; render_headlamp_application_manifest '${apps_dir}'; cat '${apps_dir}/85-headlamp.application.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"issuerURL: https://keycloak.127.0.0.1.sslip.io/realms/platform"* ]]
+  [[ "${output}" != *"issuerURL: https://dex.127.0.0.1.sslip.io"* ]]
+}
+
+@test "app-of-apps render uses direct gateway routes before SSO" {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+  cat >"${apps_dir}/50-platform-gateway-routes.application.yaml" <<'EOF'
+spec:
+  source:
+    path: apps/platform-gateway-routes-sso
+EOF
+
+  run bash -lc "export ENABLE_SSO=false; source '${SCRIPT}'; render_platform_gateway_routes_application_manifest '${apps_dir}'; cat '${apps_dir}/50-platform-gateway-routes.application.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"path: apps/platform-gateway-routes"* ]]
+  [[ "${output}" != *"path: apps/platform-gateway-routes-sso"* ]]
+}
+
+@test "app-of-apps render uses SSO gateway routes when SSO is enabled" {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+  cat >"${apps_dir}/50-platform-gateway-routes.application.yaml" <<'EOF'
+spec:
+  source:
+    path: apps/platform-gateway-routes
+EOF
+
+  run bash -lc "export ENABLE_SSO=true; source '${SCRIPT}'; render_platform_gateway_routes_application_manifest '${apps_dir}'; cat '${apps_dir}/50-platform-gateway-routes.application.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"path: apps/platform-gateway-routes-sso"* ]]
 }
 
 @test "render_repo golden renders gateway route host, forwarded headers, and admin allowlist" {

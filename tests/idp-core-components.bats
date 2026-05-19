@@ -110,6 +110,23 @@ JSON
   run rg -n 'httproute-chatgpt-sim.yaml' \
     "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml"
   [ "${status}" -eq 0 ]
+
+  run rg -n 'repoURL: ssh://git@gitea-ssh\.gitea\.svc\.cluster\.local:22/platform/policies\.git' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml"
+  [ "${status}" -eq 0 ]
+
+  run rg -n 'repoURL: http://gitea-http\.gitea\.svc\.cluster\.local:3000/platform/platform-policies\.git' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml"
+  [ "${status}" -ne 0 ]
+
+  run rg -n '"k8s:io.kubernetes.pod.namespace": chatgpt' \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium"
+  [ "${status}" -ne 0 ]
+
+  run rg -n '"k8s:io.kubernetes.pod.namespace": dev[[:space:]]*$' \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml" \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/agentgateway-ai-gateway-hardened.yaml"
+  [ "${status}" -eq 0 ]
 }
 
 @test "chatgpt-sim SSO route is permitted by the sso namespace ReferenceGrant" {
