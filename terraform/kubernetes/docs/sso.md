@@ -11,7 +11,7 @@ High-level design:
 
 ## Decisions
 
-1. **Scope**: SSO is enabled for admin UIs and selected app routes (`argocd`, `gitea`, `grafana`, `headlamp`, `hubble`, `kyverno`, `sentiment`, `subnetcalc`, `hello-platform`).
+1. **Scope**: SSO is enabled for admin UIs and selected app routes (`argocd`, `gitea`, `grafana`, `headlamp`, `hubble`, `kyverno`, `sentiment`, `subnetcalc`, `chatgpt-sim`).
 2. **IdP**: **Keycloak** with reproducible local users and groups.
 3. **Authorization proof**: org groups (`platform-admins`, `platform-viewers`) and app/environment groups (`app-*-dev`, `app-*-uat`) are distinct checks.
 4. **SigNoz**: optional observability path only; it is not part of the active SSO/RBAC success story.

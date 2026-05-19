@@ -2726,6 +2726,21 @@ check_app_yaml_tfvar_drift() {
   echo ""
 }
 
+check_platform_application_inventory() {
+  local inventory_paths=(
+    "${STACK_DIR}/apps"
+    "${STACK_DIR}/config/platform-launchpad.apps.json"
+    "${REPO_ROOT}/catalog/platform-apps.json"
+    "${REPO_ROOT}/apps/backstage/catalog"
+  )
+
+  if ! grep -R -q -E 'chatgpt-sim|chatgpt\.dev\.127\.0\.0\.1\.sslip\.io' "${inventory_paths[@]}" 2>/dev/null; then
+    fail "ChatGPT demo is missing from platform application inventory"
+  fi
+
+  ok "Application inventory contains chatgpt-sim"
+}
+
 emit_app_dependency_rows() {
   local max_jobs="${CHECK_VERSION_DEPENDENCY_CONCURRENCY}"
   local js_input py_input output_dir
@@ -3755,6 +3770,7 @@ main() {
 
   progress "Checking app-of-apps revisions and preload image alignment"
   check_app_yaml_tfvar_drift
+  check_platform_application_inventory
   check_preload_chart_section_version_alignment
   check_preload_image_version_alignment "${CODE_ARGOCD_IMAGE_REF}" "${CODETAG_PROMETHEUS}" "${CODETAG_GRAFANA}" "${CODETAG_LOKI}" "${CODETAG_TEMPO}" "${CODETAG_VICTORIA_LOGS}"
   check_platform_manifest_api_version_pins

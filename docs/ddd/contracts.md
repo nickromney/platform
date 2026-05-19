@@ -28,7 +28,7 @@ flowchart LR
     User((Browser))
     OAuth["oauth2-proxy<br/>(Identity edge)"]
     APIM["APIM simulator<br/>(Anticorruption)"]
-    Hello["hello-platform<br/>(sample workload)"]
+    ChatGPT["chatgpt-sim<br/>(ChatGPT-style demo)"]
     SubnetFE["subnetcalc frontend"]
     SubnetAPI["subnetcalc API<br/>(Open Host Service)"]
     SentFE["sentiment frontend"]
@@ -38,7 +38,7 @@ flowchart LR
     Portal["Portal/status surfaces"]
 
     User --> OAuth
-    OAuth --> Hello
+    OAuth --> ChatGPT
     OAuth --> SubnetFE
     OAuth --> SentFE
     SubnetFE --> APIM
@@ -89,7 +89,7 @@ outside the request path above.
 - **Published language:** issuer URL, JWKS URL, userinfo URL, client IDs
   (`oauth2-proxy`, `argocd`, `headlamp`, `apim-simulator`), `groups` claim,
   `platform-admins`, `platform-viewers`, and app groups such as
-  `app-subnetcalc-dev` and `app-hello-platform-dev`.
+  `app-subnetcalc-dev` and `app-sentiment-dev`.
 - **Secret lifecycle:** client secrets, the `oauth2-proxy` cookie secret, and
   Keycloak Postgres password are generated during apply and projected through
   Kubernetes Secrets. Demo user passwords come from operator input.
@@ -210,7 +210,7 @@ outside the request path above.
     `sync_gitea_app_repo_subnetcalc`)
   - ingress hostnames and the SSO path enabled at stage `900`
   - environment requests rendered by `terraform/kubernetes/scripts/idp-environment.sh`
-    for apps such as `hello-platform`
+    for apps such as `chatgpt-sim`
   - environment namespaces labeled with
     `platform.publiccloudexperiments.net/environment`
   - namespace roles labeled with

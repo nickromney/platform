@@ -1,7 +1,5 @@
 namespace: uat
 resources:
   - ../workloads/base
-  - ../workloads/hello-platform
 patches:
-  - path: hello-platform-image-patch.yaml
   - path: security-context-patches.yaml

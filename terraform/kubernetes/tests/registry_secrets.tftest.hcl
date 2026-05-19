@@ -71,18 +71,13 @@ run "registry_secret_namespaces_auto_from_app_repos" {
   }
 
   assert {
-    condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), "chatgpt")
-    error_message = "Expected gitea_registry_creds to be created for chatgpt when MCP is enabled"
-  }
-
-  assert {
     condition     = contains(keys(kubernetes_secret_v1.gitea_registry_creds), "review")
     error_message = "Expected gitea_registry_creds to be created for review when review environments are enabled"
   }
 
   assert {
-    condition     = length(kubernetes_secret_v1.gitea_registry_creds) == 6
-    error_message = "Expected exactly 6 auto-created registry secrets (dev, uat, apim, mcp, chatgpt, review)"
+    condition     = length(kubernetes_secret_v1.gitea_registry_creds) == 5
+    error_message = "Expected exactly 5 auto-created registry secrets (dev, uat, apim, mcp, review)"
   }
 }
 

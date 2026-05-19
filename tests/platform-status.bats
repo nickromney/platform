@@ -272,7 +272,7 @@ EOF
   run jq -r '
     [
       (.actions | any(.id == "kind-idp-catalog" and .command == "make -C kubernetes/kind idp-catalog")),
-      (.actions | any(.id == "kind-idp-env-create" and (.command | contains("idp-env ACTION=create APP=hello-platform ENV=preview-nr")))),
+      (.actions | any(.id == "kind-idp-env-create" and (.command | contains("idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr")))),
       (.actions | any(.id == "kind-idp-deployments" and .command == "make -C kubernetes/kind idp-deployments")),
       (.actions | any(.id == "kind-idp-secrets" and .command == "make -C kubernetes/kind idp-secrets")),
       (.actions | any(.id == "kind-gitea-repo-lifecycle-demo" and (.command | contains("gitea-repo-lifecycle-demo"))))

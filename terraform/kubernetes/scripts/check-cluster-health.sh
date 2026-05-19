@@ -34,6 +34,95 @@ fail_soft() { echo "${RED}✖${NC} $*" >&2; FAILURES=$((FAILURES + 1)); }
 warn() { echo "${YELLOW}⚠${NC} $*"; }
 ok() { echo "${GREEN}✔${NC} $*"; }
 
+expected_argocd_apps() {
+  local apps=()
+
+  if [[ "${EXPECT_GITEA}" == "true" ]]; then
+    apps+=(gitea)
+  fi
+
+  if [[ "${EXPECT_POLICIES}" == "true" ]]; then
+    apps+=(kyverno kyverno-policies policy-reporter)
+    if [[ "${EXPECT_CILIUM_POLICIES}" == "true" ]]; then
+      apps+=(cilium-policies)
+    fi
+  fi
+
+  if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
+    apps+=(cert-manager cert-manager-config nginx-gateway-fabric platform-gateway platform-gateway-routes)
+  fi
+
+  if [[ "${EXPECT_ACTIONS_RUNNER}" == "true" ]]; then
+    apps+=(gitea-actions-runner)
+  fi
+
+  if [[ "${EXPECT_PROMETHEUS}" == "true" ]]; then apps+=(prometheus); fi
+  if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(grafana); fi
+  if [[ "${EXPECT_LOKI}" == "true" ]]; then apps+=(loki); fi
+  if [[ "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then apps+=(victoria-logs); fi
+  if [[ "${EXPECT_TEMPO}" == "true" ]]; then apps+=(tempo); fi
+  if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then apps+=(signoz); fi
+  if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_LOKI}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" || "${EXPECT_TEMPO}" == "true" || "${EXPECT_SIGNOZ}" == "true" ]]; then
+    apps+=(otel-collector-prometheus)
+  fi
+
+  if [[ "${EXPECT_HEADLAMP}" == "true" ]]; then
+    apps+=(headlamp)
+  fi
+
+  if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then
+    apps+=(apim)
+  fi
+
+  if [[ "${EXPECT_AGENTGATEWAY_AI_GATEWAY}" == "true" ]]; then
+    apps+=(agentgateway-crds agentgateway agentgateway-ai-gateway)
+  fi
+
+  if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" || "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
+    apps+=(dev uat)
+  fi
+
+  if [[ "${EXPECT_SSO}" == "true" ]]; then
+    apps+=(idp oauth2-proxy-argocd oauth2-proxy-gitea oauth2-proxy-idp-core)
+    if [[ "${SSO_PROVIDER}" != "keycloak" ]]; then apps+=(dex); fi
+    if [[ "${EXPECT_HUBBLE}" == "true" ]]; then apps+=(oauth2-proxy-hubble); fi
+    if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(oauth2-proxy-grafana); fi
+    if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then apps+=(oauth2-proxy-signoz); fi
+    if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" ]]; then apps+=(oauth2-proxy-sentiment-dev oauth2-proxy-sentiment-uat); fi
+    if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then apps+=(oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat); fi
+    if [[ "${EXPECT_BACKSTAGE_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-backstage); fi
+  fi
+
+  if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
+    apps+=(mcp chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-chatgpt-sim)
+  fi
+
+  printf '%s\n' "${apps[@]}" | awk 'NF' | sort -u
+}
+
+check_expected_argocd_app_inventory() {
+  local ns="$1"
+  local expected_file live_app unexpected=""
+
+  expected_file="$(mktemp)"
+  expected_argocd_apps >"${expected_file}"
+
+  while IFS= read -r live_app; do
+    [[ -n "${live_app}" ]] || continue
+    if ! grep -Fxq "${live_app}" "${expected_file}"; then
+      unexpected="${unexpected}${unexpected:+, }${live_app}"
+    fi
+  done < <(kubectl -n "${ns}" get applications.argoproj.io -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sort || true)
+
+  rm -f "${expected_file}"
+
+  if [[ -n "${unexpected}" ]]; then
+    fail_soft "Unexpected Argo CD applications present: ${unexpected}"
+  else
+    ok "Argo CD application inventory matches expected apps"
+  fi
+}
+
 node_not_ready_count() {
   local statuses
   statuses="$(kubectl get nodes --no-headers 2>/dev/null | awk '{print $2}' || true)"
@@ -775,11 +864,26 @@ SSO_PROVIDER=$(tfvar_get sso_provider)
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
+EXPECT_APIM_SIMULATOR=$(expected_from_tfvars enable_apim_simulator)
+EXPECT_AGENTGATEWAY_AI_GATEWAY=$(expected_from_tfvars enable_agentgateway_ai_gateway)
+EXPECT_BACKSTAGE=$(expected_from_tfvars enable_backstage)
 EXPECT_APP_REPO_SUBNET_CALC=$(expected_from_tfvars enable_app_repo_subnetcalc)
 EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
 [[ -n "${EXPECT_CILIUM_POLICIES}" ]] || EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
 [[ -n "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" ]] || EXPECT_CILIUM_POLICY_AUDIT_MODE="false"
+EXPECT_APIM_EFFECTIVE="${EXPECT_APIM_SIMULATOR}"
+if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then
+  EXPECT_APIM_EFFECTIVE="true"
+fi
+EXPECT_MCP_EFFECTIVE="false"
+if [[ "${EXPECT_SSO}" == "true" && ( "${EXPECT_APIM_EFFECTIVE}" == "true" || "${EXPECT_AGENTGATEWAY_AI_GATEWAY}" == "true" ) ]]; then
+  EXPECT_MCP_EFFECTIVE="true"
+fi
+EXPECT_BACKSTAGE_EFFECTIVE="false"
+if [[ "${EXPECT_BACKSTAGE}" == "true" && "${EXPECT_SSO}" == "true" && "${EXPECT_ARGOCD}" == "true" ]]; then
+  EXPECT_BACKSTAGE_EFFECTIVE="true"
+fi
 CURRENT_STAGE=$(detect_stage_from_tfvars)
 
 ARGOCD_SERVER_NODE_PORT=$(tfvar_or_default argocd_server_node_port 30080)
@@ -1313,6 +1417,8 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   echo "Argo CD Applications:"
   kubectl -n "${ARGOCD_NS}" get applications.argoproj.io 2>/dev/null || true
 
+  check_expected_argocd_app_inventory "${ARGOCD_NS}"
+
   check_all_argocd_apps "${ARGOCD_NS}"
 
   if kubectl -n "${ARGOCD_NS}" get app gitea >/dev/null 2>&1; then
@@ -1448,6 +1554,16 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
         ok "Argo CD app ${app} exists"
       else
         fail_soft "Argo CD app ${app} missing (workload repos enabled${tfvars_hint})"
+      fi
+    done
+  fi
+
+  if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
+    for app in mcp chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-chatgpt-sim; do
+      if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
+        ok "Argo CD app ${app} exists"
+      else
+        fail_soft "Argo CD app ${app} missing (MCP/chatgpt demo expected${tfvars_hint})"
       fi
     done
   fi

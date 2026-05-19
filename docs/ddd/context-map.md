@@ -112,7 +112,7 @@ scorecard.
 
 What it owns:
 
-- app/environment names such as `hello-platform-dev`, `hello-platform-uat`,
+- app/environment names such as `chatgpt-sim-dev`,
   `sentiment-dev`, `sentiment-uat`, `subnetcalc-dev`, and `subnetcalc-uat`
 - the first-class service catalog at `catalog/platform-apps.json`
 - application namespaces labeled as `application`, shared-service namespaces

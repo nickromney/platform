@@ -291,7 +291,7 @@ entities = {
 for name, (selector, source_path) in {
     "backstage": ("app=backstage", "apps/backstage/"),
     "idp-core": ("app=idp-core", "apps/idp-core/"),
-    "hello-platform": ("app=hello-platform", "apps/hello-platform/"),
+    "chatgpt-sim": ("app=chatgpt-sim", "apps/chatgpt-sim/"),
     "platform-mcp": ("app=platform-mcp", "apps/platform-mcp/"),
     "mcp-inspector": ("app=mcp-inspector", "apps/platform-mcp/"),
     "subnetcalc": ("app=subnetcalc", "apps/subnetcalc/"),

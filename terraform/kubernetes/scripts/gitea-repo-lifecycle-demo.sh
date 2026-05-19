@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 GITEA_URL="${GITEA_URL:-http://127.0.0.1:30090}"
 GITEA_OWNER="${GITEA_OWNER:-platform}"
-REPO_NAME="${REPO_NAME:-hello-platform}"
+REPO_NAME="${REPO_NAME:-chatgpt-sim}"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"

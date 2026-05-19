@@ -228,31 +228,3 @@ resource "kubernetes_namespace_v1" "apim" {
     null_resource.ensure_kind_kubeconfig,
   ]
 }
-
-resource "kubectl_manifest" "namespace_chatgpt" {
-  count = var.enable_argocd && local.enable_mcp_effective ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: chatgpt
-  labels:
-    "app.kubernetes.io/name": chatgpt-sim
-    "app.kubernetes.io/component": chatgpt-sim
-    "platform.publiccloudexperiments.net/namespace-role": shared
-    "platform.publiccloudexperiments.net/sensitivity": internal
-    "kyverno.io/isolate": "true"
-__YAML__
-
-  wait              = false
-  wait_for_rollout  = false
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = true
-
-  depends_on = [
-    kind_cluster.local,
-    null_resource.ensure_kind_kubeconfig,
-  ]
-}

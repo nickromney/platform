@@ -38,12 +38,6 @@ spec:
       name: oauth2-proxy-subnetcalc-uat
     - group: ""
       kind: Service
-      name: oauth2-proxy-hello-platform-dev
-    - group: ""
-      kind: Service
-      name: oauth2-proxy-hello-platform-uat
-    - group: ""
-      kind: Service
       name: oauth2-proxy-backstage
     - group: ""
       kind: Service

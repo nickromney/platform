@@ -79,7 +79,7 @@ locals {
   sso_viewer_group                     = "platform-viewers"
   sso_apim_audience                    = "apim-simulator"
   sso_mcp_audience                     = "platform-mcp"
-  sso_app_groups                       = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat", "app-hello-platform-dev", "app-hello-platform-uat"]
+  sso_app_groups                       = ["app-subnetcalc-dev", "app-subnetcalc-uat", "app-sentiment-dev", "app-sentiment-uat"]
   gitea_public_host                    = local.separate_admin_domain_enabled ? "gitea.${local.platform_admin_base_domain_effective}" : "gitea.admin.${local.platform_base_domain_effective}"
   gitea_public_url                     = "https://${local.gitea_public_host}${local.gateway_https_host_port_suffix}"
   grafana_public_host                  = local.separate_admin_domain_enabled ? "grafana.${local.platform_admin_base_domain_effective}" : "grafana.admin.${local.platform_base_domain_effective}"
@@ -108,34 +108,10 @@ locals {
   chatgpt_sim_public_url               = "https://${local.chatgpt_sim_public_host}${local.gateway_https_host_port_suffix}"
   agentgateway_ai_gateway_public_host  = "llm.${local.platform_base_domain_effective}"
   agentgateway_ai_gateway_public_url   = "https://${local.agentgateway_ai_gateway_public_host}${local.gateway_https_host_port_suffix}"
-  hello_platform_dev_public_host       = "hello-platform.dev.${local.platform_base_domain_effective}"
-  hello_platform_dev_public_url        = "https://${local.hello_platform_dev_public_host}${local.gateway_https_host_port_suffix}"
-  hello_platform_uat_public_host       = "hello-platform.uat.${local.platform_base_domain_effective}"
-  hello_platform_uat_public_url        = "https://${local.hello_platform_uat_public_host}${local.gateway_https_host_port_suffix}"
   idp_portal_public_host               = "portal.${local.platform_base_domain_effective}"
   idp_portal_public_url                = "https://${local.idp_portal_public_host}${local.gateway_https_host_port_suffix}"
   idp_api_public_host                  = "portal-api.${local.platform_base_domain_effective}"
   idp_api_public_url                   = "https://${local.idp_api_public_host}${local.gateway_https_host_port_suffix}"
-  sso_hello_platform_proxy_apps = {
-    dev = {
-      name             = "oauth2-proxy-hello-platform-dev"
-      public_url       = local.hello_platform_dev_public_url
-      upstream         = "http://hello-platform.dev.svc.cluster.local:8080"
-      group            = "app-hello-platform-dev"
-      cookie_name      = "kind-v2-sso-hello-platform-dev"
-      cookie_domain    = local.dev_cookie_domain
-      whitelist_domain = local.dev_whitelist_domains
-    }
-    uat = {
-      name             = "oauth2-proxy-hello-platform-uat"
-      public_url       = local.hello_platform_uat_public_url
-      upstream         = "http://hello-platform.uat.svc.cluster.local:8080"
-      group            = "app-hello-platform-uat"
-      cookie_name      = "kind-v2-sso-hello-platform-uat"
-      cookie_domain    = local.uat_cookie_domain
-      whitelist_domain = local.uat_whitelist_domains
-    }
-  }
   sso_idp_proxy_apps = merge(
     local.enable_backstage_effective ? {
       portal = {
@@ -175,7 +151,7 @@ locals {
     chatgpt = {
       name             = "oauth2-proxy-chatgpt-sim"
       public_url       = local.chatgpt_sim_public_url
-      upstream         = "http://chatgpt-sim.chatgpt.svc.cluster.local:8080"
+      upstream         = "http://chatgpt-sim.dev.svc.cluster.local:8080"
       group            = local.sso_viewer_group
       cookie_name      = "kind-v2-sso-chatgpt-sim"
       cookie_domain    = local.dev_cookie_domain
@@ -194,7 +170,6 @@ locals {
       "${local.subnetcalc_dev_public_url}/oauth2/callback",
       "${local.subnetcalc_uat_public_url}/oauth2/callback",
     ],
-    [for app in values(local.sso_hello_platform_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
@@ -479,7 +454,7 @@ locals {
     var.enable_sso && var.enable_argocd && var.enable_signoz && !var.enable_app_of_apps ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
-    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(["oauth2-proxy-hello-platform-dev", "oauth2-proxy-hello-platform-uat"], local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
+    var.enable_sso && var.enable_argocd && !var.enable_app_of_apps ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
     local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
   ))
 
@@ -489,7 +464,6 @@ locals {
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
     (var.enable_argocd && local.enable_apim_simulator_effective) ? ["apim"] : [],
     (var.enable_sso && var.enable_argocd && local.enable_mcp_effective) ? ["mcp"] : [],
-    (var.enable_sso && var.enable_argocd && local.enable_mcp_effective) ? ["chatgpt"] : [],
     local.enable_review_environments ? [local.review_environment_contract.namespace] : [],
   )))
 

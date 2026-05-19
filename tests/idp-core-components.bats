@@ -12,7 +12,7 @@ setup() {
   run jq -e '
     .schema_version == "platform.idp/v1" and
     (.applications | length) >= 3 and
-    any(.applications[]; .name == "hello-platform" and .owner == "team-dolphin") and
+    any(.applications[]; .name == "chatgpt-sim" and .owner == "platform" and any(.environments[]; .name == "dev" and .namespace == "dev")) and
     any(.applications[]; .name == "subnetcalc" and any(.environments[]; .name == "dev" and .rbac.group == "app-subnetcalc-dev")) and
     any(.applications[]; .name == "sentiment" and any(.environments[]; .name == "uat" and .rbac.group == "app-sentiment-uat")) and
     all(.applications[]; has("deployment") and has("secrets") and has("scorecard"))
@@ -92,39 +92,31 @@ JSON
   [ "${status}" -eq 0 ]
 }
 
-@test "hello-platform is a real checked-in workload with dev and UAT promotion overlays" {
+@test "chatgpt-sim is deployed in dev with the chatgpt.dev route" {
   for path in \
-    terraform/kubernetes/apps/workloads/hello-platform/all.yaml \
-    terraform/kubernetes/apps/workloads/hello-platform/kustomization.yaml \
-    terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml \
-    terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml \
-    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-dev.yaml \
-    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-hello-platform-uat.yaml \
-    terraform/kubernetes/cluster-policies/cilium/projects/hello-platform/hello-platform-ingress.yaml
+    terraform/kubernetes/apps/chatgpt-sim/all.yaml \
+    terraform/kubernetes/apps/chatgpt-sim/kustomization.yaml \
+    terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml \
+    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-chatgpt-sim.yaml \
+    terraform/kubernetes/cluster-policies/cilium/shared/chatgpt-sim-hardened.yaml
   do
     [ -f "${REPO_ROOT}/${path}" ]
   done
 
-  run rg -n '../workloads/hello-platform|hello-platform-image-patch.yaml' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/dev/kustomization.yaml" \
-    "${REPO_ROOT}/terraform/kubernetes/apps/uat/kustomization.yaml"
+  run rg -n 'namespace: dev|PUBLIC_BASE_URL|https://chatgpt.dev.127.0.0.1.sslip.io' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/chatgpt-sim/all.yaml"
   [ "${status}" -eq 0 ]
 
-  run rg -n 'httproute-hello-platform-dev.yaml|httproute-hello-platform-uat.yaml' \
+  run rg -n 'httproute-chatgpt-sim.yaml' \
     "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml"
   [ "${status}" -eq 0 ]
 }
 
-@test "hello-platform SSO routes are permitted by the sso namespace ReferenceGrant" {
+@test "chatgpt-sim SSO route is permitted by the sso namespace ReferenceGrant" {
   grant="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/referencegrant-sso.yaml"
 
-  for service in \
-    oauth2-proxy-hello-platform-dev \
-    oauth2-proxy-hello-platform-uat
-  do
-    run rg -n "name: ${service}" "${grant}"
-    [ "${status}" -eq 0 ]
-  done
+  run rg -n 'name: oauth2-proxy-chatgpt-sim' "${grant}"
+  [ "${status}" -eq 0 ]
 }
 
 @test "developer portal and API have public portal gateway routes" {
@@ -341,9 +333,7 @@ PY
     app-subnetcalc-dev \
     app-subnetcalc-uat \
     app-sentiment-dev \
-    app-sentiment-uat \
-    app-hello-platform-dev \
-    app-hello-platform-uat
+    app-sentiment-uat
   do
     run rg -n "${group}" "${REPO_ROOT}/terraform/kubernetes/sso.tf" "${REPO_ROOT}/terraform/kubernetes/locals.tf"
     [ "${status}" -eq 0 ]
@@ -374,7 +364,7 @@ import yaml
 repo_root = Path(os.environ["REPO_ROOT"])
 paths = [
     "terraform/kubernetes/apps/workloads/base/all.yaml",
-    "terraform/kubernetes/apps/workloads/hello-platform/all.yaml",
+    "terraform/kubernetes/apps/chatgpt-sim/all.yaml",
     "terraform/kubernetes/apps/idp/all.yaml",
 ]
 
@@ -391,7 +381,7 @@ expected = {
     "subnetcalc-api",
     "subnetcalc-frontend",
     "subnetcalc-router",
-    "hello-platform",
+    "chatgpt-sim",
     "idp-core",
     "backstage",
 }
@@ -414,14 +404,20 @@ PY
 
   for expected in \
     'clientScopes = [' \
-    'name        = local.sso_groups_claim' \
-    'optionalClientScopes = [local.sso_groups_claim]' \
-    '${local.hello_platform_dev_public_url}/oauth2/callback' \
-    '${local.hello_platform_uat_public_url}/oauth2/callback' \
-    '${local.idp_portal_public_url}/oauth2/callback' \
-    '${local.idp_api_public_url}/oauth2/callback'
+    'name        = local.sso_groups_claim'
   do
     run rg -n -F "${expected}" "${realm_tf}"
+    [ "${status}" -eq 0 ]
+  done
+
+  run rg -n 'optionalClientScopes\s*=\s*\[local\.sso_groups_claim\]' "${realm_tf}"
+  [ "${status}" -eq 0 ]
+
+  for expected in \
+    '[for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"]' \
+    '[for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"]'
+  do
+    run rg -n -F "${expected}" "${REPO_ROOT}/terraform/kubernetes/locals.tf"
     [ "${status}" -eq 0 ]
   done
 
@@ -735,7 +731,7 @@ PY
   run make -C "${REPO_ROOT}/kubernetes/kind" help
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"make idp-catalog"* ]]
-  [[ "${output}" == *"make idp-env ACTION=create APP=hello-platform ENV=preview-nr"* ]]
+  [[ "${output}" == *"make idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr"* ]]
   [[ "${output}" == *"make idp-deployments"* ]]
   [[ "${output}" == *"make idp-secrets"* ]]
 
@@ -743,29 +739,29 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"would inspect the IDP service catalog"* ]]
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" idp-env DRY_RUN=1 ACTION=create APP=hello-platform ENV=preview-nr
+  run make -C "${REPO_ROOT}/kubernetes/kind" idp-env DRY_RUN=1 ACTION=create APP=chatgpt-sim ENV=preview-nr
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"would create environment preview-nr for hello-platform"* ]]
+  [[ "${output}" == *"would create environment preview-nr for chatgpt-sim"* ]]
 }
 
 @test "self-service environment requests render a usable workload base reference" {
   export PLATFORM_IDP_RUN_DIR="${REPO_ROOT}/.run/idp-core-components-test"
   rm -rf "${PLATFORM_IDP_RUN_DIR}"
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" idp-env ACTION=create APP=hello-platform ENV=preview-nr
+  run make -C "${REPO_ROOT}/kubernetes/kind" idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr
   [ "${status}" -eq 0 ]
 
-  request_dir="${PLATFORM_IDP_RUN_DIR}/hello-platform-preview-nr"
+  request_dir="${PLATFORM_IDP_RUN_DIR}/chatgpt-sim-preview-nr"
   [ -f "${request_dir}/request.json" ]
   [ -f "${request_dir}/kustomization.yaml" ]
 
   run sed -n '1,20p' "${request_dir}/kustomization.yaml"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"terraform/kubernetes/apps/workloads/hello-platform"* ]]
+  [[ "${output}" == *"apps/workloads/chatgpt-sim"* ]]
 
   run kubectl kustomize "${request_dir}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"name: hello-platform"* ]]
+  [[ "${output}" == *"name: chatgpt-sim"* ]]
 
   rm -rf "${PLATFORM_IDP_RUN_DIR}"
 }
@@ -798,7 +794,7 @@ PY
     "secret binding" \
     "scorecard" \
     "app/environment RBAC" \
-    "hello-platform"
+    "chatgpt-sim"
   do
     run rg -n "${term}" \
       "${REPO_ROOT}/docs/ddd/ubiquitous-language.md" \

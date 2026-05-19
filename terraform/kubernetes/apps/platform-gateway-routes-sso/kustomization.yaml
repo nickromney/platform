@@ -14,8 +14,6 @@ resources:
   - httproute-sentiment-uat.yaml
   - httproute-subnetcalc-dev.yaml
   - httproute-subnetcalc-uat.yaml
-  - httproute-hello-platform-dev.yaml
-  - httproute-hello-platform-uat.yaml
   - httproute-agentgateway-ai-gateway.yaml
   - httproute-chatgpt-sim.yaml
   - httproute-mcp.yaml

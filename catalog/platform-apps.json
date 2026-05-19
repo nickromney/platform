@@ -173,42 +173,27 @@
       }
     },
     {
-      "name": "hello-platform",
-      "display_name": "Hello Platform",
-      "owner": "team-dolphin",
-      "lifecycle": "example",
+      "name": "chatgpt-sim",
+      "display_name": "ChatGPT Sim",
+      "owner": "platform",
+      "lifecycle": "demo",
       "source": {
         "repo": "platform",
-        "path": "terraform/kubernetes/apps/workloads/hello-platform"
+        "path": "apps/chatgpt-sim"
       },
       "deployment": {
         "strategy": "gitops",
         "controller": "argocd",
-        "applications": ["dev", "uat"],
-        "image_patch_files": {
-          "dev": "terraform/kubernetes/apps/dev/hello-platform-image-patch.yaml",
-          "uat": "terraform/kubernetes/apps/uat/hello-platform-image-patch.yaml"
-        }
+        "applications": ["chatgpt-sim"]
       },
       "environments": [
         {
           "name": "dev",
           "type": "development",
           "namespace": "dev",
-          "route": "https://hello-platform.dev.127.0.0.1.sslip.io",
+          "route": "https://chatgpt.dev.127.0.0.1.sslip.io",
           "rbac": {
-            "group": "app-hello-platform-dev",
-            "viewer": true,
-            "mutator": false
-          }
-        },
-        {
-          "name": "uat",
-          "type": "acceptance",
-          "namespace": "uat",
-          "route": "https://hello-platform.uat.127.0.0.1.sslip.io",
-          "rbac": {
-            "group": "app-hello-platform-uat",
+            "group": "platform-viewers",
             "viewer": true,
             "mutator": false
           }
@@ -216,9 +201,9 @@
       ],
       "secrets": [
         {
-          "name": "hello-platform-demo-message",
-          "binding": "environment",
-          "rotation": "demo"
+          "name": "oauth2-proxy-oidc",
+          "binding": "sso",
+          "rotation": "platform"
         }
       ],
       "scorecard": {

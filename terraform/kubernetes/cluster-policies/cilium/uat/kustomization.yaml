@@ -5,5 +5,4 @@ namespace: uat
 resources:
   - ../projects/sentiment
   - ../projects/subnetcalc
-  - ../projects/hello-platform
   - overrides
