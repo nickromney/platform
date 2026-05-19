@@ -56,14 +56,21 @@ EOF
   [ "${output}" = "update available" ]
 }
 
-@test "terraform kubernetes module pins kubernetes and external providers in config and lockfile" {
+@test "terraform kubernetes module pins provider constraints in config and lockfile" {
   run grep -Fn 'version = "~> 3.1"' "${REPO_ROOT}/terraform/kubernetes/main.tf"
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'version = "~> 2.3"' "${REPO_ROOT}/terraform/kubernetes/main.tf"
+  for expected in \
+    'version = "~> 2.4"' \
+    'version = "~> 2.9"' \
+    'version = "~> 3.3"' \
+    'version = "~> 3.9"' \
+    'version = "~> 4.3"'; do
+    run grep -Fn "${expected}" "${REPO_ROOT}/terraform/kubernetes/main.tf"
 
-  [ "${status}" -eq 0 ]
+    [ "${status}" -eq 0 ]
+  done
 
   run grep -Fn 'version     = "3.1.0"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
 
@@ -73,11 +80,19 @@ EOF
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'version     = "2.3.5"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
+  for expected in \
+    'version     = "2.4.0"' \
+    'constraints = "~> 2.4"' \
+    'version     = "2.9.0"' \
+    'constraints = "~> 2.9"' \
+    'version     = "3.3.0"' \
+    'constraints = "~> 3.3"' \
+    'version     = "3.9.0"' \
+    'constraints = "~> 3.9"' \
+    'version     = "4.3.0"' \
+    'constraints = "~> 4.3"'; do
+    run grep -Fn "${expected}" "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
 
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'constraints = "~> 2.3"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
-
-  [ "${status}" -eq 0 ]
+    [ "${status}" -eq 0 ]
+  done
 }

@@ -94,17 +94,17 @@ run "direct_mode_supports_agentgateway_without_apim" {
   command = plan
 
   variables {
-    cni_provider              = "cilium"
-    enable_hubble             = false
-    enable_argocd             = true
-    enable_gitea              = true
-    enable_policies           = true
-    enable_gateway_tls        = true
-    enable_sso                = true
-    enable_actions_runner     = true
-    enable_app_of_apps        = false
+    cni_provider                   = "cilium"
+    enable_hubble                  = false
+    enable_argocd                  = true
+    enable_gitea                   = true
+    enable_policies                = true
+    enable_gateway_tls             = true
+    enable_sso                     = true
+    enable_actions_runner          = true
+    enable_app_of_apps             = false
     enable_agentgateway_ai_gateway = true
-    gitea_admin_pwd           = "test-gitea-admin-password"
+    gitea_admin_pwd                = "test-gitea-admin-password"
   }
 
   assert {

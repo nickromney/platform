@@ -20,26 +20,26 @@ terraform {
     }
     external = {
       source  = "hashicorp/external"
-      version = "~> 2.3"
+      version = "~> 2.4"
     }
     local = {
       source  = "hashicorp/local"
-      version = "~> 2.6"
+      version = "~> 2.9"
     }
 
     null = {
       source  = "hashicorp/null"
-      version = "~> 3.2"
+      version = "~> 3.3"
     }
 
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.7"
+      version = "~> 3.9"
     }
 
     tls = {
       source  = "hashicorp/tls"
-      version = "~> 4.1"
+      version = "~> 4.3"
     }
   }
 }

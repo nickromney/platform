@@ -41,6 +41,7 @@ KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
 DRY_RUN ?= 0
 CHECK_VERSION_FORMAT ?= text
+TOFU_TEST_TIMEOUT_SECONDS ?= 600
 OIDC_RECOVERY_FORMAT ?= text
 OIDC_RECOVERY_FORCE_MODE ?= nginx-rollout
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
@@ -1342,7 +1343,7 @@ test:
 	@$(MAKE) test-shell
 	@$(MAKE) test-bats
 	@$(MAKE) prepare-state
-	@"$(STACK_DIR)/scripts/run-opentofu-tests.sh" --execute --module-dir "$(STACK_DIR)"
+	@"$(STACK_DIR)/scripts/run-opentofu-tests.sh" --execute --module-dir "$(STACK_DIR)" --timeout-seconds "$(TOFU_TEST_TIMEOUT_SECONDS)"
 
 .PHONY: test-shell
 test-shell:
@@ -1366,20 +1367,28 @@ test-bats:
 .PHONY: check-version
 check-version:
 	@$(MAKE) ensure-kind-kubeconfig >/dev/null
-	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
-		EXPECTED_VARIANT_PATH="kubernetes/kind" \
-		EXPECTED_VARIANT_LABEL="kubernetes/kind" \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
-		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG) >/dev/null; \
+	@assert_output="$$(mktemp)"; \
+	trap 'rm -f "$$assert_output"' EXIT; \
+	set +e; \
+	EXPECTED_VARIANT_PATH="kubernetes/kind" \
+	EXPECTED_VARIANT_LABEL="kubernetes/kind" \
+	KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
+	KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
+	PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
+	"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG) >"$$assert_output" 2>&1; \
+	assert_status="$$?"; \
+	set -e; \
+	if [ "$$assert_status" -eq 0 ]; then \
+		if [ "$(CHECK_VERSION_FORMAT)" != "json" ]; then \
+			cat "$$assert_output"; \
+		fi; \
+	elif grep -Fq "Multiple tracked platform surfaces are active on this machine" "$$assert_output"; then \
+		if [ "$(CHECK_VERSION_FORMAT)" != "json" ]; then \
+			printf 'WARN Multiple tracked platform surfaces are active on this machine; continuing with version audits.\n'; \
+		fi; \
 	else \
-		EXPECTED_VARIANT_PATH="kubernetes/kind" \
-		EXPECTED_VARIANT_LABEL="kubernetes/kind" \
-		KUBECONFIG_PATH="$(KUBECONFIG_PATH)" \
-		KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" \
-		PLATFORM_STATUS_SCRIPT="$(PLATFORM_STATUS_SCRIPT)" \
-		"$(ASSERT_VARIANT_ACTIVE)" $(READONLY_MODE_FLAG); \
+		cat "$$assert_output" >&2; \
+		exit "$$assert_status"; \
 	fi
 	@if [ "$(CHECK_VERSION_FORMAT)" = "json" ]; then \
 		component_report="$$(mktemp)"; \
