@@ -12,13 +12,12 @@ setup() {
   [[ "${output}" == *"update"* ]]
 }
 
-@test "sentiment update delegates to each bun dependency root" {
+@test "sentiment update documents that the default runtime has no Bun roots" {
   run make -n -C "${REPO_ROOT}/apps/sentiment" update
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"cd api-sentiment && bun update --latest"* ]]
-  [[ "${output}" == *"cd frontend-react-vite/sentiment-auth-ui && bun update --latest"* ]]
-  [[ "${output}" == *"cd frontend-typescript-vite && bun update --latest"* ]]
+  [[ "${output}" == *"No dependency update required for the default Go sentiment runtime."* ]]
+  [[ "${output}" != *"bun update"* ]]
 }
 
 @test "sentiment prereqs fails cleanly when the repo env file is missing" {

@@ -53,29 +53,30 @@ Use direct builds when you are debugging one Dockerfile.
 ```bash
 docker build \
   --progress=plain \
-  -f apps/subnetcalc/api-fastapi-container-app/Dockerfile \
+  -f apps/subnetcalc/app-go/Dockerfile \
   -t platform-subnetcalc-api:local \
-  apps/subnetcalc/api-fastapi-container-app
+  apps/subnetcalc/app-go
 
-docker run --rm -p 8090:8000 platform-subnetcalc-api:local
+docker run --rm -e RUNTIME_ROLE=backend -p 8090:8080 platform-subnetcalc-api:local
 ```
 
-For frontend images whose Dockerfile expects the app root as context, keep the
-context aligned with the repo build scripts:
+For the frontend role, use the same image with runtime configuration:
 
 ```bash
 docker build \
   --progress=plain \
-  -f apps/subnetcalc/frontend-typescript-vite/Dockerfile \
-  -t platform-subnetcalc-frontend-vite:local \
-  apps/subnetcalc
+  -f apps/subnetcalc/app-go/Dockerfile \
+  -t platform-subnetcalc-frontend:local \
+  apps/subnetcalc/app-go
+
+docker run --rm -e RUNTIME_ROLE=frontend -e BACKEND_URL=http://host.docker.internal:8090 -p 8003:8080 platform-subnetcalc-frontend:local
 ```
 
 ## Audit Builds
 
 ```bash
 scripts/audit-docker-builds.sh
-scripts/audit-docker-builds.sh api-fastapi-container-app frontend-react
+scripts/audit-docker-builds.sh subnetcalc-go
 ```
 
 The audit script captures plain build logs, image sizes, layer histories, and

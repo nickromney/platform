@@ -64,9 +64,7 @@ These touch scripts, Go TUI code, and tests. Status-output format has consumers
 
 These stay out of scope until a version bump is planned.
 
-- Renaming `AuthMethod` enum values (`azure_swa` → something glossary-pure).
 - Renaming subnetcalc endpoints.
-- Collapsing `api-fastapi-azure-function` and `api-fastapi-container-app`.
 - Adding `POST /api/v1/lookup` (additive but adds wire surface area; defer).
 - Promoting `AuthMethod` to a shared package.
 - Extracting a shared `/network/diagnostics` payload beyond `subnetcalc`.

@@ -51,6 +51,23 @@ header {
   margin-bottom: 24px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-state {
+  max-width: 360px;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 h1 {
   margin: 0 0 8px;
   font-size: 2.25rem;
@@ -169,6 +186,20 @@ td {
 }
 
 @media (max-width: 720px) {
+  header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .auth-state {
+    max-width: 100%;
+    text-align: left;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }

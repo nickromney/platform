@@ -30,6 +30,5 @@ external_workload_image_refs = {
   sentiment-auth-ui         = "192.168.64.1:5002/platform/sentiment-auth-ui:0.1.0"
   subnetcalc-api            = "192.168.64.1:5002/platform/subnetcalc-api:1.0.0"
   subnetcalc-apim-simulator = "192.168.64.1:5002/platform/subnetcalc-apim-simulator:0.4.0"
-  subnetcalc-frontend-react = "192.168.64.1:5002/platform/subnetcalc-frontend-react:0.0.0"
   subnetcalc-frontend       = "192.168.64.1:5002/platform/subnetcalc-frontend:1.0.0"
 }

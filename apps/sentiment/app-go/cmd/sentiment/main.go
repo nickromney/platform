@@ -6,11 +6,17 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"platform.local/sentiment/internal/app"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		healthcheck()
+		return
+	}
+
 	cfg := app.Config{
 		AuthMode:     strings.ToLower(env("AUTH_METHOD", "none")),
 		APIAuthMode:  strings.ToLower(env("API_AUTH_METHOD", "")),
@@ -41,6 +47,19 @@ func main() {
 	log.Printf("sentiment listening on %s role=%s auth=%s api_auth=%s", addr, cfg.RuntimeRole, cfg.AuthMode, cfg.APIAuthMode)
 	if err := http.ListenAndServe(addr, app.NewServer(cfg, verifier)); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func healthcheck() {
+	port := env("PORT", "8080")
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + strings.TrimPrefix(port, ":") + "/health")
+	if err != nil {
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		os.Exit(1)
 	}
 }
 

@@ -95,22 +95,17 @@ services:
     profiles: ["dev"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc/api-fastapi-container-app
+      context: ../../apps/subnetcalc/app-go
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-api:compose
     environment:
+      - RUNTIME_ROLE=backend
       - AUTH_METHOD=none
-      - CORS_ORIGINS=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443,https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443
+      - PORT=8000
       - HOME=/tmp
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
-        ]
+      test: ["CMD", "/subnetcalc", "healthcheck"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -120,22 +115,17 @@ services:
     profiles: ["uat"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc/api-fastapi-container-app
+      context: ../../apps/subnetcalc/app-go
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-api:compose
     environment:
+      - RUNTIME_ROLE=backend
       - AUTH_METHOD=none
-      - CORS_ORIGINS=https://subnetcalc.dev.compose.127.0.0.1.sslip.io:8443,https://subnetcalc.uat.compose.127.0.0.1.sslip.io:8443
+      - PORT=8000
       - HOME=/tmp
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
-        ]
+      test: ["CMD", "/subnetcalc", "healthcheck"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -143,29 +133,33 @@ services:
 
   subnetcalc-frontend-dev:
     profiles: ["dev"]
-    <<: *nginx-runtime-hardening
+    <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc
-      dockerfile: ./frontend-react/Dockerfile
+      context: ../../apps/subnetcalc/app-go
+      dockerfile: Dockerfile
     platform: linux/amd64
-    image: platform-subnetcalc-frontend-react:compose
+    image: platform-subnetcalc-frontend:compose
     environment:
-      - AUTH_METHOD=easyauth
-      - API_BASE_URL=
-      - API_PROXY_ENABLED=false
+      - RUNTIME_ROLE=frontend
+      - AUTH_METHOD=none
+      - BACKEND_URL=http://subnetcalc-api-dev:8000
+      - PORT=8080
+      - HOME=/tmp
 
   subnetcalc-frontend-uat:
     profiles: ["uat"]
-    <<: *nginx-runtime-hardening
+    <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc
-      dockerfile: ./frontend-react/Dockerfile
+      context: ../../apps/subnetcalc/app-go
+      dockerfile: Dockerfile
     platform: linux/amd64
-    image: platform-subnetcalc-frontend-react:compose
+    image: platform-subnetcalc-frontend:compose
     environment:
-      - AUTH_METHOD=easyauth
-      - API_BASE_URL=
-      - API_PROXY_ENABLED=false
+      - RUNTIME_ROLE=frontend
+      - AUTH_METHOD=none
+      - BACKEND_URL=http://subnetcalc-api-uat:8000
+      - PORT=8080
+      - HOME=/tmp
 
   subnetcalc-router-dev:
     profiles: ["dev"]

@@ -191,12 +191,9 @@ stricter runtime container. The important pattern is:
 
 Examples:
 
-- `apps/subnetcalc/api-fastapi-container-app/Dockerfile` builds a Python venv in
-  `dhi.io/python:3.13-debian13-dev`, then copies `.venv` and `app/` into
-  `dhi.io/python:3.13-debian13`.
-- `apps/subnetcalc/frontend-typescript-vite/Dockerfile` builds the Vite app
-  with Bun, builds a small Go runtime-config entrypoint, then copies only the
-  built assets and binary into `dhi.io/nginx`.
+- `apps/subnetcalc/app-go/Dockerfile` compiles one Go binary, then copies only
+  that binary into the hardened runtime image used by both backend and frontend
+  roles.
 - `apps/sentiment/api-sentiment/Dockerfile` installs production Node
   dependencies, preloads the model cache in a build stage, then copies
   dependencies, model cache, and source files into `dhi.io/node`.

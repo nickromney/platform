@@ -105,13 +105,9 @@ outside the request path above.
   `auth_method`.
 - **Class:** Conformist. Apps accept whatever headers the selected auth method
   injects.
-- **Auth method enum** (authoritative in `apps/subnetcalc/api-fastapi-container-app/app/auth_utils.py`):
+- **Auth method enum** (authoritative in `apps/subnetcalc/app-go/internal/app/server.go`):
   - `none` — caller identity is `"anonymous"`
-  - `api_key` — middleware validates `X-API-Key`; identity is `"api_key_user"`
-  - `jwt` — `Authorization: Bearer <token>`, identity from `sub` claim
-  - `azure_swa` — base64 `x-ms-client-principal` header, identity from
-    `userDetails` then `userId`
-  - `apim` — `X-User-ID` and `X-User-Email` headers injected by APIM
+  - `oidc` — `Authorization: Bearer <token>`, identity from the token claims
 - **Safe pre-launch changes:** adding a new auth method value; documenting
   additional optional headers that apps already ignore.
 - **Breaking changes:** renaming enum values, changing the header names above,
@@ -122,17 +118,18 @@ outside the request path above.
 - **Shape:** REST under `/api/v1/...`.
 - **Class:** Open Host Service published by `subnetcalc`. Frontends conform.
 - **Published endpoints (authoritative in
-  `apps/subnetcalc/api-fastapi-container-app/app/routers/`):**
+  `apps/subnetcalc/app-go/internal/app/server.go`):**
   - `GET /api/v1/health`
-  - `POST /api/v1/ipv4/validate`, `POST /api/v1/ipv6/validate`
+  - `GET /api/v1/health/ready`, `GET /api/v1/health/live`
+  - `GET /api/whoami`, `GET /api/v1/whoami`
+  - `POST /api/v1/ipv4/validate`
   - `POST /api/v1/ipv4/check-private`
-  - `POST /api/v1/ipv4/check-cloudflare`, `POST /api/v1/ipv6/check-cloudflare`
+  - `POST /api/v1/ipv4/check-cloudflare`
   - `POST /api/v1/ipv4/subnet-info`, `POST /api/v1/ipv6/subnet-info`
   - `POST /api/v1/provider-ranges/check`
   - `POST /api/v1/provider-ranges/cache/refresh`
   - `POST /api/v1/provider-ranges/cache/invalidate`
   - `POST /api/v1/network-plan/allocate`
-  - `GET /api/v1/network/diagnostics` (routed deployment diagnostics)
 - **Shared types:** the React and TypeScript-Vite frontends both consume
   `@subnetcalc/shared-frontend`, which holds the wire types. That package is a
   deliberate Shared Kernel between frontends, not between a frontend and the
@@ -240,20 +237,15 @@ outside the request path above.
 
 ## Shared Kernel Candidates
 
-Today there is exactly one genuine Shared Kernel:
-
-- **`@subnetcalc/shared-frontend`** — wire types and API helpers consumed by
-  both `frontend-react` and `frontend-typescript-vite`.
+Today there is no genuine shared kernel between the current app implementations.
+Subnetcalc keeps its wire types and API handlers inside the canonical Go app.
 
 Candidates that are **not** Shared Kernels yet, and should not be turned into
 ones pre-launch:
 
-- the auth-method enum (`none` / `api_key` / `jwt` / `azure_swa` / `apim`)
-  appears only in `subnetcalc` today. Sentiment does not define it. Promoting
-  it to a shared package now would require renaming at the consumer and is a
-  breaking change.
-- `/network/diagnostics` is an app-level routed-deployment diagnostic surface.
-  Extracting a broader shared payload is tempting but post-launch.
+- the auth-mode values (`none` / `oidc`) appear only in `subnetcalc` today.
+  Sentiment does not define them. Promoting them to a shared package now would
+  add coupling without a current consumer.
 
 ## What Is Safe To Change Pre-Launch
 
@@ -263,8 +255,8 @@ Changes in this list do not break any of the edges above.
   - Extract `CommentAnalysisPolicy` inside sentiment (neutralization rules).
   - Name value objects (`Address`, `Network`, `CloudMode`, `SubnetInfo`,
     `CloudflareMembership`) as internal Python classes.
-  - Split `get_current_user` per auth method without changing the returned
-    identity string shape.
+  - Split token verification helpers without changing the returned identity
+    JSON shape.
 - **Additive API changes:**
   - Add `POST /api/v1/lookup` on `subnetcalc` that composes the existing four
     calls and returns the same fields the frontend already assembles.
@@ -286,11 +278,8 @@ surface.
 - Renaming `provider` in operator `status` output; scripts and tests parse
   it.
 - Renaming Makefile stage targets even if the ratified label differs.
-- Changing auth-method enum values or the headers each method implies.
+- Changing auth-mode values or the bearer-token identity shape.
 - Changing APIM subscription-key header name.
-- Collapsing the two `subnetcalc` API delivery shapes
-  (`api-fastapi-azure-function` and `api-fastapi-container-app`). They share a
-  domain core but ship as separate artifacts today.
 
 ## How To Add A New Contract
 

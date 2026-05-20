@@ -230,7 +230,8 @@ function refreshAuthControls() {
   const gateway = usesGatewayAuth();
   const showOidc = apiRequiresOidcToken() && !gateway;
   const showAuthPanel = showOidc || gateway;
-  document.getElementById("auth-panel").hidden = !showAuthPanel;
+  document.getElementById("auth-panel").hidden = !showOidc;
+  document.getElementById("auth-state").hidden = !showAuthPanel;
   const tokenInput = document.getElementById("token-input");
   const whoamiButton = document.getElementById("whoami-btn");
   document.getElementById("login-btn").hidden = !showOidc && !gateway;
@@ -334,7 +335,7 @@ async function completeOidcLogin(config) {
 
 function logoutFromOidc() {
   if (usesGatewayAuth()) {
-    window.location.assign("/.auth/logout?post_logout_redirect_uri=/logged-out.html");
+    window.location.assign(gatewayLogoutURL());
     return;
   }
   const config = runtimeConfig();
@@ -349,6 +350,12 @@ function logoutFromOidc() {
     });
     window.location.assign(`${config.oidcAuthority}/protocol/openid-connect/logout?${params}`);
   }
+}
+
+function gatewayLogoutURL() {
+  const oauthSignOut = new URL("/oauth2/sign_out", window.location.origin);
+  oauthSignOut.searchParams.set("rd", "/logged-out.html");
+  return oauthSignOut.toString();
 }
 
 async function refreshGatewayIdentity() {

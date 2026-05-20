@@ -656,7 +656,16 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`id="theme-switcher"`, `id="theme-icon"`, `data-theme="dark"`, `/runtime-config.js`, `id="login-btn"`, `id="logout-btn"`, `id="results" tabindex="-1" aria-live="polite"`} {
+	for _, text := range []string{
+		`class="header-actions"`,
+		`id="theme-switcher"`,
+		`id="theme-icon"`,
+		`data-theme="dark"`,
+		`/runtime-config.js`,
+		`id="login-btn"`,
+		`id="logout-btn"`,
+		`id="results" tabindex="-1" aria-live="polite"`,
+	} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
@@ -679,7 +688,8 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		"usesGatewayAuth()",
 		"refreshGatewayIdentity()",
 		"const showAuthPanel = showOidc || gateway",
-		`document.getElementById("auth-panel").hidden = !showAuthPanel`,
+		`document.getElementById("auth-panel").hidden = !showOidc`,
+		`document.getElementById("auth-state").hidden = !showAuthPanel`,
 		"tokenInput.hidden = gateway",
 		"whoamiButton.hidden = gateway",
 		"prepareResults()",
@@ -687,7 +697,10 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		`document.getElementById("results").focus()`,
 		"fetch(\"/.auth/me\"",
 		"gatewayDisplayName(session)",
-		"/.auth/logout?post_logout_redirect_uri=/logged-out.html",
+		"gatewayLogoutURL()",
+		"/oauth2/sign_out",
+		"rd\", \"/logged-out.html\"",
+		"return oauthSignOut.toString();",
 		"loginWithOidc",
 		"code_challenge_method: \"S256\"",
 		"/protocol/openid-connect/token",

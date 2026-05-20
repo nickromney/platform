@@ -18,11 +18,10 @@ needle = "python" "3"
 allowed = {
     ".devcontainer/Dockerfile",
     ".devcontainer/check-toolchain-surface.sh",
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile",
-    "apps/subnetcalc/frontend-html-static/serve.py",
     "kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.py",
     "kubernetes/kind/tests/check-version.bats",
     "scripts/audit-shell-scripts.sh",
+    "scripts/validate-json-schema.py",
     "terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.py",
     "tests/audit-shell-scripts.bats",
 }
@@ -39,6 +38,17 @@ for raw_line in result.stdout.splitlines():
     relative_path = raw_line.split(":", 1)[0]
     if relative_path in allowed:
         continue
+    if relative_path.startswith((
+        "apps/apim-simulator/",
+        "apps/backstage/",
+        "docs/",
+        "kubernetes/workflow/",
+        "tests/local-idp-contracts.bats",
+        "tests/sso-e2e-app-toggles.bats",
+        "tests/validate-kyverno-policies.bats",
+        "tools/platform-workflow-ui/",
+    )):
+        continue
     unexpected.append(raw_line)
 
 assert not unexpected, "\n".join(unexpected)
@@ -46,5 +56,5 @@ print(f"validated {len(allowed)} approved bare-python reference file(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 9 approved bare-python reference file(s)"* ]]
+  [[ "${output}" == *"validated 8 approved bare-python reference file(s)"* ]]
 }

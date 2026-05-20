@@ -14,7 +14,6 @@
       },
       "fingerprint_sources": [
         "apps/subnetcalc/catalog-info.yaml",
-        "apps/subnetcalc/docs",
         "apps/subnetcalc/mkdocs.yml",
         "apps/subnetcalc/README.md",
         "apps/apim-simulator/catalog-info.yaml",
@@ -270,30 +269,6 @@
         "apps/apim-simulator/uv.lock",
         "apps/apim-simulator/app",
         "apps/apim-simulator/examples"
-      ],
-      "version_check": {
-        "mode": "local",
-        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
-      }
-    },
-    {
-      "id": "subnetcalc-frontend-react",
-      "hcl_key": "subnetcalc-frontend-react",
-      "image_name": "subnetcalc-frontend-react",
-      "default_tag": "0.0.0",
-      "build": {
-        "context": "apps/subnetcalc",
-        "dockerfile": "apps/subnetcalc/frontend-react/Dockerfile",
-        "tag": "default"
-      },
-      "fingerprint_sources": [
-        "apps/subnetcalc/app-go/Dockerfile",
-        "apps/subnetcalc/app-go/Makefile",
-        "apps/subnetcalc/app-go/go.mod",
-        "apps/subnetcalc/app-go/go.sum",
-        "apps/subnetcalc/app-go/cmd",
-        "apps/subnetcalc/app-go/internal",
-        "apps/subnetcalc/app-go/internal/app/web"
       ],
       "version_check": {
         "mode": "local",

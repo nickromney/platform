@@ -5,7 +5,7 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-@test "react server runtime image stays dependency-free" {
+@test "subnetcalc Go runtime image stays package-manager-free" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -13,21 +13,22 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-content = (repo_root / "apps/subnetcalc/frontend-react/Dockerfile.server").read_text(encoding="utf-8")
+content = (repo_root / "apps/subnetcalc/app-go/Dockerfile").read_text(encoding="utf-8")
 
-assert " AS deps" not in content, content
 assert "node_modules" not in content, content
-assert "--production" not in content, content
-assert 'CMD ["node", "server.js"]' in content, content
+assert "bun" not in content.lower(), content
+assert "npm" not in content.lower(), content
+assert "python" not in content.lower(), content
+assert 'ENTRYPOINT ["/subnetcalc"]' in content, content
 
-print("validated dependency-free react server runtime image")
+print("validated package-manager-free subnetcalc Go runtime image")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated dependency-free react server runtime image"* ]]
+  [[ "${output}" == *"validated package-manager-free subnetcalc Go runtime image"* ]]
 }
 
-@test "dockerfiles use package-manager and compiler cache mounts" {
+@test "remaining app dockerfiles use only current cache mounts" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -37,31 +38,6 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 
 expectations = {
-    "apps/subnetcalc/frontend-typescript-vite/Dockerfile": [
-        "--mount=type=cache,target=/root/.bun/install/cache",
-        "--mount=type=cache,target=/root/.cache/go-build",
-        "--mount=type=cache,target=/go/pkg/mod",
-    ],
-    "apps/subnetcalc/frontend-react/Dockerfile": [
-        "--mount=type=cache,target=/root/.bun/install/cache",
-        "--mount=type=cache,target=/root/.cache/go-build",
-        "--mount=type=cache,target=/go/pkg/mod",
-    ],
-    "apps/subnetcalc/frontend-react/Dockerfile.server": [
-        "--mount=type=cache,target=/root/.bun/install/cache",
-    ],
-    "apps/subnetcalc/frontend-python-flask/Dockerfile": [
-        "--mount=type=cache,target=/root/.cache/uv",
-    ],
-    "apps/subnetcalc/api-fastapi-container-app/Dockerfile": [
-        "--mount=type=cache,target=/root/.cache/uv",
-    ],
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile": [
-        "--mount=type=cache,target=/root/.cache/uv",
-    ],
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn": [
-        "--mount=type=cache,target=/root/.cache/uv",
-    ],
     "apps/apim-simulator/Dockerfile": [
         "--mount=type=cache,target=/root/.cache/uv",
     ],
@@ -78,10 +54,10 @@ print(f"validated {validated} docker cache mount expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 12 docker cache mount expectation(s)"* ]]
+  [[ "${output}" == *"validated 1 docker cache mount expectation(s)"* ]]
 }
 
-@test "python dockerfiles use uv cache mounts with explicit copy link mode" {
+@test "remaining Python dockerfiles use uv cache mounts with explicit copy link mode" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -91,10 +67,6 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 
 dockerfiles = [
-    "apps/subnetcalc/frontend-python-flask/Dockerfile",
-    "apps/subnetcalc/api-fastapi-container-app/Dockerfile",
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile",
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn",
     "apps/apim-simulator/Dockerfile",
 ]
 
@@ -108,7 +80,7 @@ print(f"validated {len(dockerfiles)} uv dockerfile cache policy expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 5 uv dockerfile cache policy expectation(s)"* ]]
+  [[ "${output}" == *"validated 1 uv dockerfile cache policy expectation(s)"* ]]
 }
 
 @test "compose files harden additional subnetcalc runtime services" {
@@ -131,23 +103,15 @@ app_tmpfs = ["/tmp:rw,noexec,nosuid,nodev,mode=1777"]
 
 expectations = {
     "apps/subnetcalc/compose.yml": {
-        "frontend-html-static": nginx_tmpfs,
-        "frontend-python-flask": app_tmpfs,
-        "frontend-python-flask-container-app": app_tmpfs,
-        "frontend-typescript-vite-jwt": nginx_tmpfs,
-        "frontend-react-jwt": nginx_tmpfs,
-        "frontend-react-msal": nginx_tmpfs,
-        "frontend-react-server-jwt": app_tmpfs,
-        "frontend-react-proxy": app_tmpfs,
-        "frontend-react-keycloak": nginx_tmpfs,
-        "frontend-typescript-vite-gateway": nginx_tmpfs,
-        "frontend-typescript-vite-gateway-admin": nginx_tmpfs,
-        "apim-simulator": app_tmpfs,
-        "frontend-typescript-vite-easyauth-mock": nginx_tmpfs,
-        "easyauth-router": nginx_tmpfs,
+        "subnetcalc-backend": app_tmpfs,
+        "subnetcalc-frontend": app_tmpfs,
     },
     "docker/compose/compose.yml": {
         "apim-simulator": app_tmpfs,
+        "subnetcalc-api-dev": app_tmpfs,
+        "subnetcalc-api-uat": app_tmpfs,
+        "subnetcalc-frontend-dev": app_tmpfs,
+        "subnetcalc-frontend-uat": app_tmpfs,
     },
 }
 
@@ -173,7 +137,7 @@ print(f"validated {validated} hardened compose service(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 15 hardened compose service(s)"* ]]
+  [[ "${output}" == *"validated 7 hardened compose service(s)"* ]]
 }
 
 @test "docker build audit script captures logs sizes and warnings" {
@@ -194,11 +158,7 @@ required_fragments = [
     "docker history",
     "docker image inspect",
     "warning",
-    "frontend-typescript-vite/Dockerfile",
-    "frontend-react/Dockerfile",
-    "frontend-react/Dockerfile.server",
-    "frontend-python-flask/Dockerfile",
-    "api-fastapi-container-app/Dockerfile",
+    "apps/subnetcalc/app-go/Dockerfile",
     "apim-simulator/Dockerfile",
 ]
 
@@ -477,11 +437,6 @@ expected = {
         "dockerfile": "Dockerfile",
         "tag": "default",
     },
-    "subnetcalc-frontend-react": {
-        "context": "apps/subnetcalc",
-        "dockerfile": "apps/subnetcalc/frontend-react/Dockerfile",
-        "tag": "default",
-    },
     "subnetcalc-frontend": {
         "context": "apps/subnetcalc/app-go",
         "dockerfile": "Dockerfile",
@@ -505,12 +460,8 @@ variant_wrappers = [
 ]
 image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
 hard_coded_paths = [
-    "apps/sentiment/api-sentiment/Dockerfile",
-    "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile",
-    "apps/subnetcalc/api-fastapi-container-app/Dockerfile",
+    "apps/sentiment/app-go/Dockerfile",
     "apps/apim-simulator/Dockerfile",
-    "apps/subnetcalc/frontend-react/Dockerfile",
-    "apps/subnetcalc/frontend-typescript-vite/Dockerfile",
 ]
 
 for script in scripts:
@@ -621,7 +572,7 @@ print(f"validated {validated} image catalog version-check policies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 12 image catalog version-check policies"* ]]
+  [[ "${output}" == *"validated 11 image catalog version-check policies"* ]]
 }
 
 @test "Lima and Slicer external image refs match the image catalog" {

@@ -157,10 +157,6 @@ EOF
 }
 
 @test "subnetcalc workflow Dockerfiles avoid remote Dockerfile frontend pulls" {
-  for dockerfile in \
-    "${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app/Dockerfile" \
-    "${REPO_ROOT}/apps/apim-simulator/Dockerfile" \
-    "${REPO_ROOT}/apps/subnetcalc/frontend-typescript-vite/Dockerfile"; do
-    ! head -n 1 "${dockerfile}" | grep -Fq '# syntax=docker/dockerfile'
-  done
+  dockerfile="${REPO_ROOT}/apps/subnetcalc/app-go/Dockerfile"
+  ! head -n 1 "${dockerfile}" | grep -Fq '# syntax=docker/dockerfile'
 }

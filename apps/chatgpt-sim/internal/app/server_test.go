@@ -31,8 +31,14 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "<title>ChatGPT Sim</title>") {
 		t.Fatalf("frontend title missing: %s", rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `href="/oauth2/sign_out?rd=/"`) {
-		t.Fatalf("frontend logout link missing: %s", rec.Body.String())
+	for _, text := range []string{
+		`class="topbar-actions"`,
+		`href="/oauth2/sign_out?rd=/"`,
+		`>Sign Out<`,
+	} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
+		}
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("frontend Cache-Control=%q", got)
