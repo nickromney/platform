@@ -98,8 +98,6 @@ test: ## Run the local compose smoke test
 
 update: ## Update Bun dependency locks for each sentiment dependency root
 	@echo "No dependency update required for the default Go sentiment runtime."
-	@echo "Legacy Bun roots remain in-tree only for compatibility/reference."
-	@cd frontend-typescript-vite && bun update --latest
 
 ##@ Cleanup
 down: check-prerequisites ## Stop the compose stack

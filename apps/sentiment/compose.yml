@@ -73,6 +73,12 @@ services:
       - CSV_PATH=/data/comments.csv
     volumes:
       - ./data:/data
+    healthcheck:
+      test: ["CMD", "/sentiment", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
 
   sentiment-auth-frontend:
     <<: *app-runtime-hardening
@@ -88,6 +94,15 @@ services:
       - PORT=8080
     expose:
       - "8080"
+    depends_on:
+      sentiment-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/sentiment", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
 
   edge:
     <<: *nginx-runtime-hardening
@@ -98,8 +113,10 @@ services:
     expose:
       - "8080"
     depends_on:
-      - sentiment-api
-      - sentiment-auth-frontend
+      sentiment-api:
+        condition: service_healthy
+      sentiment-auth-frontend:
+        condition: service_healthy
 
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd

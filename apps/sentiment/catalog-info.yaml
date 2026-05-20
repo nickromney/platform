@@ -83,6 +83,61 @@ spec:
                 application/json:
                   schema:
                     $ref: '#/components/schemas/HealthResponse'
+      /api/v1/health/ready:
+        get:
+          tags: [Health]
+          summary: Check backend readiness
+          responses:
+            '200':
+              description: Backend readiness state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
+      /api/v1/health/live:
+        get:
+          tags: [Health]
+          summary: Check backend liveness
+          responses:
+            '200':
+              description: Backend liveness state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
+      /health:
+        get:
+          tags: [Health]
+          summary: Check frontend health
+          responses:
+            '200':
+              description: Frontend health state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
+      /health/ready:
+        get:
+          tags: [Health]
+          summary: Check frontend readiness
+          responses:
+            '200':
+              description: Frontend readiness state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
+      /health/live:
+        get:
+          tags: [Health]
+          summary: Check frontend liveness
+          responses:
+            '200':
+              description: Frontend liveness state
+              content:
+                application/json:
+                  schema:
+                    $ref: '#/components/schemas/HealthResponse'
       /api/v1/comments:
         get:
           tags: [Comments]

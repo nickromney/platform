@@ -408,7 +408,6 @@ main() {
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API subnetcalc-api
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR subnetcalc-apim-simulator
-  export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND_REACT subnetcalc-frontend-react
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND subnetcalc-frontend
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"

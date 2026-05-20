@@ -13,12 +13,12 @@ setup() {
   mkdir -p "${FIXTURE_ROOT}/apps/sentiment"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc"
   mkdir -p "${FIXTURE_ROOT}/apps/apim-simulator"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist/assets"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist/assets"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/node_modules"
-  mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/node_modules"
+  mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-react/dist"
+  mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/dist"
+  mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-react/dist/assets"
+  mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/dist/assets"
+  mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-react/node_modules"
+  mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/node_modules"
   mkdir -p "${FAKE_BIN}"
 
   cat >"${FAKE_BIN}/bun" <<'EOF'
@@ -117,12 +117,12 @@ plugins:
 EOF
   done
 
-  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-budgets.json" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" <<'EOF'
 {
   "frontends": [
     {
       "name": "frontend-react",
-      "path": "apps/subnetcalc/frontend-react",
+      "path": "apps/demo/frontend-react",
       "max_installed_packages": 240,
       "max_dist_asset_raw_bytes": 4096,
       "max_dist_asset_gzip_bytes": 1024,
@@ -131,7 +131,7 @@ EOF
     },
     {
       "name": "frontend-typescript-vite",
-      "path": "apps/subnetcalc/frontend-typescript-vite",
+      "path": "apps/demo/frontend-typescript-vite",
       "max_installed_packages": 124,
       "max_dist_asset_raw_bytes": 4096,
       "max_dist_asset_gzip_bytes": 1024,
@@ -142,7 +142,7 @@ EOF
 }
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/dist/index.html" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/demo/frontend-react/dist/index.html" <<'EOF'
 <!doctype html>
 <html>
   <head>
@@ -151,7 +151,7 @@ EOF
 </html>
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/dist/index.html" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/dist/index.html" <<'EOF'
 <!doctype html>
 <html>
   <head>
@@ -160,8 +160,8 @@ EOF
 </html>
 EOF
 
-  printf '240\n' >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-react/.package-count"
-  printf '124\n' >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-typescript-vite/.package-count"
+  printf '240\n' >"${FIXTURE_ROOT}/apps/demo/frontend-react/.package-count"
+  printf '124\n' >"${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/.package-count"
 
   uv run --isolated python - <<'PY' "${FIXTURE_ROOT}"
 from pathlib import Path
@@ -171,8 +171,8 @@ root = Path(sys.argv[1])
 payload = bytes(range(256)) * 4
 
 for rel in (
-    "apps/subnetcalc/frontend-react/dist/assets/index.js",
-    "apps/subnetcalc/frontend-typescript-vite/dist/assets/index.js",
+    "apps/demo/frontend-react/dist/assets/index.js",
+    "apps/demo/frontend-typescript-vite/dist/assets/index.js",
 ):
     (root / rel).write_bytes(payload)
 PY
@@ -187,6 +187,7 @@ PY
   run env \
     CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
     CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
     CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
     "${SCRIPT}" --execute
 
@@ -207,6 +208,7 @@ EOF
   run env \
     CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
     CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
     CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
     "${SCRIPT}" --execute
 
@@ -219,6 +221,7 @@ EOF
   run env \
     CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
     CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
     CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
     "${SCRIPT}" --execute
 
@@ -230,12 +233,12 @@ EOF
 }
 
 @test "check-version fails when a frontend package budget regresses" {
-  cat >"${FIXTURE_ROOT}/apps/subnetcalc/frontend-budgets.json" <<'EOF'
+  cat >"${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" <<'EOF'
 {
   "frontends": [
     {
       "name": "frontend-react",
-      "path": "apps/subnetcalc/frontend-react",
+      "path": "apps/demo/frontend-react",
       "max_installed_packages": 200,
       "max_dist_asset_raw_bytes": 4096,
       "max_dist_asset_gzip_bytes": 1024,
@@ -249,6 +252,7 @@ EOF
   run env \
     CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
     CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
     CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
     "${SCRIPT}" --execute
 

@@ -42,8 +42,7 @@ The durable implementation contract is:
 
 | Candidate | Why remove or archive | Guardrail before deletion |
 | --- | --- | --- |
-| Old Subnetcalc Azure plan docs in `apps/subnetcalc/docs/` | The folder mixes current runbooks with dated implementation plans, Azure sandbox notes, and stack-session summaries. It is the largest source of drift risk. | Keep current runbooks and auth references; move dated plans to an archive or delete them after `rg` confirms no Makefile, README, or script points at them. |
-| `apps/subnetcalc/csharp-test/` | The docs mark auth patterns as TODO and the main docs do not present this as a current platform proof path. | Check `rg "csharp-test|deploy-csharp"` and either remove the script references too or mark the whole path as archived. |
+| Retired Subnetcalc experiment docs | The previous Azure, C#, Python, and TypeScript variants were moved out of the platform repo so the app tree stays focused on the canonical Go workload. | Keep platform docs pointed at `apps/subnetcalc/app-go`; use the external archive branch for experiment history. |
 | Docker Desktop managed Kubernetes target notes | `kubernetes/docker-desktop` is explicitly a research target, not a first-class runtime. | Keep only if those scripts are still used for regression research; otherwise archive the folder outside the main operator tree. |
 | Observability wording | Default stage files set `enable_prometheus = true`, `enable_grafana = true`, `enable_victoria_logs = true`, while `enable_loki = false` and `enable_signoz = false`. Loki and SigNoz are valid heavier pathways, not dead code. | Rewrite `README.md`, `kubernetes/kind/README.md`, `kubernetes/docker-desktop/FINDINGS.md`, and related notes so they say “default” versus “alternative” instead of implying one fixed stack. |
 | Scattered version-management notes | Version pins, cooldowns, provider audits, and Kubernetes stack audits are documented in pieces. That makes the strongest free value of the repo harder to see. | Consolidate the source README and runtime READMEs around the same bump workflow described in the docs site: pin, cool, audit, bump one pathway, rebuild Kind, then promote. |
@@ -57,9 +56,9 @@ The durable implementation contract is:
 2. **Fix factual docs drift first.** Patch stage-800/900 observability wording
    so Prometheus/Grafana/VictoriaLogs are the implemented default and
    Loki/SigNoz are documented as heavier alternatives.
-3. **Separate current docs from archives.** In `apps/subnetcalc/docs`, keep
-   active runbooks near code and move dated plans/session summaries under an
-   explicit archive folder, or delete them if no current reference remains.
+3. **Separate current docs from archives.** Keep only platform-current
+   Subnetcalc docs in this repo and use the external experiment archive branch
+   for retired implementation notes.
 4. **Document the optional observability pathways.** Keep SigNoz and Loki
    code, scripts, and chart references if they still work, but make their
    memory cost and non-default status explicit.

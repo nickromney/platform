@@ -55,6 +55,9 @@ locals {
   portal_whitelist_domains             = var.gateway_https_host_port == 443 ? local.portal_cookie_domain : "${local.portal_cookie_domain},${local.portal_cookie_domain}:${var.gateway_https_host_port}"
   oauth2_proxy_session_store_service   = "oauth2-proxy-session-store"
   oauth2_proxy_redis_url               = "redis://${local.oauth2_proxy_session_store_service}.sso.svc.cluster.local:6379"
+  oauth2_proxy_backend_logout_url      = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/logout?id_token_hint={id_token}" : ""
+  oauth2_proxy_backend_logout_arg      = local.sso_provider_is_keycloak ? "          - --backend-logout-url=${local.oauth2_proxy_backend_logout_url}" : ""
+  oauth2_proxy_backend_logout_arg_map  = local.sso_provider_is_keycloak ? "          backend-logout-url: ${local.oauth2_proxy_backend_logout_url}" : ""
   gateway_https_host_port_suffix       = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
   argocd_public_host                   = local.separate_admin_domain_enabled ? "argocd.${local.platform_admin_base_domain_effective}" : "argocd.admin.${local.platform_base_domain_effective}"
   argocd_public_url                    = "https://${local.argocd_public_host}${local.gateway_https_host_port_suffix}"
@@ -149,13 +152,14 @@ locals {
   }
   sso_chatgpt_sim_proxy_apps = {
     chatgpt = {
-      name             = "oauth2-proxy-chatgpt-sim"
-      public_url       = local.chatgpt_sim_public_url
-      upstream         = "http://chatgpt-sim.dev.svc.cluster.local:8080"
-      group            = local.sso_viewer_group
-      cookie_name      = "kind-v2-sso-chatgpt-sim"
-      cookie_domain    = local.dev_cookie_domain
-      whitelist_domain = local.dev_whitelist_domains
+      name               = "oauth2-proxy-chatgpt-sim"
+      public_url         = local.chatgpt_sim_public_url
+      upstream           = "http://chatgpt-sim.dev.svc.cluster.local:8080"
+      group              = local.sso_viewer_group
+      cookie_name        = "kind-v2-sso-chatgpt-sim"
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
     }
   }
   sso_oauth2_proxy_redirect_uris = distinct(concat(
@@ -530,7 +534,6 @@ locals {
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
     external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
     external_platform_chatgpt_sim          = lookup(var.external_platform_image_refs, "chatgpt-sim", "")
-    external_subnetcalc_fe                 = lookup(var.external_workload_image_refs, "subnetcalc-frontend-react", "")
     external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host

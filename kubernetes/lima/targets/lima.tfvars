@@ -29,6 +29,5 @@ external_workload_image_refs = {
   sentiment-auth-ui         = "host.lima.internal:5002/platform/sentiment-auth-ui:0.1.0"
   subnetcalc-api            = "host.lima.internal:5002/platform/subnetcalc-api:1.0.0"
   subnetcalc-apim-simulator = "host.lima.internal:5002/platform/subnetcalc-apim-simulator:0.4.0"
-  subnetcalc-frontend-react = "host.lima.internal:5002/platform/subnetcalc-frontend-react:0.0.0"
   subnetcalc-frontend       = "host.lima.internal:5002/platform/subnetcalc-frontend:1.0.0"
 }

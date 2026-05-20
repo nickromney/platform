@@ -90,10 +90,6 @@ spec:
               value: "http/protobuf"
             - name: HOME
               value: /tmp
-            - name: MALLOC_ARENA_MAX
-              value: "2"
-            - name: OMP_NUM_THREADS
-              value: "1"
           ports:
             - name: http
               containerPort: 8080
@@ -112,7 +108,7 @@ spec:
               mountPath: /tmp
           readinessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/health/ready
               port: 8080
             initialDelaySeconds: 2
             periodSeconds: 5
@@ -120,7 +116,7 @@ spec:
             failureThreshold: 12
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/health/live
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 15
@@ -235,10 +231,16 @@ spec:
               mountPath: /tmp
           readinessProbe:
             httpGet:
-              path: /
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 2
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
       volumes:
         - name: tmp
           emptyDir: {}
@@ -312,6 +314,18 @@ data:
 
       location = /.auth/logout {
         return 302 https://$host/oauth2/sign_out?rd=/logged-out.html;
+      }
+
+      location = /health {
+        return 200 '{"status":"ok","role":"router","service":"sentiment-router"}';
+      }
+
+      location = /health/ready {
+        return 200 '{"status":"ready","role":"router"}';
+      }
+
+      location = /health/live {
+        return 200 '{"status":"alive","role":"router"}';
       }
 
       location ^~ /api/ {
@@ -431,10 +445,16 @@ spec:
               mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
-              path: /
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 2
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
       volumes:
         - name: nginx-conf
           configMap:

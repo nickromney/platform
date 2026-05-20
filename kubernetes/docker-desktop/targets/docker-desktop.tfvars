@@ -21,6 +21,5 @@ external_workload_image_refs = {
   sentiment-auth-ui         = "host.docker.internal:5002/platform/sentiment-auth-ui:0.1.0"
   subnetcalc-api            = "host.docker.internal:5002/platform/subnetcalc-api:1.0.0"
   subnetcalc-apim-simulator = "host.docker.internal:5002/platform/subnetcalc-apim-simulator:0.4.0"
-  subnetcalc-frontend-react = "host.docker.internal:5002/platform/subnetcalc-frontend-react:0.0.0"
   subnetcalc-frontend       = "host.docker.internal:5002/platform/subnetcalc-frontend:1.0.0"
 }

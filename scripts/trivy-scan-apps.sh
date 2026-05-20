@@ -44,10 +44,8 @@ SOURCE_TARGETS=(
 IMAGE_SPECS=(
   "platform-security-scan/sentiment-api:scan|apps/sentiment/api-sentiment|apps/sentiment/api-sentiment/Dockerfile|"
   "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment/frontend-react-vite/sentiment-auth-ui|apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile|"
-  "platform-security-scan/subnetcalc-api-fastapi-container-app:scan|apps/subnetcalc/api-fastapi-container-app|apps/subnetcalc/api-fastapi-container-app/Dockerfile|"
+  "platform-security-scan/subnetcalc-go:scan|apps/subnetcalc/app-go|apps/subnetcalc/app-go/Dockerfile|"
   "platform-security-scan/subnetcalc-apim-simulator:scan|apps/apim-simulator|apps/apim-simulator/Dockerfile|"
-  "platform-security-scan/subnetcalc-frontend-typescript-vite:scan|apps/subnetcalc|apps/subnetcalc/frontend-typescript-vite/Dockerfile|"
-  "platform-security-scan/subnetcalc-frontend-react:scan|apps/subnetcalc|apps/subnetcalc/frontend-react/Dockerfile|"
 )
 
 scan_failed=0

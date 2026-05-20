@@ -1,19 +1,19 @@
 ---
 title: Subnetcalc
-description: The richer sample workload for networking and hosting patterns.
+description: The Go sample workload for networking and hosting patterns.
 ---
 
 # Subnetcalc
 
 Subnetcalc is the main domain-rich sample app. It calculates IPv4 and IPv6
-subnet details and demonstrates multiple frontend, backend, authentication, and
-hosting patterns.
+subnet details from a single Go service that can run as a backend, a frontend,
+or both.
 
 ## Why It Exists
 
-The platform needs a workload with enough shape to exercise routing, auth,
-API mediation, frontend delivery, and network policy. Subnetcalc gives the
-stack those concerns without pretending to be the platform itself.
+The platform needs a workload with enough shape to exercise routing, auth, API
+mediation, frontend delivery, and network policy. Subnetcalc keeps those
+concerns in one canonical Go app so the platform path is easier to verify.
 
 <ThemeImage
   lightSrc="/diagrams/generated/apps-subnetcalc-1-light.svg"
@@ -34,33 +34,27 @@ make start-compose-happy
 For a smaller loop:
 
 ```bash
-make start-compose-backend-container
-make start-compose-frontend-vite
-make start-compose-frontend-react
-make start-compose-frontend-static
+make build
+make test
+make compose-smoke
 ```
 
 ## Hosting and Auth Patterns
 
 | Pattern | Frontend | Backend | Auth model | Why it exists |
 | --- | --- | --- | --- | --- |
-| Anonymous container-app | HTML, Vite, React, Flask | FastAPI container app | none | Fastest domain and UI loop. |
-| Function family | Flask or SPA variants | FastAPI Azure Function container | JWT or app-managed auth | Exercises function-hosting and token handling. |
-| OIDC plus APIM | Protected frontend | OIDC-aware API behind APIM simulator | OIDC at proxy and token checks at API boundary | Mirrors the layered platform path. |
-| Mock Easy Auth | React Easy Auth mock | mocked platform principal | Easy Auth style headers | Tests Azure-style identity headers without Azure. |
-| SWA / App Service patterns | Vite or React | Function or container backend | SWA platform auth, JWT, or Easy Auth | Compares cloud hosting shapes. |
+| Anonymous local app | Embedded Go frontend | Go backend | none | Fastest domain and UI loop. |
+| Split compose app | Go frontend role | Go backend role | none or OIDC/JWT | Models frontend-to-backend routing without a second codebase. |
+| OIDC plus APIM | Protected Go frontend | Go backend behind APIM simulator | OIDC at proxy and token checks at API boundary | Mirrors the layered platform path. |
 
-The important design choice is that frontend framework, identity model, and
-backend hosting style are separable. That lets the repo compare patterns
-without rewriting the subnet calculation domain each time.
+The important design choice is that runtime role, identity model, and platform
+placement are separable while the implementation remains one app.
 
 Keycloak is the Kubernetes stage-900 IdP, not a dependency of the subnet
-calculation domain. The app keeps anonymous, JWT, Easy Auth, SWA/App Service,
-and APIM-mediated variants so it can still be deployed to platforms such as
-Azure without depending on the local Keycloak stack. The integrated APIM
-simulator remains a separate supporting context contract; the platform path
-configures it to validate Keycloak access tokens with the `apim-simulator`
-audience.
+calculation domain. The app supports anonymous and OIDC/JWT-protected API
+calls. The integrated APIM simulator remains a separate supporting context
+contract; the platform path configures it to validate Keycloak access tokens
+with the `apim-simulator` audience.
 
 ## Request Paths
 
@@ -108,7 +102,7 @@ The platform path adds controls that compose does not fully model:
 </Callout>
 
 - Run only one compose slice that owns the same ports.
-- Prefer the Vite frontend for routine frontend work.
+- Keep app changes in `apps/subnetcalc/app-go`.
 - Use the Kubernetes stack when you need GitOps, gateway, SSO, or policy
   behaviour.
 

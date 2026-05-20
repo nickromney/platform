@@ -14,9 +14,14 @@
           <h1>IPv4 Subnet Calculator</h1>
           <p>Vanilla HTML, CSS, JavaScript, and a Go API.</p>
         </div>
-        <button id="theme-switcher" type="button">
-          <span id="theme-icon">Light</span>
-        </button>
+        <div class="header-actions">
+          <p id="auth-state" class="auth-state">Not signed in.</p>
+          <button id="login-btn" type="button" hidden>Sign In</button>
+          <button id="logout-btn" type="button" hidden>Sign Out</button>
+          <button id="theme-switcher" type="button">
+            <span id="theme-icon">Light</span>
+          </button>
+        </div>
       </header>
 
       <section id="api-status" class="notice">Checking API...</section>
@@ -78,11 +83,8 @@
       <section id="auth-panel">
         <h2>Identity</h2>
         <form id="identity-form">
-          <p id="auth-state">Not signed in.</p>
           <input id="token-input" name="token" type="password" autocomplete="off" placeholder="Paste bearer token">
           <div class="auth-actions">
-            <button id="login-btn" type="button" hidden>Sign In</button>
-            <button id="logout-btn" type="button" hidden>Sign Out</button>
             <button id="whoami-btn" type="submit">Validate Token</button>
           </div>
         </form>

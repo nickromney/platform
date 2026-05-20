@@ -71,7 +71,7 @@ Examples:
 kubectl -n default run curltest --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- \
   sh -lc "curl -sS -D - -o /dev/null -H 'Host: subnetcalc.uat.127.0.0.1.sslip.io' http://oauth2-proxy-subnetcalc-uat.sso.svc.cluster.local:80/ | sed -n '1,30p'"
 
-# Does sign-out clear cookies and redirect to /logged-out.html?
+# Does oauth2-proxy sign_out clear the local app cookie?
 kubectl -n default run curltest --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- \
   sh -lc "curl -sS -D - -o /dev/null -H 'Host: subnetcalc.uat.127.0.0.1.sslip.io' 'http://oauth2-proxy-subnetcalc-uat.sso.svc.cluster.local:80/oauth2/sign_out?rd=/logged-out.html' | sed -n '1,40p'"
 ```
@@ -82,7 +82,13 @@ Subnetcalc's router provides AppService-style endpoints:
 
 - `/.auth/me` (whoami; frontend uses it to display login state)
 - `/.auth/login/...` (redirect to oauth2-proxy start)
-- `/.auth/logout` (redirect to oauth2-proxy sign_out and then `/logged-out.html`)
+- `/.auth/logout` (compatibility redirect to oauth2-proxy `sign_out`)
+
+The subnetcalc UI sends gateway-auth logout to
+`/oauth2/sign_out?rd=/logged-out.html`. oauth2-proxy clears the app cookie and,
+for Keycloak, uses `--backend-logout-url` with the session ID token to end the
+IdP SSO session without sending the browser through Keycloak's confirmation
+page.
 
 Footgun:
 
@@ -101,6 +107,9 @@ Logout sanity check:
 
 - oauth2-proxy only emits a `Set-Cookie: <cookie>=; Max-Age=0` when the request includes the session cookie.
 - If you hit `/oauth2/sign_out` without a cookie, you'll still get redirected, but the browser cookie won't be cleared.
+- If re-entry silently signs you back in after logout, check the app oauth2-proxy
+  Deployment has `--backend-logout-url=...id_token_hint={id_token}` and can
+  reach Keycloak's internal realm URL.
 
 Quick check:
 

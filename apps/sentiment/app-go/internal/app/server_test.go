@@ -12,18 +12,20 @@ import (
 func TestHealthAndStaticFrontend(t *testing.T) {
 	srv := NewServer(Config{RuntimeRole: "all", DataDir: t.TempDir()})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("health returned %d: %s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), `"status":"ok"`) || !strings.Contains(rec.Body.String(), `"server_side_token_validation":false`) {
-		t.Fatalf("unexpected health body: %s", rec.Body.String())
+	for _, path := range []string{"/health", "/health/ready", "/health/live", "/api/v1/health", "/api/v1/health/ready", "/api/v1/health/live"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s returned %d: %s", path, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), `"status"`) {
+			t.Fatalf("%s returned unexpected body: %s", path, rec.Body.String())
+		}
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("frontend returned %d: %s", rec.Code, rec.Body.String())
@@ -109,11 +111,18 @@ func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
 	}
 
 	frontend := NewServer(Config{RuntimeRole: "frontend", BackendURL: "http://backend.example.test"})
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/comments", nil)
 	rec = httptest.NewRecorder()
 	frontend.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("frontend role handled API locally with status %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec = httptest.NewRecorder()
+	frontend.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"role":"frontend"`) {
+		t.Fatalf("frontend health returned %d: %s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)

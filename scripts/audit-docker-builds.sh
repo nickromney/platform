@@ -11,13 +11,7 @@ SELECTED_TARGETS=()
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 TARGET_SPECS=(
-  "frontend-typescript-vite|${REPO_ROOT}/apps/subnetcalc|${REPO_ROOT}/apps/subnetcalc/frontend-typescript-vite/Dockerfile|platform-docker-audit/subnetcalc-frontend-typescript-vite:audit|"
-  "frontend-react|${REPO_ROOT}/apps/subnetcalc|${REPO_ROOT}/apps/subnetcalc/frontend-react/Dockerfile|platform-docker-audit/subnetcalc-frontend-react:audit|"
-  "frontend-react-server|${REPO_ROOT}/apps/subnetcalc|${REPO_ROOT}/apps/subnetcalc/frontend-react/Dockerfile.server|platform-docker-audit/subnetcalc-frontend-react-server:audit|"
-  "frontend-python-flask|${REPO_ROOT}/apps/subnetcalc/frontend-python-flask|${REPO_ROOT}/apps/subnetcalc/frontend-python-flask/Dockerfile|platform-docker-audit/subnetcalc-frontend-python-flask:audit|"
-  "api-fastapi-container-app|${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app|${REPO_ROOT}/apps/subnetcalc/api-fastapi-container-app/Dockerfile|platform-docker-audit/subnetcalc-api-fastapi-container-app:audit|"
-  "api-fastapi-azure-function|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function/Dockerfile|platform-docker-audit/subnetcalc-api-fastapi-azure-function:audit|linux/amd64"
-  "api-fastapi-azure-function-uvicorn|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function|${REPO_ROOT}/apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn|platform-docker-audit/subnetcalc-api-fastapi-azure-function-uvicorn:audit|"
+  "subnetcalc-go|${REPO_ROOT}/apps/subnetcalc/app-go|${REPO_ROOT}/apps/subnetcalc/app-go/Dockerfile|platform-docker-audit/subnetcalc-go:audit|"
   "apim-simulator|${REPO_ROOT}/apps/apim-simulator|${REPO_ROOT}/apps/apim-simulator/Dockerfile|platform-docker-audit/subnetcalc-apim-simulator:audit|"
 )
 

@@ -239,7 +239,6 @@ external_workload_image_refs = {
   sentiment-auth-ui                      = "ghcr.io/<owner>/sentiment-auth-ui:main"
   subnetcalc-api                         = "ghcr.io/<owner>/subnetcalc-api:main"
   subnetcalc-apim-simulator              = "ghcr.io/<owner>/subnetcalc-apim-simulator:main"
-  subnetcalc-frontend-react              = "ghcr.io/<owner>/subnetcalc-frontend-react:main"
   subnetcalc-frontend                    = "ghcr.io/<owner>/subnetcalc-frontend:main"
 }
 ```

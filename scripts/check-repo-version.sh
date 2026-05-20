@@ -15,7 +15,7 @@ CHECK_VERSION_TIMEOUT_SECONDS="${CHECK_VERSION_TIMEOUT_SECONDS:-15}"
 CHECK_VERSION_NPM_MIN_RELEASE_AGE="${CHECK_VERSION_NPM_MIN_RELEASE_AGE:-7}"
 CHECK_VERSION_BUN_MIN_RELEASE_AGE="${CHECK_VERSION_BUN_MIN_RELEASE_AGE:-604800}"
 CHECK_VERSION_UV_EXCLUDE_NEWER="${CHECK_VERSION_UV_EXCLUDE_NEWER:-7 days}"
-CHECK_VERSION_FRONTEND_BUDGETS_FILE="${CHECK_VERSION_FRONTEND_BUDGETS_FILE:-${REPO_ROOT}/apps/subnetcalc/frontend-budgets.json}"
+CHECK_VERSION_FRONTEND_BUDGETS_FILE="${CHECK_VERSION_FRONTEND_BUDGETS_FILE:-}"
 CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS="${CHECK_VERSION_FRONTEND_BUDGETS_REQUIRE_ARTIFACTS:-0}"
 FAILURES=0
 EXECUTE=0
@@ -47,7 +47,7 @@ Checks:
   - the integrated apim-simulator package has coherent project metadata
   - repo-local dependency age gates stay aligned across .npmrc, bunfig.toml,
     and uv-managed pyproject.toml files
-  - optional frontend package-count, initial-page, and shipped-asset budgets when local artifacts exist
+  - optional frontend package-count, initial-page, and shipped-asset budgets when configured
 
 Options:
   --dry-run   Accepted for parity with other repo scripts. This command is read-only.
@@ -529,6 +529,11 @@ emit_frontend_budget_lines() {
 
 check_frontend_budgets() {
   section "Frontend Budgets"
+
+  if [[ -z "${CHECK_VERSION_FRONTEND_BUDGETS_FILE}" ]]; then
+    warn "No frontend budget file configured"
+    return
+  fi
 
   if [[ ! -f "${CHECK_VERSION_FRONTEND_BUDGETS_FILE}" ]]; then
     warn "No frontend budget file found at ${CHECK_VERSION_FRONTEND_BUDGETS_FILE}"

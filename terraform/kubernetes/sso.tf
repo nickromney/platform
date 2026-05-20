@@ -2041,6 +2041,7 @@ spec:
           - --redeem-url=${local.sso_token_url}
           - --oidc-jwks-url=${local.sso_jwks_url}
           - --redirect-url=${local.sentiment_dev_public_url}/oauth2/callback
+${local.oauth2_proxy_backend_logout_arg}
           - --upstream=http://sentiment-router.dev.svc.cluster.local:8080
           - --upstream-timeout=180s
           - --allowed-group=app-sentiment-dev
@@ -2156,6 +2157,7 @@ spec:
           - --redeem-url=${local.sso_token_url}
           - --oidc-jwks-url=${local.sso_jwks_url}
           - --redirect-url=${local.sentiment_uat_public_url}/oauth2/callback
+${local.oauth2_proxy_backend_logout_arg}
           - --upstream=http://sentiment-router.uat.svc.cluster.local:8080
           - --upstream-timeout=180s
           - --allowed-group=app-sentiment-uat
@@ -2271,6 +2273,7 @@ spec:
           - --redeem-url=${local.sso_token_url}
           - --oidc-jwks-url=${local.sso_jwks_url}
           - --redirect-url=${local.subnetcalc_dev_public_url}/oauth2/callback
+${local.oauth2_proxy_backend_logout_arg}
           - --upstream=http://subnetcalc-router.dev.svc.cluster.local:8080
           - --allowed-group=app-subnetcalc-dev
           - --allowed-group=${local.sso_admin_group}
@@ -2385,6 +2388,7 @@ spec:
           - --redeem-url=${local.sso_token_url}
           - --oidc-jwks-url=${local.sso_jwks_url}
           - --redirect-url=${local.subnetcalc_uat_public_url}/oauth2/callback
+${local.oauth2_proxy_backend_logout_arg}
           - --upstream=http://subnetcalc-router.uat.svc.cluster.local:8080
           - --allowed-group=app-subnetcalc-uat
           - --allowed-group=${local.sso_admin_group}
@@ -2504,6 +2508,7 @@ spec:
           redeem-url: ${local.sso_token_url}
           oidc-jwks-url: ${local.sso_jwks_url}
           redirect-url: ${each.value.public_url}/oauth2/callback
+${try(each.value.backend_logout_arg, "")}
           upstream: ${each.value.upstream}
           allowed-group: ${each.value.group}
           cookie-domain: ${each.value.cookie_domain}

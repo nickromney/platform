@@ -33,8 +33,15 @@ func NewServer(cfg Config, verifier ...TokenVerifier) http.Handler {
 		tokenVerifier = verifier[0]
 	}
 	srv := &server{cfg: cfg, store: newStore(cfg), verifier: tokenVerifier}
+	if cfg.RuntimeRole == "backend" || cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
+		mux.HandleFunc("GET /health", srv.frontendHealth)
+		mux.HandleFunc("GET /health/ready", srv.frontendReady)
+		mux.HandleFunc("GET /health/live", srv.frontendLive)
+	}
 	if cfg.RuntimeRole == "backend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /api/v1/health", srv.health)
+		mux.HandleFunc("GET /api/v1/health/ready", srv.ready)
+		mux.HandleFunc("GET /api/v1/health/live", srv.live)
 		mux.Handle("GET /api/v1/comments", srv.requireAuth(http.HandlerFunc(srv.listComments)))
 		mux.Handle("POST /api/v1/comments", srv.requireAuth(http.HandlerFunc(srv.createComment)))
 		mux.Handle("POST /api/v1/sentiment/classify", srv.requireAuth(http.HandlerFunc(srv.classifyOnly)))
@@ -63,8 +70,46 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":                       "ok",
+		"role":                         "backend",
+		"service":                      "sentiment-api",
 		"server_side_token_validation": s.cfg.AuthMode == "oidc",
 	})
+}
+
+func (s *server) ready(w http.ResponseWriter, _ *http.Request) {
+	if err := s.store.ensure(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready", "role": "backend"})
+}
+
+func (s *server) live(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "alive", "role": "backend"})
+}
+
+func (s *server) frontendHealth(w http.ResponseWriter, _ *http.Request) {
+	role := s.cfg.RuntimeRole
+	if role == "" {
+		role = "all"
+	}
+	service := "sentiment-auth-ui"
+	if role == "backend" {
+		service = "sentiment-api"
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"role":    role,
+		"service": service,
+	})
+}
+
+func (s *server) frontendReady(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready", "role": s.cfg.RuntimeRole})
+}
+
+func (s *server) frontendLive(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "alive", "role": s.cfg.RuntimeRole})
 }
 
 func (s *server) requireAuth(next http.Handler) http.Handler {

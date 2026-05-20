@@ -70,13 +70,8 @@ PARALLELISM=4
 MODE="default"
 WORKFLOW_DOCKERFILES=(
   "apps/subnetcalc/app-go/Dockerfile"
-  "apps/subnetcalc/api-fastapi-container-app/Dockerfile"
   "apps/apim-simulator/Dockerfile"
-  "apps/subnetcalc/frontend-typescript-vite/Dockerfile"
-  "apps/subnetcalc/frontend-react/Dockerfile"
   "apps/sentiment/app-go/Dockerfile"
-  "apps/sentiment/api-sentiment/Dockerfile"
-  "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile"
   "apps/idp-core/Dockerfile"
 )
 

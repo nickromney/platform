@@ -15,16 +15,8 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 
 expected_users = {
-    "apps/sentiment/api-sentiment/Dockerfile": "1000:1000",
-    "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile": "65532:65532",
-    "apps/subnetcalc/api-fastapi-container-app/Dockerfile": "65532:65532",
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile": "65532:65532",
-    "apps/subnetcalc/api-fastapi-azure-function/Dockerfile.uvicorn": "65532:65532",
-    "apps/subnetcalc/frontend-html-static/Dockerfile": "65532:65532",
-    "apps/subnetcalc/frontend-python-flask/Dockerfile": "65532:65532",
-    "apps/subnetcalc/frontend-react/Dockerfile": "65532:65532",
-    "apps/subnetcalc/frontend-react/Dockerfile.server": "1000:1000",
-    "apps/subnetcalc/frontend-typescript-vite/Dockerfile": "65532:65532",
+    "apps/sentiment/app-go/Dockerfile": "65532:65532",
+    "apps/subnetcalc/app-go/Dockerfile": "65532:65532",
 }
 
 for relative_path, expected_user in expected_users.items():
@@ -38,7 +30,7 @@ print(f"validated {len(expected_users)} Dockerfile(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 10 Dockerfile(s)"* ]]
+  [[ "${output}" == *"validated 2 Dockerfile(s)"* ]]
 }
 
 @test "compose app services use hardened runtime settings" {
@@ -102,32 +94,6 @@ compose_expectations = {
             "security_opt": ["no-new-privileges:true"],
             "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
         },
-        "api-fastapi-container-app": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "frontend-typescript-vite": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
-        },
-        "frontend-react": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
-        },
     },
     "docker/compose/compose.yml": {
         "edge": {
@@ -157,21 +123,13 @@ compose_expectations = {
             "read_only": True,
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
+            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
         },
         "subnetcalc-frontend-uat": {
             "read_only": True,
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
+            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
         },
         "subnetcalc-router-dev": {
             "user": "65532:65532",
@@ -217,10 +175,10 @@ print(f"validated {validated} compose service(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 15 compose service(s)"* ]]
+  [[ "${output}" == *"validated 12 compose service(s)"* ]]
 }
 
-@test "model-backed sentiment workload has a bounded laptop runtime profile" {
+@test "Go sentiment workload has a bounded laptop runtime profile and health probes" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -239,20 +197,57 @@ resources = container["resources"]
 assert env["AUTH_METHOD"] == "oidc", env
 assert env["OIDC_AUDIENCE"] == "sentiment-api", env
 assert env["OIDC_JWKS_URI"] == "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs", env
-assert env["MALLOC_ARENA_MAX"] == "2", env
-assert env["OMP_NUM_THREADS"] == "1", env
 assert resources["requests"]["memory"] == "768Mi", resources
 assert resources["limits"]["memory"] == "2048Mi", resources
 assert resources["limits"]["cpu"] == "1", resources
+assert container["readinessProbe"]["httpGet"]["path"] == "/api/v1/health/ready", container
+assert container["livenessProbe"]["httpGet"]["path"] == "/api/v1/health/live", container
 
-print("validated model-backed sentiment runtime profile")
+print("validated Go sentiment runtime profile")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated model-backed sentiment runtime profile"* ]]
+  [[ "${output}" == *"validated Go sentiment runtime profile"* ]]
 }
 
-@test "subnetcalc function-style compose healthchecks do not require /bin/sh" {
+@test "Go app compose healthchecks do not require /bin/sh" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+expectations = {
+    "apps/subnetcalc/compose.yml": {
+        "subnetcalc-backend": ["CMD", "/subnetcalc", "healthcheck"],
+        "subnetcalc-frontend": ["CMD", "/subnetcalc", "healthcheck"],
+    },
+    "apps/sentiment/compose.yml": {
+        "sentiment-api": ["CMD", "/sentiment", "healthcheck"],
+        "sentiment-auth-frontend": ["CMD", "/sentiment", "healthcheck"],
+    },
+}
+
+validated = 0
+for relative_path, services in expectations.items():
+    compose = yaml.safe_load((repo_root / relative_path).read_text(encoding="utf-8"))
+    for service_name, expected in services.items():
+        healthcheck = compose["services"][service_name]["healthcheck"]["test"]
+        assert healthcheck == expected, (relative_path, service_name, healthcheck)
+        validated += 1
+
+print(f"validated {validated} shell-free Go healthchecks")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated 4 shell-free Go healthchecks"* ]]
+}
+
+@test "subnetcalc compose keeps only Go backend and frontend services" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -264,49 +259,18 @@ import yaml
 repo_root = Path(os.environ["REPO_ROOT"])
 compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
 
-for service_name in ("api-fastapi-azure-function", "api-fastapi-keycloak"):
-    healthcheck = compose["services"][service_name]["healthcheck"]["test"]
-    assert healthcheck[:2] == ["CMD", "python"], (service_name, healthcheck)
-    assert "urllib.request.urlopen('http://127.0.0.1:8080/api/v1/health')" in healthcheck[3], (
-        service_name,
-        healthcheck,
-    )
+assert set(compose["services"]) == {"subnetcalc-backend", "subnetcalc-frontend"}, compose["services"].keys()
+assert compose["services"]["subnetcalc-backend"]["environment"]["RUNTIME_ROLE"] == "backend"
+assert compose["services"]["subnetcalc-frontend"]["environment"]["RUNTIME_ROLE"] == "frontend"
 
-print("validated 2 shell-free function healthchecks")
+print("validated Go-only subnetcalc compose services")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 2 shell-free function healthchecks"* ]]
+  [[ "${output}" == *"validated Go-only subnetcalc compose services"* ]]
 }
 
-@test "stack12 lightweight frontends stay in gateway mode behind oauth2-proxy" {
-  run uv run --isolated --with pyyaml python - <<'PY'
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-import yaml
-
-repo_root = Path(os.environ["REPO_ROOT"])
-compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
-
-for service_name in ("frontend-typescript-vite-gateway", "frontend-typescript-vite-gateway-admin"):
-    env_entries = compose["services"][service_name]["environment"]
-    if isinstance(env_entries, dict):
-        auth_method = env_entries.get("AUTH_METHOD")
-    else:
-        auth_method = next((entry.split("=", 1)[1] for entry in env_entries if entry.startswith("AUTH_METHOD=")), None)
-    assert auth_method == "gateway", (service_name, auth_method)
-
-print("validated 2 stack12 gateway auth configs")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 2 stack12 gateway auth configs"* ]]
-}
-
-@test "gateway auth shim only falls back to Authorization when no forwarded access token exists" {
+@test "subnetcalc Go frontend exposes OIDC runtime config without generated files" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -314,49 +278,40 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-nginx_conf = (repo_root / "apps/subnetcalc/frontend-typescript-vite/nginx.conf").read_text(encoding="utf-8")
+server_go = (repo_root / "apps/subnetcalc/app-go/internal/app/server.go").read_text(encoding="utf-8")
+app_js = (repo_root / "apps/subnetcalc/app-go/internal/app/web/app.js").read_text(encoding="utf-8")
 
-assert 'set $authorization_bearer "";' in nginx_conf, nginx_conf
-assert 'if ($http_authorization ~* "^Bearer (.+)$") {' in nginx_conf, nginx_conf
-assert 'set $authorization_bearer $1;' in nginx_conf, nginx_conf
-assert 'if ($access_token = "") {' in nginx_conf, nginx_conf
-assert 'set $access_token $authorization_bearer;' in nginx_conf, nginx_conf
+assert '"authMethod"' in server_go
+assert '"apiAuthMethod"' in server_go
+assert '"oidcAuthority"' in server_go
+assert "window.SUBNETCALC_RUNTIME_CONFIG" in server_go
+assert "config.apiAuthMethod === \"oidc\"" in app_js
 
-print("validated gateway auth header fallback ordering")
+print("validated Go runtime config contract")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated gateway auth header fallback ordering"* ]]
+  [[ "${output}" == *"validated Go runtime config contract"* ]]
 }
 
-@test "stack12 oauth2-proxy frontends expose public login and logout landing pages" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+@test "subnetcalc Go frontend ships sign-out landing page" {
+  run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-import yaml
-
 repo_root = Path(os.environ["REPO_ROOT"])
-compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
+logged_out = (repo_root / "apps/subnetcalc/app-go/internal/app/web/logged-out.html").read_text(encoding="utf-8")
 
-required_flags = {
-    "--skip-auth-regex=^/login\\.html$",
-    "--skip-auth-regex=^/logged-out\\.html$",
-}
+for text in ("Signed out", "Sign in again", "/.auth/login/sso"):
+    assert text in logged_out, text
 
-for service_name in ("oauth2-proxy-frontend", "oauth2-proxy-frontend-admin"):
-    command = compose["services"][service_name]["command"]
-    command_set = set(command)
-    missing = sorted(required_flags - command_set)
-    assert not missing, (service_name, missing, command)
-
-print("validated 2 public stack12 auth landing-page configs")
+print("validated Go frontend sign-out page")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 2 public stack12 auth landing-page configs"* ]]
+  [[ "${output}" == *"validated Go frontend sign-out page"* ]]
 }
 
 @test "docker compose Dex demo credentials are pinned to password123" {
@@ -509,6 +464,9 @@ frontend = next(
 frontend_env = {item["name"]: str(item.get("value", "")) for item in frontend["spec"]["template"]["spec"]["containers"][0].get("env", [])}
 assert frontend_env["AUTH_METHOD"] == "gateway", frontend_env
 assert frontend_env["API_AUTH_METHOD"] == "gateway", frontend_env
+frontend_container = frontend["spec"]["template"]["spec"]["containers"][0]
+assert frontend_container["readinessProbe"]["httpGet"]["path"] == "/health/ready", frontend_container
+assert frontend_container["livenessProbe"]["httpGet"]["path"] == "/health/live", frontend_container
 
 config = next(
     doc
@@ -521,17 +479,20 @@ assert "location ^~ /api/" in nginx_conf
 assert "proxy_pass http://sentiment-api:8080;" in nginx_conf
 assert "set $api_auth $http_authorization;" in nginx_conf
 assert 'proxy_set_header Authorization $api_auth;' in nginx_conf
+assert "location = /health" in nginx_conf
+assert "location = /health/ready" in nginx_conf
+assert "location = /health/live" in nginx_conf
 
 assert "location / {" in nginx_conf
 assert 'set $auth_email $http_x_auth_request_email;' in nginx_conf
 assert 'if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }' in nginx_conf
 assert "proxy_pass http://sentiment-auth-ui:8080;" in nginx_conf
 
-print("validated sentiment frontend auth gate and API token forwarding")
+print("validated sentiment frontend auth gate, health, and API token forwarding")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated sentiment frontend auth gate and API token forwarding"* ]]
+  [[ "${output}" == *"validated sentiment frontend auth gate, health, and API token forwarding"* ]]
 }
 
 @test "app oauth2 proxies refresh forwarded access tokens before API use" {
@@ -614,6 +575,35 @@ PY
   [[ "${output}" == *"validated 4 local workload builder(s)"* ]]
 }
 
+@test "app oauth2 proxies call Keycloak backend logout with the session ID token" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
+sso_tf = (repo_root / "terraform/kubernetes/sso.tf").read_text(encoding="utf-8")
+
+assert "oauth2_proxy_backend_logout_url" in locals_tf
+assert "/protocol/openid-connect/logout?id_token_hint={id_token}" in locals_tf
+assert "oauth2_proxy_backend_logout_arg" in locals_tf
+assert "--backend-logout-url=${local.oauth2_proxy_backend_logout_url}" in locals_tf
+assert "sso_oauth2_proxy_post_logout_redirect_uris" not in locals_tf
+assert "post.logout.redirect.uris" not in sso_tf
+
+assert sso_tf.count("${local.oauth2_proxy_backend_logout_arg}") == 4
+assert "backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map" in locals_tf
+assert "${try(each.value.backend_logout_arg, \"\")}" in sso_tf
+
+print("validated Keycloak backend logout for app oauth2 proxies")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Keycloak backend logout for app oauth2 proxies"* ]]
+}
+
 @test "app Gitea workflows build the default Go runtime images" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
@@ -679,7 +669,7 @@ PY
   [ "${status}" -eq 0 ]
 }
 
-@test "runtime-config frontends render into tmpfs-backed paths for read-only roots" {
+@test "subnetcalc Go frontend serves runtime config directly from the binary" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
@@ -688,22 +678,17 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 
-entrypoint = (repo_root / "apps/subnetcalc/scripts/runtime-config-entrypoint.go").read_text(encoding="utf-8")
-render_script = (repo_root / "apps/subnetcalc/scripts/render-runtime-config.sh").read_text(encoding="utf-8")
-react_nginx = (repo_root / "apps/subnetcalc/frontend-react/nginx.conf").read_text(encoding="utf-8")
-vite_nginx = (repo_root / "apps/subnetcalc/frontend-typescript-vite/nginx.conf").read_text(encoding="utf-8")
+server_go = (repo_root / "apps/subnetcalc/app-go/internal/app/server.go").read_text(encoding="utf-8")
 
-assert '"/tmp/runtime-config.js"' in entrypoint, entrypoint
-assert '"/var/run/nginx"' in entrypoint, entrypoint
-assert 'RUNTIME_CONFIG_OUT:-/tmp/runtime-config.js' in render_script, render_script
-assert "alias /tmp/runtime-config.js;" in react_nginx, react_nginx
-assert "alias /tmp/runtime-config.js;" in vite_nginx, vite_nginx
+assert 'mux.HandleFunc("GET /runtime-config.js", server.runtimeConfig)' in server_go, server_go
+assert 'w.Header().Set("Content-Type", "application/javascript")' in server_go, server_go
+assert 'window.SUBNETCALC_RUNTIME_CONFIG = ' in server_go, server_go
 
-print("validated runtime-config tmpfs contract")
+print("validated Go runtime-config response")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated runtime-config tmpfs contract"* ]]
+  [[ "${output}" == *"validated Go runtime-config response"* ]]
 }
 
 @test "external runtime image refs stay aligned across dockerfiles, compose, and kubernetes manifests" {
@@ -716,41 +701,18 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 
 expected_counts = {
-    "apps/sentiment/api-sentiment/Dockerfile": {
-        "FROM oven/bun:1.3.13 AS deps": 1,
-        "FROM oven/bun:1.3.13 AS preload": 1,
-    },
-    "apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS build": 1,
-    },
-    "apps/subnetcalc/frontend-react/Dockerfile": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
-        "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
-    },
-    "apps/subnetcalc/frontend-react/Dockerfile.server": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
-        "FROM --platform=$TARGETPLATFORM dhi.io/node:22-alpine3.22": 1,
+    "apps/sentiment/app-go/Dockerfile": {
+        "FROM dhi.io/static:20260413-alpine3.23": 1,
     },
     "apps/backstage/Dockerfile": {
         "FROM dhi.io/node:22-debian13 AS runtime": 1,
-    },
-    "apps/subnetcalc/frontend-typescript-vite/Dockerfile": {
-        "FROM --platform=$BUILDPLATFORM oven/bun:1.3.13-alpine AS builder": 1,
-        "FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23 AS runtime-config-builder": 1,
     },
     "apps/sentiment/compose.yml": {
         "image: quay.io/keycloak/keycloak:26.6.1": 1,
         "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
     },
-    "apps/subnetcalc/compose.yml": {
-        "image: quay.io/keycloak/keycloak:26.6.1": 1,
-        "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2": 2,
-    },
-    "apps/subnetcalc/compose.azurite.yml": {
-        "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
-    },
-    "apps/subnetcalc/api-fastapi-azure-function/compose.azurite.yml": {
-        "image: mcr.microsoft.com/azure-storage/azurite:3.35.0": 1,
+    "apps/subnetcalc/app-go/Dockerfile": {
+        "FROM dhi.io/static:20260413-alpine3.23": 1,
     },
     "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
         "image: docker:29.4.1-cli": 1,
@@ -783,7 +745,7 @@ print(f"validated {validated} external image expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 23 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 14 external image expectation(s)"* ]]
 }
 
 @test "subnetcalc frontend stays single-replica for local laptop clusters" {

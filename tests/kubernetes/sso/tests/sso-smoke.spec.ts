@@ -1272,4 +1272,66 @@ test.describe(SUITE_NAME, () => {
       }
     })
   }
+
+  test('subnetcalc-dev: sign out clears Keycloak SSO session used by chatgpt-dev', async ({ page }) => {
+    test.setTimeout(180_000)
+    test.skip(OIDC_PROVIDER !== 'keycloak', 'Keycloak SSO backend logout verification is provider-specific')
+    test.skip(!INCLUDE_SUBNETCALC || !INCLUDE_MCP, 'requires chatgpt-sim and subnetcalc dev apps')
+
+    const chatgptTarget: Target = {
+      name: 'chatgpt-sim',
+      url: platformUrl('chatgpt.dev'),
+      segment: 'dev',
+      flow: 'oauth2-proxy',
+    }
+    const subnetcalcTarget: Target = {
+      name: 'subnetcalc-dev',
+      url: platformUrl('subnetcalc.dev'),
+      segment: 'dev',
+      flow: 'oauth2-proxy',
+    }
+
+    await loginViaOauth2ProxyRedirect(page, chatgptTarget)
+    await assertNoGatewayErrorWithReloads(page, chatgptTarget.name)
+
+    await gotoWithGatewayRetry(page, subnetcalcTarget.url)
+    await page.waitForURL((u) => u.host === new URL(subnetcalcTarget.url).host, { timeout: 60_000 })
+    await expect(page.getByRole('button', { name: /^sign out$/i })).toBeVisible({ timeout: 30_000 })
+    await page.getByRole('button', { name: /^sign out$/i }).click()
+    await page.waitForURL((u) => u.host === new URL(subnetcalcTarget.url).host && u.pathname === '/logged-out.html', { timeout: 60_000 })
+    await expect(page.getByRole('heading', { name: /^signed out$/i })).toBeVisible()
+
+    await gotoWithGatewayRetry(page, subnetcalcTarget.url)
+    await page.waitForURL((u) => u.host === OIDC_HOST, { timeout: 60_000 })
+    await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 })
+  })
+
+  test('chatgpt-dev: sign out clears Keycloak SSO session used by subnetcalc-dev', async ({ page }) => {
+    test.setTimeout(180_000)
+    test.skip(OIDC_PROVIDER !== 'keycloak', 'Keycloak SSO backend logout verification is provider-specific')
+    test.skip(!INCLUDE_SUBNETCALC || !INCLUDE_MCP, 'requires chatgpt-sim and subnetcalc dev apps')
+
+    const chatgptTarget: Target = {
+      name: 'chatgpt-sim',
+      url: platformUrl('chatgpt.dev'),
+      segment: 'dev',
+      flow: 'oauth2-proxy',
+    }
+    const subnetcalcTarget: Target = {
+      name: 'subnetcalc-dev',
+      url: platformUrl('subnetcalc.dev'),
+      segment: 'dev',
+      flow: 'oauth2-proxy',
+    }
+
+    await loginViaOauth2ProxyRedirect(page, subnetcalcTarget)
+    await assertNoGatewayErrorWithReloads(page, subnetcalcTarget.name)
+
+    await gotoWithGatewayRetry(page, chatgptTarget.url)
+    await page.waitForURL((u) => u.host === new URL(chatgptTarget.url).host, { timeout: 60_000 })
+    await expect(page.getByRole('link', { name: /^sign out$/i })).toBeVisible({ timeout: 30_000 })
+    await page.getByRole('link', { name: /^sign out$/i }).click()
+    await page.waitForURL((u) => u.host === OIDC_HOST, { timeout: 60_000 })
+    await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 })
+  })
 })

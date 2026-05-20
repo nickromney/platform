@@ -5,101 +5,47 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-@test "subnetcalc make help exposes the compose workflows" {
+@test "subnetcalc make help exposes the Go-only workflows" {
   run make -C "${REPO_ROOT}/apps/subnetcalc" help
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"update"* ]]
-  [[ "${output}" == *"start-compose-happy"* ]]
-  [[ "${output}" == *"start-compose-backend-container"* ]]
-  [[ "${output}" == *"start-compose-frontend-react"* ]]
-  [[ "${output}" == *"start-compose-full"* ]]
+  [[ "${output}" == *"app-go-test"* ]]
+  [[ "${output}" == *"app-go-run-backend"* ]]
+  [[ "${output}" == *"app-go-run-frontend"* ]]
+  [[ "${output}" == *"compose-smoke"* ]]
+  [[ "${output}" != *"frontend-react"* ]]
+  [[ "${output}" != *"api-fastapi"* ]]
+  [[ "${output}" != *"bruno"* ]]
 }
 
-@test "subnetcalc update delegates to bun and uv roots" {
+@test "subnetcalc update is a no-op for the Go-only wrapper" {
   run make -n -C "${REPO_ROOT}/apps/subnetcalc" update
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"cd . && bun update --latest"* ]]
-  [[ "${output}" == *"cd shared-frontend && bun update --latest"* ]]
-  [[ "${output}" == *"make --no-print-directory -C frontend-react update"* ]]
-  [[ "${output}" == *"make --no-print-directory -C frontend-typescript-vite update"* ]]
-  [[ "${output}" == *"cd api-fastapi-azure-function && uv lock --upgrade && uv sync --extra dev"* ]]
-  [[ "${output}" == *"cd api-fastapi-container-app && uv lock --upgrade && uv sync --extra dev"* ]]
-  [[ "${output}" == *"make --no-print-directory -C frontend-html-static update"* ]]
-  [[ "${output}" == *"make --no-print-directory -C frontend-python-flask update"* ]]
+  [[ "${output}" == *"Go-only app; no package-manager locks to update"* ]]
+  [[ "${output}" != *"bun"* ]]
+  [[ "${output}" != *"uv lock"* ]]
 }
 
-@test "subnetcalc happy path keeps the backend warm and swaps frontends without deps" {
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" start-compose-happy
+@test "subnetcalc compose stack uses only the Go runtime services" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" up
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"up -d api-fastapi-container-app"* ]]
-  [[ "${output}" == *"up -d --no-deps frontend-typescript-vite"* ]]
-
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" start-compose-frontend-react
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"up -d api-fastapi-container-app"* ]]
-  [[ "${output}" == *"up -d --no-deps frontend-react"* ]]
-}
-
-@test "subnetcalc full compose topology is explicit and profile-gated" {
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" start-compose-full
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--profile function-family"* ]]
-  [[ "${output}" == *"--profile oidc"* ]]
-  [[ "${output}" == *"--profile mock-easyauth"* ]]
-  [[ "${output}" == *"up -d"* ]]
+  [[ "${output}" == *"make --no-print-directory -C app-go build-linux"* ]]
+  [[ "${output}" == *"up -d --build subnetcalc-backend subnetcalc-frontend"* ]]
 
   run bash -lc "cd '${REPO_ROOT}' && \
-    grep -qE '^  api-fastapi-azure-function:$' apps/subnetcalc/compose.yml && \
-    grep -A3 '^  api-fastapi-azure-function:$' apps/subnetcalc/compose.yml | grep -q 'function-family' && \
-    grep -qE '^  keycloak:$' apps/subnetcalc/compose.yml && \
-    grep -A3 '^  keycloak:$' apps/subnetcalc/compose.yml | grep -q 'oidc' && \
-    grep -qE '^  easyauth-router:$' apps/subnetcalc/compose.yml && \
-    grep -A3 '^  easyauth-router:$' apps/subnetcalc/compose.yml | grep -q 'mock-easyauth'"
+    grep -qE '^  subnetcalc-backend:$' apps/subnetcalc/compose.yml && \
+    grep -qE '^  subnetcalc-frontend:$' apps/subnetcalc/compose.yml && \
+    ! grep -qE '^  (api-fastapi|frontend-react|frontend-typescript-vite|frontend-python-flask|frontend-html-static|keycloak|easyauth-router)' apps/subnetcalc/compose.yml"
 
   [ "${status}" -eq 0 ]
 }
 
-@test "subnetcalc full compose teardown includes the profiled services" {
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" test-bruno-compose-full OAUTH2_PROXY_COOKIE_SECRET=fake-secret
+@test "subnetcalc compose teardown is not profile-gated" {
+  run make -n -C "${REPO_ROOT}/apps/subnetcalc" down
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--profile function-family --profile oidc --profile mock-easyauth up -d --build"* ]]
-  [[ "${output}" == *"--profile function-family --profile oidc --profile mock-easyauth down"* ]]
-
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" down OAUTH2_PROXY_COOKIE_SECRET=fake-secret
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--profile function-family --profile oidc --profile mock-easyauth down --remove-orphans"* ]]
-}
-
-@test "subnetcalc function-family compose path chooses the right function dockerfile for the host arch" {
-  host_arch="$(uname -m)"
-
-  run make -n -C "${REPO_ROOT}/apps/subnetcalc" test-bruno-compose-full OAUTH2_PROXY_COOKIE_SECRET=fake-secret
-
-  [ "${status}" -eq 0 ]
-  if [[ "${host_arch}" == "arm64" || "${host_arch}" == "aarch64" ]]; then
-    [[ "${output}" == *"SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=Dockerfile.uvicorn"* ]]
-  else
-    [[ "${output}" == *"SUBNETCALC_AZURE_FUNCTION_DOCKERFILE=Dockerfile"* ]]
-  fi
-
-  run bash -lc "cd '${REPO_ROOT}' && [ \"\$(rg -c 'dockerfile: \\$\\{SUBNETCALC_AZURE_FUNCTION_DOCKERFILE:-Dockerfile\\}' apps/subnetcalc/compose.yml)\" = '2' ]"
-
-  [ "${status}" -eq 0 ]
-}
-
-@test "subnetcalc compose prereqs fails cleanly when the repo env file is missing" {
-  missing_env="${BATS_TEST_TMPDIR}/missing.env"
-
-  run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/apps/subnetcalc" prereqs
-
-  [ "${status}" -ne 0 ]
-  [[ "${output}" == *"Missing platform env file: ${missing_env}"* ]]
-  [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
+  [[ "${output}" == *"down --remove-orphans"* ]]
+  [[ "${output}" != *"--profile"* ]]
 }

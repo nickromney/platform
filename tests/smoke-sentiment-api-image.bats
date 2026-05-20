@@ -26,7 +26,10 @@ PY
   }
   trap cleanup EXIT
 
-  run docker build -t "${image_tag}" "${REPO_ROOT}/apps/sentiment/api-sentiment"
+  run make -C "${REPO_ROOT}/apps/sentiment/app-go" build-linux
+  [ "${status}" -eq 0 ]
+
+  run docker build -t "${image_tag}" "${REPO_ROOT}/apps/sentiment/app-go"
   [ "${status}" -eq 0 ]
 
   container_id="$(
