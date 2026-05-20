@@ -33,7 +33,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	document
 		.getElementById("theme-switcher")
 		.addEventListener("click", toggleTheme);
-	document.getElementById("login-btn").addEventListener("click", loginWithOidc);
 	document
 		.getElementById("logout-btn")
 		.addEventListener("click", logoutFromOidc);
@@ -238,7 +237,6 @@ function refreshAuthControls() {
 	document.getElementById("auth-state").hidden = !showAuthPanel;
 	const tokenInput = document.getElementById("token-input");
 	const whoamiButton = document.getElementById("whoami-btn");
-	document.getElementById("login-btn").hidden = !showOidc && !gateway;
 	document.getElementById("logout-btn").hidden = !showOidc && !gateway;
 	tokenInput.hidden = gateway;
 	whoamiButton.hidden = gateway;
@@ -285,40 +283,6 @@ function userFacingAPIError(error) {
 
 function apiTraceHeaders() {
 	return shouldShowNetworkPath() ? { "x-apim-trace": "true" } : {};
-}
-
-async function loginWithOidc() {
-	if (usesGatewayAuth()) {
-		window.location.assign("/.auth/login/sso");
-		return;
-	}
-	const config = requireOidcConfig();
-	const state = randomBase64Url(32);
-	const verifier = randomBase64Url(64);
-	const challenge = await sha256Base64Url(verifier);
-	sessionStorage.setItem(
-		oidcStateKey,
-		JSON.stringify({
-			state,
-			verifier,
-			returnUrl:
-				`${window.location.pathname}${window.location.search}${window.location.hash}` ||
-				"/",
-		}),
-	);
-
-	const params = new URLSearchParams({
-		client_id: config.oidcClientId,
-		redirect_uri: oidcRedirect(config),
-		response_type: "code",
-		scope: "openid profile email",
-		state,
-		code_challenge: challenge,
-		code_challenge_method: "S256",
-	});
-	window.location.assign(
-		`${config.oidcAuthority}/protocol/openid-connect/auth?${params}`,
-	);
 }
 
 async function completeOidcLogin(config) {
@@ -406,16 +370,13 @@ async function refreshGatewayIdentity() {
 		const session = normalizeGatewaySession(await response.json());
 		if (session) {
 			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
-			document.getElementById("login-btn").hidden = true;
 			document.getElementById("logout-btn").hidden = false;
 			return;
 		}
 		authState.textContent = "Not signed in.";
-		document.getElementById("login-btn").hidden = false;
 		document.getElementById("logout-btn").hidden = true;
 	} catch (error) {
 		authState.textContent = `Unable to read gateway session: ${error.message}`;
-		document.getElementById("login-btn").hidden = false;
 		document.getElementById("logout-btn").hidden = true;
 	}
 }
@@ -461,40 +422,8 @@ function storedOidcToken() {
 	return token.accessToken;
 }
 
-function requireOidcConfig() {
-	const config = runtimeConfig();
-	if (!config.oidcAuthority || !config.oidcClientId) {
-		throw new Error("OIDC configuration missing");
-	}
-	return config;
-}
-
 function oidcRedirect(config) {
 	return config.oidcRedirect || new URL("/", window.location.origin).toString();
-}
-
-function randomBase64Url(byteCount) {
-	const bytes = new Uint8Array(byteCount);
-	crypto.getRandomValues(bytes);
-	return base64Url(bytes);
-}
-
-async function sha256Base64Url(value) {
-	const bytes = new TextEncoder().encode(value);
-	return base64Url(
-		new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-	);
-}
-
-function base64Url(bytes) {
-	let binary = "";
-	bytes.forEach((byte) => {
-		binary += String.fromCharCode(byte);
-	});
-	return btoa(binary)
-		.replace(/\+/g, "-")
-		.replace(/\//g, "_")
-		.replace(/=+$/, "");
 }
 
 function initializeTheme() {

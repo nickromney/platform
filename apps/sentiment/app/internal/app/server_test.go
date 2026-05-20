@@ -22,6 +22,13 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), `"status"`) {
 			t.Fatalf("%s returned unexpected body: %s", path, rec.Body.String())
 		}
+		if path == "/api/v1/health" {
+			for _, text := range []string{`"service":"Sentiment API (Go)"`, `"version":"1.0.0"`, `"server_side_token_validation":false`} {
+				if !strings.Contains(rec.Body.String(), text) {
+					t.Fatalf("%s missing %q in %s", path, text, rec.Body.String())
+				}
+			}
+		}
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -37,6 +44,21 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		t.Fatalf("frontend Cache-Control=%q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared app shell CSS returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{`.header-actions`, `.auth-state`, `.theme-toggle`, `.sign-in-link`, `min-height: 42px`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("shared app shell CSS missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("shared app shell CSS Cache-Control=%q", got)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -45,6 +67,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	}
 	for _, text := range []string{
 		"Sentiment",
+		`/app-shell.css`,
 		"Signed out",
 		"Sign in now",
 		"/.auth/login/sso",
@@ -96,6 +119,9 @@ func TestCommentsPersistAndReturnNewestFirst(t *testing.T) {
 	}
 	if payload.Items[0].Text != "I am disappointed and frustrated." || payload.Items[0].Label != Negative {
 		t.Fatalf("unexpected newest record: %#v", payload.Items[0])
+	}
+	if payload.Items[0].Timestamp == "" {
+		t.Fatalf("newest record missing timestamp: %#v", payload.Items[0])
 	}
 }
 
@@ -149,6 +175,51 @@ func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
 	frontend.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("frontend role did not serve static assets: %d", rec.Code)
+	}
+}
+
+func TestFrontendAPIProxyPrefersForwardedAccessToken(t *testing.T) {
+	var gotAuth string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		writeJSON(w, http.StatusOK, map[string][]Comment{"items": []Comment{}})
+	}))
+	t.Cleanup(backend.Close)
+
+	frontend := NewServer(Config{RuntimeRole: "frontend", BackendURL: backend.URL})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/comments", nil)
+	req.Header.Set("Authorization", "Bearer id-token")
+	req.Header.Set("X-Auth-Request-Access-Token", "access-token")
+	rec := httptest.NewRecorder()
+	frontend.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("frontend proxy returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if gotAuth != "Bearer access-token" {
+		t.Fatalf("Authorization=%q, want forwarded access token", gotAuth)
+	}
+}
+
+func TestFrontendAPIProxyFallsBackToAuthorizationHeader(t *testing.T) {
+	var gotAuth string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		writeJSON(w, http.StatusOK, map[string][]Comment{"items": []Comment{}})
+	}))
+	t.Cleanup(backend.Close)
+
+	frontend := NewServer(Config{RuntimeRole: "frontend", BackendURL: backend.URL})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/comments", nil)
+	req.Header.Set("Authorization", "Bearer existing-token")
+	rec := httptest.NewRecorder()
+	frontend.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("frontend proxy returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if gotAuth != "Bearer existing-token" {
+		t.Fatalf("Authorization=%q, want original authorization header", gotAuth)
 	}
 }
 
@@ -264,21 +335,31 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`<main>`, `<header>`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="login-btn"`, `>Sign In<`, `id="logout-btn"`, `>Sign Out<`, `id="diagnostics"`} {
+	for _, text := range []string{`<main>`, `<header>`, `/app-shell.css`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="api-status"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyse<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
 	}
 	html := string(indexHTML)
+	for _, text := range []string{`id="login-btn"`, `>Sign In<`} {
+		if strings.Contains(html, text) {
+			t.Fatalf("protected frontend index must not render login control %q: %s", text, html)
+		}
+	}
 	if strings.Contains(html, `<main class="shell">`) {
 		t.Fatalf("frontend shell must use the shared bare main container: %s", html)
 	}
 	if strings.Index(html, `<header>`) > strings.Index(html, `<section>`) {
 		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
 	}
-	if strings.Index(html, `id="login-btn"`) > strings.Index(html, `id="logout-btn"`) ||
-		strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
-		t.Fatalf("frontend shell actions must be ordered auth, sign in, sign out, theme: %s", html)
+	if strings.Index(html, `id="api-status"`) > strings.Index(html, `id="comment-form"`) {
+		t.Fatalf("frontend API status must render before comment form: %s", html)
+	}
+	if strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
+		t.Fatalf("frontend shell actions must be ordered auth, sign out, theme: %s", html)
+	}
+	if strings.Index(html, `id="comments"`) > strings.Index(html, `id="diagnostics"`) {
+		t.Fatalf("frontend diagnostics must render after comments: %s", html)
 	}
 	for _, text := range []string{
 		"readThemeCookie()",
@@ -291,6 +372,12 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		`matchMedia("(prefers-color-scheme: dark)")`,
 		`["system", "light", "dark"]`,
 		"window.SENTIMENT_RUNTIME_CONFIG",
+		"checkHealth()",
+		"API Status:",
+		"Backend URI:",
+		"runtimeConfig().backendURL || \"same process\"",
+		"OIDC/JWT validated by backend",
+		"No auth mode",
 		"apiReadyForUserAction()",
 		"authRequiredMessage()",
 		"Sign in before using sentiment analysis",
@@ -307,6 +394,11 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		"/oauth2/sign_out?rd=/signed-out.html",
 		"timedFetchJSON(",
 		"apiURL(",
+		"formatTimestamp(item.timestamp)",
+		"Timestamp unavailable",
+		`[data-sample="negative"]`,
+		"I am disappointed and frustrated. This was a poor experience.",
+		"parseJSONResponse(response)",
 		"apiBasePath",
 		"backendURL",
 		"x-apim-trace",
@@ -333,6 +425,16 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 	}
 	if !strings.Contains(string(styleCSS), `:root[data-theme="dark"]`) {
 		t.Fatalf("frontend style.css missing explicit dark theme override")
+	}
+	for _, text := range []string{
+		`.auth-state`,
+		`.header-actions`,
+		`.theme-toggle`,
+		`.sign-in-link`,
+	} {
+		if strings.Contains(string(styleCSS), text) {
+			t.Fatalf("frontend style.css should not own shared app shell rule %q", text)
+		}
 	}
 }
 

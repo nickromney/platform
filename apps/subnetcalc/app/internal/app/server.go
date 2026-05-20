@@ -10,6 +10,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"platform.local/appshell"
 )
 
 //go:embed web/*
@@ -52,6 +54,7 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 	}
 	if cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /runtime-config.js", server.runtimeConfig)
+		mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
 		mux.HandleFunc("GET /favicon.ico", server.favicon)
 		mux.HandleFunc("/", server.static)
 	}

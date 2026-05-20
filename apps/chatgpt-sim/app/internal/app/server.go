@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"platform.local/appshell"
 )
 
 //go:embed web/*
@@ -55,6 +57,7 @@ func NewServer(cfg Config, client HTTPDoer) http.Handler {
 		mux.HandleFunc("POST /api/chat", s.shellChat)
 		mux.HandleFunc("GET /.auth/me", s.gatewaySession)
 		mux.HandleFunc("GET /runtime-config.js", s.runtimeConfig)
+		mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
 		mux.HandleFunc("GET /favicon.ico", s.favicon)
 		mux.HandleFunc("GET /oauth/callback", s.oauthCallback)
 		mux.HandleFunc("/", s.static)

@@ -340,9 +340,9 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-logged_out = (repo_root / "apps/subnetcalc/app/internal/app/web/logged-out.html").read_text(encoding="utf-8")
+logged_out = (repo_root / "apps/subnetcalc/app/internal/app/web/signed-out.html").read_text(encoding="utf-8")
 
-for text in ("Signed out", "Sign in again", "/.auth/login/sso"):
+for text in ("Signed out", "Sign in now", "/.auth/login/sso"):
     assert text in logged_out, text
 
 print("validated Go frontend sign-out page")
@@ -572,7 +572,7 @@ for name in (
     for expected in (
         "--cookie-expire=4h",
         "--cookie-refresh=1h",
-        "--skip-auth-regex=^/(logged-out\\.html|favicon\\.svg)$",
+        "--skip-auth-regex=^/(signed-out\\.html|style\\.css|favicon\\.svg)$",
         "--pass-access-token=true",
         "--set-xauthrequest=true",
         "--set-authorization-header=true",
