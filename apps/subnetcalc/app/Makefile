@@ -1,10 +1,11 @@
-.PHONY: help test build build-linux static-dist run-backend run-frontend
+.PHONY: help test js-check build build-linux static-dist run-backend run-frontend
 
 SUBNETCALC_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 
 help:
 	@echo "App:"
 	@echo "  test          Run Go unit tests"
+	@echo "  js-check      Check vanilla JavaScript source contracts"
 	@echo "  build         Build the local binary at .run/subnetcalc"
 	@echo "  build-linux   Build the Linux binary used by compose"
 	@echo "  static-dist   Copy embedded web assets to .run/frontend-static"
@@ -13,6 +14,10 @@ help:
 
 test: ## Run Go unit tests
 	go test ./...
+
+js-check: ## Check vanilla JavaScript source contracts
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts
+	deno check --check-js internal/app/web/app.js
 
 build: ## Build the local binary at .run/subnetcalc
 	go build -trimpath -ldflags="-s -w" -o .run/subnetcalc ./cmd/subnetcalc

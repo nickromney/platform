@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites up up-tls up-apim-ai-gateway down logs ps smoke smoke-apim-ai-gateway urls compose-config-apim-ai-gateway
+MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites app-test app-js-check up up-tls up-apim-ai-gateway down logs ps smoke smoke-apim-ai-gateway urls compose-config-apim-ai-gateway
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -24,7 +24,7 @@ COMPOSE := $(COMPOSE_CMD) -f compose.yml
 COMPOSE_TLS := $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
 COMPOSE_APIM_AI_GATEWAY := $(COMPOSE_CMD) -f compose.yml -f compose.apim-ai-gateway.yml
 
-.PHONY: help prereqs test update check-prerequisites build up up-tls up-apim-ai-gateway down logs ps smoke smoke-apim-ai-gateway urls compose-config-apim-ai-gateway
+.PHONY: help prereqs test update check-prerequisites app-test app-js-check build up up-tls up-apim-ai-gateway down logs ps smoke smoke-apim-ai-gateway urls compose-config-apim-ai-gateway
 
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
@@ -45,6 +45,12 @@ check-prerequisites: ## Check that a supported compose backend is installed and 
 build: check-prerequisites ## Build the local compose images
 	@$(MAKE) --no-print-directory -C app build-linux
 	@$(COMPOSE) build
+
+app-test: ## Run Go unit tests
+	@$(MAKE) --no-print-directory -C app test
+
+app-js-check: ## Check vanilla JavaScript source contracts
+	@$(MAKE) --no-print-directory -C app js-check
 
 ##@ Run
 up: check-prerequisites ## Start the authenticated compose stack and print the local URL
@@ -93,7 +99,7 @@ compose-config-apim-ai-gateway: ## Render compose config for the APIM AI gateway
 	@PLATFORM_DEMO_PASSWORD="$${PLATFORM_DEMO_PASSWORD:-local-dev-password}" OAUTH2_PROXY_COOKIE_SECRET="$${OAUTH2_PROXY_COOKIE_SECRET:-0123456789abcdef0123456789abcdef}" $(COMPOSE_APIM_AI_GATEWAY) config
 
 ##@ Test
-test: ## Run the local compose smoke test
+test: app-test app-js-check ## Run Go tests, JS contract checks, and the local compose smoke test
 	@$(MAKE) --no-print-directory smoke
 
 update: ## Update Bun dependency locks for each sentiment dependency root

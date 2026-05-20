@@ -465,8 +465,11 @@ lint-shell:
 frontend-check:
 	test -f ui/index.html
 	test -f ui/app.js
+	test -f ui/api-types.d.ts
 	test -f ui/styles.css
 	! test -f ui/package.json
+	biome check ui/app.js ui/api-types.d.ts ui/index.html ui/styles.css
+	deno check --check-js ui/app.js
 	test -f examples/todo-app/frontend-astro/index.html
 	test -f examples/todo-app/frontend-astro/app.js
 	test -f examples/todo-app/frontend-astro/styles.css

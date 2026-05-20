@@ -64,7 +64,10 @@ make -C apps trivy-scan-all
 ## JavaScript Tooling
 
 The lightweight sample apps avoid JavaScript package managers in their default
-runtime paths. Portal is the exception: `apps/backstage` uses Backstage's
+runtime paths. Checked browser JavaScript uses `// @ts-check`, app-local
+`api-types.d.ts` files, Biome as the standalone lint/format checker, and Deno
+as the non-npm semantic checker.
+Portal is the exception: `apps/backstage` uses Backstage's
 Yarn-based toolchain because the framework owns that dependency model. Keep it
 out of lightweight app defaults and minimal profiles rather than trying to make
 Backstage dependency free.
@@ -77,4 +80,7 @@ Backstage dependency free.
   gate.
 - Use one-shot package execution only for explicit tooling such as Bruno or
   Newman collections.
+- Do not use npm, npx, Yarn, pnpm, Bun, Vite, React, or npm-installed
+  TypeScript in the default lightweight app path. Install or preload Biome and
+  Deno as standalone binaries or tool images.
 - Use `make -C apps compose-smoke` for the light compose wiring checks.

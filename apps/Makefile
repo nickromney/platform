@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc chatgpt-sim-test idp-core-test platform-mcp-test
+MAKE_KNOWN_GOALS := help prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 include ../mk/common.mk
@@ -7,19 +7,24 @@ include ../mk/common.mk
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 
-.PHONY: prereqs test update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc chatgpt-sim-test idp-core-test platform-mcp-test
+.PHONY: prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test
 
 ##@ Workflow
 prereqs: ## Check shared app workflow prerequisites without requiring Trivy
 	@echo "compose smoke prerequisites are repo-local:"
 	@echo "  - docker"
 	@echo "  - docker compose, nerdctl compose, colima nerdctl compose, or podman compose"
-	@echo "  - bun (for frontend test/build workflows)"
+	@echo "  - biome and deno for checked browser JavaScript"
 	@echo ""
 	@echo "Trivy remains opt-in. Use 'make trivy-prereqs' when you want scanning."
 
-test: chatgpt-sim-test idp-core-test platform-mcp-test ## Run the default app checks
+test: chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test js-check ## Run the default app checks
 	@$(MAKE) --no-print-directory compose-smoke
+
+js-check: ## Check dependency-free typed JavaScript contracts for lightweight apps
+	@$(MAKE) --no-print-directory -C ./chatgpt-sim/app js-check
+	@$(MAKE) --no-print-directory -C ./sentiment/app js-check
+	@$(MAKE) --no-print-directory -C ./subnetcalc/app js-check
 
 update: ## Update dependency locks across app roots using native package managers
 	@$(MAKE) --no-print-directory -C ./apim-simulator update
@@ -67,6 +72,12 @@ idp-core-test: ## Run the IDP Core Go unit tests
 
 platform-mcp-test: ## Run the Platform MCP Go unit tests
 	@$(MAKE) --no-print-directory -C ./platform-mcp/app test
+
+sentiment-test: ## Run the sentiment Go unit tests
+	@$(MAKE) --no-print-directory -C ./sentiment/app test
+
+subnetcalc-test: ## Run the subnetcalc Go unit tests
+	@$(MAKE) --no-print-directory -C ./subnetcalc/app test
 
 compose-smoke-chatgpt-sim: ## Run the lightweight ChatGPT Sim compose smoke check
 	@./chatgpt-sim/tests/compose-smoke.sh --execute

@@ -1,10 +1,11 @@
-.PHONY: help test build build-linux run-mcp run-shell
+.PHONY: help test js-check build build-linux run-mcp run-shell
 
 CHATGPT_LOCAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 
 help:
 	@echo "ChatGPT Sim app:"
 	@echo "  test         Run Go unit tests"
+	@echo "  js-check     Run Biome and Deno checks for browser JavaScript"
 	@echo "  build        Build the local binary at .run/chatgpt-sim"
 	@echo "  build-linux  Build the Linux binary used by compose/kind images"
 	@echo "  run-mcp      Run the MCP role directly"
@@ -12,6 +13,10 @@ help:
 
 test:
 	go test ./...
+
+js-check:
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts
+	deno check --check-js internal/app/web/app.js
 
 build:
 	@mkdir -p .run

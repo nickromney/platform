@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test update app-help app-test app-build app-run-backend app-run-frontend up down urls logs ps compose-smoke
+MAKE_KNOWN_GOALS := help prereqs build test update app-help app-test app-js-check app-build app-run-backend app-run-frontend up down urls logs ps compose-smoke
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -26,7 +26,7 @@ DEFAULT_COMPOSE_ENV := SUBNETCALC_LOCAL_PLATFORM=$(SUBNETCALC_LOCAL_PLATFORM)
 
 export SUBNETCALC_LOCAL_PLATFORM
 
-.PHONY: help prereqs build test update app-help app-test app-build app-run-backend app-run-frontend up down urls logs ps compose-smoke
+.PHONY: help prereqs build test update app-help app-test app-js-check app-build app-run-backend app-run-frontend up down urls logs ps compose-smoke
 
 ##@ Prerequisites
 prereqs: ## Check local compose prerequisites
@@ -46,6 +46,9 @@ app-help: ## Show app Makefile targets
 app-test: ## Run Go unit tests
 	@$(MAKE) --no-print-directory -C app test
 
+app-js-check: ## Check vanilla JavaScript source contracts
+	@$(MAKE) --no-print-directory -C app js-check
+
 app-build: ## Build the local app binary
 	@$(MAKE) --no-print-directory -C app build
 
@@ -60,7 +63,7 @@ build: prereqs ## Build the Go binary and compose image
 	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app build-linux
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build subnetcalc-backend subnetcalc-frontend
 
-test: app-test compose-smoke ## Run Go tests and the local compose smoke test
+test: app-test app-js-check compose-smoke ## Run Go tests, JS contract checks, and the local compose smoke test
 
 compose-smoke: ## Run the Go-only compose smoke test
 	@./tests/compose-smoke.sh --execute

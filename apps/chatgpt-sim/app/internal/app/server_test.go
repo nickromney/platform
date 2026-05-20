@@ -32,9 +32,13 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		t.Fatalf("frontend title missing: %s", rec.Body.String())
 	}
 	for _, text := range []string{
+		`data-theme="system"`,
 		`class="topbar-actions"`,
-		`href="/oauth2/sign_out?rd=/"`,
+		`id="auth-state"`,
+		`id="logout-btn"`,
 		`>Sign Out<`,
+		`id="theme-switcher"`,
+		`id="theme-icon"`,
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
