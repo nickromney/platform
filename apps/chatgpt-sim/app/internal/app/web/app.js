@@ -25,6 +25,7 @@ requireElement("chat-form").addEventListener("submit", submitChat);
 requireElement("discover").addEventListener("click", refreshDiscovery);
 requireElement("connector-form").addEventListener("submit", addConnector);
 requireElement("theme-switcher").addEventListener("click", toggleTheme);
+requireElement("login-btn").addEventListener("click", loginWithGateway);
 requireElement("logout-btn").addEventListener("click", logoutFromGateway);
 connectorList.addEventListener("click", deleteConnector);
 inputElement("connector-url").value = config.mcpUrl || "";
@@ -56,6 +57,9 @@ async function initialize() {
 
 async function initializeAuthState() {
 	const authState = requireElement("auth-state");
+	const loginButton = /** @type {HTMLButtonElement} */ (
+		requireElement("login-btn")
+	);
 	const logoutButton = /** @type {HTMLButtonElement} */ (
 		requireElement("logout-btn")
 	);
@@ -63,6 +67,7 @@ async function initializeAuthState() {
 		const session = await fetchGatewaySession();
 		if (session) {
 			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
+			loginButton.hidden = true;
 			logoutButton.hidden = false;
 			return;
 		}
@@ -70,14 +75,12 @@ async function initializeAuthState() {
 		// Direct local runs do not expose the gateway session endpoint.
 	}
 	authState.textContent = "Not signed in.";
+	loginButton.hidden = false;
 	logoutButton.hidden = true;
 }
 
 function initializeTheme() {
-	const savedTheme = themeOptions.includes(localStorage.getItem("theme"))
-		? localStorage.getItem("theme")
-		: "system";
-	applyTheme(savedTheme);
+	applyTheme(readThemeCookie());
 	window
 		.matchMedia("(prefers-color-scheme: dark)")
 		.addEventListener("change", () => {
@@ -93,8 +96,35 @@ function toggleTheme() {
 		themeOptions[
 			(themeOptions.indexOf(currentTheme) + 1) % themeOptions.length
 		];
-	localStorage.setItem("theme", nextTheme);
+	writeThemeCookie(nextTheme);
 	applyTheme(nextTheme);
+}
+
+function readThemeCookie() {
+	const prefix = "pce-theme=";
+	const cookieValue = document.cookie
+		.split(";")
+		.map((value) => value.trim())
+		.find((value) => value.startsWith(prefix));
+	const theme = cookieValue
+		? decodeURIComponent(cookieValue.slice(prefix.length))
+		: "";
+	return themeOptions.includes(theme) ? theme : "system";
+}
+
+function writeThemeCookie(theme) {
+	const safeTheme = themeOptions.includes(theme) ? theme : "system";
+	const maxAge = 60 * 60 * 24 * 365;
+	const secure = window.location.protocol === "https:" ? "; Secure" : "";
+	const domain = themeCookieDomain();
+	// biome-ignore lint/suspicious/noDocumentCookie: This shared preference must span dev, uat, and admin subdomains.
+	document.cookie = `pce-theme=${encodeURIComponent(safeTheme)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${domain}${secure}`;
+}
+
+function themeCookieDomain() {
+	return window.location.hostname.endsWith("127.0.0.1.sslip.io")
+		? "; Domain=.127.0.0.1.sslip.io"
+		: "";
 }
 
 function themePreference() {
@@ -108,8 +138,17 @@ function applyTheme(theme) {
 }
 
 function updateThemeIcon(theme) {
-	requireElement("theme-icon").textContent =
-		theme === "system" ? "Light" : theme === "light" ? "Dark" : "System";
+	const switcher = requireElement("theme-switcher");
+	if (switcher instanceof HTMLButtonElement) {
+		const nextTheme =
+			themeOptions[(themeOptions.indexOf(theme) + 1) % themeOptions.length];
+		switcher.dataset.themeChoice = theme;
+		switcher.setAttribute(
+			"aria-label",
+			`Theme: ${theme}. Switch to ${nextTheme} theme.`,
+		);
+		switcher.title = `Theme: ${theme}. Switch to ${nextTheme} theme.`;
+	}
 }
 
 async function fetchGatewaySession() {
@@ -126,11 +165,24 @@ function normalizeGatewaySession(payload) {
 	if (Array.isArray(payload)) {
 		return /** @type {GatewaySession | null} */ (payload[0] || null);
 	}
+	if (payload?.clientPrincipal) {
+		return /** @type {GatewaySession | null} */ (payload.clientPrincipal);
+	}
 	return /** @type {GatewaySession | null} */ (payload || null);
 }
 
 function gatewayDisplayName(session) {
+	const claims = Array.isArray(session.claims) ? session.claims : [];
+	const claimValue = (name) => {
+		const found = claims.find(
+			(claim) => claim.typ === name || claim.type === name,
+		);
+		return found ? found.val || found.value : "";
+	};
 	return (
+		claimValue("name") ||
+		claimValue("preferred_username") ||
+		claimValue("email") ||
 		session.userDetails ||
 		session.user_details ||
 		session.email ||
@@ -140,8 +192,12 @@ function gatewayDisplayName(session) {
 	);
 }
 
+function loginWithGateway() {
+	window.location.assign("/.auth/login/sso");
+}
+
 function logoutFromGateway() {
-	window.location.assign("/.auth/logout?post_logout_redirect_uri=/");
+	window.location.assign("/oauth2/sign_out?rd=/signed-out.html");
 }
 
 async function submitChat(event) {

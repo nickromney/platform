@@ -73,7 +73,7 @@ button, input, select {
   background: var(--field);
   color: var(--text);
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 button {
@@ -81,6 +81,37 @@ button {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+}
+
+.theme-toggle {
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  border-color: var(--field-border);
+  background: var(--field);
+  color: var(--text);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.theme-toggle[data-theme-choice="system"] [data-theme-icon="system"],
+.theme-toggle[data-theme-choice="light"] [data-theme-icon="light"],
+.theme-toggle[data-theme-choice="dark"] [data-theme-icon="dark"] {
+  display: block;
 }
 
 .button {
@@ -94,41 +125,39 @@ button {
   text-decoration: none;
 }
 
+.sign-in-link {
+  min-height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  text-decoration: none;
+}
+
 .button.secondary {
   background: var(--field);
   color: var(--text);
 }
 
-.shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: 16px;
-  min-height: 100vh;
-  max-width: 100vw;
-  padding: 16px;
+main {
+  width: min(1280px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0;
 }
 
-.conversation, .inspector, .panel { min-width: 0; }
-
-.conversation {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  min-height: calc(100vh - 32px);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.topbar {
+header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  align-items: flex-start;
-  padding: 20px;
-  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
 }
 
-.topbar-actions {
+.header-actions {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -136,12 +165,31 @@ button {
   justify-content: flex-end;
 }
 
+.app-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 16px;
+  align-items: start;
+  max-width: 100%;
+}
+
+.conversation, .inspector, .panel { min-width: 0; }
+
+.conversation {
+  display: grid;
+  grid-template-rows: auto auto;
+  max-height: min(680px, calc(100vh - 136px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
 h1, h2, p { margin: 0; }
 h1 { font-size: 2.25rem; line-height: 1.15; }
 h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); letter-spacing: 0; }
 p { color: var(--muted); margin-top: 6px; }
 
-.topbar p {
+header p {
   color: var(--text);
   font-size: 1rem;
 }
@@ -170,7 +218,13 @@ p { color: var(--muted); margin-top: 6px; }
   flex-direction: column;
   gap: 12px;
   overflow: auto;
-  padding: 20px;
+  min-height: 0;
+  max-height: min(440px, calc(100vh - 292px));
+  padding: 16px;
+}
+
+.messages:empty {
+  padding-block: 0;
 }
 
 .message {
@@ -205,26 +259,26 @@ p { color: var(--muted); margin-top: 6px; }
 
 .composer {
   border-top: 1px solid var(--line);
-  padding: 16px;
+  padding: 10px;
 }
 
 textarea {
   width: 100%;
   resize: vertical;
-  min-height: 92px;
+  min-height: 58px;
   border: 1px solid var(--field-border);
   border-radius: 6px;
   background: var(--field);
   color: var(--text);
-  padding: 12px;
-  line-height: 1.45;
+  padding: 9px 10px;
+  line-height: 1.35;
 }
 
 .composer-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .settings-form, .advanced-grid {
@@ -336,6 +390,8 @@ textarea {
   display: grid;
   gap: 16px;
   align-content: start;
+  max-height: min(680px, calc(100vh - 136px));
+  overflow: auto;
 }
 
 .panel {
@@ -370,23 +426,31 @@ pre {
   line-height: 1.45;
 }
 
-@media (max-width: 980px) {
-  .shell { grid-template-columns: 1fr; }
-  .conversation { min-height: 72vh; }
+@media (max-width: 840px) {
+  .app-workspace { grid-template-columns: 1fr; }
+  .conversation { min-height: 0; }
+  .inspector {
+    max-height: none;
+    overflow: visible;
+  }
 }
 
 @media (max-width: 520px) {
-  .topbar {
+  header {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .topbar button,
-  .topbar .button {
+  header button,
+  header .button {
     width: 100%;
   }
 
-  .topbar-actions {
+  header .theme-toggle {
+    width: 38px;
+  }
+
+  .header-actions {
     justify-content: stretch;
   }
 

@@ -33,12 +33,17 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	}
 	for _, text := range []string{
 		`data-theme="system"`,
-		`class="topbar-actions"`,
+		`class="header-actions"`,
 		`id="auth-state"`,
+		`id="login-btn"`,
+		`>Sign In<`,
 		`id="logout-btn"`,
 		`>Sign Out<`,
 		`id="theme-switcher"`,
-		`id="theme-icon"`,
+		`class="theme-toggle"`,
+		`data-theme-icon="light"`,
+		`data-theme-icon="dark"`,
+		`data-theme-icon="system"`,
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
@@ -46,6 +51,175 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("frontend Cache-Control=%q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("signed-out page returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{
+		"ChatGPT Sim",
+		"Signed out",
+		"Sign in now",
+		"/.auth/login/sso",
+		`id="theme-switcher"`,
+		`class="theme-toggle"`,
+		"redirect-delay",
+		"Redirecting to sign in in 5 seconds",
+		"pce-theme",
+		"setTimeout(() => {",
+		"window.location.assign(loginLink.href)",
+		"5000",
+	} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if strings.Contains(rec.Body.String(), "logged-out.html") {
+		t.Fatalf("signed-out page must not retain the old logged-out route name: %s", rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("signed-out Cache-Control=%q", got)
+	}
+}
+
+func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
+	indexHTML, err := web.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appJS, err := web.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	html := string(indexHTML)
+	for _, text := range []string{
+		`<main>`,
+		`<header>`,
+		`class="header-actions"`,
+		`id="auth-state"`,
+		`id="login-btn"`,
+		`>Sign In<`,
+		`id="logout-btn"`,
+		`>Sign Out<`,
+		`id="theme-switcher"`,
+		`class="theme-toggle"`,
+		`data-theme-icon="light"`,
+		`data-theme-icon="dark"`,
+		`data-theme-icon="system"`,
+		`<section class="conversation"`,
+		`<aside class="inspector"`,
+	} {
+		if !strings.Contains(html, text) {
+			t.Fatalf("frontend shell missing %q: %s", text, html)
+		}
+	}
+
+	if strings.Contains(html, `<main class="shell">`) {
+		t.Fatalf("frontend shell must use the shared bare main container: %s", html)
+	}
+	if strings.Index(html, `<header>`) > strings.Index(html, `<section class="conversation"`) {
+		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
+	}
+	if strings.Index(html, `id="login-btn"`) > strings.Index(html, `id="logout-btn"`) ||
+		strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
+		t.Fatalf("frontend shell actions must be ordered auth, sign in, sign out, theme: %s", html)
+	}
+
+	js := string(appJS)
+	for _, text := range []string{
+		"payload.clientPrincipal",
+		`window.location.assign("/.auth/login/sso")`,
+		`window.location.assign("/oauth2/sign_out?rd=/signed-out.html")`,
+		"readThemeCookie()",
+		"writeThemeCookie(nextTheme)",
+		"pce-theme",
+		"themeCookieDomain",
+		"document.cookie",
+	} {
+		if !strings.Contains(js, text) {
+			t.Fatalf("frontend auth code missing %q: %s", text, js)
+		}
+	}
+	if strings.Contains(js, `localStorage.setItem("theme"`) {
+		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
+	}
+}
+
+func TestFrontendComposerStaysCompact(t *testing.T) {
+	styleCSS, err := web.ReadFile("web/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(styleCSS)
+
+	for _, text := range []string{
+		`.conversation {`,
+		`grid-template-rows: auto auto;`,
+		`max-height: min(680px, calc(100vh - 136px));`,
+		`.messages {`,
+		`max-height: min(440px, calc(100vh - 292px));`,
+		`.messages:empty {`,
+		`padding-block: 0;`,
+		`.inspector {`,
+		`max-height: min(680px, calc(100vh - 136px));`,
+		`@media (max-width: 840px)`,
+		`.conversation { min-height: 0; }`,
+		`.composer {`,
+		`padding: 10px;`,
+		`min-height: 58px;`,
+	} {
+		if !strings.Contains(css, text) {
+			t.Fatalf("compact composer CSS missing %q: %s", text, css)
+		}
+	}
+
+	for _, text := range []string{
+		`grid-template-rows: auto 1fr auto;`,
+		`grid-template-rows: minmax(0, 1fr) auto;`,
+		`min-height: calc(100vh - 32px);`,
+		`min-height: min(680px, calc(100vh - 136px));`,
+		`min-height: 72vh;`,
+		`min-height: 92px;`,
+	} {
+		if strings.Contains(css, text) {
+			t.Fatalf("composer CSS still contains oversized rule %q: %s", text, css)
+		}
+	}
+
+	indexHTML, err := web.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(indexHTML), `id="message" rows="3"`) {
+		t.Fatalf("composer textarea must not force a three-row minimum: %s", string(indexHTML))
+	}
+}
+
+func TestGatewaySessionAdaptsOauth2ProxyUserHeaders(t *testing.T) {
+	srv := NewServer(Config{Role: "shell"}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/.auth/me", nil)
+	req.Header.Set("X-Auth-Request-Email", "demo@dev.test")
+	req.Header.Set("X-Forwarded-Preferred-Username", "demo@dev.test")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("gateway session returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{
+		`"clientPrincipal"`,
+		`"userDetails":"demo@dev.test"`,
+		`"typ":"preferred_username"`,
+		`"val":"demo@dev.test"`,
+		`"typ":"email"`,
+	} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("gateway session missing %q: %s", text, rec.Body.String())
+		}
 	}
 }
 

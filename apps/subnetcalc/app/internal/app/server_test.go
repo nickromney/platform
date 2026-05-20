@@ -33,19 +33,38 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		t.Fatalf("frontend Cache-Control=%q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/logged-out.html", nil)
+	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("logged-out page returned %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("signed-out page returned %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, text := range []string{"Signed out", "Sign in again", "/.auth/login/sso", "window.SUBNETCALC_RUNTIME_CONFIG"} {
+	for _, text := range []string{
+		"IPv4 Subnet Calculator",
+		"Signed out",
+		"Sign in now",
+		"/.auth/login/sso",
+		`id="theme-switcher"`,
+		`class="theme-toggle"`,
+		"redirect-delay",
+		"Redirecting to sign in in 5 seconds",
+		"pce-theme",
+		"setTimeout(() => {",
+		"window.location.assign(loginLink.href)",
+		"5000",
+	} {
 		if !strings.Contains(rec.Body.String(), text) {
-			t.Fatalf("logged-out page missing %q: %s", text, rec.Body.String())
+			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
 	}
+	if strings.Contains(rec.Body.String(), `loginLink.href = "/"`) {
+		t.Fatalf("signed-out page must not rewrite SSO login to the local app root: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "logged-out.html") {
+		t.Fatalf("signed-out page must not retain the old logged-out route name: %s", rec.Body.String())
+	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
-		t.Fatalf("logged-out Cache-Control=%q", got)
+		t.Fatalf("signed-out Cache-Control=%q", got)
 	}
 }
 
@@ -100,7 +119,6 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 		"Private Address Check",
 		"Cloudflare Check",
 		"Provider Range Check",
-		"Network Plan",
 		"Subnet Information",
 		"Performance Timing",
 		"API Call Timing",
@@ -114,15 +132,31 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 			t.Fatalf("frontend app.js missing %q", text)
 		}
 	}
-	for _, text := range []string{"provider-form", "network-plan-form", "provider-ranges/check", "network-plan/allocate"} {
+	for _, text := range []string{"provider-form", "provider-ranges/check"} {
 		if !strings.Contains(string(indexHTML)+string(appJS), text) {
 			t.Fatalf("frontend missing %q", text)
+		}
+	}
+	for _, text := range []string{"network-plan-form", "Network Plan", "network-plan/allocate"} {
+		if strings.Contains(string(indexHTML)+string(appJS), text) {
+			t.Fatalf("frontend must not expose removed network allocation feature %q", text)
 		}
 	}
 	for _, text := range []string{"box-sizing: border-box", "textarea"} {
 		if !strings.Contains(string(styleCSS), text) {
 			t.Fatalf("frontend CSS missing %q", text)
 		}
+	}
+}
+
+func TestNetworkPlanEndpointIsRemoved(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/network-plan/allocate", strings.NewReader(`{"parent":"10.0.0.0/24"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("removed network plan endpoint returned %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -135,7 +169,7 @@ func TestFrontendThemeSupportsSystemPreference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loggedOutHTML, err := web.ReadFile("web/logged-out.html")
+	signedOutHTML, err := web.ReadFile("web/signed-out.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,12 +182,17 @@ func TestFrontendThemeSupportsSystemPreference(t *testing.T) {
 		`data-theme="system"`,
 		"themePreference",
 		`matchMedia("(prefers-color-scheme: dark)")`,
-		`localStorage.setItem("theme", nextTheme)`,
+		"pce-theme",
+		"themeCookieDomain",
+		`document.cookie`,
 		`["system", "light", "dark"]`,
 	} {
-		if !strings.Contains(string(indexHTML)+string(loggedOutHTML)+string(appJS), text) {
+		if !strings.Contains(string(indexHTML)+string(signedOutHTML)+string(appJS), text) {
 			t.Fatalf("frontend theme support missing %q", text)
 		}
+	}
+	if strings.Contains(string(appJS), `localStorage.setItem("theme"`) {
+		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
 	}
 	if !strings.Contains(string(styleCSS), `:root[data-theme="dark"]`) {
 		t.Fatalf("frontend CSS must support explicit dark theme")
@@ -476,72 +515,6 @@ func TestProviderRangeRefreshParsesStripeAndAzureFeeds(t *testing.T) {
 	}
 }
 
-func TestNetworkPlanAllocatesHostRequirementsInsideParentNetwork(t *testing.T) {
-	srv := NewServer(Config{AuthMode: "none"}, nil)
-
-	body := `{"parent":"10.0.0.0/24","mode":"Standard","requirements":[{"name":"web","hosts":50},{"name":"db","hosts":20}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/network-plan/allocate", strings.NewReader(body))
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var got struct {
-		Parent      string `json:"parent"`
-		Allocations []struct {
-			Name            string `json:"name"`
-			Network         string `json:"network"`
-			PrefixLength    int    `json:"prefix_length"`
-			UsableAddresses uint64 `json:"usable_addresses"`
-		} `json:"allocations"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if got.Parent != "10.0.0.0/24" {
-		t.Fatalf("parent=%q", got.Parent)
-	}
-	if len(got.Allocations) != 2 {
-		t.Fatalf("allocations=%#v", got.Allocations)
-	}
-	if got.Allocations[0].Name != "web" || got.Allocations[0].Network != "10.0.0.0/26" || got.Allocations[0].UsableAddresses != 62 {
-		t.Fatalf("unexpected first allocation: %#v", got.Allocations[0])
-	}
-	if got.Allocations[1].Name != "db" || got.Allocations[1].Network != "10.0.0.64/27" || got.Allocations[1].UsableAddresses != 30 {
-		t.Fatalf("unexpected second allocation: %#v", got.Allocations[1])
-	}
-}
-
-func TestNetworkPlanAllocationHonorsCloudModeReservations(t *testing.T) {
-	srv := NewServer(Config{AuthMode: "none"}, nil)
-
-	body := `{"parent":"10.0.0.0/24","mode":"Azure","requirements":[{"name":"app","hosts":60}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/network-plan/allocate", strings.NewReader(body))
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var got struct {
-		Allocations []struct {
-			Network         string `json:"network"`
-			UsableAddresses uint64 `json:"usable_addresses"`
-			FirstUsableIP   string `json:"first_usable_ip"`
-		} `json:"allocations"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Allocations) != 1 {
-		t.Fatalf("allocations=%#v", got.Allocations)
-	}
-	if got.Allocations[0].Network != "10.0.0.0/25" || got.Allocations[0].UsableAddresses != 123 || got.Allocations[0].FirstUsableIP != "10.0.0.4" {
-		t.Fatalf("unexpected allocation: %#v", got.Allocations[0])
-	}
-}
-
 func TestWhoamiRequiresValidBearerToken(t *testing.T) {
 	verifier := fakeVerifier{claims: UserClaims{
 		Subject:           "user-123",
@@ -691,22 +664,42 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 	}
 
 	for _, text := range []string{
+		`<main>`,
+		`<header>`,
 		`class="header-actions"`,
 		`id="theme-switcher"`,
-		`id="theme-icon"`,
+		`class="theme-toggle"`,
+		`data-theme-icon="light"`,
+		`data-theme-icon="dark"`,
+		`data-theme-icon="system"`,
 		`data-theme="system"`,
 		`/runtime-config.js`,
+		`id="auth-state"`,
 		`id="login-btn"`,
+		`>Sign In<`,
 		`id="logout-btn"`,
+		`>Sign Out<`,
 		`id="results" tabindex="-1" aria-live="polite"`,
 	} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
 	}
+	html := string(indexHTML)
+	if strings.Contains(html, `<main class="shell">`) {
+		t.Fatalf("frontend shell must use the shared bare main container: %s", html)
+	}
+	if strings.Index(html, `<header>`) > strings.Index(html, `<section`) &&
+		strings.Index(html, `<header>`) > strings.Index(html, `<form`) {
+		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
+	}
+	if strings.Index(html, `id="login-btn"`) > strings.Index(html, `id="logout-btn"`) ||
+		strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
+		t.Fatalf("frontend shell actions must be ordered auth, sign in, sign out, theme: %s", html)
+	}
 	for _, text := range []string{
-		"localStorage.getItem(\"theme\")",
-		"localStorage.setItem(\"theme\"",
+		"readThemeCookie()",
+		"writeThemeCookie(nextTheme)",
 		"apiAuthHeaders()",
 		"apiRequiresOidcToken()",
 		"apiReadyForUserAction()",
@@ -733,7 +726,7 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		"gatewayDisplayName(session)",
 		"gatewayLogoutURL()",
 		"/oauth2/sign_out",
-		"rd\", \"/logged-out.html\"",
+		"rd\", \"/signed-out.html\"",
 		"return oauthSignOut.toString();",
 		"loginWithOidc",
 		"code_challenge_method: \"S256\"",

@@ -73,7 +73,7 @@ kubectl -n default run curltest --rm -i --restart=Never --image=curlimages/curl:
 
 # Does oauth2-proxy sign_out clear the local app cookie?
 kubectl -n default run curltest --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- \
-  sh -lc "curl -sS -D - -o /dev/null -H 'Host: subnetcalc.uat.127.0.0.1.sslip.io' 'http://oauth2-proxy-subnetcalc-uat.sso.svc.cluster.local:80/oauth2/sign_out?rd=/logged-out.html' | sed -n '1,40p'"
+  sh -lc "curl -sS -D - -o /dev/null -H 'Host: subnetcalc.uat.127.0.0.1.sslip.io' 'http://oauth2-proxy-subnetcalc-uat.sso.svc.cluster.local:80/oauth2/sign_out?rd=/signed-out.html' | sed -n '1,40p'"
 ```
 
 ### 4) Subnetcalc-specific: beware `skip-auth-regex` letting `/.auth/*` go "half-authenticated"
@@ -85,7 +85,7 @@ Subnetcalc's router provides AppService-style endpoints:
 - `/.auth/logout` (compatibility redirect to oauth2-proxy `sign_out`)
 
 The subnetcalc UI sends gateway-auth logout to
-`/oauth2/sign_out?rd=/logged-out.html`. oauth2-proxy clears the app cookie and,
+`/oauth2/sign_out?rd=/signed-out.html`. oauth2-proxy clears the app cookie and,
 for Keycloak, uses `--backend-logout-url` with the session ID token to end the
 IdP SSO session without sending the browser through Keycloak's confirmation
 page.
@@ -96,12 +96,12 @@ If oauth2-proxy is configured with `--skip-auth-regex` that includes `/.auth/*`,
 
 - oauth2-proxy will forward `/.auth/me` without requiring a session
 - the router will respond with "no user" (because oauth2-proxy didn't inject headers)
-- the frontend can look logged-out while still being able to load, and may send bad/empty `Authorization` headers to `/api`
+- the frontend can look signed-out while still being able to load, and may send bad/empty `Authorization` headers to `/api`
 
 Fix direction:
 
 - Avoid skipping `/.auth/*` (or implement a real `auth_request` flow for those endpoints).
-- Keep `logged-out.html` unauthenticated so you can see the post-logout landing page.
+- Keep `signed-out.html` unauthenticated so you can see the post-logout landing page.
 
 Logout sanity check:
 
@@ -114,8 +114,8 @@ Logout sanity check:
 Quick check:
 
 ```bash
-curl -skD - -o /dev/null 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/logged-out.html' | rg -n 'set-cookie|location'
-curl -skD - -o /dev/null -H 'Cookie: kind-v2-sso-subnetcalc-dev=foo' 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/logged-out.html' | rg -n 'set-cookie|location'
+curl -skD - -o /dev/null 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/signed-out.html' | rg -n 'set-cookie|location'
+curl -skD - -o /dev/null -H 'Cookie: kind-v2-sso-subnetcalc-dev=foo' 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/signed-out.html' | rg -n 'set-cookie|location'
 ```
 
 ### 5) Optional SigNoz path: oauth2-proxy Authorization header + upstream choice

@@ -5,6 +5,12 @@ export interface RuntimeConfig {
 }
 
 export interface GatewaySession {
+	claims?: Array<{
+		typ?: string;
+		type?: string;
+		val?: string;
+		value?: string;
+	}>;
 	userDetails?: string;
 	user_details?: string;
 	email?: string;

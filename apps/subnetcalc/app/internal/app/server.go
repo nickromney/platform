@@ -42,7 +42,6 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 		mux.Handle("POST /api/v1/provider-ranges/check", server.requireAuth(http.HandlerFunc(server.checkProviderRange)))
 		mux.Handle("POST /api/v1/provider-ranges/cache/invalidate", server.requireAuth(http.HandlerFunc(server.invalidateProviderRangeCache)))
 		mux.Handle("POST /api/v1/provider-ranges/cache/refresh", server.requireAuth(http.HandlerFunc(server.refreshProviderRangeCache)))
-		mux.Handle("POST /api/v1/network-plan/allocate", server.requireAuth(http.HandlerFunc(server.allocateNetworkPlan)))
 		mux.Handle("POST /api/v1/ipv4/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv4)))
 		mux.Handle("POST /api/v1/ipv6/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv6)))
 		mux.HandleFunc("GET /api/whoami", server.whoami)
