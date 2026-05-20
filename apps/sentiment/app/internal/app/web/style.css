@@ -65,41 +65,11 @@ section {
   margin: 0 0 18px;
 }
 
-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.header-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  color: var(--muted);
-}
-
-.user-info[hidden] {
-  display: none;
-}
-
 section {
   padding: 18px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-}
-
-h1 {
-  margin: 0 0 8px;
-  font-size: 2.2rem;
 }
 
 label {
@@ -131,55 +101,34 @@ button {
   cursor: pointer;
 }
 
-.sign-in-link {
-  min-height: 38px;
-  padding: 0 14px;
-  display: inline-flex;
+.notice {
+  border-color: #376397;
+}
+
+.comment-actions {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent);
-  color: white;
-  font: inherit;
-  text-decoration: none;
-}
-
-.theme-toggle {
-  width: 38px;
-  min-width: 38px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 38px;
-  border: 1px solid var(--field-border);
-  background: var(--field);
-  color: var(--text);
-}
-
-.theme-toggle svg {
-  width: 18px;
-  height: 18px;
-  display: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
-}
-
-.theme-toggle[data-theme-choice="system"] [data-theme-icon="system"],
-.theme-toggle[data-theme-choice="light"] [data-theme-icon="light"],
-.theme-toggle[data-theme-choice="dark"] [data-theme-icon="dark"] {
-  display: block;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .samples {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+}
+
+.samples button {
+  border: 1px solid var(--field-border);
+  background: var(--field);
+  color: var(--text);
+}
+
+.analyse-action {
+  margin-left: auto;
+  min-width: 120px;
 }
 
 .comment {
@@ -238,11 +187,4 @@ button {
 .meta {
   color: var(--muted);
   font-size: 0.9rem;
-}
-
-@media (max-width: 720px) {
-  header,
-  .header-actions {
-    flex-direction: column;
-  }
 }

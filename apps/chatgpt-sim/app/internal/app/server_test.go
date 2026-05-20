@@ -32,11 +32,10 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		t.Fatalf("frontend title missing: %s", rec.Body.String())
 	}
 	for _, text := range []string{
+		`/app-shell.css`,
 		`data-theme="system"`,
 		`class="header-actions"`,
 		`id="auth-state"`,
-		`id="login-btn"`,
-		`>Sign In<`,
 		`id="logout-btn"`,
 		`>Sign Out<`,
 		`id="theme-switcher"`,
@@ -53,6 +52,21 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		t.Fatalf("frontend Cache-Control=%q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared app shell CSS returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{`.header-actions`, `.auth-state`, `.theme-toggle`, `.sign-in-link`, `min-height: 42px`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("shared app shell CSS missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("shared app shell CSS Cache-Control=%q", got)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -61,6 +75,7 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	}
 	for _, text := range []string{
 		"ChatGPT Sim",
+		`/app-shell.css`,
 		"Signed out",
 		"Sign in now",
 		"/.auth/login/sso",
@@ -99,10 +114,9 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 	for _, text := range []string{
 		`<main>`,
 		`<header>`,
+		`/app-shell.css`,
 		`class="header-actions"`,
 		`id="auth-state"`,
-		`id="login-btn"`,
-		`>Sign In<`,
 		`id="logout-btn"`,
 		`>Sign Out<`,
 		`id="theme-switcher"`,
@@ -121,18 +135,21 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 	if strings.Contains(html, `<main class="shell">`) {
 		t.Fatalf("frontend shell must use the shared bare main container: %s", html)
 	}
+	for _, text := range []string{`id="login-btn"`, `>Sign In<`} {
+		if strings.Contains(html, text) {
+			t.Fatalf("protected frontend index must not render login control %q: %s", text, html)
+		}
+	}
 	if strings.Index(html, `<header>`) > strings.Index(html, `<section class="conversation"`) {
 		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
 	}
-	if strings.Index(html, `id="login-btn"`) > strings.Index(html, `id="logout-btn"`) ||
-		strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
-		t.Fatalf("frontend shell actions must be ordered auth, sign in, sign out, theme: %s", html)
+	if strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
+		t.Fatalf("frontend shell actions must be ordered auth, sign out, theme: %s", html)
 	}
 
 	js := string(appJS)
 	for _, text := range []string{
 		"payload.clientPrincipal",
-		`window.location.assign("/.auth/login/sso")`,
 		`window.location.assign("/oauth2/sign_out?rd=/signed-out.html")`,
 		"readThemeCookie()",
 		"writeThemeCookie(nextTheme)",

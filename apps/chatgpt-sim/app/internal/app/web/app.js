@@ -25,7 +25,6 @@ requireElement("chat-form").addEventListener("submit", submitChat);
 requireElement("discover").addEventListener("click", refreshDiscovery);
 requireElement("connector-form").addEventListener("submit", addConnector);
 requireElement("theme-switcher").addEventListener("click", toggleTheme);
-requireElement("login-btn").addEventListener("click", loginWithGateway);
 requireElement("logout-btn").addEventListener("click", logoutFromGateway);
 connectorList.addEventListener("click", deleteConnector);
 inputElement("connector-url").value = config.mcpUrl || "";
@@ -57,9 +56,6 @@ async function initialize() {
 
 async function initializeAuthState() {
 	const authState = requireElement("auth-state");
-	const loginButton = /** @type {HTMLButtonElement} */ (
-		requireElement("login-btn")
-	);
 	const logoutButton = /** @type {HTMLButtonElement} */ (
 		requireElement("logout-btn")
 	);
@@ -67,7 +63,6 @@ async function initializeAuthState() {
 		const session = await fetchGatewaySession();
 		if (session) {
 			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
-			loginButton.hidden = true;
 			logoutButton.hidden = false;
 			return;
 		}
@@ -75,7 +70,6 @@ async function initializeAuthState() {
 		// Direct local runs do not expose the gateway session endpoint.
 	}
 	authState.textContent = "Not signed in.";
-	loginButton.hidden = false;
 	logoutButton.hidden = true;
 }
 
@@ -190,10 +184,6 @@ function gatewayDisplayName(session) {
 		session.name ||
 		"authenticated user"
 	);
-}
-
-function loginWithGateway() {
-	window.location.assign("/.auth/login/sso");
 }
 
 function logoutFromGateway() {

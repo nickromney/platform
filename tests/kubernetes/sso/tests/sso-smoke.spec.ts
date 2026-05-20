@@ -1297,9 +1297,19 @@ test.describe(SUITE_NAME, () => {
     await gotoWithGatewayRetry(page, subnetcalcTarget.url)
     await page.waitForURL((u) => u.host === new URL(subnetcalcTarget.url).host, { timeout: 60_000 })
     await expect(page.getByRole('button', { name: /^sign out$/i })).toBeVisible({ timeout: 30_000 })
-    await page.getByRole('button', { name: /^sign out$/i }).click()
-    await page.waitForURL((u) => u.host === new URL(subnetcalcTarget.url).host && u.pathname === '/logged-out.html', { timeout: 60_000 })
-    await expect(page.getByRole('heading', { name: /^signed out$/i })).toBeVisible()
+    const subnetcalcHost = new URL(subnetcalcTarget.url).host
+    await Promise.all([
+      page.waitForURL((u) => {
+        if (u.host === subnetcalcHost && u.pathname === '/signed-out.html') {
+          return true
+        }
+        return u.host === OIDC_HOST && (u.searchParams.get('state') || '').endsWith(':/signed-out.html')
+      }, { timeout: 60_000 }),
+      page.getByRole('button', { name: /^sign out$/i }).click(),
+    ])
+    if (new URL(page.url()).host === subnetcalcHost) {
+      await expect(page.getByRole('heading', { name: /^signed out$/i })).toBeVisible()
+    }
 
     await gotoWithGatewayRetry(page, subnetcalcTarget.url)
     await page.waitForURL((u) => u.host === OIDC_HOST, { timeout: 60_000 })
@@ -1329,8 +1339,22 @@ test.describe(SUITE_NAME, () => {
 
     await gotoWithGatewayRetry(page, chatgptTarget.url)
     await page.waitForURL((u) => u.host === new URL(chatgptTarget.url).host, { timeout: 60_000 })
-    await expect(page.getByRole('link', { name: /^sign out$/i })).toBeVisible({ timeout: 30_000 })
-    await page.getByRole('link', { name: /^sign out$/i }).click()
+    await expect(page.getByRole('button', { name: /^sign out$/i })).toBeVisible({ timeout: 30_000 })
+    const chatgptHost = new URL(chatgptTarget.url).host
+    await Promise.all([
+      page.waitForURL((u) => {
+        if (u.host === chatgptHost && u.pathname === '/signed-out.html') {
+          return true
+        }
+        return u.host === OIDC_HOST && (u.searchParams.get('state') || '').endsWith(':/signed-out.html')
+      }, { timeout: 60_000 }),
+      page.getByRole('button', { name: /^sign out$/i }).click(),
+    ])
+    if (new URL(page.url()).host === chatgptHost) {
+      await expect(page.getByRole('heading', { name: /^signed out$/i })).toBeVisible()
+    }
+
+    await gotoWithGatewayRetry(page, chatgptTarget.url)
     await page.waitForURL((u) => u.host === OIDC_HOST, { timeout: 60_000 })
     await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 })
   })

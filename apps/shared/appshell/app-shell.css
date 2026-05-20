@@ -1,0 +1,104 @@
+body > main {
+  padding-top: 32px;
+  padding-bottom: 32px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 2.25rem;
+  line-height: 1.15;
+}
+
+header p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-state {
+  max-width: 360px;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.header-actions button,
+.sign-in-link {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.sign-in-link {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  text-decoration: none;
+}
+
+.theme-toggle {
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  border: 1px solid var(--field-border);
+  background: var(--field);
+  color: var(--text);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.theme-toggle[data-theme-choice="system"] [data-theme-icon="system"],
+.theme-toggle[data-theme-choice="light"] [data-theme-icon="light"],
+.theme-toggle[data-theme-choice="dark"] [data-theme-icon="dark"] {
+  display: block;
+}
+
+@media (max-width: 720px) {
+  header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .auth-state {
+    max-width: 100%;
+    text-align: left;
+  }
+}

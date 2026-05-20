@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"platform.local/appshell"
 )
 
 //go:embed web/*
@@ -53,6 +55,7 @@ func NewServer(cfg Config, verifier ...TokenVerifier) http.Handler {
 	}
 	if cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /runtime-config.js", srv.runtimeConfig)
+		mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
 		mux.HandleFunc("GET /favicon.ico", srv.favicon)
 		mux.HandleFunc("/", srv.static)
 	}
@@ -73,7 +76,8 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":                       "ok",
 		"role":                         "backend",
-		"service":                      "sentiment-api",
+		"service":                      "Sentiment API (Go)",
+		"version":                      "1.0.0",
 		"server_side_token_validation": s.cfg.AuthMode == "oidc",
 	})
 }
@@ -281,10 +285,26 @@ func (s *server) apiProxy() http.Handler {
 		})
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	baseDirector := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		baseDirector(r)
+		if auth := apiProxyAuthorization(r.Header); auth != "" {
+			r.Header.Set("Authorization", auth)
+		}
+	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "Backend API unavailable"})
 	}
 	return proxy
+}
+
+func apiProxyAuthorization(headers http.Header) string {
+	for _, name := range []string{"X-Auth-Request-Access-Token", "X-Forwarded-Access-Token"} {
+		if token := strings.TrimSpace(headers.Get(name)); token != "" {
+			return "Bearer " + token
+		}
+	}
+	return strings.TrimSpace(headers.Get("Authorization"))
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {

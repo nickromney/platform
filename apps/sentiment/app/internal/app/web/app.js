@@ -10,6 +10,9 @@ const diagnosticsEl = requireElement("diagnostics");
 const commentsEl = requireElement("comments");
 const textarea = textAreaElement("comment-text");
 const themeOptions = ["system", "light", "dark"];
+const paths = {
+	health: "/health",
+};
 
 document.addEventListener("DOMContentLoaded", () => {
 	initializeTheme();
@@ -19,15 +22,13 @@ document.addEventListener("DOMContentLoaded", () => {
 			"Unable to initialize authentication",
 		);
 	});
+	checkHealth();
 	document
 		.getElementById("comment-form")
 		.addEventListener("submit", submitComment);
 	document
 		.getElementById("theme-switcher")
 		.addEventListener("click", toggleTheme);
-	document
-		.getElementById("login-btn")
-		.addEventListener("click", loginWithGateway);
 	document
 		.getElementById("logout-btn")
 		.addEventListener("click", logoutFromGateway);
@@ -42,6 +43,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		.addEventListener("click", () => {
 			textarea.value =
 				"Some parts are fine, but overall I am disappointed and frustrated.";
+		});
+	document
+		.querySelector('[data-sample="negative"]')
+		.addEventListener("click", () => {
+			textarea.value =
+				"I am disappointed and frustrated. This was a poor experience.";
 		});
 });
 
@@ -61,6 +68,24 @@ function textAreaElement(id) {
 	return /** @type {HTMLTextAreaElement} */ (requireElement(id));
 }
 
+async function checkHealth() {
+	const status = document.getElementById("api-status");
+	try {
+		const data = await getJSON(apiURL(paths.health));
+		const authState = data.server_side_token_validation
+			? "OIDC/JWT validated by backend"
+			: "No auth mode";
+		const backendRoute = runtimeConfig().backendURL || "same process";
+		status.textContent = `API Status: ${data.status} | Backend: ${data.service} | Backend URI: ${backendRoute} | Version: ${data.version} | Auth: ${authState}`;
+		status.classList.remove("error");
+	} catch (error) {
+		status.textContent = authSessionExpired(error)
+			? expiredSessionMessage()
+			: `API unavailable: ${error.message}`;
+		status.classList.add("error");
+	}
+}
+
 function analyzeButton() {
 	const button = document.querySelector('[data-action="analyze"]');
 	if (!button) {
@@ -71,21 +96,18 @@ function analyzeButton() {
 
 async function initializeAuthState() {
 	const authState = document.getElementById("auth-state");
-	const loginButton = document.getElementById("login-btn");
 	const logoutButton = document.getElementById("logout-btn");
 
 	if (usesGatewayAuth()) {
 		const session = await fetchGatewaySession();
 		if (session) {
 			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
-			loginButton.hidden = true;
 			logoutButton.hidden = false;
 			await loadComments();
 			return;
 		}
 
 		authState.textContent = "Not signed in.";
-		loginButton.hidden = false;
 		logoutButton.hidden = true;
 		statusEl.textContent = authRequiredMessage();
 		analyzeButton().disabled = true;
@@ -195,6 +217,11 @@ function apiRequestHeaders() {
 	};
 }
 
+async function getJSON(url) {
+	const response = await fetch(url, { headers: apiRequestHeaders() });
+	return parseJSONResponse(response);
+}
+
 async function timedFetchJSON(url, options = {}) {
 	const started = performance.now();
 	const requestUtc = new Date().toISOString();
@@ -203,11 +230,8 @@ async function timedFetchJSON(url, options = {}) {
 		...(options.headers || {}),
 	};
 	const response = await fetch(url, { ...options, headers });
-	const data = await response.json().catch(() => ({}));
+	const data = await parseJSONResponse(response);
 	const responseUtc = new Date().toISOString();
-	if (!response.ok) {
-		throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-	}
 	return {
 		data,
 		timing: {
@@ -222,6 +246,14 @@ async function timedFetchJSON(url, options = {}) {
 	};
 }
 
+async function parseJSONResponse(response) {
+	const data = await response.json().catch(() => ({}));
+	if (!response.ok) {
+		throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+	}
+	return data;
+}
+
 function renderComments(items) {
 	if (items.length === 0) {
 		commentsEl.innerHTML = "<p>No comments yet.</p>";
@@ -232,12 +264,28 @@ function renderComments(items) {
 			(item) => `
     <article class="comment">
       <span class="label">${escapeHTML(item.label)}</span>
-      <span class="meta">Confidence: ${Number(item.confidence).toFixed(2)} | Latency: ${item.latency_ms}ms</span>
+      <span class="meta">${escapeHTML(formatTimestamp(item.timestamp))} | Confidence: ${Number(item.confidence).toFixed(2)} | Latency: ${item.latency_ms}ms</span>
       <p>${escapeHTML(item.text)}</p>
     </article>
   `,
 		)
 		.join("");
+}
+
+function formatTimestamp(value) {
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		return value || "Timestamp unavailable";
+	}
+	return date.toLocaleString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		timeZoneName: "short",
+	});
 }
 
 function renderAPIDiagnostics(action, timing) {
@@ -442,10 +490,6 @@ function gatewayDisplayName(session) {
 		session.userId ||
 		"authenticated user"
 	);
-}
-
-function loginWithGateway() {
-	window.location.assign("/.auth/login/sso");
 }
 
 function logoutFromGateway() {
