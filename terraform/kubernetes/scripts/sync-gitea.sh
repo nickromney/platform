@@ -395,6 +395,8 @@ main() {
   export_resolved_bool ENABLE_OTEL_GATEWAY enable_otel_gateway false
   export_resolved_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
   export_resolved_bool ENABLE_HEADLAMP enable_headlamp true
+  export_resolved_bool ENABLE_SSO enable_sso false
+  export_resolved_bool HEADLAMP_OIDC_SKIP_TLS_VERIFY headlamp_oidc_skip_tls_verify true
   export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false
@@ -409,8 +411,14 @@ main() {
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API subnetcalc-api
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR subnetcalc-apim-simulator
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND subnetcalc-frontend
+  export_resolved_string SSO_PUBLIC_URL sso_public_url "https://dex.127.0.0.1.sslip.io"
+  export_resolved_string HEADLAMP_PUBLIC_HOST headlamp_public_host "headlamp.admin.127.0.0.1.sslip.io"
+  export_resolved_string HEADLAMP_OIDC_CLIENT_SECRET headlamp_oidc_client_secret ""
   export_resolved_string HARDENED_IMAGE_REGISTRY hardened_image_registry dhi.io
   export POLICIES_REPO_URL_CLUSTER="${POLICIES_REPO_URL_CLUSTER:-ssh://${gitea_ssh_username}@gitea-ssh.gitea.svc.cluster.local:22/${gitea_repo_owner}/${GITEA_REPO_NAME:-policies}.git}"
+  if [[ -z "${GITOPS_RENDER_CONTRACT_FILE:-}" && -f "${STACK_DIR}/.run/kind/gitops-render-contract.json" ]]; then
+    export GITOPS_RENDER_CONTRACT_FILE="${GITOPS_RENDER_CONTRACT_FILE:-${STACK_DIR}/.run/kind/gitops-render-contract.json}"
+  fi
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
   export_resolved_string DEX_CHART_VERSION dex_chart_version "$(tf_default_from_variables dex_chart_version)"
   export_resolved_string GRAFANA_CHART_VERSION grafana_chart_version "$(tf_default_from_variables grafana_chart_version)"

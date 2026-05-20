@@ -97,7 +97,11 @@ apim_api_rule = next(
     rule
     for rule in apim_policy["spec"]["egress"]
     if any(
-        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-api"
+        endpoint.get("matchLabels", {}).get(
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"
+        ) == "application"
+        and endpoint.get("matchLabels", {}).get("k8s:team") == "dolphin"
+        and endpoint.get("matchLabels", {}).get("k8s:tier") == "backend"
         for endpoint in rule.get("toEndpoints", [])
     )
 )
@@ -112,6 +116,104 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated subnetcalc router-to-apim-to-backend policy"* ]]
+}
+
+@test "sentiment Cilium policy sends router API traffic through APIM" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all(
+        (repo_root / "terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-http-routes.yaml").read_text(encoding="utf-8")
+    )
+    if doc
+]
+runtime_docs = [
+    doc
+    for doc in yaml.safe_load_all(
+        (repo_root / "terraform/kubernetes/cluster-policies/cilium/projects/sentiment/sentiment-runtime.yaml").read_text(encoding="utf-8")
+    )
+    if doc
+]
+shared_docs = [
+    doc
+    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml").read_text(encoding="utf-8"))
+    if doc
+]
+
+router_policy = next(doc for doc in docs if doc["metadata"]["name"] == "sentiment-router-http-routes")
+api_policy = next(doc for doc in runtime_docs if doc["metadata"]["name"] == "sentiment-backend-ingress")
+apim_policy = next(doc for doc in shared_docs if doc["metadata"]["name"] == "apim-baseline")
+
+router_egress = router_policy["spec"]["egress"]
+router_apim_rule = next(
+    rule
+    for rule in router_egress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+    for rule in router_egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+assert not any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "sentiment-api"
+    for rule in router_egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+assert any(
+    port.get("port") == "8000"
+    for to_ports in router_apim_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+api_ingress = api_policy["spec"]["ingress"]
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "subnetcalc-apim-simulator"
+    for rule in api_ingress
+    for endpoint in rule.get("fromEndpoints", [])
+)
+assert not any(
+    endpoint.get("matchLabels", {}).get("k8s:app.kubernetes.io/name") == "sentiment-router"
+    for rule in api_ingress
+    for endpoint in rule.get("fromEndpoints", [])
+)
+
+apim_egress = apim_policy["spec"]["egress"]
+backend_rule = next(
+    rule
+    for rule in apim_egress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:tier") == "backend"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+backend_labels = backend_rule["toEndpoints"][0]["matchLabels"]
+assert backend_labels["k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role"] == "application"
+assert backend_labels["k8s:team"] == "dolphin"
+assert backend_labels["k8s:tier"] == "backend"
+assert "k8s:app" not in backend_labels
+assert any(
+    port.get("port") == "8080"
+    for to_ports in backend_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+print("validated sentiment router-to-apim-to-backend policy")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated sentiment router-to-apim-to-backend policy"* ]]
 }
 
 @test "static validation renders policy manifests and kustomize overlays" {

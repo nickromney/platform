@@ -1,7 +1,7 @@
 {
-  "realm": "sentiment",
+  "realm": "platform",
   "enabled": true,
-  "displayName": "Entra ID Simulator",
+  "displayName": "Platform Local",
   "sslRequired": "none",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
@@ -9,6 +9,12 @@
   "resetPasswordAllowed": false,
   "editUsernameAllowed": false,
   "bruteForceProtected": true,
+  "groups": [
+    { "name": "platform-admins" },
+    { "name": "platform-viewers" },
+    { "name": "app-sentiment-dev" },
+    { "name": "app-subnetcalc-dev" }
+  ],
   "clients": [
     {
       "clientId": "oauth2-proxy",
@@ -22,15 +28,28 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8304/oauth2/*"
+        "http://localhost:8304/oauth2/*",
+        "http://localhost:8003/oauth2/*",
+        "http://localhost:18084/oauth2/*"
       ],
-      "webOrigins": [
-        "+"
-      ],
+      "webOrigins": ["+"],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
       "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
         {
           "name": "sentiment-api-audience",
           "protocol": "openid-connect",
@@ -38,6 +57,17 @@
           "consentRequired": false,
           "config": {
             "included.client.audience": "sentiment-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "subnetcalc-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "api-app",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
@@ -54,12 +84,20 @@
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "api-app",
+      "name": "SubnetCalc API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false
     }
   ],
-  "defaultDefaultClientScopes": [
-    "profile",
-    "email"
-  ],
+  "defaultDefaultClientScopes": ["profile", "email"],
   "users": [
     {
       "username": "demo@dev.test",
@@ -68,6 +106,11 @@
       "firstName": "Demo",
       "lastName": "User",
       "email": "demo@dev.test",
+      "groups": [
+        "/platform-viewers",
+        "/app-sentiment-dev",
+        "/app-subnetcalc-dev"
+      ],
       "credentials": [
         {
           "type": "password",

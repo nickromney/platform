@@ -601,14 +601,22 @@ func (s *server) deleteConnector(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
+	payload := map[string]any{
+		"mcpUrl":          s.cfg.MCPURL,
+		"modelProvider":   s.modelProvider(),
+		"dependencies":    "go-stdlib-only",
+		"showNetworkPath": parseBoolDefault(s.cfg.ShowNetworkPath, true),
+	}
+	if s.cfg.NetworkHops != "" {
+		var hops any
+		if err := json.Unmarshal([]byte(s.cfg.NetworkHops), &hops); err == nil {
+			payload["networkHops"] = hops
+		}
+	}
 	setFrontendCacheHeaders(w)
 	w.Header().Set("Content-Type", "application/javascript")
 	_, _ = w.Write([]byte("window.PCE_CHATGPT_GO_CONFIG = "))
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"mcpUrl":        s.cfg.MCPURL,
-		"modelProvider": s.modelProvider(),
-		"dependencies":  "go-stdlib-only",
-	})
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func (s *server) modelProvider() string {
@@ -1572,4 +1580,15 @@ func defaultString(value string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func parseBoolDefault(value string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return fallback
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

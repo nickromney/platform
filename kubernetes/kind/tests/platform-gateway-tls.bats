@@ -17,7 +17,7 @@ setup() {
   gateway_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/gateway.yaml"
   hardening_manifest="${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway/tls-hardening.yaml"
 
-  grep -Fq "nginx.org/ssl-protocols: TLSv1.3" "${gateway_manifest}"
+  grep -Fq "nginx.org/ssl-protocols: TLSv1.2 TLSv1.3" "${gateway_manifest}"
   grep -Fq 'nginx.org/ssl-prefer-server-ciphers: "off"' "${gateway_manifest}"
   grep -Fq "ssl_conf_command Ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;" "${hardening_manifest}"
   grep -Fq "ssl_session_tickets off;" "${hardening_manifest}"

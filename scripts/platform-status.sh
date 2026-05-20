@@ -892,6 +892,23 @@ if [ "${slicer_endpoint_reachable}" -eq 1 ]; then
   fi
 fi
 
+slicer_host_forwards_running=""
+slicer_proxy_running=""
+slicer_host_bindings_active=0
+if [ "${slicer_running}" -eq 1 ]; then
+  slicer_host_forwards_running="$(
+    ps -ax -o comm=,args= 2>/dev/null | \
+      awk 'index($0, "slicer vm forward") && $1 != "awk" && $1 != "bash" && $1 != "sh" { found=1 } END { if (found) print "true" }' || true
+  )"
+  slicer_proxy_running="$(
+    printf '%s\n' "${docker_ps_output}" | \
+      awk -F '|' '$1 == "slicer-platform-gateway-443" { found=1 } END { if (found) print "true" }' || true
+  )"
+  if [ -n "${slicer_host_forwards_running}" ] || [ -n "${slicer_proxy_running}" ]; then
+    slicer_host_bindings_active=1
+  fi
+fi
+
 lima_ports=""
 if [ "${lima_running}" -eq 1 ]; then
   lima_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
@@ -899,7 +916,7 @@ fi
 lima_ports="$(unique_sorted_lines "${lima_ports}")"
 
 slicer_ports=""
-if [ "${slicer_running}" -eq 1 ]; then
+if [ "${slicer_running}" -eq 1 ] && [ "${slicer_host_bindings_active}" -eq 1 ]; then
   slicer_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
 fi
 slicer_ports="$(unique_sorted_lines "${slicer_ports}")"
@@ -1034,10 +1051,10 @@ fi
 if [ "${kind_docker_hub_auth}" -ne 1 ]; then
   append_line kind_blockers 'Docker Hub auth missing'
 fi
-if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
+if [ "${lima_serving}" -eq 1 ]; then
   append_line kind_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
 fi
-if [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
+if [ "${slicer_serving}" -eq 1 ]; then
   append_line kind_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 fi
 append_foreign_port_blockers kind_blockers "${kind_foreign_ports}"
@@ -1054,10 +1071,10 @@ fi
 if [ "${bootstrap_client_available}" -ne 1 ]; then
   append_line lima_blockers 'bootstrap client not found (k3sup-pro or k3sup)'
 fi
-if [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
+if [ "${kind_serving}" -eq 1 ]; then
   append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/kind')"
 fi
-if [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
+if [ "${slicer_serving}" -eq 1 ]; then
   append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 fi
 append_foreign_port_blockers lima_blockers "${lima_foreign_ports}"
@@ -1077,10 +1094,10 @@ fi
 if [ "${bootstrap_client_available}" -ne 1 ]; then
   append_line slicer_blockers 'bootstrap client not found (k3sup-pro or k3sup)'
 fi
-if [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
+if [ "${kind_serving}" -eq 1 ]; then
   append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/kind')"
 fi
-if [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
+if [ "${lima_serving}" -eq 1 ]; then
   append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
 fi
 append_foreign_port_blockers slicer_blockers "${slicer_foreign_ports}"
@@ -1203,10 +1220,10 @@ elif [ "${docker_daemon}" -ne 1 ]; then
 elif [ "${kind_available}" -ne 1 ]; then
   kind_apply_100_enabled=0
   kind_apply_100_reason='kind not found in PATH'
-elif [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
+elif [ "${lima_serving}" -eq 1 ]; then
   kind_apply_100_enabled=0
   kind_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/lima')"
-elif [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
+elif [ "${slicer_serving}" -eq 1 ]; then
   kind_apply_100_enabled=0
   kind_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 elif [ -n "${kind_foreign_ports}" ]; then
@@ -1239,10 +1256,10 @@ elif [ "${limactl_available}" -ne 1 ]; then
 elif [ "${bootstrap_client_available}" -ne 1 ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason='bootstrap client not found (k3sup-pro or k3sup)'
-elif [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
+elif [ "${kind_serving}" -eq 1 ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/kind')"
-elif [ "${slicer_state}" = "running" ] || [ "${slicer_state}" = "degraded" ]; then
+elif [ "${slicer_serving}" -eq 1 ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 elif [ -n "${lima_foreign_ports}" ]; then
@@ -1266,10 +1283,10 @@ elif [ "${slicer_available}" -ne 1 ]; then
 elif [ "${bootstrap_client_available}" -ne 1 ]; then
   slicer_apply_100_enabled=0
   slicer_apply_100_reason='bootstrap client not found (k3sup-pro or k3sup)'
-elif [ "${kind_state}" = "running" ] || [ "${kind_state}" = "degraded" ]; then
+elif [ "${kind_serving}" -eq 1 ]; then
   slicer_apply_100_enabled=0
   slicer_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/kind')"
-elif [ "${lima_state}" = "running" ] || [ "${lima_state}" = "degraded" ]; then
+elif [ "${lima_serving}" -eq 1 ]; then
   slicer_apply_100_enabled=0
   slicer_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/lima')"
 elif [ -n "${slicer_foreign_ports}" ]; then

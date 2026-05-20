@@ -23,7 +23,7 @@ fi
 mkdir -p /opt/keycloak/data/import
 
 escape_sed_replacement() {
-  printf '%s' "$1" | sed -e 's/[\\&/]/\\\\&/g'
+  printf '%s' "$1" | sed -e 's/[\\&/]/\\&/g'
 }
 
 client_secret_escaped=$(escape_sed_replacement "$OAUTH2_PROXY_CLIENT_SECRET")

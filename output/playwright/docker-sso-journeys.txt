@@ -1,0 +1,112 @@
+### Result
+[{"key":"sentiment","name":"Sentiment","url":"http://localhost:8304/","ok":true,"common":{"h1":"Sentiment","auth":"Signed in as demo@dev.test","logoutVisible":true,"themes":["system","light","dark"]},"journey":{"status":"Saved. positive | Latency: 1ms","hasRecentComment":true,"hasNetworkPath":true}},{"key":"subnetcalc","name":"Subnet Calculator","url":"http://localhost:8003/","ok":true,"common":{"h1":"IPv4 Subnet Calculator","auth":"Signed in as demo@dev.test","logoutVisible":true,"themes":["system","light","dark"]},"journey":{"hasResults":true,"hasNetworkPath":true,"excerpt":"Results\nValidation\nValid\tYes\nAddress\t10.0.0.0/24\nType\tNetwork (CIDR)\nIP Version\tIPv4\nAPI Call Timing\nPrivate Address Check\nRFC1918\tYes (10.0.0.0/8)\nRFC6598 Shared\tNo\nAPI Call Timing\nCloudflare Check\nCloudflare\tNo\nAPI Call Timing\nSubnet Information\nMode\tAzure\nNetwork Address\t10.0.0.0\nBroadcast Address\t10.0.0.255\nNetmask\t255.255.255.0\nWildcard Mask\t0.0.0.255\nPrefix Length\t/24\nTotal Addresses\t256\nUsable Addresses\t251\nFirst Usable IP\t10.0.0.4\nLast Usable IP\t10.0.0.254\nAPI Call Timing\nPerformance Tim"}},{"key":"chatgpt-sim","name":"ChatGPT Sim","url":"http://localhost:18084/","ok":true,"common":{"h1":"ChatGPT Sim","auth":"Signed in as demo@dev.test","logoutVisible":true,"themes":["system","light","dark"]},"journey":{"status":"Called whoami","hasAssistantMessage":true,"mentionsUser":false,"hasNetworkPath":true}}]
+### Ran Playwright code
+```js
+await (async (page) => {
+  const apps = [
+    { key: 'sentiment', name: 'Sentiment', url: 'http://localhost:8304/' },
+    { key: 'subnetcalc', name: 'Subnet Calculator', url: 'http://localhost:8003/' },
+    { key: 'chatgpt-sim', name: 'ChatGPT Sim', url: 'http://localhost:18084/' },
+  ];
+  const report = [];
+  async function visible(selector) {
+    try { return await page.locator(selector).first().isVisible({ timeout: 1500 }); } catch { return false; }
+  }
+  async function loginIfNeeded(app) {
+    await page.context().clearCookies();
+    await page.goto(app.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    if (await visible('input[name="username"], #username')) {
+      await page.fill('input[name="username"], #username', 'demo@dev.test');
+      await page.fill('input[name="password"], #password', 'password123');
+      await Promise.all([
+        page.waitForURL(url => url.href.startsWith(app.url), { timeout: 45000 }),
+        page.click('button[type="submit"], input[type="submit"]'),
+      ]);
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    }
+    if (!page.url().startsWith(app.url)) {
+      throw new Error(`${app.key}: did not land on app URL after login; current URL ${page.url()}`);
+    }
+  }
+  async function commonChecks(app) {
+    await page.waitForSelector('header h1', { timeout: 15000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('#auth-state');
+      return el && !/not signed in/i.test(el.textContent || '');
+    }, null, { timeout: 15000 }).catch(() => {});
+    const h1 = (await page.locator('header h1').innerText()).trim();
+    const auth = (await page.locator('#auth-state').innerText({ timeout: 10000 })).trim();
+    const logoutVisible = await page.locator('#logout-btn').isVisible();
+    const theme0 = await page.locator('html').getAttribute('data-theme');
+    await page.click('#theme-switcher');
+    const theme1 = await page.locator('html').getAttribute('data-theme');
+    await page.click('#theme-switcher');
+    const theme2 = await page.locator('html').getAttribute('data-theme');
+    await page.screenshot({ path: `output/playwright/${app.key}-after-login.png`, fullPage: true });
+    return { h1, auth, logoutVisible, themes: [theme0, theme1, theme2] };
+  }
+  async function sentimentJourney() {
+    await page.waitForFunction(() => (document.querySelector('#status')?.textContent || '') === 'Ready.', null, { timeout: 15000 });
+    await page.click('[data-sample="positive"]');
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/v1/comments') && r.request().method() === 'POST', { timeout: 15000 }),
+      page.click('[data-action="analyze"]'),
+    ]);
+    await page.waitForSelector('#diagnostics details', { timeout: 10000 });
+    const status = (await page.locator('#status').innerText()).trim();
+    const comments = (await page.locator('#comments').innerText()).trim();
+    const diagnostics = (await page.locator('#diagnostics').innerText()).trim();
+    await page.screenshot({ path: 'output/playwright/sentiment-journey.png', fullPage: true });
+    return { status, hasRecentComment: comments.includes('fantastic experience'), hasNetworkPath: diagnostics.includes('Network Path') };
+  }
+  async function subnetcalcJourney() {
+    await page.click('[data-example="10.0.0.0/24"]');
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/v1/ipv4/validate'), { timeout: 15000 }),
+      page.click('#lookup-btn'),
+    ]);
+    await page.waitForSelector('#results:not([hidden])', { timeout: 10000 });
+    await page.waitForFunction(() => {
+      const text = document.querySelector('#results')?.textContent || '';
+      return text && !text.includes('Loading...') && (text.includes('Validation') || text.includes('Network Address'));
+    }, null, { timeout: 15000 });
+    const results = (await page.locator('#results').innerText()).trim();
+    await page.screenshot({ path: 'output/playwright/subnetcalc-journey.png', fullPage: true });
+    return { hasResults: results.includes('Network Address'), hasNetworkPath: results.includes('Network Path'), excerpt: results.slice(0, 500) };
+  }
+  async function chatgptJourney() {
+    await page.waitForSelector('#message', { timeout: 15000 });
+    await page.selectOption('#tool', 'whoami');
+    await page.fill('#message', 'whoami');
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/chat'), { timeout: 20000 }),
+      page.click('#chat-form button[type="submit"]'),
+    ]);
+    await page.waitForFunction(() => (document.querySelector('#messages')?.textContent || '').trim().length > 0, null, { timeout: 15000 });
+    const status = (await page.locator('#status').innerText()).trim();
+    const messages = (await page.locator('#messages').innerText()).trim();
+    const toolOutput = (await page.locator('#tool-output').innerText()).trim();
+    await page.screenshot({ path: 'output/playwright/chatgpt-sim-journey.png', fullPage: true });
+    return { status, hasAssistantMessage: messages.length > 0, mentionsUser: messages.includes('demo@dev.test') || toolOutput.includes('demo@dev.test'), hasNetworkPath: await page.locator('text=Network Path').count() > 0 };
+  }
+  for (const app of apps) {
+    const entry = { key: app.key, name: app.name, url: app.url, ok: false };
+    try {
+      await loginIfNeeded(app);
+      entry.common = await commonChecks(app);
+      if (!entry.common.auth || /not signed in/i.test(entry.common.auth)) throw new Error('account was not shown as signed in');
+      if (!entry.common.logoutVisible) throw new Error('logout button was not visible');
+      if (app.key === 'sentiment') entry.journey = await sentimentJourney();
+      if (app.key === 'subnetcalc') entry.journey = await subnetcalcJourney();
+      if (app.key === 'chatgpt-sim') entry.journey = await chatgptJourney();
+      entry.ok = true;
+    } catch (error) {
+      entry.error = error.message;
+      await page.screenshot({ path: `output/playwright/${app.key}-error.png`, fullPage: true }).catch(() => {});
+    }
+    report.push(entry);
+  }
+  return report;
+})(page);
+```

@@ -42,8 +42,8 @@ services:
     ports:
       - "8300:8080"
     volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/local/realm-export.template.json:ro
-      - ./keycloak/start-with-templated-realm.sh:/opt/keycloak/local/start-with-templated-realm.sh:ro
+      - ../shared/keycloak/realm-export.json:/opt/keycloak/local/realm-export.template.json:ro
+      - ../shared/keycloak/start-with-templated-realm.sh:/opt/keycloak/local/start-with-templated-realm.sh:ro
     healthcheck:
       test:
         [
@@ -65,9 +65,9 @@ services:
       - HOME=/tmp
       - RUNTIME_ROLE=backend
       - AUTH_METHOD=${SENTIMENT_BACKEND_AUTH_METHOD:-none}
-      - OIDC_ISSUER_URL=${SENTIMENT_OIDC_ISSUER_URL:-http://localhost:8300/realms/sentiment}
+      - OIDC_ISSUER_URL=${SENTIMENT_OIDC_ISSUER_URL:-http://localhost:8300/realms/platform}
       - OIDC_AUDIENCE=${SENTIMENT_OIDC_AUDIENCE:-sentiment-api}
-      - OIDC_JWKS_URI=${SENTIMENT_OIDC_JWKS_URI:-http://keycloak:8080/realms/sentiment/protocol/openid-connect/certs}
+      - OIDC_JWKS_URI=${SENTIMENT_OIDC_JWKS_URI:-http://keycloak:8080/realms/platform/protocol/openid-connect/certs}
       - PORT=8080
       - DATA_DIR=/data
       - CSV_PATH=/data/comments.csv
@@ -131,11 +131,11 @@ services:
     command:
       - --provider=oidc
       - --skip-oidc-discovery=true
-      - --oidc-issuer-url=http://localhost:8300/realms/sentiment
-      - --login-url=http://localhost:8300/realms/sentiment/protocol/openid-connect/auth?max_age=0
-      - --redeem-url=http://keycloak:8080/realms/sentiment/protocol/openid-connect/token
-      - --oidc-jwks-url=http://keycloak:8080/realms/sentiment/protocol/openid-connect/certs
-      - --validate-url=http://keycloak:8080/realms/sentiment/protocol/openid-connect/userinfo
+      - --oidc-issuer-url=http://localhost:8300/realms/platform
+      - --login-url=http://localhost:8300/realms/platform/protocol/openid-connect/auth?max_age=0
+      - --redeem-url=http://keycloak:8080/realms/platform/protocol/openid-connect/token
+      - --oidc-jwks-url=http://keycloak:8080/realms/platform/protocol/openid-connect/certs
+      - --validate-url=http://keycloak:8080/realms/platform/protocol/openid-connect/userinfo
       - --client-id=oauth2-proxy
       - --client-secret=${PLATFORM_DEMO_PASSWORD:?Set PLATFORM_DEMO_PASSWORD in the repo .env or export it before running docker compose}
       - --redirect-url=http://localhost:8304/oauth2/callback
@@ -147,8 +147,10 @@ services:
       - --cookie-expire=4h
       - --cookie-refresh=1h
       - --email-domain=*
-      - --scope=openid
-      - --prompt=login
+      - --scope=openid email profile
+      - --oidc-groups-claim=groups
+      - --allowed-group=app-sentiment-dev
+      - --allowed-group=platform-admins
       - --pass-access-token=true
       - --pass-user-headers=true
       - --set-authorization-header=true
@@ -157,6 +159,9 @@ services:
       - --auth-logging=true
       - --request-logging=true
       - --upstream-timeout=180s
+      - --skip-auth-regex=^/(signed-out\.html|style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
+      - --reverse-proxy=true
+      - --skip-provider-button=true
     depends_on:
       - keycloak
       - edge

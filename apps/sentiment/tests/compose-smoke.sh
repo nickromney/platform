@@ -76,7 +76,7 @@ compose_cmd up -d --build --no-deps sentiment-api sentiment-auth-frontend edge
 wait_for_url "http://localhost:8305/" "sentiment edge frontend"
 wait_for_url "http://localhost:8305/api/v1/health" "sentiment edge API"
 
-curl -fsS "http://localhost:8305/" | grep -q "<title>Sentiment (Authenticated)</title>"
+curl -fsS -H "X-Auth-Request-Email: demo@dev.test" "http://localhost:8305/" | grep -q "<title>Sentiment (Authenticated)</title>"
 curl -fsS "http://localhost:8305/api/v1/health" | grep -q '"status":"ok"'
 wait_for_sentiment_post "http://localhost:8305/api/v1/comments" | grep -Eq '"label":"(positive|neutral|negative)"'
 

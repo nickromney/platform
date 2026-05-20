@@ -43,6 +43,7 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		`data-theme-icon="light"`,
 		`data-theme-icon="dark"`,
 		`data-theme-icon="system"`,
+		`id="network-path"`,
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
@@ -124,6 +125,7 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 		`data-theme-icon="light"`,
 		`data-theme-icon="dark"`,
 		`data-theme-icon="system"`,
+		`id="network-path"`,
 		`<section class="conversation"`,
 		`<aside class="inspector"`,
 	} {
@@ -150,12 +152,16 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 	js := string(appJS)
 	for _, text := range []string{
 		"payload.clientPrincipal",
+		"return null;",
 		`window.location.assign("/oauth2/sign_out?rd=/signed-out.html")`,
 		"readThemeCookie()",
 		"writeThemeCookie(nextTheme)",
 		"pce-theme",
 		"themeCookieDomain",
 		"document.cookie",
+		"renderNetworkPath()",
+		"Network Path",
+		"showNetworkPath",
 	} {
 		if !strings.Contains(js, text) {
 			t.Fatalf("frontend auth code missing %q: %s", text, js)
@@ -163,6 +169,31 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 	}
 	if strings.Contains(js, `localStorage.setItem("theme"`) {
 		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
+	}
+}
+
+func TestRuntimeConfigIncludesNetworkPathToggle(t *testing.T) {
+	srv := NewServer(Config{
+		Role:            "shell",
+		MCPURL:          "http://mcp.example/mcp",
+		ShowNetworkPath: "false",
+		NetworkHops:     `[{"label":"Browser","detail":"localhost","role":"User agent"}]`,
+	}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{
+		`"showNetworkPath":false`,
+		`"networkHops":[{"detail":"localhost","label":"Browser","role":"User agent"}]`,
+	} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("runtime config missing %q: %s", text, rec.Body.String())
+		}
 	}
 }
 

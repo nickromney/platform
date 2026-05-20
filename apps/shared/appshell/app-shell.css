@@ -3,6 +3,10 @@ body > main {
   padding-bottom: 32px;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 header {
   display: flex;
   align-items: center;

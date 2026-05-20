@@ -75,7 +75,7 @@ spec:
             - name: OIDC_ISSUER_URL
               value: "https://keycloak.127.0.0.1.sslip.io/realms/platform"
             - name: OIDC_AUDIENCE
-              value: "sentiment-api"
+              value: "apim-simulator"
             - name: OIDC_JWKS_URI
               value: "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs"
             - name: DATA_DIR
@@ -212,13 +212,13 @@ spec:
             - name: AUTH_METHOD
               value: "gateway"
             - name: API_AUTH_METHOD
-              value: "gateway"
+              value: "oidc"
             - name: API_BASE_PATH
               value: "/api/v1"
             - name: SHOW_NETWORK_PATH
               value: "true"
             - name: NETWORK_HOPS
-              value: '[{"label":"Browser","detail":"sentiment public host","role":"User agent"},{"label":"OAuth2 Proxy","detail":"SSO gate","role":"Session and access-token forwarding"},{"label":"Sentiment router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},{"label":"Sentiment frontend","detail":"sentiment-auth-ui service","role":"Static UI and same-origin API proxy"},{"label":"Sentiment API","detail":"sentiment-api service","role":"Go backend inference and storage"}]'
+              value: '[{"label":"Browser","detail":"sentiment public host","role":"User agent"},{"label":"OAuth2 Proxy","detail":"SSO gate","role":"Session and access-token forwarding"},{"label":"Sentiment router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},{"label":"Sentiment frontend","detail":"sentiment-auth-ui service","role":"Static UI delivery"},{"label":"APIM simulator","detail":"apim/subnetcalc-apim-simulator","role":"Gateway auth, policy, tracing"},{"label":"Sentiment API","detail":"sentiment-api service","role":"Go backend inference and storage"}]'
             - name: HOME
               value: /tmp
           securityContext:
@@ -350,9 +350,10 @@ data:
         if ($api_token != "") { set $api_auth "Bearer $api_token"; }
         if ($api_auth = "") { set $api_auth $http_authorization; }
         proxy_set_header Authorization $api_auth;
+        proxy_set_header X-Apim-Bypass-Subscription true;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_pass http://sentiment-auth-ui:8080;
+        proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;
       }
 
       location = /api {
@@ -367,6 +368,13 @@ data:
       }
 
       location = /style.css {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://sentiment-auth-ui:8080;
+      }
+
+      location = /app-shell.css {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -800,6 +808,7 @@ data:
         if ($apim_auth = "") { set $apim_auth "Bearer $apim_token"; }
         if ($apim_auth = "Bearer ") { set $apim_auth ""; }
         proxy_set_header Authorization $apim_auth;
+        proxy_set_header X-Apim-Bypass-Subscription true;
         proxy_set_header X-Subnetcalc-Bypass-Subscription true;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -818,6 +827,13 @@ data:
       }
 
       location = /style.css {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://subnetcalc-frontend:8080;
+      }
+
+      location = /app-shell.css {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

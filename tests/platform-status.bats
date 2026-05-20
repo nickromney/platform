@@ -367,6 +367,25 @@ EOF
   [ "${output}" = 'paused|true' ]
 }
 
+@test "platform status does not let a passive slicer vm claim kind localhost ports" {
+  export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
+  export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
+  export MOCK_KIND_CLUSTERS='kind-local'
+  export MOCK_SLICER_VM_LIST_JSON='[{"hostname":"slicer-1","status":"Running","ip":"192.168.64.2"}]'
+  export MOCK_LSOF_443=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\ncom.docker 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:443 (LISTEN)'
+  touch "${HOME}/.kube/kind-kind-local.yaml"
+  touch "${HOME}/.kube/slicer-k3s.yaml"
+
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '.overall_state + "|" + .active_cluster_variant + "|" + .variants.slicer.state + "|" + (.variants.slicer.serving|tostring) + "|" + (.variants.slicer.shared_ports|length|tostring)' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = 'running|kind|degraded|false|0' ]
+}
+
 @test "platform status reports a conflict when multiple cluster variants claim localhost https" {
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nlimavm-platform-gateway-443|127.0.0.1:443->host.docker.internal:30070/tcp'
   export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nlimavm-platform-gateway-443|Up 1 minute|127.0.0.1:443->host.docker.internal:30070/tcp'

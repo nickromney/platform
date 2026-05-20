@@ -691,16 +691,14 @@ vendor_chart() {
   assert_pinned_chart_version "${chart}" "${version}"
   mkdir -p "${vendor_root}"
   rm -rf "${vendor_root:?}/${chart}"
-  if [[ "${repo_url}" == "cr.agentgateway.dev/charts" ]]; then
+  if [[ "${repo_url}" == "cr.agentgateway.dev/charts" || "${repo_url}" == "ghcr.io/kgateway-dev/charts" ]]; then
+    local oci_repo="oci://${repo_url}/${chart}"
     tmp_registry_dir="$(mktemp -d)"
-    printf '{"auths":{}}\n' >"${tmp_registry_dir}/config.json"
-    printf '{"auths":{}}\n' >"${tmp_registry_dir}/registry.json"
     set +e
-    DOCKER_CONFIG="${tmp_registry_dir}" HELM_REGISTRY_CONFIG="${tmp_registry_dir}/registry.json" \
-      helm pull "oci://cr.agentgateway.dev/charts/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+    DOCKER_CONFIG="${tmp_registry_dir}" \
+      helm pull "${oci_repo}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
     status=$?
     set -e
-    rm -f "${tmp_registry_dir}/config.json" "${tmp_registry_dir}/registry.json"
     rmdir "${tmp_registry_dir}" >/dev/null 2>&1 || true
     return "${status}"
   fi

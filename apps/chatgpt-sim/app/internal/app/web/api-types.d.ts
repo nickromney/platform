@@ -2,6 +2,14 @@ export interface RuntimeConfig {
 	mcpUrl?: string;
 	modelProvider?: string;
 	dependencies?: string;
+	showNetworkPath?: boolean;
+	networkHops?: NetworkHop[];
+}
+
+export interface NetworkHop {
+	label: string;
+	detail: string;
+	role?: string;
 }
 
 export interface GatewaySession {
