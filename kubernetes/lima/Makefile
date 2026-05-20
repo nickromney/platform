@@ -1065,7 +1065,7 @@ idp-api:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "INFO dry-run: would expose Go IDP core for lima at $(IDP_API_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-core/app-go && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) IDP_CATALOG_PATH=$(REPO_ROOT)/catalog/platform-apps.json go run ./cmd/idp-core"; \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-core/app && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) IDP_CATALOG_PATH=$(REPO_ROOT)/catalog/platform-apps.json go run ./cmd/idp-core"; \
 	fi
 
 .PHONY: backstage

@@ -1,9 +1,0 @@
-**
-
-!apps/
-!apps/idp-core/
-!apps/idp-core/app-go/
-!apps/idp-core/app-go/.run/
-!apps/idp-core/app-go/.run/idp-core
-!catalog/
-!catalog/platform-apps.json

@@ -68,7 +68,7 @@ shell_cli_handle_standard_no_args usage "would run the sentiment compose smoke w
 export PLATFORM_DEMO_PASSWORD="${PLATFORM_DEMO_PASSWORD:-local-dev-password}"
 export OAUTH2_PROXY_COOKIE_SECRET="${OAUTH2_PROXY_COOKIE_SECRET:-0123456789abcdef0123456789abcdef}"
 
-(cd "${APP_DIR}/app-go" && make build-linux)
+(cd "${APP_DIR}/app" && make build-linux)
 
 compose_cmd down --remove-orphans >/dev/null 2>&1 || true
 compose_cmd up -d --build --no-deps sentiment-api sentiment-auth-frontend edge

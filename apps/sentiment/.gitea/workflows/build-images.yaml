@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "app-go/**"
+      - "app/**"
       - "update-sentiment-image-tags.sh"
       - ".gitea/workflows/**"
   workflow_dispatch:
@@ -52,7 +52,7 @@ jobs:
           cd "${WORKDIR}"
           : "${APPS_DIR:?}"
           docker run --rm \
-            -v "${APPS_DIR}/sentiment/app-go:/src" \
+            -v "${APPS_DIR}/sentiment/app:/src" \
             -w /src \
             -e CGO_ENABLED=0 \
             -e GOOS=linux \
@@ -66,7 +66,7 @@ jobs:
           cd "${WORKDIR}"
           : "${APPS_DIR:?}"
           TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${APPS_DIR}/sentiment/app-go"
+          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${APPS_DIR}/sentiment/app"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:latest"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:latest"

@@ -72,12 +72,12 @@
         "version_tag_strategy": "grafana-tag-plus-plugin-version"
       },
       "fingerprint_sources": [
-        "apps/sentiment/app-go/Dockerfile",
-        "apps/sentiment/app-go/Makefile",
-        "apps/sentiment/app-go/go.mod",
-        "apps/sentiment/app-go/go.sum",
-        "apps/sentiment/app-go/cmd",
-        "apps/sentiment/app-go/internal"
+        "apps/sentiment/app/Dockerfile",
+        "apps/sentiment/app/Makefile",
+        "apps/sentiment/app/go.mod",
+        "apps/sentiment/app/go.sum",
+        "apps/sentiment/app/cmd",
+        "apps/sentiment/app/internal"
       ],
       "version_check": {
         "mode": "checked-elsewhere",
@@ -91,18 +91,18 @@
       "default_tag": "0.1.0",
       "build": {
         "context": ".",
-        "dockerfile": "apps/idp-core/Dockerfile",
+        "dockerfile": "apps/idp-core/app/Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/idp-core/app-go build-linux"
+        "prebuild": "make -C apps/idp-core/app build-linux"
       },
       "fingerprint_sources": [
         "apps/idp-core/.dockerignore",
-        "apps/idp-core/Dockerfile",
-        "apps/idp-core/Dockerfile.dockerignore",
-        "apps/idp-core/app-go/Makefile",
-        "apps/idp-core/app-go/go.mod",
-        "apps/idp-core/app-go/cmd",
-        "apps/idp-core/app-go/internal",
+        "apps/idp-core/app/Dockerfile",
+        "apps/idp-core/app/Dockerfile.dockerignore",
+        "apps/idp-core/app/Makefile",
+        "apps/idp-core/app/go.mod",
+        "apps/idp-core/app/cmd",
+        "apps/idp-core/app/internal",
         "catalog/platform-apps.json"
       ],
       "version_check": {
@@ -136,18 +136,18 @@
       "image_name": "platform-mcp",
       "default_tag": "0.1.0",
       "build": {
-        "context": "apps/platform-mcp/app-go",
+        "context": "apps/platform-mcp/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/platform-mcp/app-go build-linux"
+        "prebuild": "make -C apps/platform-mcp/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/platform-mcp/app-go/.dockerignore",
-        "apps/platform-mcp/app-go/Dockerfile",
-        "apps/platform-mcp/app-go/Makefile",
-        "apps/platform-mcp/app-go/go.mod",
-        "apps/platform-mcp/app-go/cmd",
-        "apps/platform-mcp/app-go/internal"
+        "apps/platform-mcp/app/.dockerignore",
+        "apps/platform-mcp/app/Dockerfile",
+        "apps/platform-mcp/app/Makefile",
+        "apps/platform-mcp/app/go.mod",
+        "apps/platform-mcp/app/cmd",
+        "apps/platform-mcp/app/internal"
       ],
       "version_check": {
         "mode": "local",
@@ -160,18 +160,18 @@
       "image_name": "chatgpt-sim",
       "default_tag": "0.1.0",
       "build": {
-        "context": "apps/chatgpt-sim",
+        "context": "apps/chatgpt-sim/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/chatgpt-sim build-linux"
+        "prebuild": "make -C apps/chatgpt-sim/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/chatgpt-sim/.dockerignore",
-        "apps/chatgpt-sim/Dockerfile",
-        "apps/chatgpt-sim/Makefile",
-        "apps/chatgpt-sim/go.mod",
-        "apps/chatgpt-sim/cmd",
-        "apps/chatgpt-sim/internal"
+        "apps/chatgpt-sim/app/.dockerignore",
+        "apps/chatgpt-sim/app/Dockerfile",
+        "apps/chatgpt-sim/app/Makefile",
+        "apps/chatgpt-sim/app/go.mod",
+        "apps/chatgpt-sim/app/cmd",
+        "apps/chatgpt-sim/app/internal"
       ],
       "version_check": {
         "mode": "local",
@@ -186,18 +186,18 @@
       "image_name": "sentiment-api",
       "default_tag": "0.1.0",
       "build": {
-        "context": "apps/sentiment/app-go",
+        "context": "apps/sentiment/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/sentiment/app-go build-linux"
+        "prebuild": "make -C apps/sentiment/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/sentiment/app-go/Dockerfile",
-        "apps/sentiment/app-go/Makefile",
-        "apps/sentiment/app-go/go.mod",
-        "apps/sentiment/app-go/go.sum",
-        "apps/sentiment/app-go/cmd",
-        "apps/sentiment/app-go/internal"
+        "apps/sentiment/app/Dockerfile",
+        "apps/sentiment/app/Makefile",
+        "apps/sentiment/app/go.mod",
+        "apps/sentiment/app/go.sum",
+        "apps/sentiment/app/cmd",
+        "apps/sentiment/app/internal"
       ],
       "version_check": {
         "mode": "local",
@@ -210,18 +210,18 @@
       "image_name": "sentiment-auth-ui",
       "default_tag": "0.1.0",
       "build": {
-        "context": "apps/sentiment/app-go",
+        "context": "apps/sentiment/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/sentiment/app-go build-linux"
+        "prebuild": "make -C apps/sentiment/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/sentiment/app-go/Dockerfile",
-        "apps/sentiment/app-go/Makefile",
-        "apps/sentiment/app-go/go.mod",
-        "apps/sentiment/app-go/go.sum",
-        "apps/sentiment/app-go/cmd",
-        "apps/sentiment/app-go/internal"
+        "apps/sentiment/app/Dockerfile",
+        "apps/sentiment/app/Makefile",
+        "apps/sentiment/app/go.mod",
+        "apps/sentiment/app/go.sum",
+        "apps/sentiment/app/cmd",
+        "apps/sentiment/app/internal"
       ],
       "version_check": {
         "mode": "local",
@@ -234,19 +234,19 @@
       "image_name": "subnetcalc-api",
       "default_tag": "1.0.0",
       "build": {
-        "context": "apps/subnetcalc/app-go",
+        "context": "apps/subnetcalc/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/subnetcalc/app-go build-linux"
+        "prebuild": "make -C apps/subnetcalc/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/subnetcalc/app-go/Dockerfile",
-        "apps/subnetcalc/app-go/Makefile",
-        "apps/subnetcalc/app-go/go.mod",
-        "apps/subnetcalc/app-go/go.sum",
-        "apps/subnetcalc/app-go/cmd",
-        "apps/subnetcalc/app-go/internal",
-        "apps/subnetcalc/app-go/internal/app/web"
+        "apps/subnetcalc/app/Dockerfile",
+        "apps/subnetcalc/app/Makefile",
+        "apps/subnetcalc/app/go.mod",
+        "apps/subnetcalc/app/go.sum",
+        "apps/subnetcalc/app/cmd",
+        "apps/subnetcalc/app/internal",
+        "apps/subnetcalc/app/internal/app/web"
       ],
       "version_check": {
         "mode": "local",
@@ -281,19 +281,19 @@
       "image_name": "subnetcalc-frontend",
       "default_tag": "1.0.0",
       "build": {
-        "context": "apps/subnetcalc/app-go",
+        "context": "apps/subnetcalc/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/subnetcalc/app-go build-linux"
+        "prebuild": "make -C apps/subnetcalc/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/subnetcalc/app-go/Dockerfile",
-        "apps/subnetcalc/app-go/Makefile",
-        "apps/subnetcalc/app-go/go.mod",
-        "apps/subnetcalc/app-go/go.sum",
-        "apps/subnetcalc/app-go/cmd",
-        "apps/subnetcalc/app-go/internal",
-        "apps/subnetcalc/app-go/internal/app/web"
+        "apps/subnetcalc/app/Dockerfile",
+        "apps/subnetcalc/app/Makefile",
+        "apps/subnetcalc/app/go.mod",
+        "apps/subnetcalc/app/go.sum",
+        "apps/subnetcalc/app/cmd",
+        "apps/subnetcalc/app/internal",
+        "apps/subnetcalc/app/internal/app/web"
       ],
       "version_check": {
         "mode": "local",

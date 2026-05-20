@@ -6,10 +6,10 @@ setup() {
 }
 
 @test "subnetcalc app tree contains only the canonical Go app surface" {
-  run bash -lc "cd '${REPO_ROOT}' && git ls-files apps/subnetcalc | sed 's#^apps/subnetcalc/##' | awk -F/ '{print \$1}' | sort -u"
+  run bash -lc "cd '${REPO_ROOT}' && for path in apps/subnetcalc/* apps/subnetcalc/.[!.]*; do [ -e \"\${path}\" ] && basename \"\${path}\"; done | sort"
 
   [ "${status}" -eq 0 ]
-  expected=$'.dockerignore\n.gitea\n.gitignore\nMakefile\nREADME.md\napp-go\ncatalog-info.yaml\ncompose.yml\nmkdocs.yml\ntests'
+  expected=$'.dockerignore\n.gitea\n.gitignore\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.yml\nmkdocs.yml\ntests'
   [ "${output}" = "${expected}" ]
 }
 
@@ -17,7 +17,8 @@ setup() {
   run make -C "${REPO_ROOT}/apps/subnetcalc" help
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"app-go-test"* ]]
+  [[ "${output}" == *"app-test"* ]]
+  [[ "${output}" != *"app-go-test"* ]]
   [[ "${output}" == *"up"* ]]
   [[ "${output}" == *"down"* ]]
   [[ "${output}" != *"frontend-react"* ]]
@@ -44,7 +45,7 @@ for image in subnetcalc:
     context = build.get("context", "")
     dockerfile = build.get("dockerfile", "")
     if image["id"] in {"subnetcalc-api", "subnetcalc-frontend"}:
-        assert context == "apps/subnetcalc/app-go", image
+        assert context == "apps/subnetcalc/app", image
         assert dockerfile == "Dockerfile", image
 PY
 

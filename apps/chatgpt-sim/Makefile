@@ -1,20 +1,54 @@
-.PHONY: test build build-linux run-mcp run-shell
+.PHONY: help test build update app-help app-test app-build app-run-mcp app-run-shell up down logs ps compose-smoke
 
-CHATGPT_LOCAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+COMPOSE_CMD ?= docker compose -f compose.yml
 
-test:
-	go test ./...
+help:
+	@echo "ChatGPT Sim:"
+	@echo "  app-test       Run Go unit tests"
+	@echo "  app-build      Build the local app binary"
+	@echo "  app-run-mcp    Run the MCP role directly"
+	@echo "  app-run-shell  Run the shell role directly"
+	@echo "  compose-smoke  Run the app-local compose smoke test"
+	@echo "  up             Start the app-local compose stack"
+	@echo "  down           Stop the app-local compose stack"
+
+app-help:
+	@$(MAKE) --no-print-directory -C app help
+
+app-test:
+	@$(MAKE) --no-print-directory -C app test
+
+app-build:
+	@$(MAKE) --no-print-directory -C app build
+
+app-run-mcp:
+	@$(MAKE) --no-print-directory -C app run-mcp
+
+app-run-shell:
+	@$(MAKE) --no-print-directory -C app run-shell
+
+test: app-test compose-smoke
 
 build:
-	@mkdir -p .run
-	go build -trimpath -ldflags="-s -w" -o .run/chatgpt-sim ./cmd/chatgpt-sim
+	@$(MAKE) --no-print-directory -C app build-linux
+	@$(COMPOSE_CMD) build
 
-build-linux:
-	@mkdir -p .run
-	CGO_ENABLED=0 GOOS=linux GOARCH=$${GOARCH:-$(CHATGPT_LOCAL_GOARCH)} go build -trimpath -ldflags="-s -w" -o .run/chatgpt-sim ./cmd/chatgpt-sim
+update:
+	@echo "chatgpt-sim has no dependency lock update workflow"
 
-run-mcp:
-	ROLE=mcp PORT=18082 PUBLIC_BASE_URL=http://localhost:18082 go run ./cmd/chatgpt-sim
+compose-smoke:
+	@./tests/compose-smoke.sh --execute
 
-run-shell:
-	ROLE=shell PORT=18083 MCP_URL=http://localhost:18082/mcp go run ./cmd/chatgpt-sim
+up:
+	@$(MAKE) --no-print-directory -C app build-linux
+	@$(COMPOSE_CMD) up -d --build
+	@echo "ChatGPT Sim URL: http://localhost:18084"
+
+down:
+	@$(COMPOSE_CMD) down --remove-orphans
+
+logs:
+	@$(COMPOSE_CMD) logs -f
+
+ps:
+	@$(COMPOSE_CMD) ps

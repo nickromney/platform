@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-content = (repo_root / "apps/subnetcalc/app-go/Dockerfile").read_text(encoding="utf-8")
+content = (repo_root / "apps/subnetcalc/app/Dockerfile").read_text(encoding="utf-8")
 
 assert "node_modules" not in content, content
 assert "bun" not in content.lower(), content
@@ -46,6 +46,7 @@ expectations = {
 validated = 0
 for relative_path, required_fragments in expectations.items():
     content = (repo_root / relative_path).read_text(encoding="utf-8")
+    assert not content.startswith("# syntax=docker/dockerfile"), relative_path
     for fragment in required_fragments:
         assert fragment in content, (relative_path, fragment)
         validated += 1
@@ -158,7 +159,7 @@ required_fragments = [
     "docker history",
     "docker image inspect",
     "warning",
-    "apps/subnetcalc/app-go/Dockerfile",
+    "apps/subnetcalc/app/Dockerfile",
     "apim-simulator/Dockerfile",
 ]
 
@@ -221,9 +222,9 @@ variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encod
 locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
 
 for image_name, dockerfile_path in {
-    "idp-core": "apps/idp-core/Dockerfile",
+    "idp-core": "apps/idp-core/app/Dockerfile",
     "backstage": "apps/backstage/Dockerfile",
-    "platform-mcp": "apps/platform-mcp/app-go/Dockerfile",
+    "platform-mcp": "apps/platform-mcp/app/Dockerfile",
 }.items():
     assert f'"id": "{image_name}"' in image_catalog, image_name
     assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
@@ -251,6 +252,8 @@ assert "GITOPS_RENDER_CONTRACT_FILE" in gitops_tf
 assert "render_external_image_inputs" in policies_script
 assert 'replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"' in policies_script
 assert 'replace_image_ref "${workload_file}" "${image_name}" "${image_ref}"' in policies_script
+assert 'HELM_REGISTRY_CONFIG="${tmp_registry_dir}/registry.json"' in policies_script
+assert 'DOCKER_CONFIG="${tmp_registry_dir}"' in policies_script
 assert "external_platform_backstage" in locals_tf
 assert "external_platform_idp_core" in locals_tf
 assert "external_platform_mcp" in locals_tf
@@ -292,10 +295,10 @@ assert "backstage_image_tag=" in render_script
 assert "write_external_platform_images()" in render_script
 assert "prefer_external_platform_images = true" in render_script
 assert "external_platform_image_refs = {" in render_script
-assert "apps/platform-mcp/app-go/internal" in image_catalog
-assert "apps/idp-core/app-go/go.mod" in image_catalog
-assert "apps/idp-core/app-go/internal" in image_catalog
-assert "make -C apps/idp-core/app-go build-linux" in image_catalog
+assert "apps/platform-mcp/app/internal" in image_catalog
+assert "apps/idp-core/app/go.mod" in image_catalog
+assert "apps/idp-core/app/internal" in image_catalog
+assert "make -C apps/idp-core/app build-linux" in image_catalog
 assert "apps/backstage/packages" in image_catalog
 assert "apps/apim-simulator/catalog-info.yaml" in image_catalog
 assert "image_catalog_source_tag platform platform-mcp" in render_script
@@ -326,10 +329,10 @@ catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read
 workloads = {image["id"]: image for image in catalog["workload_images"]}
 
 expected_sources = {
-    "sentiment-api": ["apps/sentiment/app-go/go.sum", "apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
-    "sentiment-auth-ui": ["apps/sentiment/app-go/go.sum", "apps/sentiment/app-go/internal", "apps/sentiment/app-go/cmd"],
-    "subnetcalc-api": ["apps/subnetcalc/app-go/go.sum", "apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/cmd"],
-    "subnetcalc-frontend": ["apps/subnetcalc/app-go/go.sum", "apps/subnetcalc/app-go/internal", "apps/subnetcalc/app-go/internal/app/web"],
+    "sentiment-api": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd"],
+    "sentiment-auth-ui": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd"],
+    "subnetcalc-api": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/cmd"],
+    "subnetcalc-frontend": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/internal/app/web"],
 }
 
 for image_id, expected in expected_sources.items():
@@ -358,15 +361,15 @@ image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_te
 expected = {
     "idp-core": {
         "context": ".",
-        "dockerfile": "apps/idp-core/Dockerfile",
+        "dockerfile": "apps/idp-core/app/Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/idp-core/app-go build-linux",
+        "prebuild": "make -C apps/idp-core/app build-linux",
     },
     "platform-mcp": {
-        "context": "apps/platform-mcp/app-go",
+        "context": "apps/platform-mcp/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/platform-mcp/app-go build-linux",
+        "prebuild": "make -C apps/platform-mcp/app build-linux",
     },
     "backstage": {
         "context": "generated-backstage",
@@ -393,7 +396,7 @@ for image_id, build in expected.items():
 assert "image_build_catalog_build_and_push" in build_script
 assert "image_catalog_build_field" in image_build_lib
 assert "image_catalog_default_tag" in image_build_lib
-assert '"${REPO_ROOT}/apps/idp-core/Dockerfile"' not in build_script
+assert '"${REPO_ROOT}/apps/idp-core/app/Dockerfile"' not in build_script
 assert '"${REPO_ROOT}/apps/platform-mcp/Dockerfile"' not in build_script
 assert '"${REPO_ROOT}/apps/keycloak/Dockerfile"' not in build_script
 
@@ -415,22 +418,22 @@ catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read
 
 expected = {
     "sentiment-api": {
-        "context": "apps/sentiment/app-go",
+        "context": "apps/sentiment/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/sentiment/app-go build-linux",
+        "prebuild": "make -C apps/sentiment/app build-linux",
     },
     "sentiment-auth-ui": {
-        "context": "apps/sentiment/app-go",
+        "context": "apps/sentiment/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/sentiment/app-go build-linux",
+        "prebuild": "make -C apps/sentiment/app build-linux",
     },
     "subnetcalc-api": {
-        "context": "apps/subnetcalc/app-go",
+        "context": "apps/subnetcalc/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/subnetcalc/app-go build-linux",
+        "prebuild": "make -C apps/subnetcalc/app build-linux",
     },
     "subnetcalc-apim-simulator": {
         "context": "apps/apim-simulator",
@@ -438,10 +441,10 @@ expected = {
         "tag": "default",
     },
     "subnetcalc-frontend": {
-        "context": "apps/subnetcalc/app-go",
+        "context": "apps/subnetcalc/app",
         "dockerfile": "Dockerfile",
         "tag": "default",
-        "prebuild": "make -C apps/subnetcalc/app-go build-linux",
+        "prebuild": "make -C apps/subnetcalc/app build-linux",
     },
 }
 
@@ -460,7 +463,7 @@ variant_wrappers = [
 ]
 image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
 hard_coded_paths = [
-    "apps/sentiment/app-go/Dockerfile",
+    "apps/sentiment/app/Dockerfile",
     "apps/apim-simulator/Dockerfile",
 ]
 
@@ -803,6 +806,7 @@ PY
     context_dir="$(cat "${IMAGE_BUILD_CONTEXT_PATH_FILE}")"
     test -d "${context_dir}"
     test -f "${context_dir}/Dockerfile"
+    ! head -n 1 "${context_dir}/Dockerfile" | grep -Fq "# syntax=docker/dockerfile"
     test -f "${context_dir}/package.json"
     test -d "${context_dir}/catalog/apps/subnetcalc"
     test ! -e "${context_dir}/node_modules"
@@ -821,8 +825,8 @@ from pathlib import Path
 import os
 
 repo_root = Path(os.environ["REPO_ROOT"])
-dockerfile = (repo_root / "apps/platform-mcp/app-go/Dockerfile").read_text(encoding="utf-8")
-makefile = (repo_root / "apps/platform-mcp/app-go/Makefile").read_text(encoding="utf-8")
+dockerfile = (repo_root / "apps/platform-mcp/app/Dockerfile").read_text(encoding="utf-8")
+makefile = (repo_root / "apps/platform-mcp/app/Makefile").read_text(encoding="utf-8")
 
 assert "FROM dhi.io/static:20260413-alpine3.23" in dockerfile
 assert "COPY .run/platform-mcp /platform-mcp" in dockerfile

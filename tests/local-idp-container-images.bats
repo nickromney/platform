@@ -6,17 +6,17 @@ setup() {
 }
 
 @test "idp-core image contract uses Go, port 8080, non-root, and an explicit catalog path" {
-  dockerfile="${REPO_ROOT}/apps/idp-core/Dockerfile"
+  dockerfile="${REPO_ROOT}/apps/idp-core/app/Dockerfile"
   dockerignore="${REPO_ROOT}/apps/idp-core/.dockerignore"
-  dockerfile_ignore="${dockerfile}.dockerignore"
+  dockerfile_ignore="${REPO_ROOT}/apps/idp-core/app/Dockerfile.dockerignore"
 
   [ -f "${dockerfile}" ]
   [ -f "${dockerignore}" ]
   [ -f "${dockerfile_ignore}" ]
 
-  run rg -n 'FROM alpine:3\.22|EXPOSE 8080|USER 65532:65532|HOME=/tmp|PORT=8080|IDP_CATALOG_PATH=/app/catalog/platform-apps.json|catalog/platform-apps.json|/usr/local/bin/idp-core' "${dockerfile}"
+  run rg -n 'FROM dhi\.io/static:20260413-alpine3\.23|EXPOSE 8080|USER 65532:65532|HOME=/tmp|PORT=8080|IDP_CATALOG_PATH=/app/catalog/platform-apps.json|catalog/platform-apps.json|/usr/local/bin/idp-core' "${dockerfile}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"FROM alpine:3.22"* ]]
+  [[ "${output}" == *"FROM dhi.io/static:20260413-alpine3.23"* ]]
   [[ "${output}" == *"EXPOSE 8080"* ]]
   [[ "${output}" == *"USER 65532:65532"* ]]
   [[ "${output}" == *"HOME=/tmp"* ]]
@@ -25,9 +25,12 @@ setup() {
   [[ "${output}" == *"catalog/platform-apps.json"* ]]
   [[ "${output}" == *"/usr/local/bin/idp-core"* ]]
 
+  run rg -n '^# syntax=docker/dockerfile' "${dockerfile}"
+  [ "${status}" -ne 0 ]
+
   for pattern in \
     '^\*\*$' \
-    '^!apps/idp-core/app-go/\.run/idp-core$' \
+    '^!apps/idp-core/app/\.run/idp-core$' \
     '^!catalog/platform-apps\.json$'
   do
     run rg -n "${pattern}" "${dockerfile_ignore}"
@@ -35,10 +38,8 @@ setup() {
   done
 
   for pattern in \
-    '^\.venv/$' \
-    '^__pycache__/$' \
-    '^\.pytest_cache/$' \
     '^\.run/$' \
+    '^app/\.run/$' \
     '^tests/$' \
     '^dist/$' \
     '^build/$'
@@ -47,13 +48,13 @@ setup() {
     [ "${status}" -eq 0 ]
   done
 
-  [ -f "${REPO_ROOT}/apps/idp-core/app-go/go.mod" ]
-  run rg -n '^module platform\.local/idp-core$|^go 1\.26$' "${REPO_ROOT}/apps/idp-core/app-go/go.mod"
+  [ -f "${REPO_ROOT}/apps/idp-core/app/go.mod" ]
+  run rg -n '^module platform\.local/idp-core$|^go 1\.26$' "${REPO_ROOT}/apps/idp-core/app/go.mod"
   [ "${status}" -eq 0 ]
 }
 
 @test "idp-core linux build follows the target host architecture by default" {
-  makefile="${REPO_ROOT}/apps/idp-core/app-go/Makefile"
+  makefile="${REPO_ROOT}/apps/idp-core/app/Makefile"
 
   [ -f "${makefile}" ]
   run rg -n 'IDP_GOARCH \?= \$\(shell uname -m \| sed .*x86_64/amd64.*aarch64/arm64|GOOS=linux GOARCH=\$\$\{GOARCH:-\$\(IDP_GOARCH\)\}' "${makefile}"

@@ -157,6 +157,6 @@ EOF
 }
 
 @test "subnetcalc workflow Dockerfiles avoid remote Dockerfile frontend pulls" {
-  dockerfile="${REPO_ROOT}/apps/subnetcalc/app-go/Dockerfile"
+  dockerfile="${REPO_ROOT}/apps/subnetcalc/app/Dockerfile"
   ! head -n 1 "${dockerfile}" | grep -Fq '# syntax=docker/dockerfile'
 }

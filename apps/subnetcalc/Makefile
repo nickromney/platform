@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test update app-go-help app-go-test app-go-build app-go-run-backend app-go-run-frontend up down urls logs ps compose-smoke
+MAKE_KNOWN_GOALS := help prereqs build test update app-help app-test app-build app-run-backend app-run-frontend up down urls logs ps compose-smoke
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -26,7 +26,7 @@ DEFAULT_COMPOSE_ENV := SUBNETCALC_LOCAL_PLATFORM=$(SUBNETCALC_LOCAL_PLATFORM)
 
 export SUBNETCALC_LOCAL_PLATFORM
 
-.PHONY: help prereqs build test update app-go-help app-go-test app-go-build app-go-run-backend app-go-run-frontend up down urls logs ps compose-smoke
+.PHONY: help prereqs build test update app-help app-test app-build app-run-backend app-run-frontend up down urls logs ps compose-smoke
 
 ##@ Prerequisites
 prereqs: ## Check local compose prerequisites
@@ -39,28 +39,28 @@ prereqs: ## Check local compose prerequisites
 		exit 1; \
 	fi
 
-##@ App Go
-app-go-help: ## Show app-go Makefile targets
-	@$(MAKE) --no-print-directory -C app-go help
+##@ App
+app-help: ## Show app Makefile targets
+	@$(MAKE) --no-print-directory -C app help
 
-app-go-test: ## Run Go unit tests
-	@$(MAKE) --no-print-directory -C app-go test
+app-test: ## Run Go unit tests
+	@$(MAKE) --no-print-directory -C app test
 
-app-go-build: ## Build the local app-go binary
-	@$(MAKE) --no-print-directory -C app-go build
+app-build: ## Build the local app binary
+	@$(MAKE) --no-print-directory -C app build
 
-app-go-run-backend: ## Run the backend role directly on port 8090
-	@$(MAKE) --no-print-directory -C app-go run-backend
+app-run-backend: ## Run the backend role directly on port 8090
+	@$(MAKE) --no-print-directory -C app run-backend
 
-app-go-run-frontend: ## Run the frontend role directly on port 8003
-	@$(MAKE) --no-print-directory -C app-go run-frontend
+app-run-frontend: ## Run the frontend role directly on port 8003
+	@$(MAKE) --no-print-directory -C app run-frontend
 
 ##@ Build and test
 build: prereqs ## Build the Go binary and compose image
-	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app-go build-linux
+	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app build-linux
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) build subnetcalc-backend subnetcalc-frontend
 
-test: app-go-test compose-smoke ## Run Go tests and the local compose smoke test
+test: app-test compose-smoke ## Run Go tests and the local compose smoke test
 
 compose-smoke: ## Run the Go-only compose smoke test
 	@./tests/compose-smoke.sh --execute
@@ -70,7 +70,7 @@ update: ## No dependency locks are managed at this wrapper level
 
 ##@ Run
 up: prereqs ## Start the Go frontend and backend compose stack
-	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app-go build-linux
+	@GOARCH=$(SUBNETCALC_GOARCH) $(MAKE) --no-print-directory -C app build-linux
 	@$(DEFAULT_COMPOSE_ENV) $(COMPOSE_CMD) up -d --build subnetcalc-backend subnetcalc-frontend
 	@$(MAKE) --no-print-directory urls
 

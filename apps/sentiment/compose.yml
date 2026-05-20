@@ -59,7 +59,7 @@ services:
   sentiment-api:
     <<: *app-runtime-hardening
     build:
-      context: ./app-go
+      context: ./app
       dockerfile: Dockerfile
     environment:
       - HOME=/tmp
@@ -83,14 +83,17 @@ services:
   sentiment-auth-frontend:
     <<: *app-runtime-hardening
     build:
-      context: ./app-go
+      context: ./app
       dockerfile: Dockerfile
     environment:
       - HOME=/tmp
       - RUNTIME_ROLE=frontend
-      - BACKEND_URL=http://sentiment-api:8080
+      - BACKEND_URL=${SENTIMENT_FRONTEND_BACKEND_URL:-http://sentiment-api:8080}
+      - API_BASE_PATH=/api/v1
       - AUTH_METHOD=${SENTIMENT_FRONTEND_AUTH_METHOD:-none}
       - API_AUTH_METHOD=${SENTIMENT_FRONTEND_API_AUTH_METHOD:-none}
+      - SHOW_NETWORK_PATH=${SENTIMENT_SHOW_NETWORK_PATH:-true}
+      - 'NETWORK_HOPS=[{"label":"Browser","detail":"localhost","role":"User agent"},{"label":"Sentiment edge","detail":"edge nginx","role":"Routes UI and API traffic"},{"label":"Sentiment frontend","detail":"sentiment-auth-frontend:8080","role":"Static UI and same-origin API proxy"},{"label":"Sentiment API","detail":"sentiment-api:8080","role":"Go backend inference and storage"}]'
       - PORT=8080
     expose:
       - "8080"

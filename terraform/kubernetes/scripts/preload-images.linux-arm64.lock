@@ -50,7 +50,6 @@ gitea/act_runner:0.4.1	gitea/act_runner@sha256:56cc968b104b34c72bf7a564d78b60fb2
 kindest/node:v1.35.1	kindest/node@sha256:05d7bcdefbda08b4e038f644c4df690cdac3fba8b06f8289f30e10026720a1ab
 ghcr.io/astral-sh/uv:0.10.4	ghcr.io/astral-sh/uv@sha256:2c51f61a7cfbd85154b74cd3466bcd2aa2a382c08585c1c4bae0ca311cbab7fe
 python:3.13-slim	python@sha256:ee541b6a5c74b5efe7068193261709b73fef081b61514a76d55e0ecd143d0ed7
-node:22-alpine	node@sha256:17d4748a1004bd443c82171cc6642a7e741ce0bd6e97f98fddc299b8add1e44d
 dhi.io/nginx:1.29.5-debian13	dhi.io/nginx@sha256:e7d70fae56c9f86ce4f41d3fb2607ccd042e6a372fc1e6f0768f7d7a4e83c728
 python:3.12.13-alpine3.23	python@sha256:eb96e2791a0e8f4d79689719129cc6c6c9d2b48d83be3aabe1cef6856a3d0b29
 docker.io/curlimages/curl:8.19.0	docker.io/curlimages/curl@sha256:3adbf0477345eccfc6ee4bacedb3b572098210e50263043e9c99d1f4fe956ae6
@@ -59,6 +58,3 @@ ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest	ghcr.io/scolastico-
 dhi.io/node:22-debian13	dhi.io/node@sha256:5155467bc6a196aa563ea76d1a35dc947184816d9224dda0f32bb010b6c98b25
 dhi.io/python:3.13-debian13	dhi.io/python@sha256:515c8c7e833cfc63c553ff94f032450457e8c5e0eb3f8f23d1b643c434e9276b
 dhi.io/python:3.13-debian13-dev	dhi.io/python@sha256:31026f0956838c849e80a88806592fb8a5ed80ecca83e725f753c68ba4adbf95
-golang:1.26.2-alpine3.23	golang@sha256:cd092644fdf413d14a09baf952d5851dfe5d423983fe1bbbd19595f70fb939e1
-oven/bun:1.3.13	oven/bun@sha256:7e06b148ea46613dc8434fd11fafa49cc98e764367ead42e9f424356fce0fdfa
-oven/bun:1.3.13-alpine	oven/bun@sha256:588e1fb0d80ee1c09cc6e2d7d1ff8e3502191fba9cad12a4a77cb93d4d7f84f9

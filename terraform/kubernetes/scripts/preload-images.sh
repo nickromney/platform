@@ -69,10 +69,12 @@ REFRESH_LOCK=0
 PARALLELISM=4
 MODE="default"
 WORKFLOW_DOCKERFILES=(
-  "apps/subnetcalc/app-go/Dockerfile"
+  "apps/subnetcalc/app/Dockerfile"
   "apps/apim-simulator/Dockerfile"
-  "apps/sentiment/app-go/Dockerfile"
-  "apps/idp-core/Dockerfile"
+  "apps/sentiment/app/Dockerfile"
+  "apps/chatgpt-sim/app/Dockerfile"
+  "apps/idp-core/app/Dockerfile"
+  "apps/platform-mcp/app/Dockerfile"
 )
 
 shell_cli_init_standard_flags

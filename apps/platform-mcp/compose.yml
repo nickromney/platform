@@ -1,0 +1,26 @@
+services:
+  platform-mcp:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      PLATFORM_MCP_METRICS_ENABLED: "false"
+      PUBLIC_BASE_URL: http://localhost:18085
+      LLM_BASE_URL: http://localhost:65535/v1
+      HOME: /tmp
+    ports:
+      - "18085:8080"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    healthcheck:
+      test: ["CMD", "/platform-mcp", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s

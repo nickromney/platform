@@ -95,7 +95,7 @@ services:
     profiles: ["dev"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc/app-go
+      context: ../../apps/subnetcalc/app
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-api:compose
@@ -115,7 +115,7 @@ services:
     profiles: ["uat"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc/app-go
+      context: ../../apps/subnetcalc/app
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-api:compose
@@ -135,7 +135,7 @@ services:
     profiles: ["dev"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc/app-go
+      context: ../../apps/subnetcalc/app
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-frontend:compose
@@ -150,7 +150,7 @@ services:
     profiles: ["uat"]
     <<: *app-runtime-hardening
     build:
-      context: ../../apps/subnetcalc/app-go
+      context: ../../apps/subnetcalc/app
       dockerfile: Dockerfile
     platform: linux/amd64
     image: platform-subnetcalc-frontend:compose

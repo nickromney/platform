@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "app-go/**"
+      - "app/**"
       - ".gitea/workflows/**"
   workflow_dispatch:
 
@@ -52,7 +52,7 @@ jobs:
           cd "${WORKDIR}"
           : "${APPS_DIR:?}"
           docker run --rm \
-            -v "${APPS_DIR}/subnetcalc/app-go:/src" \
+            -v "${APPS_DIR}/subnetcalc/app:/src" \
             -w /src \
             -e CGO_ENABLED=0 \
             -e GOOS=linux \
@@ -66,7 +66,7 @@ jobs:
           cd "${WORKDIR}"
           : "${APPS_DIR:?}"
           TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${APPS_DIR}/subnetcalc/app-go"
+          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${APPS_DIR}/subnetcalc/app"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:latest"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:latest"
