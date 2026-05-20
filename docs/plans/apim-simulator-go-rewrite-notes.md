@@ -51,6 +51,9 @@ direction where that helps:
 - Static HTML/CSS/JavaScript for browser surfaces.
 - `// @ts-check` plus generated or maintained `.d.ts` declarations for typed
   browser code.
+- Biome for standalone lint/format checks and Deno for standalone semantic
+  `// @ts-check` JavaScript checks; neither tool is installed through npm in
+  the default workflow.
 - One Go binary can serve both gateway APIs and the operator UI.
 - One Docker image should cover the default gateway and management surface.
 - Compose overlays remain scenario-focused, but avoid duplicating app-local
@@ -237,6 +240,7 @@ Implementation:
 
 - `// @ts-check` JavaScript.
 - `.d.ts` declarations generated from or aligned with Go response types.
+- `make frontend-check` runs Biome and Deno against the static operator UI.
 - No npm, Yarn, pnpm, Bun, Vite, React, or bundler in the default path.
 
 ## CLI And Headless Mode
@@ -435,4 +439,3 @@ make -C kubernetes/kind check-health
   appear in compatibility diagnostics.
 - Do not force APIM into the exact lightweight app layout if that harms its
   standalone project workflow. Align where useful; keep the project coherent.
-

@@ -54,26 +54,28 @@ Checked JavaScript gives us:
 
 ## Type Checker Shape
 
-To enforce the checks in CI and local tests, the repo still needs one pinned
-checker path. That checker is a tool, not an app dependency.
+To enforce the checks in CI and local tests, the repo needs one explicit
+checker path. That checker is a tool, not an app runtime dependency.
 
-Preferred shape:
+Current dependency posture:
 
-- Add a repo-level `tools/js-typecheck` wrapper.
-- The wrapper runs the TypeScript compiler in `--allowJs --checkJs --noEmit`
-  mode.
-- The compiler version is pinned and checksum-verified.
+- Do not write a repo-local type checker.
+- Do not use TSLint; it is deprecated.
+- Do not use npm, npx, Yarn, pnpm, or Bun for the lightweight app default path.
+- Biome is the selected checker for linting and formatting checked browser
+  JavaScript.
+- Deno is the selected semantic checker for `// @ts-check` JavaScript via
+  `deno check --check-js`.
+- Biome and Deno are installed or preloaded as standalone binaries/tool images,
+  not through npm.
 - App Makefiles call the wrapper; app containers do not contain it.
 
-Acceptable implementation options, in preference order:
+Possible implementation options, in preference order:
 
-1. Use a pinned tool container that contains Node plus the TypeScript compiler.
-   This keeps Node out of app images and makes Docker login/preloaded images do
-   the heavy lifting.
-2. Use a repo-local tool cache that downloads the TypeScript tarball by exact
-   version and checksum, then runs `node package/lib/tsc.js`.
-3. If the host already has `tsc`, allow an opt-in fast path, but do not rely on
-   host-global tooling for the default test contract.
+1. Use Biome standalone for lint/format.
+2. Use Deno standalone for semantic type checking.
+3. Use a pinned tool container that contains Node plus the TypeScript compiler
+   only if the team explicitly accepts npm-originated TypeScript artifacts.
 
 Do not use open-ended `npm install`, `npx`, or per-app `package.json` files for
 the lightweight apps.
@@ -334,4 +336,3 @@ the app work as failed.
 - Do not extract shared frontend modules before subnetcalc and sentiment prove
   the contract.
 - Do not bypass the gateway/APIM path in frontend code when an app has an API.
-

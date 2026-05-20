@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,8 +16,11 @@
             <p>MCP connector shell for OAuth discovery and tool calls.</p>
           </div>
           <div class="topbar-actions">
-            <button id="discover" type="button">Refresh Discovery</button>
-            <a class="button secondary" href="/oauth2/sign_out?rd=/">Sign Out</a>
+            <p id="auth-state" class="auth-state">Not signed in.</p>
+            <button id="logout-btn" type="button" hidden>Sign Out</button>
+            <button id="theme-switcher" type="button">
+              <span id="theme-icon">Light</span>
+            </button>
           </div>
         </header>
         <div id="messages" class="messages" aria-live="polite"></div>
@@ -43,7 +46,10 @@
       </section>
       <aside class="inspector" aria-label="MCP inspector">
         <section class="panel">
-          <h2>Connectors</h2>
+          <div class="panel-header">
+            <h2>Connectors</h2>
+            <button id="discover" type="button">Refresh Discovery</button>
+          </div>
           <form id="connector-form" class="settings-form">
             <label for="connector-name">Name</label>
             <input id="connector-name" name="name" placeholder="Local Go MCP">

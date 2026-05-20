@@ -1,9 +1,13 @@
-.PHONY: test build build-linux static-dist run-backend run-frontend
+.PHONY: test js-check build build-linux static-dist run-backend run-frontend
 
 SENTIMENT_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 
 test:
 	go test ./...
+
+js-check:
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts
+	deno check --check-js internal/app/web/app.js
 
 build:
 	@mkdir -p .run

@@ -1,13 +1,59 @@
 :root {
+  color-scheme: light dark;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--page);
+  color: var(--text);
+  --page: #f6f8fb;
+  --surface: #ffffff;
+  --field: #ffffff;
+  --muted: #5d6b7c;
+  --border: #cfdae6;
+  --field-border: #b9c5d3;
+  --text: #17202a;
+  --accent: #2459b2;
+  --error: #9b1c1c;
+  --line: var(--border);
+  --panel: var(--surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #101418;
+    --surface: #151b21;
+    --field: #0f1419;
+    --muted: #b7c4d3;
+    --border: #2d3945;
+    --field-border: #3a4855;
+    --text: #e8eef4;
+    --accent: #2d6cdf;
+    --error: #ffb4ab;
+  }
+}
+
+:root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #101114;
-  --surface: #17191f;
-  --panel: #20232b;
-  --line: #343946;
-  --text: #f4f6f8;
-  --muted: #a9b0bd;
-  --accent: #77d6a4;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --page: #101418;
+  --surface: #151b21;
+  --field: #0f1419;
+  --muted: #b7c4d3;
+  --border: #2d3945;
+  --field-border: #3a4855;
+  --text: #e8eef4;
+  --accent: #2d6cdf;
+  --error: #ffb4ab;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f6f8fb;
+  --surface: #ffffff;
+  --field: #ffffff;
+  --muted: #5d6b7c;
+  --border: #cfdae6;
+  --field-border: #b9c5d3;
+  --text: #17202a;
+  --accent: #2459b2;
+  --error: #9b1c1c;
 }
 
 * { box-sizing: border-box; }
@@ -16,42 +62,40 @@ body {
   margin: 0;
   min-height: 100vh;
   overflow-x: hidden;
-  background: radial-gradient(circle at top left, #1d2730 0, transparent 34rem), var(--bg);
+  background: var(--page);
   color: var(--text);
 }
 
 button, input, textarea, select, .button { font: inherit; }
 
 button, input, select {
-  border: 1px solid var(--line);
-  background: #242833;
+  border: 1px solid var(--field-border);
+  background: var(--field);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 10px 12px;
 }
 
 button {
   cursor: pointer;
-  background: linear-gradient(180deg, #84e0ae, #58b97f);
-  border-color: #62c78c;
-  color: #07130c;
-  font-weight: 700;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
   padding: 10px 12px;
   color: var(--text);
   text-decoration: none;
-  font-weight: 700;
 }
 
 .button.secondary {
-  background: #242833;
+  background: var(--field);
   color: var(--text);
 }
 
@@ -72,14 +116,14 @@ button {
   min-height: calc(100vh - 32px);
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(23, 25, 31, 0.92);
+  background: var(--surface);
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
   padding: 20px;
   border-bottom: 1px solid var(--line);
 }
@@ -93,9 +137,33 @@ button {
 }
 
 h1, h2, p { margin: 0; }
-h1 { font-size: 24px; line-height: 1.15; }
+h1 { font-size: 2.25rem; line-height: 1.15; }
 h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); letter-spacing: 0; }
 p { color: var(--muted); margin-top: 6px; }
+
+.topbar p {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.auth-state {
+  max-width: 360px;
+  color: var(--text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-header button {
+  min-height: 34px;
+}
 
 .messages {
   display: flex;
@@ -110,12 +178,13 @@ p { color: var(--muted); margin-top: 6px; }
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px;
-  background: var(--panel);
+  background: var(--field);
 }
 
 .message.user {
   align-self: flex-end;
-  background: #1e2b37;
+  background: var(--surface);
+  border-left: 4px solid var(--accent);
 }
 
 .message strong {
@@ -142,10 +211,10 @@ p { color: var(--muted); margin-top: 6px; }
 textarea {
   width: 100%;
   resize: vertical;
-  min-height: 96px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #12141a;
+  min-height: 92px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--field);
   color: var(--text);
   padding: 12px;
   line-height: 1.45;
@@ -173,10 +242,10 @@ textarea {
 }
 
 .advanced-auth {
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px;
-  background: #171b24;
+  background: var(--field);
 }
 
 .advanced-auth summary {
@@ -202,9 +271,9 @@ textarea {
   display: grid;
   gap: 4px;
   padding: 10px;
-  border: 1px solid #2a2f3a;
-  border-radius: 8px;
-  background: #141820;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field);
   color: var(--muted);
   font-size: 12px;
 }
@@ -225,9 +294,9 @@ textarea {
 .connector .danger {
   flex: 0 0 auto;
   padding: 6px 8px;
-  background: #3b2026;
-  border-color: #7f3847;
-  color: #ffd7dc;
+  background: transparent;
+  border-color: var(--error);
+  color: var(--error);
   font-size: 12px;
 }
 
@@ -250,17 +319,17 @@ textarea {
   display: inline-flex;
   width: fit-content;
   margin-top: 4px;
-  border: 1px solid #3d6d95;
-  border-radius: 8px;
-  background: #173049;
-  color: #d7ecff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
   padding: 7px 10px;
   text-decoration: none;
   font-weight: 700;
 }
 
 .error {
-  color: #ff9b9b;
+  color: var(--error);
 }
 
 .inspector {
@@ -273,7 +342,7 @@ textarea {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(32, 35, 43, 0.94);
+  background: var(--surface);
   padding: 14px;
 }
 
@@ -293,10 +362,10 @@ pre {
   max-height: 330px;
   margin: 12px 0 0;
   padding: 12px;
-  border-radius: 8px;
-  background: #11141a;
-  border: 1px solid #2a2f3a;
-  color: #d9e3f0;
+  border-radius: 6px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  color: var(--text);
   font-size: 11px;
   line-height: 1.45;
 }

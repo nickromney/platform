@@ -1,3 +1,12 @@
+// @ts-check
+
+/** @typedef {import("./api-types.d.ts").ApiDiagnostics} ApiDiagnostics */
+/** @typedef {import("./api-types.d.ts").ManagementSummary} ManagementSummary */
+/** @typedef {import("./api-types.d.ts").PolicyScope} PolicyScope */
+/** @typedef {import("./api-types.d.ts").ReplayResult} ReplayResult */
+/** @typedef {import("./api-types.d.ts").RuntimeConfig} RuntimeConfig */
+/** @typedef {import("./api-types.d.ts").TraceRecord} TraceRecord */
+
 const storageKey = "apim-console-settings";
 const defaultHeaders = '{\n  "x-apim-trace": "true"\n}';
 const state = {
@@ -76,10 +85,13 @@ function loadStoredSettings() {
 }
 
 function persistSettings() {
-  window.localStorage.setItem(storageKey, JSON.stringify({
-    baseUrl: el.baseUrl.value.trim(),
-    tenantKey: el.tenantKey.value.trim(),
-  }));
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify({
+      baseUrl: el.baseUrl.value.trim(),
+      tenantKey: el.tenantKey.value.trim(),
+    }),
+  );
 }
 
 function loadLocalDemo() {
@@ -135,9 +147,10 @@ async function refreshDashboard(preferredScope) {
     }
     render();
     const scopes = flattenPolicyScopes();
-    const nextScope = scopes.find((scope) => scopeId(scope) === preferredScope)
-      || scopes.find((scope) => scopeId(scope) === state.selectedScopeId)
-      || scopes[0];
+    const nextScope =
+      scopes.find((scope) => scopeId(scope) === preferredScope) ||
+      scopes.find((scope) => scopeId(scope) === state.selectedScopeId) ||
+      scopes[0];
     if (nextScope) {
       await loadPolicy(nextScope);
     }
@@ -150,7 +163,9 @@ async function refreshDashboard(preferredScope) {
 }
 
 async function loadPolicy(scope) {
-  const policy = await apiFetch(`/apim/management/policies/${scope.scope_type}/${encodeURIComponent(scope.scope_name)}`);
+  const policy = await apiFetch(
+    `/apim/management/policies/${scope.scope_type}/${encodeURIComponent(scope.scope_name)}`,
+  );
   state.selectedScopeId = scopeId(scope);
   el.policyScope.value = state.selectedScopeId;
   el.policyXml.value = policy.xml || "";
@@ -242,7 +257,11 @@ function render() {
   el.metricRoutes.textContent = (summary.routes || []).length;
   el.metricProducts.textContent = (summary.products || []).length;
   el.metricSubscriptions.textContent = (summary.subscriptions || []).length;
-  renderList(el.apisList, summary.apis, (api) => [api.name, `/${api.path}`, `${(api.operations || []).length} operations`]);
+  renderList(el.apisList, summary.apis, (api) => [
+    api.name,
+    `/${api.path}`,
+    `${(api.operations || []).length} operations`,
+  ]);
   renderList(el.routesList, summary.routes, (route) => [route.name, route.path_prefix, route.upstream_base_url]);
   renderList(el.productsList, summary.products, (product) => [
     product.id,
@@ -260,18 +279,22 @@ function renderList(target, items, fields) {
     target.innerHTML = '<li class="empty">Nothing loaded.</li>';
     return;
   }
-  target.innerHTML = items.map((item) => {
-    const [title, subtitle, meta] = fields(item);
-    return `<li><strong>${escapeHTML(title)}</strong><span>${escapeHTML(subtitle)}</span><small>${escapeHTML(meta)}</small></li>`;
-  }).join("");
+  target.innerHTML = items
+    .map((item) => {
+      const [title, subtitle, meta] = fields(item);
+      return `<li><strong>${escapeHTML(title)}</strong><span>${escapeHTML(subtitle)}</span><small>${escapeHTML(meta)}</small></li>`;
+    })
+    .join("");
 }
 
 function renderScopes() {
   const scopes = flattenPolicyScopes();
-  el.policyScope.innerHTML = scopes.map((scope) => {
-    const id = scopeId(scope);
-    return `<option value="${escapeHTML(id)}">${escapeHTML(scope.scope_type)} / ${escapeHTML(scope.scope_name)}</option>`;
-  }).join("");
+  el.policyScope.innerHTML = scopes
+    .map((scope) => {
+      const id = scopeId(scope);
+      return `<option value="${escapeHTML(id)}">${escapeHTML(scope.scope_type)} / ${escapeHTML(scope.scope_name)}</option>`;
+    })
+    .join("");
   if (state.selectedScopeId) el.policyScope.value = state.selectedScopeId;
 }
 
@@ -281,10 +304,12 @@ function renderTraces() {
     el.traceDetail.textContent = "Select a trace to inspect its metadata.";
     return;
   }
-  el.traceList.innerHTML = state.traces.map((trace) => {
-    const active = trace.trace_id === state.selectedTraceId ? " active" : "";
-    return `<li><button type="button" class="trace-chip${active}" data-trace-id="${escapeHTML(trace.trace_id)}"><strong>${escapeHTML(trace.route)}</strong><span>${escapeHTML(String(trace.status))}</span><small>${escapeHTML(trace.forwarded_proto || "direct")}</small></button></li>`;
-  }).join("");
+  el.traceList.innerHTML = state.traces
+    .map((trace) => {
+      const active = trace.trace_id === state.selectedTraceId ? " active" : "";
+      return `<li><button type="button" class="trace-chip${active}" data-trace-id="${escapeHTML(trace.trace_id)}"><strong>${escapeHTML(trace.route)}</strong><span>${escapeHTML(String(trace.status))}</span><small>${escapeHTML(trace.forwarded_proto || "direct")}</small></button></li>`;
+    })
+    .join("");
   el.traceList.querySelectorAll("[data-trace-id]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedTraceId = button.dataset.traceId || "";
@@ -301,7 +326,9 @@ function renderSubscriptions() {
     el.subscriptionGrid.innerHTML = '<p class="empty">No subscriptions loaded.</p>';
     return;
   }
-  el.subscriptionGrid.innerHTML = subscriptions.map((subscription) => `
+  el.subscriptionGrid.innerHTML = subscriptions
+    .map(
+      (subscription) => `
     <article class="subscription-card">
       <header>
         <div><h3>${escapeHTML(subscription.name)}</h3><p>${escapeHTML(subscription.id)}</p></div>
@@ -317,7 +344,9 @@ function renderSubscriptions() {
         <button type="button" data-rotate="${escapeHTML(subscription.id)}" data-key="secondary">Rotate Secondary</button>
       </div>
     </article>
-  `).join("");
+  `,
+    )
+    .join("");
   el.subscriptionGrid.querySelectorAll("[data-rotate]").forEach((button) => {
     button.addEventListener("click", () => rotateKey(button.dataset.rotate, button.dataset.key));
   });
@@ -340,11 +369,15 @@ function prettyJson(value) {
 }
 
 function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[char]);
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (char) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[char],
+  );
 }

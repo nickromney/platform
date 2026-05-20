@@ -1,150 +1,317 @@
-const config = window.PCE_CHATGPT_GO_CONFIG || {};
-const messages = document.getElementById("messages");
-const statusEl = document.getElementById("status");
-const toolOutput = document.getElementById("tool-output");
-const discoveryOutput = document.getElementById("discovery-output");
-const connectorSelect = document.getElementById("connector");
-const connectorList = document.getElementById("connector-list");
+// @ts-check
 
-document.getElementById("mcp-url").textContent = config.mcpUrl || "unknown";
-document.getElementById("model-provider").textContent = config.modelProvider || "deterministic";
-document.getElementById("dependencies").textContent = config.dependencies || "go-stdlib-only";
-document.getElementById("chat-form").addEventListener("submit", submitChat);
-document.getElementById("discover").addEventListener("click", refreshDiscovery);
-document.getElementById("connector-form").addEventListener("submit", addConnector);
+/** @typedef {import("./api-types.d.ts").ApiError} ApiError */
+/** @typedef {import("./api-types.d.ts").ChatResponse} ChatResponse */
+/** @typedef {import("./api-types.d.ts").ConnectorListResponse} ConnectorListResponse */
+/** @typedef {import("./api-types.d.ts").ConnectorSummary} ConnectorSummary */
+/** @typedef {import("./api-types.d.ts").GatewaySession} GatewaySession */
+/** @typedef {import("./api-types.d.ts").RuntimeConfig} RuntimeConfig */
+
+const config = window.PCE_CHATGPT_GO_CONFIG || {};
+const messages = requireElement("messages");
+const statusEl = requireElement("status");
+const toolOutput = requireElement("tool-output");
+const discoveryOutput = requireElement("discovery-output");
+const connectorSelect = selectElement("connector");
+const connectorList = requireElement("connector-list");
+const themeOptions = ["system", "light", "dark"];
+
+requireElement("mcp-url").textContent = config.mcpUrl || "unknown";
+requireElement("model-provider").textContent =
+	config.modelProvider || "deterministic";
+requireElement("dependencies").textContent =
+	config.dependencies || "go-stdlib-only";
+requireElement("chat-form").addEventListener("submit", submitChat);
+requireElement("discover").addEventListener("click", refreshDiscovery);
+requireElement("connector-form").addEventListener("submit", addConnector);
+requireElement("theme-switcher").addEventListener("click", toggleTheme);
+requireElement("logout-btn").addEventListener("click", logoutFromGateway);
 connectorList.addEventListener("click", deleteConnector);
-document.getElementById("connector-url").value = config.mcpUrl || "";
+inputElement("connector-url").value = config.mcpUrl || "";
 
 initialize();
 
+function requireElement(id) {
+	const element = document.getElementById(id);
+	if (!element) {
+		throw new Error(`Missing required element #${id}`);
+	}
+	return element;
+}
+
+function inputElement(id) {
+	return /** @type {HTMLInputElement} */ (requireElement(id));
+}
+
+function selectElement(id) {
+	return /** @type {HTMLSelectElement} */ (requireElement(id));
+}
+
 async function initialize() {
-  await refreshConnectors();
-  await refreshDiscovery();
+	initializeTheme();
+	await initializeAuthState();
+	await refreshConnectors();
+	await refreshDiscovery();
+}
+
+async function initializeAuthState() {
+	const authState = requireElement("auth-state");
+	const logoutButton = /** @type {HTMLButtonElement} */ (
+		requireElement("logout-btn")
+	);
+	try {
+		const session = await fetchGatewaySession();
+		if (session) {
+			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
+			logoutButton.hidden = false;
+			return;
+		}
+	} catch {
+		// Direct local runs do not expose the gateway session endpoint.
+	}
+	authState.textContent = "Not signed in.";
+	logoutButton.hidden = true;
+}
+
+function initializeTheme() {
+	const savedTheme = themeOptions.includes(localStorage.getItem("theme"))
+		? localStorage.getItem("theme")
+		: "system";
+	applyTheme(savedTheme);
+	window
+		.matchMedia("(prefers-color-scheme: dark)")
+		.addEventListener("change", () => {
+			if (themePreference() === "system") {
+				applyTheme("system");
+			}
+		});
+}
+
+function toggleTheme() {
+	const currentTheme = themePreference();
+	const nextTheme =
+		themeOptions[
+			(themeOptions.indexOf(currentTheme) + 1) % themeOptions.length
+		];
+	localStorage.setItem("theme", nextTheme);
+	applyTheme(nextTheme);
+}
+
+function themePreference() {
+	const theme = document.documentElement.getAttribute("data-theme") || "system";
+	return themeOptions.includes(theme) ? theme : "system";
+}
+
+function applyTheme(theme) {
+	document.documentElement.setAttribute("data-theme", theme);
+	updateThemeIcon(theme);
+}
+
+function updateThemeIcon(theme) {
+	requireElement("theme-icon").textContent =
+		theme === "system" ? "Light" : theme === "light" ? "Dark" : "System";
+}
+
+async function fetchGatewaySession() {
+	const response = await fetch("/.auth/me", {
+		headers: { Accept: "application/json" },
+	});
+	if (!response.ok) {
+		throw new Error(`HTTP ${response.status}`);
+	}
+	return normalizeGatewaySession(await response.json());
+}
+
+function normalizeGatewaySession(payload) {
+	if (Array.isArray(payload)) {
+		return /** @type {GatewaySession | null} */ (payload[0] || null);
+	}
+	return /** @type {GatewaySession | null} */ (payload || null);
+}
+
+function gatewayDisplayName(session) {
+	return (
+		session.userDetails ||
+		session.user_details ||
+		session.email ||
+		session.preferred_username ||
+		session.name ||
+		"authenticated user"
+	);
+}
+
+function logoutFromGateway() {
+	window.location.assign("/.auth/logout?post_logout_redirect_uri=/");
 }
 
 async function submitChat(event) {
-  event.preventDefault();
-  const input = document.getElementById("message");
-  const message = input.value.trim();
-  if (!message) return;
-  input.value = "";
-  appendMessage("user", "You", message);
-  statusEl.textContent = "Calling MCP";
-  try {
-    const result = await postJSON("/api/chat", {
-      message,
-      tool: document.getElementById("tool").value,
-      connector_id: connectorSelect.value,
-    });
-    const connector = result.connector || selectedConnectorSummary();
-    appendMessage("assistant", connectorLabel(connector), result.assistant, connectorMeta(connector));
-    toolOutput.textContent = JSON.stringify({
-      connector,
-      selected_tool: result.selected_tool,
-      model: result.model,
-      tool_arguments: result.tool_arguments,
-      tool_result: result.tool_result,
-      mcp_steps: result.mcp_steps,
-    }, null, 2);
-    discoveryOutput.textContent = JSON.stringify(result.discovery, null, 2);
-    statusEl.textContent = `Called ${result.selected_tool}`;
-  } catch (error) {
-    appendMessage("assistant", "ChatGPT Sim", `Error: ${error.message}`);
-    statusEl.textContent = `Error: ${error.message}`;
-  }
+	event.preventDefault();
+	const input = inputElement("message");
+	const message = input.value.trim();
+	if (!message) return;
+	input.value = "";
+	appendMessage("user", "You", message);
+	statusEl.textContent = "Calling MCP";
+	try {
+		const result = /** @type {ChatResponse} */ (
+			await postJSON("/api/chat", {
+				message,
+				tool: selectElement("tool").value,
+				connector_id: connectorSelect.value,
+			})
+		);
+		const connector = result.connector || selectedConnectorSummary();
+		appendMessage(
+			"assistant",
+			connectorLabel(connector),
+			result.assistant,
+			connectorMeta(connector),
+		);
+		toolOutput.textContent = JSON.stringify(
+			{
+				connector,
+				selected_tool: result.selected_tool,
+				model: result.model,
+				tool_arguments: result.tool_arguments,
+				tool_result: result.tool_result,
+				mcp_steps: result.mcp_steps,
+			},
+			null,
+			2,
+		);
+		discoveryOutput.textContent = JSON.stringify(result.discovery, null, 2);
+		statusEl.textContent = `Called ${result.selected_tool}`;
+	} catch (error) {
+		appendMessage("assistant", "ChatGPT Sim", `Error: ${error.message}`);
+		statusEl.textContent = `Error: ${error.message}`;
+	}
 }
 
 async function refreshDiscovery() {
-  statusEl.textContent = "Discovering";
-  try {
-    const result = await fetchJSON("/api/discovery");
-    discoveryOutput.textContent = JSON.stringify(result, null, 2);
-    statusEl.textContent = "Ready";
-  } catch (error) {
-    discoveryOutput.textContent = JSON.stringify({ error: error.message }, null, 2);
-    statusEl.textContent = `Discovery failed: ${error.message}`;
-  }
+	statusEl.textContent = "Discovering";
+	try {
+		const result = await fetchJSON("/api/discovery");
+		discoveryOutput.textContent = JSON.stringify(result, null, 2);
+		statusEl.textContent = "Ready";
+	} catch (error) {
+		discoveryOutput.textContent = JSON.stringify(
+			{ error: error.message },
+			null,
+			2,
+		);
+		statusEl.textContent = `Discovery failed: ${error.message}`;
+	}
 }
 
 async function refreshConnectors() {
-  const result = await fetchJSON("/api/connectors");
-  const items = result.items || [];
-  connectorSelect.innerHTML = items.map((item) => (
-    `<option value="${escapeAttr(item.id)}">${escapeHTML(item.name)} (${escapeHTML(item.auth)})</option>`
-  )).join("");
-  connectorList.innerHTML = items.map(renderConnector).join("") || "<p>No MCP connectors configured.</p>";
+	const result = /** @type {ConnectorListResponse} */ (
+		await fetchJSON("/api/connectors")
+	);
+	const items = result.items || [];
+	connectorSelect.innerHTML = items
+		.map(
+			(item) =>
+				`<option value="${escapeAttr(item.id)}">${escapeHTML(item.name)} (${escapeHTML(item.auth)})</option>`,
+		)
+		.join("");
+	connectorList.innerHTML =
+		items.map(renderConnector).join("") ||
+		"<p>No MCP connectors configured.</p>";
 }
 
 async function addConnector(event) {
-  event.preventDefault();
-  statusEl.textContent = "Adding MCP";
-  try {
-    const result = await postJSON("/api/connectors", {
-      name: document.getElementById("connector-name").value,
-      url: document.getElementById("connector-url").value,
-      auth: document.getElementById("connector-auth").value,
-      oauth_client_mode: document.getElementById("connector-client-mode").value,
-      oauth_client_id: document.getElementById("connector-client-id").value,
-      oauth_client_secret: document.getElementById("connector-client-secret").value,
-      oauth_token_endpoint_auth_method: document.getElementById("connector-token-auth-method").value,
-      oauth_requested_scopes: document.getElementById("connector-requested-scopes").value,
-      oauth_base_scopes: document.getElementById("connector-base-scopes").value,
-      oauth_authorization_url: document.getElementById("connector-auth-url").value,
-      oauth_token_url: document.getElementById("connector-token-url").value,
-      oauth_registration_url: document.getElementById("connector-registration-url").value,
-      oauth_authorization_server_base: document.getElementById("connector-auth-server-base").value,
-      oauth_resource: document.getElementById("connector-resource").value,
-      oauth_oidc_configuration_url: document.getElementById("connector-oidc-config-url").value,
-      oauth_oidc_userinfo_endpoint: document.getElementById("connector-oidc-userinfo").value,
-      oauth_oidc_scopes_supported: document.getElementById("connector-oidc-scopes").value,
-    });
-    await refreshConnectors();
-    connectorSelect.value = result.id;
-    discoveryOutput.textContent = JSON.stringify(result.discovery || result, null, 2);
-    statusEl.textContent = result.status === "ready" ? "MCP added" : "MCP discovery failed";
-  } catch (error) {
-    if (error.status === 409 && error.payload && error.payload.connector) {
-      await refreshConnectors();
-      connectorSelect.value = error.payload.connector.id;
-      statusEl.textContent = "MCP already exists";
-      return;
-    }
-    statusEl.textContent = `Add failed: ${error.message}`;
-  }
+	event.preventDefault();
+	statusEl.textContent = "Adding MCP";
+	try {
+		const result = /** @type {ConnectorSummary} */ (
+			await postJSON("/api/connectors", {
+				name: inputElement("connector-name").value,
+				url: inputElement("connector-url").value,
+				auth: selectElement("connector-auth").value,
+				oauth_client_mode: selectElement("connector-client-mode").value,
+				oauth_client_id: inputElement("connector-client-id").value,
+				oauth_client_secret: inputElement("connector-client-secret").value,
+				oauth_token_endpoint_auth_method: selectElement(
+					"connector-token-auth-method",
+				).value,
+				oauth_requested_scopes: inputElement("connector-requested-scopes")
+					.value,
+				oauth_base_scopes: inputElement("connector-base-scopes").value,
+				oauth_authorization_url: inputElement("connector-auth-url").value,
+				oauth_token_url: inputElement("connector-token-url").value,
+				oauth_registration_url: inputElement("connector-registration-url")
+					.value,
+				oauth_authorization_server_base: inputElement(
+					"connector-auth-server-base",
+				).value,
+				oauth_resource: inputElement("connector-resource").value,
+				oauth_oidc_configuration_url: inputElement("connector-oidc-config-url")
+					.value,
+				oauth_oidc_userinfo_endpoint: inputElement("connector-oidc-userinfo")
+					.value,
+				oauth_oidc_scopes_supported: inputElement("connector-oidc-scopes")
+					.value,
+			})
+		);
+		await refreshConnectors();
+		connectorSelect.value = result.id;
+		discoveryOutput.textContent = JSON.stringify(
+			result.discovery || result,
+			null,
+			2,
+		);
+		statusEl.textContent =
+			result.status === "ready" ? "MCP added" : "MCP discovery failed";
+	} catch (error) {
+		const apiError = /** @type {ApiError} */ (error);
+		if (apiError.status === 409 && apiError.payload?.connector) {
+			await refreshConnectors();
+			connectorSelect.value = apiError.payload.connector.id;
+			statusEl.textContent = "MCP already exists";
+			return;
+		}
+		statusEl.textContent = `Add failed: ${apiError.message}`;
+	}
 }
 
 async function deleteConnector(event) {
-  const button = event.target.closest("[data-delete-connector]");
-  if (!button) return;
-  const id = button.getAttribute("data-delete-connector");
-  statusEl.textContent = "Deleting MCP";
-  try {
-    await requestJSON(`/api/connectors/${encodeURIComponent(id)}`, { method: "DELETE" });
-    await refreshConnectors();
-    await refreshDiscovery();
-    statusEl.textContent = "MCP deleted";
-  } catch (error) {
-    statusEl.textContent = `Delete failed: ${error.message}`;
-  }
+	const target = /** @type {Element | null} */ (event.target);
+	const button = target?.closest("[data-delete-connector]");
+	if (!button) return;
+	const id = button.getAttribute("data-delete-connector");
+	statusEl.textContent = "Deleting MCP";
+	try {
+		await requestJSON(`/api/connectors/${encodeURIComponent(id)}`, {
+			method: "DELETE",
+		});
+		await refreshConnectors();
+		await refreshDiscovery();
+		statusEl.textContent = "MCP deleted";
+	} catch (error) {
+		statusEl.textContent = `Delete failed: ${error.message}`;
+	}
 }
 
 function renderConnector(item) {
-  const oauth = item.oauth && item.oauth.authorization_endpoint
-    ? `<span>OAuth: ${escapeHTML(item.oauth.authorization_endpoint)}</span>`
-    : "<span>OAuth: not discovered</span>";
-  const login = item.login_url
-    ? `<a class="login-link" href="${escapeAttr(item.login_url)}" target="_blank" rel="noopener">Sign in</a>`
-    : item.oauth && item.oauth.authorization_endpoint
-      ? `<span>Login: enter an OAuth Client ID, then add this connector.</span>`
-      : "";
-  const error = item.error ? `<span class="error">${escapeHTML(item.error)}</span>` : "";
-  const advanced = item.oauth_advanced
-    ? `<details class="connector-details"><summary>Advanced OAuth</summary><pre>${escapeHTML(JSON.stringify(item.oauth_advanced, null, 2))}</pre></details>`
-    : "";
-  const actions = item.id === "default"
-    ? ""
-    : `<button type="button" class="danger" data-delete-connector="${escapeAttr(item.id)}">Delete</button>`;
-  return `
+	const oauth = item.oauth?.authorization_endpoint
+		? `<span>OAuth: ${escapeHTML(item.oauth.authorization_endpoint)}</span>`
+		: "<span>OAuth: not discovered</span>";
+	const login = item.login_url
+		? `<a class="login-link" href="${escapeAttr(item.login_url)}" target="_blank" rel="noopener">Sign in</a>`
+		: item.oauth?.authorization_endpoint
+			? `<span>Login: enter an OAuth Client ID, then add this connector.</span>`
+			: "";
+	const error = item.error
+		? `<span class="error">${escapeHTML(item.error)}</span>`
+		: "";
+	const advanced = item.oauth_advanced
+		? `<details class="connector-details"><summary>Advanced OAuth</summary><pre>${escapeHTML(JSON.stringify(item.oauth_advanced, null, 2))}</pre></details>`
+		: "";
+	const actions =
+		item.id === "default"
+			? ""
+			: `<button type="button" class="danger" data-delete-connector="${escapeAttr(item.id)}">Delete</button>`;
+	return `
     <article class="connector">
       <div class="connector-header">
         <strong>${escapeHTML(item.name)}</strong>
@@ -161,81 +328,87 @@ function renderConnector(item) {
 }
 
 function appendMessage(kind, label, text, meta) {
-  const article = document.createElement("article");
-  article.className = `message ${kind}`;
-  const strong = document.createElement("strong");
-  strong.textContent = label;
-  article.append(strong);
-  if (meta) {
-    const metaEl = document.createElement("span");
-    metaEl.className = "message-meta";
-    metaEl.textContent = meta;
-    article.append(metaEl);
-  }
-  const body = document.createElement("div");
-  body.textContent = text;
-  article.append(body);
-  messages.append(article);
-  messages.scrollTop = messages.scrollHeight;
+	const article = document.createElement("article");
+	article.className = `message ${kind}`;
+	const strong = document.createElement("strong");
+	strong.textContent = label;
+	article.append(strong);
+	if (meta) {
+		const metaEl = document.createElement("span");
+		metaEl.className = "message-meta";
+		metaEl.textContent = meta;
+		article.append(metaEl);
+	}
+	const body = document.createElement("div");
+	body.textContent = text;
+	article.append(body);
+	messages.append(article);
+	messages.scrollTop = messages.scrollHeight;
 }
 
 function selectedConnectorSummary() {
-  const option = connectorSelect.selectedOptions && connectorSelect.selectedOptions[0];
-  return {
-    id: connectorSelect.value,
-    name: option ? option.textContent : connectorSelect.value,
-  };
+	const option = connectorSelect.selectedOptions?.[0];
+	return {
+		id: connectorSelect.value,
+		name: option ? option.textContent : connectorSelect.value,
+	};
 }
 
 function connectorLabel(connector) {
-  const name = connector && connector.name ? connector.name : "selected MCP";
-  return `ChatGPT Sim via ${name}`;
+	const name = connector?.name ? connector.name : "selected MCP";
+	return `ChatGPT Sim via ${name}`;
 }
 
 function connectorMeta(connector) {
-  if (!connector) return "";
-  const parts = [];
-  if (connector.id) parts.push(`id=${connector.id}`);
-  if (connector.auth) parts.push(`auth=${connector.auth}`);
-  if (connector.url) parts.push(connector.url);
-  return parts.join(" | ");
+	if (!connector) return "";
+	const parts = [];
+	if (connector.id) parts.push(`id=${connector.id}`);
+	if (connector.auth) parts.push(`auth=${connector.auth}`);
+	if (connector.url) parts.push(connector.url);
+	return parts.join(" | ");
 }
 
 function escapeHTML(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[char]);
+	return String(value).replace(
+		/[&<>"']/g,
+		(char) =>
+			({
+				"&": "&amp;",
+				"<": "&lt;",
+				">": "&gt;",
+				'"': "&quot;",
+				"'": "&#39;",
+			})[char],
+	);
 }
 
 function escapeAttr(value) {
-  return escapeHTML(value).replace(/`/g, "&#96;");
+	return escapeHTML(value).replace(/`/g, "&#96;");
 }
 
 async function postJSON(url, body) {
-  return requestJSON(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+	return requestJSON(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	});
 }
 
 async function requestJSON(url, options = {}) {
-  const response = await fetch(url, options);
-  if (response.status === 204) return {};
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload.error || `HTTP ${response.status}`);
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-  return payload;
+	const response = await fetch(url, options);
+	if (response.status === 204) return {};
+	const payload = await response.json().catch(() => ({}));
+	if (!response.ok) {
+		const error = /** @type {ApiError} */ (
+			new Error(payload.error || `HTTP ${response.status}`)
+		);
+		error.status = response.status;
+		error.payload = payload;
+		throw error;
+	}
+	return payload;
 }
 
 async function fetchJSON(url) {
-  return requestJSON(url);
+	return requestJSON(url);
 }

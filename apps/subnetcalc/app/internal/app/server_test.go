@@ -744,7 +744,8 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		"runtimeConfig().backendURL || \"same process\"",
 		"Network Path",
 		"const backendURL = config.backendURL || \"same process\"",
-		"const backendRole = config.apiAuthMethod === \"oidc\"",
+		"const backendRole =",
+		"config.apiAuthMethod === \"oidc\"",
 		"Static UI and same-origin API proxy",
 		"APIM Trace ID",
 	} {

@@ -22,3 +22,13 @@ setup() {
   [[ "${output}" == *"uv lock"* ]]
   [[ "${output}" == *"cd backstage/app && yarn install --mode=update-lockfile"* ]]
 }
+
+@test "apim simulator frontend check uses Biome and Deno without npm UI manifests" {
+  run make -C "${APIM_ROOT}" frontend-check
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"test -f ui/api-types.d.ts"* ]]
+  [[ "${output}" == *"biome check ui/app.js ui/api-types.d.ts ui/index.html ui/styles.css"* ]]
+  [[ "${output}" == *"deno check --check-js ui/app.js"* ]]
+  [[ "${output}" == *"! test -f ui/package.json"* ]]
+}

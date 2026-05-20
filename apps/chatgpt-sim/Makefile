@@ -1,10 +1,11 @@
-.PHONY: help test build update app-help app-test app-build app-run-mcp app-run-shell up down logs ps compose-smoke
+.PHONY: help test build update app-help app-test app-js-check app-build app-run-mcp app-run-shell up down logs ps compose-smoke
 
 COMPOSE_CMD ?= docker compose -f compose.yml
 
 help:
 	@echo "ChatGPT Sim:"
 	@echo "  app-test       Run Go unit tests"
+	@echo "  app-js-check   Run Biome and Deno checks for browser JavaScript"
 	@echo "  app-build      Build the local app binary"
 	@echo "  app-run-mcp    Run the MCP role directly"
 	@echo "  app-run-shell  Run the shell role directly"
@@ -18,6 +19,9 @@ app-help:
 app-test:
 	@$(MAKE) --no-print-directory -C app test
 
+app-js-check:
+	@$(MAKE) --no-print-directory -C app js-check
+
 app-build:
 	@$(MAKE) --no-print-directory -C app build
 
@@ -27,7 +31,7 @@ app-run-mcp:
 app-run-shell:
 	@$(MAKE) --no-print-directory -C app run-shell
 
-test: app-test compose-smoke
+test: app-test app-js-check compose-smoke
 
 build:
 	@$(MAKE) --no-print-directory -C app build-linux
