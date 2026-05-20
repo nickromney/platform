@@ -43,12 +43,12 @@ check-prerequisites: ## Check that a supported compose backend is installed and 
 	fi
 
 build: check-prerequisites ## Build the local compose images
-	@$(MAKE) --no-print-directory -C app-go build-linux
+	@$(MAKE) --no-print-directory -C app build-linux
 	@$(COMPOSE) build
 
 ##@ Run
 up: check-prerequisites ## Start the authenticated compose stack and print the local URL
-	@$(MAKE) --no-print-directory -C app-go build-linux
+	@$(MAKE) --no-print-directory -C app build-linux
 	@$(COMPOSE) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Base URL:      $(APP_BASE_URL)"
@@ -56,7 +56,7 @@ up: check-prerequisites ## Start the authenticated compose stack and print the l
 	@echo "Keycloak can take a couple of minutes to become ready on cold start."
 
 up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS URL
-	@$(MAKE) --no-print-directory -C app-go build-linux
+	@$(MAKE) --no-print-directory -C app build-linux
 	@$(COMPOSE_TLS) up -d --build
 	@echo "Sentiment URL: $(APP_TLS_URL)"
 	@echo "Base URL:      $(APP_TLS_BASE_URL)"
@@ -64,7 +64,7 @@ up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS U
 	@echo "If the browser warns about the cert, run ./pki/gen-certs.sh and trust the local CA."
 
 up-apim-ai-gateway: check-prerequisites ## Start sentiment configured to call the APIM simulator AI gateway
-	@$(MAKE) --no-print-directory -C app-go build-linux
+	@$(MAKE) --no-print-directory -C app build-linux
 	@$(COMPOSE_APIM_AI_GATEWAY) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Base URL:      $(APP_BASE_URL)"

@@ -11,7 +11,7 @@ SELECTED_TARGETS=()
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 TARGET_SPECS=(
-  "subnetcalc-go|${REPO_ROOT}/apps/subnetcalc/app-go|${REPO_ROOT}/apps/subnetcalc/app-go/Dockerfile|platform-docker-audit/subnetcalc-go:audit|"
+  "subnetcalc-go|${REPO_ROOT}/apps/subnetcalc/app|${REPO_ROOT}/apps/subnetcalc/app/Dockerfile|platform-docker-audit/subnetcalc-go:audit|"
   "apim-simulator|${REPO_ROOT}/apps/apim-simulator|${REPO_ROOT}/apps/apim-simulator/Dockerfile|platform-docker-audit/subnetcalc-apim-simulator:audit|"
 )
 

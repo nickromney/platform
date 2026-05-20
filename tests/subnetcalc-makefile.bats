@@ -9,9 +9,9 @@ setup() {
   run make -C "${REPO_ROOT}/apps/subnetcalc" help
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"app-go-test"* ]]
-  [[ "${output}" == *"app-go-run-backend"* ]]
-  [[ "${output}" == *"app-go-run-frontend"* ]]
+  [[ "${output}" == *"app-test"* ]]
+  [[ "${output}" == *"app-run-backend"* ]]
+  [[ "${output}" == *"app-run-frontend"* ]]
   [[ "${output}" == *"compose-smoke"* ]]
   [[ "${output}" != *"frontend-react"* ]]
   [[ "${output}" != *"api-fastapi"* ]]
@@ -31,7 +31,7 @@ setup() {
   run make -n -C "${REPO_ROOT}/apps/subnetcalc" up
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"make --no-print-directory -C app-go build-linux"* ]]
+  [[ "${output}" == *"make --no-print-directory -C app build-linux"* ]]
   [[ "${output}" == *"up -d --build subnetcalc-backend subnetcalc-frontend"* ]]
 
   run bash -lc "cd '${REPO_ROOT}' && \

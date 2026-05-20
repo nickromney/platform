@@ -1,0 +1,78 @@
+services:
+  chatgpt-sim:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      ROLE: shell
+      PORT: "8080"
+      PUBLIC_BASE_URL: http://localhost:18084
+      MCP_URL: http://mcp-server:8080/mcp
+      LLM_URL: http://llm:8080/v1/chat/completions
+      HOME: /tmp
+    ports:
+      - "18084:8080"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/chatgpt-sim", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
+  mcp-server:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      ROLE: mcp
+      PORT: "8080"
+      PUBLIC_BASE_URL: http://mcp-server:8080
+      HOME: /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    healthcheck:
+      test: ["CMD", "/chatgpt-sim", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
+  llm:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      ROLE: llm
+      PORT: "8080"
+      LLM_MODEL: ${PLATFORM_LLM_MODEL:-go-local-openai-compatible}
+      HOME: /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    healthcheck:
+      test: ["CMD", "/chatgpt-sim", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s

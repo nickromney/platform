@@ -1,31 +1,10 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.egg-info/
-.venv/
-venv/
+.git/
+.run/
+app/.run/
+tests/
+coverage/
 dist/
 build/
-
-# Tests and local state
-tests/
-test_*.py
-.pytest_cache/
-.coverage
-htmlcov/
-.run/
-
-# Tooling and editor state
-.ruff_cache/
-.mypy_cache/
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Logs and OS metadata
+*.test
 *.log
 .DS_Store
-Thumbs.db

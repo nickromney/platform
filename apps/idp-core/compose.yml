@@ -1,0 +1,25 @@
+services:
+  idp-core:
+    build:
+      context: ../..
+      dockerfile: apps/idp-core/app/Dockerfile
+    environment:
+      PORT: "8080"
+      IDP_RUNTIME: kind
+      IDP_CATALOG_PATH: /app/catalog/platform-apps.json
+      HOME: /tmp
+    ports:
+      - "18086:8080"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/idp-core", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s

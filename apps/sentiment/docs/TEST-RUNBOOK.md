@@ -5,8 +5,8 @@ This app has a small default verification path and a few heavier opt-in checks.
 ```mermaid
 flowchart TD
   A["Change in sentiment"] --> B["Run default checks"]
-  B --> C["app-go: go test ./..."]
-  B --> D["app-go: build-linux"]
+  B --> C["app: go test ./..."]
+  B --> D["app: build-linux"]
   B --> E["make -C apps compose-smoke-sentiment"]
   A --> F["Need TLS or ingress-specific coverage?"]
   F --> G["Run opt-in checks"]
@@ -16,7 +16,7 @@ flowchart TD
 
 ## Default Checks
 
-- `make -C apps/sentiment/app-go test`
+- `make -C apps/sentiment/app test`
 - `make -C apps compose-smoke-sentiment`
 - `make -C apps/apim-simulator up-ai-gateway && make -C apps/sentiment smoke-apim-ai-gateway`
 

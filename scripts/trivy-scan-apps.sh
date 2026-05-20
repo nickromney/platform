@@ -36,15 +36,21 @@ TRIVY_SKIP_DIRS=(
 
 SOURCE_TARGETS=(
   "apps/apim-simulator"
+  "apps/chatgpt-sim"
+  "apps/idp-core"
+  "apps/platform-mcp"
   "apps/sentiment"
   "apps/subnetcalc"
 )
 
 # Keep this list aligned with kubernetes/lima/scripts/build-local-workload-images.sh.
 IMAGE_SPECS=(
-  "platform-security-scan/sentiment-api:scan|apps/sentiment/api-sentiment|apps/sentiment/api-sentiment/Dockerfile|"
-  "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment/frontend-react-vite/sentiment-auth-ui|apps/sentiment/frontend-react-vite/sentiment-auth-ui/Dockerfile|"
-  "platform-security-scan/subnetcalc-go:scan|apps/subnetcalc/app-go|apps/subnetcalc/app-go/Dockerfile|"
+  "platform-security-scan/chatgpt-sim:scan|apps/chatgpt-sim/app|apps/chatgpt-sim/app/Dockerfile|"
+  "platform-security-scan/idp-core:scan|.|apps/idp-core/app/Dockerfile|"
+  "platform-security-scan/platform-mcp:scan|apps/platform-mcp/app|apps/platform-mcp/app/Dockerfile|"
+  "platform-security-scan/sentiment-api:scan|apps/sentiment/app|apps/sentiment/app/Dockerfile|"
+  "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment/app|apps/sentiment/app/Dockerfile|"
+  "platform-security-scan/subnetcalc-go:scan|apps/subnetcalc/app|apps/subnetcalc/app/Dockerfile|"
   "platform-security-scan/subnetcalc-apim-simulator:scan|apps/apim-simulator|apps/apim-simulator/Dockerfile|"
 )
 
@@ -579,6 +585,26 @@ build_image() {
   local context_dir="$2"
   local dockerfile="$3"
   shift 3
+
+  case "${context_dir}" in
+    apps/chatgpt-sim/app)
+      make -C "${REPO_ROOT}/apps/chatgpt-sim/app" build-linux
+      ;;
+    apps/platform-mcp/app)
+      make -C "${REPO_ROOT}/apps/platform-mcp/app" build-linux
+      ;;
+    apps/sentiment/app)
+      make -C "${REPO_ROOT}/apps/sentiment/app" build-linux
+      ;;
+    apps/subnetcalc/app)
+      make -C "${REPO_ROOT}/apps/subnetcalc/app" build-linux
+      ;;
+    .)
+      if [[ "${dockerfile}" == "apps/idp-core/app/Dockerfile" ]]; then
+        make -C "${REPO_ROOT}/apps/idp-core/app" build-linux
+      fi
+      ;;
+  esac
 
   log "BUILD ${image_ref}"
   (

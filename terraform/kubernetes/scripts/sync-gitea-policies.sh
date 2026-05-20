@@ -685,13 +685,24 @@ vendor_chart() {
   local version="$3"
   local vendor_root="$4"
   local repo_name
+  local status
+  local tmp_registry_dir
 
   assert_pinned_chart_version "${chart}" "${version}"
   mkdir -p "${vendor_root}"
   rm -rf "${vendor_root:?}/${chart}"
   if [[ "${repo_url}" == "cr.agentgateway.dev/charts" ]]; then
-    helm pull "oci://cr.agentgateway.dev/charts/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
-    return 0
+    tmp_registry_dir="$(mktemp -d)"
+    printf '{"auths":{}}\n' >"${tmp_registry_dir}/config.json"
+    printf '{"auths":{}}\n' >"${tmp_registry_dir}/registry.json"
+    set +e
+    DOCKER_CONFIG="${tmp_registry_dir}" HELM_REGISTRY_CONFIG="${tmp_registry_dir}/registry.json" \
+      helm pull "oci://cr.agentgateway.dev/charts/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+    status=$?
+    set -e
+    rm -f "${tmp_registry_dir}/config.json" "${tmp_registry_dir}/registry.json"
+    rmdir "${tmp_registry_dir}" >/dev/null 2>&1 || true
+    return "${status}"
   fi
   repo_name="vendor-$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
   helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true

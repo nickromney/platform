@@ -1,0 +1,9 @@
+**
+
+!apps/
+!apps/idp-core/
+!apps/idp-core/app/
+!apps/idp-core/app/.run/
+!apps/idp-core/app/.run/idp-core
+!catalog/
+!catalog/platform-apps.json

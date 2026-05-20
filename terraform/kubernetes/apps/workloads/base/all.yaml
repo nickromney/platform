@@ -213,6 +213,12 @@ spec:
               value: "gateway"
             - name: API_AUTH_METHOD
               value: "gateway"
+            - name: API_BASE_PATH
+              value: "/api/v1"
+            - name: SHOW_NETWORK_PATH
+              value: "true"
+            - name: NETWORK_HOPS
+              value: '[{"label":"Browser","detail":"sentiment public host","role":"User agent"},{"label":"OAuth2 Proxy","detail":"SSO gate","role":"Session and access-token forwarding"},{"label":"Sentiment router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},{"label":"Sentiment frontend","detail":"sentiment-auth-ui service","role":"Static UI and same-origin API proxy"},{"label":"Sentiment API","detail":"sentiment-api service","role":"Go backend inference and storage"}]'
             - name: HOME
               value: /tmp
           securityContext:
@@ -346,7 +352,7 @@ data:
         proxy_set_header Authorization $api_auth;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_pass http://sentiment-api:8080;
+        proxy_pass http://sentiment-auth-ui:8080;
       }
 
       location = /api {

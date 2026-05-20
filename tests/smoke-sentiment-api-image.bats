@@ -26,10 +26,10 @@ PY
   }
   trap cleanup EXIT
 
-  run make -C "${REPO_ROOT}/apps/sentiment/app-go" build-linux
+  run make -C "${REPO_ROOT}/apps/sentiment/app" build-linux
   [ "${status}" -eq 0 ]
 
-  run docker build -t "${image_tag}" "${REPO_ROOT}/apps/sentiment/app-go"
+  run docker build -t "${image_tag}" "${REPO_ROOT}/apps/sentiment/app"
   [ "${status}" -eq 0 ]
 
   container_id="$(

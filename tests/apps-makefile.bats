@@ -30,8 +30,13 @@ setup() {
   run make -n -C "${REPO_ROOT}/apps" test
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"-C ./platform-mcp/app-go test"* ]]
+  [[ "${output}" == *"-C ./chatgpt-sim/app test"* ]]
+  [[ "${output}" == *"-C ./idp-core/app test"* ]]
+  [[ "${output}" == *"-C ./platform-mcp/app test"* ]]
   [[ "${output}" == *"compose-smoke"* ]]
+  [[ "${output}" == *"./chatgpt-sim/tests/compose-smoke.sh"* ]]
+  [[ "${output}" == *"./idp-core/tests/compose-smoke.sh"* ]]
+  [[ "${output}" == *"./platform-mcp/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./sentiment/tests/compose-smoke.sh"* ]]
   [[ "${output}" == *"./subnetcalc/tests/compose-smoke.sh"* ]]
 }
@@ -40,6 +45,9 @@ setup() {
   run make -n -C "${REPO_ROOT}/apps" update
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"make --no-print-directory -C ./chatgpt-sim update"* ]]
+  [[ "${output}" == *"make --no-print-directory -C ./idp-core update"* ]]
+  [[ "${output}" == *"make --no-print-directory -C ./platform-mcp update"* ]]
   [[ "${output}" == *"make --no-print-directory -C ./sentiment update"* ]]
   [[ "${output}" == *"make --no-print-directory -C ./subnetcalc update"* ]]
 }

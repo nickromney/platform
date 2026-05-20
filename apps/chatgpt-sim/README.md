@@ -17,12 +17,13 @@ There are no third-party Go modules and no JavaScript package dependencies.
 ## Local Run
 
 ```sh
-docker compose -f ../../compose.chatgpt-sim.yml up --build -d
+make -C apps/chatgpt-sim up
 ```
 
 Open `http://localhost:18084`.
 
-The MCP role is published at `http://localhost:18082`.
+The compose stack publishes the MCP role on the private compose network and
+the shell role at `http://localhost:18084`.
 
 The shell includes a small connector settings panel. Adding an MCP URL makes the
 shell fetch protected-resource metadata and OAuth authorization-server metadata,
@@ -70,5 +71,5 @@ protocol shape is exercised.
 ## Tests
 
 ```sh
-go test ./...
+make -C apps/chatgpt-sim/app test
 ```

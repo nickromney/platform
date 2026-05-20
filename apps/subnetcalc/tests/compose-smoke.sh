@@ -71,7 +71,7 @@ if [ -z "${SUBNETCALC_LOCAL_PLATFORM:-}" ]; then
 fi
 
 if [ "${SUBNETCALC_COMPOSE_SKIP_BUILD:-0}" != "1" ]; then
-  (cd "${APP_DIR}/app-go" && make build-linux)
+  (cd "${APP_DIR}/app" && make build-linux)
 fi
 
 compose_cmd down --remove-orphans >/dev/null 2>&1 || true

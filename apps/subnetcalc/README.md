@@ -24,7 +24,7 @@ Local URLs:
 ## Test
 
 ```bash
-make -C apps/subnetcalc/app-go test
+make -C apps/subnetcalc/app test
 make -C apps/subnetcalc test
 ```
 

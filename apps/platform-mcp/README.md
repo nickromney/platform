@@ -2,8 +2,8 @@
 
 Platform MCP server for the platform learning environment.
 
-The deployed kind image is built from [`app-go/`](app-go/) using the same
-single-binary, no runtime dependency pattern as the other `app-go` workloads.
+The deployed kind image is built from [`app/`](app/) using the same
+single-binary, no runtime dependency pattern as the other lightweight Go apps.
 
 It serves Streamable HTTP on `/mcp` and exposes these tools:
 
@@ -14,19 +14,19 @@ It serves Streamable HTTP on `/mcp` and exposes these tools:
 Run tests:
 
 ```bash
-make -C apps/platform-mcp/app-go test
+make -C apps/platform-mcp/app test
 ```
 
 Build the deployed image binary:
 
 ```bash
-make -C apps/platform-mcp/app-go build-linux
+make -C apps/platform-mcp/app build-linux
 ```
 
 Run locally:
 
 ```bash
-make -C apps/platform-mcp/app-go run
+make -C apps/platform-mcp/app run
 ```
 
 Local endpoints:

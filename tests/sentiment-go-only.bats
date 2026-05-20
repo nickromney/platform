@@ -9,7 +9,7 @@ setup() {
   run bash -lc "cd '${REPO_ROOT}' && ls -A apps/sentiment | sort"
 
   [ "${status}" -eq 0 ]
-  expected=$'.gitea\nMODEL_CARD.md\nMakefile\nREADME.md\napp-go\ncatalog-info.yaml\ncompose.apim-ai-gateway.yml\ncompose.tls.yml\ncompose.yml\ndata\ndocs\nedge\nevaluation.jsonl\nkeycloak\nmkdocs.yml\npki\ntests\ntls-proxy\nupdate-sentiment-image-tags.sh'
+  expected=$'.gitea\nMODEL_CARD.md\nMakefile\nREADME.md\napp\ncatalog-info.yaml\ncompose.apim-ai-gateway.yml\ncompose.tls.yml\ncompose.yml\ndata\ndocs\nedge\nevaluation.jsonl\nkeycloak\nmkdocs.yml\npki\ntests\ntls-proxy\nupdate-sentiment-image-tags.sh'
   [ "${output}" = "${expected}" ]
 }
 
@@ -26,10 +26,21 @@ retired_paths = ("api-sentiment", "frontend-react-vite", "frontend-typescript-vi
 assert {image["id"] for image in sentiment} == {"sentiment-api", "sentiment-auth-ui"}, sentiment
 for image in sentiment:
     build = image.get("build", {})
-    assert build.get("context") == "apps/sentiment/app-go", image
+    assert build.get("context") == "apps/sentiment/app", image
     assert build.get("dockerfile") == "Dockerfile", image
     assert not any(path in json.dumps(image) for path in retired_paths), image
 PY
 
   [ "${status}" -eq 0 ]
+}
+
+@test "sentiment repo tooling does not point to retired Python or React app paths" {
+  run rg -n 'apps/sentiment/(api-sentiment|frontend-react-vite|frontend-typescript-vite)|sentiment/(api-sentiment|frontend-react-vite|frontend-typescript-vite)' \
+    "${REPO_ROOT}/scripts" \
+    "${REPO_ROOT}/kubernetes" \
+    "${REPO_ROOT}/terraform" \
+    "${REPO_ROOT}/apps/sentiment" \
+    --glob '!terraform/kubernetes/.terragrunt-cache/**'
+
+  [ "${status}" -eq 1 ]
 }

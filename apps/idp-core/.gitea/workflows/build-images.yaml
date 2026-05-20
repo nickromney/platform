@@ -1,0 +1,63 @@
+name: Build idp-core image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".gitea/workflows/**"
+  workflow_dispatch:
+
+env:
+  DOCKER_HOST: unix:///var/run/docker.sock
+  WORKDIR: /tmp/idp-core
+  APP_REPO_NAME: idp-core
+
+jobs:
+  build:
+    runs-on: [self-hosted, in-cluster]
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - name: Clone repo
+        run: |
+          set -e
+          : "${GITEA_HTTP_BASE:?}"
+          : "${GITEA_REPO_OWNER:?}"
+          : "${REGISTRY_USERNAME:?}"
+          : "${REGISTRY_PWD:?}"
+          rm -rf "${WORKDIR}"
+          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/${APP_REPO_NAME}.git" "${WORKDIR}"
+          cd "${WORKDIR}" && git checkout main
+
+      - name: Log in to registry
+        run: |
+          set -e
+          : "${REGISTRY_HOST:?}"
+          echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
+
+      - name: Build Go runtime binary
+        run: |
+          set -e
+          : "${APPS_DIR:?}"
+          docker run --rm \
+            -v "${APPS_DIR}/idp-core/app:/src" \
+            -w /src \
+            -e CGO_ENABLED=0 \
+            -e GOOS=linux \
+            -e GOARCH=amd64 \
+            dhi.io/golang:1.26-alpine3.23-dev \
+            sh -c 'mkdir -p .run && go build -trimpath -ldflags="-s -w" -o .run/idp-core ./cmd/idp-core'
+
+      - name: Build and push runtime image
+        run: |
+          set -e
+          : "${APPS_DIR:?}"
+          PLATFORM_REPO_DIR="$(dirname "${APPS_DIR}")"
+          cd "${PLATFORM_REPO_DIR}"
+          TAG="$(git rev-parse --short=12 HEAD)"
+          docker build --provenance=false -f apps/idp-core/app/Dockerfile -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/idp-core:${TAG}" .
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/idp-core:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/idp-core:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/idp-core:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/idp-core:latest"

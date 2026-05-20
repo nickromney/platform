@@ -15,8 +15,8 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 
 expected_users = {
-    "apps/sentiment/app-go/Dockerfile": "65532:65532",
-    "apps/subnetcalc/app-go/Dockerfile": "65532:65532",
+    "apps/sentiment/app/Dockerfile": "65532:65532",
+    "apps/subnetcalc/app/Dockerfile": "65532:65532",
 }
 
 for relative_path, expected_user in expected_users.items():
@@ -247,6 +247,44 @@ PY
   [[ "${output}" == *"validated 4 shell-free Go healthchecks"* ]]
 }
 
+@test "sentiment compose frontend exposes API proxy diagnostics" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+compose = yaml.safe_load((repo_root / "apps/sentiment/compose.yml").read_text(encoding="utf-8"))
+frontend = compose["services"]["sentiment-auth-frontend"]
+
+env = {}
+for item in frontend["environment"]:
+    key, value = item.split("=", 1)
+    env[key] = value
+
+assert env["RUNTIME_ROLE"] == "frontend", env
+assert env["BACKEND_URL"] == "${SENTIMENT_FRONTEND_BACKEND_URL:-http://sentiment-api:8080}", env
+assert env["API_BASE_PATH"] == "/api/v1", env
+assert env["SHOW_NETWORK_PATH"] == "${SENTIMENT_SHOW_NETWORK_PATH:-true}", env
+network_hops = json.loads(env["NETWORK_HOPS"])
+assert [hop["label"] for hop in network_hops] == [
+    "Browser",
+    "Sentiment edge",
+    "Sentiment frontend",
+    "Sentiment API",
+], network_hops
+
+print("validated sentiment compose API proxy diagnostics")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated sentiment compose API proxy diagnostics"* ]]
+}
+
 @test "subnetcalc compose keeps only Go backend and frontend services" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
@@ -278,8 +316,8 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-server_go = (repo_root / "apps/subnetcalc/app-go/internal/app/server.go").read_text(encoding="utf-8")
-app_js = (repo_root / "apps/subnetcalc/app-go/internal/app/web/app.js").read_text(encoding="utf-8")
+server_go = (repo_root / "apps/subnetcalc/app/internal/app/server.go").read_text(encoding="utf-8")
+app_js = (repo_root / "apps/subnetcalc/app/internal/app/web/app.js").read_text(encoding="utf-8")
 
 assert '"authMethod"' in server_go
 assert '"apiAuthMethod"' in server_go
@@ -302,7 +340,7 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-logged_out = (repo_root / "apps/subnetcalc/app-go/internal/app/web/logged-out.html").read_text(encoding="utf-8")
+logged_out = (repo_root / "apps/subnetcalc/app/internal/app/web/logged-out.html").read_text(encoding="utf-8")
 
 for text in ("Signed out", "Sign in again", "/.auth/login/sso"):
     assert text in logged_out, text
@@ -440,10 +478,11 @@ PY
   [[ "${output}" == *"validated subnetcalc frontend auth gate and API routing"* ]]
 }
 
-@test "sentiment router protects the frontend and forwards bearer tokens to the API" {
+@test "sentiment router protects the frontend and sends API calls through the Go proxy" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -464,6 +503,17 @@ frontend = next(
 frontend_env = {item["name"]: str(item.get("value", "")) for item in frontend["spec"]["template"]["spec"]["containers"][0].get("env", [])}
 assert frontend_env["AUTH_METHOD"] == "gateway", frontend_env
 assert frontend_env["API_AUTH_METHOD"] == "gateway", frontend_env
+assert frontend_env["API_BASE_PATH"] == "/api/v1", frontend_env
+assert frontend_env["BACKEND_URL"] == "http://sentiment-api:8080", frontend_env
+assert frontend_env["SHOW_NETWORK_PATH"] == "true", frontend_env
+network_hops = json.loads(frontend_env["NETWORK_HOPS"])
+assert [hop["label"] for hop in network_hops] == [
+    "Browser",
+    "OAuth2 Proxy",
+    "Sentiment router",
+    "Sentiment frontend",
+    "Sentiment API",
+], network_hops
 frontend_container = frontend["spec"]["template"]["spec"]["containers"][0]
 assert frontend_container["readinessProbe"]["httpGet"]["path"] == "/health/ready", frontend_container
 assert frontend_container["livenessProbe"]["httpGet"]["path"] == "/health/live", frontend_container
@@ -476,7 +526,8 @@ config = next(
 nginx_conf = config["data"]["default.conf"]
 
 assert "location ^~ /api/" in nginx_conf
-assert "proxy_pass http://sentiment-api:8080;" in nginx_conf
+assert "proxy_pass http://sentiment-auth-ui:8080;" in nginx_conf
+assert "proxy_pass http://sentiment-api:8080;" not in nginx_conf
 assert "set $api_auth $http_authorization;" in nginx_conf
 assert 'proxy_set_header Authorization $api_auth;' in nginx_conf
 assert "location = /health" in nginx_conf
@@ -488,11 +539,15 @@ assert 'set $auth_email $http_x_auth_request_email;' in nginx_conf
 assert 'if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }' in nginx_conf
 assert "proxy_pass http://sentiment-auth-ui:8080;" in nginx_conf
 
-print("validated sentiment frontend auth gate, health, and API token forwarding")
+edge_conf = (repo_root / "apps/sentiment/edge/nginx.conf").read_text(encoding="utf-8")
+assert 'set $api_upstream "sentiment-auth-frontend:8080";' in edge_conf, edge_conf
+assert 'set $api_upstream "sentiment-api:8080";' not in edge_conf, edge_conf
+
+print("validated sentiment frontend auth gate, health, and API proxy routing")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated sentiment frontend auth gate, health, and API token forwarding"* ]]
+  [[ "${output}" == *"validated sentiment frontend auth gate, health, and API proxy routing"* ]]
 }
 
 @test "app oauth2 proxies refresh forwarded access tokens before API use" {
@@ -552,10 +607,10 @@ wrappers = (
 shared = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
 catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 
-assert '"prebuild": "make -C apps/sentiment/app-go build-linux"' in catalog
-assert '"prebuild": "make -C apps/subnetcalc/app-go build-linux"' in catalog
-assert '"apps/sentiment/app-go/go.sum"' in catalog
-assert '"apps/subnetcalc/app-go/go.sum"' in catalog
+assert '"prebuild": "make -C apps/sentiment/app build-linux"' in catalog
+assert '"prebuild": "make -C apps/subnetcalc/app build-linux"' in catalog
+assert '"apps/sentiment/app/go.sum"' in catalog
+assert '"apps/subnetcalc/app/go.sum"' in catalog
 assert "image_build_run_prebuild()" in shared
 assert 'image_build_run_prebuild "${category}" "${image_id}"' in shared
 
@@ -614,30 +669,30 @@ repo_root = Path(os.environ["REPO_ROOT"])
 checks = {
     "apps/sentiment/.gitea/workflows/build-images.yaml": {
         "required": [
-            '"app-go/**"',
+            '"app/**"',
             "golang:1.26-alpine",
-            "-v \"${APPS_DIR}/sentiment/app-go:/src\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${APPS_DIR}/sentiment/app-go\"",
+            "-v \"${APPS_DIR}/sentiment/app:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${APPS_DIR}/sentiment/app\"",
             "docker tag \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}\"",
         ],
         "forbidden": [
-            "-v \"${WORKDIR}/app-go:/src\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./app-go",
+            "-v \"${WORKDIR}/app:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./app",
             "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./api-sentiment",
             "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}\" ./frontend-react-vite/sentiment-auth-ui",
         ],
     },
     "apps/subnetcalc/.gitea/workflows/build-images.yaml": {
         "required": [
-            '"app-go/**"',
+            '"app/**"',
             "golang:1.26-alpine",
-            "-v \"${APPS_DIR}/subnetcalc/app-go:/src\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${APPS_DIR}/subnetcalc/app-go\"",
+            "-v \"${APPS_DIR}/subnetcalc/app:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${APPS_DIR}/subnetcalc/app\"",
             "docker tag \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}\"",
         ],
         "forbidden": [
-            "-v \"${WORKDIR}/app-go:/src\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./app-go",
+            "-v \"${WORKDIR}/app:/src\"",
+            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./app",
             "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}\"",
             "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}\" -f ./frontend-typescript-vite/Dockerfile .",
             "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./api-fastapi-container-app",
@@ -678,7 +733,7 @@ from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 
-server_go = (repo_root / "apps/subnetcalc/app-go/internal/app/server.go").read_text(encoding="utf-8")
+server_go = (repo_root / "apps/subnetcalc/app/internal/app/server.go").read_text(encoding="utf-8")
 
 assert 'mux.HandleFunc("GET /runtime-config.js", server.runtimeConfig)' in server_go, server_go
 assert 'w.Header().Set("Content-Type", "application/javascript")' in server_go, server_go
@@ -701,7 +756,7 @@ from pathlib import Path
 repo_root = Path(os.environ["REPO_ROOT"])
 
 expected_counts = {
-    "apps/sentiment/app-go/Dockerfile": {
+    "apps/sentiment/app/Dockerfile": {
         "FROM dhi.io/static:20260413-alpine3.23": 1,
     },
     "apps/backstage/Dockerfile": {
@@ -711,7 +766,7 @@ expected_counts = {
         "image: quay.io/keycloak/keycloak:26.6.1": 1,
         "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
     },
-    "apps/subnetcalc/app-go/Dockerfile": {
+    "apps/subnetcalc/app/Dockerfile": {
         "FROM dhi.io/static:20260413-alpine3.23": 1,
     },
     "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
@@ -745,7 +800,7 @@ print(f"validated {validated} external image expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 14 external image expectation(s)"* ]]
+  [[ "${output}" == *"validated 12 external image expectation(s)"* ]]
 }
 
 @test "subnetcalc frontend stays single-replica for local laptop clusters" {
@@ -801,15 +856,27 @@ required_lines = [
     "docker:29.4.1-cli",
     "gitea/act_runner:0.4.1",
     "kindest/node:v1.35.1",
+    "dhi.io/golang:1.26-alpine3.23-dev",
+    "dhi.io/static:20260413-alpine3.23",
     "python:3.12.13-alpine3.23",
     "docker.io/curlimages/curl:8.19.0",
     "curlimages/curl:8.19.0",
+]
+
+retired_lines = [
+    "dhi.io/node:22-debian13-dev",
+    "golang:1.26.2-alpine3.23",
+    "oven/bun:1.3.13",
+    "oven/bun:1.3.13-alpine",
+    "node:22-alpine",
 ]
 
 for relative_path in preload_files:
     content = (repo_root / relative_path).read_text(encoding="utf-8")
     for needle in required_lines:
         assert needle in content, (relative_path, needle)
+    for needle in retired_lines:
+        assert needle not in content, (relative_path, needle)
 
 lock_file = (repo_root / "terraform/kubernetes/scripts/preload-images.linux-arm64.lock").read_text(encoding="utf-8")
 lock_expectations = [
@@ -820,18 +887,18 @@ lock_expectations = [
     "python:3.12.13-alpine3.23",
     "docker.io/curlimages/curl:8.19.0",
     "curlimages/curl:8.19.0",
-    "oven/bun:1.3.13",
-    "oven/bun:1.3.13-alpine",
-    "golang:1.26.2-alpine3.23",
 ]
 
 for image_ref in lock_expectations:
     pattern = re.compile(rf"^{re.escape(image_ref)}\t.+@sha256:[0-9a-f]+$", re.MULTILINE)
     assert pattern.search(lock_file), image_ref
 
+for image_ref in retired_lines:
+    assert f"{image_ref}\t" not in lock_file, image_ref
+
 print(f"validated {len(preload_files)} preload image snapshot(s) and {len(lock_expectations)} lock entry(ies)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 preload image snapshot(s) and 10 lock entry(ies)"* ]]
+  [[ "${output}" == *"validated 4 preload image snapshot(s) and 7 lock entry(ies)"* ]]
 }

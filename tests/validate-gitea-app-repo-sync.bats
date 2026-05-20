@@ -11,8 +11,8 @@ setup() {
   target_dir="${BATS_TEST_TMPDIR}/target"
 
   mkdir -p \
-    "${source_dir}/app-go/internal" \
-    "${source_dir}/app-go/.run/build" \
+    "${source_dir}/app/internal" \
+    "${source_dir}/app/.run/build" \
     "${source_dir}/apim-simulator/.run/cache" \
     "${source_dir}/frontend/node_modules/pkg" \
     "${source_dir}/api/.venv/lib" \
@@ -20,8 +20,8 @@ setup() {
     "${source_dir}/api/.ruff_cache" \
     "${source_dir}/.git/objects"
 
-  printf 'package app\n' >"${source_dir}/app-go/internal/app.go"
-  printf 'generated\n' >"${source_dir}/app-go/.run/build/output"
+  printf 'package app\n' >"${source_dir}/app/internal/app.go"
+  printf 'generated\n' >"${source_dir}/app/.run/build/output"
   printf 'generated\n' >"${source_dir}/apim-simulator/.run/cache/blob"
   printf 'dependency\n' >"${source_dir}/frontend/node_modules/pkg/index.js"
   printf 'dependency\n' >"${source_dir}/api/.venv/lib/site.py"
@@ -34,8 +34,8 @@ setup() {
 
   copy_app_repo_source_dir "${source_dir}" "${target_dir}"
 
-  [ -f "${target_dir}/app-go/internal/app.go" ]
-  [ ! -e "${target_dir}/app-go/.run" ]
+  [ -f "${target_dir}/app/internal/app.go" ]
+  [ ! -e "${target_dir}/app/.run" ]
   [ ! -e "${target_dir}/apim-simulator/.run" ]
   [ ! -e "${target_dir}/frontend/node_modules" ]
   [ ! -e "${target_dir}/api/.venv" ]

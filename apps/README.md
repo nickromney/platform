@@ -12,9 +12,8 @@ This directory contains the source applications that feed the local platform dem
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)
 - [`apim-simulator/`](apim-simulator/) contains the local Azure API Management simulator used by the Kubernetes APIM gateway demo and by app-local compose workflows.
   It keeps its own standalone Docker Compose entrypoints, for example `make -C apps/apim-simulator up` and `make -C apps/apim-simulator smoke-hello`.
-- [`idp-core/`](idp-core/) contains the Portal API. The default shipped runtime
-  is the Go implementation under `idp-core/app-go`; the Python implementation is
-  retained as a deprecated compatibility reference.
+- [`idp-core/`](idp-core/) contains the Portal API as a Go single-binary app
+  under `idp-core/app`.
 - [`idp-mcp/`](idp-mcp/) contains a small dependency-free stdlib MCP adapter for
   the Portal API.
 - [`idp-sdk/`](idp-sdk/) contains a dependency-free browser `fetch` wrapper for
