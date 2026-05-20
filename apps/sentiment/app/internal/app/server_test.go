@@ -37,19 +37,38 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		t.Fatalf("frontend Cache-Control=%q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/logged-out.html", nil)
+	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("logged-out page returned %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("signed-out page returned %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, text := range []string{"Signed out", "Sign in again", "/.auth/login/sso", "window.SENTIMENT_RUNTIME_CONFIG"} {
+	for _, text := range []string{
+		"Sentiment",
+		"Signed out",
+		"Sign in now",
+		"/.auth/login/sso",
+		`id="theme-switcher"`,
+		`class="theme-toggle"`,
+		"redirect-delay",
+		"Redirecting to sign in in 5 seconds",
+		"pce-theme",
+		"setTimeout(() => {",
+		"window.location.assign(loginLink.href)",
+		"5000",
+	} {
 		if !strings.Contains(rec.Body.String(), text) {
-			t.Fatalf("logged-out page missing %q: %s", text, rec.Body.String())
+			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
 	}
+	if strings.Contains(rec.Body.String(), `loginLink.href = "/"`) {
+		t.Fatalf("signed-out page must not rewrite SSO login to the local app root: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "logged-out.html") {
+		t.Fatalf("signed-out page must not retain the old logged-out route name: %s", rec.Body.String())
+	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
-		t.Fatalf("logged-out Cache-Control=%q", got)
+		t.Fatalf("signed-out Cache-Control=%q", got)
 	}
 }
 
@@ -245,14 +264,28 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`data-theme="system"`, `id="theme-switcher"`, `id="theme-icon"`, `id="user-info"`, `id="auth-state"`, `id="logout-btn"`, `id="diagnostics"`} {
+	for _, text := range []string{`<main>`, `<header>`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="login-btn"`, `>Sign In<`, `id="logout-btn"`, `>Sign Out<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
 	}
+	html := string(indexHTML)
+	if strings.Contains(html, `<main class="shell">`) {
+		t.Fatalf("frontend shell must use the shared bare main container: %s", html)
+	}
+	if strings.Index(html, `<header>`) > strings.Index(html, `<section>`) {
+		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
+	}
+	if strings.Index(html, `id="login-btn"`) > strings.Index(html, `id="logout-btn"`) ||
+		strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
+		t.Fatalf("frontend shell actions must be ordered auth, sign in, sign out, theme: %s", html)
+	}
 	for _, text := range []string{
-		"localStorage.getItem(\"theme\")",
-		"localStorage.setItem(\"theme\", nextTheme)",
+		"readThemeCookie()",
+		"writeThemeCookie(nextTheme)",
+		"pce-theme",
+		"themeCookieDomain",
+		"document.cookie",
 		"toggleTheme",
 		"themePreference",
 		`matchMedia("(prefers-color-scheme: dark)")`,
@@ -269,8 +302,9 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		"usesGatewayAuth()",
 		"fetchGatewaySession()",
 		"fetch(\"/.auth/me\"",
+		"payload.clientPrincipal",
 		"gatewayDisplayName(session)",
-		"/.auth/logout?post_logout_redirect_uri=/logged-out.html",
+		"/oauth2/sign_out?rd=/signed-out.html",
 		"timedFetchJSON(",
 		"apiURL(",
 		"apiBasePath",
@@ -288,6 +322,9 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		if !strings.Contains(string(appJS), text) {
 			t.Fatalf("frontend app.js missing %q", text)
 		}
+	}
+	if strings.Contains(string(appJS), `localStorage.setItem("theme"`) {
+		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
 	}
 
 	styleCSS, err := web.ReadFile("web/style.css")

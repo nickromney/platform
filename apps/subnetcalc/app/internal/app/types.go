@@ -49,33 +49,6 @@ type providerRangeRequest struct {
 	Address  string `json:"address"`
 }
 
-type networkPlanRequest struct {
-	Parent       string                   `json:"parent"`
-	Mode         string                   `json:"mode"`
-	Requirements []networkPlanRequirement `json:"requirements"`
-}
-
-type networkPlanRequirement struct {
-	Name  string `json:"name"`
-	Hosts uint64 `json:"hosts"`
-}
-
-type networkPlanResponse struct {
-	Parent      string                  `json:"parent"`
-	Mode        string                  `json:"mode"`
-	Allocations []networkPlanAllocation `json:"allocations"`
-}
-
-type networkPlanAllocation struct {
-	Name            string `json:"name"`
-	Network         string `json:"network"`
-	PrefixLength    int    `json:"prefix_length"`
-	TotalAddresses  uint64 `json:"total_addresses"`
-	UsableAddresses uint64 `json:"usable_addresses"`
-	FirstUsableIP   string `json:"first_usable_ip"`
-	LastUsableIP    string `json:"last_usable_ip"`
-}
-
 type subnetIPv4Response struct {
 	Network          string  `json:"network"`
 	Mode             string  `json:"mode"`

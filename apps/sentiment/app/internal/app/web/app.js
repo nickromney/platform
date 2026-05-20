@@ -70,13 +70,11 @@ function analyzeButton() {
 }
 
 async function initializeAuthState() {
-	const userInfo = document.getElementById("user-info");
 	const authState = document.getElementById("auth-state");
 	const loginButton = document.getElementById("login-btn");
 	const logoutButton = document.getElementById("logout-btn");
 
 	if (usesGatewayAuth()) {
-		userInfo.hidden = false;
 		const session = await fetchGatewaySession();
 		if (session) {
 			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
@@ -336,10 +334,7 @@ function decodeAPIMTrace(value) {
 }
 
 function initializeTheme() {
-	const savedTheme = themeOptions.includes(localStorage.getItem("theme"))
-		? localStorage.getItem("theme")
-		: "system";
-	applyTheme(savedTheme);
+	applyTheme(readThemeCookie());
 	window
 		.matchMedia("(prefers-color-scheme: dark)")
 		.addEventListener("change", () => {
@@ -355,8 +350,35 @@ function toggleTheme() {
 		themeOptions[
 			(themeOptions.indexOf(currentTheme) + 1) % themeOptions.length
 		];
-	localStorage.setItem("theme", nextTheme);
+	writeThemeCookie(nextTheme);
 	applyTheme(nextTheme);
+}
+
+function readThemeCookie() {
+	const prefix = "pce-theme=";
+	const cookieValue = document.cookie
+		.split(";")
+		.map((value) => value.trim())
+		.find((value) => value.startsWith(prefix));
+	const theme = cookieValue
+		? decodeURIComponent(cookieValue.slice(prefix.length))
+		: "";
+	return themeOptions.includes(theme) ? theme : "system";
+}
+
+function writeThemeCookie(theme) {
+	const safeTheme = themeOptions.includes(theme) ? theme : "system";
+	const maxAge = 60 * 60 * 24 * 365;
+	const secure = window.location.protocol === "https:" ? "; Secure" : "";
+	const domain = themeCookieDomain();
+	// biome-ignore lint/suspicious/noDocumentCookie: This shared preference must span dev, uat, and admin subdomains.
+	document.cookie = `pce-theme=${encodeURIComponent(safeTheme)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${domain}${secure}`;
+}
+
+function themeCookieDomain() {
+	return window.location.hostname.endsWith("127.0.0.1.sslip.io")
+		? "; Domain=.127.0.0.1.sslip.io"
+		: "";
 }
 
 function themePreference() {
@@ -370,10 +392,16 @@ function applyTheme(theme) {
 }
 
 function updateThemeIcon(theme) {
-	const icon = document.getElementById("theme-icon");
-	if (icon) {
-		icon.textContent =
-			theme === "system" ? "Light" : theme === "light" ? "Dark" : "System";
+	const switcher = document.getElementById("theme-switcher");
+	if (switcher instanceof HTMLButtonElement) {
+		const nextTheme =
+			themeOptions[(themeOptions.indexOf(theme) + 1) % themeOptions.length];
+		switcher.dataset.themeChoice = theme;
+		switcher.setAttribute(
+			"aria-label",
+			`Theme: ${theme}. Switch to ${nextTheme} theme.`,
+		);
+		switcher.title = `Theme: ${theme}. Switch to ${nextTheme} theme.`;
 	}
 }
 
@@ -421,9 +449,7 @@ function loginWithGateway() {
 }
 
 function logoutFromGateway() {
-	window.location.assign(
-		"/.auth/logout?post_logout_redirect_uri=/logged-out.html",
-	);
+	window.location.assign("/oauth2/sign_out?rd=/signed-out.html");
 }
 
 function escapeHTML(value) {

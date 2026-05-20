@@ -10,7 +10,6 @@ const paths = {
 	private: "/api/v1/ipv4/check-private",
 	cloudflare: "/api/v1/ipv4/check-cloudflare",
 	providerRange: "/api/v1/provider-ranges/check",
-	networkPlan: "/api/v1/network-plan/allocate",
 	subnet: "/api/v1/ipv4/subnet-info",
 	whoami: "/api/whoami",
 };
@@ -30,9 +29,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	document
 		.getElementById("provider-form")
 		.addEventListener("submit", providerRangeCheck);
-	document
-		.getElementById("network-plan-form")
-		.addEventListener("submit", allocateNetworkPlan);
 	document.getElementById("identity-form").addEventListener("submit", whoami);
 	document
 		.getElementById("theme-switcher")
@@ -67,10 +63,6 @@ function inputElement(id) {
 
 function selectElement(id) {
 	return /** @type {HTMLSelectElement} */ (requireElement(id));
-}
-
-function textAreaElement(id) {
-	return /** @type {HTMLTextAreaElement} */ (requireElement(id));
 }
 
 async function initializeAuth() {
@@ -188,38 +180,6 @@ async function providerRangeCheck(event) {
 	focusResults();
 }
 
-async function allocateNetworkPlan(event) {
-	event.preventDefault();
-	const parent = inputElement("plan-parent").value.trim();
-	const mode = selectElement("plan-mode").value;
-	const requirements = parseHostRequirements(
-		textAreaElement("plan-requirements").value,
-	);
-	const content = prepareResults();
-
-	if (!apiReadyForUserAction()) {
-		content.innerHTML = `<p class="error">${escapeHTML(authRequiredMessage())}</p>`;
-		focusResults();
-		return;
-	}
-
-	content.textContent = "Loading...";
-	try {
-		const started = performance.now();
-		const plan = await timedPostJSON(paths.networkPlan, {
-			parent,
-			mode,
-			requirements,
-		});
-		const totalMs = Math.round(performance.now() - started);
-		content.innerHTML = renderNetworkPlan(plan);
-		content.insertAdjacentHTML("beforeend", renderPerformance(totalMs));
-	} catch (error) {
-		content.innerHTML = `<p class="error">${escapeHTML(userFacingAPIError(error))}</p>`;
-	}
-	focusResults();
-}
-
 function prepareResults() {
 	const results = document.getElementById("results");
 	results.hidden = false;
@@ -228,17 +188,6 @@ function prepareResults() {
 
 function focusResults() {
 	document.getElementById("results").focus();
-}
-
-function parseHostRequirements(value) {
-	return value
-		.split(/\r?\n/)
-		.map((line) => line.trim())
-		.filter(Boolean)
-		.map((line) => {
-			const [name, hosts] = line.split(",").map((part) => part.trim());
-			return { name, hosts: Number(hosts) };
-		});
 }
 
 async function refreshIdentity() {
@@ -441,7 +390,7 @@ function logoutFromOidc() {
 
 function gatewayLogoutURL() {
 	const oauthSignOut = new URL("/oauth2/sign_out", window.location.origin);
-	oauthSignOut.searchParams.set("rd", "/logged-out.html");
+	oauthSignOut.searchParams.set("rd", "/signed-out.html");
 	return oauthSignOut.toString();
 }
 
@@ -549,10 +498,7 @@ function base64Url(bytes) {
 }
 
 function initializeTheme() {
-	const savedTheme = themeOptions.includes(localStorage.getItem("theme"))
-		? localStorage.getItem("theme")
-		: "system";
-	applyTheme(savedTheme);
+	applyTheme(readThemeCookie());
 	window
 		.matchMedia("(prefers-color-scheme: dark)")
 		.addEventListener("change", () => {
@@ -568,8 +514,35 @@ function toggleTheme() {
 		themeOptions[
 			(themeOptions.indexOf(currentTheme) + 1) % themeOptions.length
 		];
-	localStorage.setItem("theme", nextTheme);
+	writeThemeCookie(nextTheme);
 	applyTheme(nextTheme);
+}
+
+function readThemeCookie() {
+	const prefix = "pce-theme=";
+	const cookieValue = document.cookie
+		.split(";")
+		.map((value) => value.trim())
+		.find((value) => value.startsWith(prefix));
+	const theme = cookieValue
+		? decodeURIComponent(cookieValue.slice(prefix.length))
+		: "";
+	return themeOptions.includes(theme) ? theme : "system";
+}
+
+function writeThemeCookie(theme) {
+	const safeTheme = themeOptions.includes(theme) ? theme : "system";
+	const maxAge = 60 * 60 * 24 * 365;
+	const secure = window.location.protocol === "https:" ? "; Secure" : "";
+	const domain = themeCookieDomain();
+	// biome-ignore lint/suspicious/noDocumentCookie: This shared preference must span dev, uat, and admin subdomains.
+	document.cookie = `pce-theme=${encodeURIComponent(safeTheme)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${domain}${secure}`;
+}
+
+function themeCookieDomain() {
+	return window.location.hostname.endsWith("127.0.0.1.sslip.io")
+		? "; Domain=.127.0.0.1.sslip.io"
+		: "";
 }
 
 function themePreference() {
@@ -583,10 +556,16 @@ function applyTheme(theme) {
 }
 
 function updateThemeIcon(theme) {
-	const icon = document.getElementById("theme-icon");
-	if (icon) {
-		icon.textContent =
-			theme === "system" ? "Light" : theme === "light" ? "Dark" : "System";
+	const switcher = document.getElementById("theme-switcher");
+	if (switcher instanceof HTMLButtonElement) {
+		const nextTheme =
+			themeOptions[(themeOptions.indexOf(theme) + 1) % themeOptions.length];
+		switcher.dataset.themeChoice = theme;
+		switcher.setAttribute(
+			"aria-label",
+			`Theme: ${theme}. Switch to ${nextTheme} theme.`,
+		);
+		switcher.title = `Theme: ${theme}. Switch to ${nextTheme} theme.`;
 	}
 }
 
@@ -763,22 +742,6 @@ function renderProviderRange(providerRange) {
 		rows.push(["Range Source Note", providerRange.data.range_source_note]);
 	if (matched.length) rows.push(["Matched Ranges", matched.join(", ")]);
 	return renderArticle("Provider Range Check", rows, providerRange.timing);
-}
-
-function renderNetworkPlan(plan) {
-	const rows = [
-		["Parent", plan.data.parent],
-		["Mode", plan.data.mode],
-		["Allocations", plan.data.allocations.length],
-	];
-	const allocationRows = plan.data.allocations.map((allocation) => [
-		allocation.name,
-		`${allocation.network} (${allocation.usable_addresses.toLocaleString()} usable, ${allocation.first_usable_ip} - ${allocation.last_usable_ip})`,
-	]);
-	return (
-		renderArticle("Network Plan", rows, plan.timing) +
-		`<article><h3>Allocations</h3>${renderTable(allocationRows)}</article>`
-	);
 }
 
 function renderArticle(title, rows, timing) {

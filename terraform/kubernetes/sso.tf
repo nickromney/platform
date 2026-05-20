@@ -1458,7 +1458,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-argocd
+          cookieName: ${local.admin_sso_cookie_name}
           configFile: ""
 
         service:
@@ -1566,7 +1566,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-gitea
+          cookieName: ${local.admin_sso_cookie_name}
           configFile: ""
 
         service:
@@ -1604,7 +1604,6 @@ spec:
           redirect-url: ${local.gitea_public_url}/oauth2/callback
           upstream: http://gitea-http.gitea.svc.cluster.local:3000
           allowed-group: ${local.sso_admin_group}
-          prompt: login
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
@@ -1675,7 +1674,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-hubble
+          cookieName: ${local.admin_sso_cookie_name}
           configFile: ""
 
         service:
@@ -1713,7 +1712,6 @@ spec:
           redirect-url: ${local.hubble_public_url}/oauth2/callback
           upstream: http://hubble-ui.kube-system.svc.cluster.local:80
           allowed-group: ${local.sso_admin_group}
-          prompt: login
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
@@ -1783,7 +1781,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-grafana
+          cookieName: ${local.admin_sso_cookie_name}
           configFile: ""
 
         service:
@@ -1821,7 +1819,6 @@ spec:
           redirect-url: ${local.grafana_public_url}/oauth2/callback
           upstream: http://grafana.observability.svc.cluster.local:3000
           allowed-group: ${local.sso_admin_group}
-          prompt: login
           cookie-domain: ${local.admin_cookie_domain}
           whitelist-domain: ${local.admin_whitelist_domains}
           cookie-secure: "true"
@@ -1895,7 +1892,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-signoz
+          cookieName: ${local.admin_sso_cookie_name}
           configFile: ""
 
         service:
@@ -2005,7 +2002,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-sentiment-dev
+          cookieName: ${local.dev_sso_cookie_name}
           configFile: ""
 
         service:
@@ -2054,7 +2051,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2121,7 +2118,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-sentiment-uat
+          cookieName: ${local.uat_sso_cookie_name}
           configFile: ""
 
         service:
@@ -2170,7 +2167,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2237,7 +2234,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-subnetcalc-dev
+          cookieName: ${local.dev_sso_cookie_name}
           configFile: ""
 
         service:
@@ -2285,7 +2282,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2352,7 +2349,7 @@ spec:
           tag: 7.15.2-debian13
         config:
           existingSecret: oauth2-proxy-oidc
-          cookieName: kind-v2-sso-subnetcalc-uat
+          cookieName: ${local.uat_sso_cookie_name}
           configFile: ""
 
         service:
@@ -2400,7 +2397,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(logged-out\.html|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2517,6 +2514,7 @@ ${try(each.value.backend_logout_arg, "")}
           session-store-type: redis
           redis-connection-url: ${local.oauth2_proxy_redis_url}
           show-debug-on-error: "true"
+${try("          skip-auth-regex: ${each.value.skip_auth_regex}", "")}
           pass-access-token: "true"
           pass-user-headers: "true"
           set-xauthrequest: "true"

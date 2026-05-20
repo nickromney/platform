@@ -162,9 +162,11 @@ run "sso_enabled_argocd_oidc_disabled" {
 
   assert {
     condition = alltrue([
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "prompt: login"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_argocd[0].yaml_body, "cookieName: kind-v2-sso-admin"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "cookieName: kind-v2-sso-admin"),
+      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_gitea[0].yaml_body, "prompt: login"),
     ])
-    error_message = "Expected always-on admin-only oauth2-proxy apps to force an OIDC login prompt so a stale dev Keycloak session cannot silently produce an admin-site 403"
+    error_message = "Expected admin oauth2-proxy apps to share the admin SSO cookie without forcing a fresh login prompt"
   }
 
   assert {
@@ -243,6 +245,59 @@ run "sso_enabled_argocd_oidc_enabled" {
       strcontains(file("${path.module}/scripts/check-sso.sh"), "EXPECTED_CLUSTER_NAME=\"$${KUBECONFIG_CONTEXT#kind-}\""),
     ])
     error_message = "Expected SSO/RBAC checkers to exercise isolated real tokens and resolve kind context names to kind cluster names"
+  }
+}
+
+run "app_sso_cookies_are_environment_scoped" {
+  command = plan
+
+  variables {
+    cni_provider                    = "none"
+    enable_hubble                   = false
+    enable_argocd                   = true
+    enable_gitea                    = true
+    enable_signoz                   = false
+    enable_gateway_tls              = true
+    enable_sso                      = true
+    enable_argocd_oidc              = false
+    sso_provider                    = "keycloak"
+    enable_headlamp                 = false
+    enable_app_repo_sentiment       = true
+    enable_app_repo_subnetcalc      = true
+    enable_apim_simulator           = true
+    enable_host_local_registry      = true
+    prefer_external_workload_images = true
+    external_workload_image_refs = {
+      "sentiment-api"       = "host.docker.internal:5002/platform/sentiment-api:test"
+      "sentiment-auth-ui"   = "host.docker.internal:5002/platform/sentiment-auth-ui:test"
+      "subnetcalc-api"      = "host.docker.internal:5002/platform/subnetcalc-api:test"
+      "subnetcalc-frontend" = "host.docker.internal:5002/platform/subnetcalc-frontend:test"
+    }
+    gitea_admin_pwd       = "test-admin-password"
+    gitea_member_user_pwd = "test-demo-password"
+  }
+
+  assert {
+    condition = alltrue([
+      length(kubectl_manifest.argocd_app_oauth2_proxy_sentiment) == 1,
+      length(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc) == 1,
+      length(kubectl_manifest.argocd_app_oauth2_proxy_idp) > 0,
+    ])
+    error_message = "Expected dev app oauth2-proxy Applications to render when dev apps and MCP are enabled"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_sentiment[0].yaml_body, "cookieName: kind-v2-sso-dev"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc[0].yaml_body, "cookieName: kind-v2-sso-dev"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "cookieName: kind-v2-sso-dev"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["chatgpt"].yaml_body, "skip-auth-regex: ^/(signed-out\\.html|style\\.css|favicon\\.svg)$"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_sentiment_uat[0].yaml_body, "cookieName: kind-v2-sso-uat"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc_uat[0].yaml_body, "cookieName: kind-v2-sso-uat"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["api"].yaml_body, "cookieName: kind-v2-sso-portal"),
+      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_idp["console"].yaml_body, "cookieName: kind-v2-sso-portal"),
+    ])
+    error_message = "Expected oauth2-proxy app sessions to share one cookie per cookie domain so SSO carries across matching apps without a fresh Keycloak redirect"
   }
 }
 

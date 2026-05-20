@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Signed out - ChatGPT Sim</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>ChatGPT Sim</h1>
+          <p>MCP connector shell for OAuth discovery and tool calls.</p>
+        </div>
+        <div class="header-actions">
+          <a id="login-link" class="sign-in-link" href="/.auth/login/sso">Sign in now</a>
+          <button id="theme-switcher" class="theme-toggle" type="button" aria-label="Theme: system. Switch to light theme." title="Theme: system. Switch to light theme." data-theme-choice="system">
+            <svg data-theme-icon="system" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8"></path><path d="M12 16v4"></path></svg>
+            <svg data-theme-icon="light" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+            <svg data-theme-icon="dark" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"></path></svg>
+          </button>
+        </div>
+      </header>
+      <section class="panel">
+        <h2>Signed out</h2>
+        <p>Your ChatGPT Sim session has ended.</p>
+        <p id="redirect-delay">Redirecting to sign in in 5 seconds.</p>
+      </section>
+    </main>
+    <script>
+      const themeOptions = ["system", "light", "dark"];
+      const loginLink = document.getElementById("login-link");
+      const themeSwitcher = document.getElementById("theme-switcher");
+
+      function readThemeCookie() {
+        const prefix = "pce-theme=";
+        const cookieValue = document.cookie.split(";").map((value) => value.trim()).find((value) => value.startsWith(prefix));
+        const theme = cookieValue ? decodeURIComponent(cookieValue.slice(prefix.length)) : "";
+        return themeOptions.includes(theme) ? theme : "system";
+      }
+
+      function themeCookieDomain() {
+        return window.location.hostname.endsWith("127.0.0.1.sslip.io") ? "; Domain=.127.0.0.1.sslip.io" : "";
+      }
+
+      function writeThemeCookie(theme) {
+        const safeTheme = themeOptions.includes(theme) ? theme : "system";
+        const secure = window.location.protocol === "https:" ? "; Secure" : "";
+        document.cookie = `pce-theme=${encodeURIComponent(safeTheme)}; Path=/; Max-Age=31536000; SameSite=Lax${themeCookieDomain()}${secure}`;
+      }
+
+      function applyTheme(theme) {
+        const nextTheme = themeOptions[(themeOptions.indexOf(theme) + 1) % themeOptions.length];
+        document.documentElement.setAttribute("data-theme", theme);
+        themeSwitcher.dataset.themeChoice = theme;
+        themeSwitcher.setAttribute("aria-label", `Theme: ${theme}. Switch to ${nextTheme} theme.`);
+        themeSwitcher.title = `Theme: ${theme}. Switch to ${nextTheme} theme.`;
+      }
+
+      applyTheme(readThemeCookie());
+      themeSwitcher.addEventListener("click", () => {
+        const theme = document.documentElement.getAttribute("data-theme") || "system";
+        const nextTheme = themeOptions[(themeOptions.indexOf(theme) + 1) % themeOptions.length];
+        writeThemeCookie(nextTheme);
+        applyTheme(nextTheme);
+      });
+      setTimeout(() => {
+        window.location.assign(loginLink.href);
+      }, 5000);
+    </script>
+  </body>
+</html>

@@ -53,6 +53,7 @@ func NewServer(cfg Config, client HTTPDoer) http.Handler {
 		mux.HandleFunc("POST /api/connectors", s.addConnector)
 		mux.HandleFunc("DELETE /api/connectors/{id}", s.deleteConnector)
 		mux.HandleFunc("POST /api/chat", s.shellChat)
+		mux.HandleFunc("GET /.auth/me", s.gatewaySession)
 		mux.HandleFunc("GET /runtime-config.js", s.runtimeConfig)
 		mux.HandleFunc("GET /favicon.ico", s.favicon)
 		mux.HandleFunc("GET /oauth/callback", s.oauthCallback)
@@ -87,6 +88,47 @@ func (s *server) shellHealth(w http.ResponseWriter, _ *http.Request) {
 		"mcp_url":        s.cfg.MCPURL,
 		"model_provider": s.modelProvider(),
 		"dependencies":   "go-stdlib-only",
+	})
+}
+
+func (s *server) gatewaySession(w http.ResponseWriter, r *http.Request) {
+	email := firstHeader(r,
+		"X-Auth-Request-Email",
+		"X-Forwarded-Email",
+	)
+	username := firstHeader(r,
+		"X-Auth-Request-Preferred-Username",
+		"X-Forwarded-Preferred-Username",
+		"X-Auth-Request-User",
+		"X-Forwarded-User",
+	)
+	subject := firstHeader(r,
+		"X-Auth-Request-Subject",
+		"X-Forwarded-Subject",
+	)
+	displayName := firstNonEmpty(username, email, subject)
+	if displayName == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"clientPrincipal": nil})
+		return
+	}
+	claims := make([]map[string]string, 0, 3)
+	for _, claim := range []struct {
+		name  string
+		value string
+	}{
+		{name: "name", value: displayName},
+		{name: "preferred_username", value: firstNonEmpty(username, email)},
+		{name: "email", value: email},
+	} {
+		if claim.value != "" {
+			claims = append(claims, map[string]string{"typ": claim.name, "val": claim.value})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clientPrincipal": map[string]any{
+			"userDetails": displayName,
+			"claims":      claims,
+		},
 	})
 }
 
@@ -1039,6 +1081,24 @@ func outboundAuthorization(r *http.Request) string {
 	for _, header := range []string{"X-Forwarded-Access-Token", "X-Auth-Request-Access-Token"} {
 		if value := strings.TrimSpace(r.Header.Get(header)); value != "" {
 			return "Bearer " + value
+		}
+	}
+	return ""
+}
+
+func firstHeader(r *http.Request, names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(r.Header.Get(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
 		}
 	}
 	return ""

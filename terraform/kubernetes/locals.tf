@@ -53,6 +53,10 @@ locals {
   uat_whitelist_domains                = var.gateway_https_host_port == 443 ? local.uat_cookie_domain : "${local.uat_cookie_domain},${local.uat_cookie_domain}:${var.gateway_https_host_port}"
   portal_cookie_domain                 = ".${local.platform_base_domain_effective}"
   portal_whitelist_domains             = var.gateway_https_host_port == 443 ? local.portal_cookie_domain : "${local.portal_cookie_domain},${local.portal_cookie_domain}:${var.gateway_https_host_port}"
+  admin_sso_cookie_name                = "kind-v2-sso-admin"
+  dev_sso_cookie_name                  = "kind-v2-sso-dev"
+  uat_sso_cookie_name                  = "kind-v2-sso-uat"
+  portal_sso_cookie_name               = "kind-v2-sso-portal"
   oauth2_proxy_session_store_service   = "oauth2-proxy-session-store"
   oauth2_proxy_redis_url               = "redis://${local.oauth2_proxy_session_store_service}.sso.svc.cluster.local:6379"
   oauth2_proxy_backend_logout_url      = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/logout?id_token_hint={id_token}" : ""
@@ -122,7 +126,7 @@ locals {
         public_url       = local.idp_portal_public_url
         upstream         = "http://backstage.idp.svc.cluster.local:7007"
         group            = local.sso_viewer_group
-        cookie_name      = "kind-v2-sso-portal"
+        cookie_name      = local.portal_sso_cookie_name
         cookie_domain    = local.portal_cookie_domain
         whitelist_domain = local.portal_whitelist_domains
       }
@@ -133,7 +137,7 @@ locals {
         public_url       = local.idp_api_public_url
         upstream         = "http://idp-core.idp.svc.cluster.local:8080"
         group            = local.sso_viewer_group
-        cookie_name      = "kind-v2-sso-portal-api"
+        cookie_name      = local.portal_sso_cookie_name
         cookie_domain    = local.portal_cookie_domain
         whitelist_domain = local.portal_whitelist_domains
       }
@@ -145,7 +149,7 @@ locals {
       public_url       = local.mcp_console_public_url
       upstream         = "http://mcp-inspector.mcp.svc.cluster.local:6274"
       group            = local.sso_viewer_group
-      cookie_name      = "kind-v2-sso-mcp-console"
+      cookie_name      = local.portal_sso_cookie_name
       cookie_domain    = local.portal_cookie_domain
       whitelist_domain = local.portal_whitelist_domains
     }
@@ -156,10 +160,11 @@ locals {
       public_url         = local.chatgpt_sim_public_url
       upstream           = "http://chatgpt-sim.dev.svc.cluster.local:8080"
       group              = local.sso_viewer_group
-      cookie_name        = "kind-v2-sso-chatgpt-sim"
+      cookie_name        = local.dev_sso_cookie_name
       cookie_domain      = local.dev_cookie_domain
       whitelist_domain   = local.dev_whitelist_domains
       backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(signed-out\\.html|style\\.css|favicon\\.svg)$"
     }
   }
   sso_oauth2_proxy_redirect_uris = distinct(concat(

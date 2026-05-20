@@ -146,14 +146,54 @@ button {
   cursor: pointer;
 }
 
+.sign-in-link {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  text-decoration: none;
+}
+
+.theme-toggle {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  border-color: var(--field-border);
+  background: var(--field);
+  color: var(--text);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.theme-toggle[data-theme-choice="system"] [data-theme-icon="system"],
+.theme-toggle[data-theme-choice="light"] [data-theme-icon="light"],
+.theme-toggle[data-theme-choice="dark"] [data-theme-icon="dark"] {
+  display: block;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 160px 120px;
   gap: 10px;
-}
-
-.plan-row {
-  grid-template-columns: minmax(0, 1fr) 160px;
 }
 
 .examples {
@@ -225,6 +265,10 @@ td {
   .auth-state {
     max-width: 100%;
     text-align: left;
+  }
+
+  .theme-toggle {
+    width: 42px;
   }
 
   .form-row {

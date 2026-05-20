@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -181,19 +180,6 @@ func (s *server) refreshProviderRangeCache(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	resp, err := s.analyzer.refreshProviderRangeCache(r, req.Provider)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (s *server) allocateNetworkPlan(w http.ResponseWriter, r *http.Request) {
-	var req networkPlanRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	resp, err := s.analyzer.allocateNetworkPlan(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
 		return
@@ -598,105 +584,6 @@ func (a *subnetAnalyzer) subnetInfoIPv4(networkStr, mode string) (subnetIPv4Resp
 		UsableAddresses: total - uint64(offset) - 1, FirstUsableIP: uint32ToIPv4(networkIP + offset).String(),
 		LastUsableIP: uint32ToIPv4(broadcast - 1).String(),
 	}, nil
-}
-
-func (a *subnetAnalyzer) allocateNetworkPlan(req networkPlanRequest) (networkPlanResponse, error) {
-	if len(req.Requirements) == 0 {
-		return networkPlanResponse{}, fmt.Errorf("At least one requirement is required")
-	}
-	if _, err := modeOffset(req.Mode); err != nil {
-		return networkPlanResponse{}, err
-	}
-	ip, parent, err := net.ParseCIDR(req.Parent)
-	if err != nil || ip.To4() == nil {
-		return networkPlanResponse{}, fmt.Errorf("parent must be an IPv4 CIDR network")
-	}
-	parentPrefix, bits := parent.Mask.Size()
-	if bits != 32 {
-		return networkPlanResponse{}, fmt.Errorf("parent must be an IPv4 CIDR network")
-	}
-	parentStart := ipv4ToUint32(parent.IP)
-	parentSize := uint64(1) << uint(32-parentPrefix)
-	parentEnd := uint64(parentStart) + parentSize
-
-	requirements := append([]networkPlanRequirement(nil), req.Requirements...)
-	for _, requirement := range requirements {
-		if strings.TrimSpace(requirement.Name) == "" {
-			return networkPlanResponse{}, fmt.Errorf("requirement name is required")
-		}
-		if requirement.Hosts == 0 {
-			return networkPlanResponse{}, fmt.Errorf("requirement hosts must be greater than zero")
-		}
-	}
-	sort.SliceStable(requirements, func(i, j int) bool {
-		return requirements[i].Hosts > requirements[j].Hosts
-	})
-
-	cursor := uint64(parentStart)
-	allocations := make([]networkPlanAllocation, 0, len(requirements))
-	for _, requirement := range requirements {
-		prefix, total, err := smallestIPv4PrefixForHosts(requirement.Hosts, req.Mode)
-		if err != nil {
-			return networkPlanResponse{}, err
-		}
-		cursor = alignToBlock(cursor, total)
-		if cursor+total > parentEnd {
-			return networkPlanResponse{}, fmt.Errorf("requirements do not fit inside parent network")
-		}
-		network := fmt.Sprintf("%s/%d", uint32ToIPv4(uint32(cursor)).String(), prefix)
-		info, err := a.subnetInfoIPv4(network, req.Mode)
-		if err != nil {
-			return networkPlanResponse{}, err
-		}
-		allocations = append(allocations, networkPlanAllocation{
-			Name:            requirement.Name,
-			Network:         network,
-			PrefixLength:    prefix,
-			TotalAddresses:  info.TotalAddresses,
-			UsableAddresses: info.UsableAddresses,
-			FirstUsableIP:   info.FirstUsableIP,
-			LastUsableIP:    info.LastUsableIP,
-		})
-		cursor += total
-	}
-
-	return networkPlanResponse{Parent: req.Parent, Mode: req.Mode, Allocations: allocations}, nil
-}
-
-func smallestIPv4PrefixForHosts(hosts uint64, mode string) (int, uint64, error) {
-	for prefix := 32; prefix >= 0; prefix-- {
-		total := uint64(1) << uint(32-prefix)
-		usable, err := usableIPv4Addresses(prefix, total, mode)
-		if err != nil {
-			return 0, 0, err
-		}
-		if usable >= hosts {
-			return prefix, total, nil
-		}
-	}
-	return 0, 0, fmt.Errorf("host requirement is too large")
-}
-
-func usableIPv4Addresses(prefix int, total uint64, mode string) (uint64, error) {
-	offset, err := modeOffset(mode)
-	if err != nil {
-		return 0, err
-	}
-	if prefix == 31 || prefix == 32 {
-		return total, nil
-	}
-	reserved := uint64(offset) + 1
-	if total <= reserved {
-		return 0, nil
-	}
-	return total - reserved, nil
-}
-
-func alignToBlock(value, blockSize uint64) uint64 {
-	if blockSize == 0 || value%blockSize == 0 {
-		return value
-	}
-	return value + blockSize - (value % blockSize)
 }
 
 func modeOffset(mode string) (uint32, error) {

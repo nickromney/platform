@@ -319,7 +319,7 @@ data:
       }
 
       location = /.auth/logout {
-        return 302 https://$host/oauth2/sign_out?rd=/logged-out.html;
+        return 302 https://$host/oauth2/sign_out?rd=/signed-out.html;
       }
 
       location = /health {
@@ -359,7 +359,14 @@ data:
         return 301 /api/;
       }
 
-      location = /logged-out.html {
+      location = /signed-out.html {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://sentiment-auth-ui:8080;
+      }
+
+      location = /style.css {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -779,7 +786,7 @@ data:
       }
 
       location = /.auth/logout {
-        return 302 https://$host/oauth2/sign_out?rd=/logged-out.html;
+        return 302 https://$host/oauth2/sign_out?rd=/signed-out.html;
       }
 
       location ^~ /api/ {
@@ -803,7 +810,14 @@ data:
         return 301 /api/;
       }
 
-      location = /logged-out.html {
+      location = /signed-out.html {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://subnetcalc-frontend:8080;
+      }
+
+      location = /style.css {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
