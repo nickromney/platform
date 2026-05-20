@@ -887,7 +887,7 @@ variable "enable_agentgateway_ai_gateway" {
 variable "agentgateway_chart_version" {
   description = "agentgateway Helm chart version for the AI gateway experiment."
   type        = string
-  default     = "v1.2.0"
+  default     = "v2.2.1"
 }
 
 variable "agentgateway_namespace" {

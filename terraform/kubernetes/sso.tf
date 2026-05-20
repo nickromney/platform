@@ -2051,7 +2051,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2167,7 +2167,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2282,7 +2282,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true
@@ -2397,7 +2397,7 @@ ${local.oauth2_proxy_backend_logout_arg}
           - --session-store-type=redis
           - --redis-connection-url=${local.oauth2_proxy_redis_url}
           - --show-debug-on-error=true
-          - --skip-auth-regex=^/(signed-out\.html|style\.css|favicon\.svg)$
+          - --skip-auth-regex=^/(signed-out\.html|style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
           - --pass-access-token=true
           - --pass-user-headers=true
           - --set-xauthrequest=true

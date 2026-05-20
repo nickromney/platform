@@ -107,6 +107,10 @@ JSON
     "${REPO_ROOT}/terraform/kubernetes/apps/chatgpt-sim/all.yaml"
   [ "${status}" -eq 0 ]
 
+  run rg -n 'LLM_URL|http://agentgateway-ai-gateway\.agentgateway-system\.svc\.cluster\.local/v1/chat/completions|MCP_INTERNAL_URL|http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000/mcp' \
+    "${REPO_ROOT}/terraform/kubernetes/apps/chatgpt-sim/all.yaml"
+  [ "${status}" -eq 0 ]
+
   run rg -n 'httproute-chatgpt-sim.yaml' \
     "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml"
   [ "${status}" -eq 0 ]
@@ -126,6 +130,10 @@ JSON
   run rg -n '"k8s:io.kubernetes.pod.namespace": dev[[:space:]]*$' \
     "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml" \
     "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/agentgateway-ai-gateway-hardened.yaml"
+  [ "${status}" -eq 0 ]
+
+  run rg -n '"k8s:app.kubernetes.io/name": agentgateway-ai-gateway|port: "80"' \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/chatgpt-sim-hardened.yaml"
   [ "${status}" -eq 0 ]
 }
 

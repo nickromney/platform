@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -122,6 +124,44 @@ func TestCommentsPersistAndReturnNewestFirst(t *testing.T) {
 	}
 	if payload.Items[0].Timestamp == "" {
 		t.Fatalf("newest record missing timestamp: %#v", payload.Items[0])
+	}
+}
+
+func TestCommentsListToleratesLegacyAndCurrentCSVRows(t *testing.T) {
+	dataDir := t.TempDir()
+	csvPath := filepath.Join(dataDir, "comments.csv")
+	csvBody := strings.Join([]string{
+		"timestamp,text,label,confidence,latency_ms",
+		`"2026-03-16T11:59:22.294Z","I love how small and fast this is.","positive","1","8235"`,
+		`comment-1779305010205722583,2026-05-20T19:23:30.205722583Z,I absolutely love this. Great work and fantastic experience.,positive,0.97,1`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(csvPath, []byte(csvBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServer(Config{RuntimeRole: "backend", CSVPath: csvPath})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/comments?limit=25", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Items []Comment `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Items) != 2 {
+		t.Fatalf("items length=%d, body=%s", len(payload.Items), rec.Body.String())
+	}
+	if payload.Items[0].ID != "comment-1779305010205722583" || payload.Items[0].Label != Positive {
+		t.Fatalf("unexpected current row: %#v", payload.Items[0])
+	}
+	if payload.Items[1].ID == "" || payload.Items[1].Text != "I love how small and fast this is." {
+		t.Fatalf("unexpected legacy row: %#v", payload.Items[1])
 	}
 }
 
@@ -335,7 +375,7 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`<main>`, `<header>`, `/app-shell.css`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="api-status"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyse<`, `id="diagnostics"`} {
+	for _, text := range []string{`<main>`, `<header>`, `/app-shell.css`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="api-status"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}

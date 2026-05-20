@@ -49,6 +49,7 @@ function selectElement(id) {
 
 async function initialize() {
 	initializeTheme();
+	renderNetworkPath();
 	await initializeAuthState();
 	await refreshConnectors();
 	await refreshDiscovery();
@@ -162,7 +163,7 @@ function normalizeGatewaySession(payload) {
 	if (payload?.clientPrincipal) {
 		return /** @type {GatewaySession | null} */ (payload.clientPrincipal);
 	}
-	return /** @type {GatewaySession | null} */ (payload || null);
+	return null;
 }
 
 function gatewayDisplayName(session) {
@@ -188,6 +189,71 @@ function gatewayDisplayName(session) {
 
 function logoutFromGateway() {
 	window.location.assign("/oauth2/sign_out?rd=/signed-out.html");
+}
+
+function renderNetworkPath() {
+	const container = requireElement("network-path");
+	if (config.showNetworkPath === false) {
+		container.replaceChildren();
+		return;
+	}
+	const hops = configuredNetworkHops();
+	container.innerHTML = `<details>
+    <summary>Network Path (${hops.length} hops)</summary>
+    <div class="network-path">
+      ${hops
+				.map((hop, index) => {
+					const arrow = index > 0 ? `<div class="hop-arrow">&darr;</div>` : "";
+					const role = hop.role
+						? `<br><em>${escapeHTML(String(hop.role))}</em>`
+						: "";
+					return `${arrow}<div class="hop"><strong>${escapeHTML(hop.label)}</strong><br><small>${escapeHTML(hop.detail)}</small>${role}</div>`;
+				})
+				.join("")}
+    </div>
+  </details>`;
+}
+
+function configuredNetworkHops() {
+	if (
+		Array.isArray(config.networkHops) &&
+		config.networkHops.every(isNetworkHop)
+	) {
+		return config.networkHops;
+	}
+	return [
+		{
+			label: "Browser",
+			detail: window.location.origin,
+			role: "User agent",
+		},
+		{
+			label: "OAuth2 Proxy",
+			detail: "/oauth2 and forwarded identity headers",
+			role: "Gateway authentication",
+		},
+		{
+			label: "ChatGPT Sim",
+			detail: config.mcpUrl || "/api/chat",
+			role: "Go shell and same-origin API",
+		},
+		{
+			label: "MCP Server",
+			detail: config.mcpUrl || "configured MCP endpoint",
+			role: "Tool discovery and calls",
+		},
+		{
+			label: "Model Gateway",
+			detail: config.modelProvider || "deterministic",
+			role: "Assistant response",
+		},
+	];
+}
+
+function isNetworkHop(value) {
+	return (
+		value && typeof value.label === "string" && typeof value.detail === "string"
+	);
 }
 
 async function submitChat(event) {

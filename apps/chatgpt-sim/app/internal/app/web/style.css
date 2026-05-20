@@ -163,6 +163,25 @@ header p {
   padding-block: 0;
 }
 
+.network-path {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.hop {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  background: var(--field);
+}
+
+.hop-arrow {
+  color: var(--accent);
+  font-weight: 700;
+  text-align: center;
+}
+
 .message {
   max-width: 760px;
   border: 1px solid var(--line);

@@ -5,7 +5,7 @@ metadata:
 spec:
   description: >-
     Restrict the sentiment router's egress to only the expected HTTP methods
-    and paths on the backend API, plus unrestricted proxying to the frontend.
+    and paths through APIM, plus unrestricted proxying to the frontend.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal
@@ -16,14 +16,15 @@ spec:
   egress:
     - toEndpoints:
         - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
             "k8s:project": kindlocal
             "k8s:team": dolphin
-            "k8s:app": sentiment
-            "k8s:tier": backend
-            "k8s:app.kubernetes.io/name": sentiment-api
+            "k8s:app": subnetcalc
+            "k8s:tier": gateway
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
       toPorts:
         - ports:
-            - port: "8080"
+            - port: "8000"
               protocol: TCP
           rules:
             http:

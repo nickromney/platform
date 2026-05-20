@@ -195,7 +195,7 @@ env = {item["name"]: str(item.get("value", "")) for item in container.get("env",
 resources = container["resources"]
 
 assert env["AUTH_METHOD"] == "oidc", env
-assert env["OIDC_AUDIENCE"] == "sentiment-api", env
+assert env["OIDC_AUDIENCE"] == "apim-simulator", env
 assert env["OIDC_JWKS_URI"] == "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs", env
 assert resources["requests"]["memory"] == "768Mi", resources
 assert resources["limits"]["memory"] == "2048Mi", resources
@@ -285,7 +285,7 @@ PY
   [[ "${output}" == *"validated sentiment compose API proxy diagnostics"* ]]
 }
 
-@test "subnetcalc compose keeps only Go backend and frontend services" {
+@test "subnetcalc compose keeps default runtime Go-only and SSO profile services toggleable" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -297,15 +297,30 @@ import yaml
 repo_root = Path(os.environ["REPO_ROOT"])
 compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
 
-assert set(compose["services"]) == {"subnetcalc-backend", "subnetcalc-frontend"}, compose["services"].keys()
-assert compose["services"]["subnetcalc-backend"]["environment"]["RUNTIME_ROLE"] == "backend"
-assert compose["services"]["subnetcalc-frontend"]["environment"]["RUNTIME_ROLE"] == "frontend"
+services = compose["services"]
+default_services = {
+    name
+    for name, service in services.items()
+    if "profiles" not in service
+}
+sso_services = {
+    name
+    for name, service in services.items()
+    if service.get("profiles") == ["sso"]
+}
 
-print("validated Go-only subnetcalc compose services")
+assert default_services == {"subnetcalc-backend", "subnetcalc-frontend"}, default_services
+assert sso_services == {"keycloak", "edge", "oauth2-proxy"}, sso_services
+assert services["subnetcalc-backend"]["environment"]["RUNTIME_ROLE"] == "backend"
+assert services["subnetcalc-frontend"]["environment"]["RUNTIME_ROLE"] == "frontend"
+assert services["oauth2-proxy"]["command"].count("--cookie-refresh=1h") == 1
+assert "--pass-access-token=true" in services["oauth2-proxy"]["command"]
+
+print("validated toggleable subnetcalc compose services")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Go-only subnetcalc compose services"* ]]
+  [[ "${output}" == *"validated toggleable subnetcalc compose services"* ]]
 }
 
 @test "subnetcalc Go frontend exposes OIDC runtime config without generated files" {
@@ -478,7 +493,7 @@ PY
   [[ "${output}" == *"validated subnetcalc frontend auth gate and API routing"* ]]
 }
 
-@test "sentiment router protects the frontend and sends API calls through the Go proxy" {
+@test "sentiment router protects the frontend and sends API calls through APIM" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -502,7 +517,7 @@ frontend = next(
 )
 frontend_env = {item["name"]: str(item.get("value", "")) for item in frontend["spec"]["template"]["spec"]["containers"][0].get("env", [])}
 assert frontend_env["AUTH_METHOD"] == "gateway", frontend_env
-assert frontend_env["API_AUTH_METHOD"] == "gateway", frontend_env
+assert frontend_env["API_AUTH_METHOD"] == "oidc", frontend_env
 assert frontend_env["API_BASE_PATH"] == "/api/v1", frontend_env
 assert frontend_env["BACKEND_URL"] == "http://sentiment-api:8080", frontend_env
 assert frontend_env["SHOW_NETWORK_PATH"] == "true", frontend_env
@@ -512,6 +527,7 @@ assert [hop["label"] for hop in network_hops] == [
     "OAuth2 Proxy",
     "Sentiment router",
     "Sentiment frontend",
+    "APIM simulator",
     "Sentiment API",
 ], network_hops
 frontend_container = frontend["spec"]["template"]["spec"]["containers"][0]
@@ -526,10 +542,10 @@ config = next(
 nginx_conf = config["data"]["default.conf"]
 
 assert "location ^~ /api/" in nginx_conf
-assert "proxy_pass http://sentiment-auth-ui:8080;" in nginx_conf
-assert "proxy_pass http://sentiment-api:8080;" not in nginx_conf
+assert "proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;" in nginx_conf
 assert "set $api_auth $http_authorization;" in nginx_conf
 assert 'proxy_set_header Authorization $api_auth;' in nginx_conf
+assert "proxy_set_header X-Apim-Bypass-Subscription true;" in nginx_conf
 assert "location = /health" in nginx_conf
 assert "location = /health/ready" in nginx_conf
 assert "location = /health/live" in nginx_conf
@@ -543,11 +559,24 @@ edge_conf = (repo_root / "apps/sentiment/edge/nginx.conf").read_text(encoding="u
 assert 'set $api_upstream "sentiment-auth-frontend:8080";' in edge_conf, edge_conf
 assert 'set $api_upstream "sentiment-api:8080";' not in edge_conf, edge_conf
 
-print("validated sentiment frontend auth gate, health, and API proxy routing")
+apim_docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/apim/all.yaml").read_text(encoding="utf-8")))
+apim_config = next(
+    doc
+    for doc in apim_docs
+    if doc and doc.get("kind") == "ConfigMap" and doc.get("metadata", {}).get("name") == "subnetcalc-apim-simulator-config"
+)
+apim_payload = json.loads(apim_config["data"]["config.json"])
+routes = {route["name"]: route for route in apim_payload["routes"]}
+assert routes["sentiment-api-dev"]["upstream_base_url"] == "http://sentiment-api.dev.svc.cluster.local:8080", routes
+assert routes["sentiment-api-uat"]["upstream_base_url"] == "http://sentiment-api.uat.svc.cluster.local:8080", routes
+assert "https://sentiment.dev.127.0.0.1.sslip.io" in apim_payload["allowed_origins"], apim_payload
+assert {"header": "X-Apim-Bypass-Subscription", "equals": "true"} in apim_payload["subscription"]["bypass"], apim_payload
+
+print("validated sentiment frontend auth gate, health, and APIM API routing")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated sentiment frontend auth gate, health, and API proxy routing"* ]]
+  [[ "${output}" == *"validated sentiment frontend auth gate, health, and APIM API routing"* ]]
 }
 
 @test "app oauth2 proxies refresh forwarded access tokens before API use" {
@@ -572,7 +601,7 @@ for name in (
     for expected in (
         "--cookie-expire=4h",
         "--cookie-refresh=1h",
-        "--skip-auth-regex=^/(signed-out\\.html|style\\.css|favicon\\.svg)$",
+        "--skip-auth-regex=^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$",
         "--pass-access-token=true",
         "--set-xauthrequest=true",
         "--set-authorization-header=true",

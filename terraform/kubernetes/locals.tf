@@ -164,7 +164,7 @@ locals {
       cookie_domain      = local.dev_cookie_domain
       whitelist_domain   = local.dev_whitelist_domains
       backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
-      skip_auth_regex    = "^/(signed-out\\.html|style\\.css|favicon\\.svg)$"
+      skip_auth_regex    = "^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"
     }
   }
   sso_oauth2_proxy_redirect_uris = distinct(concat(

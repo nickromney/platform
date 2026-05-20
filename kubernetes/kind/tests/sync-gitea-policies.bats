@@ -188,9 +188,9 @@ metadata:
   name: agentgateway-crds
 spec:
   source:
-    repoURL: cr.agentgateway.dev/charts
+    repoURL: ghcr.io/kgateway-dev/charts
     chart: agentgateway-crds
-    targetRevision: v1.2.0
+    targetRevision: v2.2.1
 EOF
   cat >"${stack_dir}/apps/argocd-apps/69-agentgateway.application.yaml" <<'EOF'
 apiVersion: argoproj.io/v1alpha1
@@ -199,9 +199,9 @@ metadata:
   name: agentgateway
 spec:
   source:
-    repoURL: cr.agentgateway.dev/charts
+    repoURL: ghcr.io/kgateway-dev/charts
     chart: agentgateway
-    targetRevision: v1.2.0
+    targetRevision: v2.2.1
 EOF
 
   cat >"${stack_dir}/apps/agentgateway-ai-gateway/all.yaml" <<'EOF'

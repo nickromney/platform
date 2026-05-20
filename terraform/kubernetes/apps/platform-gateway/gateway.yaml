@@ -24,7 +24,7 @@ spec:
             kind: Secret
             name: platform-gateway-tls
         options:
-          nginx.org/ssl-protocols: TLSv1.3
+          nginx.org/ssl-protocols: TLSv1.2 TLSv1.3
           nginx.org/ssl-prefer-server-ciphers: "off"
       allowedRoutes:
         namespaces:

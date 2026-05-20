@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -74,31 +75,54 @@ func (s store) list(limit int) ([]Comment, error) {
 		return nil, err
 	}
 	defer file.Close()
-	rows, err := csv.NewReader(file).ReadAll()
+	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = -1
+	rows, err := reader.ReadAll()
 	if err != nil {
 		return nil, err
 	}
 	comments := []Comment{}
 	for i := len(rows) - 1; i >= 1; i-- {
-		row := rows[i]
-		if len(row) < 6 {
+		comment, ok := parseCommentRow(rows[i], i)
+		if !ok {
 			continue
 		}
-		confidence, _ := strconv.ParseFloat(row[4], 64)
-		latency, _ := strconv.ParseInt(row[5], 10, 64)
-		comments = append(comments, Comment{
-			ID:         row[0],
-			Timestamp:  row[1],
-			Text:       row[2],
-			Label:      Label(row[3]),
-			Confidence: confidence,
-			LatencyMS:  latency,
-		})
+		comments = append(comments, comment)
 		if limit > 0 && len(comments) >= limit {
 			break
 		}
 	}
 	return comments, nil
+}
+
+func parseCommentRow(row []string, index int) (Comment, bool) {
+	switch {
+	case len(row) == 5:
+		confidence, _ := strconv.ParseFloat(row[3], 64)
+		latency, _ := strconv.ParseInt(row[4], 10, 64)
+		return Comment{
+			ID:         fmt.Sprintf("legacy-comment-%d", index),
+			Timestamp:  row[0],
+			Text:       row[1],
+			Label:      Label(row[2]),
+			Confidence: confidence,
+			LatencyMS:  latency,
+		}, true
+	case len(row) >= 6:
+		labelIndex := len(row) - 3
+		confidence, _ := strconv.ParseFloat(row[len(row)-2], 64)
+		latency, _ := strconv.ParseInt(row[len(row)-1], 10, 64)
+		return Comment{
+			ID:         row[0],
+			Timestamp:  row[1],
+			Text:       strings.Join(row[2:labelIndex], ","),
+			Label:      Label(row[labelIndex]),
+			Confidence: confidence,
+			LatencyMS:  latency,
+		}, true
+	default:
+		return Comment{}, false
+	}
 }
 
 func newComment(text string, result classifyResponse) Comment {

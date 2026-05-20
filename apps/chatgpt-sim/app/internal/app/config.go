@@ -7,14 +7,16 @@ import (
 )
 
 type Config struct {
-	Role           string
-	Port           string
-	PublicBaseURL  string
-	MCPURL         string
-	MCPInternalURL string
-	MCPConnectors  []ConnectorConfig
-	LLMURL         string
-	LLMModel       string
+	Role            string
+	Port            string
+	PublicBaseURL   string
+	MCPURL          string
+	MCPInternalURL  string
+	MCPConnectors   []ConnectorConfig
+	LLMURL          string
+	LLMModel        string
+	ShowNetworkPath string
+	NetworkHops     string
 }
 
 type ConnectorConfig struct {
@@ -49,15 +51,19 @@ func ConfigFromEnv() Config {
 	mcpConnectors := parseConnectorConfigs(os.Getenv("MCP_CONNECTORS"))
 	llmURL := strings.TrimSpace(os.Getenv("LLM_URL"))
 	llmModel := strings.TrimSpace(os.Getenv("LLM_MODEL"))
+	showNetworkPath := strings.TrimSpace(os.Getenv("SHOW_NETWORK_PATH"))
+	networkHops := strings.TrimSpace(os.Getenv("NETWORK_HOPS"))
 	return Config{
-		Role:           role,
-		Port:           port,
-		PublicBaseURL:  publicBaseURL,
-		MCPURL:         mcpURL,
-		MCPInternalURL: mcpInternalURL,
-		MCPConnectors:  mcpConnectors,
-		LLMURL:         llmURL,
-		LLMModel:       llmModel,
+		Role:            role,
+		Port:            port,
+		PublicBaseURL:   publicBaseURL,
+		MCPURL:          mcpURL,
+		MCPInternalURL:  mcpInternalURL,
+		MCPConnectors:   mcpConnectors,
+		LLMURL:          llmURL,
+		LLMModel:        llmModel,
+		ShowNetworkPath: showNetworkPath,
+		NetworkHops:     networkHops,
 	}
 }
 

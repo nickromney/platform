@@ -14,6 +14,7 @@ PLATFORM_REQUIRED_ENV_VARS :=
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
 endif
+SSO_COMPOSE_ENV := PLATFORM_DEMO_PASSWORD=$(PLATFORM_DEMO_PASSWORD) OAUTH2_PROXY_COOKIE_SECRET=$(OAUTH2_PROXY_COOKIE_SECRET) SENTIMENT_FRONTEND_AUTH_METHOD=gateway SENTIMENT_FRONTEND_API_AUTH_METHOD=oidc SENTIMENT_BACKEND_AUTH_METHOD=oidc SENTIMENT_OIDC_ISSUER_URL=http://localhost:8300/realms/platform SENTIMENT_OIDC_JWKS_URI=http://keycloak:8080/realms/platform/protocol/openid-connect/certs SENTIMENT_OIDC_AUDIENCE=sentiment-api
 
 APP_BASE_URL := http://localhost:8304
 APP_URL := $(APP_BASE_URL)/oauth2/sign_in
@@ -55,7 +56,7 @@ app-js-check: ## Check vanilla JavaScript source contracts
 ##@ Run
 up: check-prerequisites ## Start the authenticated compose stack and print the local URL
 	@$(MAKE) --no-print-directory -C app build-linux
-	@$(COMPOSE) up -d --build
+	@$(SSO_COMPOSE_ENV) $(COMPOSE) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Base URL:      $(APP_BASE_URL)"
 	@echo "Keycloak URL:  $(KEYCLOAK_URL)"
@@ -63,7 +64,7 @@ up: check-prerequisites ## Start the authenticated compose stack and print the l
 
 up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS URL
 	@$(MAKE) --no-print-directory -C app build-linux
-	@$(COMPOSE_TLS) up -d --build
+	@$(SSO_COMPOSE_ENV) $(COMPOSE_TLS) up -d --build
 	@echo "Sentiment URL: $(APP_TLS_URL)"
 	@echo "Base URL:      $(APP_TLS_BASE_URL)"
 	@echo "Keycloak URL:  $(KEYCLOAK_URL)"
@@ -71,7 +72,7 @@ up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS U
 
 up-apim-ai-gateway: check-prerequisites ## Start sentiment configured to call the APIM simulator AI gateway
 	@$(MAKE) --no-print-directory -C app build-linux
-	@$(COMPOSE_APIM_AI_GATEWAY) up -d --build
+	@$(SSO_COMPOSE_ENV) $(COMPOSE_APIM_AI_GATEWAY) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
 	@echo "Base URL:      $(APP_BASE_URL)"
 	@echo "APIM AI URL:   $${SENTIMENT_APIM_AI_GATEWAY_URL:-http://host.docker.internal:8000/ai/v1/chat/completions}"

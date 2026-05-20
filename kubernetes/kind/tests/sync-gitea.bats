@@ -41,3 +41,21 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "sync-gitea.sh exports SSO so stage 900 keeps SSO gateway routes" {
+  run grep -Fn 'export_resolved_bool ENABLE_SSO enable_sso false' "${SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "sync-gitea.sh exports Headlamp OIDC inputs consumed by the policies renderer" {
+  run bash -lc "grep -F 'export_resolved_string SSO_PUBLIC_URL sso_public_url' '${SCRIPT}' && grep -F 'export_resolved_string HEADLAMP_PUBLIC_HOST headlamp_public_host' '${SCRIPT}' && grep -F 'export_resolved_string HEADLAMP_OIDC_CLIENT_SECRET headlamp_oidc_client_secret' '${SCRIPT}' && grep -F 'export_resolved_bool HEADLAMP_OIDC_SKIP_TLS_VERIFY headlamp_oidc_skip_tls_verify true' '${SCRIPT}'"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "sync-gitea.sh passes the Terraform render contract to the policies renderer when present" {
+  run grep -Fn 'GITOPS_RENDER_CONTRACT_FILE="${GITOPS_RENDER_CONTRACT_FILE:-${STACK_DIR}/.run/kind/gitops-render-contract.json}"' "${SCRIPT}"
+
+  [ "${status}" -eq 0 ]
+}

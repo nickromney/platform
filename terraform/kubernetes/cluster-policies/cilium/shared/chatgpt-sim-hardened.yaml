@@ -5,7 +5,8 @@ metadata:
 spec:
   description: >-
     Hardened policy for the ChatGPT simulator. oauth2-proxy is the only
-    permitted ingress source, and MCP discovery/tool calls must go via APIM.
+    permitted ingress source, MCP discovery/tool calls must go via APIM, and
+    LLM chat completions must go via agentgateway.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": dev
