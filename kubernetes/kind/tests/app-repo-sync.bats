@@ -157,6 +157,17 @@ EOF
   grep -Eq 'target_dir[[:space:]]*= "apim-simulator"' "${locals_tf}"
 }
 
+@test "subnetcalc workflow stamps policies with built image tags" {
+  workflow="${REPO_ROOT}/apps/subnetcalc/.gitea/workflows/build-images.yaml"
+  stamp_script="${REPO_ROOT}/apps/subnetcalc/update-subnetcalc-image-tags.sh"
+
+  grep -Fq '"update-subnetcalc-image-tags.sh"' "${workflow}"
+  grep -Fq "bash update-subnetcalc-image-tags.sh" "${workflow}"
+  grep -Fq "subnetcalc-apim-simulator" "${workflow}"
+  grep -Fq "apps/apim/all.yaml" "${stamp_script}"
+  grep -Fq '"subnetcalc-apim-simulator"' "${stamp_script}"
+}
+
 @test "subnetcalc workflow clones the synced app repo name" {
   workflow="${REPO_ROOT}/apps/subnetcalc/.gitea/workflows/build-images.yaml"
 
@@ -171,7 +182,8 @@ EOF
     "${REPO_ROOT}/apps/subnetcalc/.gitea/workflows/build-images.yaml" \
     "${REPO_ROOT}/apps/chatgpt-sim/.gitea/workflows/build-images.yaml"; do
     grep -Fq '"shared/**"' "${workflow}"
-    grep -Fq -- '-v "${APPS_DIR}/shared:/shared:ro"' "${workflow}"
+    grep -Fq "COPY shared /shared" "${workflow}"
+    ! grep -Fq -- '-v "${APPS_DIR}/shared:/shared:ro"' "${workflow}"
   done
 }
 

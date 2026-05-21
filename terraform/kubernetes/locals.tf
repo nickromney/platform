@@ -387,11 +387,15 @@ locals {
       workflow_ref            = "main"
       ensure_workflow_started = false
       failure_consequence     = "Policies will not update until it succeeds."
-      image_names             = ["subnetcalc-api", "subnetcalc-frontend"]
+      image_names             = ["subnetcalc-api", "subnetcalc-frontend", "subnetcalc-apim-simulator"]
       policy_checks = [
         {
           file            = "apps/workloads/base/all.yaml"
           required_images = ["subnetcalc-api", "subnetcalc-frontend"]
+        },
+        {
+          file            = "apps/apim/all.yaml"
+          required_images = ["subnetcalc-apim-simulator"]
         }
       ]
     }

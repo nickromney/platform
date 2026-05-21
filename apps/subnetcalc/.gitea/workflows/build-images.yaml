@@ -6,11 +6,11 @@ on:
     paths:
       - "app/**"
       - "shared/**"
+      - "update-subnetcalc-image-tags.sh"
       - ".gitea/workflows/**"
   workflow_dispatch:
 
 env:
-  DOCKER_HOST: unix:///var/run/docker.sock
   WORKDIR: /tmp/subnet-calculator
   APP_REPO_NAME: subnetcalc
 
@@ -47,28 +47,29 @@ jobs:
           : "${REGISTRY_HOST:?}"
           echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
 
-      - name: Build Go runtime binary
-        run: |
-          set -e
-          cd "${WORKDIR}"
-          : "${APPS_DIR:?}"
-          docker run --rm \
-            -v "${APPS_DIR}/subnetcalc/app:/src" \
-            -v "${APPS_DIR}/shared:/shared:ro" \
-            -w /src \
-            -e CGO_ENABLED=0 \
-            -e GOOS=linux \
-            -e GOARCH=amd64 \
-            dhi.io/golang:1.26-alpine3.23-dev \
-            sh -c 'mkdir -p .run && go build -trimpath -ldflags="-s -w" -o .run/subnetcalc ./cmd/subnetcalc'
-
       - name: Build and push runtime images
         run: |
           set -e
           cd "${WORKDIR}"
-          : "${APPS_DIR:?}"
           TAG="$(git rev-parse --short=12 HEAD)"
-          docker build --provenance=false -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${APPS_DIR}/subnetcalc/app"
+          cat > Dockerfile.runtime <<'EOF_DOCKERFILE'
+          FROM dhi.io/golang:1.26-alpine3.23-dev AS build
+          WORKDIR /src
+          COPY app/go.mod app/go.sum ./
+          COPY shared /shared
+          RUN go mod download
+          COPY app/ ./
+          RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/subnetcalc ./cmd/subnetcalc
+
+          FROM dhi.io/static:20260413-alpine3.23
+          COPY --from=build /out/subnetcalc /subnetcalc
+          USER 65532:65532
+          ENV PORT=8080
+          EXPOSE 8080
+          ENTRYPOINT ["/subnetcalc"]
+          EOF_DOCKERFILE
+
+          docker build --provenance=false -f Dockerfile.runtime -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" .
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:latest"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:latest"
@@ -76,3 +77,16 @@ jobs:
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:latest"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:latest"
+
+          DOCKER_BUILDKIT=1 docker build --provenance=false -f apim-simulator/Dockerfile -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" apim-simulator
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
+
+      - name: Stamp manifests with new subnetcalc tags
+        run: |
+          set -e
+          cd "${WORKDIR}"
+          TAG="$(git rev-parse --short=12 HEAD)"
+          export TAG
+          bash update-subnetcalc-image-tags.sh
