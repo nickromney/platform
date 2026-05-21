@@ -43,6 +43,10 @@ if [[ -f "apps/workloads/base/all.yaml" ]]; then
   files+=("apps/workloads/base/all.yaml")
 fi
 
+if [[ -f "apps/apim/all.yaml" ]]; then
+  files+=("apps/apim/all.yaml")
+fi
+
 if [[ -f "apps/dev/all.yaml" ]]; then
   files+=("apps/dev/all.yaml")
 fi
@@ -51,13 +55,14 @@ if [[ -f "apps/uat/all.yaml" ]]; then
 fi
 
 if [[ ${#files[@]} -eq 0 ]]; then
-  echo "No supported sentiment manifest files found under apps/" >&2
+  echo "No supported subnetcalc manifest files found under apps/" >&2
   exit 1
 fi
 
 images=(
-  "sentiment-api"
-  "sentiment-auth-ui"
+  "subnetcalc-api"
+  "subnetcalc-frontend"
+  "subnetcalc-apim-simulator"
 )
 
 rewrite_files() {
@@ -88,7 +93,7 @@ for _ in $(seq 1 "${PUSH_RETRY_COUNT}"); do
     exit 0
   fi
 
-  git commit -m "chore: bump sentiment images to ${TAG}" >/dev/null
+  git commit -m "chore: bump subnetcalc images to ${TAG}" >/dev/null
   if git push origin HEAD:"${POLICIES_BRANCH}" >/dev/null; then
     echo "Updated ${POLICIES_REPO_NAME} manifests to ${TAG}"
     exit 0
