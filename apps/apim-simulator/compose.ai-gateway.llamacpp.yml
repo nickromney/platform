@@ -1,8 +1,0 @@
-services:
-  apim-simulator:
-    environment:
-      APIM_CONFIG_PATH: /tmp/ai-gateway-llamacpp-apim-config.json
-      APIM_CONFIG_SOURCE_PATH: /app/examples/ai-gateway/apim.llamacpp.json
-      OTEL_SERVICE_NAME: apim-simulator
-    extra_hosts:
-      - "host.docker.internal:host-gateway"

@@ -2439,6 +2439,7 @@ __YAML__
 resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
   for_each = var.enable_sso && var.enable_argocd ? merge(
     local.sso_idp_proxy_apps,
+    local.sso_apim_proxy_apps,
     local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_chatgpt_sim_proxy_apps : {},
   ) : {}

@@ -532,6 +532,20 @@ EOF
   [[ "${output}" != *"refresh_gitea_git_access"* ]]
 }
 
+@test "render_policy_repo_tree exposes APIM console on admin host behind SSO when APIM is enabled" {
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-admin' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"apim.admin.127.0.0.1.sslip.io"* ]]
+  [[ "${output}" == *"name: oauth2-proxy-apim"* ]]
+}
+
+@test "render_policy_repo_tree prunes APIM console route and SSO grant when APIM is disabled" {
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-disabled' >/dev/null; test ! -f '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; ! grep -Fq 'oauth2-proxy-apim' '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "render_policy_repo_tree matches full golden tree for minimal contract" {
   assert_policy_render_tree_matches_golden "minimal"
 }

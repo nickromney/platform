@@ -11,7 +11,7 @@ This directory contains the source applications that feed the local platform dem
   Local compose architecture: [`sentiment/docs/COMPOSE-ARCHITECTURE.md`](sentiment/docs/COMPOSE-ARCHITECTURE.md)
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)
 - [`apim-simulator/`](apim-simulator/) contains the local Azure API Management simulator used by the Kubernetes APIM gateway demo and by app-local compose workflows.
-  It keeps its own standalone Docker Compose entrypoints, for example `make -C apps/apim-simulator up` and `make -C apps/apim-simulator smoke-hello`.
+  It is a small Go app with embedded HTML/CSS/JavaScript and direct/SSO local compose workflows.
 - [`idp-core/`](idp-core/) contains the Portal API as a Go single-binary app
   under `idp-core/app`.
 - [`idp-mcp/`](idp-mcp/) contains a small dependency-free stdlib MCP adapter for
@@ -75,9 +75,9 @@ Backstage dependency free.
 - Use package-manager installs only in explicit legacy or product surfaces such
   as Backstage, deprecated Vite examples, or one-shot API client tooling.
 - JavaScript package roots ship local `bunfig.toml` or `.npmrc` cooldown
-  defaults, and Python app roots set `[tool.uv].exclude-newer = "7 days"`, so
-  copied app directories and compose/Docker builds keep the same dependency age
-  gate.
+  defaults, and any Python app roots set `[tool.uv].exclude-newer = "7 days"`,
+  so copied app directories and compose/Docker builds keep the same dependency
+  age gate.
 - Use one-shot package execution only for explicit tooling such as Bruno or
   Newman collections.
 - Do not use npm, npx, Yarn, pnpm, Bun, Vite, React, or npm-installed

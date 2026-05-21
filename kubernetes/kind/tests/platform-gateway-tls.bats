@@ -183,6 +183,26 @@ PY
   grep -Fq 'EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"' "${script}"
 }
 
+@test "cluster health expected inventory includes APIM SSO proxy app when APIM is enabled" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-apim); fi' "${script}"
+  grep -Fq 'sso_apps+=(oauth2-proxy-apim)' "${script}"
+}
+
+@test "Cilium policies allow APIM admin oauth2 proxy to reach APIM upstream" {
+  apim_policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml"
+  sso_policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/sso-hardened.yaml"
+
+  grep -Fq '"k8s:app.kubernetes.io/instance": oauth2-proxy-apim' "${apim_policy}"
+  grep -Fq '"k8s:io.kubernetes.pod.namespace": sso' "${apim_policy}"
+  grep -Fq 'port: "8000"' "${apim_policy}"
+
+  grep -Fq '"k8s:io.kubernetes.pod.namespace": apim' "${sso_policy}"
+  grep -Fq '"k8s:app.kubernetes.io/name": subnetcalc-apim-simulator' "${sso_policy}"
+  grep -Fq 'port: "8000"' "${sso_policy}"
+}
+
 @test "platform gateway policy allows direct Hubble UI route backend" {
   policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml"
 

@@ -177,16 +177,12 @@ EOF
   }
 }
 EOF
-  expected_cutoff="$(awk -F'\"' '/^exclude-newer = \"/ { print $2; exit }' "${REPO_ROOT}/apps/apim-simulator/uv.lock")"
-
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
     \"\$(js_dependency_cooldown_seconds '${js_fixture}')\" \
-    \"\$(bun_lock_resolved_version '${js_fixture}/bun.lock' 'vite')\" \
-    \"\$(python_dependency_cooldown_cutoff '${REPO_ROOT}/apps/apim-simulator')\" \
-    \"\$(uv_lock_resolved_version '${REPO_ROOT}/apps/apim-simulator/uv.lock' 'anyio')\""
+    \"\$(bun_lock_resolved_version '${js_fixture}/bun.lock' 'vite')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf '604800\n8.0.9\n%s\n4.12.1' "${expected_cutoff}")" ]
+  [ "${output}" = "$(printf '604800\n8.0.9')" ]
 }
 
 @test "check-version collects only project dependencies from pyproject arrays" {

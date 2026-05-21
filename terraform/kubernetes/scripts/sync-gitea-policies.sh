@@ -134,6 +134,7 @@ string|SENTIMENT_DEV_PUBLIC_HOST|sentiment_dev_public_host|
 string|SENTIMENT_UAT_PUBLIC_HOST|sentiment_uat_public_host|
 string|SUBNETCALC_DEV_PUBLIC_HOST|subnetcalc_dev_public_host|
 string|SUBNETCALC_UAT_PUBLIC_HOST|subnetcalc_uat_public_host|
+string|APIM_PUBLIC_HOST|apim_public_host|
 string|ADMIN_ROUTE_ALLOWLIST_CIDRS|admin_route_allowlist_cidrs|
 string|GATEWAY_TRUSTED_PROXY_CIDRS|gateway_trusted_proxy_cidrs|
 bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
@@ -272,6 +273,7 @@ SENTIMENT_DEV_PUBLIC_HOST="${SENTIMENT_DEV_PUBLIC_HOST:-sentiment.dev.${PLATFORM
 SENTIMENT_UAT_PUBLIC_HOST="${SENTIMENT_UAT_PUBLIC_HOST:-sentiment.uat.${PLATFORM_BASE_DOMAIN}}"
 SUBNETCALC_DEV_PUBLIC_HOST="${SUBNETCALC_DEV_PUBLIC_HOST:-subnetcalc.dev.${PLATFORM_BASE_DOMAIN}}"
 SUBNETCALC_UAT_PUBLIC_HOST="${SUBNETCALC_UAT_PUBLIC_HOST:-subnetcalc.uat.${PLATFORM_BASE_DOMAIN}}"
+APIM_PUBLIC_HOST="${APIM_PUBLIC_HOST:-apim.admin.${PLATFORM_BASE_DOMAIN}}"
 MCP_PUBLIC_HOST="${MCP_PUBLIC_HOST:-mcp.${PLATFORM_BASE_DOMAIN}}"
 MCP_CONSOLE_PUBLIC_HOST="${MCP_CONSOLE_PUBLIC_HOST:-mcp-console.${PLATFORM_BASE_DOMAIN}}"
 AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST="${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST:-llm.${PLATFORM_BASE_DOMAIN}}"
@@ -500,6 +502,7 @@ rewrite_public_hostnames() {
       -e "s|sentiment\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SENTIMENT_UAT_PUBLIC_HOST}|g" \
       -e "s|subnetcalc\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_DEV_PUBLIC_HOST}|g" \
       -e "s|subnetcalc\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_UAT_PUBLIC_HOST}|g" \
+      -e "s|apim\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${APIM_PUBLIC_HOST}|g" \
       -e "s|mcp-console\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_CONSOLE_PUBLIC_HOST}|g" \
       -e "s|mcp\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_PUBLIC_HOST}|g" \
       -e "s|llm\\.127\\.0\\.0\\.1\\.sslip\\.io|${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST}|g" \
@@ -1707,6 +1710,12 @@ prune_gateway_routes_manifests() {
     remove_if_present "${routes_dir}/httproute-subnetcalc-uat.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-dev.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-uat.yaml"
+  fi
+
+  if ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+    remove_if_present "${routes_dir}/httproute-apim.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-apim.yaml"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-apim"
   fi
 
   if ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; then

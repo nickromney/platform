@@ -1,8 +1,0 @@
-<policies>
-  <inbound>
-    <cache-lookup-value key="demo" variable-name="value" caching-type="external" />
-  </inbound>
-  <backend />
-  <outbound />
-  <on-error />
-</policies>

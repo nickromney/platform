@@ -69,14 +69,6 @@ version = "0.1.0"
 exclude-newer = "7 days"
 EOF
 
-  cat >"${FIXTURE_ROOT}/apps/apim-simulator/pyproject.toml" <<'EOF'
-[project]
-name = "apim-simulator"
-version = "0.4.0"
-
-[tool.uv]
-exclude-newer = "7 days"
-EOF
   touch "${FIXTURE_ROOT}/apps/apim-simulator/Dockerfile"
   cat >"${FIXTURE_ROOT}/apps/apim-simulator/catalog-info.yaml" <<'EOF'
 apiVersion: backstage.io/v1alpha1

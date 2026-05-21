@@ -1,9 +1,0 @@
-{
-  "method": "GET",
-  "path": "/sample",
-  "config": {
-    "policy_fragments": {
-      "common-header": "<fragment><set-header name=\"x-fragment\" exists-action=\"override\"><value>1</value></set-header></fragment>"
-    }
-  }
-}

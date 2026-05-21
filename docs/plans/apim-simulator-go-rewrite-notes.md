@@ -300,8 +300,7 @@ Verification:
 
 ```bash
 make -C apps/apim-simulator test
-make -C apps/apim-simulator smoke-hello
-make -C apps/apim-simulator smoke-todo
+make -C apps/apim-simulator compose-smoke
 ```
 
 ### 1. Go Skeleton And Default Gateway
@@ -421,9 +420,8 @@ Final verification after Docker login and local-runtime cleanup:
 
 ```bash
 make -C apps/apim-simulator test
-make -C apps/apim-simulator smoke-hello
-make -C apps/apim-simulator smoke-todo
-make -C apps/apim-simulator smoke-ai-gateway
+make -C apps/apim-simulator compose-smoke
+make -C apps/apim-simulator compose-smoke-sso
 make -C apps compose-smoke-apim-simulator
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/kind check-health

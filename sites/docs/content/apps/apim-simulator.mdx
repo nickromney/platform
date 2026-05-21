@@ -45,15 +45,7 @@ Use the app-local compose paths when you are changing simulator behaviour:
 ```bash
 make -C apps/apim-simulator help
 make -C apps/apim-simulator up
-make -C apps/apim-simulator smoke-hello
-```
-
-Use the Key Vault stack when you need local Azure-style storage for API
-secrets or imported certificates:
-
-```bash
-make -C apps/apim-simulator up-keyvault
-make -C apps/apim-simulator smoke-keyvault
+make -C apps/apim-simulator compose-smoke
 ```
 
 The Key Vault simulator is intentionally small. It supports versioned secrets

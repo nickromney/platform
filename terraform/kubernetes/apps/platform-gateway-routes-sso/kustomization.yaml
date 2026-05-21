@@ -10,6 +10,7 @@ resources:
   - httproute-hubble.yaml
   - httproute-grafana.yaml
   - httproute-kyverno.yaml
+  - httproute-apim.yaml
   - httproute-sentiment-dev.yaml
   - httproute-sentiment-uat.yaml
   - httproute-subnetcalc-dev.yaml
