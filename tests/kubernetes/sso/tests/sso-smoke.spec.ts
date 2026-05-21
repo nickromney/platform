@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 
 type Segment = 'dev' | 'uat' | 'admin'
 
@@ -150,6 +151,10 @@ function filterTargetByEnabledApps(target: Target) {
   if (target.name.startsWith('sentiment-')) return INCLUDE_SENTIMENT
   if (target.name.startsWith('subnetcalc-')) return INCLUDE_SUBNETCALC
   return true
+}
+
+function isLightweightPlatformApp(target: Target) {
+  return target.name === 'chatgpt-sim' || target.name.startsWith('sentiment-') || target.name.startsWith('subnetcalc-')
 }
 
 const TARGETS: Target[] = BASE_TARGETS.filter(filterTargetByEnabledApps)
@@ -1194,6 +1199,61 @@ async function attachLoggedInScreenshotIfEnabled(page: Page, testInfo: TestInfo,
   })
 }
 
+async function expectLightweightAppAccessible(page: Page, target: Target) {
+  await page.goto(target.url, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#main'), `${target.name} should load the protected app before accessibility checks`).toBeVisible()
+
+  await expect(page.getByRole('banner'), `${target.name} should expose a page banner landmark`).toBeVisible()
+  await expect(page.getByRole('main'), `${target.name} should expose one main landmark`).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 }), `${target.name} should expose a single page heading`).toBeVisible()
+
+  await expect(page.locator('[role="tree"], [role="treeitem"]'), `${target.name} should not use ARIA tree roles for ordinary page structure`).toHaveCount(0)
+
+  const unnamedControlIds = await page.locator('button, input, select, textarea').evaluateAll((controls) =>
+    controls
+      .filter((control) => {
+        const element = control as HTMLElement
+        if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false
+        if (element.closest('[hidden], [aria-hidden="true"]')) return false
+        return element.offsetParent !== null
+      })
+      .filter((control) => {
+        const element = control as HTMLElement
+        const id = element.id
+        const ariaLabel = element.getAttribute('aria-label')?.trim()
+        const ariaLabelledBy = element.getAttribute('aria-labelledby')?.trim()
+        const text = element.textContent?.trim()
+        const hasNativeLabel = id ? Boolean(document.querySelector(`label[for="${CSS.escape(id)}"]`)) : false
+        return !ariaLabel && !ariaLabelledBy && !text && !hasNativeLabel
+      })
+      .map((control) => {
+        const element = control as HTMLElement
+        return element.id || element.getAttribute('name') || element.tagName.toLowerCase()
+      }),
+  )
+  expect(unnamedControlIds, `${target.name} has interactive controls without accessible names`).toEqual([])
+
+  await page.evaluate(() => {
+    window.scrollTo(0, 0)
+    const activeElement = document.activeElement
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur()
+    }
+  })
+  await page.keyboard.press('Tab')
+  const skipLink = page.getByRole('link', { name: /^skip to main content$/i })
+  await expect(skipLink, `${target.name} skip link should be first keyboard stop`).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('#main'), `${target.name} skip link should move focus to main`).toBeFocused()
+
+  const accessibilityScanResults = await new AxeBuilder({ page })
+    .include('body')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+
+  expect(accessibilityScanResults.violations, `${target.name} has axe accessibility violations`).toEqual([])
+}
+
 test.describe(SUITE_NAME, () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -1259,6 +1319,10 @@ test.describe(SUITE_NAME, () => {
         if (t.postLogin === 'signoz-logs-and-metrics') {
           await signozVerifyLogsAndMetrics(page, t.url)
         }
+      }
+
+      if (isLightweightPlatformApp(t)) {
+        await expectLightweightAppAccessible(page, t)
       }
 
       await attachLoggedInScreenshotIfEnabled(page, testInfo, t.name)

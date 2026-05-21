@@ -440,6 +440,8 @@ function renderConnector(item) {
 }
 
 function appendMessage(kind, label, text, meta) {
+	const item = document.createElement("li");
+	item.className = kind;
 	const article = document.createElement("article");
 	article.className = `message ${kind}`;
 	const strong = document.createElement("strong");
@@ -454,7 +456,8 @@ function appendMessage(kind, label, text, meta) {
 	const body = document.createElement("div");
 	body.textContent = text;
 	article.append(body);
-	messages.append(article);
+	item.append(article);
+	messages.append(item);
 	messages.scrollTop = messages.scrollHeight;
 }
 

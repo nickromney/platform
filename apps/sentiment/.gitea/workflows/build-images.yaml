@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "shared/**"
       - "update-sentiment-image-tags.sh"
       - ".gitea/workflows/**"
   workflow_dispatch:
@@ -53,6 +54,7 @@ jobs:
           : "${APPS_DIR:?}"
           docker run --rm \
             -v "${APPS_DIR}/sentiment/app:/src" \
+            -v "${APPS_DIR}/shared:/shared:ro" \
             -w /src \
             -e CGO_ENABLED=0 \
             -e GOOS=linux \

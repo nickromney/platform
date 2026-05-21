@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: check-make-target-surfaces.sh --execute
+
+Load every repo-owned Makefile and inspect its make database without running
+recipes. This catches broken includes, invalid make syntax, and missing target
+definitions across the repository's documented make surfaces.
+USAGE
+}
+
+if [ "${1:-}" != "--execute" ]; then
+  usage
+  exit 64
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp_dir="${TMPDIR:-/tmp}/platform-make-target-surfaces.$$"
+mkdir -p "${tmp_dir}"
+trap 'rm -rf "${tmp_dir}"' EXIT
+
+env_file="${tmp_dir}/platform.env"
+cat >"${env_file}" <<'EOF'
+PLATFORM_ADMIN_PASSWORD=local-admin-password
+PLATFORM_DEMO_PASSWORD=local-dev-password
+OAUTH2_PROXY_COOKIE_SECRET=0123456789abcdef0123456789abcdef
+EOF
+
+noop_makefile="${tmp_dir}/noop.mk"
+cat >"${noop_makefile}" <<'EOF'
+.PHONY: __platform_make_surface_noop
+__platform_make_surface_noop:
+EOF
+
+makefiles="$(
+  cd "${repo_root}"
+  find . \
+    -path './.git' -prune -o \
+    -path './.run' -prune -o \
+    -path './*/node_modules/*' -prune -o \
+    -name Makefile -print | sort
+)"
+
+makefiles_checked=0
+targets_checked=0
+failures=0
+
+while IFS= read -r makefile; do
+  [ -n "${makefile}" ] || continue
+  dir="${makefile%/Makefile}"
+  db_file="${tmp_dir}/$(printf '%s' "${dir}" | tr '/.' '__').mkdb"
+  err_file="${db_file}.err"
+
+  status=0
+  env \
+    PLATFORM_ENV_FILE="${env_file}" \
+    PLATFORM_ENV_TEMPLATE="${env_file}" \
+    COMPOSE_CMD=true \
+    make -pRrq -C "${repo_root}/${dir}" -f Makefile -f "${noop_makefile}" __platform_make_surface_noop >"${db_file}" 2>"${err_file}" || status=$?
+
+  if [ "${status}" -gt 1 ]; then
+    failures=$((failures + 1))
+    printf 'make database load failed: %s\n' "${dir}" >&2
+    cat "${err_file}" >&2
+    continue
+  fi
+
+  makefiles_checked=$((makefiles_checked + 1))
+  targets="$(
+    awk '
+      /^\.PHONY:[[:space:]]/ {
+        for (i = 2; i <= NF; i++) {
+          if ($i !~ /[$()]/ && $i != "\\") {
+            print $i
+          }
+        }
+      }
+    ' "${repo_root}/${makefile}" | LC_ALL=C sort -u
+  )"
+
+  while IFS= read -r target; do
+    [ -n "${target}" ] || continue
+    targets_checked=$((targets_checked + 1))
+    if ! grep -Eq "^${target}:" "${db_file}"; then
+      failures=$((failures + 1))
+      printf 'phony target missing from make database: %s %s\n' "${dir}" "${target}" >&2
+    fi
+  done <<<"${targets}"
+done <<<"${makefiles}"
+
+if [ "${failures}" -gt 0 ]; then
+  printf 'checked %s targets across %s Makefiles; %s failed\n' "${targets_checked}" "${makefiles_checked}" "${failures}" >&2
+  exit 1
+fi
+
+printf 'checked %s targets across %s repo-owned Makefiles\n' "${targets_checked}" "${makefiles_checked}"

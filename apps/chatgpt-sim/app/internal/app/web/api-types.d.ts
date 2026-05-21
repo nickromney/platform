@@ -1,30 +1,16 @@
-export interface RuntimeConfig {
+import type {
+	ApiDiagnostics,
+	GatewaySession,
+	NetworkHop,
+	RuntimeConfigBase,
+} from "../../../../../shared/web/api-types.d.ts";
+
+export type { ApiDiagnostics, GatewaySession, NetworkHop };
+
+export interface RuntimeConfig extends RuntimeConfigBase {
 	mcpUrl?: string;
 	modelProvider?: string;
 	dependencies?: string;
-	showNetworkPath?: boolean;
-	networkHops?: NetworkHop[];
-}
-
-export interface NetworkHop {
-	label: string;
-	detail: string;
-	role?: string;
-}
-
-export interface GatewaySession {
-	claims?: Array<{
-		typ?: string;
-		type?: string;
-		val?: string;
-		value?: string;
-	}>;
-	userDetails?: string;
-	user_details?: string;
-	email?: string;
-	preferred_username?: string;
-	name?: string;
-	[key: string]: unknown;
 }
 
 export interface ConnectorOAuthMetadata {
@@ -69,16 +55,6 @@ export interface ApiError extends Error {
 		connector?: ConnectorSummary;
 		[key: string]: unknown;
 	};
-}
-
-export interface ApiDiagnostics {
-	traceId?: string;
-	correlationId?: string;
-	requestStartedAt: string;
-	responseEndedAt: string;
-	durationMs: number;
-	requestURL: string;
-	status: number;
 }
 
 declare global {

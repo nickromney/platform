@@ -329,10 +329,10 @@ catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read
 workloads = {image["id"]: image for image in catalog["workload_images"]}
 
 expected_sources = {
-    "sentiment-api": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd"],
-    "sentiment-auth-ui": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd"],
-    "subnetcalc-api": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/cmd"],
-    "subnetcalc-frontend": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/internal/app/web"],
+    "sentiment-api": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd", "apps/shared/idpauth", "apps/shared/web"],
+    "sentiment-auth-ui": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd", "apps/shared/idpauth", "apps/shared/web"],
+    "subnetcalc-api": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/cmd", "apps/shared/idpauth", "apps/shared/web"],
+    "subnetcalc-frontend": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/internal/app/web", "apps/shared/idpauth", "apps/shared/web"],
 }
 
 for image_id, expected in expected_sources.items():

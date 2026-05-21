@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"platform.local/idpauth"
 )
 
 func TestHealthAndStaticFrontend(t *testing.T) {
@@ -266,7 +268,7 @@ func TestFrontendAPIProxyFallsBackToAuthorizationHeader(t *testing.T) {
 func TestAPIsRequireValidBearerTokenWhenOIDCEnabled(t *testing.T) {
 	srv := NewServer(
 		Config{RuntimeRole: "backend", AuthMode: "oidc", DataDir: t.TempDir()},
-		fakeVerifier{claims: UserClaims{Subject: "user-123", Groups: []string{"platform"}}},
+		fakeVerifier{claims: idpauth.UserClaims{Subject: "user-123", Groups: []string{"platform"}}},
 	)
 
 	post(t, srv, "/api/v1/comments", `{"text":"I love this."}`, http.StatusUnauthorized)
@@ -313,7 +315,7 @@ func TestWhoamiExposesSafeIdentity(t *testing.T) {
 
 	oidc := NewServer(
 		Config{RuntimeRole: "backend", AuthMode: "oidc", DataDir: t.TempDir()},
-		fakeVerifier{claims: UserClaims{Subject: "user-123", PreferredUsername: "alice", Email: "alice@example.test", Groups: []string{"app-sentiment-dev"}}},
+		fakeVerifier{claims: idpauth.UserClaims{Subject: "user-123", PreferredUsername: "alice", Email: "alice@example.test", Groups: []string{"app-sentiment-dev"}}},
 	)
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
@@ -375,7 +377,7 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`<main>`, `<header>`, `/app-shell.css`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="api-status"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
+	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `/app-shell.css`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="api-status"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
@@ -389,7 +391,7 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 	if strings.Contains(html, `<main class="shell">`) {
 		t.Fatalf("frontend shell must use the shared bare main container: %s", html)
 	}
-	if strings.Index(html, `<header>`) > strings.Index(html, `<section>`) {
+	if strings.Index(html, `<header>`) > strings.Index(html, `<section `) {
 		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
 	}
 	if strings.Index(html, `id="api-status"`) > strings.Index(html, `id="comment-form"`) {
@@ -479,16 +481,16 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 }
 
 type fakeVerifier struct {
-	claims UserClaims
+	claims idpauth.UserClaims
 	err    error
 }
 
-func (v fakeVerifier) Verify(_ context.Context, token string) (UserClaims, error) {
+func (v fakeVerifier) Verify(_ context.Context, token string) (idpauth.UserClaims, error) {
 	if token != "valid-token" {
-		return UserClaims{}, ErrInvalidToken
+		return idpauth.UserClaims{}, idpauth.ErrInvalidToken
 	}
 	if v.err != nil {
-		return UserClaims{}, v.err
+		return idpauth.UserClaims{}, v.err
 	}
 	return v.claims, nil
 }

@@ -170,6 +170,10 @@
         "apps/chatgpt-sim/app/Dockerfile",
         "apps/chatgpt-sim/app/Makefile",
         "apps/chatgpt-sim/app/go.mod",
+        "apps/chatgpt-sim/app/go.sum",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
         "apps/chatgpt-sim/app/cmd",
         "apps/chatgpt-sim/app/internal"
       ],
@@ -196,6 +200,9 @@
         "apps/sentiment/app/Makefile",
         "apps/sentiment/app/go.mod",
         "apps/sentiment/app/go.sum",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
         "apps/sentiment/app/cmd",
         "apps/sentiment/app/internal"
       ],
@@ -220,6 +227,9 @@
         "apps/sentiment/app/Makefile",
         "apps/sentiment/app/go.mod",
         "apps/sentiment/app/go.sum",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
         "apps/sentiment/app/cmd",
         "apps/sentiment/app/internal"
       ],
@@ -244,6 +254,9 @@
         "apps/subnetcalc/app/Makefile",
         "apps/subnetcalc/app/go.mod",
         "apps/subnetcalc/app/go.sum",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
         "apps/subnetcalc/app/cmd",
         "apps/subnetcalc/app/internal",
         "apps/subnetcalc/app/internal/app/web"
@@ -291,6 +304,9 @@
         "apps/subnetcalc/app/Makefile",
         "apps/subnetcalc/app/go.mod",
         "apps/subnetcalc/app/go.sum",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
         "apps/subnetcalc/app/cmd",
         "apps/subnetcalc/app/internal",
         "apps/subnetcalc/app/internal/app/web"

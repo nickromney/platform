@@ -111,12 +111,12 @@ func (s *server) validateAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Address == "" {
-		writeJSON(w, http.StatusUnprocessableEntity, errorResponse{Detail: "Missing address"})
+		writeJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: "Missing address"})
 		return
 	}
 	resp, err := s.analyzer.validateAddress(req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -129,7 +129,7 @@ func (s *server) checkPrivate(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.analyzer.checkPrivate(req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -142,7 +142,7 @@ func (s *server) checkCloudflare(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.analyzer.checkCloudflare(req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -155,7 +155,7 @@ func (s *server) checkProviderRange(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.analyzer.checkProviderRange(req.Provider, req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -168,7 +168,7 @@ func (s *server) invalidateProviderRangeCache(w http.ResponseWriter, r *http.Req
 	}
 	resp, err := s.analyzer.invalidateProviderRangeCache(req.Provider)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -181,7 +181,7 @@ func (s *server) refreshProviderRangeCache(w http.ResponseWriter, r *http.Reques
 	}
 	resp, err := s.analyzer.refreshProviderRangeCache(r, req.Provider)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -194,7 +194,7 @@ func (s *server) subnetInfoIPv4(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.analyzer.subnetInfoIPv4(req.Network, req.Mode)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -207,7 +207,7 @@ func (s *server) subnetInfoIPv6(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.analyzer.subnetInfoIPv6(req.Network)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: err.Error()})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -602,7 +602,7 @@ func modeOffset(mode string) (uint32, error) {
 func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(out); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Detail: "Invalid JSON body"})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Invalid JSON body"})
 		return false
 	}
 	return true

@@ -113,7 +113,8 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 
 	html := string(indexHTML)
 	for _, text := range []string{
-		`<main>`,
+		`class="skip-link" href="#main"`,
+		`<main id="main" tabindex="-1">`,
 		`<header>`,
 		`/app-shell.css`,
 		`class="header-actions"`,
@@ -207,13 +208,13 @@ func TestFrontendComposerStaysCompact(t *testing.T) {
 	for _, text := range []string{
 		`.conversation {`,
 		`grid-template-rows: auto auto;`,
-		`max-height: min(680px, calc(100vh - 136px));`,
+		`max-height: min(680px, calc(100vh - 152px));`,
 		`.messages {`,
-		`max-height: min(440px, calc(100vh - 292px));`,
+		`max-height: min(440px, calc(100vh - 308px));`,
 		`.messages:empty {`,
 		`padding-block: 0;`,
 		`.inspector {`,
-		`max-height: min(680px, calc(100vh - 136px));`,
+		`max-height: min(680px, calc(100vh - 152px));`,
 		`@media (max-width: 840px)`,
 		`.conversation { min-height: 0; }`,
 		`.composer {`,
@@ -229,7 +230,7 @@ func TestFrontendComposerStaysCompact(t *testing.T) {
 		`grid-template-rows: auto 1fr auto;`,
 		`grid-template-rows: minmax(0, 1fr) auto;`,
 		`min-height: calc(100vh - 32px);`,
-		`min-height: min(680px, calc(100vh - 136px));`,
+		`min-height: min(680px, calc(100vh - 152px));`,
 		`min-height: 72vh;`,
 		`min-height: 92px;`,
 	} {
