@@ -26,6 +26,9 @@ spec:
       name: oauth2-proxy-grafana
     - group: ""
       kind: Service
+      name: oauth2-proxy-apim
+    - group: ""
+      kind: Service
       name: oauth2-proxy-sentiment-dev
     - group: ""
       kind: Service

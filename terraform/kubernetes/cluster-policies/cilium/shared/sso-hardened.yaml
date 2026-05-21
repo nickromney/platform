@@ -109,6 +109,15 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": apim
+            "k8s:app.kubernetes.io/name": subnetcalc-apim-simulator
+            "k8s:tier": gateway
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
           matchExpressions:
             - key: "k8s:tier"

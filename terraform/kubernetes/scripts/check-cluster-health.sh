@@ -94,6 +94,7 @@ expected_argocd_apps() {
     if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then apps+=(oauth2-proxy-signoz); fi
     if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" ]]; then apps+=(oauth2-proxy-sentiment-dev oauth2-proxy-sentiment-uat); fi
     if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then apps+=(oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat); fi
+    if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-apim); fi
     if [[ "${EXPECT_BACKSTAGE_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-backstage); fi
   fi
 
@@ -1533,6 +1534,9 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
     fi
     if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-signoz)
+    fi
+    if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then
+      sso_apps+=(oauth2-proxy-apim)
     fi
 
     for app in "${sso_apps[@]}"; do

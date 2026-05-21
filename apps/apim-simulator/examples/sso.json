@@ -1,0 +1,31 @@
+{
+  "allowed_origins": ["http://localhost:8307"],
+  "allow_anonymous": false,
+  "trace_enabled": true,
+  "oidc": {
+    "issuer": "http://localhost:${APIM_KEYCLOAK_PORT:-8500}/realms/platform",
+    "audience": "api-app",
+    "jwks_uri": "http://keycloak:8080/realms/platform/protocol/openid-connect/certs"
+  },
+  "tenant_access": {
+    "enabled": true,
+    "primary_key": "local-dev-tenant-key",
+    "secondary_key": "local-dev-tenant-key-secondary"
+  },
+  "products": {
+    "default": {
+      "name": "Default",
+      "description": "OIDC-gated local development product",
+      "require_subscription": false
+    }
+  },
+  "routes": [
+    {
+      "name": "demo-api",
+      "path_prefix": "/api",
+      "upstream_base_url": "http://apim-simulator:8000",
+      "upstream_path_prefix": "/mock",
+      "allow_anonymous": false
+    }
+  ]
+}

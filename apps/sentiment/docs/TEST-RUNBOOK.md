@@ -18,7 +18,6 @@ flowchart TD
 
 - `make -C apps/sentiment/app test`
 - `make -C apps compose-smoke-sentiment`
-- `make -C apps/apim-simulator up-ai-gateway && make -C apps/sentiment smoke-apim-ai-gateway`
 
 Use this path for normal application changes. It covers the API, the authenticated UI build, and the minimal compose wiring.
 

@@ -27,8 +27,8 @@ metadata:
     - url: https://subnetcalc.dev.127.0.0.1.sslip.io/api
       title: Platform gateway
       icon: api
-    - url: http://localhost:3007
-      title: Operator console
+    - url: http://localhost:8000
+      title: Local frontend
       icon: dashboard
     - url: https://grafana.admin.127.0.0.1.sslip.io
       title: Grafana
@@ -101,7 +101,7 @@ kind: API
 metadata:
   name: apim-simulator-management-api
   title: APIM Simulator Management API
-  description: Local APIM management surface for APIs, products, subscriptions, named values, and imports.
+  description: Local APIM management surface for runtime summaries, traces, policies, and subscription-key rotation.
   tags:
     - openapi
     - management
@@ -137,6 +137,29 @@ spec:
           responses:
             '200':
               description: Created API
+      /apim/management/apis/{id}:
+        put:
+          summary: Replace an API
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Updated API
+        delete:
+          summary: Delete an API
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '204':
+              description: API deleted
       /apim/management/products:
         get:
           summary: List products
@@ -148,6 +171,29 @@ spec:
           responses:
             '200':
               description: Created product
+      /apim/management/products/{id}:
+        put:
+          summary: Replace a product
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Updated product
+        delete:
+          summary: Delete a product
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '204':
+              description: Product deleted
       /apim/management/subscriptions:
         get:
           summary: List subscriptions
@@ -159,9 +205,123 @@ spec:
           responses:
             '200':
               description: Created subscription
+      /apim/management/subscriptions/{id}:
+        put:
+          summary: Replace a subscription
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Updated subscription
+        delete:
+          summary: Delete a subscription
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '204':
+              description: Subscription deleted
       /apim/management/named-values:
         get:
           summary: List named values
           responses:
             '200':
               description: Named value collection
+        post:
+          summary: Create a named value
+          responses:
+            '200':
+              description: Created named value
+      /apim/management/named-values/{id}:
+        put:
+          summary: Replace a named value
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Updated named value
+        delete:
+          summary: Delete a named value
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '204':
+              description: Named value deleted
+      /apim/management/summary:
+        get:
+          summary: Read configured APIM routes, products, subscriptions, and policies
+          responses:
+            '200':
+              description: Management summary
+      /apim/management/traces:
+        get:
+          summary: List recent gateway traces
+          responses:
+            '200':
+              description: Trace collection
+      /apim/management/replay:
+        post:
+          summary: Replay a captured gateway request
+          responses:
+            '200':
+              description: Replay result
+      /apim/management/policies/{scope}/{name}:
+        get:
+          summary: Read a policy document
+          parameters:
+            - name: scope
+              in: path
+              required: true
+              schema:
+                type: string
+            - name: name
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Policy XML
+        put:
+          summary: Replace a policy document
+          parameters:
+            - name: scope
+              in: path
+              required: true
+              schema:
+                type: string
+            - name: name
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Updated policy
+      /apim/management/subscriptions/{id}/rotate:
+        post:
+          summary: Rotate a configured subscription key
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+          responses:
+            '200':
+              description: Rotated subscription keys

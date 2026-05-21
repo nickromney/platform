@@ -8,8 +8,6 @@ compose files in this app directory, without Kubernetes or Terraform.
 - `compose.yml` is the primary local runtime.
 - `compose.tls.yml` is a thin overlay that adds a TLS 1.3 front door.
 - The default runtime path is `sentiment-api -> in-process SST classifier`.
-- `compose.apim-ai-gateway.yml` switches inference to
-  `sentiment-api -> APIM simulator AI gateway -> OpenAI-compatible backend`.
 
 ## Compose Files
 
@@ -17,7 +15,6 @@ compose files in this app directory, without Kubernetes or Terraform.
 | --- | --- |
 | [`compose.yml`](../compose.yml) | Main authenticated local stack: Keycloak, oauth2-proxy, edge router, API, UI, and SST inference. |
 | [`compose.tls.yml`](../compose.tls.yml) | Optional TLS 1.3 overlay in front of `oauth2-proxy`. |
-| [`compose.apim-ai-gateway.yml`](../compose.apim-ai-gateway.yml) | Optional overlay that disables SST preload and points `sentiment-api` at the APIM simulator AI gateway. |
 
 ## System Context
 
@@ -31,8 +28,6 @@ flowchart LR
     UI["sentiment-auth-frontend<br/>static SPA"]
     API["sentiment-api"]
     SST["SST classifier<br/>loaded inside sentiment-api"]
-    APIM["APIM simulator AI gateway<br/>optional external stack"]
-    Model["OpenAI-compatible model endpoint"]
 
     Browser -->|"default HTTP"| OAuth
     Browser -->|"optional TLS"| TLS
@@ -42,8 +37,6 @@ flowchart LR
     Edge -->|" / "| UI
     Edge -->|" /api/* "| API
     API -->|"default"| SST
-    API -.->|"compose.apim-ai-gateway.yml"| APIM
-    APIM -.-> Model
 ```
 
 ## Runtime Slices
@@ -59,8 +52,6 @@ flowchart LR
   classification result, so machine clients such as Platform MCP can inspect
   sentiment without changing comment history.
 - The default local setup is fully self-contained inside `sentiment-api`.
-- The APIM AI gateway overlay keeps the API and UI unchanged but moves
-  inference behind APIM-style backend selection, token limits, and fallback.
 
 ## Backend State Diagram
 
@@ -69,7 +60,6 @@ stateDiagram-v2
     [*] --> Start
     Start --> ChooseAnalyzer
     ChooseAnalyzer --> LoadClassifier: SENTIMENT_ANALYZER=sst
-    ChooseAnalyzer --> Ready: SENTIMENT_ANALYZER=apim-ai-gateway
     LoadClassifier --> WarmClassifier: SENTIMENT_WARM_ON_START=true
     LoadClassifier --> Ready: SENTIMENT_WARM_ON_START=false
     WarmClassifier --> Ready
@@ -88,8 +78,6 @@ sequenceDiagram
     participant UI as sentiment-auth-frontend
     participant API as sentiment-api
     participant S as SST classifier
-    participant A as APIM AI gateway
-    participant M as Model endpoint
 
     B->>O: GET /
     O-->>B: Redirect to Keycloak login
@@ -106,11 +94,6 @@ sequenceDiagram
     alt default SST analyzer
         API->>S: Classify sentiment in-process
         S-->>API: Label + confidence
-    else APIM AI gateway analyzer
-        API->>A: POST /ai/v1/chat/completions
-        A->>M: Forward to selected model backend
-        M-->>A: OpenAI-compatible completion
-        A-->>API: Completion with label JSON or text
     end
     API-->>B: JSON result
 ```

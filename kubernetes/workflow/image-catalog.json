@@ -278,8 +278,8 @@
       },
       "fingerprint_sources": [
         "apps/apim-simulator/Dockerfile",
-        "apps/apim-simulator/pyproject.toml",
-        "apps/apim-simulator/uv.lock",
+        "apps/apim-simulator/app/go.mod",
+        "apps/apim-simulator/app/go.sum",
         "apps/apim-simulator/app",
         "apps/apim-simulator/examples"
       ],

@@ -107,6 +107,8 @@ locals {
   subnetcalc_dev_public_url            = "https://${local.subnetcalc_dev_public_host}${local.gateway_https_host_port_suffix}"
   subnetcalc_uat_public_host           = "subnetcalc.uat.${local.platform_base_domain_effective}"
   subnetcalc_uat_public_url            = "https://${local.subnetcalc_uat_public_host}${local.gateway_https_host_port_suffix}"
+  apim_public_host                     = local.separate_admin_domain_enabled ? "apim.${local.platform_admin_base_domain_effective}" : "apim.admin.${local.platform_base_domain_effective}"
+  apim_public_url                      = "https://${local.apim_public_host}${local.gateway_https_host_port_suffix}"
   mcp_public_host                      = "mcp.${local.platform_base_domain_effective}"
   mcp_public_url                       = "https://${local.mcp_public_host}${local.gateway_https_host_port_suffix}"
   mcp_console_public_host              = "mcp-console.${local.platform_base_domain_effective}"
@@ -167,6 +169,19 @@ locals {
       skip_auth_regex    = "^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"
     }
   }
+  sso_apim_proxy_apps = local.enable_apim_simulator_effective ? {
+    apim = {
+      name               = "oauth2-proxy-apim"
+      public_url         = local.apim_public_url
+      upstream           = "http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000"
+      group              = local.sso_admin_group
+      cookie_name        = local.admin_sso_cookie_name
+      cookie_domain      = local.admin_cookie_domain
+      whitelist_domain   = local.admin_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(signed-out\\.html|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"
+    }
+  } : {}
   sso_oauth2_proxy_redirect_uris = distinct(concat(
     [
       "${local.argocd_public_url}/oauth2/callback",
@@ -180,6 +195,7 @@ locals {
       "${local.subnetcalc_uat_public_url}/oauth2/callback",
     ],
     [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_apim_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
   ))
@@ -488,6 +504,7 @@ locals {
     var.enable_sso && var.enable_argocd && var.enable_signoz ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
+    var.enable_sso && local.enable_apim_simulator_effective && var.enable_argocd ? ["oauth2-proxy-apim"] : [],
     var.enable_sso && var.enable_argocd ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
     local.enable_mcp_effective && var.enable_argocd ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
   ))

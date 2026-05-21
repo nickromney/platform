@@ -1,10 +1,5 @@
 {
-  "allowed_origins": [
-    "${APIM_ALLOWED_ORIGIN_BROWSER_LOCALHOST}",
-    "${APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE}",
-    "${APIM_ALLOWED_ORIGIN_VITE}",
-    "${APIM_ALLOWED_ORIGIN_GATEWAY}"
-  ],
+  "allowed_origins": ["http://localhost:8000", "http://localhost:8307"],
   "allow_anonymous": true,
   "trace_enabled": true,
   "tenant_access": {
@@ -23,8 +18,6 @@
     "default": {
       "name": "Default",
       "path": "api",
-      "upstream_base_url": "http://mock-backend:8080",
-      "upstream_path_prefix": "/api",
       "products": ["default"],
       "operations": {
         "health": {
@@ -39,5 +32,13 @@
         }
       }
     }
-  }
+  },
+  "routes": [
+    {
+      "name": "demo-api",
+      "path_prefix": "/api",
+      "upstream_base_url": "http://apim-simulator:8000",
+      "upstream_path_prefix": "/mock"
+    }
+  ]
 }

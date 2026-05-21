@@ -25,7 +25,7 @@ metadata:
 data:
   config.json: |
     {
-      "allowed_origins": ["https://sentiment.dev.127.0.0.1.sslip.io", "https://sentiment.uat.127.0.0.1.sslip.io", "https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io", "https://mcp-console.127.0.0.1.sslip.io", "https://chatgpt.dev.127.0.0.1.sslip.io"],
+      "allowed_origins": ["https://apim.admin.127.0.0.1.sslip.io", "https://sentiment.dev.127.0.0.1.sslip.io", "https://sentiment.uat.127.0.0.1.sslip.io", "https://subnetcalc.dev.127.0.0.1.sslip.io", "https://subnetcalc.uat.127.0.0.1.sslip.io", "https://mcp-console.127.0.0.1.sslip.io", "https://chatgpt.dev.127.0.0.1.sslip.io"],
       "allow_anonymous": false,
       "proxy_timeout_seconds": 120,
       "trace_enabled": true,

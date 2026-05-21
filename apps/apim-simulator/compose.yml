@@ -1,60 +1,104 @@
-x-python-build-args: &python-build-args
-  PYTHON_BUILD_IMAGE: ${PYTHON_BUILD_IMAGE:-dhi.io/python:3.13-debian13-dev}
-  PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
-  APP_UID: ${APP_UID:-65532}
-  APP_GID: ${APP_GID:-65532}
-
-x-python-service-hardening: &python-service-hardening
-  init: true
-  read_only: true
-  tmpfs:
-    - /tmp:rw,noexec,nosuid,nodev
-  security_opt:
-    - no-new-privileges:true
-  cap_drop:
-    - ALL
-
 services:
-  mock-backend:
-    <<: *python-service-hardening
-    build:
-      context: ./examples/mock-backend
-      dockerfile: Dockerfile
-      args:
-        PYTHON_RUNTIME_IMAGE: ${PYTHON_RUNTIME_IMAGE:-dhi.io/python:3.13-debian13}
-        APP_UID: ${APP_UID:-65532}
-        APP_GID: ${APP_GID:-65532}
-    image: apim-simulator-mock-backend:latest
-    expose:
-      - "8080"
-    networks:
-      - apim
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    profiles: ["sso"]
+    entrypoint: ["/bin/sh", "/opt/keycloak/local/start-with-templated-realm.sh"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-demo@admin.test}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_DEMO_PASSWORD:-local-dev-password}
+      KC_DB: dev-file
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      OAUTH2_PROXY_CLIENT_SECRET: ${PLATFORM_DEMO_PASSWORD:-local-dev-password}
+      KEYCLOAK_DEMO_PASSWORD: ${PLATFORM_DEMO_PASSWORD:-local-dev-password}
+    ports:
+      - "${APIM_KEYCLOAK_PORT:-8500}:8080"
+    volumes:
+      - ../shared/keycloak/realm-export.json:/opt/keycloak/local/realm-export.template.json:ro
+      - ../shared/keycloak/start-with-templated-realm.sh:/opt/keycloak/local/start-with-templated-realm.sh:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200\\|UP'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 600s
 
   apim-simulator:
-    <<: *python-service-hardening
     build:
       context: .
       dockerfile: Dockerfile
-      args: *python-build-args
     image: apim-simulator:latest
-    expose:
-      - "8000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    ports:
+      - "${APIM_DIRECT_PORT:-8000}:8000"
     environment:
-      APIM_CONFIG_PATH: ${APIM_CONFIG_PATH:-/tmp/apim-config.json}
-      APIM_CONFIG_SOURCE_PATH: ${APIM_CONFIG_SOURCE_PATH:-/app/examples/basic.json}
+      APIM_CONFIG_PATH: ${APIM_CONFIG_PATH:-/app/examples/basic.json}
       APIM_CONFIG_TEMPLATE_SUBSTITUTE: "true"
-      APIM_ALLOWED_ORIGIN_BROWSER_LOCALHOST: ${APIM_ALLOWED_ORIGIN_BROWSER_LOCALHOST:-http://localhost:3000}
-      APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE: ${APIM_ALLOWED_ORIGIN_OPERATOR_CONSOLE:-http://localhost:3007}
-      APIM_ALLOWED_ORIGIN_VITE: ${APIM_ALLOWED_ORIGIN_VITE:-http://localhost:5173}
-      APIM_ALLOWED_ORIGIN_GATEWAY: ${APIM_ALLOWED_ORIGIN_GATEWAY:-http://localhost:8000}
-      OIDC_ISSUER_EXTERNAL: ${OIDC_ISSUER_EXTERNAL:-http://localhost:8180/realms/subnet-calculator}
-      OPERATOR_CONSOLE_URL: ${OPERATOR_CONSOLE_URL:-http://localhost:3007}
-      OTEL_SERVICE_NAME: apim-simulator
-    depends_on:
-      mock-backend:
-        condition: service_started
-    networks:
-      - apim
+      PORT: "8000"
+      HOME: /tmp
+    healthcheck:
+      test: ["CMD", "/apim-simulator", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
 
-networks:
-  apim:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd
+    profiles: ["sso"]
+    restart: unless-stopped
+    ports:
+      - "${APIM_PUBLIC_PORT:-8307}:4180"
+    environment:
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:-0123456789abcdef0123456789abcdef}
+    command:
+      - --provider=oidc
+      - --skip-oidc-discovery=true
+      - --oidc-issuer-url=http://localhost:${APIM_KEYCLOAK_PORT:-8500}/realms/platform
+      - --login-url=http://localhost:${APIM_KEYCLOAK_PORT:-8500}/realms/platform/protocol/openid-connect/auth?max_age=0
+      - --redeem-url=http://keycloak:8080/realms/platform/protocol/openid-connect/token
+      - --oidc-jwks-url=http://keycloak:8080/realms/platform/protocol/openid-connect/certs
+      - --validate-url=http://keycloak:8080/realms/platform/protocol/openid-connect/userinfo
+      - --client-id=oauth2-proxy
+      - --client-secret=${PLATFORM_DEMO_PASSWORD:-local-dev-password}
+      - --redirect-url=http://localhost:${APIM_PUBLIC_PORT:-8307}/oauth2/callback
+      - --code-challenge-method=S256
+      - --upstream=http://apim-simulator:8000
+      - --http-address=0.0.0.0:4180
+      - --cookie-secure=false
+      - --cookie-httponly=true
+      - --cookie-expire=4h
+      - --cookie-refresh=1h
+      - --email-domain=*
+      - --scope=openid email profile
+      - --oidc-groups-claim=groups
+      - --allowed-group=app-subnetcalc-dev
+      - --allowed-group=platform-admins
+      - --pass-access-token=true
+      - --pass-user-headers=true
+      - --set-authorization-header=true
+      - --set-xauthrequest=true
+      - --standard-logging=true
+      - --auth-logging=true
+      - --request-logging=true
+      - --upstream-timeout=180s
+      - --skip-auth-regex=^/(styles\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
+      - --reverse-proxy=true
+      - --skip-provider-button=true
+    depends_on:
+      - keycloak
+      - apim-simulator

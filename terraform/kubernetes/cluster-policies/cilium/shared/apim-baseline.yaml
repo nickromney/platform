@@ -6,7 +6,8 @@ spec:
   description: >-
     Hardened policy for apim namespace (shared APIM simulator).
     Traffic flow (verified via APIM config.json):
-      Ingress: platform-gateway and app routers (dev/uat, tier=gateway) -> :8000
+      Ingress: platform-gateway, app routers (dev/uat, tier=gateway),
+        and oauth2-proxy-apim -> :8000
       Egress:  -> sentiment-api and subnetcalc-api (dev/uat, tier=backend)
         :8080  (service port 8000)
       Egress:  -> platform-mcp (mcp) :8080  (MCP host/path routed)
@@ -42,6 +43,15 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": platform-gateway
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": sso
+            "k8s:app.kubernetes.io/name": oauth2-proxy
+            "k8s:app.kubernetes.io/instance": oauth2-proxy-apim
       toPorts:
         - ports:
             - port: "8000"

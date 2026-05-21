@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test
+MAKE_KNOWN_GOALS := help prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc apim-simulator-test chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test
 MAKE_SUGGEST_SCRIPT := ../scripts/suggest-make-goal.sh
 
 include ../mk/common.mk
@@ -7,7 +7,7 @@ include ../mk/common.mk
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TRIVY_SCAN_SCRIPT := $(MAKEFILE_DIR)../scripts/trivy-scan-apps.sh
 
-.PHONY: prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test
+.PHONY: prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc apim-simulator-test chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test
 
 ##@ Workflow
 prereqs: ## Check shared app workflow prerequisites without requiring Trivy
@@ -18,10 +18,11 @@ prereqs: ## Check shared app workflow prerequisites without requiring Trivy
 	@echo ""
 	@echo "Trivy remains opt-in. Use 'make trivy-prereqs' when you want scanning."
 
-test: chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test js-check ## Run the default app checks
+test: apim-simulator-test chatgpt-sim-test idp-core-test platform-mcp-test sentiment-test subnetcalc-test js-check ## Run the default app checks
 	@$(MAKE) --no-print-directory compose-smoke
 
 js-check: ## Check dependency-free typed JavaScript contracts for lightweight apps
+	@$(MAKE) --no-print-directory -C ./apim-simulator/app js-check
 	@$(MAKE) --no-print-directory -C ./chatgpt-sim/app js-check
 	@$(MAKE) --no-print-directory -C ./sentiment/app js-check
 	@$(MAKE) --no-print-directory -C ./subnetcalc/app js-check
@@ -59,10 +60,10 @@ trivy-scan-all: ## Scan local apps/, workload images, and the optional in-cluste
 compose-smoke: compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc ## Run the compose smoke checks for app-local stacks
 
 compose-smoke-apim-simulator: ## Run the APIM simulator direct public compose smoke check
-	@set -e; \
-	trap '$(MAKE) --no-print-directory -C ./apim-simulator down >/dev/null 2>&1 || true' EXIT; \
-	$(MAKE) --no-print-directory -C ./apim-simulator up-hello; \
-	$(MAKE) --no-print-directory -C ./apim-simulator smoke-hello SMOKE_HELLO_MODE=anonymous
+	@./apim-simulator/tests/compose-smoke.sh --execute
+
+apim-simulator-test: ## Run the APIM Simulator Go unit tests
+	@$(MAKE) --no-print-directory -C ./apim-simulator/app test
 
 chatgpt-sim-test: ## Run the ChatGPT Sim Go unit tests
 	@$(MAKE) --no-print-directory -C ./chatgpt-sim/app test
