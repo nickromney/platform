@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"platform.local/appshell"
+	"platform.local/idpauth"
 )
 
 //go:embed web/*
@@ -26,16 +27,21 @@ type HTTPDoer interface {
 type server struct {
 	cfg        Config
 	client     HTTPDoer
+	verifier   idpauth.TokenVerifier
 	mu         sync.Mutex
 	connectors []connector
 	nextID     int
 }
 
-func NewServer(cfg Config, client HTTPDoer) http.Handler {
+func NewServer(cfg Config, client HTTPDoer, verifier ...idpauth.TokenVerifier) http.Handler {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	s := &server{cfg: cfg, client: client, nextID: 2}
+	var tokenVerifier idpauth.TokenVerifier
+	if len(verifier) > 0 {
+		tokenVerifier = verifier[0]
+	}
+	s := &server{cfg: cfg, client: client, verifier: tokenVerifier, nextID: 2}
 	s.connectors = initialConnectors(cfg)
 	mux := http.NewServeMux()
 	switch cfg.Role {
@@ -50,6 +56,8 @@ func NewServer(cfg Config, client HTTPDoer) http.Handler {
 		mux.HandleFunc("POST /v1/chat/completions", s.llmChatCompletions)
 	default:
 		mux.HandleFunc("GET /health", s.shellHealth)
+		mux.HandleFunc("GET /api/whoami", s.whoami)
+		mux.HandleFunc("GET /api/v1/whoami", s.whoami)
 		mux.HandleFunc("GET /api/discovery", s.shellDiscovery)
 		mux.HandleFunc("GET /api/connectors", s.listConnectors)
 		mux.HandleFunc("POST /api/connectors", s.addConnector)
@@ -92,6 +100,51 @@ func (s *server) shellHealth(w http.ResponseWriter, _ *http.Request) {
 		"model_provider": s.modelProvider(),
 		"dependencies":   "go-stdlib-only",
 	})
+}
+
+func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
+	claims, ok := s.currentUser(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, claims)
+}
+
+func (s *server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := s.currentUser(w, r); !ok {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
+	if strings.EqualFold(s.cfg.AuthMode, "none") {
+		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
+	}
+	if s.verifier == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "OIDC verifier is not configured"})
+		return idpauth.UserClaims{}, false
+	}
+	token := idpauth.BearerToken(r)
+	if token == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing bearer token"})
+		return idpauth.UserClaims{}, false
+	}
+	claims, err := s.verifier.Verify(r.Context(), token)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if !errors.Is(err, idpauth.ErrInvalidToken) {
+			status = http.StatusBadGateway
+		}
+		writeJSON(w, status, map[string]string{"error": "invalid token"})
+		return idpauth.UserClaims{}, false
+	}
+	if claims.Groups == nil {
+		claims.Groups = []string{}
+	}
+	return claims, true
 }
 
 func (s *server) gatewaySession(w http.ResponseWriter, r *http.Request) {
@@ -600,11 +653,23 @@ func (s *server) deleteConnector(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "connector not found"})
 }
 
-func (s *server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
+func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
+	redirectURI := s.cfg.OIDCRedirect
+	if redirectURI == "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		redirectURI = scheme + "://" + r.Host + "/"
+	}
 	payload := map[string]any{
+		"authMethod":      s.cfg.AuthMode,
+		"apiAuthMethod":   s.cfg.APIAuthMode,
+		"oidcAuthority":   strings.TrimRight(s.cfg.OIDCIssuer, "/"),
+		"oidcClientId":    s.cfg.OIDCClientID,
+		"oidcRedirect":    redirectURI,
 		"mcpUrl":          s.cfg.MCPURL,
 		"modelProvider":   s.modelProvider(),
-		"dependencies":    "go-stdlib-only",
 		"showNetworkPath": parseBoolDefault(s.cfg.ShowNetworkPath, true),
 	}
 	if s.cfg.NetworkHops != "" {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"platform.local/idpauth"
 	"platform.local/subnetcalc/internal/app"
 )
 
@@ -38,9 +39,9 @@ func main() {
 		cfg.APIAuthMode = cfg.AuthMode
 	}
 
-	var verifier app.TokenVerifier
+	var verifier idpauth.TokenVerifier
 	if cfg.AuthMode == "oidc" && cfg.RuntimeRole != "frontend" {
-		oidcVerifier, err := app.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, firstString(cfg.OIDCAudience, cfg.OIDCClientID), cfg.OIDCJWKSURI)
+		oidcVerifier, err := idpauth.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, firstString(cfg.OIDCAudience, cfg.OIDCClientID), cfg.OIDCJWKSURI)
 		if err != nil {
 			log.Fatalf("configure oidc: %v", err)
 		}

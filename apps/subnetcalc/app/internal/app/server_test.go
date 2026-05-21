@@ -1,11 +1,14 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"platform.local/idpauth"
 )
 
 func TestHealthAndStaticFrontend(t *testing.T) {
@@ -532,7 +535,7 @@ func TestProviderRangeRefreshParsesStripeAndAzureFeeds(t *testing.T) {
 }
 
 func TestWhoamiRequiresValidBearerToken(t *testing.T) {
-	verifier := fakeVerifier{claims: UserClaims{
+	verifier := fakeVerifier{claims: idpauth.UserClaims{
 		Subject:           "user-123",
 		PreferredUsername: "demo",
 		Email:             "demo@example.test",
@@ -626,7 +629,7 @@ func TestRuntimeConfigDefaultsAPIAuthMethodToFrontendAuthMethod(t *testing.T) {
 }
 
 func TestOIDCVerifierCanUseSeparateJWKSURI(t *testing.T) {
-	verifier, err := NewOIDCVerifier(
+	verifier, err := idpauth.NewOIDCVerifier(
 		t.Context(),
 		"http://localhost:8300/realms/subnetcalc",
 		"api-app",
@@ -641,7 +644,7 @@ func TestOIDCVerifierCanUseSeparateJWKSURI(t *testing.T) {
 }
 
 func TestSubnetAPIsRequireValidBearerTokenWhenOIDCEnabled(t *testing.T) {
-	verifier := fakeVerifier{claims: UserClaims{Subject: "user-123", Groups: []string{"platform"}}}
+	verifier := fakeVerifier{claims: idpauth.UserClaims{Subject: "user-123", Groups: []string{"platform"}}}
 	srv := NewServer(Config{AuthMode: "oidc"}, verifier)
 	body := `{"address":"192.168.1.0/24"}`
 
@@ -680,7 +683,8 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 	}
 
 	for _, text := range []string{
-		`<main>`,
+		`class="skip-link" href="#main"`,
+		`<main id="main" tabindex="-1">`,
 		`<header>`,
 		`/app-shell.css`,
 		`class="header-actions"`,
@@ -766,13 +770,13 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 }
 
 type fakeVerifier struct {
-	claims UserClaims
+	claims idpauth.UserClaims
 	err    error
 }
 
-func (f fakeVerifier) Verify(_ *http.Request, token string) (UserClaims, error) {
+func (f fakeVerifier) Verify(_ context.Context, token string) (idpauth.UserClaims, error) {
 	if token != "valid-token" {
-		return UserClaims{}, ErrInvalidToken
+		return idpauth.UserClaims{}, idpauth.ErrInvalidToken
 	}
 	return f.claims, f.err
 }

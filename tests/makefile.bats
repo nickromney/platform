@@ -28,6 +28,7 @@ setup() {
   [[ "${output}" == *"make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]"* ]]
   [[ "${output}" == *"make kubernetes"* ]]
   [[ "${output}" == *"make docker"* ]]
+  [[ "${output}" == *"make docker-safe-clean [AUTO_APPROVE=1]"* ]]
   [[ "${output}" == *"make apps"* ]]
   [[ "${output}" == *"make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1]"* ]]
   [[ "${output}" != *"make kubernetes-old-network-lab"* ]]
@@ -44,7 +45,8 @@ setup() {
   apps_line="$(printf '%s\n' "${output}" | grep -n '^  make apps' | cut -d: -f1)"
   check_version_line="$(printf '%s\n' "${output}" | grep -n '^  make check-version' | cut -d: -f1)"
   build_tui_line="$(printf '%s\n' "${output}" | grep -n '^  make build-tui' | cut -d: -f1)"
-  docker_line="$(printf '%s\n' "${output}" | grep -n '^  make docker' | cut -d: -f1)"
+  docker_line="$(printf '%s\n' "${output}" | grep -n '^  make docker[[:space:]]' | cut -d: -f1)"
+  docker_safe_clean_line="$(printf '%s\n' "${output}" | grep -n '^  make docker-safe-clean' | cut -d: -f1)"
   fmt_line="$(printf '%s\n' "${output}" | grep -n '^  make fmt' | cut -d: -f1)"
   kubernetes_line="$(printf '%s\n' "${output}" | grep -n '^  make kubernetes' | cut -d: -f1)"
   lint_line="$(printf '%s\n' "${output}" | grep -n '^  make lint[[:space:]]' | cut -d: -f1)"
@@ -55,7 +57,8 @@ setup() {
   [ "${apps_line}" -lt "${build_tui_line}" ]
   [ "${build_tui_line}" -lt "${check_version_line}" ]
   [ "${check_version_line}" -lt "${docker_line}" ]
-  [ "${docker_line}" -lt "${fmt_line}" ]
+  [ "${docker_line}" -lt "${docker_safe_clean_line}" ]
+  [ "${docker_safe_clean_line}" -lt "${fmt_line}" ]
   [ "${fmt_line}" -lt "${kubernetes_line}" ]
   [ "${kubernetes_line}" -lt "${lint_line}" ]
   [ "${lint_line}" -lt "${status_line}" ]
@@ -238,6 +241,28 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'reset --dry-run --include-host-caches --include-kubeconfigs --include-docker --include-docker-volumes' ]
+}
+
+@test "root docker-safe-clean delegates to the kind conservative cleanup target" {
+  cleanup_stub="${BATS_TEST_TMPDIR}/docker-safe-clean.sh"
+  log_file="${BATS_TEST_TMPDIR}/docker-safe-clean.log"
+
+  cat >"${cleanup_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'docker-safe-clean %s\n' "\$*" >>"${log_file}"
+printf 'safe clean\n'
+EOF
+  chmod +x "${cleanup_stub}"
+
+  run make -C "${REPO_ROOT}" docker-safe-clean DOCKER_SAFE_CLEAN="${cleanup_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"safe clean"* ]]
+
+  run cat "${log_file}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "docker-safe-clean --dry-run" ]
 }
 
 @test "root prereqs and test are informational entrypoints" {

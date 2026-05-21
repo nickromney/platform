@@ -13,12 +13,13 @@ import (
 	"strings"
 
 	"platform.local/appshell"
+	"platform.local/idpauth"
 )
 
 //go:embed web/*
 var web embed.FS
 
-func NewServer(cfg Config, verifier ...TokenVerifier) http.Handler {
+func NewServer(cfg Config, verifier ...idpauth.TokenVerifier) http.Handler {
 	if cfg.AuthMode == "" {
 		cfg.AuthMode = "none"
 	}
@@ -30,7 +31,7 @@ func NewServer(cfg Config, verifier ...TokenVerifier) http.Handler {
 	}
 
 	mux := http.NewServeMux()
-	var tokenVerifier TokenVerifier
+	var tokenVerifier idpauth.TokenVerifier
 	if len(verifier) > 0 {
 		tokenVerifier = verifier[0]
 	}
@@ -65,7 +66,7 @@ func NewServer(cfg Config, verifier ...TokenVerifier) http.Handler {
 type server struct {
 	cfg      Config
 	store    store
-	verifier TokenVerifier
+	verifier idpauth.TokenVerifier
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -135,27 +136,27 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, claims)
 }
 
-func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (UserClaims, bool) {
+func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
 	if strings.EqualFold(s.cfg.AuthMode, "none") {
-		return UserClaims{Subject: "anonymous", Groups: []string{}}, true
+		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
 	}
 	if s.verifier == nil {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "OIDC verifier is not configured"})
-		return UserClaims{}, false
+		return idpauth.UserClaims{}, false
 	}
-	token := bearerToken(r)
+	token := idpauth.BearerToken(r)
 	if token == "" {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "missing bearer token"})
-		return UserClaims{}, false
+		return idpauth.UserClaims{}, false
 	}
 	claims, err := s.verifier.Verify(r.Context(), token)
 	if err != nil {
 		status := http.StatusUnauthorized
-		if !errors.Is(err, ErrInvalidToken) {
+		if !errors.Is(err, idpauth.ErrInvalidToken) {
 			status = http.StatusBadGateway
 		}
 		writeJSON(w, status, errorResponse{Error: "invalid token"})
-		return UserClaims{}, false
+		return idpauth.UserClaims{}, false
 	}
 	if claims.Groups == nil {
 		claims.Groups = []string{}

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go get *)",
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(go work *)",
+      "Bash(go mod *)",
+      "Bash(go env *)",
+      "Bash(GONOSUMDB=platform.local go build ./subnetcalc/app/...)",
+      "Bash(GONOSUMDB=platform.local GONOSUMCHECK=platform.local/* go build *)",
+      "Bash(GONOSUMDB=platform.local go build *)",
+      "Bash(go version *)",
+      "Bash(GONOSUMDB=platform.local GOFLAGS=-mod=mod go build *)",
+      "Bash(GONOSUMDB=platform.local go work *)"
+    ]
+  }
+}

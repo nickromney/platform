@@ -284,12 +284,30 @@ locals {
   subnetcalc_source_dir = var.subnetcalc_source_dir != "" ? abspath(pathexpand(var.subnetcalc_source_dir)) : abspath(
     "${local.monorepo_apps_dir}/${local.subnetcalc_repo_name}"
   )
+  app_shared_source_dir = abspath("${local.monorepo_apps_dir}/shared")
+  app_shared_extra_source_dir = {
+    source_dir = local.app_shared_source_dir
+    target_dir = "shared"
+  }
+  sentiment_app_extra_source_dirs = [
+    local.app_shared_extra_source_dir
+  ]
   subnetcalc_app_extra_source_dirs = [
+    local.app_shared_extra_source_dir,
     {
       source_dir = abspath("${local.monorepo_apps_dir}/apim-simulator")
       target_dir = "apim-simulator"
     }
   ]
+  sentiment_projected_source_dirs = concat(
+    [
+      {
+        source_dir = local.sentiment_source_dir
+        target_dir = ""
+      }
+    ],
+    local.sentiment_app_extra_source_dirs
+  )
   subnetcalc_projected_source_dirs = concat(
     [
       {
@@ -308,10 +326,12 @@ locals {
     "__pycache__",
     "node_modules",
   ])
-  sentiment_content_hash = var.enable_app_repo_sentiment ? try(sha1(join("", [
-    for f in sort(fileset(local.sentiment_source_dir, "**")) : filesha256("${local.sentiment_source_dir}/${f}")
-    if length(setintersection(toset(split("/", f)), local.app_repo_sync_excluded_path_segments)) == 0
-  ])), "") : ""
+  sentiment_content_hash = var.enable_app_repo_sentiment ? try(sha1(join("", flatten([
+    for source in local.sentiment_projected_source_dirs : [
+      for f in sort(fileset(source.source_dir, "**")) : "${source.target_dir}/${f}:${filesha256("${source.source_dir}/${f}")}"
+      if length(setintersection(toset(split("/", f)), local.app_repo_sync_excluded_path_segments)) == 0
+    ]
+  ]))), "") : ""
   subnetcalc_content_hash = var.enable_app_repo_subnetcalc ? try(sha1(join("", flatten([
     for source in local.subnetcalc_projected_source_dirs : [
       for f in sort(fileset(source.source_dir, "**")) : "${source.target_dir}/${f}:${filesha256("${source.source_dir}/${f}")}"
@@ -328,6 +348,7 @@ locals {
       repo_is_org         = local.gitea_repo_owner_is_org
       repo_owner_fallback = local.gitea_repo_owner_fallback
       deploy_key_title    = "ci-${local.sentiment_repo_name}-key"
+      extra_source_dirs   = local.sentiment_app_extra_source_dirs
     }
     subnetcalc = {
       app_id              = "subnetcalc"

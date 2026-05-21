@@ -1,9 +1,5 @@
 package app
 
-import "errors"
-
-var ErrInvalidToken = errors.New("invalid bearer token")
-
 type Config struct {
 	Addr                 string
 	AuthMode             string
@@ -20,15 +16,8 @@ type Config struct {
 	ProviderRangeSources map[string]string
 }
 
-type UserClaims struct {
-	Subject           string   `json:"sub"`
-	PreferredUsername string   `json:"preferred_username,omitempty"`
-	Email             string   `json:"email,omitempty"`
-	Groups            []string `json:"groups"`
-}
-
 type errorResponse struct {
-	Detail string `json:"detail"`
+	Error string `json:"error"`
 }
 
 type subnetIPv4Request struct {

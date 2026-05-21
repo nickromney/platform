@@ -1,9 +1,5 @@
 package app
 
-import "errors"
-
-var ErrInvalidToken = errors.New("invalid bearer token")
-
 type Config struct {
 	AuthMode        string
 	APIAuthMode     string
@@ -17,13 +13,6 @@ type Config struct {
 	CSVPath         string
 	NetworkHops     string
 	ShowNetworkPath string
-}
-
-type UserClaims struct {
-	Subject           string   `json:"sub"`
-	PreferredUsername string   `json:"preferred_username,omitempty"`
-	Email             string   `json:"email,omitempty"`
-	Groups            []string `json:"groups"`
 }
 
 type Label string

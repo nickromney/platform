@@ -17,6 +17,13 @@ type Config struct {
 	LLMModel        string
 	ShowNetworkPath string
 	NetworkHops     string
+	AuthMode        string
+	APIAuthMode     string
+	OIDCIssuer      string
+	OIDCAudience    string
+	OIDCJWKSURI     string
+	OIDCClientID    string
+	OIDCRedirect    string
 }
 
 type ConnectorConfig struct {
@@ -53,6 +60,15 @@ func ConfigFromEnv() Config {
 	llmModel := strings.TrimSpace(os.Getenv("LLM_MODEL"))
 	showNetworkPath := strings.TrimSpace(os.Getenv("SHOW_NETWORK_PATH"))
 	networkHops := strings.TrimSpace(os.Getenv("NETWORK_HOPS"))
+	authMode := strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_METHOD")))
+	if authMode == "" {
+		authMode = "none"
+	}
+	apiAuthMode := strings.ToLower(strings.TrimSpace(os.Getenv("API_AUTH_METHOD")))
+	if apiAuthMode == "" {
+		apiAuthMode = authMode
+	}
+	oidcIssuer := firstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY")
 	return Config{
 		Role:            role,
 		Port:            port,
@@ -64,7 +80,23 @@ func ConfigFromEnv() Config {
 		LLMModel:        llmModel,
 		ShowNetworkPath: showNetworkPath,
 		NetworkHops:     networkHops,
+		AuthMode:        authMode,
+		APIAuthMode:     apiAuthMode,
+		OIDCIssuer:      oidcIssuer,
+		OIDCAudience:    strings.TrimSpace(os.Getenv("OIDC_AUDIENCE")),
+		OIDCJWKSURI:     strings.TrimSpace(os.Getenv("OIDC_JWKS_URI")),
+		OIDCClientID:    strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID")),
+		OIDCRedirect:    strings.TrimSpace(os.Getenv("OIDC_REDIRECT_URI")),
 	}
+}
+
+func firstEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseConnectorConfigs(raw string) []ConnectorConfig {

@@ -140,6 +140,15 @@ EOF
   done
 }
 
+@test "app repo sync contracts project shared source" {
+  locals_tf="${REPO_ROOT}/terraform/kubernetes/locals.tf"
+
+  grep -Eq 'app_shared_source_dir[[:space:]]*= abspath\("\$\{local\.monorepo_apps_dir\}/shared"\)' "${locals_tf}"
+  grep -Eq 'target_dir[[:space:]]*= "shared"' "${locals_tf}"
+  grep -Eq 'extra_source_dirs[[:space:]]*= local\.sentiment_app_extra_source_dirs' "${locals_tf}"
+  grep -Eq 'extra_source_dirs[[:space:]]*= local\.subnetcalc_app_extra_source_dirs' "${locals_tf}"
+}
+
 @test "subnetcalc app repo sync contract projects APIM simulator source" {
   locals_tf="${REPO_ROOT}/terraform/kubernetes/locals.tf"
 
@@ -154,6 +163,16 @@ EOF
   grep -Fq "APP_REPO_NAME: subnetcalc" "${workflow}"
   grep -Fq '${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/${APP_REPO_NAME}.git' "${workflow}"
   ! grep -Fq "subnet-calculator.git" "${workflow}"
+}
+
+@test "app Gitea workflows rebuild when shared app libraries change" {
+  for workflow in \
+    "${REPO_ROOT}/apps/sentiment/.gitea/workflows/build-images.yaml" \
+    "${REPO_ROOT}/apps/subnetcalc/.gitea/workflows/build-images.yaml" \
+    "${REPO_ROOT}/apps/chatgpt-sim/.gitea/workflows/build-images.yaml"; do
+    grep -Fq '"shared/**"' "${workflow}"
+    grep -Fq -- '-v "${APPS_DIR}/shared:/shared:ro"' "${workflow}"
+  done
 }
 
 @test "subnetcalc workflow Dockerfiles avoid remote Dockerfile frontend pulls" {

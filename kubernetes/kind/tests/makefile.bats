@@ -28,6 +28,7 @@ setup() {
   [[ "${output}" == *"make status"* ]]
   [[ "${output}" != *"make 950-local-idp plan"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
+  [[ "${output}" == *"make docker-safe-clean [AUTO_APPROVE=1]"* ]]
   [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"* ]]

@@ -29,6 +29,7 @@ BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
 BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
+DOCKER_SAFE_CLEAN := $(SCRIPTS_DIR)/docker-safe-clean.sh
 ENSURE_KIND_KUBECONFIG := $(SCRIPTS_DIR)/ensure-kind-kubeconfig.sh
 REFRESH_KIND_KUBECONFIG := $(SCRIPTS_DIR)/refresh-kind-kubeconfig.sh
 ENSURE_LOCAL_IMAGE_CACHE := $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh
@@ -104,7 +105,7 @@ VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-ss
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -194,6 +195,7 @@ help:
 	@echo "  make discover-images                          Dump images from running cluster"
 	@echo "  make docker-health"
 	@echo "  make docker-prune-estimate                   Estimate reclaimable space for docker builder prune -af and docker system prune -af"
+	@echo "  make docker-safe-clean [AUTO_APPROVE=1]      Preview or run conservative Docker cleanup that preserves the current kind cluster"
 	@echo "  make env                                     Show local tool versions + Docker daemon status"
 	@echo "  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
@@ -1008,6 +1010,10 @@ docker-health:
 .PHONY: docker-prune-estimate
 docker-prune-estimate:
 	@"$(DOCKER_PRUNE_ESTIMATE)"
+
+.PHONY: docker-safe-clean
+docker-safe-clean:
+	@"$(DOCKER_SAFE_CLEAN)" $(if $(filter 1,$(DRY_RUN)),--dry-run,$(if $(filter 1,$(AUTO_APPROVE)),--execute,--dry-run))
 
 .PHONY: status
 status:

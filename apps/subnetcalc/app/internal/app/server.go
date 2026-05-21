@@ -12,16 +12,13 @@ import (
 	"strings"
 
 	"platform.local/appshell"
+	"platform.local/idpauth"
 )
 
 //go:embed web/*
 var web embed.FS
 
-type TokenVerifier interface {
-	Verify(r *http.Request, token string) (UserClaims, error)
-}
-
-func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
+func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 	if cfg.AuthMode == "" {
 		cfg.AuthMode = "none"
 	}
@@ -63,7 +60,7 @@ func NewServer(cfg Config, verifier TokenVerifier) http.Handler {
 
 type server struct {
 	cfg      Config
-	verifier TokenVerifier
+	verifier idpauth.TokenVerifier
 	analyzer *subnetAnalyzer
 }
 
@@ -108,30 +105,27 @@ func (s *server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (UserClaims, bool) {
+func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
 	if strings.EqualFold(s.cfg.AuthMode, "none") {
-		return UserClaims{Subject: "anonymous", Groups: []string{}}, true
+		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
 	}
 	if s.verifier == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Detail: "OIDC verifier is not configured"})
-		return UserClaims{}, false
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "OIDC verifier is not configured"})
+		return idpauth.UserClaims{}, false
 	}
-
-	auth := strings.TrimSpace(r.Header.Get("Authorization"))
-	parts := strings.Fields(auth)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Detail: "Missing or invalid bearer token"})
-		return UserClaims{}, false
+	token := idpauth.BearerToken(r)
+	if token == "" {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Missing or invalid bearer token"})
+		return idpauth.UserClaims{}, false
 	}
-
-	claims, err := s.verifier.Verify(r, parts[1])
+	claims, err := s.verifier.Verify(r.Context(), token)
 	if err != nil {
 		status := http.StatusUnauthorized
-		if !errors.Is(err, ErrInvalidToken) {
+		if !errors.Is(err, idpauth.ErrInvalidToken) {
 			status = http.StatusBadGateway
 		}
-		writeJSON(w, status, errorResponse{Detail: "Invalid token"})
-		return UserClaims{}, false
+		writeJSON(w, status, errorResponse{Error: "Invalid token"})
+		return idpauth.UserClaims{}, false
 	}
 	if claims.Groups == nil {
 		claims.Groups = []string{}
@@ -198,18 +192,18 @@ func setFrontendCacheHeaders(w http.ResponseWriter) {
 func (s *server) apiProxy() http.Handler {
 	if s.cfg.BackendURL == "" {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Detail: "BACKEND_URL is not configured"})
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "BACKEND_URL is not configured"})
 		})
 	}
 	target, err := url.Parse(s.cfg.BackendURL)
 	if err != nil {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Detail: "BACKEND_URL is invalid"})
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "BACKEND_URL is invalid"})
 		})
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Detail: "Backend API unavailable"})
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "Backend API unavailable"})
 	}
 	return proxy
 }
