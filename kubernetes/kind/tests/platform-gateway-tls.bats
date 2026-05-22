@@ -190,6 +190,19 @@ PY
   grep -Fq 'sso_apps+=(oauth2-proxy-apim)' "${script}"
 }
 
+@test "cluster health expected inventory includes Langfuse and its SSO proxy when enabled" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'EXPECT_LANGFUSE=$(expected_from_tfvars enable_langfuse)' "${script}"
+  grep -Fq 'EXPECT_LANGFUSE_DEMOS=$(expected_from_tfvars enable_langfuse_demos)' "${script}"
+  grep -Fq 'if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(langfuse); fi' "${script}"
+  grep -Fq 'if [[ "${EXPECT_LANGFUSE}" == "true" ]]; then apps+=(oauth2-proxy-langfuse); fi' "${script}"
+  grep -Fq 'if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(langfuse-demos); fi' "${script}"
+  grep -Fq 'if [[ "${EXPECT_LANGFUSE_DEMOS}" == "true" ]]; then apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner); fi' "${script}"
+  grep -Fq 'sso_apps+=(oauth2-proxy-langfuse)' "${script}"
+  grep -Fq 'sso_apps+=(oauth2-proxy-langfuse-trace-chat oauth2-proxy-langfuse-tool-agent oauth2-proxy-langfuse-eval-runner)' "${script}"
+}
+
 @test "Cilium policies allow APIM admin oauth2 proxy to reach APIM upstream" {
   apim_policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml"
   sso_policy="${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/sso-hardened.yaml"

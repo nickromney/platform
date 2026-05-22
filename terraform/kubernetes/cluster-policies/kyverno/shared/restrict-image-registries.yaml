@@ -36,6 +36,7 @@ spec:
                 - headlamp
                 - gitea
                 - gitea-runner
+                - langfuse
       validate:
         allowExistingViolations: true
         message: >-
@@ -65,6 +66,7 @@ spec:
                       - "quay.io/*"
                       - "ghcr.io/*"
                       - "cr.agentgateway.dev/*"
+                      - "cgr.dev/*"
                       - "dhi.io/*"
                       - "ecr-public.aws.com/*"
                       - "docker.gitea.com/*"
@@ -74,7 +76,9 @@ spec:
                       - "docker.io/curlimages/*"
                       - "docker.io/grafana/*"
                       - "docker.io/groundnuty/*"
+                      - "docker.io/langfuse/*"
                       - "docker.io/postgres:*"
+                      - "docker.io/redis:*"
                       - "docker.io/signoz/*"
                       - "docker.io/victoriametrics/*"
                       # Some upstream Helm charts omit the explicit docker.io prefix.

@@ -18,6 +18,7 @@ setup() {
   [[ "${output}" == *"700 - app repos"* ]]
   [[ "${output}" == *"800 - observability"* ]]
   [[ "${output}" == *"900 - sso"* ]]
+  [[ "${output}" == *"920 - langfuse"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
   [[ "${output}" == *"make exercise-k3s-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=k3s-restart]"* ]]
   [[ "${output}" == *"make start"* ]]
@@ -94,7 +95,7 @@ setup() {
   run make -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=950
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900 920"* ]]
 }
 
 @test "lima check-app forwards ordered tfvars through the shared builder" {
@@ -279,7 +280,7 @@ EOF
   run make -C "${REPO_ROOT}/kubernetes/lima" plan STAGE=950
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900 920"* ]]
 }
 
 @test "lima prereqs groups tool checks and does not run shell audit" {

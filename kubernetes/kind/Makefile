@@ -155,6 +155,7 @@ stage_var_file = $(abspath $(stage_file))
 target_var_file = $(abspath $(target_profile_file))
 preload_images_file = $(abspath $(MAKEFILE_DIR)preload-images.txt)
 export TF_VAR_kind_stage_900_tfvars_file := $(abspath $(MAKEFILE_DIR)$(STAGE_FILE_REL_900))
+export TF_VAR_kind_stage_tfvars_file := $(stage_var_file)
 export TF_VAR_kind_target_tfvars_file := $(target_var_file)
 export TF_VAR_kind_stack_dir := $(abspath $(STACK_DIR))
 export TF_VAR_kind_config_path := $(abspath $(STACK_DIR))/kind-config.yaml
@@ -166,7 +167,9 @@ help:
 	@echo "Workflow syntax:"
 	@echo "  make 100 apply"
 	@echo "  make 900 plan"
+	@echo "  make 920 plan"
 	@echo "  make 900 apply AUTO_APPROVE=1"
+	@echo "  make 920 apply AUTO_APPROVE=1"
 	@echo ""
 	@echo "Accepted variants:"
 	@echo "  make apply 100"
@@ -174,7 +177,7 @@ help:
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Targets (workflow syntax above is preferred):"
-	@echo "  make apply        900 [AUTO_APPROVE=1]"
+	@echo "  make apply        900|920 [AUTO_APPROVE=1]"
 	@echo "  make audit-bootstrap                         Post-bootstrap audit: apps, pods, events, restarts, previous logs"
 	@echo "  make build-local-platform-images             Build host-side platform shortcut images into 127.0.0.1:5002"
 	@echo "  make build-local-workload-images             Build host-side workload shortcut images into 127.0.0.1:5002"
@@ -237,6 +240,7 @@ help:
 	@echo "  700 - $(STAGE_DESC_KIND_700)"
 	@echo "  800 - $(STAGE_DESC_KIND_800)"
 	@echo "  900 - $(STAGE_DESC_KIND_900)"
+	@echo "  920 - $(STAGE_DESC_KIND_920)"
 	@echo ""
 	@echo "Stage examples:"
 	@echo "  make 100 plan"
@@ -587,7 +591,7 @@ apply: workflow-validate-stage
 	@if [ ! -f "$(target_profile_file)" ]; then echo "Missing $(target_profile_file)"; exit 1; fi
 	@$(MAKE) check-stage-monotonicity
 	@$(MAKE) check-platform-env-file
-	@$(MAKE) prereqs
+	@$(MAKE) prereqs STAGE="$(STAGE)"
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) check-docker-daemon && $(MAKE) check-kind-state
 	@$(MAKE) ensure-kind-running
@@ -747,7 +751,7 @@ apply: workflow-validate-stage
 endif
 .PHONY: readiness
 readiness: ## Check operator and variant readiness
-	@$(MAKE) prereqs
+	@$(MAKE) prereqs STAGE="$(STAGE)"
 	@if docker ps --format '{{.Names}}' | grep -qx "$${TARGET_CLUSTER_NAME:-kind-local}-control-plane"; then \
 		$(MAKE) check-health; \
 	fi

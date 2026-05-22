@@ -35,7 +35,8 @@
       "600": "kubernetes/slicer/stages/600-policies.tfvars",
       "700": "kubernetes/slicer/stages/700-app-repos.tfvars",
       "800": "kubernetes/slicer/stages/800-gateway-tls.tfvars",
-      "900": "kubernetes/slicer/stages/900-sso.tfvars"
+      "900": "kubernetes/slicer/stages/900-sso.tfvars",
+      "920": "kubernetes/slicer/stages/920-langfuse.tfvars"
     }
   },
   "readiness": {

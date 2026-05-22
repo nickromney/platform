@@ -546,6 +546,30 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "render_policy_repo_tree includes lightweight Langfuse without Bitnami legacy images when enabled" {
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_LANGFUSE=true ENABLE_PROMETHEUS=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-langfuse' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/argocd-apps/81-langfuse.application.yaml' '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/langfuse/all.yaml' '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/platform-gateway-routes-sso/httproute-langfuse.yaml' '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"path: apps/langfuse"* ]]
+  [[ "${output}" == *"ignoreDifferences:"* ]]
+  [[ "${output}" == *".spec.volumeClaimTemplates[].status"* ]]
+  [[ "${output}" == *"RespectIgnoreDifferences=true"* ]]
+  [[ "${output}" == *"image: docker.io/langfuse/langfuse:3"* ]]
+  [[ "${output}" == *"image: docker.io/langfuse/langfuse-worker:3"* ]]
+  [[ "${output}" == *"image: docker.io/postgres:17.6-alpine"* ]]
+  [[ "${output}" == *"image: docker.io/redis:8.2.3-alpine"* ]]
+  [[ "${output}" == *"image: docker.io/clickhouse/clickhouse-server:25.5.6"* ]]
+  [[ "${output}" == *"image: cgr.dev/chainguard/minio:latest"* ]]
+  [[ "${output}" == *'encryption-key: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"'* ]]
+  [[ "${output}" == *"langfuse.admin.127.0.0.1.sslip.io"* ]]
+  [[ "${output}" == *"name: oauth2-proxy-langfuse"* ]]
+  [[ "${output}" != *"dhi.io/langfuse"* ]]
+  [[ "${output}" != *"dhi.io/postgres"* ]]
+  [[ "${output}" != *"dhi.io/redis"* ]]
+  [[ "${output}" != *"bitnami"* ]]
+  [[ "${output}" != *"bitnamilegacy"* ]]
+}
+
 @test "render_policy_repo_tree matches full golden tree for minimal contract" {
   assert_policy_render_tree_matches_golden "minimal"
 }

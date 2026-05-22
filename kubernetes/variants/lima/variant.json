@@ -35,7 +35,8 @@
       "600": "kubernetes/lima/stages/600-policies.tfvars",
       "700": "kubernetes/lima/stages/700-app-repos.tfvars",
       "800": "kubernetes/lima/stages/800-gateway-tls.tfvars",
-      "900": "kubernetes/lima/stages/900-sso.tfvars"
+      "900": "kubernetes/lima/stages/900-sso.tfvars",
+      "920": "kubernetes/lima/stages/920-langfuse.tfvars"
     }
   },
   "readiness": {

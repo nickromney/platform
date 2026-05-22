@@ -115,8 +115,17 @@ locals {
   mcp_console_public_url               = "https://${local.mcp_console_public_host}${local.gateway_https_host_port_suffix}"
   chatgpt_sim_public_host              = "chatgpt.dev.${local.platform_base_domain_effective}"
   chatgpt_sim_public_url               = "https://${local.chatgpt_sim_public_host}${local.gateway_https_host_port_suffix}"
+  langfuse_trace_chat_public_host      = "lf-chat.dev.${local.platform_base_domain_effective}"
+  langfuse_trace_chat_public_url       = "https://${local.langfuse_trace_chat_public_host}${local.gateway_https_host_port_suffix}"
+  langfuse_tool_agent_public_host      = "lf-agent.dev.${local.platform_base_domain_effective}"
+  langfuse_tool_agent_public_url       = "https://${local.langfuse_tool_agent_public_host}${local.gateway_https_host_port_suffix}"
+  langfuse_eval_runner_public_host     = "lf-evals.dev.${local.platform_base_domain_effective}"
+  langfuse_eval_runner_public_url      = "https://${local.langfuse_eval_runner_public_host}${local.gateway_https_host_port_suffix}"
   agentgateway_ai_gateway_public_host  = "llm.${local.platform_base_domain_effective}"
   agentgateway_ai_gateway_public_url   = "https://${local.agentgateway_ai_gateway_public_host}${local.gateway_https_host_port_suffix}"
+  langfuse_public_host                 = local.separate_admin_domain_enabled ? "langfuse.${local.platform_admin_base_domain_effective}" : "langfuse.admin.${local.platform_base_domain_effective}"
+  langfuse_public_url                  = "https://${local.langfuse_public_host}${local.gateway_https_host_port_suffix}"
+  langfuse_keycloak_redirect_uri       = "${local.langfuse_public_url}/api/auth/callback/keycloak"
   idp_portal_public_host               = "portal.${local.platform_base_domain_effective}"
   idp_portal_public_url                = "https://${local.idp_portal_public_host}${local.gateway_https_host_port_suffix}"
   idp_api_public_host                  = "portal-api.${local.platform_base_domain_effective}"
@@ -169,6 +178,53 @@ locals {
       skip_auth_regex    = "^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$"
     }
   }
+  sso_langfuse_proxy_apps = var.enable_langfuse ? {
+    langfuse = {
+      name               = "oauth2-proxy-langfuse"
+      public_url         = local.langfuse_public_url
+      upstream           = "http://langfuse-web.langfuse.svc.cluster.local:3000"
+      group              = local.sso_viewer_group
+      cookie_name        = local.admin_sso_cookie_name
+      cookie_domain      = local.admin_cookie_domain
+      whitelist_domain   = local.admin_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+    }
+  } : {}
+  sso_langfuse_demo_proxy_apps = var.enable_langfuse_demos ? {
+    trace_chat = {
+      name               = "oauth2-proxy-langfuse-trace-chat"
+      public_url         = local.langfuse_trace_chat_public_url
+      upstream           = "http://langfuse-trace-chat.dev.svc.cluster.local:8080"
+      group              = local.sso_viewer_group
+      cookie_name        = local.dev_sso_cookie_name
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(style\\.css|app\\.js|runtime-config\\.js|favicon\\.ico)$"
+    }
+    tool_agent = {
+      name               = "oauth2-proxy-langfuse-tool-agent"
+      public_url         = local.langfuse_tool_agent_public_url
+      upstream           = "http://langfuse-tool-agent.dev.svc.cluster.local:8080"
+      group              = local.sso_viewer_group
+      cookie_name        = local.dev_sso_cookie_name
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(style\\.css|app\\.js|runtime-config\\.js|favicon\\.ico)$"
+    }
+    eval_runner = {
+      name               = "oauth2-proxy-langfuse-eval-runner"
+      public_url         = local.langfuse_eval_runner_public_url
+      upstream           = "http://langfuse-eval-runner.dev.svc.cluster.local:8080"
+      group              = local.sso_viewer_group
+      cookie_name        = local.dev_sso_cookie_name
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(style\\.css|app\\.js|runtime-config\\.js|favicon\\.ico)$"
+    }
+  } : {}
   sso_apim_proxy_apps = local.enable_apim_simulator_effective ? {
     apim = {
       name               = "oauth2-proxy-apim"
@@ -198,6 +254,8 @@ locals {
     [for app in values(local.sso_apim_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_langfuse_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_langfuse_demo_proxy_apps) : "${app.public_url}/oauth2/callback"],
   ))
   admin_route_allowlist_cidrs_effective = [for cidr in var.admin_route_allowlist_cidrs : trimspace(cidr) if trimspace(cidr) != ""]
   admin_route_allowlist_enabled         = length(local.admin_route_allowlist_cidrs_effective) > 0
@@ -231,6 +289,7 @@ locals {
   external_platform_backstage          = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
   external_platform_mcp                = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
   external_platform_chatgpt_sim        = trimspace(lookup(var.external_platform_image_refs, "chatgpt-sim", ""))
+  external_platform_langfuse_demos     = trimspace(lookup(var.external_platform_image_refs, "langfuse-demos", ""))
   external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
@@ -476,6 +535,8 @@ locals {
     var.enable_signoz ||
     var.enable_headlamp ||
     var.enable_sso ||
+    var.enable_langfuse ||
+    var.enable_langfuse_demos ||
     var.enable_app_of_apps
   )
   enable_gitops_repo = var.enable_gitea && var.enable_argocd && local.enable_gitops_repo_requested
@@ -494,6 +555,8 @@ locals {
     local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
     local.enable_apim_simulator_effective && var.enable_argocd ? ["apim"] : [],
     var.enable_agentgateway_ai_gateway && var.enable_argocd ? ["agentgateway-ai-gateway"] : [],
+    var.enable_langfuse && var.enable_argocd ? ["langfuse"] : [],
+    var.enable_langfuse_demos && var.enable_argocd ? ["langfuse-demos"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd ? ["dev", "uat"] : [],
     var.enable_sso && var.enable_argocd ? ["idp"] : [],
     local.enable_mcp_effective && var.enable_argocd ? ["mcp", "chatgpt-sim"] : [],
@@ -507,11 +570,14 @@ locals {
     var.enable_sso && local.enable_apim_simulator_effective && var.enable_argocd ? ["oauth2-proxy-apim"] : [],
     var.enable_sso && var.enable_argocd ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
     local.enable_mcp_effective && var.enable_argocd ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
+    var.enable_sso && var.enable_langfuse && var.enable_argocd ? ["oauth2-proxy-langfuse"] : [],
+    var.enable_sso && var.enable_langfuse_demos && var.enable_argocd ? ["oauth2-proxy-langfuse-trace-chat", "oauth2-proxy-langfuse-tool-agent", "oauth2-proxy-langfuse-eval-runner"] : [],
   ))
 
   registry_secret_namespaces_effective = toset(distinct(concat(
     var.registry_secret_namespaces,
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["dev"] : [],
+    (var.enable_argocd && var.enable_langfuse_demos) ? ["dev"] : [],
     (var.enable_argocd && (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective)) ? ["uat"] : [],
     (var.enable_argocd && local.enable_apim_simulator_effective) ? ["apim"] : [],
     (var.enable_sso && var.enable_argocd && local.enable_mcp_effective) ? ["mcp"] : [],
@@ -581,10 +647,16 @@ locals {
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
     external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
     external_platform_chatgpt_sim          = lookup(var.external_platform_image_refs, "chatgpt-sim", "")
+    external_platform_langfuse_demos       = lookup(var.external_platform_image_refs, "langfuse-demos", "")
     external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host
     agentgateway_ai_gateway_public_host    = local.agentgateway_ai_gateway_public_host
+    langfuse_public_host                   = local.langfuse_public_host
+    langfuse_public_url                    = local.langfuse_public_url
+    langfuse_trace_chat_public_host        = local.langfuse_trace_chat_public_host
+    langfuse_tool_agent_public_host        = local.langfuse_tool_agent_public_host
+    langfuse_eval_runner_public_host       = local.langfuse_eval_runner_public_host
     prefer_external_platform               = var.prefer_external_platform_images
     host_local_registry_enabled            = local.host_local_registry_enabled
     host_local_registry_host               = local.host_local_registry_host_effective
@@ -616,6 +688,8 @@ locals {
     tempo_chart_version                    = var.tempo_chart_version
     victoria_logs_chart_version            = var.victoria_logs_chart_version
     signoz_auth_proxy_image                = local.signoz_auth_proxy_image_effective
+    enable_langfuse                        = var.enable_langfuse
+    enable_langfuse_demos                  = var.enable_langfuse_demos
   }
   policies_repo_render_hash = sha1(jsonencode(local.policies_repo_render_contract))
 

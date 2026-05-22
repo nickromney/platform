@@ -90,3 +90,66 @@ resource "null_resource" "wait_headlamp_deployment" {
     null_resource.argocd_refresh_gitops_repo_apps,
   ]
 }
+
+resource "null_resource" "wait_langfuse_web_deployment" {
+  count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
+
+  provisioner "local-exec" {
+    command     = <<-EOT
+      set -euo pipefail
+
+      for i in {1..300}; do
+        if kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" get deploy langfuse-web >/dev/null 2>&1; then
+          kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" rollout status deploy/langfuse-web --timeout=600s
+          exit 0
+        fi
+        sleep 2
+      done
+
+      echo "Timed out waiting for deployment/langfuse-web in namespace ${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" >&2
+      kubectl -n "${kubernetes_namespace_v1.langfuse[0].metadata[0].name}" get all || true
+      exit 1
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+    environment = {
+      KUBECONFIG = local.kubeconfig_path_expanded
+    }
+  }
+
+  depends_on = [
+    null_resource.ensure_kind_kubeconfig,
+    kubernetes_secret_v1.langfuse_keycloak_oidc,
+    kubectl_manifest.argocd_app_langfuse,
+    kubectl_manifest.argocd_app_of_apps,
+    null_resource.argocd_refresh_gitops_repo_apps,
+  ]
+}
+
+resource "kubectl_manifest" "langfuse_web_hostaliases" {
+  count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-web
+  namespace: ${kubernetes_namespace_v1.langfuse[0].metadata[0].name}
+spec:
+  template:
+    spec:
+      hostAliases:
+        - ip: ${kubernetes_service_v1.platform_gateway_nginx_internal[0].spec[0].cluster_ip}
+          hostnames:
+            - ${local.sso_public_host}
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = true
+  server_side_apply = true
+
+  depends_on = [
+    null_resource.wait_langfuse_web_deployment,
+    kubernetes_service_v1.platform_gateway_nginx_internal,
+  ]
+}

@@ -44,6 +44,13 @@ resource "random_password" "oauth2_proxy_cookie_secret" {
   special = false
 }
 
+resource "random_password" "langfuse_keycloak_client_secret" {
+  count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
+
+  length  = 32
+  special = false
+}
+
 resource "random_password" "keycloak_postgres_password" {
   count = var.enable_sso && local.sso_provider_is_keycloak ? 1 : 0
 
@@ -77,6 +84,25 @@ resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
     "client-secret" = random_password.dex_oauth2_proxy_client_secret[0].result
     "cookie-secret" = random_password.oauth2_proxy_cookie_secret[0].result
   }
+}
+
+resource "kubernetes_secret_v1" "langfuse_keycloak_oidc" {
+  count = var.enable_sso && local.sso_provider_is_keycloak && var.enable_langfuse ? 1 : 0
+
+  metadata {
+    name      = "langfuse-keycloak-oidc"
+    namespace = kubernetes_namespace_v1.langfuse[0].metadata[0].name
+  }
+
+  type = "Opaque"
+
+  data = {
+    "client-secret" = random_password.langfuse_keycloak_client_secret[0].result
+  }
+
+  depends_on = [
+    kubernetes_namespace_v1.langfuse,
+  ]
 }
 
 resource "kubectl_manifest" "oauth2_proxy_session_store_deployment" {
@@ -554,7 +580,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           ]
         }
       ]
-      clients = [
+      clients = concat([
         {
           clientId                  = local.sso_apim_audience
           name                      = "APIM Simulator"
@@ -731,7 +757,38 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
             }
           ]
         },
-      ]
+        ], var.enable_langfuse ? [
+        {
+          clientId                  = "langfuse"
+          name                      = "Langfuse"
+          enabled                   = true
+          publicClient              = false
+          protocol                  = "openid-connect"
+          secret                    = random_password.langfuse_keycloak_client_secret[0].result
+          fullScopeAllowed          = false
+          standardFlowEnabled       = true
+          directAccessGrantsEnabled = true
+          redirectUris              = [local.langfuse_keycloak_redirect_uri]
+          webOrigins                = ["+"]
+          defaultClientScopes       = ["web-origins", "acr", "profile", "basic", "email"]
+          optionalClientScopes      = [local.sso_groups_claim]
+          protocolMappers = [
+            {
+              name            = "groups"
+              protocol        = "openid-connect"
+              protocolMapper  = "oidc-group-membership-mapper"
+              consentRequired = false
+              config = {
+                "claim.name"           = local.sso_groups_claim
+                "full.path"            = "false"
+                "id.token.claim"       = "true"
+                "access.token.claim"   = "true"
+                "userinfo.token.claim" = "true"
+              }
+            }
+          ]
+        },
+      ] : [])
       users = [
         {
           username      = "demo@admin.test"
@@ -1301,25 +1358,25 @@ resource "null_resource" "check_kind_cluster_health_after_oidc" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
 
   triggers = {
-    health_script_sha         = filesha256(abspath("${local.stack_dir}/scripts/check-cluster-health.sh"))
-    health_resource_sha       = filesha256(abspath("${local.stack_dir}/sso.tf"))
-    kind_stage_900_tfvars_sha = try(filesha256(var.kind_stage_900_tfvars_file), "absent")
-    kind_target_tfvars_sha    = try(filesha256(var.kind_target_tfvars_file), "absent")
-    operator_overrides_sha    = try(filesha256(var.kind_operator_overrides_file), "absent")
-    recovery_resource_id      = null_resource.recover_kind_cluster_after_oidc_restart[0].id
+    health_script_sha      = filesha256(abspath("${local.stack_dir}/scripts/check-cluster-health.sh"))
+    health_resource_sha    = filesha256(abspath("${local.stack_dir}/sso.tf"))
+    kind_stage_tfvars_sha  = try(filesha256(var.kind_stage_tfvars_file), "absent")
+    kind_target_tfvars_sha = try(filesha256(var.kind_target_tfvars_file), "absent")
+    operator_overrides_sha = try(filesha256(var.kind_operator_overrides_file), "absent")
+    recovery_resource_id   = null_resource.recover_kind_cluster_after_oidc_restart[0].id
   }
 
   provisioner "local-exec" {
     command     = <<__EOT__
 set -euo pipefail
 export KUBECONFIG="${local.kubeconfig_path_expanded}"
-KIND_STAGE_900_TFVARS_FILE="${var.kind_stage_900_tfvars_file}"
+KIND_STAGE_TFVARS_FILE="${var.kind_stage_tfvars_file}"
 KIND_TARGET_TFVARS_FILE="${var.kind_target_tfvars_file}"
 KIND_OPERATOR_OVERRIDES_FILE="${var.kind_operator_overrides_file}"
 PLATFORM_TFVARS_FILE="$${PLATFORM_TFVARS:-}"
 check_args=()
-if [[ -n "$${KIND_STAGE_900_TFVARS_FILE}" && -f "$${KIND_STAGE_900_TFVARS_FILE}" ]]; then
-  check_args+=(--var-file "$${KIND_STAGE_900_TFVARS_FILE}")
+if [[ -n "$${KIND_STAGE_TFVARS_FILE}" && -f "$${KIND_STAGE_TFVARS_FILE}" ]]; then
+  check_args+=(--var-file "$${KIND_STAGE_TFVARS_FILE}")
 fi
 if [[ -n "$${KIND_TARGET_TFVARS_FILE}" && -f "$${KIND_TARGET_TFVARS_FILE}" ]]; then
   check_args+=(--var-file "$${KIND_TARGET_TFVARS_FILE}")
@@ -2442,6 +2499,8 @@ resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
     local.sso_apim_proxy_apps,
     local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_chatgpt_sim_proxy_apps : {},
+    local.sso_langfuse_proxy_apps,
+    local.sso_langfuse_demo_proxy_apps,
   ) : {}
 
   yaml_body = <<__YAML__
@@ -2534,8 +2593,8 @@ __YAML__
 
   wait              = true
   validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
+  force_conflicts   = true
+  server_side_apply = true
 
   depends_on = [
     helm_release.argocd,

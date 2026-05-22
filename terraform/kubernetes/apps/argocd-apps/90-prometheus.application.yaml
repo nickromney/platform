@@ -136,6 +136,32 @@ spec:
                 target_label: namespace
               - source_labels: [__meta_kubernetes_pod_label_app]
                 target_label: app
+          - job_name: langfuse-demos
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - dev
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_part_of]
+                action: keep
+                regex: langfuse-demos
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                action: keep
+                regex: "true"
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                target_label: __metrics_path__
+                regex: (.+)
+              - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                target_label: __address__
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: "$1:$2"
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                target_label: app
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+                target_label: role
           - job_name: backstage-catalog
             kubernetes_sd_configs:
               - role: pod

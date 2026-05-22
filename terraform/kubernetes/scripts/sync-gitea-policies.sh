@@ -94,6 +94,7 @@ workload|EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR|external_subnetcalc_apim|subne
 workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend|workload
 platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp|mcp
 platform|EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM|external_platform_chatgpt_sim|chatgpt-sim|chatgpt
+platform|EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS|external_platform_langfuse_demos|langfuse-demos|langfuse-demos
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
 platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
 platform|EXTERNAL_PLATFORM_IMAGE_BACKSTAGE|external_platform_backstage|backstage|idp
@@ -162,6 +163,12 @@ string|MCP_PUBLIC_HOST|mcp_public_host|
 string|MCP_CONSOLE_PUBLIC_HOST|mcp_console_public_host|
 string|AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST|agentgateway_ai_gateway_public_host|
 string|AGENTGATEWAY_AI_GATEWAY_MODEL|agentgateway_ai_gateway_model|
+string|LANGFUSE_PUBLIC_HOST|langfuse_public_host|
+string|LANGFUSE_TRACE_CHAT_PUBLIC_HOST|langfuse_trace_chat_public_host|
+string|LANGFUSE_TOOL_AGENT_PUBLIC_HOST|langfuse_tool_agent_public_host|
+string|LANGFUSE_EVAL_RUNNER_PUBLIC_HOST|langfuse_eval_runner_public_host|
+bool|ENABLE_LANGFUSE|enable_langfuse|false
+bool|ENABLE_LANGFUSE_DEMOS|enable_langfuse_demos|false
 bool|PREFER_EXTERNAL_PLATFORM_IMAGES|prefer_external_platform|false
 string|HARDENED_IMAGE_REGISTRY|hardened_image_registry|dhi.io
 chart|AGENTGATEWAY_CHART_VERSION|agentgateway_chart_version|agentgateway_chart_version
@@ -278,6 +285,10 @@ MCP_PUBLIC_HOST="${MCP_PUBLIC_HOST:-mcp.${PLATFORM_BASE_DOMAIN}}"
 MCP_CONSOLE_PUBLIC_HOST="${MCP_CONSOLE_PUBLIC_HOST:-mcp-console.${PLATFORM_BASE_DOMAIN}}"
 AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST="${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST:-llm.${PLATFORM_BASE_DOMAIN}}"
 AGENTGATEWAY_AI_GATEWAY_MODEL="${AGENTGATEWAY_AI_GATEWAY_MODEL:-}"
+LANGFUSE_PUBLIC_HOST="${LANGFUSE_PUBLIC_HOST:-langfuse.admin.${PLATFORM_BASE_DOMAIN}}"
+LANGFUSE_TRACE_CHAT_PUBLIC_HOST="${LANGFUSE_TRACE_CHAT_PUBLIC_HOST:-lf-chat.dev.${PLATFORM_BASE_DOMAIN}}"
+LANGFUSE_TOOL_AGENT_PUBLIC_HOST="${LANGFUSE_TOOL_AGENT_PUBLIC_HOST:-lf-agent.dev.${PLATFORM_BASE_DOMAIN}}"
+LANGFUSE_EVAL_RUNNER_PUBLIC_HOST="${LANGFUSE_EVAL_RUNNER_PUBLIC_HOST:-lf-evals.dev.${PLATFORM_BASE_DOMAIN}}"
 ADMIN_ROUTE_ALLOWLIST_CIDRS="${ADMIN_ROUTE_ALLOWLIST_CIDRS:-}"
 GATEWAY_TRUSTED_PROXY_CIDRS="${GATEWAY_TRUSTED_PROXY_CIDRS:-}"
 ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
@@ -286,6 +297,8 @@ ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
 ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
 ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
+ENABLE_LANGFUSE="${ENABLE_LANGFUSE:-false}"
+ENABLE_LANGFUSE_DEMOS="${ENABLE_LANGFUSE_DEMOS:-false}"
 ENABLE_PROMETHEUS="${ENABLE_PROMETHEUS:-false}"
 ENABLE_GRAFANA="${ENABLE_GRAFANA:-false}"
 ENABLE_LOKI="${ENABLE_LOKI:-false}"
@@ -455,6 +468,7 @@ rewrite_image_owner() {
     subnetcalc-apim-simulator \
     platform-mcp \
     chatgpt-sim \
+    langfuse-demos \
     subnetcalc-frontend; do
     out="$(mktemp)"
     sed -E \
@@ -503,9 +517,14 @@ rewrite_public_hostnames() {
       -e "s|subnetcalc\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_DEV_PUBLIC_HOST}|g" \
       -e "s|subnetcalc\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_UAT_PUBLIC_HOST}|g" \
       -e "s|apim\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${APIM_PUBLIC_HOST}|g" \
+      -e "s|https://keycloak\\.127\\.0\\.0\\.1\\.sslip\\.io/realms/platform|${SSO_PUBLIC_URL}|g" \
       -e "s|mcp-console\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_CONSOLE_PUBLIC_HOST}|g" \
       -e "s|mcp\\.127\\.0\\.0\\.1\\.sslip\\.io|${MCP_PUBLIC_HOST}|g" \
       -e "s|llm\\.127\\.0\\.0\\.1\\.sslip\\.io|${AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST}|g" \
+      -e "s|langfuse\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_PUBLIC_HOST}|g" \
+      -e "s|lf-chat\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_TRACE_CHAT_PUBLIC_HOST}|g" \
+      -e "s|lf-agent\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_TOOL_AGENT_PUBLIC_HOST}|g" \
+      -e "s|lf-evals\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${LANGFUSE_EVAL_RUNNER_PUBLIC_HOST}|g" \
       -e "s|127\\.0\\.0\\.1\\.sslip\\.io|${PLATFORM_BASE_DOMAIN}|g" \
       "${file}" > "${tmp_file}"
     mv "${tmp_file}" "${file}"
@@ -836,6 +855,7 @@ apply_external_platform_images() {
   local idp_manifest="${root_dir}/apps/idp/all.yaml"
   local mcp_manifest="${root_dir}/apps/mcp/all.yaml"
   local chatgpt_manifest="${root_dir}/apps/chatgpt-sim/all.yaml"
+  local langfuse_demos_manifest="${root_dir}/apps/langfuse-demos/all.yaml"
   local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
   local scope env_name contract_key image_name manifest_group image_ref manifest_file
 
@@ -872,6 +892,10 @@ apply_external_platform_images() {
         ;;
       chatgpt)
         manifest_file="${chatgpt_manifest}"
+        eval "image_ref=\"\${${env_name}:-}\""
+        ;;
+      langfuse-demos)
+        manifest_file="${langfuse_demos_manifest}"
         eval "image_ref=\"\${${env_name}:-}\""
         ;;
       signoz)
@@ -1587,6 +1611,14 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/73-agentgateway-ai-gateway.application.yaml"
   fi
 
+  if ! is_true "${ENABLE_LANGFUSE}"; then
+    remove_if_present "${apps_dir}/81-langfuse.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_LANGFUSE_DEMOS}"; then
+    remove_if_present "${apps_dir}/82-langfuse-demos.application.yaml"
+  fi
+
   if ! is_true "${ENABLE_SIGNOZ}"; then
     remove_if_present "${apps_dir}/82-signoz-clickhouse.service.yaml"
     remove_if_present "${apps_dir}/90-signoz.application.yaml"
@@ -1723,6 +1755,21 @@ prune_gateway_routes_manifests() {
     remove_if_present "${routes_dir}/referencegrant-agentgateway-ai-gateway.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-agentgateway-ai-gateway.yaml"
     remove_kustomization_entry "${kustomization_file}" "referencegrant-agentgateway-ai-gateway.yaml"
+  fi
+
+  if ! is_true "${ENABLE_LANGFUSE}"; then
+    remove_if_present "${routes_dir}/httproute-langfuse.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-langfuse.yaml"
+    remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-langfuse"
+  fi
+
+  if ! is_true "${ENABLE_LANGFUSE_DEMOS}"; then
+    for route in langfuse-trace-chat langfuse-tool-agent langfuse-eval-runner; do
+      remove_if_present "${routes_dir}/httproute-${route}.yaml"
+      remove_kustomization_entry "${kustomization_file}" "httproute-${route}.yaml"
+    done
+    remove_if_present "${routes_dir}/referencegrant-sso-langfuse-demos.yaml"
+    remove_kustomization_entry "${kustomization_file}" "referencegrant-sso-langfuse-demos.yaml"
   fi
 }
 
@@ -1982,6 +2029,7 @@ render_policy_repo_tree() {
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/chatgpt-sim/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/langfuse-demos/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/dev/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/uat/all.yaml"

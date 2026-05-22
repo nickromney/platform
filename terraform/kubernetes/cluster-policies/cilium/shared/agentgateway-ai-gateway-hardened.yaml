@@ -34,6 +34,9 @@ spec:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
             "k8s:app.kubernetes.io/name": chatgpt-sim
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/part-of": langfuse-demos
       toPorts:
         - ports:
             - port: "80"

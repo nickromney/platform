@@ -1468,6 +1468,87 @@ __GRAFANA_PLUGINS_VALUES__
                   "uid": "platform-app-overview",
                   "version": 1
                 }
+            langfuse-agent-flow:
+              json: |
+                {
+                  "annotations": {"list": []},
+                  "editable": true,
+                  "graphTooltip": 0,
+                  "panels": [
+                    {
+                      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+                      "id": 1,
+                      "options": {
+                        "content": "## Langfuse Agent Flow\nlangfuse-trace-chat: https://lf-chat.dev.127.0.0.1.sslip.io\nlangfuse-tool-agent: https://lf-agent.dev.127.0.0.1.sslip.io\nlangfuse-eval-runner: https://lf-evals.dev.127.0.0.1.sslip.io\nLangfuse UI: https://langfuse.admin.127.0.0.1.sslip.io",
+                        "mode": "markdown"
+                      },
+                      "title": "Demo Entry Points",
+                      "type": "text"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 3},
+                      "id": 2,
+                      "targets": [{"expr": "(sum(langfuse_demo_runs_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
+                      "title": "Demo Runs",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 3},
+                      "id": 3,
+                      "targets": [{"expr": "(sum(langfuse_demo_llm_calls_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
+                      "title": "LLM Calls",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 3},
+                      "id": 4,
+                      "targets": [{"expr": "(sum(langfuse_demo_langfuse_batches_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
+                      "title": "Langfuse Batches",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 3},
+                      "id": 5,
+                      "targets": [{"expr": "(sum(langfuse_demo_langfuse_errors_total{job=\"langfuse-demos\"}) or vector(0))", "refId": "A"}],
+                      "title": "Langfuse Errors",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+                      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+                      "id": 6,
+                      "targets": [{"expr": "sum(rate(langfuse_demo_llm_calls_total{job=\"langfuse-demos\"}[5m])) by (role)", "legendFormat": "{{role}}", "refId": "A"}],
+                      "title": "LLM Call Rate",
+                      "type": "timeseries"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+                      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+                      "id": 7,
+                      "targets": [{"expr": "sum(rate(langfuse_demo_run_latency_milliseconds_sum{job=\"langfuse-demos\"}[5m])) by (role) / clamp_min(sum(rate(langfuse_demo_runs_total{job=\"langfuse-demos\"}[5m])) by (role), 0.001)", "legendFormat": "{{role}}", "refId": "A"}],
+                      "title": "Run Latency",
+                      "type": "timeseries"
+                    }
+                  ],
+                  "refresh": "30s",
+                  "schemaVersion": 39,
+                  "tags": ["platform", "langfuse", "agent", "evals"],
+                  "templating": {"list": []},
+                  "time": {"from": "now-6h", "to": "now"},
+                  "title": "Langfuse Agent Flow",
+                  "uid": "langfuse-agent-flow",
+                  "version": 1
+                }
             platform-namespace-health:
               json: |
                 {

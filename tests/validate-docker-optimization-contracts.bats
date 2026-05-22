@@ -575,7 +575,7 @@ print(f"validated {validated} image catalog version-check policies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 11 image catalog version-check policies"* ]]
+  [[ "${output}" == *"validated 12 image catalog version-check policies"* ]]
 }
 
 @test "Lima and Slicer external image refs match the image catalog" {
@@ -648,7 +648,8 @@ for target, host in {
     )
     assert "external_platform_image_refs = {" in rendered, target
     assert "external_workload_image_refs = {" in rendered, target
-    assert f'"platform-mcp" = "{host}/platform/platform-mcp:0.1.0"' in rendered, rendered
+    assert '"platform-mcp"' in rendered and f'{host}/platform/platform-mcp:0.1.0' in rendered, rendered
+    assert '"langfuse-demos"' in rendered and f'{host}/platform/langfuse-demos:0.1.0' in rendered, rendered
     assert '"sentiment-api"' in rendered and f'{host}/platform/sentiment-api:0.1.0' in rendered, rendered
 
 print("validated generated target tfvars projection from image catalog")

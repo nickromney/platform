@@ -37,7 +37,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -E -n 'kind_stage_900_tfvars_sha[[:space:]]*=[[:space:]]*try\(filesha256\(var\.kind_stage_900_tfvars_file\), "absent"\)' "${SSO_FILE}"
+  run grep -E -n 'kind_stage_tfvars_sha[[:space:]]*=[[:space:]]*try\(filesha256\(var\.kind_stage_tfvars_file\), "absent"\)' "${SSO_FILE}"
 
   [ "${status}" -eq 0 ]
 
@@ -49,7 +49,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'KIND_STAGE_900_TFVARS_FILE="${var.kind_stage_900_tfvars_file}"' "${SSO_FILE}"
+  run grep -Fn 'KIND_STAGE_TFVARS_FILE="${var.kind_stage_tfvars_file}"' "${SSO_FILE}"
 
   [ "${status}" -eq 0 ]
 
@@ -58,6 +58,10 @@ setup() {
   [ "${status}" -eq 0 ]
 
   run grep -Fn 'KIND_OPERATOR_OVERRIDES_FILE="${var.kind_operator_overrides_file}"' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn -- '--var-file "$${KIND_STAGE_TFVARS_FILE}"' "${SSO_FILE}"
 
   [ "${status}" -eq 0 ]
 

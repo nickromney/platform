@@ -89,7 +89,7 @@ shell_cli_maybe_execute_or_preview_summary usage \
   "would verify ${#required_tools[@]} required and ${#optional_tools[@]} optional host tools for stage ${stage}"
 
 case "${stage}" in
-  100|200|300|400|500|600|700|800|900) ;;
+  100|200|300|400|500|600|700|800|900|920) ;;
   *)
     echo "Unknown stage: ${stage}" >&2
     exit 1
@@ -97,7 +97,9 @@ case "${stage}" in
 esac
 
 if [[ "${stage}" -ge 900 ]]; then
-  required_tools+=("${recommended_tools[@]}")
+  if [[ "${#recommended_tools[@]}" -gt 0 ]]; then
+    required_tools+=("${recommended_tools[@]}")
+  fi
 fi
 
 missing_required=()
@@ -150,7 +152,14 @@ sorted_tools=()
 while IFS= read -r tool; do
   [[ -n "${tool}" ]] || continue
   sorted_tools+=("${tool}")
-done < <(printf '%s\n' "${required_tools[@]}" "${optional_tools[@]}" | LC_ALL=C sort -u)
+done < <({
+  if [[ "${#required_tools[@]}" -gt 0 ]]; then
+    printf '%s\n' "${required_tools[@]}"
+  fi
+  if [[ "${#optional_tools[@]}" -gt 0 ]]; then
+    printf '%s\n' "${optional_tools[@]}"
+  fi
+} | LC_ALL=C sort -u)
 for tool in "${sorted_tools[@]}"; do
   [[ -n "${tool}" ]] || continue
   if is_required "${tool}"; then
@@ -175,4 +184,22 @@ if [[ "${#missing_recommended[@]}" -gt 0 ]]; then
   echo
   echo "Install hints:"
   "${install_hints_script}" --execute --plain "${missing_recommended[@]}" | sed 's/^/  /'
+fi
+
+if (( 10#${stage} >= 900 )); then
+  local_openai_base_url="${LOCAL_OPENAI_BASE_URL:-http://127.0.0.1:8000/v1}"
+  local_openai_base_url="${local_openai_base_url%/}"
+  echo
+  echo "Local OpenAI-compatible model endpoint:"
+  echo "  host endpoint: ${local_openai_base_url}"
+  echo "  kind route: agentgateway -> host.docker.internal:8000"
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fsS --max-time "${LOCAL_OPENAI_PROBE_TIMEOUT_SECONDS:-2}" "${local_openai_base_url}/models" >/dev/null 2>&1; then
+      echo "OK   oMLX ${local_openai_base_url}"
+    else
+      echo "WARN oMLX ${local_openai_base_url} is unreachable; start the oMLX OpenAI-compatible server before expecting live LLM content."
+    fi
+  else
+    echo "WARN curl missing; skipped oMLX endpoint probe."
+  fi
 fi
