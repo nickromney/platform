@@ -51,7 +51,7 @@ setup() {
         and (.cluster_access.kubeconfig_path | type == \"string\" and startswith(\"~/.kube/\"))
         and (.cluster_access.kubeconfig_context | type == \"string\" and length > 0)
         and (.stage_ladder.target_profile_file | type == \"string\")
-        and (.stage_ladder.stage_files | keys == [\"100\",\"200\",\"300\",\"400\",\"500\",\"600\",\"700\",\"800\",\"900\"])
+        and (.stage_ladder.stage_files | keys == [\"100\",\"200\",\"300\",\"400\",\"500\",\"600\",\"700\",\"800\",\"900\",\"920\"])
         and (.readiness.facets | index(\"operator_prereqs\"))
         and (.readiness.facets | index(\"blockers\"))
         and (.blockers.conflicting_variants | type == \"array\")

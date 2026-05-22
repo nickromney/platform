@@ -35,7 +35,8 @@
       "600": "kubernetes/kind/stages/600-policies.tfvars",
       "700": "kubernetes/kind/stages/700-app-repos.tfvars",
       "800": "kubernetes/kind/stages/800-gateway-tls.tfvars",
-      "900": "kubernetes/kind/stages/900-sso.tfvars"
+      "900": "kubernetes/kind/stages/900-sso.tfvars",
+      "920": "kubernetes/kind/stages/920-langfuse.tfvars"
     }
   },
   "readiness": {

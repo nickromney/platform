@@ -1,0 +1,914 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langfuse-secrets
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: config
+type: Opaque
+stringData:
+  nextauth-secret: local-langfuse-nextauth-secret
+  salt: local-langfuse-salt
+  encryption-key: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+  postgres-password: local-langfuse-postgres
+  clickhouse-password: local-langfuse-clickhouse
+  redis-auth: local-langfuse-redis
+  minio-root-user: minio
+  minio-root-password: local-langfuse-minio
+  init-user-password: local-langfuse-admin
+  database-url: postgresql://langfuse:local-langfuse-postgres@langfuse-postgres.langfuse.svc.cluster.local:5432/langfuse
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langfuse-env
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: config
+data:
+  NEXTAUTH_URL: https://langfuse.admin.127.0.0.1.sslip.io
+  AUTH_KEYCLOAK_CLIENT_ID: langfuse
+  AUTH_KEYCLOAK_ISSUER: https://keycloak.127.0.0.1.sslip.io/realms/platform
+  AUTH_KEYCLOAK_SCOPE: "openid email profile groups"
+  AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING: "true"
+  AUTH_DOMAINS_WITH_SSO_ENFORCEMENT: admin.test
+  AUTH_DISABLE_SIGNUP: "true"
+  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse.langfuse.svc.cluster.local:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse.langfuse.svc.cluster.local:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio.langfuse.svc.cluster.local:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio.langfuse.svc.cluster.local:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+  LANGFUSE_S3_BATCH_EXPORT_BUCKET: langfuse
+  LANGFUSE_S3_BATCH_EXPORT_PREFIX: exports/
+  LANGFUSE_S3_BATCH_EXPORT_REGION: auto
+  LANGFUSE_S3_BATCH_EXPORT_ENDPOINT: http://langfuse-minio.langfuse.svc.cluster.local:9000
+  LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT: http://langfuse-minio.langfuse.svc.cluster.local:9000
+  LANGFUSE_S3_BATCH_EXPORT_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_BATCH_EXPORT_FORCE_PATH_STYLE: "true"
+  REDIS_HOST: langfuse-redis.langfuse.svc.cluster.local
+  REDIS_PORT: "6379"
+  REDIS_TLS_ENABLED: "false"
+  EMAIL_FROM_ADDRESS: ""
+  SMTP_CONNECTION_URL: ""
+  LANGFUSE_INIT_ORG_ID: local-platform
+  LANGFUSE_INIT_ORG_NAME: Local Platform
+  LANGFUSE_INIT_PROJECT_ID: local-platform-project
+  LANGFUSE_INIT_PROJECT_NAME: Platform Memory
+  LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-local-platform
+  LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-local-platform
+  LANGFUSE_INIT_USER_EMAIL: demo@admin.test
+  LANGFUSE_INIT_USER_NAME: Demo Admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: langfuse-postgres
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-postgres
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: langfuse-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-postgres
+        app.kubernetes.io/component: postgres
+    spec:
+      securityContext:
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: docker.io/postgres:17.6-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: langfuse
+            - name: POSTGRES_USER
+              value: langfuse
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: TZ
+              value: UTC
+            - name: PGTZ
+              value: UTC
+          startupProbe:
+            tcpSocket:
+              port: postgres
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            tcpSocket:
+              port: postgres
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-postgres
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-postgres
+    app.kubernetes.io/component: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: langfuse-redis
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-redis
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: langfuse-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-redis
+        app.kubernetes.io/component: redis
+    spec:
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: docker.io/redis:8.2.3-alpine
+          args:
+            - redis-server
+            - --requirepass
+            - $(REDIS_AUTH)
+            - --maxmemory-policy
+            - noeviction
+          ports:
+            - name: redis
+              containerPort: 6379
+          env:
+            - name: REDIS_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: redis-auth
+          startupProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 150m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-redis
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-redis
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: langfuse-clickhouse
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-clickhouse
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: langfuse-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-clickhouse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-clickhouse
+        app.kubernetes.io/component: clickhouse
+    spec:
+      securityContext:
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: clickhouse
+          image: docker.io/clickhouse/clickhouse-server:25.5.6
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+          env:
+            - name: CLICKHOUSE_DB
+              value: default
+            - name: CLICKHOUSE_USER
+              value: clickhouse
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: clickhouse-password
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: logs
+              mountPath: /var/log/clickhouse-server
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+    - metadata:
+        name: logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-clickhouse
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-clickhouse
+    app.kubernetes.io/component: clickhouse
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: http
+    - name: native
+      port: 9000
+      targetPort: native
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: langfuse-minio
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-minio
+    app.kubernetes.io/component: minio
+spec:
+  serviceName: langfuse-minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-minio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-minio
+        app.kubernetes.io/component: minio
+    spec:
+      securityContext:
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: create-bucket-dir
+          image: cgr.dev/chainguard/busybox:latest
+          command: ["mkdir", "-p", "/data/langfuse"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: minio
+          image: cgr.dev/chainguard/minio:latest
+          args:
+            - server
+            - --address
+            - :9000
+            - --console-address
+            - :9001
+            - /data
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+          startupProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: s3
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: s3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 384Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-minio
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse-minio
+    app.kubernetes.io/component: minio
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-web
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse
+        app.kubernetes.io/component: web
+        project: kindlocal
+        team: platform
+        tier: platform
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: docker.io/langfuse/langfuse:3
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: langfuse-env
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: database-url
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: nextauth-secret
+            - name: AUTH_KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-keycloak-oidc
+                  key: client-secret
+            - name: SALT
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: salt
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: encryption-key
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: clickhouse-password
+            - name: REDIS_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: redis-auth
+            - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+            - name: LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+            - name: LANGFUSE_INIT_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: init-user-password
+            - name: HOME
+              value: /tmp
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=768
+          startupProbe:
+            httpGet:
+              path: /api/public/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /api/public/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /api/public/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-worker
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse
+        app.kubernetes.io/component: worker
+        project: kindlocal
+        team: platform
+        tier: platform
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 65533
+        fsGroup: 65533
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: docker.io/langfuse/langfuse-worker:3
+          ports:
+            - name: http
+              containerPort: 3030
+          envFrom:
+            - configMapRef:
+                name: langfuse-env
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: database-url
+            - name: SALT
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: salt
+            - name: AUTH_KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-keycloak-oidc
+                  key: client-secret
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: encryption-key
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: clickhouse-password
+            - name: REDIS_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: redis-auth
+            - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+            - name: LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: minio-root-password
+            - name: HOME
+              value: /tmp
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=768
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-web
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: web
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      appProtocol: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-worker
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: worker
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: worker
+  ports:
+    - name: http
+      appProtocol: http
+      port: 3030
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: langfuse-runtime
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 3030
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 8123
+        - protocol: TCP
+          port: 9000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sso
+      ports:
+        - protocol: TCP
+          port: 3000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dev
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: langfuse-demos
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 3030
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 8123
+        - protocol: TCP
+          port: 9000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-gateway
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-gateway-nginx
+      ports:
+        - protocol: TCP
+          port: 443

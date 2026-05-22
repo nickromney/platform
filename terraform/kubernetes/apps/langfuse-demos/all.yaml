@@ -1,0 +1,474 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-trace-chat
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-trace-chat
+    app.kubernetes.io/component: trace-chat
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-trace-chat
+      app.kubernetes.io/part-of: langfuse-demos
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+      labels:
+        app: langfuse-demos
+        app.kubernetes.io/name: langfuse-trace-chat
+        app.kubernetes.io/component: trace-chat
+        app.kubernetes.io/part-of: langfuse-demos
+        project: kindlocal
+        team: platform
+        tier: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: server
+          image: localhost:30090/platform/langfuse-demos:0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEMO_ROLE
+              value: trace-chat
+            - name: DEMO_NAME
+              value: Langfuse Trace Chat
+            - name: PORT
+              value: "8080"
+            - name: PUBLIC_BASE_URL
+              value: https://lf-chat.dev.127.0.0.1.sslip.io
+            - name: LANGFUSE_HOST
+              value: http://langfuse-web.langfuse.svc.cluster.local:3000
+            - name: LANGFUSE_PUBLIC_KEY
+              value: pk-lf-local-platform
+            - name: LANGFUSE_SECRET_KEY
+              value: sk-lf-local-platform
+            - name: OPENAI_BASE_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
+            - name: OPENAI_MODEL
+              value: local-omlx
+            - name: LLM_TIMEOUT_SECONDS
+              value: "30"
+            - name: LANGFUSE_TIMEOUT_SECONDS
+              value: "5"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-trace-chat
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-trace-chat
+    app.kubernetes.io/component: trace-chat
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-trace-chat
+    app.kubernetes.io/part-of: langfuse-demos
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-tool-agent
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-tool-agent
+    app.kubernetes.io/component: tool-agent
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-tool-agent
+      app.kubernetes.io/part-of: langfuse-demos
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+      labels:
+        app: langfuse-demos
+        app.kubernetes.io/name: langfuse-tool-agent
+        app.kubernetes.io/component: tool-agent
+        app.kubernetes.io/part-of: langfuse-demos
+        project: kindlocal
+        team: platform
+        tier: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: server
+          image: localhost:30090/platform/langfuse-demos:0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEMO_ROLE
+              value: tool-agent
+            - name: DEMO_NAME
+              value: Langfuse Tool Agent
+            - name: PORT
+              value: "8080"
+            - name: PUBLIC_BASE_URL
+              value: https://lf-agent.dev.127.0.0.1.sslip.io
+            - name: LANGFUSE_HOST
+              value: http://langfuse-web.langfuse.svc.cluster.local:3000
+            - name: LANGFUSE_PUBLIC_KEY
+              value: pk-lf-local-platform
+            - name: LANGFUSE_SECRET_KEY
+              value: sk-lf-local-platform
+            - name: OPENAI_BASE_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
+            - name: OPENAI_MODEL
+              value: local-omlx
+            - name: LLM_TIMEOUT_SECONDS
+              value: "30"
+            - name: LANGFUSE_TIMEOUT_SECONDS
+              value: "5"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-tool-agent
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-tool-agent
+    app.kubernetes.io/component: tool-agent
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-tool-agent
+    app.kubernetes.io/part-of: langfuse-demos
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-eval-runner
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-eval-runner
+    app.kubernetes.io/component: eval-runner
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-eval-runner
+      app.kubernetes.io/part-of: langfuse-demos
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+      labels:
+        app: langfuse-demos
+        app.kubernetes.io/name: langfuse-eval-runner
+        app.kubernetes.io/component: eval-runner
+        app.kubernetes.io/part-of: langfuse-demos
+        project: kindlocal
+        team: platform
+        tier: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: server
+          image: localhost:30090/platform/langfuse-demos:0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEMO_ROLE
+              value: eval-runner
+            - name: DEMO_NAME
+              value: Langfuse Eval Runner
+            - name: PORT
+              value: "8080"
+            - name: PUBLIC_BASE_URL
+              value: https://lf-evals.dev.127.0.0.1.sslip.io
+            - name: LANGFUSE_HOST
+              value: http://langfuse-web.langfuse.svc.cluster.local:3000
+            - name: LANGFUSE_PUBLIC_KEY
+              value: pk-lf-local-platform
+            - name: LANGFUSE_SECRET_KEY
+              value: sk-lf-local-platform
+            - name: OPENAI_BASE_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
+            - name: OPENAI_MODEL
+              value: local-omlx
+            - name: LLM_TIMEOUT_SECONDS
+              value: "30"
+            - name: LANGFUSE_TIMEOUT_SECONDS
+              value: "5"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-eval-runner
+  namespace: dev
+  labels:
+    app: langfuse-demos
+    app.kubernetes.io/name: langfuse-eval-runner
+    app.kubernetes.io/component: eval-runner
+    app.kubernetes.io/part-of: langfuse-demos
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-eval-runner
+    app.kubernetes.io/part-of: langfuse-demos
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: langfuse-demos-runtime
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: langfuse-demos
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: langfuse-demos
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sso
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langfuse
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: langfuse
+              app.kubernetes.io/component: web
+      ports:
+        - protocol: TCP
+          port: 3000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentgateway-system
+      ports:
+        - protocol: TCP
+          port: 80

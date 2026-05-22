@@ -17,6 +17,7 @@ ENABLE_TEMPO="$(jq -r '.enable_tempo // "false"' <<<"${query}")"
 ENABLE_HEADLAMP="$(jq -r '.enable_headlamp // "false"' <<<"${query}")"
 ENABLE_SSO="$(jq -r '.enable_sso // "false"' <<<"${query}")"
 ENABLE_ACTIONS_RUNNER="$(jq -r '.enable_actions_runner // "false"' <<<"${query}")"
+ENABLE_LANGFUSE="$(jq -r '.enable_langfuse // "false"' <<<"${query}")"
 
 [[ -n "${PRELOAD_SCRIPT}" ]] || fail "preload_script is required"
 [[ -f "${PRELOAD_SCRIPT}" ]] || fail "preload_script not found at ${PRELOAD_SCRIPT}"
@@ -32,6 +33,7 @@ images="$(
   PRELOAD_ENABLE_HEADLAMP="${ENABLE_HEADLAMP}" \
   PRELOAD_ENABLE_SSO="${ENABLE_SSO}" \
   PRELOAD_ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER}" \
+  PRELOAD_ENABLE_LANGFUSE="${ENABLE_LANGFUSE}" \
   "${PRELOAD_SCRIPT}" --image-list "${IMAGE_LIST}" --print-images
 )"
 

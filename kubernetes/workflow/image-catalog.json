@@ -181,6 +181,31 @@
         "mode": "local",
         "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
       }
+    },
+    {
+      "id": "langfuse-demos",
+      "hcl_key": "langfuse-demos",
+      "image_name": "langfuse-demos",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": "apps/langfuse-demos/app",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+        "prebuild": "make -C apps/langfuse-demos/app build-linux"
+      },
+      "fingerprint_sources": [
+        "apps/langfuse-demos/app/Dockerfile",
+        "apps/langfuse-demos/app/Makefile",
+        "apps/langfuse-demos/app/go.mod",
+        "apps/langfuse-demos/app/go.sum",
+        "apps/langfuse-demos/app/cmd",
+        "apps/langfuse-demos/app/internal",
+        "apps/shared/idpauth"
+      ],
+      "version_check": {
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
     }
   ],
   "workload_images": [

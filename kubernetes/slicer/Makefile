@@ -118,7 +118,6 @@ endif
 
 include $(STAGE_LADDER_MK)
 
-VALID_STAGES := 100 200 300 400 500 600 700 800 900
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := check-health check-security check-rbac
 VALID_SLICER_NETWORK_PROFILES := cilium default
@@ -181,6 +180,7 @@ STAGE_FILE_600 := $(STAGES_DIR)/600-policies.tfvars
 STAGE_FILE_700 := $(STAGES_DIR)/700-app-repos.tfvars
 STAGE_FILE_800 := $(STAGES_DIR)/800-gateway-tls.tfvars
 STAGE_FILE_900 := $(STAGES_DIR)/900-sso.tfvars
+STAGE_FILE_920 := $(STAGES_DIR)/920-langfuse.tfvars
 
 stage_file = $(STAGE_FILE_$(STAGE))
 target_profile_file = targets/slicer.tfvars
@@ -198,14 +198,16 @@ help:
 	@echo "Workflow syntax:"
 	@echo "  make 100 apply"
 	@echo "  make 900 plan"
+	@echo "  make 920 plan"
 	@echo "  make 900 apply AUTO_APPROVE=1"
+	@echo "  make 920 apply AUTO_APPROVE=1"
 	@echo ""
 	@echo "Accepted variants:"
 	@echo "  make apply 100"
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make apply        100|200|300|...|900 [AUTO_APPROVE=1]"
+	@echo "  make apply        100|200|300|...|920 [AUTO_APPROVE=1]"
 	@echo "  make check-app    APP=grafana [EXTENDED=1]"
 	@echo "  make check-cluster"
 	@echo "  make check-gateway-stack"
@@ -231,7 +233,7 @@ help:
 	@echo "  make gitea-sync"
 	@echo "  make launchpad-render"
 	@echo "  make merge-default-kubeconfig"
-	@echo "  make plan         100|200|300|...|900"
+	@echo "  make plan         100|200|300|...|920"
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
 	@echo "  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only"
@@ -256,10 +258,12 @@ help:
 	@echo "  700 - $(STAGE_DESC_SLICER_700)"
 	@echo "  800 - $(STAGE_DESC_SLICER_800)"
 	@echo "  900 - $(STAGE_DESC_SLICER_900)"
+	@echo "  920 - $(STAGE_DESC_SLICER_920)"
 	@echo ""
 	@echo "Stage examples:"
 	@echo "  make 100 plan"
 	@echo "  make 900 apply AUTO_APPROVE=1"
+	@echo "  make 920 apply AUTO_APPROVE=1"
 	@echo "  make 900 check-security"
 	@echo ""
 	@echo "Default kubeconfigs:"

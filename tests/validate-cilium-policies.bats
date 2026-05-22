@@ -216,6 +216,48 @@ PY
   [[ "${output}" == *"validated sentiment router-to-apim-to-backend policy"* ]]
 }
 
+@test "platform gateway Cilium policy allows Langfuse native OIDC discovery through the gateway" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all(
+        (repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/platform-gateway-hardened.yaml").read_text(encoding="utf-8")
+    )
+    if doc
+]
+
+policy = next(doc for doc in docs if doc["metadata"]["name"] == "platform-gateway-hardened")
+ingress = policy["spec"]["ingress"]
+
+langfuse_gateway_rule = next(
+    rule
+    for rule in ingress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "langfuse"
+        for endpoint in rule.get("fromEndpoints", [])
+    )
+)
+assert any(
+    port.get("port") == "443"
+    for to_ports in langfuse_gateway_rule.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+
+print("validated Langfuse native OIDC ingress to platform gateway")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Langfuse native OIDC ingress to platform gateway"* ]]
+}
+
 @test "static validation renders policy manifests and kustomize overlays" {
   policy_root="${BATS_TEST_TMPDIR}/cilium"
   render_stub="${BATS_TEST_TMPDIR}/render.sh"

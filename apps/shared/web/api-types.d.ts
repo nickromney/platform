@@ -54,6 +54,13 @@ export interface GatewaySession {
 	[key: string]: unknown;
 }
 
+export interface PlatformIdpAuth {
+	normalizeGatewaySession(payload: unknown): GatewaySession | null;
+	gatewayDisplayName(session: GatewaySession): string;
+	fetchGatewaySession(path?: string): Promise<GatewaySession | null>;
+	gatewayLogoutURL(returnPath?: string): string;
+}
+
 export interface APIMTrace {
 	route?: string;
 	upstream_url?: string;

@@ -1,0 +1,444 @@
+package app
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) Do(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func TestHealthMetricsAndFrontendAreLightweight(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	for _, target := range []string{"/health", "/", "/runtime-config.js", "/metrics"} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s returned %d: %s", target, rec.Code, rec.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	for _, text := range []string{"Langfuse Trace Chat", "/api/run", "traceId", "score-list"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	for _, text := range []string{"langfuse_demo_runs_total", "langfuse_demo_llm_calls_total", `role="trace-chat"`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("metrics missing %q: %s", text, rec.Body.String())
+		}
+	}
+}
+
+func TestFrontendFaviconIsHandled(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code == http.StatusNotFound {
+		t.Fatalf("favicon should not produce browser console noise: %d", rec.Code)
+	}
+}
+
+func TestFrontendUsesSharedAuthShellControls(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("frontend returned %d: %s", rec.Code, rec.Body.String())
+	}
+	html := rec.Body.String()
+	for _, text := range []string{`class="header-actions"`, `id="auth-state"`, `class="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `/oauth2/sign_out?rd=/signed-out.html`, `/idpauth.js`} {
+		if !strings.Contains(html, text) {
+			t.Fatalf("frontend missing auth shell control %q: %s", text, html)
+		}
+	}
+}
+
+func TestGatewaySessionPrefersEmailOverOpaqueSubject(t *testing.T) {
+	srv := NewServer(Config{Role: "tool-agent", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/.auth/me", nil)
+	req.Header.Set("X-Forwarded-User", "baa3e24f-39c3-4693-8754-ca65d0842572")
+	req.Header.Set("X-Forwarded-Email", "demo@dev.test")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("gateway session returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		ClientPrincipal struct {
+			UserDetails string `json:"userDetails"`
+			Claims      []struct {
+				Type  string `json:"typ"`
+				Value string `json:"val"`
+			} `json:"claims"`
+		} `json:"clientPrincipal"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ClientPrincipal.UserDetails != "demo@dev.test" {
+		t.Fatalf("expected display identity to use email, got %q in %s", payload.ClientPrincipal.UserDetails, rec.Body.String())
+	}
+}
+
+func TestFrontendUsesSharedGatewayIdentityNormalization(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("app.js returned %d: %s", rec.Code, rec.Body.String())
+	}
+	script := rec.Body.String()
+	for _, text := range []string{`window.PlatformIdpAuth`, `idpAuth.fetchGatewaySession`, `idpAuth.gatewayDisplayName`} {
+		if !strings.Contains(script, text) {
+			t.Fatalf("app.js missing shared gateway identity helper %q: %s", text, script)
+		}
+	}
+	for _, text := range []string{`function normalizeGatewaySession`, `function gatewayDisplayName`} {
+		if strings.Contains(script, text) {
+			t.Fatalf("app.js should consume shared idpauth bundle, but still defines %q: %s", text, script)
+		}
+	}
+}
+
+func TestSharedIdpAuthBundleIsServed(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/idpauth.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("idpauth bundle returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{`window.PlatformIdpAuth`, `normalizeGatewaySession`, `gatewayDisplayName`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("idpauth bundle missing %q: %s", text, rec.Body.String())
+		}
+	}
+}
+
+func TestFrontendMobileHeaderStacksShellControls(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/style.css", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("style.css returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{`@media (max-width: 820px)`, `header { flex-direction: column;`, `.header-actions { width: 100%;`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("style.css missing mobile shell rule %q: %s", text, rec.Body.String())
+		}
+	}
+}
+
+func TestFrontendShowsMetricsPanelOnMainView(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("frontend returned %d: %s", rec.Code, rec.Body.String())
+	}
+	html := rec.Body.String()
+	for _, text := range []string{`id="metrics-panel"`, `id="refresh-metrics"`, `id="metrics-output"`, `href="/metrics"`, `Raw Metrics`} {
+		if !strings.Contains(html, text) {
+			t.Fatalf("frontend missing metrics panel affordance %q: %s", text, html)
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("app.js returned %d: %s", rec.Code, rec.Body.String())
+	}
+	script := rec.Body.String()
+	for _, text := range []string{`refreshMetrics`, `cfg.metricsEndpoint || "/metrics"`, `#metrics-output`} {
+		if !strings.Contains(script, text) {
+			t.Fatalf("app.js missing metrics panel behavior %q: %s", text, script)
+		}
+	}
+}
+
+func TestRuntimeConfigProvidesDistinctRoleUI(t *testing.T) {
+	roles := map[string]string{
+		"trace-chat":  "Single prompt",
+		"tool-agent":  "Planner",
+		"eval-runner": "Eval cases",
+	}
+
+	for role, expectedCopy := range roles {
+		t.Run(role, func(t *testing.T) {
+			srv := NewServer(Config{Role: role, LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+			req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+			}
+			body := rec.Body.String()
+			for _, text := range []string{`"scenarioCopy"`, `"promptLabel"`, `"actionLabel"`, expectedCopy} {
+				if !strings.Contains(body, text) {
+					t.Fatalf("%s runtime config missing %q: %s", role, text, body)
+				}
+			}
+		})
+	}
+}
+
+func TestRuntimeConfigDocumentsLocalOMLXPrerequisite(t *testing.T) {
+	srv := NewServer(Config{Role: "tool-agent", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1", OpenAIModel: "local-omlx"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, text := range []string{`"llmPrerequisite"`, `http://127.0.0.1:8000/v1`, `host.docker.internal:8000`, `start the oMLX OpenAI-compatible server`} {
+		if !strings.Contains(body, text) {
+			t.Fatalf("runtime config missing local oMLX prerequisite %q: %s", text, body)
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `id="prereq-note"`) {
+		t.Fatalf("frontend missing prerequisite note mount: %s", rec.Body.String())
+	}
+}
+
+func TestConfigDefaultsGiveLocalOMLXSufficientTime(t *testing.T) {
+	t.Setenv("LLM_TIMEOUT_SECONDS", "")
+	t.Setenv("LANGFUSE_TIMEOUT_SECONDS", "")
+
+	cfg := ConfigFromEnv()
+	if cfg.LLMTimeout < 20*time.Second {
+		t.Fatalf("local oMLX completions need more than the gateway smoke timeout, got %s", cfg.LLMTimeout)
+	}
+	if cfg.LangfuseTimeout != 5*time.Second {
+		t.Fatalf("Langfuse ingestion timeout should remain tight, got %s", cfg.LangfuseTimeout)
+	}
+}
+
+func TestTraceChatCallsLLMAndIngestsTraceGenerationAndScores(t *testing.T) {
+	var ingestion map[string][]map[string]any
+	client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.Path, "/chat/completions"):
+			return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"Langfuse trace response"}}]}`), nil
+		case strings.Contains(r.URL.Path, "/api/public/ingestion"):
+			raw, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(raw, &ingestion); err != nil {
+				t.Fatal(err)
+			}
+			user, pass, ok := r.BasicAuth()
+			if !ok || user != "pk" || pass != "sk" {
+				t.Fatalf("bad Langfuse basic auth")
+			}
+			return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+		default:
+			t.Fatalf("unexpected request: %s", r.URL.String())
+			return nil, nil
+		}
+	})
+	srv := NewServer(Config{
+		Role:              "trace-chat",
+		LangfuseHost:      "http://langfuse",
+		LangfusePublicKey: "pk",
+		LangfuseSecretKey: "sk",
+		OpenAIBaseURL:     "http://llm/v1",
+		OpenAIModel:       "local",
+	}, client)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"hello"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var response runResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.LangfuseStatus != "ok" || response.LLMStatus != "ok" || response.TraceID == "" {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+
+	types := map[string]int{}
+	for _, event := range ingestion["batch"] {
+		types[event["type"].(string)]++
+	}
+	for _, typ := range []string{"trace-create", "generation-create", "score-create"} {
+		if types[typ] == 0 {
+			t.Fatalf("missing Langfuse event type %s in %#v", typ, ingestion)
+		}
+	}
+}
+
+func TestToolAgentAndEvalRunnerEmitScoresWhenLLMFails(t *testing.T) {
+	for _, role := range []string{"tool-agent", "eval-runner"} {
+		t.Run(role, func(t *testing.T) {
+			var sawIngestion bool
+			client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if strings.Contains(r.URL.Path, "/chat/completions") {
+					return jsonResponse(http.StatusServiceUnavailable, `{"error":"offline"}`), nil
+				}
+				if strings.Contains(r.URL.Path, "/api/public/ingestion") {
+					sawIngestion = true
+					raw, _ := io.ReadAll(r.Body)
+					if !strings.Contains(string(raw), "score-create") {
+						t.Fatalf("ingestion missing scores: %s", string(raw))
+					}
+					return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+				}
+				t.Fatalf("unexpected request: %s", r.URL.String())
+				return nil, nil
+			})
+			srv := NewServer(Config{
+				Role:              role,
+				LangfuseHost:      "http://langfuse",
+				LangfusePublicKey: "pk",
+				LangfuseSecretKey: "sk",
+				OpenAIBaseURL:     "http://llm/v1",
+				OpenAIModel:       "local",
+			}, client)
+			req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"evaluate this"}`))
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+			}
+			if !sawIngestion {
+				t.Fatalf("expected Langfuse ingestion for %s", role)
+			}
+			if !strings.Contains(rec.Body.String(), `"scores"`) {
+				t.Fatalf("response missing scores: %s", rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestToolAgentPresentsDeterministicFallbackWhenLLMUnavailable(t *testing.T) {
+	client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, "/chat/completions") {
+			return jsonResponse(http.StatusServiceUnavailable, `{"error":"offline"}`), nil
+		}
+		if strings.Contains(r.URL.Path, "/api/public/ingestion") {
+			return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+		}
+		t.Fatalf("unexpected request: %s", r.URL.String())
+		return nil, nil
+	})
+	srv := NewServer(Config{
+		Role:              "tool-agent",
+		LangfuseHost:      "http://langfuse",
+		LangfusePublicKey: "pk",
+		LangfuseSecretKey: "sk",
+		OpenAIBaseURL:     "http://llm/v1",
+		OpenAIModel:       "local",
+	}, client)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"check langfuse wiring"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var response runResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.LLMStatus != "deterministic fallback" {
+		t.Fatalf("expected clear deterministic fallback status, got %+v", response)
+	}
+	if strings.Contains(strings.ToLower(response.Answer), "did not return content") {
+		t.Fatalf("fallback answer should not expose raw LLM failure: %q", response.Answer)
+	}
+	for _, step := range response.Steps {
+		if (step.Name == "planner" || step.Name == "final-response") && step.Status != "deterministic fallback" {
+			t.Fatalf("expected %s to show deterministic fallback status, got %+v", step.Name, step)
+		}
+	}
+}
+
+func TestTraceChatUsesBoundedLLMTimeoutAndStillIngestsFallbackTrace(t *testing.T) {
+	var sawIngestion bool
+	client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, "/chat/completions") {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}
+		if strings.Contains(r.URL.Path, "/api/public/ingestion") {
+			sawIngestion = true
+			return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+		}
+		t.Fatalf("unexpected request: %s", r.URL.String())
+		return nil, nil
+	})
+	srv := NewServer(Config{
+		Role:              "trace-chat",
+		LangfuseHost:      "http://langfuse",
+		LangfusePublicKey: "pk",
+		LangfuseSecretKey: "sk",
+		OpenAIBaseURL:     "http://llm/v1",
+		OpenAIModel:       "local",
+		LLMTimeout:        10 * time.Millisecond,
+		LangfuseTimeout:   time.Second,
+	}, client)
+
+	start := time.Now()
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"hello"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("run took too long after LLM timeout: %s", elapsed)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !sawIngestion {
+		t.Fatalf("expected fallback trace ingestion after LLM timeout")
+	}
+	if !strings.Contains(rec.Body.String(), `"llmStatus":"error"`) || !strings.Contains(rec.Body.String(), `"langfuseStatus":"ok"`) {
+		t.Fatalf("unexpected timeout response: %s", rec.Body.String())
+	}
+}
+
+func jsonResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}

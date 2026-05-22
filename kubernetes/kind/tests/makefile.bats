@@ -8,7 +8,7 @@ setup() {
   export PATH="${TEST_BIN}:${PATH}"
 }
 
-@test "kind help documents the 900 stage ladder" {
+@test "kind help documents the 920 stage ladder" {
   run make -C "${REPO_ROOT}/kubernetes/kind" help
 
   [ "${status}" -eq 0 ]
@@ -18,6 +18,7 @@ setup() {
   [[ "${output}" == *"700 - app repos"* ]]
   [[ "${output}" == *"800 - observability"* ]]
   [[ "${output}" == *"900 - sso"* ]]
+  [[ "${output}" == *"920 - langfuse"* ]]
   [[ "${output}" == *"Linux -> Docker Engine or Docker Desktop"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]
   [[ "${output}" == *"split by default"* ]]
@@ -250,7 +251,7 @@ EOF
   run make -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=950
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900 920"* ]]
 }
 
 @test "check-cluster-health accepts repeated --var-file flags in dry-run mode" {
@@ -296,7 +297,7 @@ EOF
   run make -C "${REPO_ROOT}/kubernetes/kind" plan STAGE=950
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900"* ]]
+  [[ "${output}" == *"Unknown STAGE=950. Expected one of: 100 200 300 400 500 600 700 800 900 920"* ]]
 }
 
 @test "kind apply refreshes kubeconfig after a successful apply" {
@@ -648,6 +649,34 @@ EOF
 
 @test "kind prereqs keeps kyverno in the optional host tool inventory" {
   run grep -Fn -- '--optional kyverno \' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind stack prereqs accepts stage 920 and warns when the host oMLX server is absent" {
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${*}" == *"/v1/models"* ]]; then
+  exit 7
+fi
+exit 99
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" LOCAL_OPENAI_BASE_URL=http://127.0.0.1:9/v1 \
+    "${REPO_ROOT}/kubernetes/scripts/check-stack-prereqs.sh" --execute --stage 920 --required curl
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Local OpenAI-compatible model endpoint:"* ]]
+  [[ "${output}" == *"http://127.0.0.1:9/v1"* ]]
+  [[ "${output}" == *"host.docker.internal:8000"* ]]
+  [[ "${output}" == *"start the oMLX OpenAI-compatible server"* ]]
+}
+
+@test "kind apply passes the selected stage into prereqs" {
+  run bash -c 'sed -n "/^apply:/,/^\\.PHONY: readiness/p" "$1" | grep -F '"'"'$(MAKE) prereqs STAGE="$(STAGE)"'"'"'' _ \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

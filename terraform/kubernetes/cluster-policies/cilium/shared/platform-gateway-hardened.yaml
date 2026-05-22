@@ -6,7 +6,8 @@ spec:
   description: >-
     Hardened policy for platform-gateway namespace. This is the TLS termination
     point (NGINX Gateway Fabric). All external traffic enters here.
-    Ingress: external clients via host/remote-node on :443 only.
+    Ingress: external clients via host/remote-node on :443, plus internal
+    OIDC clients that must reach the public issuer through the gateway.
     Egress: argocd-server on :8080, gitea on :3000, shared APIM on :8000,
     agentgateway AI gateway on :80/:8080, shared auth proxies on :4180,
     application HTTP frontends on :8080, shared Keycloak on :5556, Hubble UI on
@@ -36,6 +37,13 @@ spec:
     - fromEndpoints:
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": headlamp
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": langfuse
       toPorts:
         - ports:
             - port: "443"

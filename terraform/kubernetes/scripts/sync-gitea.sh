@@ -398,6 +398,8 @@ main() {
   export_resolved_bool ENABLE_SSO enable_sso false
   export_resolved_bool HEADLAMP_OIDC_SKIP_TLS_VERIFY headlamp_oidc_skip_tls_verify true
   export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false
+  export_resolved_bool ENABLE_LANGFUSE enable_langfuse false
+  export_resolved_bool ENABLE_LANGFUSE_DEMOS enable_langfuse_demos false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_GRAFANA grafana
@@ -405,6 +407,7 @@ main() {
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_BACKSTAGE backstage
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP platform-mcp
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM chatgpt-sim
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS langfuse-demos
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_API sentiment-api
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
@@ -436,6 +439,10 @@ main() {
   export_resolved_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version "$(tf_default_from_variables agentgateway_chart_version)"
   export_resolved_string AGENTGATEWAY_AI_GATEWAY_MODEL agentgateway_ai_gateway_model ""
   export_resolved_string AGENTGATEWAY_AI_GATEWAY_PUBLIC_HOST agentgateway_ai_gateway_public_host ""
+  export_resolved_string LANGFUSE_PUBLIC_HOST langfuse_public_host "langfuse.admin.127.0.0.1.sslip.io"
+  export_resolved_string LANGFUSE_TRACE_CHAT_PUBLIC_HOST langfuse_trace_chat_public_host "lf-chat.dev.127.0.0.1.sslip.io"
+  export_resolved_string LANGFUSE_TOOL_AGENT_PUBLIC_HOST langfuse_tool_agent_public_host "lf-agent.dev.127.0.0.1.sslip.io"
+  export_resolved_string LANGFUSE_EVAL_RUNNER_PUBLIC_HOST langfuse_eval_runner_public_host "lf-evals.dev.127.0.0.1.sslip.io"
 
   exec "${delegate}" --execute
 }

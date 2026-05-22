@@ -73,6 +73,7 @@ WORKFLOW_DOCKERFILES=(
   "apps/apim-simulator/Dockerfile"
   "apps/sentiment/app/Dockerfile"
   "apps/chatgpt-sim/app/Dockerfile"
+  "apps/langfuse-demos/app/Dockerfile"
   "apps/idp-core/app/Dockerfile"
   "apps/platform-mcp/app/Dockerfile"
 )
@@ -112,7 +113,7 @@ is_true() {
 has_toggle_env_overrides() {
   local env_key
 
-  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER; do
+  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
     if [[ -n "${!env_key:-}" ]]; then
       return 0
     fi
@@ -280,6 +281,14 @@ is_actions_runner_image() {
   esac
 }
 
+is_langfuse_image() {
+  local img="$1"
+  case "${img}" in
+    docker.io/langfuse/langfuse:*|docker.io/langfuse/langfuse-worker:*|docker.io/postgres:*|docker.io/redis:*|docker.io/clickhouse/clickhouse-server:*|cgr.dev/chainguard/minio:*|cgr.dev/chainguard/busybox:*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 filter_images_by_toggles() {
   local enable_signoz="$1"
   local enable_prometheus="$2"
@@ -290,6 +299,7 @@ filter_images_by_toggles() {
   local enable_headlamp="$7"
   local enable_sso="$8"
   local enable_actions_runner="$9"
+  local enable_langfuse="${10}"
   local output=""
   local img
 
@@ -329,6 +339,10 @@ filter_images_by_toggles() {
     fi
 
     if ! is_true "${enable_actions_runner}" && is_actions_runner_image "${img}"; then
+      continue
+    fi
+
+    if ! is_true "${enable_langfuse}" && is_langfuse_image "${img}"; then
       continue
     fi
 
@@ -852,7 +866,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER; do
+for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -869,6 +883,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   ENABLE_HEADLAMP="$(toggle_input_or_default "PRELOAD_ENABLE_HEADLAMP" "enable_headlamp" "false")"
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
   ENABLE_ACTIONS_RUNNER="$(toggle_input_or_default "PRELOAD_ENABLE_ACTIONS_RUNNER" "enable_actions_runner" "false")"
+  ENABLE_LANGFUSE="$(toggle_input_or_default "PRELOAD_ENABLE_LANGFUSE" "enable_langfuse" "false")"
 
   if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
     echo "Applying feature filters from ${TFVARS_FILE} with PRELOAD_ENABLE_* env overrides" >&2
@@ -885,7 +900,8 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
     "${ENABLE_TEMPO}" \
     "${ENABLE_HEADLAMP}" \
     "${ENABLE_SSO}" \
-    "${ENABLE_ACTIONS_RUNNER}")"
+    "${ENABLE_ACTIONS_RUNNER}" \
+    "${ENABLE_LANGFUSE}")"
 fi
 
 if [[ -z "$images" ]]; then

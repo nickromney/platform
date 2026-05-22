@@ -109,6 +109,7 @@ if [[ -n "${stages_dir}" ]]; then
 700:${stages_dir}/700-app-repos.tfvars
 800:${stages_dir}/800-gateway-tls.tfvars
 900:${stages_dir}/900-sso.tfvars
+920:${stages_dir}/920-langfuse.tfvars
 EOF
 else
   "${STAGE_LADDER_HELPER}" --execute --stack-dir "${stack_dir}" >"${stage_list_file}"

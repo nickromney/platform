@@ -18,6 +18,7 @@ setup() {
   [[ "${output}" == *"700 - app repos"* ]]
   [[ "${output}" == *"800 - observability"* ]]
   [[ "${output}" == *"900 - sso"* ]]
+  [[ "${output}" == *"920 - langfuse"* ]]
   [[ "${output}" == *"make 900 check-security"* ]]
   [[ "${output}" == *"Docker-only hosts       -> use ../kind"* ]]
   [[ "${output}" == *"make merge-default-kubeconfig"* ]]

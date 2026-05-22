@@ -228,3 +228,23 @@ resource "kubernetes_namespace_v1" "apim" {
     null_resource.ensure_kind_kubeconfig,
   ]
 }
+
+resource "kubernetes_namespace_v1" "langfuse" {
+  count = var.enable_argocd && var.enable_langfuse ? 1 : 0
+
+  metadata {
+    name = "langfuse"
+    labels = {
+      "app.kubernetes.io/name"                             = "langfuse"
+      "app.kubernetes.io/managed-by"                       = "terraform"
+      "platform.publiccloudexperiments.net/namespace-role" = "platform"
+      "platform.publiccloudexperiments.net/sensitivity"    = "internal"
+      "kyverno.io/isolate"                                 = "true"
+    }
+  }
+
+  depends_on = [
+    kind_cluster.local,
+    null_resource.ensure_kind_kubeconfig,
+  ]
+}

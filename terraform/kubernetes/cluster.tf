@@ -193,6 +193,7 @@ resource "null_resource" "preload_images" {
     enable_headlamp       = tostring(var.enable_headlamp)
     enable_sso            = tostring(var.enable_sso)
     enable_actions_runner = tostring(var.enable_actions_runner)
+    enable_langfuse       = tostring(var.enable_langfuse)
     preload_parallelism   = tostring(var.image_preload_parallelism)
   }
 
@@ -209,6 +210,7 @@ resource "null_resource" "preload_images" {
       PRELOAD_ENABLE_HEADLAMP       = tostring(var.enable_headlamp)
       PRELOAD_ENABLE_SSO            = tostring(var.enable_sso)
       PRELOAD_ENABLE_ACTIONS_RUNNER = tostring(var.enable_actions_runner)
+      PRELOAD_ENABLE_LANGFUSE       = tostring(var.enable_langfuse)
     }
   }
 

@@ -1,0 +1,56 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: langfuse-demos-runtime
+spec:
+  description: >-
+    Allow Langfuse demo pods to receive authenticated SSO traffic and emit
+    trace/eval data to Langfuse while calling the local agentgateway LLM route.
+  endpointSelector:
+    matchLabels:
+      "k8s:app.kubernetes.io/part-of": langfuse-demos
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
+            "k8s:app.kubernetes.io/component": authentication-proxy
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": observability
+            "k8s:app.kubernetes.io/name": prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": langfuse
+            "k8s:app.kubernetes.io/name": langfuse
+            "k8s:app.kubernetes.io/component": web
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": agentgateway-system
+            "k8s:app.kubernetes.io/name": agentgateway-ai-gateway
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP

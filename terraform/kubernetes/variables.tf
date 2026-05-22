@@ -89,6 +89,12 @@ variable "kind_stage_900_tfvars_file" {
   default     = ""
 }
 
+variable "kind_stage_tfvars_file" {
+  description = "Absolute path to the current kubernetes/kind stage tfvars file."
+  type        = string
+  default     = ""
+}
+
 variable "kind_target_tfvars_file" {
   description = "Absolute path to kubernetes/kind/targets/kind.tfvars."
   type        = string
@@ -884,6 +890,18 @@ variable "enable_agentgateway_ai_gateway" {
   default     = false
 }
 
+variable "enable_langfuse" {
+  description = "Deploy Langfuse OSS with lightweight in-cluster dependencies for LLM observability and memory experiments."
+  type        = bool
+  default     = false
+}
+
+variable "enable_langfuse_demos" {
+  description = "Deploy lightweight Langfuse demo apps for trace chat, tool-agent, and eval/replay flows."
+  type        = bool
+  default     = false
+}
+
 variable "agentgateway_chart_version" {
   description = "agentgateway Helm chart version for the AI gateway experiment."
   type        = string
@@ -1025,6 +1043,20 @@ check "enable_actions_runner_requires_gitea_and_argocd" {
   assert {
     condition     = !var.enable_actions_runner || (var.enable_gitea && var.enable_argocd)
     error_message = "enable_actions_runner requires enable_gitea=true and enable_argocd=true."
+  }
+}
+
+check "enable_langfuse_requires_sso_gateway_argocd_gitea" {
+  assert {
+    condition     = !var.enable_langfuse || (var.enable_sso && var.enable_gateway_tls && var.enable_argocd && var.enable_gitea)
+    error_message = "enable_langfuse requires enable_sso=true, enable_gateway_tls=true, enable_argocd=true, and enable_gitea=true."
+  }
+}
+
+check "enable_langfuse_demos_requires_langfuse_agentgateway_and_sso" {
+  assert {
+    condition     = !var.enable_langfuse_demos || (var.enable_langfuse && var.enable_agentgateway_ai_gateway && var.enable_sso && var.enable_gateway_tls && var.enable_argocd && var.enable_gitea)
+    error_message = "enable_langfuse_demos requires enable_langfuse=true, enable_agentgateway_ai_gateway=true, enable_sso=true, enable_gateway_tls=true, enable_argocd=true, and enable_gitea=true."
   }
 }
 
@@ -1228,15 +1260,15 @@ variable "enable_backstage" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "platform-mcp", "signoz-auth-proxy"], key)
+      contains(["backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp", "signoz-auth-proxy"], key)
     ])
-    error_message = "external_platform_image_refs supports only: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, platform-mcp, signoz-auth-proxy."
+    error_message = "external_platform_image_refs supports only: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
   }
 }

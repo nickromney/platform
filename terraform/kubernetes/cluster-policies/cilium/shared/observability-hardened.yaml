@@ -159,6 +159,15 @@ spec:
               protocol: TCP
     - toEndpoints:
         - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/part-of": langfuse-demos
+      toPorts:
+        - ports:
+            # Langfuse demo app metrics for the agent flow dashboard
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
             "k8s:io.kubernetes.pod.namespace": cert-manager
       toPorts:
         - ports:

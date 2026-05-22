@@ -933,3 +933,88 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated 4 preload image snapshot(s) and 7 lock entry(ies)"* ]]
 }
+
+@test "Langfuse image artifacts use approved non-Bitnami runtime sources" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy = (repo_root / "terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml").read_text(encoding="utf-8")
+
+required_images = [
+    "docker.io/langfuse/langfuse:3",
+    "docker.io/langfuse/langfuse-worker:3",
+    "docker.io/postgres:17.6-alpine",
+    "docker.io/redis:8.2.3-alpine",
+    "docker.io/clickhouse/clickhouse-server:25.5.6",
+    "cgr.dev/chainguard/minio:latest",
+    "cgr.dev/chainguard/busybox:latest",
+]
+
+for required_policy in ['"docker.io/langfuse/*"', '"docker.io/postgres:*"', '"docker.io/redis:*"', '"docker.io/clickhouse/*"', '"cgr.dev/*"']:
+    assert required_policy in policy, required_policy
+
+for relative_path in [
+    "kubernetes/kind/preload-images.txt",
+    "kubernetes/lima/preload-images.txt",
+    "kubernetes/slicer/preload-images.txt",
+    "kubernetes/docker-desktop/preload-images.txt",
+]:
+    lines = (repo_root / relative_path).read_text(encoding="utf-8").splitlines()
+    for image in required_images:
+        assert image in lines, (relative_path, image)
+    assert not any(line.startswith("dhi.io/langfuse:") for line in lines), relative_path
+    assert not any(line.startswith("dhi.io/postgres:") for line in lines), relative_path
+    assert not any(line.startswith("dhi.io/redis:") for line in lines), relative_path
+    assert all("bitnamilegacy" not in line for line in lines if "langfuse" in line.lower()), relative_path
+
+docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/langfuse/all.yaml").read_text(encoding="utf-8")))
+redis = next(doc for doc in docs if doc and doc.get("kind") == "StatefulSet" and doc["metadata"]["name"] == "langfuse-redis")
+redis_pod_spec = redis["spec"]["template"]["spec"]
+redis_container = redis_pod_spec["containers"][0]
+assert redis_pod_spec["securityContext"]["fsGroup"] == 1000, redis_pod_spec["securityContext"]
+assert redis_container["securityContext"]["runAsUser"] == 999, redis_container["securityContext"]
+assert redis_container["securityContext"]["runAsGroup"] == 1000, redis_container["securityContext"]
+
+network_policy = next(doc for doc in docs if doc and doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == "langfuse-runtime")
+assert network_policy["metadata"]["namespace"] == "langfuse", network_policy["metadata"]
+assert set(network_policy["spec"]["policyTypes"]) == {"Ingress", "Egress"}, network_policy["spec"]
+
+ingress_ports = {
+    str(port["port"])
+    for rule in network_policy["spec"]["ingress"]
+    for port in rule.get("ports", [])
+}
+egress_ports = {
+    str(port["port"])
+    for rule in network_policy["spec"]["egress"]
+    for port in rule.get("ports", [])
+}
+for required_port in {"3000", "3030", "5432", "6379", "8123", "9000"}:
+    assert required_port in ingress_ports, (required_port, ingress_ports)
+    assert required_port in egress_ports, (required_port, egress_ports)
+
+dns_rules = [
+    rule
+    for rule in network_policy["spec"]["egress"]
+    if any(str(port["port"]) == "53" for port in rule.get("ports", []))
+]
+assert dns_rules, network_policy["spec"]["egress"]
+dns_peers = [peer for rule in dns_rules for peer in rule.get("to", [])]
+assert any(
+    peer.get("namespaceSelector", {}).get("matchLabels", {}).get("kubernetes.io/metadata.name") == "kube-system"
+    and peer.get("podSelector", {}).get("matchLabels", {}).get("k8s-app") == "kube-dns"
+    for peer in dns_peers
+), dns_peers
+
+print("validated Langfuse preload and registry policy sources")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Langfuse preload and registry policy sources"* ]]
+}
