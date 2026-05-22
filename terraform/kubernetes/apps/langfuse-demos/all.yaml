@@ -45,7 +45,7 @@ spec:
       containers:
         - name: server
           image: localhost:30090/platform/langfuse-demos:0.1.0
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: DEMO_ROLE
               value: trace-chat
@@ -64,11 +64,11 @@ spec:
             - name: OPENAI_BASE_URL
               value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
             - name: OPENAI_MODEL
-              value: local-omlx
+              value: auto
             - name: LLM_TIMEOUT_SECONDS
-              value: "30"
+              value: "10"
             - name: LANGFUSE_TIMEOUT_SECONDS
-              value: "5"
+              value: "15"
             - name: HOME
               value: /tmp
           ports:
@@ -182,7 +182,7 @@ spec:
       containers:
         - name: server
           image: localhost:30090/platform/langfuse-demos:0.1.0
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: DEMO_ROLE
               value: tool-agent
@@ -201,11 +201,11 @@ spec:
             - name: OPENAI_BASE_URL
               value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
             - name: OPENAI_MODEL
-              value: local-omlx
+              value: auto
             - name: LLM_TIMEOUT_SECONDS
-              value: "30"
+              value: "10"
             - name: LANGFUSE_TIMEOUT_SECONDS
-              value: "5"
+              value: "15"
             - name: HOME
               value: /tmp
           ports:
@@ -319,7 +319,7 @@ spec:
       containers:
         - name: server
           image: localhost:30090/platform/langfuse-demos:0.1.0
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: DEMO_ROLE
               value: eval-runner
@@ -338,11 +338,11 @@ spec:
             - name: OPENAI_BASE_URL
               value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
             - name: OPENAI_MODEL
-              value: local-omlx
+              value: auto
             - name: LLM_TIMEOUT_SECONDS
-              value: "30"
+              value: "10"
             - name: LANGFUSE_TIMEOUT_SECONDS
-              value: "5"
+              value: "15"
             - name: HOME
               value: /tmp
           ports:

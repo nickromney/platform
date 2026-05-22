@@ -38,6 +38,11 @@ data:
   NODE_TLS_REJECT_UNAUTHORIZED: "0"
   TELEMETRY_ENABLED: "false"
   LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  LANGFUSE_DEFAULT_ORG_ID: local-platform
+  LANGFUSE_DEFAULT_ORG_ROLE: OWNER
+  LANGFUSE_DEFAULT_PROJECT_ID: local-platform-project
+  LANGFUSE_DEFAULT_PROJECT_ROLE: OWNER
+  LANGFUSE_LLM_CONNECTION_WHITELISTED_HOST: agentgateway-ai-gateway.agentgateway-system.svc.cluster.local
   CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse.langfuse.svc.cluster.local:9000
   CLICKHOUSE_URL: http://langfuse-clickhouse.langfuse.svc.cluster.local:8123
   CLICKHOUSE_USER: clickhouse
@@ -533,6 +538,8 @@ spec:
       app.kubernetes.io/component: web
   template:
     metadata:
+      annotations:
+        platform.publiccloudexperiments.net/config-generation: "2026-05-22-langfuse-bootstrap"
       labels:
         app.kubernetes.io/name: langfuse
         app.kubernetes.io/component: web
@@ -676,6 +683,8 @@ spec:
       app.kubernetes.io/component: worker
   template:
     metadata:
+      annotations:
+        platform.publiccloudexperiments.net/config-generation: "2026-05-22-langfuse-bootstrap"
       labels:
         app.kubernetes.io/name: langfuse
         app.kubernetes.io/component: worker
@@ -829,6 +838,171 @@ spec:
       port: 3030
       targetPort: http
 ---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: langfuse-bootstrap
+  namespace: langfuse
+  labels:
+    app.kubernetes.io/name: langfuse
+    app.kubernetes.io/component: bootstrap
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 420
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse
+        app.kubernetes.io/component: bootstrap
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: docker.io/curlimages/curl:8.19.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LANGFUSE_URL
+              value: http://langfuse-web.langfuse.svc.cluster.local:3000
+            - name: LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-env
+                  key: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-env
+                  key: LANGFUSE_INIT_PROJECT_SECRET_KEY
+            - name: LOCAL_LLM_PROVIDER
+              value: local-agentgateway
+            - name: LOCAL_LLM_API_KEY
+              value: local-platform-noop
+            - name: LOCAL_LLM_BASE_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1
+            - name: LOCAL_LLM_FALLBACK_MODEL
+              value: Qwen3.5-9B-MLX-4bit
+          command:
+            - sh
+            - -ec
+            - |
+              json_escape() {
+                printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+              }
+
+              auth="${LANGFUSE_PUBLIC_KEY}:${LANGFUSE_SECRET_KEY}"
+
+              echo "waiting for Langfuse public health"
+              for attempt in $(seq 1 60); do
+                if curl -fsS --max-time 5 "${LANGFUSE_URL}/api/public/health" >/dev/null; then
+                  break
+                fi
+                if [ "${attempt}" -eq 60 ]; then
+                  echo "Langfuse did not become ready" >&2
+                  exit 1
+                fi
+                sleep 5
+              done
+
+              model="${LOCAL_LLM_FALLBACK_MODEL}"
+              models_json="$(curl -fsS --max-time 5 "${LOCAL_LLM_BASE_URL}/models" 2>/dev/null || true)"
+              discovered_model="$(printf '%s\n' "${models_json}" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+              if [ -n "${discovered_model}" ]; then
+                model="${discovered_model}"
+              fi
+
+              provider_json="$(json_escape "${LOCAL_LLM_PROVIDER}")"
+              key_json="$(json_escape "${LOCAL_LLM_API_KEY}")"
+              base_url_json="$(json_escape "${LOCAL_LLM_BASE_URL}")"
+              model_json="$(json_escape "${model}")"
+              cat >/tmp/llm-connection.json <<EOF
+              {"provider":"${provider_json}","adapter":"openai","secretKey":"${key_json}","baseURL":"${base_url_json}","customModels":["${model_json}"],"withDefaultModels":false}
+              EOF
+
+              echo "upserting Langfuse LLM connection ${LOCAL_LLM_PROVIDER} with model ${model}"
+              for attempt in $(seq 1 60); do
+                status="$(curl -sS \
+                  -u "${auth}" \
+                  -H "content-type: application/json" \
+                  -X PUT \
+                  --data @/tmp/llm-connection.json \
+                  --output /tmp/llm-connection-response.json \
+                  --write-out "%{http_code}" \
+                  "${LANGFUSE_URL}/api/public/llm-connections" || true)"
+                if [ "${status}" -ge 200 ] && [ "${status}" -lt 300 ]; then
+                  break
+                fi
+                cat /tmp/llm-connection-response.json >&2 || true
+                if [ "${attempt}" -eq 60 ]; then
+                  echo "Langfuse LLM connection upsert failed with HTTP ${status}" >&2
+                  exit 1
+                fi
+                sleep 5
+              done
+
+              now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              cat >/tmp/bootstrap-trace.json <<EOF
+              {"batch":[
+                {"id":"platform-langfuse-bootstrap-trace-create","type":"trace-create","timestamp":"${now}","body":{"id":"platform-langfuse-bootstrap","name":"platform.langfuse.bootstrap","input":"Stage 920 Langfuse bootstrap","output":"Default org, project, API keys, LLM connection, and trace ingestion are ready.","tags":["platform-demo","bootstrap"],"sessionId":"platform-langfuse-bootstrap","userId":"platform-demo-user","metadata":{"source":"langfuse-bootstrap","llmProvider":"${provider_json}","llmModel":"${model_json}"}}},
+                {"id":"platform-langfuse-bootstrap-generation-create","type":"generation-create","timestamp":"${now}","body":{"id":"platform-langfuse-bootstrap-generation","traceId":"platform-langfuse-bootstrap","name":"bootstrap-model-config","model":"${model_json}","input":"Configure the local Langfuse playground model.","output":"${model_json} via ${provider_json}","startTime":"${now}","endTime":"${now}","metadata":{"status":"configured","baseUrl":"${base_url_json}"}}},
+                {"id":"platform-langfuse-bootstrap-score-create","type":"score-create","timestamp":"${now}","body":{"id":"platform-langfuse-bootstrap-score","traceId":"platform-langfuse-bootstrap","observationId":"platform-langfuse-bootstrap-generation","name":"bootstrap_ready","value":1,"dataType":"BOOLEAN","comment":"Stage 920 seeded a useful Langfuse project."}}
+              ]}
+              EOF
+
+              echo "seeding Langfuse bootstrap trace"
+              curl -fsS \
+                -u "${auth}" \
+                -H "content-type: application/json" \
+                -X POST \
+                --data @/tmp/bootstrap-trace.json \
+                "${LANGFUSE_URL}/api/public/ingestion" >/dev/null
+
+              echo "waiting for bootstrap trace to become queryable"
+              for attempt in $(seq 1 60); do
+                if curl -fsS \
+                  -u "${auth}" \
+                  --max-time 5 \
+                  "${LANGFUSE_URL}/api/public/traces/platform-langfuse-bootstrap" >/dev/null; then
+                  echo "Langfuse bootstrap complete"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "bootstrap trace was accepted but did not become queryable in time" >&2
+              exit 1
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+              ephemeral-storage: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+              ephemeral-storage: 128Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -912,3 +1086,13 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentgateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentgateway-ai-gateway
+      ports:
+        - protocol: TCP
+          port: 80

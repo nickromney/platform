@@ -52,9 +52,11 @@ for name, role in expected.items():
     assert env["DEMO_ROLE"] == role, name
     assert env["LANGFUSE_HOST"] == "http://langfuse-web.langfuse.svc.cluster.local:3000", name
     assert env["OPENAI_BASE_URL"] == "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1", name
-    assert env["OPENAI_MODEL"], name
-    assert int(env["LLM_TIMEOUT_SECONDS"]) >= 20, name
+    assert env["OPENAI_MODEL"] == "auto", name
+    assert int(env["LLM_TIMEOUT_SECONDS"]) >= 10, name
+    assert int(env["LANGFUSE_TIMEOUT_SECONDS"]) >= 10, name
     assert "langfuse-demos" in container["image"], name
+    assert container["imagePullPolicy"] == "Always", name
 
 network_policy = next(
     doc
@@ -187,7 +189,7 @@ PY
   [[ "${output}" == *"validated observability egress for Langfuse demo scraping"* ]]
 }
 
-@test "Agentgateway policy permits Langfuse demos to call the local LLM route" {
+@test "Agentgateway policy permits Langfuse and demos to call the local LLM route" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -200,7 +202,8 @@ repo_root = Path(os.environ["REPO_ROOT"])
 policy = yaml.safe_load(
     (repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/agentgateway-ai-gateway-hardened.yaml").read_text(encoding="utf-8")
 )
-allowed = False
+allowed_demos = False
+allowed_langfuse = False
 for rule in policy["spec"].get("ingress", []):
     ports = {
         port.get("port")
@@ -214,17 +217,24 @@ for rule in policy["spec"].get("ingress", []):
             and labels.get("k8s:app.kubernetes.io/part-of") == "langfuse-demos"
             and {"80", "8080"} <= ports
         ):
-            allowed = True
-assert allowed, "agentgateway ingress must allow dev/langfuse-demos on the OpenAI-compatible ports"
+            allowed_demos = True
+        if (
+            labels.get("k8s:io.kubernetes.pod.namespace") == "langfuse"
+            and labels.get("k8s:app.kubernetes.io/name") == "langfuse"
+            and {"80", "8080"} <= ports
+        ):
+            allowed_langfuse = True
+assert allowed_demos, "agentgateway ingress must allow dev/langfuse-demos on the OpenAI-compatible ports"
+assert allowed_langfuse, "agentgateway ingress must allow Langfuse web/bootstrap on the OpenAI-compatible ports"
 
-print("validated agentgateway ingress for Langfuse demo LLM calls")
+print("validated agentgateway ingress for Langfuse and demo LLM calls")
 PY
 
   if [ "${status}" -ne 0 ]; then
     printf '%s\n' "${output}"
   fi
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated agentgateway ingress for Langfuse demo LLM calls"* ]]
+  [[ "${output}" == *"validated agentgateway ingress for Langfuse and demo LLM calls"* ]]
 }
 
 @test "Langfuse runtime ingress permits demo pods to ingest traces" {
@@ -269,6 +279,84 @@ PY
   fi
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated Langfuse runtime ingress for demo ingestion"* ]]
+}
+
+@test "Langfuse bootstrap seeds the default project, LLM connection, and starter trace" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+docs = [
+    doc
+    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/langfuse/all.yaml").read_text(encoding="utf-8"))
+    if doc
+]
+config = next(doc for doc in docs if doc.get("kind") == "ConfigMap" and doc["metadata"]["name"] == "langfuse-env")
+data = config["data"]
+for key, value in {
+    "LANGFUSE_INIT_ORG_ID": "local-platform",
+    "LANGFUSE_INIT_PROJECT_ID": "local-platform-project",
+    "LANGFUSE_INIT_PROJECT_PUBLIC_KEY": "pk-lf-local-platform",
+    "LANGFUSE_INIT_PROJECT_SECRET_KEY": "sk-lf-local-platform",
+    "LANGFUSE_DEFAULT_ORG_ID": "local-platform",
+    "LANGFUSE_DEFAULT_ORG_ROLE": "OWNER",
+    "LANGFUSE_DEFAULT_PROJECT_ID": "local-platform-project",
+    "LANGFUSE_DEFAULT_PROJECT_ROLE": "OWNER",
+    "LANGFUSE_LLM_CONNECTION_WHITELISTED_HOST": "agentgateway-ai-gateway.agentgateway-system.svc.cluster.local",
+}.items():
+    assert data[key] == value, (key, data.get(key))
+
+job = next(doc for doc in docs if doc.get("kind") == "Job" and doc["metadata"]["name"] == "langfuse-bootstrap")
+assert job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "PostSync", job["metadata"]
+for name in ("langfuse-web", "langfuse-worker"):
+    deployment = next(doc for doc in docs if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == name)
+    annotations = deployment["spec"]["template"]["metadata"]["annotations"]
+    assert annotations["platform.publiccloudexperiments.net/config-generation"] == "2026-05-22-langfuse-bootstrap", name
+pod_spec = job["spec"]["template"]["spec"]
+assert pod_spec["automountServiceAccountToken"] is False
+container = pod_spec["containers"][0]
+assert container["image"] == "docker.io/curlimages/curl:8.19.0", container["image"]
+env = {item["name"]: item.get("value") for item in container["env"] if "value" in item}
+assert env["LOCAL_LLM_PROVIDER"] == "local-agentgateway"
+assert env["LOCAL_LLM_BASE_URL"] == "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"
+assert env["LOCAL_LLM_FALLBACK_MODEL"] == "Qwen3.5-9B-MLX-4bit"
+command = "\n".join(container["command"])
+for expected in (
+    "/api/public/llm-connections",
+    "/api/public/ingestion",
+    "/api/public/traces/platform-langfuse-bootstrap",
+    "platform-langfuse-bootstrap",
+):
+    assert expected in command, expected
+
+network_policy = next(doc for doc in docs if doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == "langfuse-runtime")
+egress_to_agentgateway = False
+for rule in network_policy["spec"].get("egress", []):
+    ports = {item.get("port") for item in rule.get("ports", [])}
+    for peer in rule.get("to", []):
+        namespace = peer.get("namespaceSelector", {}).get("matchLabels", {})
+        pod = peer.get("podSelector", {}).get("matchLabels", {})
+        if (
+            namespace.get("kubernetes.io/metadata.name") == "agentgateway-system"
+            and pod.get("app.kubernetes.io/name") == "agentgateway-ai-gateway"
+            and 80 in ports
+        ):
+            egress_to_agentgateway = True
+assert egress_to_agentgateway, "Langfuse bootstrap/playground needs egress to agentgateway"
+
+print("validated Langfuse bootstrap defaults and starter trace")
+PY
+
+  if [ "${status}" -ne 0 ]; then
+    printf '%s\n' "${output}"
+  fi
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Langfuse bootstrap defaults and starter trace"* ]]
 }
 
 @test "Langfuse demo app is a lightweight Go-only app with unit tests" {

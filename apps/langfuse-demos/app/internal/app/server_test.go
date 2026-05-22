@@ -215,7 +215,7 @@ func TestRuntimeConfigProvidesDistinctRoleUI(t *testing.T) {
 }
 
 func TestRuntimeConfigDocumentsLocalOMLXPrerequisite(t *testing.T) {
-	srv := NewServer(Config{Role: "tool-agent", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1", OpenAIModel: "local-omlx"}, nil)
+	srv := NewServer(Config{Role: "tool-agent", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1", OpenAIModel: "auto"}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
 	rec := httptest.NewRecorder()
@@ -241,12 +241,16 @@ func TestRuntimeConfigDocumentsLocalOMLXPrerequisite(t *testing.T) {
 func TestConfigDefaultsGiveLocalOMLXSufficientTime(t *testing.T) {
 	t.Setenv("LLM_TIMEOUT_SECONDS", "")
 	t.Setenv("LANGFUSE_TIMEOUT_SECONDS", "")
+	t.Setenv("OPENAI_MODEL", "")
 
 	cfg := ConfigFromEnv()
-	if cfg.LLMTimeout < 20*time.Second {
+	if cfg.OpenAIModel != "auto" {
+		t.Fatalf("default model should be discovered from /v1/models, got %q", cfg.OpenAIModel)
+	}
+	if cfg.LLMTimeout < 10*time.Second {
 		t.Fatalf("local oMLX completions need more than the gateway smoke timeout, got %s", cfg.LLMTimeout)
 	}
-	if cfg.LangfuseTimeout != 5*time.Second {
+	if cfg.LangfuseTimeout != 15*time.Second {
 		t.Fatalf("Langfuse ingestion timeout should remain tight, got %s", cfg.LangfuseTimeout)
 	}
 }
@@ -303,6 +307,57 @@ func TestTraceChatCallsLLMAndIngestsTraceGenerationAndScores(t *testing.T) {
 		if types[typ] == 0 {
 			t.Fatalf("missing Langfuse event type %s in %#v", typ, ingestion)
 		}
+	}
+}
+
+func TestTraceChatAutoDiscoversOpenAIModel(t *testing.T) {
+	var sawModels bool
+	client := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.Path, "/models"):
+			sawModels = true
+			return jsonResponse(http.StatusOK, `{"data":[{"id":"Qwen3.5-9B-MLX-4bit"}]}`), nil
+		case strings.Contains(r.URL.Path, "/chat/completions"):
+			raw, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(raw), `"model":"Qwen3.5-9B-MLX-4bit"`) {
+				t.Fatalf("chat request did not use discovered model: %s", string(raw))
+			}
+			return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"discovered model response"}}]}`), nil
+		case strings.Contains(r.URL.Path, "/api/public/ingestion"):
+			raw, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(raw), `"model":"Qwen3.5-9B-MLX-4bit"`) {
+				t.Fatalf("ingestion did not record discovered model: %s", string(raw))
+			}
+			return jsonResponse(http.StatusOK, `{"successes":[],"errors":[]}`), nil
+		default:
+			t.Fatalf("unexpected request: %s", r.URL.String())
+			return nil, nil
+		}
+	})
+	srv := NewServer(Config{
+		Role:              "trace-chat",
+		LangfuseHost:      "http://langfuse",
+		LangfusePublicKey: "pk",
+		LangfuseSecretKey: "sk",
+		OpenAIBaseURL:     "http://llm/v1",
+		OpenAIModel:       "auto",
+	}, client)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":"hello"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !sawModels {
+		t.Fatalf("expected /models discovery request")
+	}
+	var response runResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.LLMStatus != "ok" || response.Steps[0].Detail != "Qwen3.5-9B-MLX-4bit" {
+		t.Fatalf("unexpected response after model discovery: %+v", response)
 	}
 }
 
