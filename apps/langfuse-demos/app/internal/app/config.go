@@ -33,10 +33,10 @@ func ConfigFromEnv() Config {
 		LangfuseSecretKey: getenv("LANGFUSE_SECRET_KEY", "sk-lf-local-platform"),
 		OpenAIBaseURL:     strings.TrimRight(getenv("OPENAI_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"), "/"),
 		OpenAIAPIKey:      os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:       getenv("OPENAI_MODEL", "local-omlx"),
+		OpenAIModel:       getenv("OPENAI_MODEL", "auto"),
 		DemoName:          getenv("DEMO_NAME", role),
-		LLMTimeout:        secondsDuration("LLM_TIMEOUT_SECONDS", 30*time.Second),
-		LangfuseTimeout:   secondsDuration("LANGFUSE_TIMEOUT_SECONDS", 5*time.Second),
+		LLMTimeout:        secondsDuration("LLM_TIMEOUT_SECONDS", 10*time.Second),
+		LangfuseTimeout:   secondsDuration("LANGFUSE_TIMEOUT_SECONDS", 15*time.Second),
 	}
 }
 

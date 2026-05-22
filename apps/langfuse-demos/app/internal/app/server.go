@@ -97,10 +97,13 @@ type llmMessage struct {
 type llmResult struct {
 	Content        string
 	Status         string
+	Model          string
 	StatusCode     int
 	DurationMillis int64
 	Error          string
 }
+
+const defaultOpenAIModel = "Qwen3.5-9B-MLX-4bit"
 
 type roleUI struct {
 	ScenarioCopy  string   `json:"scenarioCopy"`
@@ -229,7 +232,7 @@ func (s *server) runTraceChat(ctx context.Context, req runRequest, started time.
 	}
 	events := []langfuseEvent{
 		traceCreate(traceID, "langfuse.trace_chat", req.Prompt, answer, []string{"platform-demo", "trace-chat"}),
-		generationCreate(genID, traceID, "chat-completion", s.cfg.OpenAIModel, req.Prompt, answer, llmStarted, time.Now(), llm.Status, llm.StatusCode),
+		generationCreate(genID, traceID, "chat-completion", llm.Model, req.Prompt, answer, llmStarted, time.Now(), llm.Status, llm.StatusCode),
 	}
 	events = append(events, scoreEvents(traceID, genID, scores)...)
 	langfuseStatus := s.ingest(ctx, events)
@@ -237,7 +240,7 @@ func (s *server) runTraceChat(ctx context.Context, req runRequest, started time.
 		Role:           s.cfg.Role,
 		TraceID:        traceID,
 		Answer:         answer,
-		Steps:          []demoStep{{Name: "chat-completion", Type: "generation", Status: llm.Status, Detail: s.cfg.OpenAIModel, TraceID: traceID, SpanID: genID, Duration: llm.DurationMillis}},
+		Steps:          []demoStep{{Name: "chat-completion", Type: "generation", Status: llm.Status, Detail: llm.Model, TraceID: traceID, SpanID: genID, Duration: llm.DurationMillis}},
 		Scores:         scores,
 		LLMStatus:      llm.Status,
 		LangfuseStatus: langfuseStatus,
@@ -282,10 +285,10 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 	}
 	events := []langfuseEvent{
 		traceCreate(traceID, "langfuse.tool_agent", req.Prompt, answer, []string{"platform-demo", "tool-agent"}),
-		generationCreate(planID, traceID, "planner", s.cfg.OpenAIModel, req.Prompt, planText, planStarted, time.Now(), plan.Status, plan.StatusCode),
+		generationCreate(planID, traceID, "planner", plan.Model, req.Prompt, planText, planStarted, time.Now(), plan.Status, plan.StatusCode),
 		spanCreate(toolPolicyID, traceID, "policy_check", req.Prompt, policyDetail, "ok"),
 		spanCreate(toolMemoryID, traceID, "memory_lookup", req.Prompt, memoryDetail, "ok"),
-		generationCreate(finalID, traceID, "final-response", s.cfg.OpenAIModel, finalPrompt, answer, finalStarted, time.Now(), final.Status, final.StatusCode),
+		generationCreate(finalID, traceID, "final-response", final.Model, finalPrompt, answer, finalStarted, time.Now(), final.Status, final.StatusCode),
 	}
 	events = append(events, scoreEvents(traceID, finalID, scores)...)
 	langfuseStatus := s.ingest(ctx, events)
@@ -335,7 +338,7 @@ func (s *server) runEvalRunner(ctx context.Context, req runRequest, started time
 		scores = append(scores, score)
 		answerParts = append(answerParts, fmt.Sprintf("%s=%0.0f", tc.Name, scoreValue))
 		events = append(events,
-			generationCreate(caseID, traceID, "eval-case-"+tc.Name, s.cfg.OpenAIModel, tc.Prompt, output, caseStarted, time.Now(), llm.Status, llm.StatusCode),
+			generationCreate(caseID, traceID, "eval-case-"+tc.Name, llm.Model, tc.Prompt, output, caseStarted, time.Now(), llm.Status, llm.StatusCode),
 		)
 		events = append(events, scoreEvents(traceID, caseID, []demoScore{score})...)
 		steps = append(steps, demoStep{Name: tc.Name, Type: "eval-case", Status: llm.Status, Detail: "expected=" + tc.Expected, TraceID: traceID, SpanID: caseID, Duration: llm.DurationMillis})
@@ -366,8 +369,9 @@ func (s *server) callLLM(ctx context.Context, messages []llmMessage) llmResult {
 	s.m.llmCalls.Add(1)
 	callCtx, cancel := context.WithTimeout(ctx, positiveDuration(s.cfg.LLMTimeout, 5*time.Second))
 	defer cancel()
+	model := s.resolveOpenAIModel(callCtx)
 	payload := map[string]any{
-		"model":       s.cfg.OpenAIModel,
+		"model":       model,
 		"messages":    messages,
 		"temperature": 0.2,
 		"stream":      false,
@@ -376,7 +380,7 @@ func (s *server) callLLM(ctx context.Context, messages []llmMessage) llmResult {
 	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, s.cfg.OpenAIBaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		s.m.llmErrors.Add(1)
-		return llmResult{Status: "error", Error: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
+		return llmResult{Status: "error", Model: model, Error: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if s.cfg.OpenAIAPIKey != "" {
@@ -385,11 +389,11 @@ func (s *server) callLLM(ctx context.Context, messages []llmMessage) llmResult {
 	resp, err := s.client.Do(req)
 	if err != nil {
 		s.m.llmErrors.Add(1)
-		return llmResult{Status: "error", Error: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
+		return llmResult{Status: "error", Model: model, Error: err.Error(), DurationMillis: time.Since(start).Milliseconds()}
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	result := llmResult{StatusCode: resp.StatusCode, DurationMillis: time.Since(start).Milliseconds()}
+	result := llmResult{Model: model, StatusCode: resp.StatusCode, DurationMillis: time.Since(start).Milliseconds()}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		s.m.llmErrors.Add(1)
 		result.Status = "http_error"
@@ -417,6 +421,42 @@ func (s *server) callLLM(ctx context.Context, messages []llmMessage) llmResult {
 	result.Status = "ok"
 	result.Content = strings.TrimSpace(parsed.Choices[0].Message.Content)
 	return result
+}
+
+func (s *server) resolveOpenAIModel(ctx context.Context) string {
+	configured := strings.TrimSpace(s.cfg.OpenAIModel)
+	if configured != "" && configured != "auto" && configured != "local-omlx" {
+		return configured
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.OpenAIBaseURL+"/models", nil)
+	if err != nil {
+		return defaultOpenAIModel
+	}
+	if s.cfg.OpenAIAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return defaultOpenAIModel
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return defaultOpenAIModel
+	}
+	var parsed struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&parsed); err != nil {
+		return defaultOpenAIModel
+	}
+	for _, model := range parsed.Data {
+		if strings.TrimSpace(model.ID) != "" {
+			return strings.TrimSpace(model.ID)
+		}
+	}
+	return defaultOpenAIModel
 }
 
 func (s *server) ingest(ctx context.Context, events []langfuseEvent) string {
