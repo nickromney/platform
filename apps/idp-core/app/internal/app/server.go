@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"platform.local/apphttp"
 )
 
 type Config struct {
@@ -51,9 +53,7 @@ func NewServer(cfg Config) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	writeCORS(w, r)
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
+	if apphttp.HandleCORS(w, r, portalCORSConfig()) {
 		return
 	}
 	s.mux.ServeHTTP(w, r)
@@ -61,10 +61,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"status": "healthy", "service": "idp-core"})
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "healthy", "service": "idp-core"})
 	})
 	s.mux.HandleFunc("GET /api/v1/runtimes", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"runtimes": runtimeInfos()})
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"runtimes": runtimeInfos()})
 	})
 	s.mux.HandleFunc("GET /api/v1/runtime", func(w http.ResponseWriter, r *http.Request) {
 		adapter, err := adapterFor(s.runtime)
@@ -72,7 +72,7 @@ func (s *Server) routes() {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"active_runtime": adapter.info(), "runtimes": runtimeInfos()})
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"active_runtime": adapter.info(), "runtimes": runtimeInfos()})
 	})
 	s.mux.HandleFunc("GET /api/v1/status", s.status)
 	s.mux.HandleFunc("GET /api/v1/catalog/apps", s.catalogApps)
@@ -82,7 +82,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/scorecards", s.scorecards)
 	s.mux.HandleFunc("GET /api/v1/actions", s.actions)
 	s.mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, openAPI())
+		apphttp.WriteJSON(w, http.StatusOK, openAPI())
 	})
 	s.mux.HandleFunc("POST /api/v1/environments", s.createEnvironment)
 	s.mux.HandleFunc("DELETE /api/v1/environments/{app}/{environment}", s.deleteEnvironment)
@@ -101,7 +101,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payload := map[string]any{
-		"overall_state":       "unknown",
+		"overall_state":       "unavailable",
 		"active_variant_path": nil,
 		"actions":             []any{},
 		"source":              "unavailable",
@@ -112,7 +112,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		payload = collectStatus(s.statusCmd)
 	}
 	payload["runtime"] = adapter.Name
-	writeJSON(w, http.StatusOK, payload)
+	apphttp.WriteJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) catalogApps(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +121,7 @@ func (s *Server) catalogApps(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"applications": arrayValue(catalog["applications"])})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"applications": arrayValue(catalog["applications"])})
 }
 
 func (s *Server) catalogApp(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +134,7 @@ func (s *Server) catalogApp(w http.ResponseWriter, r *http.Request) {
 	for _, item := range arrayValue(catalog["applications"]) {
 		app, ok := item.(map[string]any)
 		if ok && stringValue(app["name"]) == name {
-			writeJSON(w, http.StatusOK, app)
+			apphttp.WriteJSON(w, http.StatusOK, app)
 			return
 		}
 	}
@@ -168,7 +168,7 @@ func (s *Server) deployments(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"deployments": records})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"deployments": records})
 }
 
 func (s *Server) secrets(w http.ResponseWriter, r *http.Request) {
@@ -187,15 +187,15 @@ func (s *Server) secrets(w http.ResponseWriter, r *http.Request) {
 			secret := copyMap(mapValue(secretItem))
 			secret["app"] = stringValue(app["name"])
 			if _, ok := secret["binding"]; !ok {
-				secret["binding"] = "unknown"
+				secret["binding"] = "not declared"
 			}
 			if _, ok := secret["rotation"]; !ok {
-				secret["rotation"] = "unknown"
+				secret["rotation"] = "not declared"
 			}
 			records = append(records, secret)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"secrets": records})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"secrets": records})
 }
 
 func (s *Server) scorecards(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +211,7 @@ func (s *Server) scorecards(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		scorecard := copyMap(mapValue(app["scorecard"]))
-		defaultValue(scorecard, "runtime_profile", "unknown")
+		defaultValue(scorecard, "runtime_profile", "not declared")
 		defaultValue(scorecard, "has_health_endpoint", false)
 		defaultValue(scorecard, "has_network_policy", false)
 		if _, ok := scorecard["has_owner"]; !ok {
@@ -220,7 +220,7 @@ func (s *Server) scorecards(w http.ResponseWriter, r *http.Request) {
 		scorecard["app"] = stringValue(app["name"])
 		records = append(records, scorecard)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"scorecards": records})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"scorecards": records})
 }
 
 func (s *Server) actions(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +229,7 @@ func (s *Server) actions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"actions": []map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"actions": []map[string]any{
 		{"id": "environment.create", "label": "Create environment", "runtime": adapter.Name, "dry_run": true},
 		{"id": "deployment.promote", "label": "Promote deployment", "runtime": adapter.Name, "dry_run": true},
 		{"id": "app.scaffold", "label": "Scaffold app", "runtime": adapter.Name, "dry_run": true},
@@ -241,20 +241,19 @@ func (s *Server) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	request, err := decodeObject(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	request, ok := decodeObject(w, r)
+	if !ok {
 		return
 	}
 	request["action"] = "create"
-	runtime := defaultString(request["runtime"], "kind")
+	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
 	adapter, err := adapterFor(runtime)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	plan := adapter.planEnvironment(request)
-	writeJSON(w, http.StatusOK, s.workflowResponse("environment.create", adapter.Name, plan, request))
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("environment.create", adapter.Name, plan, request))
 }
 
 func (s *Server) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +261,7 @@ func (s *Server) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	runtime := defaultString(r.URL.Query().Get("runtime"), "kind")
+	runtime := apphttp.StringDefault(r.URL.Query().Get("runtime"), "kind")
 	adapter, err := adapterFor(runtime)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -275,7 +274,7 @@ func (s *Server) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
 		"environment": r.PathValue("environment"),
 	}
 	plan := adapter.planEnvironment(request)
-	writeJSON(w, http.StatusOK, s.workflowResponse("environment.delete", adapter.Name, plan, request))
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("environment.delete", adapter.Name, plan, request))
 }
 
 func (s *Server) promoteDeployment(w http.ResponseWriter, r *http.Request) {
@@ -291,12 +290,11 @@ func (s *Server) deploymentAction(w http.ResponseWriter, r *http.Request, action
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	request, err := decodeObject(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	request, ok := decodeObject(w, r)
+	if !ok {
 		return
 	}
-	runtime := defaultString(request["runtime"], "kind")
+	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
 	adapter, err := adapterFor(runtime)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -306,7 +304,7 @@ func (s *Server) deploymentAction(w http.ResponseWriter, r *http.Request, action
 	if rollback {
 		plan["summary"] = fmt.Sprintf("would roll back %s/%s on %s", stringValue(request["app"]), stringValue(request["environment"]), adapter.Name)
 	}
-	writeJSON(w, http.StatusOK, s.workflowResponse(action, adapter.Name, plan, request))
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse(action, adapter.Name, plan, request))
 }
 
 func (s *Server) scaffoldApp(w http.ResponseWriter, r *http.Request) {
@@ -314,12 +312,11 @@ func (s *Server) scaffoldApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	request, err := decodeObject(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	request, ok := decodeObject(w, r)
+	if !ok {
 		return
 	}
-	runtime := defaultString(request["runtime"], "kind")
+	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
 	adapter, err := adapterFor(runtime)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -328,7 +325,7 @@ func (s *Server) scaffoldApp(w http.ResponseWriter, r *http.Request) {
 	envRequest := map[string]any{"runtime": adapter.Name, "action": "create", "app": request["app"], "environment": "dev"}
 	plan := adapter.planEnvironment(envRequest)
 	plan["summary"] = fmt.Sprintf("would scaffold app %s for %s on %s", stringValue(request["app"]), stringValue(request["owner"]), adapter.Name)
-	writeJSON(w, http.StatusOK, s.workflowResponse("app.scaffold", adapter.Name, plan, request))
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("app.scaffold", adapter.Name, plan, request))
 }
 
 func (s *Server) environmentDryRun(w http.ResponseWriter, r *http.Request) {
@@ -350,12 +347,11 @@ func (s *Server) secretDryRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) workflowDryRun(w http.ResponseWriter, r *http.Request, workflow string, planner func(runtimeAdapter, map[string]any) map[string]any) {
-	request, err := decodeObject(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	request, ok := decodeObject(w, r)
+	if !ok {
 		return
 	}
-	runtime := defaultString(request["runtime"], "kind")
+	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
 	adapter, err := adapterFor(runtime)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -363,7 +359,7 @@ func (s *Server) workflowDryRun(w http.ResponseWriter, r *http.Request, workflow
 	}
 	plan := planner(adapter, request)
 	audit := s.writeAudit(workflow+".dry_run", adapter.Name, workflow, request)
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"dry_run":  true,
 		"runtime":  adapter.Name,
 		"workflow": workflow,
@@ -420,7 +416,7 @@ func collectStatus(command []string) map[string]any {
 	out, err := cmd.Output()
 	if err != nil {
 		return map[string]any{
-			"overall_state":       "unknown",
+			"overall_state":       "unavailable",
 			"active_variant_path": nil,
 			"actions":             []any{},
 			"source":              "platform-status-script",
@@ -431,7 +427,7 @@ func collectStatus(command []string) map[string]any {
 	var payload map[string]any
 	if err := json.Unmarshal(out, &payload); err != nil {
 		return map[string]any{
-			"overall_state":       "unknown",
+			"overall_state":       "unavailable",
 			"active_variant_path": nil,
 			"actions":             []any{},
 			"source":              "platform-status-script",
@@ -444,41 +440,31 @@ func collectStatus(command []string) map[string]any {
 	return payload
 }
 
-func writeCORS(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-	for _, allowed := range []string{
-		"https://portal.127.0.0.1.sslip.io",
-		"https://portal-api.127.0.0.1.sslip.io",
-		"http://127.0.0.1:5173",
-		"http://localhost:5173",
-	} {
-		if origin == allowed {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			break
-		}
+func portalCORSConfig() apphttp.CORSConfig {
+	return apphttp.CORSConfig{
+		AllowedOrigins: []string{
+			"https://portal.127.0.0.1.sslip.io",
+			"https://portal-api.127.0.0.1.sslip.io",
+			"http://127.0.0.1:5173",
+			"http://localhost:5173",
+		},
+		AllowCredentials: true,
+		AllowMethods:     []string{"*"},
+		AllowHeaders:     []string{"*"},
+		PreflightStatus:  http.StatusOK,
 	}
-	w.Header().Set("Access-Control-Allow-Methods", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "*")
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func writeError(w http.ResponseWriter, status int, detail string) {
-	writeJSON(w, status, map[string]any{"detail": detail})
+	apphttp.WriteJSON(w, status, map[string]any{"detail": detail})
 }
 
-func decodeObject(r *http.Request) (map[string]any, error) {
-	defer r.Body.Close()
+func decodeObject(w http.ResponseWriter, r *http.Request) (map[string]any, bool) {
 	var payload map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		return nil, err
+	if !apphttp.DecodeJSON(w, r, &payload, map[string]any{"detail": "invalid JSON body"}) {
+		return nil, false
 	}
-	return payload, nil
+	return payload, true
 }
 
 func dryRun(r *http.Request) bool {
@@ -530,13 +516,6 @@ func defaultValue(m map[string]any, key string, value any) {
 	}
 }
 
-func defaultString(value any, fallback string) string {
-	if out := stringValue(value); out != "" {
-		return out
-	}
-	return fallback
-}
-
 func stringValue(value any) string {
 	if out, ok := value.(string); ok {
 		return out
@@ -585,7 +564,7 @@ func adapterFor(name string) (runtimeAdapter, error) {
 	case "lima":
 		return runtimeAdapter{Name: name, Description: "Local Lima workflow adapter", Kind: "make", MakeDir: "kubernetes/lima", DisplayName: "lima"}, nil
 	default:
-		return runtimeAdapter{}, errors.New("unknown runtime: " + name)
+		return runtimeAdapter{}, errors.New("unsupported runtime: " + name)
 	}
 }
 
@@ -596,7 +575,7 @@ func (a runtimeAdapter) info() map[string]string {
 func (a runtimeAdapter) planEnvironment(request map[string]any) map[string]any {
 	app := stringValue(request["app"])
 	environment := stringValue(request["environment"])
-	action := defaultString(request["action"], "create")
+	action := apphttp.StringDefault(stringValue(request["action"]), "create")
 	if a.Kind == "generic" {
 		namespace := app + "-" + environment
 		verb := "create namespace"

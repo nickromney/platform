@@ -14,7 +14,8 @@ SVG renders. Click any diagram to open its `.mmd` source.
 ## Current posture
 
 - The Cilium model is now split between clusterwide guardrails in `cilium/shared/` and reusable namespaced `CiliumNetworkPolicy` bundles in `cilium/projects/`, so router, API, and frontend permissions are separated by actual workload identity without duplicating the same YAML per namespace.
-- The shipped stages keep `sentiment` on the in-process SST path inside `sentiment-api`.
+- The shipped stages keep `sentiment` on the in-process Go lexicon classifier
+  path inside `sentiment-api`.
 - `protect-default-deny-netpol` now enforces deletion protection instead of only reporting it.
 - `require-app-labels-application-namespaces` now validates both `Deployment` labels and pod-template labels, and it enforces those checks in any namespace labeled `platform.publiccloudexperiments.net/namespace-role=application`.
 - Namespace intent is now explicit: `dev`, `uat`, and the intentionally empty `sit` namespace carry `platform.publiccloudexperiments.net/namespace-role=application` plus `platform.publiccloudexperiments.net/environment`; serving-path and runtime shared-service namespaces such as `apim`, `sso`, `observability`, `platform-gateway`, and `gateway-routes` carry `platform.publiccloudexperiments.net/namespace-role=shared`; and operator, control, and delivery namespaces such as `argocd`, `cert-manager`, `kyverno`, `nginx-gateway`, `gitea`, `gitea-runner`, `headlamp`, and `policy-reporter` carry `platform.publiccloudexperiments.net/namespace-role=platform`.
@@ -47,7 +48,7 @@ SVG renders. Click any diagram to open its `.mmd` source.
 | `application-cloud-metadata-deny.yaml` | Blocks IMDS for application pods with frontend/gateway/backend tiers. | Cleaner shared intent than the old `dev`/`uat`-named file. |
 | `application-backend-egress-via-cidrgroup.yaml` | Allows selected app backends to the approved CIDR group on 443 plus DNS. | Narrower than before because frontends and gateways no longer inherit the shared outbound rule. |
 | `application-backend-egress-via-fqdn.yaml` | Allows those same app backends to GitHub API and GitHub content over 443. | Includes DNS L7 visibility so the FQDN pinning is actually enforceable. |
-| `sentiment-api-dns-egress.yaml` | Allows DNS for sentiment backend workloads in application namespaces. | Supports the shipped SST path and any future backend DNS needs. |
+| `sentiment-api-dns-egress.yaml` | Allows DNS for sentiment backend workloads in application namespaces. | Supports the shipped Go lexicon classifier path and any future backend DNS needs. |
 | `apim-baseline.yaml` | Restricts APIM ingress to subnetcalc routers and egress to Dex, subnetcalc API, DNS, and apiserver. | Now keys off `namespace-role=application` for inherited subnetcalc deployments. |
 | `argocd-hardened.yaml` | Restricts Argo CD ingress and baseline egress to Gitea, Dex, DNS, and the apiserver. | External chart fetches are now moved out of the namespace-wide policy. |
 | `argocd-hardened.yaml` (`argocd-repo-server-helm-egress`) | Allows only `argocd-repo-server` to reach `dl.gitea.io:443`. | This is now a minimal bootstrap exception for the Gitea chart; other chart-based apps render from vendored charts in Gitea Git. The rule now includes DNS L7 visibility so the FQDN pin is active. |

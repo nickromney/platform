@@ -124,7 +124,7 @@ for row in rows:
         continue
 
     msg = row.get("_msg", "")
-    deployment = row.get("k8s.deployment.name", row.get("service.name", "<unknown>"))
+    deployment = row.get("k8s.deployment.name", row.get("service.name", "deployment not reported"))
     if any(pattern.search(msg) for pattern in allowlist):
         continue
     violations.append(f"{raw_time} {deployment}: {msg[:500]}")

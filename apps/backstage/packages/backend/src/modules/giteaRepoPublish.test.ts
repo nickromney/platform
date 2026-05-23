@@ -6,9 +6,16 @@ import { uploadFile } from './giteaRepoPublish';
 const originalFetch = global.fetch;
 const originalEnv = process.env;
 
+type JSONPrimitive = string | number | boolean | null;
+type JSONValue = JSONPrimitive | JSONObject | JSONValue[];
+
+type JSONObject = {
+  [key: string]: JSONValue | undefined;
+};
+
 describe('gitea repo publish action', () => {
   let sourceRoot: string;
-  let requests: Array<{ url: string; method: string; body?: any }>;
+  let requests: Array<{ url: string; method: string; body?: JSONObject }>;
 
   beforeEach(async () => {
     sourceRoot = await mkdtemp(join(tmpdir(), 'gitea-publish-'));
@@ -32,7 +39,7 @@ describe('gitea repo publish action', () => {
       requests.push({
         url: String(url),
         method,
-        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        body: init?.body ? (JSON.parse(String(init.body)) as JSONObject) : undefined,
       });
 
       if (method === 'GET') {
@@ -66,7 +73,7 @@ describe('gitea repo publish action', () => {
       branch: 'main',
       message: 'backstage: update .gitea/workflows/build.yaml',
     });
-    expect(requests[1].body.sha).toBeUndefined();
+    expect(requests[1].body?.sha).toBeUndefined();
   });
 
   it('updates existing files with PUT and the current SHA', async () => {

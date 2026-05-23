@@ -11,9 +11,9 @@ C4Container
 
     Container_Boundary(subnetcalc, "subnetcalc") {
         Container(router, "subnetcalc-router", "NGINX", "Routes browser traffic between frontend and APIM")
-        Container(frontend, "subnetcalc-frontend", "SPA", "Browser user interface")
+        Container(frontend, "subnetcalc-frontend", "Vanilla browser UI", "Embedded HTML/CSS/JavaScript")
         Container(apim, "subnetcalc-apim-simulator", "APIM simulator", "Validates identity context and forwards /api traffic")
-        Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
+        Container(api, "subnetcalc-api", "Go API", "CIDR calculation and Cloudflare range logic")
     }
 
     Rel(browser, gateway, "Uses over HTTPS")

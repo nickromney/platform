@@ -4,11 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"io"
-	"log/slog"
-	"mime"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -17,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
 )
@@ -27,7 +24,7 @@ func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 	s := &server{
 		cfg:      cfg,
 		verifier: verifier,
-		client:   &http.Client{Timeout: time.Duration(cfg.ProxyTimeoutSeconds) * time.Second},
+		client:   apphttp.NewHTTPClient(time.Duration(cfg.ProxyTimeoutSeconds) * time.Second),
 		traces:   newTraceStore(100),
 		policies: map[string]string{},
 	}
@@ -64,10 +61,16 @@ func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 	mux.HandleFunc("POST /mock/echo", s.mockEcho)
 	mux.HandleFunc("GET /.auth/me", s.gatewayIdentity)
 	mux.HandleFunc("GET /runtime-config.js", s.runtimeConfig)
-	mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
-	mux.HandleFunc("GET /favicon.ico", s.favicon)
+	appshell.RegisterSharedAssets(mux, idpauth.BrowserBundle)
+	mux.HandleFunc("GET /favicon.ico", appshell.SVGFavicon(apimFaviconSVG))
+	mux.HandleFunc("GET /signed-out.html", appshell.SignedOutPage(appshell.SignedOutPageConfig{
+		AppName:     "APIM Simulator",
+		Tagline:     "Go gateway, vanilla console, APIM-shaped routing and tracing.",
+		SessionName: "APIM simulator",
+		Stylesheet:  "/style.css",
+	}))
 	mux.HandleFunc("/", s.dispatch)
-	return logMiddleware(corsMiddleware(cfg, mux))
+	return apphttp.RequestLogger("apim", nil, corsMiddleware(cfg, mux))
 }
 
 type server struct {
@@ -80,30 +83,29 @@ type server struct {
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":                         "healthy",
-		"service":                        "APIM Simulator (Go)",
-		"version":                        "1.0.0",
-		"dependency_footprint":           "go-stdlib-plus-oidc",
-		"frontend_dependency_footprint":  "vanilla",
-		"transitive_javascript_packages": 0,
-		"transitive_python_packages":     0,
-		"routes":                         len(s.cfg.Routes),
+	apphttp.WriteBrowserAppHealth(w, map[string]any{
+		"status":  "healthy",
+		"service": "APIM Simulator (Go)",
+		"version": "1.0.0",
+		"routes":  len(s.cfg.Routes),
 	})
 }
 
 func (s *server) startup(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "ready", "")
 }
 
 func (s *server) mockHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "ready", "")
 }
 
 func (s *server) mockEcho(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(r.Body)
-	_ = r.Body.Close()
-	writeJSON(w, http.StatusOK, map[string]any{
+	body, err := apphttp.ReadRequestBody(r)
+	if err != nil {
+		apphttp.WriteError(w, http.StatusBadRequest, "Unable to read request body")
+		return
+	}
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"method":  r.Method,
 		"path":    r.URL.Path,
@@ -113,47 +115,7 @@ func (s *server) mockEcho(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) gatewayIdentity(w http.ResponseWriter, r *http.Request) {
-	email := firstString(
-		r.Header.Get("X-Auth-Request-Email"),
-		r.Header.Get("X-Forwarded-Email"),
-		r.Header.Get("X-Forwarded-User"),
-	)
-	username := firstString(
-		r.Header.Get("X-Auth-Request-Preferred-Username"),
-		r.Header.Get("X-Auth-Request-User"),
-		r.Header.Get("X-Forwarded-Preferred-Username"),
-		r.Header.Get("X-Forwarded-User"),
-		email,
-	)
-	subject := firstString(
-		r.Header.Get("X-Auth-Request-Subject"),
-		r.Header.Get("X-Forwarded-Subject"),
-		email,
-		username,
-	)
-	if subject == "" && username == "" && email == "" {
-		writeJSON(w, http.StatusOK, []any{})
-		return
-	}
-	claims := []map[string]string{}
-	addClaim := func(kind, value string) {
-		if value != "" {
-			claims = append(claims, map[string]string{"typ": kind, "val": value})
-		}
-	}
-	addClaim("sub", subject)
-	addClaim("name", firstString(r.Header.Get("X-Auth-Request-User"), username))
-	addClaim("preferred_username", username)
-	addClaim("email", email)
-	for _, group := range splitHeaderValues(r.Header.Values("X-Auth-Request-Groups")) {
-		addClaim("groups", group)
-	}
-	writeJSON(w, http.StatusOK, []map[string]any{{
-		"provider_name": "oauth2-proxy",
-		"user_id":       firstString(email, username, subject),
-		"userDetails":   firstString(username, email, subject),
-		"claims":        claims,
-	}})
+	idpauth.WriteSessionArray(w, r)
 }
 
 func (s *server) dispatch(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +124,7 @@ func (s *server) dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 	route, ok := s.resolveRoute(r)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "No APIM route matched the request"})
+		apphttp.WriteError(w, http.StatusNotFound, "No APIM route matched the request")
 		return
 	}
 	s.proxyRoute(w, r, route)
@@ -170,14 +132,16 @@ func (s *server) dispatch(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) proxyRoute(w http.ResponseWriter, r *http.Request, route RouteConfig) {
 	started := time.Now()
-	body, err := io.ReadAll(r.Body)
+	body, err := apphttp.ReadRequestBody(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Unable to read request body"})
+		apphttp.WriteError(w, http.StatusBadRequest, "Unable to read request body")
 		return
 	}
-	_ = r.Body.Close()
 	auth, ok := s.authenticate(w, r, route)
 	if !ok {
+		return
+	}
+	if !s.authorizeRoute(w, route, auth) {
 		return
 	}
 	subscription, ok := s.authorizeSubscription(w, r, route)
@@ -186,12 +150,12 @@ func (s *server) proxyRoute(w http.ResponseWriter, r *http.Request, route RouteC
 	}
 	target, err := s.upstreamURL(route, r)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		apphttp.WriteError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, target, bytes.NewReader(body))
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Unable to create upstream request"})
+		apphttp.WriteError(w, http.StatusBadGateway, "Unable to create upstream request")
 		return
 	}
 	copyUpstreamHeaders(req.Header, r.Header)
@@ -223,7 +187,7 @@ func (s *server) proxyRoute(w http.ResponseWriter, r *http.Request, route RouteC
 		trace.Error = err.Error()
 		s.traces.add(trace)
 		w.Header().Set("X-Apim-Trace-Id", traceID)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Upstream request failed"})
+		apphttp.WriteError(w, http.StatusBadGateway, "Upstream request failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -242,25 +206,28 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request, route Rout
 	if s.cfg.AllowAnonymous || route.AllowAnonymous || (s.cfg.OIDC.Issuer == "" && s.verifier == nil) {
 		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
 	}
-	if s.verifier == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "OIDC verifier is not configured"})
-		return idpauth.UserClaims{}, false
-	}
-	token := idpauth.BearerToken(r)
-	if token == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing bearer token"})
-		return idpauth.UserClaims{}, false
-	}
-	claims, err := s.verifier.Verify(r.Context(), token)
-	if err != nil {
-		status := http.StatusUnauthorized
-		if !errors.Is(err, idpauth.ErrInvalidToken) {
-			status = http.StatusBadGateway
-		}
-		writeJSON(w, status, map[string]string{"error": "Invalid bearer token"})
+	claims, failure := (idpauth.Authenticator{Mode: "oidc", Verifier: s.verifier}).CurrentUser(r)
+	if failure != nil {
+		apphttp.WriteError(w, failure.StatusCode, failure.MessageFor(idpauth.AuthFailureMessages{
+			MissingBearerToken: "Missing bearer token",
+			InvalidToken:       "Invalid bearer token",
+		}))
 		return idpauth.UserClaims{}, false
 	}
 	return claims, true
+}
+
+func (s *server) authorizeRoute(w http.ResponseWriter, route RouteConfig, claims idpauth.UserClaims) bool {
+	failure := (idpauth.AccessPolicy{
+		RequiredGroups: route.Authz.RequiredGroups,
+		RequiredRoles:  route.Authz.RequiredRoles,
+		RequiredClaims: route.Authz.RequiredClaims,
+	}).Evaluate(claims)
+	if failure == nil {
+		return true
+	}
+	apphttp.WriteError(w, failure.StatusCode, failure.Message)
+	return false
 }
 
 func (s *server) authorizeSubscription(w http.ResponseWriter, r *http.Request, route RouteConfig) (Subscription, bool) {
@@ -269,16 +236,16 @@ func (s *server) authorizeSubscription(w http.ResponseWriter, r *http.Request, r
 	}
 	key := subscriptionKey(s.cfg.Subscriptions, r)
 	if key == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Subscription key is required"})
+		apphttp.WriteError(w, http.StatusUnauthorized, "Subscription key is required")
 		return Subscription{}, false
 	}
 	sub, ok := lookupSubscription(s.cfg.Subscriptions, key)
 	if !ok {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Subscription key is invalid"})
+		apphttp.WriteError(w, http.StatusForbidden, "Subscription key is invalid")
 		return Subscription{}, false
 	}
 	if sub.State != "" && !strings.EqualFold(sub.State, "active") {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Subscription is not active"})
+		apphttp.WriteError(w, http.StatusForbidden, "Subscription is not active")
 		return Subscription{}, false
 	}
 	return sub, true
@@ -348,34 +315,18 @@ func (s *server) requireTenantKey(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Tenant key is required"})
+		apphttp.WriteError(w, http.StatusUnauthorized, "Tenant key is required")
 	}
 }
 
-func logMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started := time.Now()
-		next.ServeHTTP(w, r)
-		slog.Info("apim request", "method", r.Method, "path", r.URL.Path, "duration_ms", time.Since(started).Milliseconds())
-	})
-}
-
 func corsMiddleware(cfg Config, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin != "" && originAllowed(cfg.AllowedOrigins, origin) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Ocp-Apim-Subscription-Key, X-Apim-Tenant-Key, X-Apim-Trace")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Expose-Headers", "X-Apim-Simulator, X-Apim-Trace-Id")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return apphttp.CORS(apphttp.CORSConfig{
+		AllowedOrigins:  cfg.AllowedOrigins,
+		AllowHeaders:    []string{"Authorization", "Content-Type", "Ocp-Apim-Subscription-Key", "X-Apim-Tenant-Key", "X-Apim-Trace"},
+		AllowMethods:    []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		ExposeHeaders:   []string{"X-Apim-Simulator", "X-Apim-Trace-Id"},
+		PreflightStatus: http.StatusNoContent,
+	}, next)
 }
 
 func copyUpstreamHeaders(dst, src http.Header) {
@@ -405,14 +356,6 @@ var hopByHopHeaders = map[string]bool{
 	"connection": true, "keep-alive": true, "proxy-authenticate": true,
 	"proxy-authorization": true, "te": true, "trailer": true,
 	"transfer-encoding": true, "upgrade": true, "host": true,
-}
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(value); err != nil {
-		slog.Error("write json", "error", err)
-	}
 }
 
 func newTraceID() string {
@@ -446,13 +389,6 @@ func reverseProxyDirector(target *url.URL) func(*http.Request) {
 		req.URL.Host = target.Host
 		req.Host = target.Host
 	}
-}
-
-func contentTypeFor(name string) string {
-	if ct := mime.TypeByExtension(path.Ext(name)); ct != "" {
-		return ct
-	}
-	return "application/octet-stream"
 }
 
 var _ = httputil.ReverseProxy{Director: reverseProxyDirector(&url.URL{})}

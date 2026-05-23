@@ -2,28 +2,37 @@ package app
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
+	"time"
+
+	"platform.local/apphttp"
+	"platform.local/idpauth"
 )
 
 type Config struct {
-	Role            string
-	Port            string
-	PublicBaseURL   string
-	MCPURL          string
-	MCPInternalURL  string
-	MCPConnectors   []ConnectorConfig
-	LLMURL          string
-	LLMModel        string
-	ShowNetworkPath string
-	NetworkHops     string
-	AuthMode        string
-	APIAuthMode     string
-	OIDCIssuer      string
-	OIDCAudience    string
-	OIDCJWKSURI     string
-	OIDCClientID    string
-	OIDCRedirect    string
+	Role              string
+	Port              string
+	PublicBaseURL     string
+	MCPURL            string
+	MCPInternalURL    string
+	MCPConnectors     []ConnectorConfig
+	LLMURL            string
+	LLMModel          string
+	LLMTimeout        time.Duration
+	LLMMaxTokens      int
+	LangfuseHost      string
+	LangfusePublicKey string
+	LangfuseSecretKey string
+	LangfuseTimeout   time.Duration
+	ShowNetworkPath   string
+	NetworkHops       string
+	AuthMode          string
+	APIAuthMode       string
+	OIDCIssuer        string
+	OIDCAudience      string
+	OIDCJWKSURI       string
+	OIDCClientID      string
+	OIDCRedirect      string
 }
 
 type ConnectorConfig struct {
@@ -35,68 +44,47 @@ type ConnectorConfig struct {
 }
 
 func ConfigFromEnv() Config {
-	role := strings.TrimSpace(os.Getenv("ROLE"))
+	role := apphttp.Env("ROLE", "")
 	if role == "" {
-		role = strings.TrimSpace(os.Getenv("PCE_GO_APP_ROLE"))
+		role = apphttp.Env("PCE_GO_APP_ROLE", "shell")
 	}
-	if role == "" {
-		role = "shell"
-	}
-	port := strings.TrimSpace(os.Getenv("PORT"))
-	if port == "" {
-		port = "8080"
-	}
-	publicBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("PUBLIC_BASE_URL")), "/")
-	if publicBaseURL == "" {
-		publicBaseURL = "http://localhost:" + port
-	}
-	mcpURL := strings.TrimSpace(os.Getenv("MCP_URL"))
-	if mcpURL == "" {
-		mcpURL = "http://localhost:18082/mcp"
-	}
-	mcpInternalURL := strings.TrimSpace(os.Getenv("MCP_INTERNAL_URL"))
-	mcpConnectors := parseConnectorConfigs(os.Getenv("MCP_CONNECTORS"))
-	llmURL := strings.TrimSpace(os.Getenv("LLM_URL"))
-	llmModel := strings.TrimSpace(os.Getenv("LLM_MODEL"))
-	showNetworkPath := strings.TrimSpace(os.Getenv("SHOW_NETWORK_PATH"))
-	networkHops := strings.TrimSpace(os.Getenv("NETWORK_HOPS"))
-	authMode := strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_METHOD")))
-	if authMode == "" {
-		authMode = "none"
-	}
-	apiAuthMode := strings.ToLower(strings.TrimSpace(os.Getenv("API_AUTH_METHOD")))
-	if apiAuthMode == "" {
-		apiAuthMode = authMode
-	}
-	oidcIssuer := firstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY")
+	port := apphttp.Env("PORT", "8080")
+	publicBaseURL := apphttp.EnvURL("PUBLIC_BASE_URL", "http://localhost:"+port)
+	mcpURL := apphttp.Env("MCP_URL", "http://localhost:18082/mcp")
+	mcpInternalURL := apphttp.Env("MCP_INTERNAL_URL", "")
+	mcpConnectors := parseConnectorConfigs(apphttp.Env("MCP_CONNECTORS", ""))
+	llmURL := apphttp.Env("LLM_URL", "")
+	llmModel := apphttp.Env("LLM_MODEL", "")
+	llmMaxTokens := apphttp.EnvInt("LLM_MAX_TOKENS", 32)
+	langfuseHost := apphttp.EnvURL("LANGFUSE_HOST", "")
+	showNetworkPath := apphttp.Env("SHOW_NETWORK_PATH", "")
+	networkHops := apphttp.Env("NETWORK_HOPS", "")
+	auth := idpauth.RuntimeAuthConfigFromEnv("shell")
 	return Config{
-		Role:            role,
-		Port:            port,
-		PublicBaseURL:   publicBaseURL,
-		MCPURL:          mcpURL,
-		MCPInternalURL:  mcpInternalURL,
-		MCPConnectors:   mcpConnectors,
-		LLMURL:          llmURL,
-		LLMModel:        llmModel,
-		ShowNetworkPath: showNetworkPath,
-		NetworkHops:     networkHops,
-		AuthMode:        authMode,
-		APIAuthMode:     apiAuthMode,
-		OIDCIssuer:      oidcIssuer,
-		OIDCAudience:    strings.TrimSpace(os.Getenv("OIDC_AUDIENCE")),
-		OIDCJWKSURI:     strings.TrimSpace(os.Getenv("OIDC_JWKS_URI")),
-		OIDCClientID:    strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID")),
-		OIDCRedirect:    strings.TrimSpace(os.Getenv("OIDC_REDIRECT_URI")),
+		Role:              role,
+		Port:              port,
+		PublicBaseURL:     publicBaseURL,
+		MCPURL:            mcpURL,
+		MCPInternalURL:    mcpInternalURL,
+		MCPConnectors:     mcpConnectors,
+		LLMURL:            llmURL,
+		LLMModel:          llmModel,
+		LLMTimeout:        apphttp.EnvSeconds("LLM_TIMEOUT_SECONDS", time.Second),
+		LLMMaxTokens:      llmMaxTokens,
+		LangfuseHost:      langfuseHost,
+		LangfusePublicKey: apphttp.Env("LANGFUSE_PUBLIC_KEY", ""),
+		LangfuseSecretKey: apphttp.Env("LANGFUSE_SECRET_KEY", ""),
+		LangfuseTimeout:   apphttp.EnvSeconds("LANGFUSE_TIMEOUT_SECONDS", time.Second),
+		ShowNetworkPath:   showNetworkPath,
+		NetworkHops:       networkHops,
+		AuthMode:          auth.AuthMode,
+		APIAuthMode:       auth.APIAuthMode,
+		OIDCIssuer:        auth.OIDCIssuer,
+		OIDCAudience:      auth.OIDCAudience,
+		OIDCJWKSURI:       auth.OIDCJWKSURI,
+		OIDCClientID:      auth.OIDCClientID,
+		OIDCRedirect:      auth.OIDCRedirect,
 	}
-}
-
-func firstEnv(keys ...string) string {
-	for _, key := range keys {
-		if value := os.Getenv(key); value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func parseConnectorConfigs(raw string) []ConnectorConfig {

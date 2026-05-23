@@ -71,6 +71,38 @@ EOF
   [ ! -e "${kubectl_log}" ]
 }
 
+@test "blocks checks when the expected variant state is not reported" {
+  kubectl_log="${BATS_TEST_TMPDIR}/kubectl.log"
+
+  cat >"${STATUS_STUB}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+EOF
+  chmod +x "${STATUS_STUB}"
+
+  cat >"${TEST_BIN}/kubectl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'kubectl %s\n' "\$*" >>"${kubectl_log}"
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run env \
+    PLATFORM_STATUS_SCRIPT="${STATUS_STUB}" \
+    EXPECTED_VARIANT_PATH="kubernetes/kind" \
+    KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"BLOCKED"* ]]
+  [[ "${output}" == *"kubernetes/kind state was not reported"* ]]
+  [[ "${output}" != *"unknown"* ]]
+  [[ "${output}" != *"Unknown"* ]]
+  [ ! -e "${kubectl_log}" ]
+}
+
 @test "blocks checks when the expected variant owns the machine but is not reachable" {
   kubeconfig_path="${BATS_TEST_TMPDIR}/kind-kind-local.yaml"
   : >"${kubeconfig_path}"

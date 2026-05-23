@@ -1,9 +1,10 @@
 FROM dhi.io/static:20260413-alpine3.23
 
-COPY .run/sentiment /sentiment
+COPY --chown=65532:65532 .run/sentiment /sentiment
 
 USER 65532:65532
-ENV PORT=8080
+ENV PORT=8080 \
+    HOME=/tmp
 EXPOSE 8080
 
 ENTRYPOINT ["/sentiment"]

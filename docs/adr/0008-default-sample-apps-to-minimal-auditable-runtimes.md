@@ -40,25 +40,23 @@ The default Docker Compose path runs separate frontend and backend services
 from the same image. This keeps the microservice topology visible while
 avoiding two dependency graphs and two build systems.
 
-The APIM simulator keeps its Python backend, but its default operator console
-is static HTML, CSS, and vanilla JavaScript served from nginx. It no longer
-uses React, Vite, TypeScript, or npm in the shipped console path.
+The APIM simulator now ships as a Go single-binary runtime with embedded
+static HTML, CSS, and vanilla JavaScript. It no longer uses Python, FastAPI,
+React, Vite, TypeScript, or npm in the default shipped path.
 
 The APIM todo demo frontend is also static HTML, CSS, and vanilla JavaScript
 served from nginx. The previous Astro package root was removed; the directory
 name remains only to avoid unnecessary compose and documentation path churn.
 
 The local IDP core keeps the same portal API contract, but its default shipped
-runtime is now a Go stdlib server. The previous FastAPI implementation stays
-in-tree as a compatibility reference while the platform image builds from
-`apps/idp-core/app-go`.
+runtime is now a Go stdlib server under `apps/idp-core/app`.
 
 Backstage is the explicit exception. Portal demonstrates Backstage as a product,
 so its Yarn and plugin dependency graph is intentional and resource-gated
 rather than converted into a no-dependency sample app.
 
 The Platform MCP server now follows the same lightweight runtime direction. The
-active implementation is the Go server under `apps/platform-mcp/app-go`, using
+active implementation is the Go server under `apps/platform-mcp/app`, using
 Go stdlib HTTP and JSON for the current MCP surface.
 
 The smaller `apps/idp-mcp` adapter remains dependency-free and uses Python
@@ -66,12 +64,12 @@ stdlib JSON and `urllib.request` directly.
 
 ## Consequences
 
-- `apps/subnetcalc/app-go` is the default subnetcalc runtime.
-- `apps/sentiment/app-go` is the default sentiment runtime.
-- `apps/apim-simulator/ui` is a static nginx-served operator console.
-- `apps/idp-core/app-go` is the default portal API runtime.
+- `apps/subnetcalc/app` is the default subnetcalc runtime.
+- `apps/sentiment/app` is the default sentiment runtime.
+- `apps/apim-simulator/app` is the default APIM simulator runtime.
+- `apps/idp-core/app` is the default portal API runtime.
 - `apps/backstage` is a documented Portal exception, not a sample-app template.
-- `apps/platform-mcp/app-go` is the active Platform MCP runtime.
+- `apps/platform-mcp/app` is the active Platform MCP runtime.
 - `apps/idp-mcp` remains dependency-free.
 - `make -C apps/subnetcalc test` verifies the default Go two-service compose
   path.

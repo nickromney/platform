@@ -217,7 +217,7 @@ emit_provider_row() {
 
   latest_version="$(latest_registry_version "${full_source}" 2>/dev/null || true)"
   if [ -z "${latest_version}" ]; then
-    latest_version="unknown"
+    latest_version="not reported"
     status_text="registry lookup failed"
     status_rendered="${RED}${status_text}${NC}"
     error_flag="1"

@@ -70,11 +70,11 @@ command -v kubectl >/dev/null 2>&1 || die "kubectl not found in PATH"
 status_json="$("${PLATFORM_STATUS_SCRIPT}" --execute --output json)" || die "Failed to inspect local runtime status with ${PLATFORM_STATUS_SCRIPT}"
 
 expected_variant_key="$(jq -r --arg path "${EXPECTED_VARIANT_PATH}" '.variants | to_entries[] | select(.value.path == $path) | .key' <<<"${status_json}" | head -n 1)"
-[ -n "${expected_variant_key}" ] || die "Unknown EXPECTED_VARIANT_PATH: ${EXPECTED_VARIANT_PATH}"
+[ -n "${expected_variant_key}" ] || die "Unrecognized EXPECTED_VARIANT_PATH: ${EXPECTED_VARIANT_PATH}"
 
-overall_state="$(jq -r '.overall_state // "unknown"' <<<"${status_json}")"
+overall_state="$(jq -r '.overall_state // "not reported"' <<<"${status_json}")"
 active_variant_path="$(jq -r '.active_variant_path // empty' <<<"${status_json}")"
-expected_variant_state="$(jq -r --arg key "${expected_variant_key}" '(.variants[$key].state) // "unknown"' <<<"${status_json}")"
+expected_variant_state="$(jq -r --arg key "${expected_variant_key}" '(.variants[$key].state) // "not reported"' <<<"${status_json}")"
 
 if [ "${overall_state}" = "conflict" ]; then
   blocked $'Multiple tracked platform surfaces are active on this machine.\nInspect the full local runtime state with:\n  make status'
@@ -98,6 +98,11 @@ Inspect the local runtime state with:
     ;;
   paused)
     blocked "${EXPECTED_VARIANT_PATH} is paused on this machine.
+Inspect the local runtime state with:
+  make status"
+    ;;
+  "not reported")
+    blocked "${EXPECTED_VARIANT_PATH} state was not reported by platform status.
 Inspect the local runtime state with:
   make status"
     ;;

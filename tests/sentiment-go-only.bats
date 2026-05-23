@@ -44,3 +44,22 @@ PY
 
   [ "${status}" -eq 1 ]
 }
+
+@test "current sentiment docs describe the shipped Go lexicon classifier path" {
+  run rg -n "SST|sst|model endpoint|model-backed" \
+    "${REPO_ROOT}/apps/sentiment/docs" \
+    "${REPO_ROOT}/kubernetes/kind/docs" \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/COMPOSITION.md" \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/AUDIT.md" \
+    --glob '!**/*.svg'
+
+  [ "${status}" -eq 1 ]
+
+  run rg -n "Go lexicon classifier|deterministic lexicon classifier" \
+    "${REPO_ROOT}/apps/sentiment/docs" \
+    "${REPO_ROOT}/kubernetes/kind/docs" \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/COMPOSITION.md" \
+    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/AUDIT.md"
+
+  [ "${status}" -eq 0 ]
+}

@@ -9,16 +9,50 @@ setup() {
 @test "IDP catalog declares app ownership environments RBAC secrets and deployment evidence" {
   [ -f "${CATALOG}" ]
 
-  run jq -e '
-    .schema_version == "platform.idp/v1" and
-    (.applications | length) >= 3 and
-    any(.applications[]; .name == "chatgpt-sim" and .owner == "platform" and any(.environments[]; .name == "dev" and .namespace == "dev")) and
-    any(.applications[]; .name == "subnetcalc" and any(.environments[]; .name == "dev" and .rbac.group == "app-subnetcalc-dev")) and
-    any(.applications[]; .name == "sentiment" and any(.environments[]; .name == "uat" and .rbac.group == "app-sentiment-uat")) and
-    all(.applications[]; has("deployment") and has("secrets") and has("scorecard"))
-  ' "${CATALOG}"
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
+
+from tests.app_contracts import idp_catalog_app_contract_violations
+
+violations = idp_catalog_app_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
+print("validated IDP app catalog contract")
+PY
 
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated IDP app catalog contract"* ]]
+}
+
+@test "IDP component tests share app catalog contract helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import idp_catalog_app_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "IDP catalog declares app ownership environments RBAC secrets and deployment evidence"'):
+    content.index('\n@test "IDP deployment shell read model includes catalog deployment evidence"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "IDP app catalog policy should move" not in line
+]
+
+assert callable(idp_catalog_app_contract_violations)
+assert "idp_catalog_app_contract_violations" in test_body
+assert not any("chatgpt-sim" in line for line in contract_lines), "IDP app catalog policy should move to tests/app_contracts.py"
+assert not any("app-subnetcalc-dev" in line for line in contract_lines), "IDP app catalog policy should move to tests/app_contracts.py"
+assert not any("jq -e" in line for line in contract_lines), "IDP app catalog policy should move to tests/app_contracts.py"
+
+print("validated shared IDP app catalog contract helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared IDP app catalog contract helper usage"* ]]
 }
 
 @test "IDP deployment shell read model includes catalog deployment evidence" {
@@ -93,48 +127,51 @@ JSON
 }
 
 @test "chatgpt-sim is deployed in dev with the chatgpt.dev route" {
-  for path in \
-    terraform/kubernetes/apps/chatgpt-sim/all.yaml \
-    terraform/kubernetes/apps/chatgpt-sim/kustomization.yaml \
-    terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml \
-    terraform/kubernetes/apps/platform-gateway-routes-sso/httproute-chatgpt-sim.yaml \
-    terraform/kubernetes/cluster-policies/cilium/shared/chatgpt-sim-hardened.yaml
-  do
-    [ -f "${REPO_ROOT}/${path}" ]
-  done
+  run uv run --isolated --with pyyaml python - <<'PY'
+import os
+from pathlib import Path
 
-  run rg -n 'namespace: dev|PUBLIC_BASE_URL|https://chatgpt.dev.127.0.0.1.sslip.io' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/chatgpt-sim/all.yaml"
+from tests.app_contracts import chatgpt_sim_kubernetes_runtime_contract_violations
+
+violations = chatgpt_sim_kubernetes_runtime_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
+
+print("validated ChatGPT Sim dev route, MCP, oMLX, and Langfuse wiring")
+PY
+
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated ChatGPT Sim dev route, MCP, oMLX, and Langfuse wiring"* ]]
+}
 
-  run rg -n 'LLM_URL|http://agentgateway-ai-gateway\.agentgateway-system\.svc\.cluster\.local/v1/chat/completions|MCP_INTERNAL_URL|http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000/mcp' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/chatgpt-sim/all.yaml"
+@test "IDP component tests share ChatGPT Sim runtime contract helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import chatgpt_sim_kubernetes_runtime_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "chatgpt-sim is deployed in dev with the chatgpt.dev route"'):
+    content.index('\n@test "chatgpt-sim SSO route is permitted by the sso namespace ReferenceGrant"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "ChatGPT Sim runtime policy should move" not in line
+]
+
+assert callable(chatgpt_sim_kubernetes_runtime_contract_violations)
+assert "chatgpt_sim_kubernetes_runtime_contract_violations" in test_body
+assert not any("agentgateway-ai-gateway" in line for line in contract_lines), "ChatGPT Sim runtime policy should move to tests/app_contracts.py"
+assert not any("langfuse-web" in line for line in contract_lines), "ChatGPT Sim runtime policy should move to tests/app_contracts.py"
+assert not any("rg -n" in line for line in contract_lines), "ChatGPT Sim runtime policy should move to tests/app_contracts.py"
+
+print("validated shared ChatGPT Sim runtime contract helper usage")
+PY
+
   [ "${status}" -eq 0 ]
-
-  run rg -n 'httproute-chatgpt-sim.yaml' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'repoURL: ssh://git@gitea-ssh\.gitea\.svc\.cluster\.local:22/platform/policies\.git' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'repoURL: http://gitea-http\.gitea\.svc\.cluster\.local:3000/platform/platform-policies\.git' \
-    "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml"
-  [ "${status}" -ne 0 ]
-
-  run rg -n '"k8s:io.kubernetes.pod.namespace": chatgpt' \
-    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium"
-  [ "${status}" -ne 0 ]
-
-  run rg -n '"k8s:io.kubernetes.pod.namespace": dev[[:space:]]*$' \
-    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/apim-baseline.yaml" \
-    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/agentgateway-ai-gateway-hardened.yaml"
-  [ "${status}" -eq 0 ]
-
-  run rg -n '"k8s:app.kubernetes.io/name": agentgateway-ai-gateway|port: "80"' \
-    "${REPO_ROOT}/terraform/kubernetes/cluster-policies/cilium/shared/chatgpt-sim-hardened.yaml"
-  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared ChatGPT Sim runtime contract helper usage"* ]]
 }
 
 @test "chatgpt-sim SSO route is permitted by the sso namespace ReferenceGrant" {
@@ -325,26 +362,14 @@ PY
 
 @test "developer portal and API proxies use scoped browser SSO cookies" {
   run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
 import os
-import re
 from pathlib import Path
 
+from tests.app_contracts import idp_proxy_cookie_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
-
-block_match = re.search(r"sso_idp_proxy_apps = merge\((?P<body>.*?)\n  \)", locals_tf, re.S)
-assert block_match, "sso_idp_proxy_apps local not found"
-body = block_match.group("body")
-
-cookie_names = dict(re.findall(r"(portal|api) = \{.*?cookie_name\s+=\s+\"([^\"]+)\"", body, re.S))
-cookie_domains = dict(re.findall(r"(portal|api) = \{.*?cookie_domain\s+=\s+([^\n]+)", body, re.S))
-
-assert cookie_names.get("portal") == "kind-v2-sso-portal", cookie_names
-assert cookie_names.get("api") == "kind-v2-sso-portal-api", cookie_names
-assert cookie_domains.get("portal", "").strip() == "local.portal_cookie_domain", cookie_domains
-assert cookie_domains.get("api", "").strip() == "local.portal_cookie_domain", cookie_domains
+violations = idp_proxy_cookie_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated scoped portal/API SSO cookies")
 PY
@@ -353,75 +378,130 @@ PY
   [[ "${output}" == *"validated scoped portal/API SSO cookies"* ]]
 }
 
+@test "IDP component tests share portal API cookie helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import idp_proxy_cookie_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "developer portal and API proxies use scoped browser SSO cookies"'):
+    content.index('\n@test "app and environment authorization uses Keycloak groups instead of email-domain shortcuts"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "IDP proxy cookie policy should move" not in line
+]
+
+assert callable(idp_proxy_cookie_contract_violations)
+assert "idp_proxy_cookie_contract_violations" in test_body
+assert not any("sso_idp_proxy_apps = merge" in line for line in contract_lines), "IDP proxy cookie policy should move to tests/app_contracts.py"
+assert not any("cookie_name" in line and "assert" in line for line in contract_lines), "IDP proxy cookie policy should move to tests/app_contracts.py"
+assert not any("kind-v2-sso-portal-api" in line for line in contract_lines), "IDP proxy cookie policy should move to tests/app_contracts.py"
+
+print("validated shared IDP proxy cookie helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared IDP proxy cookie helper usage"* ]]
+}
+
 @test "app and environment authorization uses Keycloak groups instead of email-domain shortcuts" {
-  for group in \
-    app-subnetcalc-dev \
-    app-subnetcalc-uat \
-    app-sentiment-dev \
-    app-sentiment-uat
-  do
-    run rg -n "${group}" "${REPO_ROOT}/terraform/kubernetes/sso.tf" "${REPO_ROOT}/terraform/kubernetes/locals.tf"
-    [ "${status}" -eq 0 ]
-  done
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
 
-  run rg -n -- '--allowed-group=app-(subnetcalc|sentiment)-(dev|uat)' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
+from tests.app_contracts import keycloak_group_authorization_contract_violations
+
+violations = keycloak_group_authorization_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
+print("validated Keycloak app/environment group authorization")
+PY
+
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Keycloak app/environment group authorization"* ]]
+}
 
-  run rg -n -- '--allowed-group=\$\{each\.value\.group\}' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
+@test "IDP component tests share Keycloak group authorization helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import keycloak_group_authorization_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "app and environment authorization uses Keycloak groups instead of email-domain shortcuts"'):
+    content.index('\n@test "HTTP services expose named appProtocol and target ports"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Keycloak group authorization policy should move" not in line
+]
+
+assert callable(keycloak_group_authorization_contract_violations)
+assert "keycloak_group_authorization_contract_violations" in test_body
+assert not any("app-subnetcalc-dev" in line for line in contract_lines), "Keycloak group authorization policy should move to tests/app_contracts.py"
+assert not any("allowed-group" in line and "rg" in line for line in contract_lines), "Keycloak group authorization policy should move to tests/app_contracts.py"
+assert not any("email-domain" in line and "rg" in line for line in contract_lines), "Keycloak group authorization policy should move to tests/app_contracts.py"
+
+print("validated shared Keycloak group authorization helper usage")
+PY
+
   [ "${status}" -eq 0 ]
-
-  run rg -n -- '--allowed-group=\$\{local\.sso_admin_group\}' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'email-domain: "(dev|uat)\\.test"' "${REPO_ROOT}/terraform/kubernetes/sso.tf"
-  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"validated shared Keycloak group authorization helper usage"* ]]
 }
 
 @test "HTTP services expose named appProtocol and target ports" {
   run uv run --isolated --with pyyaml python - <<'PY'
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import kubernetes_http_service_metadata_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-paths = [
-    "terraform/kubernetes/apps/workloads/base/all.yaml",
-    "terraform/kubernetes/apps/chatgpt-sim/all.yaml",
-    "terraform/kubernetes/apps/idp/all.yaml",
-]
-
-services = {}
-for rel in paths:
-    for doc in yaml.safe_load_all((repo_root / rel).read_text(encoding="utf-8")):
-        if doc and doc.get("kind") == "Service":
-            services[doc["metadata"]["name"]] = doc
-
-expected = {
-    "sentiment-api",
-    "sentiment-auth-ui",
-    "sentiment-router",
-    "subnetcalc-api",
-    "subnetcalc-frontend",
-    "subnetcalc-router",
-    "chatgpt-sim",
-    "idp-core",
-    "backstage",
-}
-
-for name in sorted(expected):
-    port = services[name]["spec"]["ports"][0]
-    assert port["name"] == "http", name
-    assert port["appProtocol"] == "http", name
-    assert port["targetPort"] == "http", name
-
+violations = kubernetes_http_service_metadata_contract_violations(repo_root)
+assert not violations, violations
 print("validated HTTP service port metadata")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated HTTP service port metadata"* ]]
+}
+
+@test "IDP component tests share HTTP service metadata helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import kubernetes_http_service_metadata_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "HTTP services expose named appProtocol and target ports"'):
+    content.index('\n@test "Keycloak realm bootstrap includes app callbacks and a requestable groups client scope"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "HTTP service metadata policy should move" not in line
+]
+
+assert callable(kubernetes_http_service_metadata_contract_violations)
+assert "kubernetes_http_service_metadata_contract_violations" in test_body
+assert not any("sentiment-api" in line for line in contract_lines), "HTTP service metadata policy should move to tests/app_contracts.py"
+assert not any("appProtocol" in line and "assert" in line for line in contract_lines), "HTTP service metadata policy should move to tests/app_contracts.py"
+assert not any("targetPort" in line and "assert" in line for line in contract_lines), "HTTP service metadata policy should move to tests/app_contracts.py"
+
+print("validated shared HTTP service metadata helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared HTTP service metadata helper usage"* ]]
 }
 
 @test "Keycloak realm bootstrap includes app callbacks and a requestable groups client scope" {
@@ -451,56 +531,97 @@ PY
 }
 
 @test "launchpad and IDP catalog use portal public FQDNs" {
-  launchpad="${REPO_ROOT}/terraform/kubernetes/config/platform-launchpad.apps.json"
-  catalog="${REPO_ROOT}/catalog/platform-apps.json"
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
 
-  run jq -e '.tiles[] | select(.title == "Developer Portal") | .url == "https://portal.127.0.0.1.sslip.io"' "${launchpad}"
-  [ "${status}" -eq 0 ]
+from tests.app_contracts import portal_public_fqdn_contract_violations
 
-  run jq -e '.tiles[] | select(.title == "Portal API") | .url == "https://portal-api.127.0.0.1.sslip.io"' "${launchpad}"
-  [ "${status}" -eq 0 ]
+violations = portal_public_fqdn_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
+print("validated Portal public FQDN launchpad and catalog contract")
+PY
 
-  run jq -e '
-    any(.applications[]; .name == "backstage" and any(.environments[]; .route == "https://portal.127.0.0.1.sslip.io")) and
-    any(.applications[]; .name == "idp-core" and any(.environments[]; .route == "https://portal-api.127.0.0.1.sslip.io"))
-  ' "${catalog}"
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated Portal public FQDN launchpad and catalog contract"* ]]
+}
+
+@test "IDP component tests share Portal public FQDN helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import portal_public_fqdn_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "launchpad and IDP catalog use portal public FQDNs"'):
+    content.index('\n@test "APIM uses a dedicated stage-900 resource audience without owning subnetcalc or compose auth"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Portal public FQDN policy should move" not in line
+]
+
+assert callable(portal_public_fqdn_contract_violations)
+assert "portal_public_fqdn_contract_violations" in test_body
+assert not any("jq -e" in line for line in contract_lines), "Portal public FQDN policy should move to tests/app_contracts.py"
+assert not any("portal-api.127.0.0.1.sslip.io" in line for line in contract_lines), "Portal public FQDN policy should move to tests/app_contracts.py"
+assert not any("Developer Portal" in line and ".tiles" in line for line in contract_lines), "Portal public FQDN policy should move to tests/app_contracts.py"
+
+print("validated shared Portal public FQDN helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Portal public FQDN helper usage"* ]]
 }
 
 @test "APIM uses a dedicated stage-900 resource audience without owning subnetcalc or compose auth" {
-  realm_tf="${REPO_ROOT}/terraform/kubernetes/sso.tf"
-  apim_manifest="${REPO_ROOT}/terraform/kubernetes/apps/apim/all.yaml"
-  compose_stack="${REPO_ROOT}/docker/compose/compose.yml"
-  subnetcalc_compose="${REPO_ROOT}/apps/subnetcalc/compose.yml"
-  contracts="${REPO_ROOT}/docs/ddd/contracts.md"
-  glossary="${REPO_ROOT}/docs/ddd/ubiquitous-language.md"
+  run uv run --isolated --with pyyaml python - <<'PY'
+import os
+from pathlib import Path
 
-  run rg -n 'sso_apim_audience\s*=\s*"apim-simulator"' "${REPO_ROOT}/terraform/kubernetes/locals.tf"
+from tests.app_contracts import apim_resource_audience_contract_violations
+
+violations = apim_resource_audience_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
+print("validated APIM resource audience and portable auth contract")
+PY
+
   [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated APIM resource audience and portable auth contract"* ]]
+}
 
-  run rg -n 'clientId\s*=\s*local\.sso_apim_audience|included\.client\.audience.*local\.sso_apim_audience' "${realm_tf}"
+@test "IDP component tests share APIM audience helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import apim_resource_audience_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "APIM uses a dedicated stage-900 resource audience without owning subnetcalc or compose auth"'):
+    content.index('\n@test "Keycloak admin console lands on the platform realm and uses a permanent admin lifecycle"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "APIM resource audience policy should move" not in line
+]
+
+assert callable(apim_resource_audience_contract_violations)
+assert "apim_resource_audience_contract_violations" in test_body
+assert not any("sso_apim_audience" in line for line in contract_lines), "APIM resource audience policy should move to tests/app_contracts.py"
+assert not any("profiles:" in line for line in contract_lines), "APIM resource audience policy should move to tests/app_contracts.py"
+assert not any("AUTH_METHOD=none" in line for line in contract_lines), "APIM resource audience policy should move to tests/app_contracts.py"
+
+print("validated shared APIM resource audience helper usage")
+PY
+
   [ "${status}" -eq 0 ]
-
-  run rg -n '"audience": "apim-simulator"' "${apim_manifest}"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'oidc-issuer-url=https://dex\.compose\.127\.0\.0\.1\.sslip\.io:8443/dex' "${compose_stack}"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'AUTH_METHOD=none' "${subnetcalc_compose}"
-  [ "${status}" -eq 0 ]
-
-  run rg -n 'profiles: \["oidc"\]' "${subnetcalc_compose}"
-  [ "${status}" -eq 0 ]
-
-  for term in \
-    "resource audience" \
-    "portable auth mode" \
-    "apim-simulator"
-  do
-    run rg -n "${term}" "${contracts}" "${glossary}"
-    [ "${status}" -eq 0 ]
-  done
+  [[ "${output}" == *"validated shared APIM resource audience helper usage"* ]]
 }
 
 @test "Keycloak admin console lands on the platform realm and uses a permanent admin lifecycle" {
@@ -599,48 +720,50 @@ PY
 
 @test "Keycloak local targets use an optimized single-pod container image" {
   run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
-dockerfile = (repo_root / "apps/keycloak/Dockerfile").read_text(encoding="utf-8")
-sso_tf = (repo_root / "terraform/kubernetes/sso.tf").read_text(encoding="utf-8")
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
+from tests.app_contracts import keycloak_optimized_image_contract_violations
 
-assert "FROM quay.io/keycloak/keycloak:26.6.1 AS builder" in dockerfile
-assert "ENV KC_DB=postgres" in dockerfile
-assert "ENV KC_CACHE=local" in dockerfile
-assert "RUN /opt/keycloak/bin/kc.sh build" in dockerfile
-assert "COPY --from=builder /opt/keycloak/ /opt/keycloak/" in dockerfile
-assert 'ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]' in dockerfile
-assert "microdnf" not in dockerfile and "dnf " not in dockerfile and "rpm " not in dockerfile
-
-assert "replicas: 1" in sso_tf
-assert "image: ${var.keycloak_image}" in sso_tf
-assert "- --optimized" in sso_tf
-
-assert "keycloak_source_tag=" in build_script
-assert '"id": "keycloak"' in image_catalog
-assert '"context": "apps/keycloak"' in image_catalog
-assert '"dockerfile": "Dockerfile"' in image_catalog
-assert '"default_tag": "26.6.1"' in image_catalog
-
-for target, registry_host in {
-    "kind": "host.docker.internal:5002",
-    "lima": "host.lima.internal:5002",
-    "slicer": "192.168.64.1:5002",
-}.items():
-    tfvars = (repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars").read_text(encoding="utf-8")
-    assert f'keycloak_image = "{registry_host}/platform/keycloak:26.6.1"' in tfvars, (target, tfvars)
+violations = keycloak_optimized_image_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
 
 print("validated optimized Keycloak container contract")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated optimized Keycloak container contract"* ]]
+}
+
+@test "IDP component tests share optimized Keycloak image helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import keycloak_optimized_image_contract_violations
+
+test_file = Path("tests/idp-core-components.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "Keycloak local targets use an optimized single-pod container image"'):
+    content.index('\n@test "Headlamp local chart is patched for CPU-bound laptop rollouts"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Keycloak optimized image policy should move" not in line
+]
+
+assert callable(keycloak_optimized_image_contract_violations)
+assert "keycloak_optimized_image_contract_violations" in test_body
+assert not any("apps/keycloak/Dockerfile" in line for line in contract_lines), "Keycloak optimized image policy should move to tests/app_contracts.py"
+assert not any("keycloak_image =" in line for line in contract_lines), "Keycloak optimized image policy should move to tests/app_contracts.py"
+assert not any("--optimized" in line and "assert" in line for line in contract_lines), "Keycloak optimized image policy should move to tests/app_contracts.py"
+
+print("validated shared optimized Keycloak image helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared optimized Keycloak image helper usage"* ]]
 }
 
 @test "Headlamp local chart is patched for CPU-bound laptop rollouts" {

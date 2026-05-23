@@ -9,9 +9,9 @@ C4Container
 
     Container_Boundary(sentiment, "sentiment") {
         Container(router, "sentiment-router", "NGINX", "Routes browser traffic between UI and API")
-        Container(ui, "sentiment-auth-ui", "SPA", "Browser user interface")
-        Container(api, "sentiment-api", "API service", "Runs the shipped in-process SST classifier and emits traces")
-        Container(sst, "SST classifier", "Transformers.js pipeline", "Loaded in-process by sentiment-api")
+        Container(ui, "sentiment-auth-ui", "Vanilla browser UI", "Embedded HTML/CSS/JavaScript")
+        Container(api, "sentiment-api", "Go API", "Runs the shipped in-process Go lexicon classifier and emits traces")
+        Container(classifier, "Go lexicon classifier", "In-process classifier", "Available at sentiment-api startup")
     }
 
     Rel(browser, gateway, "Uses over HTTPS")
@@ -19,6 +19,6 @@ C4Container
     Rel(oauth, router, "Forwards authenticated traffic to")
     Rel(router, ui, "Serves UI routes from")
     Rel(router, api, "Forwards /api/* to")
-    Rel(api, sst, "Classifies sentiment with")
+    Rel(api, classifier, "Classifies sentiment with")
     Rel(api, otel, "Exports traces to")
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")

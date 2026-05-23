@@ -1,6 +1,6 @@
 # ChatGPT Sim
 
-Go stdlib-only local simulation of the key ChatGPT-to-MCP loop.
+Small Go local simulation of the key ChatGPT-to-MCP loop.
 
 It has two roles in the same static binary:
 
@@ -12,7 +12,9 @@ It has two roles in the same static binary:
   then either phrase the result with a deterministic local rule or forward the
   user message and MCP result to an OpenAI-compatible chat-completions endpoint.
 
-There are no third-party Go modules and no JavaScript package dependencies.
+The shell reuses the repo-local shared Go app libraries for HTTP, browser
+assets, and provider-neutral OIDC/session helpers. There are no JavaScript
+package dependencies.
 
 ## Local Run
 
@@ -53,7 +55,47 @@ show security posture
 With `LLM_URL`, the shell keeps MCP discovery and tool calls in-process, then
 posts the user message plus MCP result to an OpenAI-compatible
 `/v1/chat/completions` endpoint. The compose file runs a tiny stdlib `ROLE=llm`
-stub; Kubernetes points `LLM_URL` at the agentgateway-brokered endpoint.
+stub named `go-local-openai-compatible-stub`; it is not a bundled mini model.
+Kubernetes points `LLM_URL` at the agentgateway-brokered endpoint.
+`LLM_MODEL` should be set when the target model is known; otherwise the shell
+discovers `/v1/models` before completion. `LLM_TIMEOUT_SECONDS`,
+`LLM_MAX_TOKENS`, and `LANGFUSE_TIMEOUT_SECONDS` bound the request so the
+interactive SSO route returns before the gateway times out.
+
+If that configured endpoint is unavailable or returns unusable text, `/api/chat`
+falls back to `deterministicReply` and includes model metadata such as
+`"status":"unavailable"` or `"status":"fallback"` in the JSON inspector output.
+
+To point the app-local compose shell at a running OpenAI-compatible oMLX
+endpoint instead of the stub, override the shell endpoint:
+
+```sh
+CHATGPT_SIM_LLM_URL=http://host.docker.internal:8000/v1/chat/completions \
+CHATGPT_SIM_LLM_MODEL=Qwen3.5-9B-MLX-4bit \
+  make -C apps/chatgpt-sim up-direct
+```
+
+To also prove Langfuse ingestion from the shell, provide the local Langfuse
+endpoint and keys:
+
+```sh
+CHATGPT_SIM_LLM_URL=http://host.docker.internal:8000/v1/chat/completions \
+CHATGPT_SIM_LLM_MODEL=Qwen3.5-9B-MLX-4bit \
+CHATGPT_SIM_LANGFUSE_HOST=http://host.docker.internal:3000 \
+CHATGPT_SIM_LANGFUSE_PUBLIC_KEY=pk-lf-local-platform \
+CHATGPT_SIM_LANGFUSE_SECRET_KEY=sk-lf-local-platform \
+  make -C apps/chatgpt-sim up-direct
+```
+
+Then post a chat request and check the response inspector payload. A successful
+oMLX call reports `"model":{"status":"ok",...}` and a successful Langfuse
+ingestion reports `"trace":{"provider":"langfuse","status":"ok",...}`:
+
+```sh
+curl -fsS http://localhost:18084/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"who am I to the MCP server?"}'
+```
 
 ## OAuth Scope
 

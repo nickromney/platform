@@ -237,7 +237,7 @@ PY
   [[ "${output}" == *"validated agentgateway ingress for Langfuse and demo LLM calls"* ]]
 }
 
-@test "Langfuse runtime ingress permits demo pods to ingest traces" {
+@test "Langfuse runtime ingress permits demo pods and ChatGPT Sim to ingest traces" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
@@ -257,28 +257,31 @@ policy = next(
     for doc in docs
     if doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == "langfuse-runtime"
 )
-allowed = False
+required_sources = {
+    "langfuse-demos": {"app.kubernetes.io/part-of": "langfuse-demos"},
+    "chatgpt-sim": {"app.kubernetes.io/name": "chatgpt-sim"},
+}
+allowed = set()
 for rule in policy["spec"].get("ingress", []):
     ports = {item.get("port") for item in rule.get("ports", [])}
     for source in rule.get("from", []):
         namespace = source.get("namespaceSelector", {}).get("matchLabels", {})
         pod = source.get("podSelector", {}).get("matchLabels", {})
-        if (
-            namespace.get("kubernetes.io/metadata.name") == "dev"
-            and pod.get("app.kubernetes.io/part-of") == "langfuse-demos"
-            and 3000 in ports
-        ):
-            allowed = True
-assert allowed, "Langfuse NetworkPolicy must allow dev/langfuse-demos pods to ingest events on port 3000"
+        if namespace.get("kubernetes.io/metadata.name") != "dev" or 3000 not in ports:
+            continue
+        for name, labels in required_sources.items():
+            if all(pod.get(key) == value for key, value in labels.items()):
+                allowed.add(name)
+assert allowed == set(required_sources), f"Langfuse NetworkPolicy must allow dev trace ingest sources on port 3000: {allowed}"
 
-print("validated Langfuse runtime ingress for demo ingestion")
+print("validated Langfuse runtime ingress for demo and ChatGPT Sim ingestion")
 PY
 
   if [ "${status}" -ne 0 ]; then
     printf '%s\n' "${output}"
   fi
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Langfuse runtime ingress for demo ingestion"* ]]
+  [[ "${output}" == *"validated Langfuse runtime ingress for demo and ChatGPT Sim ingestion"* ]]
 }
 
 @test "Langfuse bootstrap seeds the default project, LLM connection, and starter trace" {
@@ -425,58 +428,13 @@ PY
 
 @test "Langfuse demos are enabled by stage 920 and visible from GitOps, SSO, Grafana, and image build surfaces" {
   run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
-import json
 import os
-import re
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
-checks = {
-    "stage": repo_root / "kubernetes/kind/stages/920-langfuse.tfvars",
-    "variables": repo_root / "terraform/kubernetes/variables.tf",
-    "locals": repo_root / "terraform/kubernetes/locals.tf",
-    "workload_apps": repo_root / "terraform/kubernetes/workload-apps.tf",
-    "app_of_apps": repo_root / "terraform/kubernetes/apps/argocd-apps/82-langfuse-demos.application.yaml",
-    "routes_kustomization": repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso/kustomization.yaml",
-    "referencegrant": repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso/referencegrant-sso.yaml",
-    "demo_referencegrant": repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso/referencegrant-sso-langfuse-demos.yaml",
-    "prometheus": repo_root / "terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml",
-    "grafana": repo_root / "terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml",
-    "image_catalog": repo_root / "kubernetes/workflow/image-catalog.json",
-    "image_builder": repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh",
-    "sync_script": repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh",
-}
-texts = {name: path.read_text(encoding="utf-8") for name, path in checks.items()}
+from tests.app_contracts import langfuse_demo_rollout_surface_contract_violations
 
-assert re.search(r"(?m)^enable_langfuse_demos\s*=\s*true$", texts["stage"])
-assert "enable_langfuse_demos" in texts["variables"]
-assert "langfuse_trace_chat_public_host" in texts["locals"]
-assert "argocd_app_langfuse_demos" in texts["workload_apps"]
-assert "path: apps/langfuse-demos" in texts["app_of_apps"]
-for name in ("langfuse-trace-chat", "langfuse-tool-agent", "langfuse-eval-runner"):
-    assert f"httproute-{name}.yaml" in texts["routes_kustomization"], name
-    assert f"oauth2-proxy-{name}" in texts["demo_referencegrant"], name
-    assert name in texts["grafana"], name
-assert "job_name: langfuse-demos" in texts["prometheus"]
-assert "langfuse-demos" in texts["prometheus"]
-assert "__meta_kubernetes_pod_annotation_prometheus_io_scrape" in texts["prometheus"]
-assert "referencegrant-sso-langfuse-demos.yaml" in texts["routes_kustomization"]
-assert "Langfuse Agent Flow" in texts["grafana"]
-assert "langfuse_demo_llm_calls_total" in texts["grafana"]
-assert 'langfuse_demo_runs_total{job=\\"langfuse-demos\\"}' in texts["grafana"]
-assert 'langfuse_demo_langfuse_batches_total{job=\\"langfuse-demos\\"}' in texts["grafana"]
-assert '"id": "langfuse-demos"' in texts["image_catalog"]
-assert "apps/shared/idpauth" in texts["image_catalog"]
-assert "apps/langfuse-demos/app/go.sum" in texts["image_catalog"]
-assert "langfuse_demos_source_tag=" in texts["image_builder"]
-assert 'image_build_catalog_build_and_push platform langfuse-demos langfuse-demos "${langfuse_demos_source_tag}"' in texts["image_builder"]
-assert "EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS" in texts["sync_script"]
-
-catalog = json.loads(texts["image_catalog"])
-ids = {item["id"] for item in catalog["platform_images"]}
-assert "langfuse-demos" in ids
+violations = langfuse_demo_rollout_surface_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
 
 print("validated Langfuse demo rollout surfaces")
 PY
@@ -486,6 +444,41 @@ PY
   fi
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated Langfuse demo rollout surfaces"* ]]
+}
+
+@test "Langfuse demo tests share rollout surface helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import langfuse_demo_rollout_surface_contract_violations
+
+test_file = Path("tests/langfuse-demos.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "Langfuse demos are enabled by stage 920 and visible from GitOps, SSO, Grafana, and image build surfaces"'):
+    content.index('\n@test "SSO ReferenceGrants stay under Gateway API target limits while permitting Langfuse demos"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Langfuse rollout surface policy should move" not in line
+]
+
+assert callable(langfuse_demo_rollout_surface_contract_violations)
+assert "langfuse_demo_rollout_surface_contract_violations" in test_body
+assert not any("platform-launchpad.apps.json" in line for line in contract_lines), "Langfuse rollout surface policy should move to tests/app_contracts.py"
+assert not any("Langfuse Trace Chat DEV" in line for line in contract_lines), "Langfuse rollout surface policy should move to tests/app_contracts.py"
+assert not any("EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS" in line for line in contract_lines), "Langfuse rollout surface policy should move to tests/app_contracts.py"
+assert not any("langfuse_demo_llm_calls_total" in line for line in contract_lines), "Langfuse rollout surface policy should move to tests/app_contracts.py"
+
+print("validated shared Langfuse rollout surface helper usage")
+PY
+
+  if [ "${status}" -ne 0 ]; then
+    printf '%s\n' "${output}"
+  fi
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Langfuse rollout surface helper usage"* ]]
 }
 
 @test "SSO ReferenceGrants stay under Gateway API target limits while permitting Langfuse demos" {

@@ -22,6 +22,32 @@
       "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
     },
     {
+      "title": "Platform MCP Endpoint",
+      "url": "https://mcp.127.0.0.1.sslip.io/mcp",
+      "sort_key": "admin/platform-mcp",
+      "service": "platform-mcp",
+      "owner": "platform",
+      "environment": "local",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "((max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"platform-mcp\"}) > bool 0) or max(argocd_app_info{name=\"mcp\",health_status=\"Healthy\",sync_status=\"Synced\"}) or vector(0))"
+    },
+    {
+      "title": "MCP Inspector",
+      "url": "https://mcp-console.127.0.0.1.sslip.io",
+      "sort_key": "admin/mcp-inspector",
+      "service": "mcp-inspector",
+      "owner": "platform",
+      "environment": "local",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-mcp-console\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"mcp\",deployment=\"mcp-inspector\"}) > bool 0)) or vector(0))"
+    },
+    {
       "title": "Backstage Observability",
       "url": "https://grafana.admin.127.0.0.1.sslip.io/d/backstage-observability/backstage-observability",
       "sort_key": "00/dashboard/backstage-observability",
@@ -128,6 +154,19 @@
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
     },
     {
+      "title": "APIM Simulator",
+      "url": "https://subnetcalc.dev.127.0.0.1.sslip.io/api",
+      "sort_key": "dev/apim-simulator",
+      "service": "apim-simulator",
+      "owner": "apim-simulator-maintainers",
+      "environment": "local",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_APP_REPO_SUBNETCALC"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-apim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"apim\",deployment=\"subnetcalc-apim-simulator\"}) > bool 0)) or vector(0))"
+    },
+    {
       "title": "ChatGPT Sim DEV",
       "url": "https://chatgpt.dev.127.0.0.1.sslip.io",
       "sort_key": "dev/chatgpt-sim",
@@ -139,6 +178,58 @@
         "ENABLE_SSO"
       ],
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-chatgpt-sim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"chatgpt-sim\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Langfuse",
+      "url": "https://langfuse.admin.127.0.0.1.sslip.io",
+      "sort_key": "dev/langfuse",
+      "service": "langfuse",
+      "owner": "platform",
+      "environment": "local",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_LANGFUSE"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"langfuse\",deployment=\"langfuse-web\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Langfuse Trace Chat DEV",
+      "url": "https://lf-chat.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/langfuse-trace-chat",
+      "service": "langfuse-trace-chat",
+      "owner": "platform",
+      "environment": "dev",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_LANGFUSE_DEMOS"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-trace-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-trace-chat\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Langfuse Tool Agent DEV",
+      "url": "https://lf-agent.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/langfuse-tool-agent",
+      "service": "langfuse-tool-agent",
+      "owner": "platform",
+      "environment": "dev",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_LANGFUSE_DEMOS"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-tool-agent\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-tool-agent\"}) > bool 0)) or vector(0))"
+    },
+    {
+      "title": "Langfuse Eval Runner DEV",
+      "url": "https://lf-evals.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/langfuse-eval-runner",
+      "service": "langfuse-eval-runner",
+      "owner": "platform",
+      "environment": "dev",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_LANGFUSE_DEMOS"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-langfuse-eval-runner\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"langfuse-eval-runner\"}) > bool 0)) or vector(0))"
     },
     {
       "title": "Sentiment UAT",

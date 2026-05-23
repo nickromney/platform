@@ -342,8 +342,8 @@ if [[ "${#requested_tools[@]}" -lt 1 ]]; then
   exit 2
 fi
 
-os_name="$(uname -s 2>/dev/null || echo unknown)"
-arch_name="$(uname -m 2>/dev/null || echo unknown)"
+os_name="$(uname -s 2>/dev/null || echo "OS not reported")"
+arch_name="$(uname -m 2>/dev/null || echo "architecture not reported")"
 platform_label="${os_name}"
 if [[ "${os_name}" == "Linux" ]] && grep -Eiq '(microsoft|wsl)' /proc/version 2>/dev/null; then
   platform_label="Linux (WSL)"

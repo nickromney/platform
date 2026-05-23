@@ -1,0 +1,83 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: langfuse-trace-chat
+  title: Langfuse Trace Chat
+  description: Prompt-to-generation demo that emits Langfuse traces, scores, and transport status.
+  tags:
+    - llm
+    - demo
+    - traces
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/langfuse-demos/
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=langfuse-trace-chat
+  links:
+    - url: https://lf-chat.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/langfuse-agent-flow/langfuse-agent-flow
+      title: Langfuse Agent Flow
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: demo
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/langfuse
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: langfuse-tool-agent
+  title: Langfuse Tool Agent
+  description: Tool-using agent demo that records planner, tool, and final-response observations.
+  tags:
+    - llm
+    - demo
+    - tools
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/langfuse-demos/
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=langfuse-tool-agent
+  links:
+    - url: https://lf-agent.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/langfuse-agent-flow/langfuse-agent-flow
+      title: Langfuse Agent Flow
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: demo
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/langfuse
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: langfuse-eval-runner
+  title: Langfuse Eval Runner
+  description: Evaluation runner demo that emits deterministic scores and LLM availability evidence.
+  tags:
+    - llm
+    - demo
+    - evaluations
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/langfuse-demos/
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=langfuse-eval-runner
+  links:
+    - url: https://lf-evals.dev.127.0.0.1.sslip.io
+      title: Dev
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/langfuse-agent-flow/langfuse-agent-flow
+      title: Langfuse Agent Flow
+      icon: dashboard
+spec:
+  type: website
+  lifecycle: demo
+  owner: group:default/platform
+  system: local-idp
+  dependsOn:
+    - component:default/langfuse

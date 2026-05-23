@@ -1,18 +1,20 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
 )
@@ -65,24 +67,32 @@ func NewServer(cfg Config, client HTTPDoer, verifier ...idpauth.TokenVerifier) h
 		mux.HandleFunc("POST /api/chat", s.shellChat)
 		mux.HandleFunc("GET /.auth/me", s.gatewaySession)
 		mux.HandleFunc("GET /runtime-config.js", s.runtimeConfig)
-		mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
-		mux.HandleFunc("GET /favicon.ico", s.favicon)
+		appshell.RegisterSharedAssets(mux, idpauth.BrowserBundle)
+		mux.HandleFunc("GET /favicon.ico", appshell.SVGFavicon(chatGPTSimFaviconSVG))
+		mux.HandleFunc("GET /signed-out.html", appshell.SignedOutPage(appshell.SignedOutPageConfig{
+			AppName:     "ChatGPT Sim",
+			Tagline:     "MCP connector shell for OAuth discovery and tool calls.",
+			SessionName: "ChatGPT Sim",
+			Stylesheet:  "/style.css",
+			Favicon:     "/favicon.ico",
+			PanelClass:  "panel",
+		}))
 		mux.HandleFunc("GET /oauth/callback", s.oauthCallback)
-		mux.HandleFunc("/", s.static)
+		mux.Handle("/", appshell.StaticFiles(web, "web"))
 	}
-	return logMiddleware(mux)
+	return apphttp.RequestLogger("chatgpt-sim", nil, mux)
 }
 
 func (s *server) mcpHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "go-local-mcp"})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "go-local-mcp"})
 }
 
 func (s *server) llmHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "go-local-openai-compatible-llm"})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "go-local-openai-compatible-llm"})
 }
 
 func (s *server) llmModels(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"object": "list",
 		"data": []map[string]any{{
 			"id":       s.localLLMModel(),
@@ -93,12 +103,14 @@ func (s *server) llmModels(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) shellHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":         "ok",
-		"service":        "chatgpt-sim-shell",
-		"mcp_url":        s.cfg.MCPURL,
-		"model_provider": s.modelProvider(),
-		"dependencies":   "go-stdlib-only",
+	apphttp.WriteBrowserAppHealth(w, map[string]any{
+		"status":          "ok",
+		"service":         "chatgpt-sim-shell",
+		"mcp_url":         s.cfg.MCPURL,
+		"model_provider":  s.modelProvider(),
+		"llm_configured":  s.llmConfigured(),
+		"trace_provider":  "langfuse",
+		"trace_ingestion": s.traceIngestionStatus(),
 	})
 }
 
@@ -107,7 +119,7 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, claims)
+	apphttp.WriteJSON(w, http.StatusOK, claims)
 }
 
 func (s *server) requireAuth(next http.Handler) http.Handler {
@@ -120,72 +132,16 @@ func (s *server) requireAuth(next http.Handler) http.Handler {
 }
 
 func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
-	if strings.EqualFold(s.cfg.AuthMode, "none") {
-		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
-	}
-	if s.verifier == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "OIDC verifier is not configured"})
+	claims, failure := (idpauth.Authenticator{Mode: s.cfg.AuthMode, Verifier: s.verifier}).CurrentUser(r)
+	if failure != nil {
+		apphttp.WriteError(w, failure.StatusCode, failure.Message)
 		return idpauth.UserClaims{}, false
-	}
-	token := idpauth.BearerToken(r)
-	if token == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing bearer token"})
-		return idpauth.UserClaims{}, false
-	}
-	claims, err := s.verifier.Verify(r.Context(), token)
-	if err != nil {
-		status := http.StatusUnauthorized
-		if !errors.Is(err, idpauth.ErrInvalidToken) {
-			status = http.StatusBadGateway
-		}
-		writeJSON(w, status, map[string]string{"error": "invalid token"})
-		return idpauth.UserClaims{}, false
-	}
-	if claims.Groups == nil {
-		claims.Groups = []string{}
 	}
 	return claims, true
 }
 
 func (s *server) gatewaySession(w http.ResponseWriter, r *http.Request) {
-	email := firstHeader(r,
-		"X-Auth-Request-Email",
-		"X-Forwarded-Email",
-	)
-	username := firstHeader(r,
-		"X-Auth-Request-Preferred-Username",
-		"X-Forwarded-Preferred-Username",
-		"X-Auth-Request-User",
-		"X-Forwarded-User",
-	)
-	subject := firstHeader(r,
-		"X-Auth-Request-Subject",
-		"X-Forwarded-Subject",
-	)
-	displayName := firstNonEmpty(username, email, subject)
-	if displayName == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"clientPrincipal": nil})
-		return
-	}
-	claims := make([]map[string]string, 0, 3)
-	for _, claim := range []struct {
-		name  string
-		value string
-	}{
-		{name: "name", value: displayName},
-		{name: "preferred_username", value: firstNonEmpty(username, email)},
-		{name: "email", value: email},
-	} {
-		if claim.value != "" {
-			claims = append(claims, map[string]string{"typ": claim.name, "val": claim.value})
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"clientPrincipal": map[string]any{
-			"userDetails": displayName,
-			"claims":      claims,
-		},
-	})
+	idpauth.WriteClientPrincipalSession(w, r)
 }
 
 func (s *server) llmChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +152,7 @@ func (s *server) llmChatCompletions(w http.ResponseWriter, r *http.Request) {
 			Content string `json:"content"`
 		} `json:"messages"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	if req.Model == "" {
@@ -212,17 +168,17 @@ func (s *server) llmChatCompletions(w http.ResponseWriter, r *http.Request) {
 			mcpContext = message.Content
 		}
 	}
-	subject := "unknown"
+	subject := "not provided"
 	if strings.Contains(mcpContext, "local-chatgpt-go-user") {
 		subject = "local-chatgpt-go-user"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"model": req.Model,
 		"choices": []map[string]any{{
 			"index": 0,
 			"message": map[string]string{
 				"role":    "assistant",
-				"content": "OpenAI-compatible local model saw `" + userMessage + "` and the MCP subject `" + subject + "`.",
+				"content": "OpenAI-compatible local deterministic stub saw `" + userMessage + "` and the MCP subject `" + subject + "`.",
 			},
 			"finish_reason": "stop",
 		}},
@@ -231,7 +187,7 @@ func (s *server) llmChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) protectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	baseURL := s.publicBaseURL(r)
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"resource":                 baseURL + "/mcp",
 		"authorization_servers":    []string{baseURL},
 		"scopes_supported":         []string{"mcp.access"},
@@ -241,7 +197,7 @@ func (s *server) protectedResourceMetadata(w http.ResponseWriter, r *http.Reques
 
 func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request) {
 	baseURL := s.publicBaseURL(r)
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                      baseURL,
 		"authorization_endpoint":                      baseURL + "/oauth2/v1/authorize",
 		"token_endpoint":                              baseURL + "/oauth2/v1/token",
@@ -259,11 +215,11 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 func (s *server) mcp(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+s.publicBaseURL(r)+`/.well-known/oauth-protected-resource/mcp"`)
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing bearer token"})
+		apphttp.WriteError(w, http.StatusUnauthorized, "missing bearer token")
 		return
 	}
 	var req rpcRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	switch req.Method {
@@ -296,58 +252,98 @@ func (s *server) shellDiscovery(w http.ResponseWriter, r *http.Request) {
 	conn := s.defaultConnector()
 	discovery, err := s.discoverConnector(conn, outboundAuthorization(r))
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		apphttp.WriteError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, discovery)
+	apphttp.WriteJSON(w, http.StatusOK, discovery)
 }
 
 func (s *server) shellChat(w http.ResponseWriter, r *http.Request) {
 	var req chatRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	req.Message = strings.TrimSpace(req.Message)
 	if req.Message == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "message is required")
 		return
 	}
 	conn, ok := s.connectorByID(req.ConnectorID)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "connector not found"})
+		apphttp.WriteError(w, http.StatusBadRequest, "connector not found")
 		return
 	}
-	discovery, err := s.discoverConnector(conn, outboundAuthorization(r))
+	requestBudget := s.llmTimeout()
+	deadline := time.Now().Add(requestBudget)
+	discoveryTimeout := stageTimeout(deadline, requestBudget-50*time.Millisecond, 900*time.Millisecond)
+	discovery, err := s.discoverConnectorWithinBudget(conn, outboundAuthorization(r), discoveryTimeout)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		apphttp.WriteError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	toolName, args := chooseTool(req.Tool, req.Message)
-	steps, result, selectedTool, err := s.callConnectorMCP(conn, toolName, args, req.Tool, req.Message, outboundAuthorization(r))
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+	if toolName == "model_ping" && s.cfg.LLMURL != "" {
+		pingTimeout := stageTimeout(deadline, requestBudget-50*time.Millisecond, 900*time.Millisecond)
+		result, err := s.pingLLMModelsWithinBudget(pingTimeout)
+		steps := []map[string]any{{"method": "llm.models", "status": "ok", "route": "agentgateway"}}
+		if err != nil {
+			steps[0]["status"] = "error"
+			steps[0]["error"] = err.Error()
+			result = failedToolResult(toolName, err)
+		}
+		assistant := deterministicReply(toolName, result)
+		model := map[string]any{"provider": "deterministic", "model": "go-local-rule"}
+		if modelEvidence := modelFromToolResult(toolName, result); modelEvidence != nil {
+			model = modelEvidence
+		}
+		traceTimeout := stageTimeout(deadline, s.langfuseTimeout(), s.langfuseTimeout())
+		trace := s.emitChatTraceWithinBudget(r, req.Message, assistant, toolName, result, model, traceTimeout)
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{
+			"assistant":      assistant,
+			"connector":      conn,
+			"model":          model,
+			"trace":          trace,
+			"selected_tool":  toolName,
+			"tool_arguments": args,
+			"tool_result":    result,
+			"discovery":      discovery,
+			"mcp_steps":      steps,
+		})
 		return
+	}
+	mcpTimeout := stageTimeout(deadline, requestBudget-50*time.Millisecond, 900*time.Millisecond)
+	steps, result, selectedTool, err := s.callConnectorMCPWithinBudget(conn, toolName, args, req.Tool, req.Message, outboundAuthorization(r), mcpTimeout)
+	if err != nil {
+		steps = append(steps, map[string]any{"method": "tools/call", "status": "error", "error": err.Error()})
+		result = failedToolResult(toolName, err)
+		selectedTool = toolName
 	}
 	toolName = selectedTool
 	assistant := deterministicReply(toolName, result)
-	model := map[string]string{"provider": "deterministic", "model": "go-local-rule"}
-	if s.cfg.LLMURL != "" && toolName != "tools/list" {
+	model := map[string]any{"provider": "deterministic", "model": "go-local-rule"}
+	if modelEvidence := modelFromToolResult(toolName, result); modelEvidence != nil {
+		model = modelEvidence
+	} else if s.cfg.LLMURL != "" && toolName != "tools/list" && !isToolError(result) {
 		var modelName string
-		assistant, modelName, err = s.completeWithLLM(req.Message, toolName, result)
+		llmTimeout := stageTimeout(deadline, requestBudget-50*time.Millisecond, 900*time.Millisecond)
+		assistant, modelName, err = s.completeWithLLMWithinBudget(req.Message, toolName, result, llmTimeout)
 		if err != nil {
 			assistant = deterministicReply(toolName, result)
-			model = map[string]string{"provider": "openai-compatible", "route": "agentgateway", "status": "unavailable", "error": err.Error()}
+			model = map[string]any{"provider": "openai-compatible", "route": "agentgateway", "status": "unavailable", "error": err.Error()}
 		} else if isUnusableAssistantText(assistant) {
 			assistant = deterministicReply(toolName, result)
-			model = map[string]string{"provider": "openai-compatible", "model": modelName, "route": "agentgateway", "status": "fallback"}
+			model = map[string]any{"provider": "openai-compatible", "model": modelName, "route": "agentgateway", "status": "fallback"}
 		} else {
-			model = map[string]string{"provider": "openai-compatible", "model": modelName, "route": "agentgateway", "status": "ok"}
+			model = map[string]any{"provider": "openai-compatible", "model": modelName, "route": "agentgateway", "status": "ok"}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	traceTimeout := stageTimeout(deadline, s.langfuseTimeout(), s.langfuseTimeout())
+	trace := s.emitChatTraceWithinBudget(r, req.Message, assistant, toolName, result, model, traceTimeout)
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"assistant":      assistant,
 		"connector":      conn,
 		"model":          model,
+		"trace":          trace,
 		"selected_tool":  toolName,
 		"tool_arguments": args,
 		"tool_result":    result,
@@ -356,7 +352,297 @@ func (s *server) shellChat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) completeWithLLM(message string, toolName string, toolResult map[string]any) (string, string, error) {
+func stageTimeout(deadline time.Time, preferred time.Duration, cap time.Duration) time.Duration {
+	if preferred <= 0 {
+		preferred = time.Second
+	}
+	if cap > 0 && preferred > cap {
+		preferred = cap
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return time.Millisecond
+	}
+	if preferred > remaining {
+		return remaining
+	}
+	return preferred
+}
+
+func isToolError(result map[string]any) bool {
+	value, _ := result["isError"].(bool)
+	return value
+}
+
+func modelFromToolResult(toolName string, result map[string]any) map[string]any {
+	if toolName != "model_ping" || isToolError(result) {
+		return nil
+	}
+	content, _ := result["structuredContent"].(map[string]any)
+	if content == nil {
+		return nil
+	}
+	success, _ := content["success"].(bool)
+	if !success {
+		return nil
+	}
+	modelName := stringValue(content["model"])
+	if modelName == "" {
+		modelName = stringValue(content["deployment_name"])
+	}
+	if modelName == "" {
+		modelName = "discovered-model"
+	}
+	route := stringValue(content["route"])
+	if route == "" {
+		route = "agentgateway"
+	}
+	source := stringValue(content["source"])
+	if source == "" {
+		source = "mcp.model_ping"
+	}
+	return map[string]any{"provider": "openai-compatible", "model": modelName, "route": route, "status": "ok", "source": source}
+}
+
+func failedToolResult(toolName string, err error) map[string]any {
+	message := ""
+	if err != nil {
+		message = err.Error()
+	}
+	content := map[string]any{
+		"status": "error",
+		"tool":   toolName,
+		"error":  message,
+	}
+	text, _ := json.MarshalIndent(content, "", "  ")
+	return map[string]any{
+		"content":           []map[string]any{{"type": "text", "text": string(text)}},
+		"structuredContent": content,
+		"isError":           true,
+	}
+}
+
+func (s *server) discoverConnectorWithinBudget(conn connector, authorization string, timeout time.Duration) (map[string]any, error) {
+	if timeout <= 0 {
+		timeout = time.Millisecond
+	}
+	type discoveryResult struct {
+		discovery map[string]any
+		err       error
+	}
+	done := make(chan discoveryResult, 1)
+	go func() {
+		discovery, err := s.discoverConnector(conn, authorization)
+		done <- discoveryResult{discovery: discovery, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result.discovery, result.err
+	case <-timer.C:
+		return nil, fmt.Errorf("MCP discovery exceeded %s", timeout)
+	}
+}
+
+func (s *server) callConnectorMCPWithinBudget(conn connector, toolName string, args map[string]any, requestedTool string, message string, authorization string, timeout time.Duration) ([]map[string]any, map[string]any, string, error) {
+	if timeout <= 0 {
+		timeout = time.Millisecond
+	}
+	type mcpResult struct {
+		steps        []map[string]any
+		result       map[string]any
+		selectedTool string
+		err          error
+	}
+	done := make(chan mcpResult, 1)
+	go func() {
+		steps, result, selectedTool, err := s.callConnectorMCP(conn, toolName, args, requestedTool, message, authorization)
+		done <- mcpResult{steps: steps, result: result, selectedTool: selectedTool, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result.steps, result.result, result.selectedTool, result.err
+	case <-timer.C:
+		return nil, nil, "", fmt.Errorf("MCP connector call exceeded %s", timeout)
+	}
+}
+
+func (s *server) completeWithLLMWithinBudget(message string, toolName string, toolResult map[string]any, timeout time.Duration) (string, string, error) {
+	if timeout <= 0 {
+		timeout = time.Millisecond
+	}
+	type completionResult struct {
+		assistant string
+		modelName string
+		err       error
+	}
+	done := make(chan completionResult, 1)
+	go func() {
+		assistant, modelName, err := s.completeWithLLM(message, toolName, toolResult, timeout)
+		done <- completionResult{assistant: assistant, modelName: modelName, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result.assistant, result.modelName, result.err
+	case <-timer.C:
+		return "", "", fmt.Errorf("LLM completion exceeded %s", timeout)
+	}
+}
+
+func (s *server) pingLLMModelsWithinBudget(timeout time.Duration) (map[string]any, error) {
+	if timeout <= 0 {
+		timeout = time.Millisecond
+	}
+	type pingResult struct {
+		result map[string]any
+		err    error
+	}
+	done := make(chan pingResult, 1)
+	go func() {
+		result, err := s.pingLLMModels(timeout)
+		done <- pingResult{result: result, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result.result, result.err
+	case <-timer.C:
+		return nil, fmt.Errorf("LLM model catalogue exceeded %s", timeout)
+	}
+}
+
+func (s *server) emitChatTraceWithinBudget(r *http.Request, message string, assistant string, toolName string, toolResult map[string]any, model map[string]any, timeout time.Duration) map[string]string {
+	if timeout <= 0 {
+		timeout = time.Millisecond
+	}
+	done := make(chan map[string]string, 1)
+	go func() {
+		done <- s.emitChatTrace(r, message, assistant, toolName, toolResult, model)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result
+	case <-timer.C:
+		traceID := fmt.Sprintf("chatgpt-sim-%d", time.Now().UnixNano())
+		return map[string]string{"provider": "langfuse", "status": "error", "traceId": traceID, "error": fmt.Sprintf("Langfuse ingestion exceeded %s", timeout)}
+	}
+}
+
+func (s *server) emitChatTrace(r *http.Request, message string, assistant string, toolName string, toolResult map[string]any, model map[string]any) map[string]string {
+	traceID := fmt.Sprintf("chatgpt-sim-%d", time.Now().UnixNano())
+	return s.emitChatTraceWithID(r, traceID, message, assistant, toolName, toolResult, model)
+}
+
+func (s *server) emitChatTraceWithID(r *http.Request, traceID string, message string, assistant string, toolName string, toolResult map[string]any, model map[string]any) map[string]string {
+	status := "disabled"
+	if !s.langfuseConfigured() {
+		return map[string]string{"provider": "langfuse", "status": status, "traceId": traceID}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	modelName, _ := model["model"].(string)
+	if strings.TrimSpace(modelName) == "" {
+		modelName = stringValue(model["provider"])
+	}
+	if strings.TrimSpace(modelName) == "" {
+		modelName = "unavailable"
+	}
+	payload := map[string]any{"batch": []map[string]any{
+		{
+			"id":        traceID + "-trace",
+			"type":      "trace-create",
+			"timestamp": now,
+			"body": map[string]any{
+				"id":     traceID,
+				"name":   "chatgpt-sim.chat",
+				"input":  message,
+				"output": assistant,
+				"tags":   []string{"platform-demo", "chatgpt-sim"},
+				"metadata": map[string]any{
+					"selected_tool": toolName,
+					"mcp_url":       s.cfg.MCPURL,
+					"llm_url":       s.cfg.LLMURL,
+				},
+			},
+		},
+		{
+			"id":        traceID + "-generation",
+			"type":      "generation-create",
+			"timestamp": now,
+			"body": map[string]any{
+				"id":      traceID + "-gen",
+				"traceId": traceID,
+				"name":    "assistant-response",
+				"model":   modelName,
+				"input": map[string]any{
+					"message":       message,
+					"selected_tool": toolName,
+					"tool_result":   toolResult,
+				},
+				"output":    assistant,
+				"startTime": now,
+				"endTime":   now,
+				"metadata": map[string]any{
+					"model": model,
+				},
+			},
+		},
+	}}
+	body, _ := json.Marshal(payload)
+	timeout := s.cfg.LangfuseTimeout
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.LangfuseHost, "/")+"/api/public/ingestion", bytes.NewReader(body))
+	if err != nil {
+		return map[string]string{"provider": "langfuse", "status": "error", "traceId": traceID, "error": err.Error()}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(s.cfg.LangfusePublicKey, s.cfg.LangfuseSecretKey)
+	resp, err := s.llmClient(timeout).Do(req)
+	if err != nil {
+		return map[string]string{"provider": "langfuse", "status": "error", "traceId": traceID, "error": err.Error()}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		return map[string]string{"provider": "langfuse", "status": fmt.Sprintf("http_%d", resp.StatusCode), "traceId": traceID, "error": truncate(string(raw), 180)}
+	}
+	return map[string]string{"provider": "langfuse", "status": "ok", "traceId": traceID}
+}
+
+func (s *server) langfuseTimeout() time.Duration {
+	if s.cfg.LangfuseTimeout > 0 {
+		return s.cfg.LangfuseTimeout
+	}
+	return time.Second
+}
+
+func (s *server) langfuseConfigured() bool {
+	return strings.TrimSpace(s.cfg.LangfuseHost) != "" && strings.TrimSpace(s.cfg.LangfusePublicKey) != "" && strings.TrimSpace(s.cfg.LangfuseSecretKey) != ""
+}
+
+func truncate(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
+}
+
+func (s *server) completeWithLLM(message string, toolName string, toolResult map[string]any, timeout time.Duration) (string, string, error) {
+	if timeout <= 0 {
+		timeout = time.Millisecond
+	}
 	modelName, err := s.openAICompatibleModel()
 	if err != nil {
 		return "", "", err
@@ -368,7 +654,7 @@ func (s *server) completeWithLLM(message string, toolName string, toolResult map
 		"messages": []map[string]string{
 			{
 				"role":    "system",
-				"content": "You are ChatGPT Sim. The platform shell has already executed the selected MCP tool. Answer the user from the observed MCP tool result. Do not say you need to call the tool, and do not invent tool results.",
+				"content": "You are ChatGPT Sim. The platform shell has already executed the selected MCP tool. /no_think Answer the user from the observed MCP tool result in one concise paragraph. Do not include hidden reasoning. Do not say you need to call the tool, and do not invent tool results.",
 			},
 			{"role": "user", "content": message},
 			{
@@ -378,16 +664,20 @@ func (s *server) completeWithLLM(message string, toolName string, toolResult map
 					"\nMCP tool result JSON: " + string(contextJSON),
 			},
 		},
-		"max_tokens": 256,
+		"max_tokens":  s.llmMaxTokens(),
+		"temperature": 0,
+		"stream":      false,
 	}
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequest(http.MethodPost, s.cfg.LLMURL, strings.NewReader(string(body)))
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.LLMURL, strings.NewReader(string(body)))
 	if err != nil {
 		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	resp, err := s.client.Do(req)
+	resp, err := s.llmClient(timeout).Do(req)
 	if err != nil {
 		return "", "", err
 	}
@@ -402,13 +692,104 @@ func (s *server) completeWithLLM(message string, toolName string, toolResult map
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
+	if err := apphttp.DecodeJSONReader(resp.Body, &completion); err != nil {
 		return "", "", err
 	}
 	if len(completion.Choices) == 0 || strings.TrimSpace(completion.Choices[0].Message.Content) == "" {
 		return "", "", errors.New("empty LLM completion")
 	}
 	return cleanAssistantText(completion.Choices[0].Message.Content), modelName, nil
+}
+
+func (s *server) pingLLMModels(timeout time.Duration) (map[string]any, error) {
+	modelsURL, err := llmModelsURL(s.cfg.LLMURL)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := s.llmClient(timeout).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, errors.New(resp.Status)
+	}
+	var models struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := apphttp.DecodeJSONReader(resp.Body, &models); err != nil {
+		return nil, err
+	}
+	modelName := s.cfg.LLMModel
+	if modelName == "" && len(models.Data) > 0 {
+		modelName = models.Data[0].ID
+	}
+	if strings.TrimSpace(modelName) == "" {
+		modelName = "discovered-model"
+	}
+	content := map[string]any{"success": true, "provider": "openai-compatible", "route": "agentgateway", "model": modelName, "source": "llm.models"}
+	text, _ := json.MarshalIndent(content, "", "  ")
+	return map[string]any{
+		"content":           []map[string]any{{"type": "text", "text": string(text)}},
+		"structuredContent": content,
+		"isError":           false,
+	}, nil
+}
+
+func llmModelsURL(completionsURL string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(completionsURL))
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", errors.New("invalid LLM URL")
+	}
+	path := strings.TrimRight(parsed.Path, "/")
+	switch {
+	case strings.HasSuffix(path, "/chat/completions"):
+		parsed.Path = strings.TrimSuffix(path, "/chat/completions") + "/models"
+	case strings.HasSuffix(path, "/completions"):
+		parsed.Path = strings.TrimSuffix(path, "/completions") + "/models"
+	default:
+		parsed.Path = strings.TrimRight(path, "/") + "/models"
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func (s *server) llmTimeout() time.Duration {
+	if s.cfg.LLMTimeout > 0 {
+		return s.cfg.LLMTimeout
+	}
+	return time.Second
+}
+
+func (s *server) llmClient(timeout time.Duration) HTTPDoer {
+	if client, ok := s.client.(*http.Client); ok {
+		bounded := *client
+		if bounded.Timeout == 0 || bounded.Timeout > timeout {
+			bounded.Timeout = timeout
+		}
+		return &bounded
+	}
+	return s.client
+}
+
+func (s *server) llmMaxTokens() int {
+	if s.cfg.LLMMaxTokens > 0 {
+		return s.cfg.LLMMaxTokens
+	}
+	return 32
 }
 
 func cleanAssistantText(content string) string {
@@ -492,7 +873,7 @@ func (s *server) openAICompatibleModel() (string, error) {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
+	if err := apphttp.DecodeJSONReader(resp.Body, &models); err != nil {
 		return "", err
 	}
 	for _, model := range models.Data {
@@ -526,23 +907,23 @@ func (s *server) localLLMModel() string {
 	if strings.TrimSpace(s.cfg.LLMModel) != "" {
 		return strings.TrimSpace(s.cfg.LLMModel)
 	}
-	return "go-local-openai-compatible"
+	return "go-local-openai-compatible-stub"
 }
 
 func (s *server) listConnectors(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"items": s.connectors})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"items": s.connectors})
 }
 
 func (s *server) addConnector(w http.ResponseWriter, r *http.Request) {
 	var req connectorRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	req.URL = normalizeConnectorURL(req.URL)
 	if req.URL == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mcp url is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "mcp url is required")
 		return
 	}
 	if req.Name = strings.TrimSpace(req.Name); req.Name == "" {
@@ -554,7 +935,7 @@ func (s *server) addConnector(w http.ResponseWriter, r *http.Request) {
 	req.OAuthClientID = strings.TrimSpace(req.OAuthClientID)
 	req.normalizeOAuthAdvanced()
 	if existing, ok := s.connectorByURL(req.URL); ok {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "connector already exists", "connector": existing})
+		apphttp.WriteJSON(w, http.StatusConflict, map[string]any{"error": "connector already exists", "connector": existing})
 		return
 	}
 	discovery, err := s.discover(req.URL, outboundAuthorization(r))
@@ -588,7 +969,7 @@ func (s *server) addConnector(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.connectors = append(s.connectors, conn)
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, conn)
+	apphttp.WriteJSON(w, http.StatusOK, conn)
 }
 
 func initialConnectors(cfg Config) []connector {
@@ -634,11 +1015,11 @@ func initialConnectors(cfg Config) []connector {
 func (s *server) deleteConnector(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "connector id is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "connector id is required")
 		return
 	}
 	if id == "default" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "default connector cannot be deleted"})
+		apphttp.WriteError(w, http.StatusBadRequest, "default connector cannot be deleted")
 		return
 	}
 	s.mu.Lock()
@@ -650,49 +1031,56 @@ func (s *server) deleteConnector(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "connector not found"})
+	apphttp.WriteError(w, http.StatusNotFound, "connector not found")
 }
 
 func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
-	redirectURI := s.cfg.OIDCRedirect
-	if redirectURI == "" {
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
-		redirectURI = scheme + "://" + r.Host + "/"
-	}
-	payload := map[string]any{
-		"authMethod":      s.cfg.AuthMode,
-		"apiAuthMethod":   s.cfg.APIAuthMode,
-		"oidcAuthority":   strings.TrimRight(s.cfg.OIDCIssuer, "/"),
-		"oidcClientId":    s.cfg.OIDCClientID,
-		"oidcRedirect":    redirectURI,
-		"mcpUrl":          s.cfg.MCPURL,
-		"modelProvider":   s.modelProvider(),
-		"showNetworkPath": parseBoolDefault(s.cfg.ShowNetworkPath, true),
-	}
-	if s.cfg.NetworkHops != "" {
-		var hops any
-		if err := json.Unmarshal([]byte(s.cfg.NetworkHops), &hops); err == nil {
-			payload["networkHops"] = hops
-		}
-	}
-	setFrontendCacheHeaders(w)
-	w.Header().Set("Content-Type", "application/javascript")
-	_, _ = w.Write([]byte("window.PCE_CHATGPT_GO_CONFIG = "))
-	_ = json.NewEncoder(w).Encode(payload)
+	payload := appshell.RuntimeConfigPayload(r, appshell.RuntimeConfigOptions{
+		Base: map[string]any{
+			"authMethod":          s.cfg.AuthMode,
+			"apiAuthMethod":       s.cfg.APIAuthMode,
+			"oidcAuthority":       apphttp.NormalizeURL(s.cfg.OIDCIssuer),
+			"oidcClientId":        s.cfg.OIDCClientID,
+			"mcpUrl":              s.cfg.MCPURL,
+			"modelProvider":       s.modelProvider(),
+			"traceProvider":       s.traceProvider(),
+			"dependencyFootprint": apphttp.DependencyFootprintGoSharedIDPAuth,
+		},
+		OIDCRedirect:        s.cfg.OIDCRedirect,
+		IncludeOIDCRedirect: true,
+		ShowNetworkPath:     s.cfg.ShowNetworkPath,
+		NetworkHopsJSON:     s.cfg.NetworkHops,
+	})
+	appshell.WriteScriptConfigForRequest(w, r, "window.PCE_CHATGPT_GO_CONFIG", payload)
 }
 
 func (s *server) modelProvider() string {
-	if s.cfg.LLMURL != "" {
+	if s.llmConfigured() {
 		return "openai-compatible via agentgateway"
 	}
 	return "deterministic"
 }
 
+func (s *server) llmConfigured() bool {
+	return strings.TrimSpace(s.cfg.LLMURL) != ""
+}
+
+func (s *server) traceProvider() string {
+	if s.langfuseConfigured() {
+		return "langfuse configured"
+	}
+	return "disabled"
+}
+
+func (s *server) traceIngestionStatus() string {
+	if s.langfuseConfigured() {
+		return "configured"
+	}
+	return "disabled"
+}
+
 func (s *server) oauthCallback(w http.ResponseWriter, r *http.Request) {
-	setFrontendCacheHeaders(w)
+	appshell.NoCacheHeaders(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
@@ -709,21 +1097,6 @@ func (s *server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, callbackHTML("OAuth authorization code received", "state="+state+"\ncode="+code+"\n\nToken exchange is not implemented yet."))
 }
 
-func (s *server) static(w http.ResponseWriter, r *http.Request) {
-	sub, err := fs.Sub(web, "web")
-	if err != nil {
-		http.Error(w, "static assets unavailable", http.StatusInternalServerError)
-		return
-	}
-	setFrontendCacheHeaders(w)
-	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
-}
-
-func (s *server) favicon(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "image/svg+xml")
-	_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#14171d"/><path d="M16 18h32M16 32h22M16 46h28" stroke="#79d89f" stroke-width="6" stroke-linecap="round"/></svg>`))
-}
-
 func (s *server) publicBaseURL(r *http.Request) string {
 	if s.cfg.PublicBaseURL != "" {
 		return strings.TrimRight(s.cfg.PublicBaseURL, "/")
@@ -734,6 +1107,8 @@ func (s *server) publicBaseURL(r *http.Request) string {
 	}
 	return scheme + "://" + r.Host
 }
+
+const chatGPTSimFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#14171d"/><path d="M16 18h32M16 32h22M16 46h28" stroke="#79d89f" stroke-width="6" stroke-linecap="round"/></svg>`
 
 func (s *server) discover(mcpURL string, authorization string) (map[string]any, error) {
 	return s.discoverResolved(mcpURL, "", authorization)
@@ -796,7 +1171,7 @@ func (s *server) getJSONWithHost(url string, authorization string, hostOverride 
 		return nil, errors.New(resp.Status)
 	}
 	var out map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := apphttp.DecodeJSONReader(resp.Body, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -955,7 +1330,7 @@ func (s *server) oauthLoginURL(discovery map[string]any, clientID string, state 
 func authorizationEndpoint(discovery map[string]any) string {
 	for _, key := range []string{"oauth_authorization_server", "oidc_configuration"} {
 		if metadata, ok := discovery[key].(map[string]any); ok {
-			if endpoint := stringValue(metadata["authorization_endpoint"]); endpoint != "unknown" {
+			if endpoint := stringValue(metadata["authorization_endpoint"]); endpoint != "" {
 				return endpoint
 			}
 		}
@@ -966,14 +1341,14 @@ func authorizationEndpoint(discovery map[string]any) string {
 func loginScopesFromDiscovery(discovery map[string]any) []string {
 	if protected, ok := discovery["protected_resource"].(map[string]any); ok {
 		if scopes, ok := protected["scopes_supported"].([]any); ok && len(scopes) > 0 {
-			if scope := stringValue(scopes[0]); scope != "unknown" {
+			if scope := stringValue(scopes[0]); scope != "" {
 				return []string{scope}
 			}
 		}
 	}
 	if metadata, ok := discovery["oauth_authorization_server"].(map[string]any); ok {
 		if scopes, ok := metadata["scopes_supported"].([]any); ok && len(scopes) > 0 {
-			if scope := stringValue(scopes[0]); scope != "unknown" {
+			if scope := stringValue(scopes[0]); scope != "" {
 				return []string{scope}
 			}
 		}
@@ -1100,7 +1475,7 @@ func rpcErrorSuffix(value any) string {
 		return ""
 	}
 	message := stringValue(rpcError["message"])
-	if message == "unknown" || strings.TrimSpace(message) == "" {
+	if strings.TrimSpace(message) == "" {
 		return ""
 	}
 	return ": " + message
@@ -1108,7 +1483,7 @@ func rpcErrorSuffix(value any) string {
 
 func httpErrorSuffix(rpc map[string]any, body []byte) string {
 	for _, key := range []string{"detail", "error", "message"} {
-		if value := stringValue(rpc[key]); value != "unknown" && strings.TrimSpace(value) != "" {
+		if value := stringValue(rpc[key]); strings.TrimSpace(value) != "" {
 			return ": " + value
 		}
 	}
@@ -1157,24 +1532,6 @@ func outboundAuthorization(r *http.Request) string {
 	for _, header := range []string{"X-Forwarded-Access-Token", "X-Auth-Request-Access-Token"} {
 		if value := strings.TrimSpace(r.Header.Get(header)); value != "" {
 			return "Bearer " + value
-		}
-	}
-	return ""
-}
-
-func firstHeader(r *http.Request, names ...string) string {
-	for _, name := range names {
-		if value := strings.TrimSpace(r.Header.Get(name)); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
 		}
 	}
 	return ""
@@ -1331,7 +1688,7 @@ func advertisedToolNames(rpc map[string]any) []string {
 	names := make([]string, 0, len(tools))
 	for _, item := range tools {
 		tool, _ := item.(map[string]any)
-		if name := stringValue(tool["name"]); name != "unknown" {
+		if name := stringValue(tool["name"]); name != "" {
 			names = append(names, name)
 		}
 	}
@@ -1354,7 +1711,11 @@ func deterministicReply(tool string, result map[string]any) string {
 	case "tools/list":
 		return describeDiscoveredTools(content)
 	case "whoami":
-		return "The Go MCP server accepted the local ChatGPT identity `" + stringValue(content["subject"]) + "`."
+		subject := stringValue(content["subject"])
+		if subject == "" {
+			subject = "unidentified"
+		}
+		return "The Go MCP server accepted the local ChatGPT identity `" + subject + "`."
 	case "route_trace":
 		return "The Go MCP server returned local route evidence. The inspector shows the full JSON."
 	case "infer":
@@ -1389,6 +1750,9 @@ func discoveredToolsResult(rpc map[string]any) map[string]any {
 	for _, item := range tools {
 		tool, _ := item.(map[string]any)
 		name := stringValue(tool["name"])
+		if name == "" {
+			continue
+		}
 		title := stringValue(tool["title"])
 		description := stringValue(tool["description"])
 		summaries = append(summaries, map[string]any{
@@ -1410,14 +1774,14 @@ func describeDiscoveredTools(content map[string]any) string {
 	switch tools := content["tools"].(type) {
 	case []map[string]any:
 		for _, tool := range tools {
-			if name := stringValue(tool["name"]); name != "unknown" {
+			if name := stringValue(tool["name"]); name != "" {
 				names = append(names, "`"+name+"`")
 			}
 		}
 	case []any:
 		for _, item := range tools {
 			tool, _ := item.(map[string]any)
-			if name := stringValue(tool["name"]); name != "unknown" {
+			if name := stringValue(tool["name"]); name != "" {
 				names = append(names, "`"+name+"`")
 			}
 		}
@@ -1449,32 +1813,11 @@ func titleForTool(name string) string {
 }
 
 func writeRPC(w http.ResponseWriter, id any, result any) {
-	writeJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 }
 
 func writeRPCError(w http.ResponseWriter, id any, code int, message string) {
-	writeJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": message}})
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	defer r.Body.Close()
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(out); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
-		return false
-	}
-	return true
-}
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
-}
-
-func setFrontendCacheHeaders(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": message}})
 }
 
 func remarshal(in any, out any) error {
@@ -1487,9 +1830,9 @@ func remarshal(in any, out any) error {
 
 func stringValue(value any) string {
 	if text, ok := value.(string); ok {
-		return text
+		return strings.TrimSpace(text)
 	}
-	return "unknown"
+	return ""
 }
 
 func callbackHTML(title string, body string) string {
@@ -1499,14 +1842,6 @@ func callbackHTML(title string, body string) string {
 func htmlEscape(value string) string {
 	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return replacer.Replace(value)
-}
-
-func logMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started := time.Now()
-		next.ServeHTTP(w, r)
-		_ = started
-	})
 }
 
 type rpcRequest struct {
@@ -1568,7 +1903,7 @@ type connector struct {
 }
 
 func (r *connectorRequest) normalizeOAuthAdvanced() {
-	r.OAuthClientMode = defaultString(strings.TrimSpace(r.OAuthClientMode), "USER_DEFINED")
+	r.OAuthClientMode = apphttp.StringDefault(strings.TrimSpace(r.OAuthClientMode), "USER_DEFINED")
 	r.OAuthClientID = strings.TrimSpace(r.OAuthClientID)
 	r.OAuthClientSecret = strings.TrimSpace(r.OAuthClientSecret)
 	r.OAuthTokenEndpointAuthMethod = strings.TrimSpace(r.OAuthTokenEndpointAuthMethod)
@@ -1638,22 +1973,4 @@ func dedupeStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
-}
-
-func defaultString(value string, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func parseBoolDefault(value string, fallback bool) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "":
-		return fallback
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
 }

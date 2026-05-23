@@ -16,10 +16,6 @@ type Config struct {
 	ProviderRangeSources map[string]string
 }
 
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
 type subnetIPv4Request struct {
 	Network string `json:"network"`
 	Mode    string `json:"mode"`

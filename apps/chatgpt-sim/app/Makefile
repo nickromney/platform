@@ -1,4 +1,4 @@
-.PHONY: help test js-check build build-linux run-mcp run-shell
+.PHONY: help test js-check build build-linux run-mcp run-shell clean
 
 CHATGPT_LOCAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 
@@ -10,12 +10,13 @@ help:
 	@echo "  build-linux  Build the Linux binary used by compose/kind images"
 	@echo "  run-mcp      Run the MCP role directly"
 	@echo "  run-shell    Run the shell role directly"
+	@echo "  clean        Remove generated .run artifacts"
 
 test:
 	go test ./...
 
 js-check:
-	biome check internal/app/web/app.js internal/app/web/api-types.d.ts
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html internal/app/web/style.css
 	deno check --check-js internal/app/web/app.js
 
 build:
@@ -31,3 +32,6 @@ run-mcp:
 
 run-shell:
 	ROLE=shell PORT=18083 MCP_URL=http://localhost:18082/mcp go run ./cmd/chatgpt-sim
+
+clean:
+	rm -rf .run

@@ -87,7 +87,7 @@ jobs:
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:latest"
 
-          DOCKER_BUILDKIT=1 docker build --provenance=false -f "${APPS_DIR}/apim-simulator/Dockerfile" -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${APPS_DIR}/apim-simulator"
+          DOCKER_BUILDKIT=1 docker build --provenance=false -f "${APPS_DIR}/apim-simulator/app/Dockerfile" -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${APPS_DIR}/apim-simulator"
           docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}"
           docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"

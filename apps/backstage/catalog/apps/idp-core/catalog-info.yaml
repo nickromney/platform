@@ -1,0 +1,53 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: idp-core
+  title: Portal API
+  description: Go product API for catalog, runtime, environment, deployment, secret, and action contracts.
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/idp-core/
+    backstage.io/kubernetes-label-selector: app=idp-core
+  links:
+    - url: https://portal-api.127.0.0.1.sslip.io
+      title: Portal API
+      icon: api
+spec:
+  type: service
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  providesApis:
+    - idp-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: idp-api
+  title: IDP API
+  description: HTTP API used by Backstage, SDKs, MCP, and automation clients.
+spec:
+  type: openapi
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: Local IDP API
+      version: 0.1.0
+    paths:
+      /api/v1/runtime:
+        get:
+          responses:
+            '200':
+              description: Runtime status
+      /api/v1/catalog/apps:
+        get:
+          responses:
+            '200':
+              description: Application catalog
+      /api/v1/environments:
+        post:
+          responses:
+            '200':
+              description: Environment dry-run or request result

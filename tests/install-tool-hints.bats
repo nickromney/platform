@@ -90,3 +90,18 @@ EOF
   [[ "${output}" == *"bun: brew install bun"* ]]
   [[ "${output}" == *"npx: brew install node"* ]]
 }
+
+@test "install-tool-hints reports missing platform facts without unknown placeholders" {
+  cat >"${TEST_BIN}/uname" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/uname"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute docker
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"unknown"* ]]
+  [[ "${output}" == *"Install hints for OS not reported architecture not reported"* ]]
+}

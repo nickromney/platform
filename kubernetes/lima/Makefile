@@ -510,7 +510,7 @@ stop-lima:
 			limactl stop "$$vm" >/dev/null; \
 			stopped=$$((stopped + 1)); \
 		else \
-			echo "Skipping $$vm ($${status:-unknown})"; \
+			echo "Skipping $$vm ($${status:-not reported})"; \
 		fi; \
 	done <<< "$$vm_names"; \
 	if [ "$$stopped" -eq 0 ]; then \

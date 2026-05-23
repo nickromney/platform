@@ -4,29 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Langfuse Trace Chat</title>
+    <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="/style.css">
-    <script src="/idpauth.js"></script>
-    <script src="/runtime-config.js"></script>
-    <script defer src="/app.js"></script>
+    <link rel="stylesheet" href="/app-shell.css">
   </head>
   <body>
-    <main>
-      <header>
-        <div>
-          <p class="eyebrow">Langfuse demos</p>
-          <h1 id="app-title">Langfuse Trace Chat</h1>
-          <p id="scenario-copy" class="scenario-copy">Single prompt to one generation with response quality scores.</p>
-          <p id="prereq-note" class="prereq-note"></p>
-        </div>
-        <div class="header-actions">
-          <p id="auth-state" class="auth-state">Not signed in.</p>
-          <button id="logout-btn" class="sign-in-link" type="button" data-sign-out-url="/oauth2/sign_out?rd=/signed-out.html" hidden>Sign Out</button>
-          <a href="/metrics">Metrics</a>
-        </div>
-      </header>
-
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header>
+      <div>
+        <p class="eyebrow">Langfuse demos</p>
+        <h1 id="app-title">Langfuse Trace Chat</h1>
+        <p id="scenario-copy" class="scenario-copy">Single prompt to one generation with response quality scores.</p>
+        <p id="prereq-note" class="prereq-note"></p>
+      </div>
+      <div class="header-actions">
+        <p id="auth-state" class="auth-state">Not signed in.</p>
+        <button id="logout-btn" class="sign-in-link" type="button" data-sign-out-url="/oauth2/sign_out?rd=/signed-out.html" hidden>Sign Out</button>
+        <button id="theme-switcher" class="theme-toggle" type="button" aria-label="Theme: system. Switch to light theme." title="Theme: system. Switch to light theme." data-theme-choice="system"></button>
+        <a href="/metrics">Metrics</a>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
       <section class="workspace">
-        <form id="run-form" class="runner" data-run-endpoint="/api/run">
+        <form id="run-form" class="app-panel runner" data-run-endpoint="/api/run">
           <div>
             <p class="eyebrow">Capability path</p>
             <ul id="capability-list" class="capability-list"></ul>
@@ -36,7 +36,9 @@
           <button id="run-button" type="submit">Run Demo</button>
         </form>
 
-        <section class="results" aria-live="polite">
+        <section class="app-panel results" aria-live="polite" aria-labelledby="results-heading">
+          <h2 id="results-heading">Run Results</h2>
+          <p id="run-status" class="run-status" role="status" aria-live="polite">Ready to run.</p>
           <div class="result-head">
             <div>
               <p class="eyebrow">Trace</p>
@@ -65,7 +67,7 @@
         </section>
       </section>
 
-      <section id="metrics-panel" class="metrics-panel" aria-labelledby="metrics-heading">
+      <section id="metrics-panel" class="app-panel metrics-panel" aria-labelledby="metrics-heading">
         <div class="panel-head">
           <div>
             <p class="eyebrow">Prometheus</p>
@@ -79,5 +81,9 @@
         <pre id="metrics-output">Metrics load here so you can stay on the demo page while Prometheus scrapes /metrics.</pre>
       </section>
     </main>
+    <script src="/runtime-config.js"></script>
+    <script src="/idpauth.js"></script>
+    <script src="/app-shell.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>

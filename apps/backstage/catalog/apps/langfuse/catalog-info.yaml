@@ -1,0 +1,25 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: langfuse
+  title: Langfuse
+  description: Local observability workspace for LLM traces, generations, scores, and evaluations.
+  tags:
+    - llm
+    - observability
+    - traces
+  annotations:
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/terraform/kubernetes/apps/langfuse/
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=langfuse
+  links:
+    - url: https://langfuse.admin.127.0.0.1.sslip.io
+      title: Langfuse
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io/d/langfuse-agent-flow/langfuse-agent-flow
+      title: Langfuse Agent Flow
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: platform
+  owner: group:default/platform
+  system: local-idp

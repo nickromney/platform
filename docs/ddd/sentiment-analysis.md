@@ -24,7 +24,7 @@ Supporting concerns are:
 - legacy SST model loading and warmup
 
 The supporting stack is substantial, but the actual business model is compact.
-The default implementation now lives in `apps/sentiment/app-go`: one Go
+The default implementation now lives in `apps/sentiment/app`: one Go
 codebase and image, selected at runtime with `RUNTIME_ROLE=backend` or
 `RUNTIME_ROLE=frontend`.
 
@@ -78,7 +78,7 @@ The current tests describe meaningful domain rules:
 - the historical SST-based path is now a legacy/model-backed experiment
 
 Those rules are visible in
-[server_test.go](../../apps/sentiment/app-go/internal/app/server_test.go). The
+[server_test.go](../../apps/sentiment/app/internal/app/server_test.go). The
 older JavaScript tests remain useful as migration references for the deprecated
 Node API and Vite UI.
 

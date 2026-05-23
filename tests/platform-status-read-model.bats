@@ -125,6 +125,46 @@ EOF
   [ "${output}" = "0.1|platform-status|true|false|kubernetes/kind|true|true|true|false|false|shared host ports|kubernetes/kind|make -C kubernetes/lima status|2" ]
 }
 
+@test "status read model reports missing status fields without unknown placeholders" {
+  status_stub="${BATS_TEST_TMPDIR}/platform-status-missing-fields.sh"
+
+  cat >"${status_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$*" != "--execute --output json" ]]; then
+  printf 'unexpected args: %s\n' "$*" >&2
+  exit 64
+fi
+
+cat <<'JSON'
+{
+  "generated_at": "2026-05-03T12:00:00Z",
+  "active_variant": null,
+  "active_variant_path": null,
+  "variants_order": ["kind"],
+  "variants": {
+    "kind": {
+      "path": "kubernetes/kind",
+      "blockers": [],
+      "readiness": {}
+    }
+  },
+  "actions": []
+}
+JSON
+EOF
+  chmod +x "${status_stub}"
+
+  run env PLATFORM_STATUS_READ_MODEL_STATUS_SCRIPT="${status_stub}" "${SCRIPT}" --execute --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Overall: not reported"* ]]
+  [[ "${output}" == *"kubernetes/kind: not reported"* ]]
+  [[ "${output}" != *"unknown"* ]]
+  [[ "${output}" != *"Unknown"* ]]
+}
+
 @test "status read model previews without execute" {
   run "${SCRIPT}" --output json
 

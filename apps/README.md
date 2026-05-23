@@ -12,6 +12,9 @@ This directory contains the source applications that feed the local platform dem
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)
 - [`apim-simulator/`](apim-simulator/) contains the local Azure API Management simulator used by the Kubernetes APIM gateway demo and by app-local compose workflows.
   It is a small Go app with embedded HTML/CSS/JavaScript and direct/SSO local compose workflows.
+- [`chatgpt-sim/`](chatgpt-sim/) contains the ChatGPT-style shell and MCP demo,
+  implemented as a small Go service with embedded HTML/CSS/JavaScript and
+  local compose workflows for direct and SSO-protected runs.
 - [`idp-core/`](idp-core/) contains the Portal API as a Go single-binary app
   under `idp-core/app`.
 - [`idp-mcp/`](idp-mcp/) contains a small dependency-free stdlib MCP adapter for
@@ -20,6 +23,15 @@ This directory contains the source applications that feed the local platform dem
   Portal clients.
 - [`platform-mcp/`](platform-mcp/) contains the production MCP service. It keeps
   the MCP SDK as an intentional protocol dependency.
+- [`langfuse-demos/`](langfuse-demos/) contains lightweight Go demo roles for
+  trace, tool-agent, and eval flows against Langfuse and an OpenAI-compatible
+  model endpoint.
+- [`shared/apphttp/`](shared/apphttp/) contains dependency-free Go HTTP helpers
+  for repeated JSON response and bounded decode behaviour in lightweight apps.
+- [`shared/appshell/`](shared/appshell/) contains the shared vanilla app shell
+  CSS/JavaScript and route/cache helpers used by browser-facing apps.
+- [`shared/idpauth/`](shared/idpauth/) contains provider-neutral OIDC and
+  gateway-session helpers shared by the Go apps and browser bundles.
 - [`backstage/`](backstage/) contains Portal. It is an intentional Backstage
   exception to the lightweight app rule and remains resource-gated in the local
   Kubernetes profiles.

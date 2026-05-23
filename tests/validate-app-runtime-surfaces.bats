@@ -5,177 +5,762 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
-@test "repo-owned app Dockerfiles pin numeric runtime users" {
-  run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-repo_root = Path(os.environ["REPO_ROOT"])
-
-expected_users = {
-    "apps/sentiment/app/Dockerfile": "65532:65532",
-    "apps/subnetcalc/app/Dockerfile": "65532:65532",
+teardown() {
+  rm -rf "${REPO_ROOT}/apps/zz-test-dockerfile-runtime"
+  rm -rf "${REPO_ROOT}/apps/zz-test-compose-healthcheck"
+  rm -rf "${REPO_ROOT}/apps/zz-test-compose-hardening"
+  rm -rf "${REPO_ROOT}/apps/zz-test-sso-allowlist"
 }
 
-for relative_path, expected_user in expected_users.items():
-    lines = (repo_root / relative_path).read_text(encoding="utf-8").splitlines()
-    user_lines = [line.strip() for line in lines if line.strip().startswith("USER ")]
-    assert user_lines, relative_path
-    actual_user = user_lines[-1].split(None, 1)[1]
-    assert actual_user == expected_user, (relative_path, expected_user, actual_user)
-
-print(f"validated {len(expected_users)} Dockerfile(s)")
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 2 Dockerfile(s)"* ]]
-}
-
-@test "compose app services use hardened runtime settings" {
+@test "app runtime tests share compose service discovery helpers" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import iter_browser_sso_compose_services, iter_go_app_dockerfiles
 
 repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+helper = repo_root / "tests" / "app_contracts.py"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "Go app Dockerfile discovery should move" not in line
+]
 
+assert helper.exists(), "tests/app_contracts.py should own reusable app contract helpers"
+assert content.count("\ndef service_dockerfile") == 0, "inline service_dockerfile helpers should move to tests/app_contracts.py"
+assert content.count("\ndef is_go_app_dockerfile") == 0, "inline Go Dockerfile predicates should move to tests/app_contracts.py"
+assert not any('repo_root / "apps").glob("*/app/Dockerfile")' in line for line in contract_lines), "Go app Dockerfile discovery should move to tests/app_contracts.py"
+assert "iter_go_app_compose_services" in content, "runtime contracts should call the shared compose service iterator"
+assert "iter_browser_sso_compose_services" in content, "browser SSO contracts should call the shared compose service iterator"
+assert "iter_go_app_dockerfiles" in content, "Dockerfile contracts should call the shared Go app Dockerfile iterator"
+assert callable(iter_browser_sso_compose_services)
+assert callable(iter_go_app_dockerfiles)
 
-def load_yaml(relative_path: str) -> dict:
-    return yaml.safe_load((repo_root / relative_path).read_text(encoding="utf-8"))
-
-
-def assert_tmpfs(service: dict, required_entries: list[str], relative_path: str, service_name: str) -> None:
-    tmpfs_entries = service.get("tmpfs", [])
-    for required in required_entries:
-      assert required in tmpfs_entries, (relative_path, service_name, required, tmpfs_entries)
-
-
-compose_expectations = {
-    "apps/sentiment/compose.yml": {
-        "sentiment-api": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "sentiment-auth-frontend": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "edge": {
-            "user": "65532:65532",
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
-        },
-    },
-    "apps/subnetcalc/compose.yml": {
-        "subnetcalc-backend": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "subnetcalc-frontend": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-    },
-    "docker/compose/compose.yml": {
-        "edge": {
-            "user": "65532:65532",
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
-        },
-        "subnetcalc-api-dev": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "subnetcalc-api-uat": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "subnetcalc-frontend-dev": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "subnetcalc-frontend-uat": {
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": ["/tmp:rw,noexec,nosuid,nodev,mode=1777"],
-        },
-        "subnetcalc-router-dev": {
-            "user": "65532:65532",
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
-        },
-        "subnetcalc-router-uat": {
-            "user": "65532:65532",
-            "read_only": True,
-            "cap_drop": ["ALL"],
-            "security_opt": ["no-new-privileges:true"],
-            "tmpfs": [
-                "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-                "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-                "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-            ],
-        },
-    },
-}
-
-validated = 0
-for relative_path, services in compose_expectations.items():
-    compose = load_yaml(relative_path)
-    for service_name, expected in services.items():
-        service = compose["services"][service_name]
-        for key in ("user", "read_only", "cap_drop", "security_opt"):
-            if key in expected:
-                assert service.get(key) == expected[key], (relative_path, service_name, key, expected[key], service.get(key))
-        if "tmpfs" in expected:
-            assert_tmpfs(service, expected["tmpfs"], relative_path, service_name)
-        if "build_args" in expected:
-            build = service.get("build", {})
-            assert build.get("args") == expected["build_args"], (relative_path, service_name, build.get("args"))
-        validated += 1
-
-print(f"validated {validated} compose service(s)")
+print("validated shared app contract helper usage")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 12 compose service(s)"* ]]
+  [[ "${output}" == *"validated shared app contract helper usage"* ]]
+}
+
+@test "lightweight app source trees avoid literal unknown tokens" {
+  run python3 - <<PY
+from pathlib import Path
+
+from tests.app_contracts import lightweight_app_source_unknown_token_contract_violations
+
+violations = lightweight_app_source_unknown_token_contract_violations(Path("${REPO_ROOT}"))
+assert not violations, violations
+print("validated lightweight app source unknown-token contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated lightweight app source unknown-token contract"* ]]
+}
+
+@test "app discovery metadata avoids literal unknown placeholders" {
+  run python3 - <<PY
+from pathlib import Path
+
+from tests.app_contracts import app_discovery_metadata_unknown_token_contract_violations
+
+violations = app_discovery_metadata_unknown_token_contract_violations(Path("${REPO_ROOT}"))
+assert not violations, violations
+print("validated app discovery metadata unknown-token contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated app discovery metadata unknown-token contract"* ]]
+}
+
+@test "browser Go apps share static asset serving helpers" {
+  run python3 - <<PY
+from pathlib import Path
+
+from tests.app_contracts import browser_app_static_asset_go_contract_violations
+
+violations = browser_app_static_asset_go_contract_violations(Path("${REPO_ROOT}"))
+assert not violations, violations
+print("validated browser Go static asset helper contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated browser Go static asset helper contract"* ]]
+}
+
+@test "browser Go app health payloads expose canonical dependency footprints" {
+  run python3 - <<PY
+from pathlib import Path
+
+from tests.app_contracts import browser_app_health_dependency_footprint_contract_violations
+
+violations = browser_app_health_dependency_footprint_contract_violations(Path("${REPO_ROOT}"))
+assert not violations, violations
+print("validated browser Go app health dependency footprint contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated browser Go app health dependency footprint contract"* ]]
+}
+
+@test "app runtime tests share compose hardening helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import compose_hardening_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "compose hardening policy should move" not in line
+]
+
+assert callable(compose_hardening_contract_violations)
+assert "compose_hardening_contract_violations" in content, "compose hardening contracts should call tests/app_contracts.py"
+assert not any("go_service_expectation =" in line for line in contract_lines), "compose hardening policy should move to tests/app_contracts.py"
+assert not any("explicit_expectations =" in line for line in contract_lines), "compose hardening policy should move to tests/app_contracts.py"
+
+print("validated shared compose hardening helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared compose hardening helper usage"* ]]
+}
+
+@test "app runtime tests share Go compose healthcheck helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import go_compose_healthcheck_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "Go compose healthcheck policy should move" not in line
+]
+
+assert callable(go_compose_healthcheck_contract_violations)
+assert "go_compose_healthcheck_contract_violations" in content, "Go compose healthcheck contracts should call tests/app_contracts.py"
+assert not any('healthcheck = service.get("healthcheck"' in line for line in contract_lines), "Go compose healthcheck policy should move to tests/app_contracts.py"
+assert not any('healthcheck[0] == "CMD"' in line for line in contract_lines), "Go compose healthcheck policy should move to tests/app_contracts.py"
+assert not any('healthcheck[-1] == "healthcheck"' in line for line in contract_lines), "Go compose healthcheck policy should move to tests/app_contracts.py"
+
+print("validated shared Go compose healthcheck helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Go compose healthcheck helper usage"* ]]
+}
+
+@test "app runtime tests share browser SSO static allowlist helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import browser_sso_static_allowlist_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "browser SSO static allowlist policy should move" not in line
+]
+
+assert callable(browser_sso_static_allowlist_contract_violations)
+assert "browser_sso_static_allowlist_contract_violations" in content, "browser SSO static allowlist contracts should call tests/app_contracts.py"
+assert not any("skip_auth = next" in line for line in contract_lines), "browser SSO static allowlist policy should move to tests/app_contracts.py"
+assert not any('"app-shell\\\\.css" in skip_auth' in line for line in contract_lines), "browser SSO static allowlist policy should move to tests/app_contracts.py"
+assert not any('"styles\\\\.css" not in skip_auth' in line for line in contract_lines), "browser SSO static allowlist policy should move to tests/app_contracts.py"
+
+print("validated shared browser SSO static allowlist helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared browser SSO static allowlist helper usage"* ]]
+}
+
+@test "app runtime tests share Dockerfile runtime user helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import dockerfile_runtime_user_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "Dockerfile runtime user policy should move" not in line
+]
+
+assert callable(dockerfile_runtime_user_contract_violations)
+assert "dockerfile_runtime_user_contract_violations" in content, "Dockerfile runtime user contracts should call tests/app_contracts.py"
+assert not any("user_lines =" in line for line in contract_lines), "Dockerfile runtime user policy should move to tests/app_contracts.py"
+assert not any('actual_user == "65532:65532"' in line for line in contract_lines), "Dockerfile runtime user policy should move to tests/app_contracts.py"
+
+print("validated shared Dockerfile runtime user helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Dockerfile runtime user helper usage"* ]]
+}
+
+@test "app runtime tests share sentiment compose diagnostics helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import sentiment_compose_diagnostics_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "sentiment compose diagnostics policy should move" not in line
+]
+
+assert callable(sentiment_compose_diagnostics_contract_violations)
+assert "sentiment_compose_diagnostics_contract_violations" in content, "sentiment compose diagnostics contracts should call tests/app_contracts.py"
+assert not any('frontend = compose["services"]["sentiment-auth-frontend"]' in line for line in contract_lines), "sentiment compose diagnostics policy should move to tests/app_contracts.py"
+assert not any('assert env["SHOW_NETWORK_PATH"]' in line for line in contract_lines), "sentiment compose diagnostics policy should move to tests/app_contracts.py"
+assert not any('json.loads(env["NETWORK_HOPS"])' in line for line in contract_lines), "sentiment compose diagnostics policy should move to tests/app_contracts.py"
+
+print("validated shared sentiment compose diagnostics helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared sentiment compose diagnostics helper usage"* ]]
+}
+
+@test "app runtime tests share subnetcalc compose topology helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import subnetcalc_compose_topology_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "subnetcalc compose topology policy should move" not in line
+]
+
+assert callable(subnetcalc_compose_topology_contract_violations)
+assert "subnetcalc_compose_topology_contract_violations" in content, "subnetcalc compose topology contracts should call tests/app_contracts.py"
+assert not any("default_services =" in line for line in contract_lines), "subnetcalc compose topology policy should move to tests/app_contracts.py"
+assert not any("sso_services =" in line for line in contract_lines), "subnetcalc compose topology policy should move to tests/app_contracts.py"
+assert not any('services["oauth2-proxy"]["command"].count("--cookie-refresh=1h")' in line for line in contract_lines), "subnetcalc compose topology policy should move to tests/app_contracts.py"
+
+print("validated shared subnetcalc compose topology helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared subnetcalc compose topology helper usage"* ]]
+}
+
+@test "app runtime tests share subnetcalc runtime config helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import subnetcalc_runtime_config_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "subnetcalc runtime config policy should move" not in line
+]
+
+assert callable(subnetcalc_runtime_config_contract_violations)
+assert "subnetcalc_runtime_config_contract_violations" in content, "subnetcalc runtime config contracts should call tests/app_contracts.py"
+assert not any('app_js = (repo_root / "apps/subnetcalc/app/internal/app/web/app.js")' in line for line in contract_lines), "subnetcalc runtime config policy should move to tests/app_contracts.py"
+assert not any('assert \'"authMethod"\' in server_go' in line for line in contract_lines), "subnetcalc runtime config policy should move to tests/app_contracts.py"
+assert not any('"window.SUBNETCALC_RUNTIME_CONFIG" in server_go' in line for line in contract_lines), "subnetcalc runtime config policy should move to tests/app_contracts.py"
+
+print("validated shared subnetcalc runtime config helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared subnetcalc runtime config helper usage"* ]]
+}
+
+@test "app runtime tests share sign-out landing page helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import shared_sign_out_page_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "sign-out landing page policy should move" not in line
+]
+
+assert callable(shared_sign_out_page_contract_violations)
+assert "shared_sign_out_page_contract_violations" in content, "sign-out landing page contracts should call tests/app_contracts.py"
+assert not any("appshell.SignedOutPage" in line and "assert" in line for line in contract_lines), "sign-out landing page policy should move to tests/app_contracts.py"
+assert not any('AppName:     "IPv4 Subnet Calculator"' in line and "assert" in line for line in contract_lines), "sign-out landing page policy should move to tests/app_contracts.py"
+assert not any('for text in ("Signed out", "Sign in now", "/.auth/login/sso")' in line for line in contract_lines), "sign-out landing page policy should move to tests/app_contracts.py"
+
+print("validated shared sign-out landing page helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared sign-out landing page helper usage"* ]]
+}
+
+@test "app runtime tests share Kubernetes workload runtime user helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import kubernetes_workload_runtime_user_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "Kubernetes workload runtime user policy should move" not in line
+]
+
+assert callable(kubernetes_workload_runtime_user_contract_violations)
+assert "kubernetes_workload_runtime_user_contract_violations" in content, "Kubernetes workload runtime user contracts should call tests/app_contracts.py"
+assert not any('"sentiment-api": {"runAsUser": 1000' in line for line in contract_lines), "Kubernetes workload runtime user policy should move to tests/app_contracts.py"
+assert not any('pod_security = deployment["spec"]["template"]["spec"].get("securityContext", {})' in line for line in contract_lines), "Kubernetes workload runtime user policy should move to tests/app_contracts.py"
+assert not any('for deployment_name, expected_security in expected.items()' in line for line in contract_lines), "Kubernetes workload runtime user policy should move to tests/app_contracts.py"
+
+print("validated shared Kubernetes workload runtime user helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Kubernetes workload runtime user helper usage"* ]]
+}
+
+@test "app runtime tests share browser router auth and API routing helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import browser_router_auth_api_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "browser router auth/API policy should move" not in line
+]
+
+assert callable(browser_router_auth_api_contract_violations)
+assert "browser_router_auth_api_contract_violations" in content, "browser router auth/API contracts should call tests/app_contracts.py"
+assert not any('"subnetcalc-router-nginx"' in line for line in contract_lines), "browser router auth/API policy should move to tests/app_contracts.py"
+assert not any('"sentiment-router-nginx"' in line for line in contract_lines), "browser router auth/API policy should move to tests/app_contracts.py"
+assert not any('"proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;"' in line for line in contract_lines), "browser router auth/API policy should move to tests/app_contracts.py"
+assert not any('"proxy_set_header Authorization' in line for line in contract_lines), "browser router auth/API policy should move to tests/app_contracts.py"
+
+print("validated shared browser router auth/API helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared browser router auth/API helper usage"* ]]
+}
+
+@test "app runtime tests share sentiment Kubernetes frontend and APIM helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import sentiment_kubernetes_frontend_apim_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content[
+        content.index('@test "sentiment router protects the frontend and sends API calls through APIM"'):
+    ].splitlines()
+    if "sentiment Kubernetes frontend/APIM policy should move" not in line
+]
+
+assert callable(sentiment_kubernetes_frontend_apim_contract_violations)
+assert "sentiment_kubernetes_frontend_apim_contract_violations" in content, "sentiment Kubernetes frontend/APIM contracts should call tests/app_contracts.py"
+assert not any('"NETWORK_HOPS"' in line for line in contract_lines), "sentiment Kubernetes frontend/APIM policy should move to tests/app_contracts.py"
+assert not any('"sentiment-api-dev"' in line for line in contract_lines), "sentiment Kubernetes frontend/APIM policy should move to tests/app_contracts.py"
+assert not any('"subnetcalc-apim-simulator-config"' in line for line in contract_lines), "sentiment Kubernetes frontend/APIM policy should move to tests/app_contracts.py"
+assert not any('"X-Apim-Bypass-Subscription"' in line for line in contract_lines), "sentiment Kubernetes frontend/APIM policy should move to tests/app_contracts.py"
+
+print("validated shared sentiment Kubernetes frontend/APIM helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared sentiment Kubernetes frontend/APIM helper usage"* ]]
+}
+
+@test "app runtime tests share sentiment API Kubernetes runtime helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import sentiment_api_kubernetes_runtime_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content[
+        content.index('@test "Go sentiment workload has a bounded laptop runtime profile and health probes"'):
+    ].splitlines()
+    if "sentiment API Kubernetes runtime policy should move" not in line
+]
+
+assert callable(sentiment_api_kubernetes_runtime_contract_violations)
+assert "sentiment_api_kubernetes_runtime_contract_violations" in content, "sentiment API Kubernetes runtime contracts should call tests/app_contracts.py"
+assert not any('"OIDC_JWKS_URI"' in line for line in contract_lines), "sentiment API Kubernetes runtime policy should move to tests/app_contracts.py"
+assert not any('"768Mi"' in line for line in contract_lines), "sentiment API Kubernetes runtime policy should move to tests/app_contracts.py"
+assert not any('"/api/v1/health/ready"' in line for line in contract_lines), "sentiment API Kubernetes runtime policy should move to tests/app_contracts.py"
+
+print("validated shared sentiment API Kubernetes runtime helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared sentiment API Kubernetes runtime helper usage"* ]]
+}
+
+@test "app runtime tests share ChatGPT Sim compose LLM and Langfuse helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import chatgpt_sim_compose_llm_langfuse_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content[
+        content.index('@test "chatgpt-sim compose can target external OpenAI-compatible LLMs and Langfuse"'):
+    ].splitlines()
+    if "ChatGPT Sim compose LLM/Langfuse policy should move" not in line
+]
+
+assert callable(chatgpt_sim_compose_llm_langfuse_contract_violations)
+assert "chatgpt_sim_compose_llm_langfuse_contract_violations" in content, "ChatGPT Sim compose LLM/Langfuse contracts should call tests/app_contracts.py"
+assert not any('"LLM_URL"' in line for line in contract_lines), "ChatGPT Sim compose LLM/Langfuse policy should move to tests/app_contracts.py"
+assert not any('"LANGFUSE_TIMEOUT_SECONDS"' in line for line in contract_lines), "ChatGPT Sim compose LLM/Langfuse policy should move to tests/app_contracts.py"
+assert not any('"${PLATFORM_LLM_MODEL:-go-local-openai-compatible-stub}"' in line for line in contract_lines), "ChatGPT Sim compose LLM/Langfuse policy should move to tests/app_contracts.py"
+
+print("validated shared ChatGPT Sim compose LLM/Langfuse helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared ChatGPT Sim compose LLM/Langfuse helper usage"* ]]
+}
+
+@test "app runtime tests share Gitea workflow Go image build helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import gitea_workflow_go_image_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content[
+        content.index('@test "app Gitea workflows build the default Go runtime images"'):
+    ].splitlines()
+    if "Gitea workflow Go image policy should move" not in line
+]
+
+assert callable(gitea_workflow_go_image_contract_violations)
+assert "gitea_workflow_go_image_contract_violations" in content, "Gitea workflow Go image contracts should call tests/app_contracts.py"
+assert not any('"apps/sentiment/.gitea/workflows/build-images.yaml"' in line for line in contract_lines), "Gitea workflow Go image policy should move to tests/app_contracts.py"
+assert not any('"docker build --provenance=false -t' in line for line in contract_lines), "Gitea workflow Go image policy should move to tests/app_contracts.py"
+assert not any('"frontend-typescript-vite/Dockerfile"' in line for line in contract_lines), "Gitea workflow Go image policy should move to tests/app_contracts.py"
+
+print("validated shared Gitea workflow Go image helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Gitea workflow Go image helper usage"* ]]
+}
+
+@test "app runtime tests share subnetcalc runtime-config response helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import subnetcalc_runtime_config_response_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content[
+        content.index('@test "subnetcalc Go frontend serves runtime config directly from the binary"'):
+    ].splitlines()
+    if "subnetcalc runtime-config response policy should move" not in line
+]
+
+assert callable(subnetcalc_runtime_config_response_contract_violations)
+assert "subnetcalc_runtime_config_response_contract_violations" in content, "subnetcalc runtime-config response contracts should call tests/app_contracts.py"
+assert not any('"/runtime-config.js"' in line for line in contract_lines), "subnetcalc runtime-config response policy should move to tests/app_contracts.py"
+assert not any('"window.SUBNETCALC_RUNTIME_CONFIG"' in line for line in contract_lines), "subnetcalc runtime-config response policy should move to tests/app_contracts.py"
+assert not any('"application/javascript; charset=utf-8"' in line for line in contract_lines), "subnetcalc runtime-config response policy should move to tests/app_contracts.py"
+
+print("validated shared subnetcalc runtime-config response helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared subnetcalc runtime-config response helper usage"* ]]
+}
+
+@test "app runtime tests share oauth2-proxy token refresh helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import oauth2_proxy_token_refresh_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "oauth2-proxy token refresh policy should move" not in line
+]
+
+assert callable(oauth2_proxy_token_refresh_contract_violations)
+assert "oauth2_proxy_token_refresh_contract_violations" in content, "oauth2-proxy token refresh contracts should call tests/app_contracts.py"
+assert not any('start = sso_tf.index(f"name: {name}")' in line for line in contract_lines), "oauth2-proxy token refresh policy should move to tests/app_contracts.py"
+assert not any('"oauth2-proxy-sentiment-dev"' in line for line in contract_lines), "oauth2-proxy token refresh policy should move to tests/app_contracts.py"
+assert not any('"--pass-access-token=true"' in line and "assert" in line for line in contract_lines), "oauth2-proxy token refresh policy should move to tests/app_contracts.py"
+
+print("validated shared oauth2-proxy token refresh helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared oauth2-proxy token refresh helper usage"* ]]
+}
+
+@test "app runtime tests share image prebuild hook helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import image_prebuild_hook_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "image prebuild hook policy should move" not in line
+]
+
+assert callable(image_prebuild_hook_contract_violations)
+assert "image_prebuild_hook_contract_violations" in content, "image prebuild hook contracts should call tests/app_contracts.py"
+assert not any('"prebuild": "make -C apps/sentiment/app build-linux"' in line for line in contract_lines), "image prebuild hook policy should move to tests/app_contracts.py"
+assert not any('"apps/subnetcalc/app/go.sum"' in line for line in contract_lines), "image prebuild hook policy should move to tests/app_contracts.py"
+assert not any('"image_build_run_prebuild()"' in line for line in contract_lines), "image prebuild hook policy should move to tests/app_contracts.py"
+
+print("validated shared image prebuild hook helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image prebuild hook helper usage"* ]]
+}
+
+@test "app runtime tests share oauth2-proxy backend logout helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import oauth2_proxy_backend_logout_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+contract_lines = [
+    line
+    for line in content.splitlines()
+    if "oauth2-proxy backend logout policy should move" not in line
+]
+
+assert callable(oauth2_proxy_backend_logout_contract_violations)
+assert "oauth2_proxy_backend_logout_contract_violations" in content, "oauth2-proxy backend logout contracts should call tests/app_contracts.py"
+assert not any('"oauth2_proxy_backend_logout_url" in locals_tf' in line for line in contract_lines), "oauth2-proxy backend logout policy should move to tests/app_contracts.py"
+assert not any('"post.logout.redirect.uris" not in sso_tf' in line for line in contract_lines), "oauth2-proxy backend logout policy should move to tests/app_contracts.py"
+assert not any('sso_tf.count("${local.oauth2_proxy_backend_logout_arg}")' in line for line in contract_lines), "oauth2-proxy backend logout policy should move to tests/app_contracts.py"
+
+print("validated shared oauth2-proxy backend logout helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared oauth2-proxy backend logout helper usage"* ]]
+}
+
+@test "repo-owned app Dockerfiles pin numeric runtime users" {
+  temp_app="${REPO_ROOT}/apps/zz-test-dockerfile-runtime"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/app/go.mod" <<'EOF'
+module platform.local/zz-test-dockerfile-runtime
+
+go 1.26
+EOF
+  cat >"${temp_app}/app/Dockerfile" <<'EOF'
+FROM dhi.io/static:20260413-alpine3.23
+COPY --chown=65532:65532 .run/zz-test /zz-test
+USER 65532:65532
+ENTRYPOINT ["/zz-test"]
+EOF
+
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import dockerfile_runtime_user_contract_violations, dockerfile_runtime_user_validated_files
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+violations = dockerfile_runtime_user_contract_violations(repo_root)
+assert not violations, violations
+validated = dockerfile_runtime_user_validated_files(repo_root)
+
+print(f"validated {len(validated)} Dockerfile(s): {', '.join(validated)}")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"zz-test-dockerfile-runtime"* ]]
+}
+
+@test "compose app services use hardened runtime settings" {
+  temp_app="${REPO_ROOT}/apps/zz-test-compose-hardening"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/app/go.mod" <<'EOF'
+module platform.local/zz-test-compose-hardening
+
+go 1.26
+EOF
+  cat >"${temp_app}/app/Dockerfile" <<'EOF'
+FROM dhi.io/static:20260413-alpine3.23
+COPY --chown=65532:65532 .run/zz-test /zz-test
+USER 65532:65532
+ENTRYPOINT ["/zz-test"]
+EOF
+  cat >"${temp_app}/compose.yml" <<'EOF'
+services:
+  zz-test:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+EOF
+
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import compose_hardening_contract_violations, compose_hardening_validated_services
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+violations = compose_hardening_contract_violations(repo_root)
+assert not violations, violations
+validated_services = compose_hardening_validated_services(repo_root)
+print(f"validated {len(validated_services)} compose service(s): {', '.join(validated_services)}")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"zz-test-compose-hardening/compose.yml:zz-test"* ]]
 }
 
 @test "Go sentiment workload has a bounded laptop runtime profile and health probes" {
@@ -185,23 +770,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import sentiment_api_kubernetes_runtime_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8")))
-deployment = next(doc for doc in docs if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "sentiment-api")
-container = deployment["spec"]["template"]["spec"]["containers"][0]
-env = {item["name"]: str(item.get("value", "")) for item in container.get("env", [])}
-resources = container["resources"]
-
-assert env["AUTH_METHOD"] == "oidc", env
-assert env["OIDC_AUDIENCE"] == "apim-simulator", env
-assert env["OIDC_JWKS_URI"] == "http://keycloak.sso.svc.cluster.local:8080/realms/platform/protocol/openid-connect/certs", env
-assert resources["requests"]["memory"] == "768Mi", resources
-assert resources["limits"]["memory"] == "2048Mi", resources
-assert resources["limits"]["cpu"] == "1", resources
-assert container["readinessProbe"]["httpGet"]["path"] == "/api/v1/health/ready", container
-assert container["livenessProbe"]["httpGet"]["path"] == "/api/v1/health/live", container
+violations = sentiment_api_kubernetes_runtime_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated Go sentiment runtime profile")
 PY
@@ -210,73 +783,124 @@ PY
   [[ "${output}" == *"validated Go sentiment runtime profile"* ]]
 }
 
-@test "Go app compose healthchecks do not require /bin/sh" {
+@test "chatgpt-sim compose can target external OpenAI-compatible LLMs and Langfuse" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import chatgpt_sim_compose_llm_langfuse_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = chatgpt_sim_compose_llm_langfuse_contract_violations(repo_root)
+assert not violations, violations
 
-expectations = {
-    "apps/subnetcalc/compose.yml": {
-        "subnetcalc-backend": ["CMD", "/subnetcalc", "healthcheck"],
-        "subnetcalc-frontend": ["CMD", "/subnetcalc", "healthcheck"],
-    },
-    "apps/sentiment/compose.yml": {
-        "sentiment-api": ["CMD", "/sentiment", "healthcheck"],
-        "sentiment-auth-frontend": ["CMD", "/sentiment", "healthcheck"],
-    },
-}
-
-validated = 0
-for relative_path, services in expectations.items():
-    compose = yaml.safe_load((repo_root / relative_path).read_text(encoding="utf-8"))
-    for service_name, expected in services.items():
-        healthcheck = compose["services"][service_name]["healthcheck"]["test"]
-        assert healthcheck == expected, (relative_path, service_name, healthcheck)
-        validated += 1
-
-print(f"validated {validated} shell-free Go healthchecks")
+print("validated chatgpt-sim compose external LLM and Langfuse knobs")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 4 shell-free Go healthchecks"* ]]
+  [[ "${output}" == *"validated chatgpt-sim compose external LLM and Langfuse knobs"* ]]
+}
+
+@test "browser app compose SSO static allowlists match embedded asset names" {
+  temp_app="${REPO_ROOT}/apps/zz-test-sso-allowlist"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app/internal/app/web"
+  cat >"${temp_app}/app/go.mod" <<'EOF'
+module platform.local/zz-test-sso-allowlist
+
+go 1.26
+EOF
+  touch "${temp_app}/app/internal/app/web/index.html"
+  touch "${temp_app}/app/internal/app/web/style.css"
+  cat >"${temp_app}/compose.yml" <<'EOF'
+services:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+    command:
+      - --skip-auth-regex=^/(style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
+EOF
+
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import browser_sso_static_allowlist_contract_violations, browser_sso_static_allowlist_validated_apps
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+violations = browser_sso_static_allowlist_contract_violations(repo_root)
+assert not violations, violations
+validated = browser_sso_static_allowlist_validated_apps(repo_root)
+
+print(f"validated {len(validated)} browser app compose SSO static allowlist(s): {', '.join(validated)}")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"zz-test-sso-allowlist"* ]]
+}
+
+@test "Go app compose healthchecks do not require /bin/sh" {
+  temp_app="${REPO_ROOT}/apps/zz-test-compose-healthcheck"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/app/go.mod" <<'EOF'
+module platform.local/zz-test-compose-healthcheck
+
+go 1.26
+EOF
+  cat >"${temp_app}/app/Dockerfile" <<'EOF'
+FROM dhi.io/static:20260413-alpine3.23
+COPY --chown=65532:65532 .run/zz-test /zz-test
+USER 65532:65532
+ENTRYPOINT ["/zz-test"]
+EOF
+  cat >"${temp_app}/compose.yml" <<'EOF'
+services:
+  zz-test:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "/zz-test", "healthcheck"]
+EOF
+
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import go_compose_healthcheck_contract_violations, go_compose_healthcheck_validated_services
+
+repo_root = Path(os.environ["REPO_ROOT"])
+
+violations = go_compose_healthcheck_contract_violations(repo_root)
+assert not violations, violations
+validated_services = go_compose_healthcheck_validated_services(repo_root)
+
+print(f"validated {len(validated_services)} shell-free Go healthchecks: {', '.join(validated_services)}")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"zz-test-compose-healthcheck/compose.yml:zz-test"* ]]
 }
 
 @test "sentiment compose frontend exposes API proxy diagnostics" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import sentiment_compose_diagnostics_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-compose = yaml.safe_load((repo_root / "apps/sentiment/compose.yml").read_text(encoding="utf-8"))
-frontend = compose["services"]["sentiment-auth-frontend"]
-
-env = {}
-for item in frontend["environment"]:
-    key, value = item.split("=", 1)
-    env[key] = value
-
-assert env["RUNTIME_ROLE"] == "frontend", env
-assert env["BACKEND_URL"] == "${SENTIMENT_FRONTEND_BACKEND_URL:-http://sentiment-api:8080}", env
-assert env["API_BASE_PATH"] == "/api/v1", env
-assert env["SHOW_NETWORK_PATH"] == "${SENTIMENT_SHOW_NETWORK_PATH:-true}", env
-network_hops = json.loads(env["NETWORK_HOPS"])
-assert [hop["label"] for hop in network_hops] == [
-    "Browser",
-    "Sentiment edge",
-    "Sentiment frontend",
-    "Sentiment API",
-], network_hops
+violations = sentiment_compose_diagnostics_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated sentiment compose API proxy diagnostics")
 PY
@@ -292,29 +916,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import subnetcalc_compose_topology_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-compose = yaml.safe_load((repo_root / "apps/subnetcalc/compose.yml").read_text(encoding="utf-8"))
-
-services = compose["services"]
-default_services = {
-    name
-    for name, service in services.items()
-    if "profiles" not in service
-}
-sso_services = {
-    name
-    for name, service in services.items()
-    if service.get("profiles") == ["sso"]
-}
-
-assert default_services == {"subnetcalc-backend", "subnetcalc-frontend"}, default_services
-assert sso_services == {"keycloak", "edge", "oauth2-proxy"}, sso_services
-assert services["subnetcalc-backend"]["environment"]["RUNTIME_ROLE"] == "backend"
-assert services["subnetcalc-frontend"]["environment"]["RUNTIME_ROLE"] == "frontend"
-assert services["oauth2-proxy"]["command"].count("--cookie-refresh=1h") == 1
-assert "--pass-access-token=true" in services["oauth2-proxy"]["command"]
+violations = subnetcalc_compose_topology_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated toggleable subnetcalc compose services")
 PY
@@ -330,15 +936,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
-server_go = (repo_root / "apps/subnetcalc/app/internal/app/server.go").read_text(encoding="utf-8")
-app_js = (repo_root / "apps/subnetcalc/app/internal/app/web/app.js").read_text(encoding="utf-8")
+from tests.app_contracts import subnetcalc_runtime_config_contract_violations
 
-assert '"authMethod"' in server_go
-assert '"apiAuthMethod"' in server_go
-assert '"oidcAuthority"' in server_go
-assert "window.SUBNETCALC_RUNTIME_CONFIG" in server_go
-assert "config.apiAuthMethod === \"oidc\"" in app_js
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = subnetcalc_runtime_config_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated Go runtime config contract")
 PY
@@ -347,18 +949,18 @@ PY
   [[ "${output}" == *"validated Go runtime config contract"* ]]
 }
 
-@test "subnetcalc Go frontend ships sign-out landing page" {
+@test "subnetcalc Go frontend uses shared sign-out landing page" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
-logged_out = (repo_root / "apps/subnetcalc/app/internal/app/web/signed-out.html").read_text(encoding="utf-8")
+from tests.app_contracts import shared_sign_out_page_contract_violations
 
-for text in ("Signed out", "Sign in now", "/.auth/login/sso"):
-    assert text in logged_out, text
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = shared_sign_out_page_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated Go frontend sign-out page")
 PY
@@ -418,35 +1020,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import (
+    kubernetes_workload_runtime_user_contract_violations,
+    kubernetes_workload_runtime_user_validated_deployments,
+)
 
 repo_root = Path(os.environ["REPO_ROOT"])
-docs = [
-    doc
-    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8"))
-    if doc
-]
+violations = kubernetes_workload_runtime_user_contract_violations(repo_root)
+assert not violations, violations
+validated = kubernetes_workload_runtime_user_validated_deployments()
 
-expected = {
-    "sentiment-api": {"runAsUser": 1000, "runAsGroup": 1000, "fsGroup": 1000},
-    "sentiment-auth-ui": {"runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532},
-    "sentiment-router": {"runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532},
-    "subnetcalc-api": {"runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532},
-    "subnetcalc-frontend": {"runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532},
-    "subnetcalc-router": {"runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532},
-}
-
-for deployment_name, expected_security in expected.items():
-    deployment = next(
-        doc
-        for doc in docs
-        if doc.get("kind") == "Deployment" and doc.get("metadata", {}).get("name") == deployment_name
-    )
-    pod_security = deployment["spec"]["template"]["spec"].get("securityContext", {})
-    for key, expected_value in expected_security.items():
-        assert pod_security.get(key) == expected_value, (deployment_name, key, expected_value, pod_security)
-
-print(f"validated {len(expected)} workload deployment(s)")
+print(f"validated {len(validated)} workload deployment(s)")
 PY
 
   [ "${status}" -eq 0 ]
@@ -460,31 +1044,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import browser_router_auth_api_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-docs = [
-    doc
-    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8"))
-    if doc
-]
-
-config = next(
-    doc
-    for doc in docs
-    if doc.get("kind") == "ConfigMap" and doc.get("metadata", {}).get("name") == "subnetcalc-router-nginx"
-)
-nginx_conf = config["data"]["default.conf"]
-
-assert "location ^~ /api/" in nginx_conf
-assert "proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;" in nginx_conf
-assert "set $apim_auth $http_authorization;" in nginx_conf
-assert 'proxy_set_header Authorization $apim_auth;' in nginx_conf
-
-assert "location / {" in nginx_conf
-assert 'set $auth_email $http_x_auth_request_email;' in nginx_conf
-assert 'if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }' in nginx_conf
-assert "proxy_pass http://subnetcalc-frontend:8080;" in nginx_conf
+violations = browser_router_auth_api_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated subnetcalc frontend auth gate and API routing")
 PY
@@ -497,80 +1061,20 @@ PY
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import (
+    browser_router_auth_api_contract_violations,
+    sentiment_kubernetes_frontend_apim_contract_violations,
+)
 
 repo_root = Path(os.environ["REPO_ROOT"])
-docs = [
-    doc
-    for doc in yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8"))
-    if doc
-]
-
-frontend = next(
-    doc
-    for doc in docs
-    if doc.get("kind") == "Deployment" and doc.get("metadata", {}).get("name") == "sentiment-auth-ui"
+violations = (
+    browser_router_auth_api_contract_violations(repo_root)
+    + sentiment_kubernetes_frontend_apim_contract_violations(repo_root)
 )
-frontend_env = {item["name"]: str(item.get("value", "")) for item in frontend["spec"]["template"]["spec"]["containers"][0].get("env", [])}
-assert frontend_env["AUTH_METHOD"] == "gateway", frontend_env
-assert frontend_env["API_AUTH_METHOD"] == "oidc", frontend_env
-assert frontend_env["API_BASE_PATH"] == "/api/v1", frontend_env
-assert frontend_env["BACKEND_URL"] == "http://sentiment-api:8080", frontend_env
-assert frontend_env["SHOW_NETWORK_PATH"] == "true", frontend_env
-network_hops = json.loads(frontend_env["NETWORK_HOPS"])
-assert [hop["label"] for hop in network_hops] == [
-    "Browser",
-    "OAuth2 Proxy",
-    "Sentiment router",
-    "Sentiment frontend",
-    "APIM simulator",
-    "Sentiment API",
-], network_hops
-frontend_container = frontend["spec"]["template"]["spec"]["containers"][0]
-assert frontend_container["readinessProbe"]["httpGet"]["path"] == "/health/ready", frontend_container
-assert frontend_container["livenessProbe"]["httpGet"]["path"] == "/health/live", frontend_container
-
-config = next(
-    doc
-    for doc in docs
-    if doc.get("kind") == "ConfigMap" and doc.get("metadata", {}).get("name") == "sentiment-router-nginx"
-)
-nginx_conf = config["data"]["default.conf"]
-
-assert "location ^~ /api/" in nginx_conf
-assert "proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;" in nginx_conf
-assert "set $api_auth $http_authorization;" in nginx_conf
-assert 'proxy_set_header Authorization $api_auth;' in nginx_conf
-assert "proxy_set_header X-Apim-Bypass-Subscription true;" in nginx_conf
-assert "location = /health" in nginx_conf
-assert "location = /health/ready" in nginx_conf
-assert "location = /health/live" in nginx_conf
-
-assert "location / {" in nginx_conf
-assert 'set $auth_email $http_x_auth_request_email;' in nginx_conf
-assert 'if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }' in nginx_conf
-assert "proxy_pass http://sentiment-auth-ui:8080;" in nginx_conf
-
-edge_conf = (repo_root / "apps/sentiment/edge/nginx.conf").read_text(encoding="utf-8")
-assert 'set $api_upstream "sentiment-auth-frontend:8080";' in edge_conf, edge_conf
-assert 'set $api_upstream "sentiment-api:8080";' not in edge_conf, edge_conf
-
-apim_docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/apim/all.yaml").read_text(encoding="utf-8")))
-apim_config = next(
-    doc
-    for doc in apim_docs
-    if doc and doc.get("kind") == "ConfigMap" and doc.get("metadata", {}).get("name") == "subnetcalc-apim-simulator-config"
-)
-apim_payload = json.loads(apim_config["data"]["config.json"])
-routes = {route["name"]: route for route in apim_payload["routes"]}
-assert routes["sentiment-api-dev"]["upstream_base_url"] == "http://sentiment-api.dev.svc.cluster.local:8080", routes
-assert routes["sentiment-api-uat"]["upstream_base_url"] == "http://sentiment-api.uat.svc.cluster.local:8080", routes
-assert "https://sentiment.dev.127.0.0.1.sslip.io" in apim_payload["allowed_origins"], apim_payload
-assert {"header": "X-Apim-Bypass-Subscription", "equals": "true"} in apim_payload["subscription"]["bypass"], apim_payload
+assert not violations, violations
 
 print("validated sentiment frontend auth gate, health, and APIM API routing")
 PY
@@ -586,33 +1090,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import oauth2_proxy_token_refresh_contract_violations, oauth2_proxy_token_refresh_validated_names
+
 repo_root = Path(os.environ["REPO_ROOT"])
-sso_tf = (repo_root / "terraform/kubernetes/sso.tf").read_text(encoding="utf-8")
+violations = oauth2_proxy_token_refresh_contract_violations(repo_root)
+assert not violations, violations
+validated = oauth2_proxy_token_refresh_validated_names()
 
-for name in (
-    "oauth2-proxy-sentiment-dev",
-    "oauth2-proxy-sentiment-uat",
-    "oauth2-proxy-subnetcalc-dev",
-    "oauth2-proxy-subnetcalc-uat",
-):
-    start = sso_tf.index(f"name: {name}")
-    end = sso_tf.index("syncPolicy:", start)
-    block = sso_tf[start:end]
-    for expected in (
-        "--cookie-expire=4h",
-        "--cookie-refresh=1h",
-        "--skip-auth-regex=^/(signed-out\\.html|style\\.css|app-shell\\.css|favicon\\.svg|favicon\\.ico)$",
-        "--pass-access-token=true",
-        "--set-xauthrequest=true",
-        "--set-authorization-header=true",
-    ):
-        assert expected in block, (name, expected)
-
-print("validated app oauth2-proxy access-token refresh settings")
+print(f"validated {len(validated)} app oauth2-proxy access-token refresh setting(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated app oauth2-proxy access-token refresh settings"* ]]
+  [[ "${output}" == *"validated 4 app oauth2-proxy access-token refresh setting(s)"* ]]
 }
 
 @test "local workload image builders run app prebuild hooks" {
@@ -622,37 +1111,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import image_prebuild_hook_contract_violations, image_prebuild_hook_validated_builders
+
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = image_prebuild_hook_contract_violations(repo_root)
+assert not violations, violations
+validated = image_prebuild_hook_validated_builders()
 
-scripts = (
-    "kubernetes/kind/scripts/build-local-workload-images.sh",
-    "kubernetes/scripts/build-local-workload-images.sh",
-)
-wrappers = (
-    "kubernetes/lima/scripts/build-local-workload-images.sh",
-    "kubernetes/slicer/scripts/build-local-workload-images.sh",
-)
-
-shared = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
-
-assert '"prebuild": "make -C apps/sentiment/app build-linux"' in catalog
-assert '"prebuild": "make -C apps/subnetcalc/app build-linux"' in catalog
-assert '"apps/sentiment/app/go.sum"' in catalog
-assert '"apps/subnetcalc/app/go.sum"' in catalog
-assert "image_build_run_prebuild()" in shared
-assert 'image_build_run_prebuild "${category}" "${image_id}"' in shared
-
-for relative_path in scripts:
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    assert "kubernetes/workflow/image-build-lib.sh" in content, relative_path
-    assert "image_build_catalog_build_loop workload workload" in content, relative_path
-
-for relative_path in wrappers:
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    assert "kubernetes/scripts/build-local-workload-images.sh" in content, relative_path
-
-print(f"validated {len(scripts) + len(wrappers)} local workload builder(s)")
+print(f"validated {len(validated)} local workload builder(s)")
 PY
 
   [ "${status}" -eq 0 ]
@@ -666,20 +1132,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import oauth2_proxy_backend_logout_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
-sso_tf = (repo_root / "terraform/kubernetes/sso.tf").read_text(encoding="utf-8")
-
-assert "oauth2_proxy_backend_logout_url" in locals_tf
-assert "/protocol/openid-connect/logout?id_token_hint={id_token}" in locals_tf
-assert "oauth2_proxy_backend_logout_arg" in locals_tf
-assert "--backend-logout-url=${local.oauth2_proxy_backend_logout_url}" in locals_tf
-assert "sso_oauth2_proxy_post_logout_redirect_uris" not in locals_tf
-assert "post.logout.redirect.uris" not in sso_tf
-
-assert sso_tf.count("${local.oauth2_proxy_backend_logout_arg}") == 4
-assert "backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map" in locals_tf
-assert "${try(each.value.backend_logout_arg, \"\")}" in sso_tf
+violations = oauth2_proxy_backend_logout_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated Keycloak backend logout for app oauth2 proxies")
 PY
@@ -693,52 +1150,14 @@ PY
 from pathlib import Path
 import os
 
+from tests.app_contracts import gitea_workflow_go_image_contract_violations, gitea_workflow_go_image_validated_files
+
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = gitea_workflow_go_image_contract_violations(repo_root)
+assert not violations, violations
+validated = gitea_workflow_go_image_validated_files()
 
-checks = {
-    "apps/sentiment/.gitea/workflows/build-images.yaml": {
-        "required": [
-            '"app/**"',
-            "golang:1.26-alpine",
-            "-v \"${APPS_DIR}/sentiment/app:/src\"",
-            "-v \"${APPS_DIR}/shared:/shared:ro\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${APPS_DIR}/sentiment/app\"",
-            "docker tag \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}\"",
-        ],
-        "forbidden": [
-            "-v \"${WORKDIR}/app:/src\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./app",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-api:${TAG}\" ./api-sentiment",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/sentiment-auth-ui:${TAG}\" ./frontend-react-vite/sentiment-auth-ui",
-        ],
-    },
-    "apps/subnetcalc/.gitea/workflows/build-images.yaml": {
-        "required": [
-            '"app/**"',
-            "golang:1.26-alpine",
-            "-v \"${APPS_DIR}/subnetcalc/app:/src\"",
-            "-v \"${APPS_DIR}/shared:/shared:ro\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${APPS_DIR}/subnetcalc/app\"",
-            "docker tag \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}\"",
-        ],
-        "forbidden": [
-            "-v \"${WORKDIR}/app:/src\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./app",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}\"",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-frontend:${TAG}\" -f ./frontend-typescript-vite/Dockerfile .",
-            "docker build --provenance=false -t \"${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-api:${TAG}\" ./api-fastapi-container-app",
-        ],
-    },
-}
-
-for relative_path, spec in checks.items():
-    text = (repo_root / relative_path).read_text(encoding="utf-8")
-    for needle in spec["required"]:
-        assert needle in text, (relative_path, needle)
-    for needle in spec["forbidden"]:
-        assert needle not in text, (relative_path, needle)
-
-print(f"validated {len(checks)} Gitea workflow(s)")
+print(f"validated {len(validated)} Gitea workflow(s)")
 PY
 
   [ "${status}" -eq 0 ]
@@ -762,19 +1181,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import subnetcalc_runtime_config_response_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = subnetcalc_runtime_config_response_contract_violations(repo_root)
+assert not violations, violations
 
-server_go = (repo_root / "apps/subnetcalc/app/internal/app/server.go").read_text(encoding="utf-8")
-
-assert 'mux.HandleFunc("GET /runtime-config.js", server.runtimeConfig)' in server_go, server_go
-assert 'w.Header().Set("Content-Type", "application/javascript")' in server_go, server_go
-assert 'window.SUBNETCALC_RUNTIME_CONFIG = ' in server_go, server_go
-
-print("validated Go runtime-config response")
+print("validated shared Go runtime-config response")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Go runtime-config response"* ]]
+  [[ "${output}" == *"validated shared Go runtime-config response"* ]]
 }
 
 @test "external runtime image refs stay aligned across dockerfiles, compose, and kubernetes manifests" {
@@ -784,54 +1201,56 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import (
+    external_runtime_image_ref_contract_violations,
+    external_runtime_image_ref_expectation_count,
+)
+
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = external_runtime_image_ref_contract_violations(repo_root)
+assert not violations, violations
 
-expected_counts = {
-    "apps/sentiment/app/Dockerfile": {
-        "FROM dhi.io/static:20260413-alpine3.23": 1,
-    },
-    "apps/backstage/Dockerfile": {
-        "FROM dhi.io/node:22-debian13 AS runtime": 1,
-    },
-    "apps/sentiment/compose.yml": {
-        "image: quay.io/keycloak/keycloak:26.6.1": 1,
-        "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
-    },
-    "apps/subnetcalc/app/Dockerfile": {
-        "FROM dhi.io/static:20260413-alpine3.23": 1,
-    },
-    "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
-        "image: docker:29.4.1-cli": 1,
-        "image: gitea/act_runner:0.4.1": 2,
-        "image: kindest/node:v1.35.1": 1,
-    },
-    "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
-        "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
-    },
-    "terraform/kubernetes/apps/platform-gateway-routes-sso/job-signoz-bootstrap.yaml": {
-        "image: curlimages/curl:8.19.0": 1,
-    },
-    "terraform/kubernetes/apps/platform-gateway/agent-tls-bootstrap.yaml": {
-        "image: python:3.12.13-alpine3.23": 1,
-    },
-    "terraform/kubernetes/scripts/check-security.sh": {
-        'POLICY_PROBE_IMAGE="curlimages/curl:8.19.0"': 1,
-    },
-}
-
-validated = 0
-for relative_path, expectations in expected_counts.items():
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    for needle, expected_count in expectations.items():
-        actual_count = content.count(needle)
-        assert actual_count == expected_count, (relative_path, needle, expected_count, actual_count)
-        validated += 1
-
-print(f"validated {validated} external image expectation(s)")
+print(f"validated {external_runtime_image_ref_expectation_count()} external image expectation(s)")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated 12 external image expectation(s)"* ]]
+}
+
+@test "app runtime tests share external image ref helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import external_runtime_image_ref_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "external runtime image refs stay aligned across dockerfiles, compose, and kubernetes manifests"'):
+    content.index('\n@test "subnetcalc frontend stays single-replica for local laptop clusters"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "external runtime image ref policy should move" not in line
+]
+
+assert callable(external_runtime_image_ref_contract_violations)
+assert "external_runtime_image_ref_contract_violations" in content
+assert not any("expected_counts =" in line for line in contract_lines), "external runtime image ref policy should move to tests/app_contracts.py"
+assert not any("dhi.io/static:20260413-alpine3.23" in line for line in contract_lines), "external runtime image ref policy should move to tests/app_contracts.py"
+assert not any("gitea/act_runner:0.4.1" in line for line in contract_lines), "external runtime image ref policy should move to tests/app_contracts.py"
+assert not any("POLICY_PROBE_IMAGE" in line for line in contract_lines), "external runtime image ref policy should move to tests/app_contracts.py"
+
+print("validated shared external runtime image ref helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared external runtime image ref helper usage"* ]]
 }
 
 @test "subnetcalc frontend stays single-replica for local laptop clusters" {
@@ -841,21 +1260,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import subnetcalc_frontend_local_replica_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/workloads/base/all.yaml").read_text(encoding="utf-8")))
-
-frontend = next(
-    doc
-    for doc in docs
-    if doc
-    and doc.get("kind") == "Deployment"
-    and doc.get("metadata", {}).get("name") == "subnetcalc-frontend"
-)
-
-assert frontend["spec"]["replicas"] == 1, frontend["spec"].get("replicas")
-assert "topologySpreadConstraints" not in frontend["spec"]["template"]["spec"]
+violations = subnetcalc_frontend_local_replica_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated single-replica subnetcalc frontend")
 PY
@@ -864,74 +1273,100 @@ PY
   [[ "${output}" == *"validated single-replica subnetcalc frontend"* ]]
 }
 
+@test "app runtime tests share subnetcalc frontend replica helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import subnetcalc_frontend_local_replica_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "subnetcalc frontend stays single-replica for local laptop clusters"'):
+    content.index('\n@test "preload image artifacts track the current external runtime bump set"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "subnetcalc frontend replica policy should move" not in line
+]
+
+assert callable(subnetcalc_frontend_local_replica_contract_violations)
+assert "subnetcalc_frontend_local_replica_contract_violations" in content
+assert not any("yaml.safe_load_all" in line for line in contract_lines), "subnetcalc frontend replica policy should move to tests/app_contracts.py"
+assert not any("subnetcalc-frontend" in line for line in contract_lines), "subnetcalc frontend replica policy should move to tests/app_contracts.py"
+assert not any("topologySpreadConstraints" in line for line in contract_lines), "subnetcalc frontend replica policy should move to tests/app_contracts.py"
+
+print("validated shared subnetcalc frontend replica helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared subnetcalc frontend replica helper usage"* ]]
+}
+
 @test "preload image artifacts track the current external runtime bump set" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
+from tests.app_contracts import (
+    preload_image_artifact_contract_violations,
+    preload_image_lock_refs,
+    preload_image_snapshot_files,
+)
+
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = preload_image_artifact_contract_violations(repo_root)
+assert not violations, violations
 
-preload_files = [
-    "kubernetes/kind/preload-images.txt",
-    "kubernetes/lima/preload-images.txt",
-    "kubernetes/slicer/preload-images.txt",
-    "kubernetes/docker-desktop/preload-images.txt",
-]
-
-required_lines = [
-    "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
-    "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
-    "docker:29.4.1-cli",
-    "gitea/act_runner:0.4.1",
-    "kindest/node:v1.35.1",
-    "dhi.io/golang:1.26-alpine3.23-dev",
-    "dhi.io/static:20260413-alpine3.23",
-    "python:3.12.13-alpine3.23",
-    "docker.io/curlimages/curl:8.19.0",
-    "curlimages/curl:8.19.0",
-]
-
-retired_lines = [
-    "dhi.io/node:22-debian13-dev",
-    "golang:1.26.2-alpine3.23",
-    "oven/bun:1.3.13",
-    "oven/bun:1.3.13-alpine",
-    "node:22-alpine",
-]
-
-for relative_path in preload_files:
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    for needle in required_lines:
-        assert needle in content, (relative_path, needle)
-    for needle in retired_lines:
-        assert needle not in content, (relative_path, needle)
-
-lock_file = (repo_root / "terraform/kubernetes/scripts/preload-images.linux-arm64.lock").read_text(encoding="utf-8")
-lock_expectations = [
-    "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
-    "docker:29.4.1-cli",
-    "gitea/act_runner:0.4.1",
-    "kindest/node:v1.35.1",
-    "python:3.12.13-alpine3.23",
-    "docker.io/curlimages/curl:8.19.0",
-    "curlimages/curl:8.19.0",
-]
-
-for image_ref in lock_expectations:
-    pattern = re.compile(rf"^{re.escape(image_ref)}\t.+@sha256:[0-9a-f]+$", re.MULTILINE)
-    assert pattern.search(lock_file), image_ref
-
-for image_ref in retired_lines:
-    assert f"{image_ref}\t" not in lock_file, image_ref
-
-print(f"validated {len(preload_files)} preload image snapshot(s) and {len(lock_expectations)} lock entry(ies)")
+print(f"validated {len(preload_image_snapshot_files())} preload image snapshot(s) and {len(preload_image_lock_refs())} lock entry(ies)")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated 4 preload image snapshot(s) and 7 lock entry(ies)"* ]]
+}
+
+@test "app runtime tests share preload image artifact helpers" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import preload_image_artifact_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "preload image artifacts track the current external runtime bump set"'):
+    content.index('\n@test "Langfuse image artifacts use approved non-Bitnami runtime sources"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "preload image artifact policy should move" not in line
+]
+
+assert callable(preload_image_artifact_contract_violations)
+assert "preload_image_artifact_contract_violations" in content
+assert not any("required_lines =" in line for line in contract_lines), "preload image artifact policy should move to tests/app_contracts.py"
+assert not any("retired_lines =" in line for line in contract_lines), "preload image artifact policy should move to tests/app_contracts.py"
+assert not any("lock_expectations =" in line for line in contract_lines), "preload image artifact policy should move to tests/app_contracts.py"
+assert not any("dhi.io/static:20260413-alpine3.23" in line for line in contract_lines), "preload image artifact policy should move to tests/app_contracts.py"
+assert not any("oven/bun:1.3.13" in line for line in contract_lines), "preload image artifact policy should move to tests/app_contracts.py"
+
+print("validated shared preload image artifact helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared preload image artifact helper usage"* ]]
 }
 
 @test "Langfuse image artifacts use approved non-Bitnami runtime sources" {
@@ -941,80 +1376,52 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import langfuse_image_artifact_contract_violations, langfuse_runtime_image_refs
 
 repo_root = Path(os.environ["REPO_ROOT"])
-policy = (repo_root / "terraform/kubernetes/cluster-policies/kyverno/shared/restrict-image-registries.yaml").read_text(encoding="utf-8")
+violations = langfuse_image_artifact_contract_violations(repo_root)
+assert not violations, violations
 
-required_images = [
-    "docker.io/langfuse/langfuse:3",
-    "docker.io/langfuse/langfuse-worker:3",
-    "docker.io/postgres:17.6-alpine",
-    "docker.io/redis:8.2.3-alpine",
-    "docker.io/clickhouse/clickhouse-server:25.5.6",
-    "cgr.dev/chainguard/minio:latest",
-    "cgr.dev/chainguard/busybox:latest",
-]
-
-for required_policy in ['"docker.io/langfuse/*"', '"docker.io/postgres:*"', '"docker.io/redis:*"', '"docker.io/clickhouse/*"', '"cgr.dev/*"']:
-    assert required_policy in policy, required_policy
-
-for relative_path in [
-    "kubernetes/kind/preload-images.txt",
-    "kubernetes/lima/preload-images.txt",
-    "kubernetes/slicer/preload-images.txt",
-    "kubernetes/docker-desktop/preload-images.txt",
-]:
-    lines = (repo_root / relative_path).read_text(encoding="utf-8").splitlines()
-    for image in required_images:
-        assert image in lines, (relative_path, image)
-    assert not any(line.startswith("dhi.io/langfuse:") for line in lines), relative_path
-    assert not any(line.startswith("dhi.io/postgres:") for line in lines), relative_path
-    assert not any(line.startswith("dhi.io/redis:") for line in lines), relative_path
-    assert all("bitnamilegacy" not in line for line in lines if "langfuse" in line.lower()), relative_path
-
-docs = list(yaml.safe_load_all((repo_root / "terraform/kubernetes/apps/langfuse/all.yaml").read_text(encoding="utf-8")))
-redis = next(doc for doc in docs if doc and doc.get("kind") == "StatefulSet" and doc["metadata"]["name"] == "langfuse-redis")
-redis_pod_spec = redis["spec"]["template"]["spec"]
-redis_container = redis_pod_spec["containers"][0]
-assert redis_pod_spec["securityContext"]["fsGroup"] == 1000, redis_pod_spec["securityContext"]
-assert redis_container["securityContext"]["runAsUser"] == 999, redis_container["securityContext"]
-assert redis_container["securityContext"]["runAsGroup"] == 1000, redis_container["securityContext"]
-
-network_policy = next(doc for doc in docs if doc and doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == "langfuse-runtime")
-assert network_policy["metadata"]["namespace"] == "langfuse", network_policy["metadata"]
-assert set(network_policy["spec"]["policyTypes"]) == {"Ingress", "Egress"}, network_policy["spec"]
-
-ingress_ports = {
-    str(port["port"])
-    for rule in network_policy["spec"]["ingress"]
-    for port in rule.get("ports", [])
-}
-egress_ports = {
-    str(port["port"])
-    for rule in network_policy["spec"]["egress"]
-    for port in rule.get("ports", [])
-}
-for required_port in {"3000", "3030", "5432", "6379", "8123", "9000"}:
-    assert required_port in ingress_ports, (required_port, ingress_ports)
-    assert required_port in egress_ports, (required_port, egress_ports)
-
-dns_rules = [
-    rule
-    for rule in network_policy["spec"]["egress"]
-    if any(str(port["port"]) == "53" for port in rule.get("ports", []))
-]
-assert dns_rules, network_policy["spec"]["egress"]
-dns_peers = [peer for rule in dns_rules for peer in rule.get("to", [])]
-assert any(
-    peer.get("namespaceSelector", {}).get("matchLabels", {}).get("kubernetes.io/metadata.name") == "kube-system"
-    and peer.get("podSelector", {}).get("matchLabels", {}).get("k8s-app") == "kube-dns"
-    for peer in dns_peers
-), dns_peers
-
-print("validated Langfuse preload and registry policy sources")
+print(f"validated {len(langfuse_runtime_image_refs())} Langfuse preload and registry policy source(s)")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Langfuse preload and registry policy sources"* ]]
+  [[ "${output}" == *"validated 7 Langfuse preload and registry policy source(s)"* ]]
+}
+
+@test "app runtime tests share Langfuse image artifact helpers" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from tests.app_contracts import langfuse_image_artifact_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-app-runtime-surfaces.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "Langfuse image artifacts use approved non-Bitnami runtime sources"'):
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Langfuse image artifact policy should move" not in line
+]
+
+assert callable(langfuse_image_artifact_contract_violations)
+assert "langfuse_image_artifact_contract_violations" in content
+assert not any("required_images =" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
+assert not any("docker.io/langfuse/langfuse:3" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
+assert not any('"docker.io/langfuse/*"' in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
+assert not any("dhi.io/langfuse:" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
+assert not any("langfuse-redis" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
+assert not any("kube-dns" in line for line in contract_lines), "Langfuse image artifact policy should move to tests/app_contracts.py"
+
+print("validated shared Langfuse image artifact helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Langfuse image artifact helper usage"* ]]
 }

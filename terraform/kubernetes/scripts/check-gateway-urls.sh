@@ -177,7 +177,7 @@ debug_gateway_pods() {
     if [[ "${ready}" == "True" ]]; then
       ok "Pod ${pod} Ready=True"
     else
-      warn "Pod ${pod} Ready=${ready:-unknown}"
+      warn "Pod ${pod} Ready=$(reported_or_not "${ready}")"
     fi
     if [[ -n "${statuses}" ]]; then
       echo "${statuses}"
@@ -268,6 +268,15 @@ normalize_route_path() {
   fi
 
   printf '%s\n' "${path}"
+}
+
+reported_or_not() {
+  local value="$1"
+  if [[ -n "${value}" ]]; then
+    printf '%s' "${value}"
+  else
+    printf 'not reported'
+  fi
 }
 
 probe_https_url() {
@@ -499,7 +508,7 @@ if kubectl -n nginx-gateway get deploy nginx-gateway >/dev/null 2>&1; then
   if [[ -n "${ready}" && -n "${desired}" && "${ready}" == "${desired}" ]]; then
     ok "nginx-gateway ready (${ready}/${desired})"
   else
-    warn "nginx-gateway not fully ready (ready=${ready:-0} desired=${desired:-unknown})"
+    warn "nginx-gateway not fully ready (ready=${ready:-0} desired=$(reported_or_not "${desired}"))"
   fi
 else
   fail_soft "nginx-gateway deployment missing in namespace nginx-gateway"
@@ -514,7 +523,7 @@ if kubectl -n platform-gateway get gateway platform-gateway >/dev/null 2>&1; the
   if [[ "${programmed}" == "True" ]]; then
     ok "Gateway Programmed=True"
   else
-    fail_soft "Gateway Programmed=${programmed:-unknown}"
+    fail_soft "Gateway Programmed=$(reported_or_not "${programmed}")"
   fi
   if [[ -n "${accepted}" && "${accepted}" != "True" ]]; then
     warn "Gateway Accepted=${accepted}"
@@ -564,7 +573,7 @@ if kubectl -n platform-gateway get certificate platform-gateway-tls >/dev/null 2
   if [[ "${cert_ready}" == "True" ]]; then
     ok "Certificate Ready=True"
   else
-    fail_soft "Certificate Ready=${cert_ready:-unknown}"
+    fail_soft "Certificate Ready=$(reported_or_not "${cert_ready}")"
   fi
   if kubectl -n platform-gateway get secret platform-gateway-tls >/dev/null 2>&1; then
     ok "TLS secret exists: platform-gateway-tls"
@@ -593,7 +602,7 @@ if kubectl -n gateway-routes get httproute >/dev/null 2>&1; then
       if [[ "${accepted}" == "True" ]]; then
         ok "HTTPRoute ${route} Accepted=True (${hostnames})"
       else
-        fail_soft "HTTPRoute ${route} Accepted=${accepted:-unknown} (${hostnames})"
+        fail_soft "HTTPRoute ${route} Accepted=$(reported_or_not "${accepted}") (${hostnames})"
       fi
       if [[ -n "${resolved}" && "${resolved}" != "True" ]]; then
         warn "HTTPRoute ${route} ResolvedRefs=${resolved}"

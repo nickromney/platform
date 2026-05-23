@@ -65,11 +65,11 @@ esac
 EOF
   chmod +x "${stub_bin}/curl"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_PARALLEL_JOBS=2 PATH='${stub_bin}:'\"\$PATH\"; start=\$(date +%s); '${SCRIPT}' --execute >/tmp/check-provider-version.out; elapsed=\$(( \$(date +%s) - start )); cat /tmp/check-provider-version.out; printf 'elapsed=%s\n' \"\${elapsed}\" >&2"
+  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_PARALLEL_JOBS=2 PATH='${stub_bin}:'\"\$PATH\"; start=\$(date +%s); '${SCRIPT}' --execute >/tmp/check-provider-version.out; elapsed=\$(( \$(date +%s) - start )); cat /tmp/check-provider-version.out; printf 'elapsed=%s\n' \"\${elapsed}\""
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ hashicorp/aws ]]
   [[ "${output}" =~ hashicorp/azurerm ]]
   [[ "${output}" =~ hashicorp/random ]]
-  [[ "${stderr}${output}" =~ elapsed=2|elapsed=1 ]]
+  [[ "${output}" =~ elapsed=2|elapsed=1 ]]
 }

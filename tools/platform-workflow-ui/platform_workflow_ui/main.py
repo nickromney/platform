@@ -1010,7 +1010,7 @@ def tool_version(command: str) -> str:
 
 def inventory_panel(payload: dict[str, Any], tools: list[dict[str, str]] | None = None) -> str:
     health = payload.get("health_summary") if isinstance(payload.get("health_summary"), dict) else {}
-    overall = html.escape(str(health.get("overall_state") or payload.get("overall_state") or "unknown"))
+    overall = html.escape(str(health.get("overall_state") or payload.get("overall_state") or "not reported"))
     active = html.escape(str(health.get("active_variant") or payload.get("active_variant") or "none"))
     variant_rows = prereq_variant_rows(payload)
     runtime_rows = prereq_runtime_rows(payload)
@@ -1063,15 +1063,15 @@ def prereq_variant_rows(payload: dict[str, Any]) -> str:
                 blocker_text = "No blockers reported"
             rows.append(
                 f"""
-<div class="inventory-card {prereq_state_class(str(item.get('state') or 'unknown'))}">
+<div class="inventory-card {prereq_state_class(str(item.get('state') or 'not reported'))}">
   <span>{html.escape(str(variant_id))}</span>
-  <strong>{html.escape(str(item.get('state') or 'unknown'))}</strong>
+  <strong>{html.escape(str(item.get('state') or 'not reported'))}</strong>
   <small>{html.escape(blocker_text)}</small>
 </div>
 """
             )
     if not rows:
-        rows.append('<div class="inventory-card"><span>Status</span><strong>unknown</strong><small>No variant status rows reported.</small></div>')
+        rows.append('<div class="inventory-card"><span>Status</span><strong>not reported</strong><small>No variant status rows reported.</small></div>')
     return "".join(rows)
 
 
@@ -1086,7 +1086,7 @@ def prereq_runtime_rows(payload: dict[str, Any]) -> str:
                 continue
             state = "ready" if item.get("available") and item.get("running") else ("missing" if not item.get("available") else "stopped")
             rows.append(prereq_card(str(item.get("name") or runtime_id), state, str(item.get("detail") or "")))
-    return "".join(rows) or prereq_card("Host runtime", "unknown", "No runtime status reported")
+    return "".join(rows) or prereq_card("Host runtime", "not reported", "No runtime status reported")
 
 
 def prereq_registry_rows(payload: dict[str, Any]) -> str:
@@ -1100,7 +1100,7 @@ def prereq_registry_rows(payload: dict[str, Any]) -> str:
                 continue
             state = "ready" if item.get("authenticated") else "missing"
             rows.append(prereq_card(str(item.get("registry") or registry_id), state, str(item.get("detail") or item.get("source") or "")))
-    return "".join(rows) or prereq_card("Registry auth", "unknown", "No registry auth status reported")
+    return "".join(rows) or prereq_card("Registry auth", "not reported", "No registry auth status reported")
 
 
 def prereq_tool_rows(tools: list[dict[str, str]]) -> str:
@@ -1123,7 +1123,7 @@ def prereq_state_class(state: str) -> str:
         return "ready"
     if normalized in {"missing", "blocked", "conflict", "failed"}:
         return "blocked"
-    if normalized in {"stopped", "absent", "unknown"}:
+    if normalized in {"stopped", "absent", "not reported"}:
         return "warn"
     return "neutral"
 
@@ -1258,7 +1258,7 @@ def history_panel(history: list[dict[str, Any]], current_variant: str | None = N
     for index, entry in enumerate(history[:5]):
         variant = html.escape(entry.get("variant", ""))
         timestamp = html.escape(entry.get("timestamp", ""))
-        status = history_status(entry.get("exit_status", "unknown"))
+        status = history_status(entry.get("exit_status"))
         command = html.escape(entry["command"])
         command_id = f"recent-command-{index}"
         marker = '<span class="history-current" aria-label="Most recent">&rarr;</span>' if index == 0 else '<span></span>'
@@ -1282,9 +1282,9 @@ def history_status(exit_status: str | None) -> str:
         return '<span class="history-status-running">Running</span>'
     if exit_status == "0":
         return '<span class="history-status-ok">Succeeded</span>'
-    if exit_status and exit_status != "unknown":
+    if exit_status:
         return f'<span class="history-status-failed">Failed ({html.escape(exit_status)})</span>'
-    return '<span class="history-status-unknown">Unknown</span>'
+    return '<span class="history-status-not-reported">No command status reported</span>'
 
 
 def history_preview_form(entry: dict[str, Any]) -> str:
@@ -1330,7 +1330,7 @@ def latest_output_panel(history: list[dict[str, Any]] | None) -> str:
 
 
 def output_meta(entry: dict[str, Any]) -> str:
-    status = html.escape(str(entry.get("exit_status") or "unknown"))
+    status = html.escape(str(entry.get("exit_status") or "not reported"))
     timestamp = html.escape(str(entry.get("timestamp") or ""))
     kind = html.escape(str(entry.get("kind") or "Command"))
     return f"{kind} | exit {status} | {timestamp}"
@@ -1671,7 +1671,7 @@ html[data-theme="light"] .theme-icon-moon { display:block; color:var(--blue); }
 .history-status-running { color:#8a5b00; }
 .history-status-ok { color:var(--accent); }
 .history-status-failed { color:var(--danger); }
-.history-status-unknown { color:var(--muted); }
+.history-status-not-reported { color:var(--muted); }
 .history small { color:#8a5b00; font-size:.72rem; font-weight:800; white-space:nowrap; }
 .history code { display:block; min-width:0; overflow:auto; white-space:nowrap; font-family:ui-monospace, monospace; color:var(--ink); }
 .history button { min-height:32px; padding:5px 9px; }

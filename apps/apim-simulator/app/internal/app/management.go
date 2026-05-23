@@ -2,12 +2,13 @@ package app
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
+
+	"platform.local/apphttp"
 )
 
 type TraceRecord struct {
@@ -52,7 +53,7 @@ func (s *traceStore) list() []TraceRecord {
 }
 
 func (s *server) summary(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"service":              map[string]any{"name": "apim-simulator", "display_name": "Local APIM Simulator"},
 		"apis":                 apiSummaries(s.cfg.APIs),
 		"routes":               routeSummaries(s.cfg.Routes),
@@ -66,7 +67,7 @@ func (s *server) summary(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) serviceProjection(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"service": map[string]any{
 			"name":                "apim-simulator",
 			"display_name":        "Local APIM Simulator",
@@ -80,7 +81,7 @@ func (s *server) serviceProjection(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) listAPIs(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": apiSummaries(s.cfg.APIs)})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"items": apiSummaries(s.cfg.APIs)})
 }
 
 func (s *server) upsertAPI(w http.ResponseWriter, r *http.Request) {
@@ -88,13 +89,12 @@ func (s *server) upsertAPI(w http.ResponseWriter, r *http.Request) {
 		ID string `json:"id"`
 		APIConfig
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid API payload"})
+	if !apphttp.DecodeJSONError(w, r, &payload, "Invalid API payload") {
 		return
 	}
 	id := firstString(r.PathValue("id"), payload.ID, payload.Name)
 	if id == "" || payload.Path == "" || payload.UpstreamBaseURL == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "API id, path, and upstream_base_url are required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "API id, path, and upstream_base_url are required")
 		return
 	}
 	s.mu.Lock()
@@ -103,7 +103,7 @@ func (s *server) upsertAPI(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Routes = routesFromAPIsWithExplicit(s.cfg.APIs, s.cfg.Routes)
 	api := s.cfg.APIs[id]
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "api": api})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "api": api})
 }
 
 func (s *server) deleteAPI(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +111,7 @@ func (s *server) deleteAPI(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if _, ok := s.cfg.APIs[id]; !ok {
 		s.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "API not found"})
+		apphttp.WriteError(w, http.StatusNotFound, "API not found")
 		return
 	}
 	s.cfg.APIs = cloneMap(s.cfg.APIs)
@@ -122,7 +122,7 @@ func (s *server) deleteAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listProducts(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": productSummaries(s.cfg.Products)})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"items": productSummaries(s.cfg.Products)})
 }
 
 func (s *server) upsertProduct(w http.ResponseWriter, r *http.Request) {
@@ -130,13 +130,12 @@ func (s *server) upsertProduct(w http.ResponseWriter, r *http.Request) {
 		ID string `json:"id"`
 		ProductConfig
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid product payload"})
+	if !apphttp.DecodeJSONError(w, r, &payload, "Invalid product payload") {
 		return
 	}
 	id := firstString(r.PathValue("id"), payload.ID, payload.Name)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Product id is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "Product id is required")
 		return
 	}
 	s.mu.Lock()
@@ -144,7 +143,7 @@ func (s *server) upsertProduct(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Products[id] = payload.ProductConfig
 	product := s.cfg.Products[id]
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "product": product})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "product": product})
 }
 
 func (s *server) deleteProduct(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +151,7 @@ func (s *server) deleteProduct(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if _, ok := s.cfg.Products[id]; !ok {
 		s.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Product not found"})
+		apphttp.WriteError(w, http.StatusNotFound, "Product not found")
 		return
 	}
 	s.cfg.Products = cloneMap(s.cfg.Products)
@@ -163,7 +162,7 @@ func (s *server) deleteProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listSubscriptions(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": subscriptionSummaries(s.cfg.Subscriptions.Items)})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"items": subscriptionSummaries(s.cfg.Subscriptions.Items)})
 }
 
 func (s *server) upsertSubscription(w http.ResponseWriter, r *http.Request) {
@@ -171,13 +170,12 @@ func (s *server) upsertSubscription(w http.ResponseWriter, r *http.Request) {
 		ID string `json:"id"`
 		Subscription
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid subscription payload"})
+	if !apphttp.DecodeJSONError(w, r, &payload, "Invalid subscription payload") {
 		return
 	}
 	id := firstString(r.PathValue("id"), payload.ID, payload.Subscription.ID)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Subscription id is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "Subscription id is required")
 		return
 	}
 	sub := payload.Subscription
@@ -197,7 +195,7 @@ func (s *server) upsertSubscription(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Subscriptions.Items = cloneSubscriptions(s.cfg.Subscriptions.Items)
 	s.cfg.Subscriptions.Items[id] = sub
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, sub)
+	apphttp.WriteJSON(w, http.StatusOK, sub)
 }
 
 func (s *server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +203,7 @@ func (s *server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if _, ok := s.cfg.Subscriptions.Items[id]; !ok {
 		s.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Subscription not found"})
+		apphttp.WriteError(w, http.StatusNotFound, "Subscription not found")
 		return
 	}
 	s.cfg.Subscriptions.Items = cloneSubscriptions(s.cfg.Subscriptions.Items)
@@ -215,7 +213,7 @@ func (s *server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listNamedValues(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": namedValueSummaries(s.cfg.NamedValues)})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"items": namedValueSummaries(s.cfg.NamedValues)})
 }
 
 func (s *server) upsertNamedValue(w http.ResponseWriter, r *http.Request) {
@@ -223,13 +221,12 @@ func (s *server) upsertNamedValue(w http.ResponseWriter, r *http.Request) {
 		ID string `json:"id"`
 		NamedValueConfig
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid named value payload"})
+	if !apphttp.DecodeJSONError(w, r, &payload, "Invalid named value payload") {
 		return
 	}
 	id := firstString(r.PathValue("id"), payload.ID)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Named value id is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "Named value id is required")
 		return
 	}
 	s.mu.Lock()
@@ -237,7 +234,7 @@ func (s *server) upsertNamedValue(w http.ResponseWriter, r *http.Request) {
 	s.cfg.NamedValues[id] = payload.NamedValueConfig
 	namedValue := s.cfg.NamedValues[id]
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "named_value": namedValue})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"id": id, "named_value": namedValue})
 }
 
 func (s *server) deleteNamedValue(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +242,7 @@ func (s *server) deleteNamedValue(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if _, ok := s.cfg.NamedValues[id]; !ok {
 		s.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Named value not found"})
+		apphttp.WriteError(w, http.StatusNotFound, "Named value not found")
 		return
 	}
 	s.cfg.NamedValues = cloneMap(s.cfg.NamedValues)
@@ -255,7 +252,7 @@ func (s *server) deleteNamedValue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listTraces(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": s.traces.list()})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"items": s.traces.list()})
 }
 
 type replayRequest struct {
@@ -267,15 +264,14 @@ type replayRequest struct {
 
 func (s *server) replay(w http.ResponseWriter, r *http.Request) {
 	var req replayRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid replay request"})
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid replay request") {
 		return
 	}
 	method := strings.ToUpper(firstString(req.Method, http.MethodGet))
 	replayPath := firstString(req.Path, "/")
 	proxyReq, err := http.NewRequestWithContext(r.Context(), method, replayPath, bytes.NewBufferString(req.Body))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid replay path"})
+		apphttp.WriteError(w, http.StatusBadRequest, "Invalid replay path")
 		return
 	}
 	proxyReq.Host = r.Host
@@ -289,7 +285,7 @@ func (s *server) replay(w http.ResponseWriter, r *http.Request) {
 	if len(traceItems) > 0 {
 		trace = traceItems[0]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"response": dumpResponse(rec.statusCode(), rec.header, rec.body.Bytes()),
 		"trace":    trace,
 	})
@@ -303,22 +299,21 @@ func (s *server) getPolicy(w http.ResponseWriter, r *http.Request) {
 	if xml == "" {
 		xml = "<policies><inbound /><backend /><outbound /><on-error /></policies>"
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"scope_type": r.PathValue("scope"), "scope_name": r.PathValue("name"), "xml": xml})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]string{"scope_type": r.PathValue("scope"), "scope_name": r.PathValue("name"), "xml": xml})
 }
 
 func (s *server) putPolicy(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		XML string `json:"xml"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid policy payload"})
+	if !apphttp.DecodeJSONError(w, r, &payload, "Invalid policy payload") {
 		return
 	}
 	key := policyKey(r.PathValue("scope"), r.PathValue("name"))
 	s.mu.Lock()
 	s.policies[key] = payload.XML
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 func (s *server) rotateSubscriptionKey(w http.ResponseWriter, r *http.Request) {
@@ -338,10 +333,10 @@ func (s *server) rotateSubscriptionKey(w http.ResponseWriter, r *http.Request) {
 			sub.Keys.Primary = "rotated-primary-" + newTraceID()[:8]
 		}
 		s.cfg.Subscriptions.Items[name] = sub
-		writeJSON(w, http.StatusOK, sub)
+		apphttp.WriteJSON(w, http.StatusOK, sub)
 		return
 	}
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Subscription not found"})
+	apphttp.WriteError(w, http.StatusNotFound, "Subscription not found")
 }
 
 type captureResponse struct {

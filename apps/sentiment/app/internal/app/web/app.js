@@ -2,140 +2,168 @@
 
 /** @typedef {import("./api-types.d.ts").RuntimeConfig} RuntimeConfig */
 /** @typedef {import("./api-types.d.ts").ApiDiagnostics} ApiDiagnostics */
+/** @typedef {import("./api-types.d.ts").CommentListResponse} CommentListResponse */
+/** @typedef {import("./api-types.d.ts").HealthResponse} HealthResponse */
 /** @typedef {import("./api-types.d.ts").NetworkHop} NetworkHop */
 /** @typedef {import("./api-types.d.ts").SentimentComment} SentimentComment */
 
+const {
+	apiErrorMessage,
+	bindGatewayLogout,
+	apiActionReady,
+	apiAuthRequiredMessage,
+	initializeGatewayAuthState,
+	usesGatewayAuth,
+} = window.PlatformIdpAuth;
+const {
+	apiBasePath,
+	apiJSONHeaders,
+	apiPath,
+	apiTimingElement,
+	buttonElement,
+	buttonSelector,
+	decodeAPIMTrace,
+	errorMessage,
+	fetchJSON,
+	fetchJSONWithTiming,
+	formatAPIHealthStatus,
+	formatTimestamp,
+	initializeThemeSwitcher,
+	readRuntimeConfig,
+	renderElementsInto,
+	renderMessageInto,
+	renderNetworkPathInto,
+	renderStatusInto,
+	requireElement,
+	requireSelector,
+	resolveNetworkHops,
+	shouldShowNetworkPath,
+	textAreaElement,
+	withSubmitterBusy,
+} = window.PlatformAppShell;
 const statusEl = requireElement("status");
+const apiStatusEl = requireElement("api-status");
 const diagnosticsEl = requireElement("diagnostics");
 const commentsEl = requireElement("comments");
+const commentForm = requireElement("comment-form");
 const textarea = textAreaElement("comment-text");
-const themeOptions = ["system", "light", "dark"];
+const logoutButton = buttonElement("logout-btn");
+const analyzeAction = buttonSelector('[data-action="analyze"]');
+const positiveSample = requireSelector('[data-sample="positive"]');
+const mixedSample = requireSelector('[data-sample="mixed"]');
+const negativeSample = requireSelector('[data-sample="negative"]');
 const paths = {
 	health: "/health",
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-	initializeTheme();
+	initializeThemeSwitcher();
 	initializeAuthState().catch((error) => {
-		statusEl.textContent = userFacingAPIError(
-			error,
-			"Unable to initialize authentication",
+		renderStatusInto(
+			statusEl,
+			apiErrorMessage(runtimeConfig(), error, {
+				prefix: "Unable to initialize authentication",
+				errorMessage,
+			}),
+			true,
 		);
 	});
 	checkHealth();
-	document
-		.getElementById("comment-form")
-		.addEventListener("submit", submitComment);
-	document
-		.getElementById("theme-switcher")
-		.addEventListener("click", toggleTheme);
-	document
-		.getElementById("logout-btn")
-		.addEventListener("click", logoutFromGateway);
-	document
-		.querySelector('[data-sample="positive"]')
-		.addEventListener("click", () => {
-			textarea.value =
-				"I absolutely love this. Great work and fantastic experience.";
-		});
-	document
-		.querySelector('[data-sample="mixed"]')
-		.addEventListener("click", () => {
-			textarea.value =
-				"Some parts are fine, but overall I am disappointed and frustrated.";
-		});
-	document
-		.querySelector('[data-sample="negative"]')
-		.addEventListener("click", () => {
-			textarea.value =
-				"I am disappointed and frustrated. This was a poor experience.";
-		});
+	commentForm.addEventListener("submit", submitComment);
+	bindGatewayLogout(logoutButton);
+	positiveSample.addEventListener("click", () => {
+		textarea.value =
+			"I absolutely love this. Great work and fantastic experience.";
+	});
+	mixedSample.addEventListener("click", () => {
+		textarea.value =
+			"Some parts are fine, but overall I am disappointed and frustrated.";
+	});
+	negativeSample.addEventListener("click", () => {
+		textarea.value =
+			"I am disappointed and frustrated. This was a poor experience.";
+	});
 });
 
 function runtimeConfig() {
-	return window.SENTIMENT_RUNTIME_CONFIG || {};
-}
-
-function requireElement(id) {
-	const element = document.getElementById(id);
-	if (!element) {
-		throw new Error(`Missing required element #${id}`);
-	}
-	return element;
-}
-
-function textAreaElement(id) {
-	return /** @type {HTMLTextAreaElement} */ (requireElement(id));
+	return /** @type {RuntimeConfig} */ (
+		readRuntimeConfig("SENTIMENT_RUNTIME_CONFIG")
+	);
 }
 
 async function checkHealth() {
-	const status = document.getElementById("api-status");
 	try {
-		const data = await getJSON(apiURL(paths.health));
-		const authState = data.server_side_token_validation
-			? "OIDC/JWT validated by backend"
-			: "No auth mode";
-		const backendRoute = runtimeConfig().backendURL || "same process";
-		status.textContent = `API Status: ${data.status} | Backend: ${data.service} | Backend URI: ${backendRoute} | Version: ${data.version} | Auth: ${authState}`;
-		status.classList.remove("error");
+		/** @type {HealthResponse} */
+		const data = await getJSON(
+			apiPath(runtimeConfig(), paths.health, "/api/v1"),
+		);
+		renderStatusInto(
+			apiStatusEl,
+			formatAPIHealthStatus(data, runtimeConfig()),
+			"success",
+		);
 	} catch (error) {
-		status.textContent = authSessionExpired(error)
-			? expiredSessionMessage()
-			: `API unavailable: ${error.message}`;
-		status.classList.add("error");
+		renderStatusInto(
+			apiStatusEl,
+			apiErrorMessage(runtimeConfig(), error, {
+				prefix: "API unavailable",
+				errorMessage,
+			}),
+			true,
+		);
 	}
 }
 
 function analyzeButton() {
-	const button = document.querySelector('[data-action="analyze"]');
-	if (!button) {
-		throw new Error("Missing analyze button");
-	}
-	return /** @type {HTMLButtonElement} */ (button);
+	return analyzeAction;
 }
 
 async function initializeAuthState() {
-	const authState = document.getElementById("auth-state");
-	const logoutButton = document.getElementById("logout-btn");
+	const authState = requireElement("auth-state");
 
-	if (usesGatewayAuth()) {
-		const session = await fetchGatewaySession();
+	if (usesGatewayAuth(runtimeConfig())) {
+		const session = await initializeGatewayAuthState(authState, logoutButton);
 		if (session) {
-			authState.textContent = `Signed in as ${gatewayDisplayName(session)}`;
-			logoutButton.hidden = false;
 			await loadComments();
 			return;
 		}
 
-		authState.textContent = "Not signed in.";
-		logoutButton.hidden = true;
-		statusEl.textContent = authRequiredMessage();
+		renderStatusInto(statusEl, authRequiredMessage(), true);
 		analyzeButton().disabled = true;
-		commentsEl.innerHTML = "<p>Sign in to load comments.</p>";
+		renderMessageInto(commentsEl, "Sign in to load comments.");
 		return;
 	}
 
 	if (apiReadyForUserAction()) {
 		if ((runtimeConfig().apiAuthMethod || "none") === "none") {
-			statusEl.textContent =
-				"Ready. API authentication is disabled for this environment.";
+			renderStatusInto(
+				statusEl,
+				"Ready. API authentication is disabled for this environment.",
+			);
 		}
 		await loadComments();
 		return;
 	}
-	statusEl.textContent = authRequiredMessage();
+	renderStatusInto(statusEl, authRequiredMessage(), true);
 	analyzeButton().disabled = true;
-	commentsEl.innerHTML = "<p>Sign in to load comments.</p>";
+	renderMessageInto(commentsEl, "Sign in to load comments.");
 }
 
 async function loadComments() {
 	try {
-		const response = await timedFetchJSON(apiURL("/comments?limit=25"));
-		renderComments(response.data.items || []);
+		const response = await timedFetchJSON(
+			apiPath(runtimeConfig(), "/comments?limit=25", "/api/v1"),
+		);
+		/** @type {CommentListResponse} */
+		const data = response.data;
+		renderComments(data.items || []);
 		renderAPIDiagnostics("Load comments", response.timing);
-		statusEl.textContent = "Ready.";
+		renderStatusInto(statusEl, "Ready.", "success");
 	} catch (error) {
-		commentsEl.innerHTML = `<p>${escapeHTML(userFacingAPIError(error))}</p>`;
+		renderMessageInto(
+			commentsEl,
+			apiErrorMessage(runtimeConfig(), error, { errorMessage }),
+		);
 		throw error;
 	}
 }
@@ -144,196 +172,132 @@ async function submitComment(event) {
 	event.preventDefault();
 	const text = textarea.value.trim();
 	if (!text) {
-		statusEl.textContent = "Text is required.";
+		renderStatusInto(statusEl, "Text is required.", "warning");
 		return;
 	}
 	if (!apiReadyForUserAction()) {
-		statusEl.textContent = authRequiredMessage();
+		renderStatusInto(statusEl, authRequiredMessage(), true);
 		return;
 	}
-	try {
-		const response = await timedFetchJSON(apiURL("/comments"), {
-			method: "POST",
-			headers: apiRequestHeaders(),
-			body: JSON.stringify({ text }),
-		});
+	const action = async () => {
+		const response = await timedFetchJSON(
+			apiPath(runtimeConfig(), "/comments", "/api/v1"),
+			{
+				method: "POST",
+				headers: apiJSONHeaders(runtimeConfig()),
+				body: JSON.stringify({ text }),
+			},
+		);
+		/** @type {SentimentComment} */
 		const result = response.data;
-		statusEl.textContent = `Saved. ${result.label} | Latency: ${result.latency_ms}ms`;
+		renderStatusInto(
+			statusEl,
+			`Saved. ${result.label} | Latency: ${result.latency_ms}ms`,
+			"success",
+		);
 		textarea.value = "";
 		await loadComments();
 		renderAPIDiagnostics("Submit comment", response.timing);
+	};
+	try {
+		await withSubmitterBusy(event, "Analyzing", action);
 	} catch (error) {
-		statusEl.textContent = userFacingAPIError(error);
+		renderStatusInto(
+			statusEl,
+			apiErrorMessage(runtimeConfig(), error, {
+				errorMessage,
+			}),
+			true,
+		);
 	}
 }
 
 function apiReadyForUserAction() {
-	const config = runtimeConfig();
-	const authMethod = config.authMethod || "none";
-	const apiAuthMethod = config.apiAuthMethod || authMethod;
-	return apiAuthMethod !== "oidc" || authMethod === "gateway";
-}
-
-function usesGatewayAuth() {
-	const config = runtimeConfig();
-	return config.authMethod === "gateway" || config.apiAuthMethod === "gateway";
+	return apiActionReady(runtimeConfig());
 }
 
 function authRequiredMessage() {
-	return "Sign in before using sentiment analysis. The backend validates JWT/OIDC tokens, so this frontend will not submit unauthenticated API requests.";
+	return apiAuthRequiredMessage("using sentiment analysis");
 }
 
-function expiredSessionMessage() {
-	return "Session expired. Sign out and sign in again to refresh API access.";
-}
-
-function authSessionExpired(error) {
-	return (
-		usesGatewayAuth() &&
-		/invalid or expired access token/i.test(error.message || "")
-	);
-}
-
-function userFacingAPIError(error, prefix = "") {
-	if (authSessionExpired(error)) {
-		return expiredSessionMessage();
-	}
-	return prefix ? `${prefix}: ${error.message}` : `API error: ${error.message}`;
-}
-
-function apiBasePath() {
-	const base = runtimeConfig().apiBasePath || "/api/v1";
-	return `/${String(base).replace(/^\/+|\/+$/g, "")}`;
-}
-
-function apiURL(path) {
-	return `${apiBasePath()}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function apiRequestHeaders() {
-	return {
-		"Content-Type": "application/json",
-		...(shouldShowNetworkPath() ? { "x-apim-trace": "true" } : {}),
-	};
-}
-
+/**
+ * @template T
+ * @param {string} url
+ * @returns {Promise<T>}
+ */
 async function getJSON(url) {
-	const response = await fetch(url, { headers: apiRequestHeaders() });
-	return parseJSONResponse(response);
+	return fetchJSON(url, { headers: apiJSONHeaders(runtimeConfig()) });
 }
 
+/**
+ * @template T
+ * @param {string} url
+ * @param {RequestInit=} options
+ * @returns {Promise<{data: T, timing: import("../../../../../shared/web/api-types.d.ts").APITiming}>}
+ */
 async function timedFetchJSON(url, options = {}) {
-	const started = performance.now();
-	const requestUtc = new Date().toISOString();
 	const headers = {
-		...apiRequestHeaders(),
+		...apiJSONHeaders(runtimeConfig()),
 		...(options.headers || {}),
 	};
-	const response = await fetch(url, { ...options, headers });
-	const data = await parseJSONResponse(response);
-	const responseUtc = new Date().toISOString();
-	return {
-		data,
-		timing: {
-			url,
-			durationMs: Math.round(performance.now() - started),
-			requestUtc,
-			responseUtc,
-			traceId: response.headers.get("x-apim-trace-id") || "",
-			correlationId: response.headers.get("x-correlation-id") || "",
-			apimTrace: decodeAPIMTrace(response.headers.get("x-apim-trace") || ""),
-		},
-	};
-}
-
-async function parseJSONResponse(response) {
-	const data = await response.json().catch(() => ({}));
-	if (!response.ok) {
-		throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-	}
-	return data;
+	return fetchJSONWithTiming(url, { ...options, headers }, decodeAPIMTrace);
 }
 
 function renderComments(items) {
 	if (items.length === 0) {
-		commentsEl.innerHTML = "<p>No comments yet.</p>";
+		renderMessageInto(commentsEl, "No comments yet.");
 		return;
 	}
-	commentsEl.innerHTML = items
-		.map(
-			(item) => `
-    <article class="comment">
-      <span class="label">${escapeHTML(item.label)}</span>
-      <span class="meta">${escapeHTML(formatTimestamp(item.timestamp))} | Confidence: ${Number(item.confidence).toFixed(2)} | Latency: ${item.latency_ms}ms</span>
-      <p>${escapeHTML(item.text)}</p>
-    </article>
-  `,
-		)
-		.join("");
+	renderElementsInto(commentsEl, items, commentElement);
 }
 
-function formatTimestamp(value) {
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) {
-		return value || "Timestamp unavailable";
-	}
-	return date.toLocaleString(undefined, {
-		year: "numeric",
-		month: "short",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-		timeZoneName: "short",
-	});
+/**
+ * @param {SentimentComment} item
+ * @returns {HTMLElement}
+ */
+function commentElement(item) {
+	const article = document.createElement("article");
+	article.className = "comment";
+
+	const label = document.createElement("span");
+	label.className = "label";
+	label.textContent = item.label;
+
+	const meta = document.createElement("span");
+	meta.className = "meta";
+	meta.textContent = `${formatTimestamp(item.timestamp)} | Confidence: ${Number(item.confidence).toFixed(2)} | Latency: ${item.latency_ms}ms`;
+
+	const text = document.createElement("p");
+	text.textContent = item.text;
+
+	article.append(label, meta, text);
+	return article;
 }
 
 function renderAPIDiagnostics(action, timing) {
-	const rows = [
-		["Action", action],
-		["API URL", timing.url],
-		["Backend URL", runtimeConfig().backendURL || "same process"],
-		["Duration", `${timing.durationMs}ms`],
-		["Request (UTC)", timing.requestUtc],
-		["Response (UTC)", timing.responseUtc],
-	];
-	if (timing.correlationId) rows.push(["Correlation ID", timing.correlationId]);
-	if (timing.traceId) rows.push(["APIM Trace ID", timing.traceId]);
-	if (timing.apimTrace) {
-		if (timing.apimTrace.route)
-			rows.push(["APIM Route", timing.apimTrace.route]);
-		if (timing.apimTrace.upstream_url)
-			rows.push(["APIM Upstream", timing.apimTrace.upstream_url]);
-		if (timing.apimTrace.elapsed_ms !== undefined)
-			rows.push(["APIM Upstream Time", `${timing.apimTrace.elapsed_ms}ms`]);
-		if (timing.apimTrace.status !== undefined)
-			rows.push(["APIM Status", timing.apimTrace.status]);
-	}
-	const networkPath = shouldShowNetworkPath() ? renderNetworkPath() : "";
-	diagnosticsEl.innerHTML = `<details open><summary>API Call Timing</summary>${renderTable(rows)}</details>${networkPath}`;
-}
-
-function renderTable(rows) {
-	return `<table><tbody>${rows.map(([key, value]) => `<tr><th>${escapeHTML(key)}</th><td>${escapeHTML(String(value || ""))}</td></tr>`).join("")}</tbody></table>`;
-}
-
-function shouldShowNetworkPath() {
-	return runtimeConfig().showNetworkPath !== false;
+	const networkPath = document.createElement("div");
+	renderNetworkPathInto(
+		networkPath,
+		configuredNetworkHops(),
+		shouldShowNetworkPath(runtimeConfig()),
+	);
+	diagnosticsEl.replaceChildren(
+		apiTimingElement(timing, {
+			action,
+			backendURL: runtimeConfig().backendURL || "same process",
+			open: true,
+		}),
+		networkPath,
+	);
 }
 
 function configuredNetworkHops() {
 	const config = runtimeConfig();
-	if (
-		Array.isArray(config.networkHops) &&
-		config.networkHops.every(isNetworkHop)
-	) {
-		return config.networkHops;
-	}
 	const backendURL = config.backendURL || "same process";
 	const backendRole = String(backendURL).includes("apim")
 		? "API gateway forwarding to sentiment-api"
 		: "Go API";
-	return [
+	return resolveNetworkHops(config, [
 		{
 			label: "Browser",
 			detail: window.location.origin,
@@ -341,171 +305,9 @@ function configuredNetworkHops() {
 		},
 		{
 			label: "Sentiment frontend",
-			detail: `${apiBasePath()}/*`,
+			detail: `${apiBasePath(config, "/api/v1")}/*`,
 			role: "Same-origin API route",
 		},
 		{ label: "Sentiment API", detail: backendURL, role: backendRole },
-	];
-}
-
-function isNetworkHop(value) {
-	return (
-		value && typeof value.label === "string" && typeof value.detail === "string"
-	);
-}
-
-function renderNetworkPath() {
-	const hops = configuredNetworkHops();
-	return `<details>
-    <summary>Network Path (${hops.length} hops)</summary>
-    <div class="network-path">
-      ${hops
-				.map((hop, index) => {
-					const arrow = index > 0 ? `<div class="hop-arrow">&darr;</div>` : "";
-					const role = hop.role
-						? `<br><em>${escapeHTML(String(hop.role))}</em>`
-						: "";
-					return `${arrow}<div class="hop"><strong>${escapeHTML(hop.label)}</strong><br><small>${escapeHTML(hop.detail)}</small>${role}</div>`;
-				})
-				.join("")}
-    </div>
-  </details>`;
-}
-
-function decodeAPIMTrace(value) {
-	if (!value) return null;
-	try {
-		return JSON.parse(atob(value));
-	} catch {
-		return null;
-	}
-}
-
-function initializeTheme() {
-	applyTheme(readThemeCookie());
-	window
-		.matchMedia("(prefers-color-scheme: dark)")
-		.addEventListener("change", () => {
-			if (themePreference() === "system") {
-				applyTheme("system");
-			}
-		});
-}
-
-function toggleTheme() {
-	const currentTheme = themePreference();
-	const nextTheme =
-		themeOptions[
-			(themeOptions.indexOf(currentTheme) + 1) % themeOptions.length
-		];
-	writeThemeCookie(nextTheme);
-	applyTheme(nextTheme);
-}
-
-function readThemeCookie() {
-	const prefix = "pce-theme=";
-	const cookieValue = document.cookie
-		.split(";")
-		.map((value) => value.trim())
-		.find((value) => value.startsWith(prefix));
-	const theme = cookieValue
-		? decodeURIComponent(cookieValue.slice(prefix.length))
-		: "";
-	return themeOptions.includes(theme) ? theme : "system";
-}
-
-function writeThemeCookie(theme) {
-	const safeTheme = themeOptions.includes(theme) ? theme : "system";
-	const maxAge = 60 * 60 * 24 * 365;
-	const secure = window.location.protocol === "https:" ? "; Secure" : "";
-	const domain = themeCookieDomain();
-	// biome-ignore lint/suspicious/noDocumentCookie: This shared preference must span dev, uat, and admin subdomains.
-	document.cookie = `pce-theme=${encodeURIComponent(safeTheme)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${domain}${secure}`;
-}
-
-function themeCookieDomain() {
-	return window.location.hostname.endsWith("127.0.0.1.sslip.io")
-		? "; Domain=.127.0.0.1.sslip.io"
-		: "";
-}
-
-function themePreference() {
-	const theme = document.documentElement.getAttribute("data-theme") || "system";
-	return themeOptions.includes(theme) ? theme : "system";
-}
-
-function applyTheme(theme) {
-	document.documentElement.setAttribute("data-theme", theme);
-	updateThemeIcon(theme);
-}
-
-function updateThemeIcon(theme) {
-	const switcher = document.getElementById("theme-switcher");
-	if (switcher instanceof HTMLButtonElement) {
-		const nextTheme =
-			themeOptions[(themeOptions.indexOf(theme) + 1) % themeOptions.length];
-		switcher.dataset.themeChoice = theme;
-		switcher.setAttribute(
-			"aria-label",
-			`Theme: ${theme}. Switch to ${nextTheme} theme.`,
-		);
-		switcher.title = `Theme: ${theme}. Switch to ${nextTheme} theme.`;
-	}
-}
-
-async function fetchGatewaySession() {
-	const response = await fetch("/.auth/me", {
-		headers: { Accept: "application/json" },
-	});
-	if (!response.ok) {
-		throw new Error(`HTTP ${response.status}`);
-	}
-	return normalizeGatewaySession(await response.json());
-}
-
-function normalizeGatewaySession(payload) {
-	if (Array.isArray(payload)) {
-		return payload[0] || null;
-	}
-	if (payload?.clientPrincipal) {
-		return payload.clientPrincipal;
-	}
-	return null;
-}
-
-function gatewayDisplayName(session) {
-	const claims = Array.isArray(session.claims) ? session.claims : [];
-	const claimValue = (name) => {
-		const found = claims.find(
-			(claim) => claim.typ === name || claim.type === name,
-		);
-		return found ? found.val || found.value : "";
-	};
-	return (
-		claimValue("name") ||
-		claimValue("preferred_username") ||
-		claimValue("email") ||
-		session.userDetails ||
-		session.user_id ||
-		session.userId ||
-		"authenticated user"
-	);
-}
-
-function logoutFromGateway() {
-	window.location.assign("/oauth2/sign_out?rd=/signed-out.html");
-}
-
-function escapeHTML(value) {
-	return String(value).replace(
-		/[&<>"']/g,
-		(char) =>
-			({
-				"&": "&amp;",
-				"<": "&lt;",
-				">": "&gt;",
-				'"': "&quot;",
-				"'": "&#39;",
-			})[char],
-	);
+	]);
 }

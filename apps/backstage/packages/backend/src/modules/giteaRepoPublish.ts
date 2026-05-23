@@ -15,9 +15,23 @@ type GiteaPublishInput = {
   private?: boolean;
 };
 
+type JSONPrimitive = string | number | boolean | null;
+type JSONValue = JSONPrimitive | JSONObject | JSONValue[];
+
+type JSONObject = {
+  [key: string]: JSONValue | undefined;
+};
+
+type GiteaFileContentRequestBody = JSONObject & {
+  branch: string;
+  message: string;
+  content: string;
+  sha?: string;
+};
+
 type GiteaRequestOptions = {
   method?: string;
-  body?: unknown;
+  body?: JSONObject | JSONValue[];
   allowStatuses?: number[];
 };
 
@@ -170,7 +184,7 @@ export async function uploadFile(
     allowStatuses: [200, 404],
   });
 
-  const body: Record<string, unknown> = {
+  const body: GiteaFileContentRequestBody = {
     branch,
     message: `backstage: update ${filePath}`,
     content: (await readFile(resolve(sourceRoot, filePath))).toString('base64'),

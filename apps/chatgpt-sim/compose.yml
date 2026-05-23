@@ -40,7 +40,14 @@ services:
       PORT: "8080"
       PUBLIC_BASE_URL: http://localhost:${CHATGPT_SIM_PUBLIC_PORT:-18084}
       MCP_URL: http://mcp-server:8080/mcp
-      LLM_URL: http://llm:8080/v1/chat/completions
+      LLM_URL: ${CHATGPT_SIM_LLM_URL:-http://llm:8080/v1/chat/completions}
+      LLM_MODEL: ${CHATGPT_SIM_LLM_MODEL:-${PLATFORM_LLM_MODEL:-go-local-openai-compatible-stub}}
+      LLM_TIMEOUT_SECONDS: ${CHATGPT_SIM_LLM_TIMEOUT_SECONDS:-1}
+      LLM_MAX_TOKENS: ${CHATGPT_SIM_LLM_MAX_TOKENS:-32}
+      LANGFUSE_HOST: ${CHATGPT_SIM_LANGFUSE_HOST:-}
+      LANGFUSE_PUBLIC_KEY: ${CHATGPT_SIM_LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${CHATGPT_SIM_LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_TIMEOUT_SECONDS: ${CHATGPT_SIM_LANGFUSE_TIMEOUT_SECONDS:-1}
       HOME: /tmp
     ports:
       - "${CHATGPT_SIM_APP_PORT:-18084}:8080"
@@ -139,7 +146,7 @@ services:
     environment:
       ROLE: llm
       PORT: "8080"
-      LLM_MODEL: ${PLATFORM_LLM_MODEL:-go-local-openai-compatible}
+      LLM_MODEL: ${PLATFORM_LLM_MODEL:-go-local-openai-compatible-stub}
       HOME: /tmp
     read_only: true
     cap_drop:

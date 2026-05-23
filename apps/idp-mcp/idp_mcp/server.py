@@ -84,7 +84,7 @@ def handle_tool_call(client: IdpApiClient, name: str, arguments: dict[str, Any])
     elif name == "environment_create":
         result = client.create_environment(arguments)
     else:
-        raise ValueError(f"unknown tool: {name}")
+        raise ValueError(f"unsupported tool: {name}")
 
     return {
         "content": [

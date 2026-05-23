@@ -9,13 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
-	"path"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"platform.local/apphttp"
+	"platform.local/appshell"
 	"platform.local/idpauth"
 )
 
@@ -120,57 +120,53 @@ func NewServer(cfg Config, client HTTPDoer) http.Handler {
 	s := &server{cfg: cfg, client: client}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
-	mux.HandleFunc("GET /favicon.ico", s.noContent)
+	mux.HandleFunc("GET /favicon.ico", appshell.SVGFavicon(langfuseDemosFaviconSVG))
 	mux.HandleFunc("GET /metrics", s.metrics)
 	mux.HandleFunc("GET /runtime-config.js", s.runtimeConfig)
-	mux.HandleFunc("GET /idpauth.js", idpauth.BrowserBundle)
+	appshell.RegisterSharedAssets(mux, idpauth.BrowserBundle)
 	mux.HandleFunc("GET /.auth/me", idpauth.WriteClientPrincipalSession)
 	mux.HandleFunc("POST /api/run", s.runDemo)
-	mux.HandleFunc("/", s.static)
-	return logMiddleware(mux)
-}
-
-func (s *server) noContent(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusNoContent)
+	mux.Handle("/", appshell.StaticFiles(web, "web"))
+	return apphttp.RequestLogger("langfuse-demos", nil, mux)
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteBrowserAppHealth(w, map[string]any{
 		"status":          "ok",
 		"service":         "langfuse-demos",
 		"role":            s.cfg.Role,
-		"dependencies":    "go-plus-shared-idpauth",
 		"langfuse_host":   s.cfg.LangfuseHost,
 		"openai_base_url": s.cfg.OpenAIBaseURL,
 	})
 }
 
 func (s *server) metrics(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	role := s.cfg.Role
-	fmt.Fprintf(w, "# HELP langfuse_demo_runs_total Demo runs accepted by the app.\n")
-	fmt.Fprintf(w, "# TYPE langfuse_demo_runs_total counter\n")
-	fmt.Fprintf(w, "langfuse_demo_runs_total{role=%q} %d\n", role, s.m.runs.Load())
-	fmt.Fprintf(w, "# HELP langfuse_demo_llm_calls_total LLM chat-completion attempts.\n")
-	fmt.Fprintf(w, "# TYPE langfuse_demo_llm_calls_total counter\n")
-	fmt.Fprintf(w, "langfuse_demo_llm_calls_total{role=%q} %d\n", role, s.m.llmCalls.Load())
-	fmt.Fprintf(w, "# HELP langfuse_demo_llm_errors_total LLM attempts that failed or returned non-2xx.\n")
-	fmt.Fprintf(w, "# TYPE langfuse_demo_llm_errors_total counter\n")
-	fmt.Fprintf(w, "langfuse_demo_llm_errors_total{role=%q} %d\n", role, s.m.llmErrors.Load())
-	fmt.Fprintf(w, "# HELP langfuse_demo_langfuse_batches_total Langfuse ingestion batches sent.\n")
-	fmt.Fprintf(w, "# TYPE langfuse_demo_langfuse_batches_total counter\n")
-	fmt.Fprintf(w, "langfuse_demo_langfuse_batches_total{role=%q} %d\n", role, s.m.langfuseBatches.Load())
-	fmt.Fprintf(w, "# HELP langfuse_demo_langfuse_errors_total Langfuse ingestion batches that failed.\n")
-	fmt.Fprintf(w, "# TYPE langfuse_demo_langfuse_errors_total counter\n")
-	fmt.Fprintf(w, "langfuse_demo_langfuse_errors_total{role=%q} %d\n", role, s.m.langfuseErrors.Load())
-	fmt.Fprintf(w, "# HELP langfuse_demo_run_latency_milliseconds_sum Sum of demo run latency in milliseconds.\n")
-	fmt.Fprintf(w, "# TYPE langfuse_demo_run_latency_milliseconds_sum counter\n")
-	fmt.Fprintf(w, "langfuse_demo_run_latency_milliseconds_sum{role=%q} %d\n", role, s.m.runLatencyMillis.Load())
+	var body strings.Builder
+	fmt.Fprintf(&body, "# HELP langfuse_demo_runs_total Demo runs accepted by the app.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_runs_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_runs_total{role=%q} %d\n", role, s.m.runs.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_llm_calls_total LLM chat-completion attempts.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_llm_calls_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_llm_calls_total{role=%q} %d\n", role, s.m.llmCalls.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_llm_errors_total LLM attempts that failed or returned non-2xx.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_llm_errors_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_llm_errors_total{role=%q} %d\n", role, s.m.llmErrors.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_langfuse_batches_total Langfuse ingestion batches sent.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_langfuse_batches_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_langfuse_batches_total{role=%q} %d\n", role, s.m.langfuseBatches.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_langfuse_errors_total Langfuse ingestion batches that failed.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_langfuse_errors_total counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_langfuse_errors_total{role=%q} %d\n", role, s.m.langfuseErrors.Load())
+	fmt.Fprintf(&body, "# HELP langfuse_demo_run_latency_milliseconds_sum Sum of demo run latency in milliseconds.\n")
+	fmt.Fprintf(&body, "# TYPE langfuse_demo_run_latency_milliseconds_sum counter\n")
+	fmt.Fprintf(&body, "langfuse_demo_run_latency_milliseconds_sum{role=%q} %d\n", role, s.m.runLatencyMillis.Load())
+	apphttp.WritePrometheusMetrics(w, body.String())
 }
 
-func (s *server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/javascript")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+const langfuseDemosFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#14171d"/><circle cx="22" cy="24" r="8" fill="#4f9d7e"/><circle cx="42" cy="40" r="8" fill="#2d6cdf"/><path d="M28 28l8 8" stroke="#e8eef4" stroke-width="5" stroke-linecap="round"/></svg>`
+
+func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{
 		"role":            s.cfg.Role,
 		"demoName":        s.displayName(),
@@ -186,14 +182,13 @@ func (s *server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
 	for key, value := range s.roleUIMap() {
 		payload[key] = value
 	}
-	b, _ := json.Marshal(payload)
-	fmt.Fprintf(w, "window.LANGFUSE_DEMO_CONFIG = %s;\n", b)
+	appshell.WriteScriptConfigForRequest(w, r, "window.LANGFUSE_DEMO_CONFIG", payload)
 }
 
 func (s *server) runDemo(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	var req runRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	if strings.TrimSpace(req.Prompt) == "" {
@@ -211,7 +206,7 @@ func (s *server) runDemo(w http.ResponseWriter, r *http.Request) {
 	}
 	s.m.runs.Add(1)
 	s.m.runLatencyMillis.Add(res.DurationMillis)
-	writeJSON(w, http.StatusOK, res)
+	apphttp.WriteJSON(w, http.StatusOK, res)
 }
 
 func (s *server) runTraceChat(ctx context.Context, req runRequest, started time.Time) runResponse {
@@ -260,7 +255,7 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 		{Role: "system", Content: "Plan one or two tool calls. Return a compact plan."},
 		{Role: "user", Content: req.Prompt},
 	})
-	planText := firstNonEmpty(plan.Content, "Deterministic plan: run policy_check and memory_lookup, then answer.")
+	planText := apphttp.FirstNonEmpty(plan.Content, "Deterministic plan: run policy_check and memory_lookup, then answer.")
 	policyDetail := "prompt_present=true; langfuse_configured=" + fmt.Sprint(s.langfuseConfigured())
 	memoryDetail := "memory_lookup=local-platform-stage-920-langfuse"
 	finalPrompt := fmt.Sprintf("User prompt: %s\nPlan: %s\nTool results: %s; %s", req.Prompt, planText, policyDetail, memoryDetail)
@@ -269,7 +264,7 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 		{Role: "system", Content: "Use tool results and produce a concise agent answer."},
 		{Role: "user", Content: finalPrompt},
 	})
-	answer := firstNonEmpty(final.Content, fmt.Sprintf(
+	answer := apphttp.FirstNonEmpty(final.Content, fmt.Sprintf(
 		"Agent completed with deterministic tool evidence: policy_check passed, memory_lookup returned %s. Langfuse receives the planner attempt, tool spans, final generation attempt, and scores.",
 		strings.TrimPrefix(memoryDetail, "memory_lookup="),
 	))
@@ -300,7 +295,7 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 			{Name: "planner", Type: "generation", Status: planDisplayStatus, Detail: truncate(planText, 120), TraceID: traceID, SpanID: planID, Duration: plan.DurationMillis},
 			{Name: "policy_check", Type: "tool", Status: "ok", Detail: policyDetail, TraceID: traceID, SpanID: toolPolicyID},
 			{Name: "memory_lookup", Type: "tool", Status: "ok", Detail: memoryDetail, TraceID: traceID, SpanID: toolMemoryID},
-			{Name: "final-response", Type: "generation", Status: finalDisplayStatus, Detail: firstNonEmpty(final.Content, "deterministic synthesis"), TraceID: traceID, SpanID: finalID, Duration: final.DurationMillis},
+			{Name: "final-response", Type: "generation", Status: finalDisplayStatus, Detail: apphttp.FirstNonEmpty(final.Content, "deterministic synthesis"), TraceID: traceID, SpanID: finalID, Duration: final.DurationMillis},
 		},
 		Scores:         scores,
 		LLMStatus:      joinAgentStatuses(planDisplayStatus, finalDisplayStatus),
@@ -331,7 +326,7 @@ func (s *server) runEvalRunner(ctx context.Context, req runRequest, started time
 			{Role: "system", Content: "Answer for an evaluation harness. Keep it one sentence."},
 			{Role: "user", Content: tc.Prompt},
 		})
-		output := firstNonEmpty(llm.Content, "Langfuse trace and score replay fallback output.")
+		output := apphttp.FirstNonEmpty(llm.Content, "Langfuse trace and score replay fallback output.")
 		scoreValue := boolFloat(strings.Contains(strings.ToLower(output), strings.ToLower(tc.Expected)))
 		total += scoreValue
 		score := demoScore{Name: "expected_keyword_match", Value: scoreValue, DataType: "BOOLEAN", Comment: tc.Name + " expects " + tc.Expected}
@@ -448,7 +443,7 @@ func (s *server) resolveOpenAIModel(ctx context.Context) string {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&parsed); err != nil {
+	if err := apphttp.DecodeJSONReader(resp.Body, &parsed); err != nil {
 		return defaultOpenAIModel
 	}
 	for _, model := range parsed.Data {
@@ -580,25 +575,6 @@ func scoreEvents(traceID, observationID string, scores []demoScore) []langfuseEv
 	return events
 }
 
-func (s *server) static(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-	if name == "." || name == "" {
-		name = "index.html"
-	}
-	name = "web/" + name
-	b, err := web.ReadFile(name)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
-	if ct := mime.TypeByExtension(path.Ext(name)); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(b)
-}
-
 func (s *server) displayName() string {
 	switch s.cfg.Role {
 	case "tool-agent":
@@ -665,36 +641,6 @@ func (s *server) langfuseConfigured() bool {
 	return s.cfg.LangfuseHost != "" && s.cfg.LangfusePublicKey != "" && s.cfg.LangfuseSecretKey != ""
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	defer r.Body.Close()
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(v); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
-		return false
-	}
-	return true
-}
-
-func logMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func boolFloat(ok bool) float64 {
 	if ok {
 		return 1
@@ -706,6 +652,7 @@ func joinStatuses(values ...string) string {
 	seen := map[string]bool{}
 	var out []string
 	for _, value := range values {
+		value = strings.TrimSpace(value)
 		if value == "" || seen[value] {
 			continue
 		}
@@ -713,7 +660,7 @@ func joinStatuses(values ...string) string {
 		out = append(out, value)
 	}
 	if len(out) == 0 {
-		return "unknown"
+		return "not reported"
 	}
 	return strings.Join(out, ",")
 }

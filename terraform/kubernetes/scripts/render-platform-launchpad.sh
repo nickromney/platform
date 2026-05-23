@@ -32,6 +32,8 @@ Environment variables:
   ENABLE_HEADLAMP
   ENABLE_APP_REPO_SENTIMENT
   ENABLE_APP_REPO_SUBNETCALC
+  ENABLE_LANGFUSE
+  ENABLE_LANGFUSE_DEMOS
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -58,7 +60,7 @@ parse_args() {
         shift 2
         ;;
       *)
-        echo "unknown flag: $1" >&2
+        shell_cli_unknown_flag "$(shell_cli_script_name)" "$1"
         usage
         exit 1
         ;;
@@ -66,28 +68,74 @@ parse_args() {
   done
 }
 
+set_default_targets() {
+  if [[ "${#TARGETS[@]}" -eq 0 ]]; then
+    TARGETS=(
+      "${STACK_DIR}/apps/argocd-apps/95-grafana.application.yaml"
+      "${STACK_DIR}/observability.tf"
+    )
+  fi
+}
+
 build_toggles_json() {
   local enable_sso=false
   local enable_headlamp=false
   local enable_sentiment=false
   local enable_subnetcalc=false
+  local enable_langfuse=false
+  local enable_langfuse_demos=false
 
   if is_true "${ENABLE_SSO:-true}"; then enable_sso=true; fi
   if is_true "${ENABLE_HEADLAMP:-true}"; then enable_headlamp=true; fi
   if is_true "${ENABLE_APP_REPO_SENTIMENT:-true}"; then enable_sentiment=true; fi
   if is_true "${ENABLE_APP_REPO_SUBNETCALC:-true}"; then enable_subnetcalc=true; fi
+  if is_true "${ENABLE_LANGFUSE:-true}"; then enable_langfuse=true; fi
+  if is_true "${ENABLE_LANGFUSE_DEMOS:-true}"; then enable_langfuse_demos=true; fi
 
   jq -cn \
     --argjson sso "${enable_sso}" \
     --argjson headlamp "${enable_headlamp}" \
     --argjson sentiment "${enable_sentiment}" \
     --argjson subnetcalc "${enable_subnetcalc}" \
+    --argjson langfuse "${enable_langfuse}" \
+    --argjson langfuse_demos "${enable_langfuse_demos}" \
     '{
       ENABLE_SSO: $sso,
       ENABLE_HEADLAMP: $headlamp,
       ENABLE_APP_REPO_SENTIMENT: $sentiment,
-      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc
+      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,
+      ENABLE_LANGFUSE: $langfuse,
+      ENABLE_LANGFUSE_DEMOS: $langfuse_demos
     }'
+}
+
+validate_inventory_requires() {
+  local toggles_json="$1"
+  local unsupported
+
+  unsupported="$(
+    jq -r \
+      --argjson toggles "${toggles_json}" \
+      '
+      [
+        .tiles[]
+        | (
+          (.requires // [])[]
+          as $requirement
+          | select(($toggles | has($requirement)) | not)
+          | $requirement
+        )
+      ]
+      | unique
+      | join(", ")
+      ' \
+      "${INVENTORY_FILE}"
+  )"
+
+  if [[ -n "${unsupported}" ]]; then
+    echo "Launchpad inventory uses unsupported requires toggle(s): ${unsupported}" >&2
+    return 1
+  fi
 }
 
 generate_dashboard_json() {
@@ -183,6 +231,18 @@ generate_dashboard_json() {
     "${INVENTORY_FILE}"
 }
 
+selected_tile_count() {
+  local toggles_json="$1"
+
+  jq \
+    --argjson toggles "${toggles_json}" \
+    '[
+      .tiles[]
+      | select(((.requires // []) | all($toggles[.] == true)))
+    ] | length' \
+    "${INVENTORY_FILE}"
+}
+
 build_section() {
   local dashboard_json="$1"
   cat <<EOF
@@ -223,26 +283,24 @@ replace_marked_section() {
 
 main() {
   parse_args "$@"
-
-  shell_cli_maybe_execute_or_preview_summary usage \
-    "would render the Platform Launchpad dashboard into ${#TARGETS[@]} target file(s)"
+  set_default_targets
 
   if [[ ! -f "${INVENTORY_FILE}" ]]; then
     echo "inventory file not found: ${INVENTORY_FILE}" >&2
     exit 1
   fi
 
-  if [[ "${#TARGETS[@]}" -eq 0 ]]; then
-    TARGETS=(
-      "${STACK_DIR}/apps/argocd-apps/95-grafana.application.yaml"
-      "${STACK_DIR}/observability.tf"
-    )
-  fi
-
   local toggles_json
+  local tile_count
+  toggles_json="$(build_toggles_json)"
+  validate_inventory_requires "${toggles_json}"
+  tile_count="$(selected_tile_count "${toggles_json}")"
+
+  shell_cli_maybe_execute_or_preview_summary usage \
+    "would render the Platform Launchpad dashboard into ${#TARGETS[@]} target file(s) with ${tile_count} selected tile(s)"
+
   local dashboard_json
   local section
-  toggles_json="$(build_toggles_json)"
   dashboard_json="$(generate_dashboard_json "${toggles_json}")"
   section="$(build_section "${dashboard_json}")"
 

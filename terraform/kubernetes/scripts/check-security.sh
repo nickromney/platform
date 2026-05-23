@@ -434,7 +434,7 @@ if [[ "${EXPECT_GATEWAY_TLS}" == "true" ]]; then
     if [[ "${h2_check}" == "2" ]]; then
       ok "HTTP/2 negotiated via ALPN"
     else
-      warn "HTTP/2 not negotiated (got version: ${h2_check:-unknown})"
+      warn "HTTP/2 not negotiated (got version: ${h2_check:-not reported})"
     fi
   fi
 

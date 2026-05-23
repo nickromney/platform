@@ -1,6 +1,6 @@
 FROM dhi.io/static:20260413-alpine3.23
 
-COPY app/.run/apim-simulator /apim-simulator
+COPY --chown=65532:65532 app/.run/apim-simulator /apim-simulator
 COPY examples /app/examples
 
 USER 65532:65532

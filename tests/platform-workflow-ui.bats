@@ -204,6 +204,26 @@ PY
   [[ "${output}" == *'recent-command-1'* ]]
 }
 
+@test "platform workflow ui avoids unknown placeholders in inventory and history fallbacks" {
+  run uv run --project "${REPO_ROOT}/tools/platform-workflow-ui" python - <<'PY'
+from platform_workflow_ui.main import history_panel, inventory_panel, output_meta
+
+print(inventory_panel({"generated_at": "2026-05-03T12:00:00Z"}, tools=[]))
+print(history_panel([
+    {"kind": "Run", "variant": "kubernetes/kind", "timestamp": "09:15:03", "command": "make status"},
+]))
+print(output_meta({"kind": "Run", "timestamp": "09:15:03"}))
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'not reported'* ]]
+  [[ "${output}" == *'No variant status rows reported.'* ]]
+  [[ "${output}" == *'No command status reported'* ]]
+  [[ "${output}" == *'exit not reported'* ]]
+  [[ "${output}" != *'unknown'* ]]
+  [[ "${output}" != *'Unknown'* ]]
+}
+
 @test "platform workflow ui serves the shared favicon" {
   start_server 18745
 

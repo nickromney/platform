@@ -112,7 +112,7 @@ def render_hcl_map(name: str, values: dict[str, str]) -> str:
 
 def required_string(image: dict[str, object], key: str, category: str) -> str:
     value = image.get(key)
-    image_id = image.get("id", "<unknown>")
+    image_id = image.get("id", "<missing id>")
     if not isinstance(value, str) or not value:
         raise ValueError(f"{category}_images.{image_id}.{key} must be a non-empty string")
     return value

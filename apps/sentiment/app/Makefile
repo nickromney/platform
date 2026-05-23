@@ -1,12 +1,23 @@
-.PHONY: test js-check build build-linux static-dist run-backend run-frontend
+.PHONY: help test js-check build build-linux static-dist run-backend run-frontend clean
 
 SENTIMENT_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+
+help:
+	@echo "Sentiment app:"
+	@echo "  test          Run Go unit tests"
+	@echo "  js-check      Check vanilla JavaScript source contracts"
+	@echo "  build         Build the local binary at .run/sentiment"
+	@echo "  build-linux   Build the Linux binary used by compose/kind images"
+	@echo "  static-dist   Copy embedded web assets to .run/frontend-static"
+	@echo "  run-backend   Run the backend role directly on port 8306"
+	@echo "  run-frontend  Run the frontend role directly on port 8307"
+	@echo "  clean         Remove generated .run artifacts"
 
 test:
 	go test ./...
 
 js-check:
-	biome check internal/app/web/app.js internal/app/web/api-types.d.ts
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html internal/app/web/style.css
 	deno check --check-js internal/app/web/app.js
 
 build:
@@ -27,3 +38,6 @@ run-backend:
 
 run-frontend:
 	RUNTIME_ROLE=frontend BACKEND_URL=http://127.0.0.1:8306 PORT=8307 go run ./cmd/sentiment
+
+clean:
+	rm -rf .run

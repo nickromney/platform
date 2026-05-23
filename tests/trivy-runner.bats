@@ -80,3 +80,12 @@ write_fake_docker() {
     [ "${status}" -eq 1 ]
   done
 }
+
+@test "trivy report summaries avoid unknown placeholders for sparse fields" {
+  run rg -n '// "unknown"|// "UNKNOWN"|order\[[0-9]+\] = "UNKNOWN"' "${REPO_ROOT}/scripts/trivy-scan-apps.sh"
+
+  [ "${status}" -ne 0 ]
+
+  run rg -n 'target not reported|severity not reported|finding id not reported' "${REPO_ROOT}/scripts/trivy-scan-apps.sh"
+  [ "${status}" -eq 0 ]
+}

@@ -5,21 +5,64 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
+assert_file_contains() {
+  local relative_path="$1"
+  local expected="$2"
+
+  run grep -Fq -- "${expected}" "${REPO_ROOT}/${relative_path}"
+  [ "${status}" -eq 0 ] || {
+    echo "${relative_path} must contain: ${expected}"
+    return 1
+  }
+}
+
+assert_file_matches() {
+  local relative_path="$1"
+  local expected_regex="$2"
+
+  run grep -Eq -- "${expected_regex}" "${REPO_ROOT}/${relative_path}"
+  [ "${status}" -eq 0 ] || {
+    echo "${relative_path} must match: ${expected_regex}"
+    return 1
+  }
+}
+
+assert_file_omits_ci() {
+  local relative_path="$1"
+  local forbidden="$2"
+
+  run grep -Eiq -- "${forbidden}" "${REPO_ROOT}/${relative_path}"
+  [ "${status}" -ne 0 ] || {
+    echo "${relative_path} must not contain case-insensitive match: ${forbidden}"
+    return 1
+  }
+}
+
+assert_image_source() {
+  local image_id="$1"
+  local source="$2"
+
+  run jq -e \
+    --arg image_id "${image_id}" \
+    --arg source "${source}" \
+    '(.platform_images + .workload_images) | any(.[]; .id == $image_id and ((.fingerprint_sources // []) | index($source)))' \
+    "${REPO_ROOT}/kubernetes/workflow/image-catalog.json"
+  [ "${status}" -eq 0 ] || {
+    echo "${image_id} fingerprint must include ${source}"
+    return 1
+  }
+}
+
 @test "subnetcalc Go runtime image stays package-manager-free" {
   run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
-content = (repo_root / "apps/subnetcalc/app/Dockerfile").read_text(encoding="utf-8")
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations
 
-assert "node_modules" not in content, content
-assert "bun" not in content.lower(), content
-assert "npm" not in content.lower(), content
-assert "python" not in content.lower(), content
-assert 'ENTRYPOINT ["/subnetcalc"]' in content, content
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_dockerfile_runtime_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated package-manager-free subnetcalc Go runtime image")
 PY
@@ -28,117 +71,464 @@ PY
   [[ "${output}" == *"validated package-manager-free subnetcalc Go runtime image"* ]]
 }
 
-@test "remaining app dockerfiles use only current cache mounts" {
+@test "APIM simulator image follows the Go single-binary runtime contract" {
   run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-
-expectations = {
-    "apps/apim-simulator/Dockerfile": [
-        "--mount=type=cache,target=/root/.cache/uv",
-    ],
-}
-
-validated = 0
-for relative_path, required_fragments in expectations.items():
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    assert not content.startswith("# syntax=docker/dockerfile"), relative_path
-    for fragment in required_fragments:
-        assert fragment in content, (relative_path, fragment)
-        validated += 1
-
-print(f"validated {validated} docker cache mount expectation(s)")
+violations = go_app_dockerfile_runtime_contract_violations(repo_root)
+assert not violations, violations
+print("validated APIM simulator Go single-binary runtime contract")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 1 docker cache mount expectation(s)"* ]]
+  [[ "${output}" == *"validated APIM simulator Go single-binary runtime contract"* ]]
 }
 
-@test "remaining Python dockerfiles use uv cache mounts with explicit copy link mode" {
+@test "lightweight Go app images avoid package manager runtimes" {
   run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations
 
-dockerfiles = [
-    "apps/apim-simulator/Dockerfile",
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_dockerfile_runtime_contract_violations(repo_root)
+assert not violations, violations
+print("validated lightweight Go app package-manager-free runtime contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated lightweight Go app package-manager-free runtime contract"* ]]
+}
+
+@test "local Go app runtime binaries are owned by the non-root runtime user" {
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
+
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_dockerfile_runtime_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app runtime binary ownership contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app runtime binary ownership contract"* ]]
+}
+
+@test "local Go app runtime images use writable temp home for the non-root user" {
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
+
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_dockerfile_runtime_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app runtime writable temp home contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app runtime writable temp home contract"* ]]
+}
+
+@test "docker optimization tests share Go app Dockerfile runtime helpers" {
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
+
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-docker-optimization-contracts.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "subnetcalc Go runtime image stays package-manager-free"'):
+    content.index('\n@test "local Go app Makefiles create their binary output directory"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Go app Dockerfile runtime policy should move" not in line
 ]
 
-for relative_path in dockerfiles:
-    content = (repo_root / relative_path).read_text(encoding="utf-8")
-    assert "--mount=type=cache,target=/root/.cache/uv" in content, relative_path
-    assert "--link-mode=copy" in content, relative_path
-    assert "--no-cache" not in content, relative_path
+assert callable(go_app_dockerfile_runtime_contract_violations)
+assert (
+    "go_app_dockerfile_runtime_contract_violations" in content
+), "Go app Dockerfile runtime contracts should call tests/app_contracts.py"
+assert not any("apps/apim-simulator/app/Dockerfile" in line for line in contract_lines), "Go app Dockerfile runtime policy should move to tests/app_contracts.py"
+assert not any("COPY --chown=65532:65532" in line for line in contract_lines), "Go app Dockerfile runtime policy should move to tests/app_contracts.py"
+assert not any("ENTRYPOINT" in line for line in contract_lines), "Go app Dockerfile runtime policy should move to tests/app_contracts.py"
+assert not any("HOME=/tmp" in line for line in contract_lines), "Go app Dockerfile runtime policy should move to tests/app_contracts.py"
 
-print(f"validated {len(dockerfiles)} uv dockerfile cache policy expectation(s)")
+print("validated shared Go app Dockerfile runtime helper usage")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 1 uv dockerfile cache policy expectation(s)"* ]]
+  [[ "${output}" == *"validated shared Go app Dockerfile runtime helper usage"* ]]
+}
+
+@test "local Go app Makefiles create their binary output directory" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_makefile_workflow_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_makefile_workflow_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app Makefile workflow contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app Makefile workflow contract"* ]]
+}
+
+@test "local Go app Makefiles build trimmed stripped binaries by default" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_makefile_workflow_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_makefile_workflow_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app Makefile optimized build contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app Makefile optimized build contract"* ]]
+}
+
+@test "local Go app Makefiles share the Linux binary build contract" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_makefile_build_linux_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_makefile_build_linux_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app Makefile build-linux contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app Makefile build-linux contract"* ]]
+}
+
+@test "local Go app Makefiles expose help for focused workflows" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_makefile_workflow_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_makefile_workflow_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app Makefile focused help contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app Makefile focused help contract"* ]]
+}
+
+@test "local Go app Makefiles expose clean for generated run artifacts" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_makefile_workflow_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_makefile_workflow_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app Makefile clean contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app Makefile clean contract"* ]]
+}
+
+@test "docker optimization tests share local Go app Makefile workflow helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_makefile_workflow_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-docker-optimization-contracts.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "local Go app Makefiles create their binary output directory"'):
+    content.index('\n@test "shared app module Makefiles expose focused help"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local Go app Makefile workflow policy should move" not in line
+]
+
+assert callable(go_app_makefile_workflow_contract_violations)
+assert (
+    "go_app_makefile_workflow_contract_violations" in content
+), "local Go app Makefile workflow contracts should call tests/app_contracts.py"
+assert not any("apps/apim-simulator/app/Makefile" in line for line in contract_lines), "local Go app Makefile workflow policy should move to tests/app_contracts.py"
+assert not any("apps/subnetcalc/app/Makefile" in line for line in contract_lines), "local Go app Makefile workflow policy should move to tests/app_contracts.py"
+assert not any("APIM Simulator app:" in line for line in contract_lines), "local Go app Makefile workflow policy should move to tests/app_contracts.py"
+assert not any("rm -rf \\.run" in line for line in contract_lines), "local Go app Makefile workflow policy should move to tests/app_contracts.py"
+
+print("validated shared local Go app Makefile workflow helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local Go app Makefile workflow helper usage"* ]]
+}
+
+@test "shared app module Makefiles expose focused help" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import (
+    canonical_shared_app_module_names,
+    shared_app_module_makefile_contract_violations,
+)
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = shared_app_module_makefile_contract_violations(repo_root)
+assert not violations, violations
+
+print("validated shared app module Makefile focused help")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared app module Makefile focused help"* ]]
+}
+
+@test "docker optimization tests share shared app module Makefile helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import (
+    canonical_shared_app_module_names,
+    shared_app_module_makefile_contract_violations,
+)
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-docker-optimization-contracts.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "shared app module Makefiles expose focused help"'):
+    content.index('\n@test "browser app js-check targets cover shipped vanilla web assets"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "shared app module Makefile policy should move" not in line
+]
+
+assert callable(shared_app_module_makefile_contract_violations)
+assert callable(canonical_shared_app_module_names)
+assert "shared_app_module_makefile_contract_violations" in test_body
+assert "canonical_shared_app_module_names" in test_body
+assert not any("assert_file_matches" in line for line in contract_lines), "shared app module Makefile policy should move to tests/app_contracts.py"
+assert not any("apps/shared/appshell/Makefile" in line for line in contract_lines), "shared app module Makefile policy should move to tests/app_contracts.py"
+assert not any("apps/shared/idpauth/Makefile" in line for line in contract_lines), "shared app module Makefile policy should move to tests/app_contracts.py"
+
+print("validated shared app module Makefile helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared app module Makefile helper usage"* ]]
+}
+
+@test "browser app js-check targets cover shipped vanilla web assets" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import browser_app_js_check_asset_contract_violations
+
+repo_root = Path.cwd()
+violations = browser_app_js_check_asset_contract_violations(repo_root)
+assert not violations, violations
+
+print("validated browser app js-check coverage for shipped vanilla web assets")
+PY
+
+	[ "$status" -eq 0 ]
+	[[ "${output}" == *"validated browser app js-check coverage for shipped vanilla web assets"* ]]
+}
+
+@test "docker optimization tests share browser app js-check asset helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import browser_app_js_check_asset_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "browser app js-check targets cover shipped vanilla web assets"'):
+    content.index('\n@test "local Go app commands use the shared hardened HTTP server helper"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "browser app js-check asset policy should move" not in line
+]
+
+assert callable(browser_app_js_check_asset_contract_violations)
+assert (
+    "browser_app_js_check_asset_contract_violations" in content
+), "browser app js-check asset contracts should call tests/app_contracts.py"
+assert not any('Path("apps/apim-simulator/app")' in line for line in contract_lines), "browser app js-check asset policy should move to tests/app_contracts.py"
+assert not any('"internal/app/web"' in line for line in contract_lines), "browser app js-check asset policy should move to tests/app_contracts.py"
+assert not any('path.suffix in {".js", ".css", ".html", ".ts"}' in line for line in contract_lines), "browser app js-check asset policy should move to tests/app_contracts.py"
+
+print("validated shared browser app js-check asset helper usage")
+PY
+
+	[ "$status" -eq 0 ]
+	[[ "${output}" == *"validated shared browser app js-check asset helper usage"* ]]
+}
+
+@test "local Go app commands use the shared hardened HTTP server helper" {
+	run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import hardened_go_command_http_contract_violations
+
+violations = hardened_go_command_http_contract_violations(Path.cwd())
+assert not violations, violations
+
+print("validated shared hardened HTTP server and healthcheck helper usage")
+PY
+
+	[ "$status" -eq 0 ]
+	[[ "${output}" == *"validated shared hardened HTTP server and healthcheck helper usage"* ]]
+}
+
+@test "Go apps decode upstream JSON through shared apphttp helper" {
+	run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import go_app_upstream_json_decode_contract_violations
+
+violations = go_app_upstream_json_decode_contract_violations(Path.cwd())
+assert not violations, violations
+
+print("validated shared upstream JSON decode helper usage")
+PY
+
+	[ "$status" -eq 0 ]
+	[[ "${output}" == *"validated shared upstream JSON decode helper usage"* ]]
+}
+
+@test "docker optimization tests share hardened Go command HTTP helpers" {
+	run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import hardened_go_command_http_contract_violations, go_app_upstream_json_decode_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "local Go app commands use the shared hardened HTTP server helper"'):
+    content.index('\n@test "compose files harden additional subnetcalc runtime services"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "hardened Go command HTTP policy should move" not in line
+]
+
+assert callable(hardened_go_command_http_contract_violations)
+assert callable(go_app_upstream_json_decode_contract_violations)
+assert (
+    "hardened_go_command_http_contract_violations" in content
+), "hardened Go command HTTP contracts should call tests/app_contracts.py"
+assert (
+    "go_app_upstream_json_decode_contract_violations" in content
+), "upstream JSON decode contracts should call tests/app_contracts.py"
+assert not any('Path("apps").glob("*/app/cmd/*/main.go")' in line for line in contract_lines), "hardened Go command HTTP policy should move to tests/app_contracts.py"
+assert not any('"http.ListenAndServe("' in line for line in contract_lines), "hardened Go command HTTP policy should move to tests/app_contracts.py"
+assert not any('"func CheckLocalHealth("' in line for line in contract_lines), "hardened Go command HTTP policy should move to tests/app_contracts.py"
+
+print("validated shared hardened Go command HTTP helper usage")
+PY
+
+	[ "$status" -eq 0 ]
+	[[ "${output}" == *"validated shared hardened Go command HTTP helper usage"* ]]
 }
 
 @test "compose files harden additional subnetcalc runtime services" {
-  run uv run --isolated --with pyyaml python - <<'PY'
+	run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import (
+    additional_subnetcalc_compose_hardening_contract_violations,
+    additional_subnetcalc_compose_hardening_validated_services,
+)
 
 repo_root = Path(os.environ["REPO_ROOT"])
+violations = additional_subnetcalc_compose_hardening_contract_violations(repo_root)
+assert not violations, violations
+validated = additional_subnetcalc_compose_hardening_validated_services()
 
-nginx_tmpfs = [
-    "/tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=1777",
-    "/var/cache/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-    "/var/run/nginx:rw,noexec,nosuid,nodev,uid=65532,gid=65532",
-]
-app_tmpfs = ["/tmp:rw,noexec,nosuid,nodev,mode=1777"]
-
-expectations = {
-    "apps/subnetcalc/compose.yml": {
-        "subnetcalc-backend": app_tmpfs,
-        "subnetcalc-frontend": app_tmpfs,
-    },
-    "docker/compose/compose.yml": {
-        "apim-simulator": app_tmpfs,
-        "subnetcalc-api-dev": app_tmpfs,
-        "subnetcalc-api-uat": app_tmpfs,
-        "subnetcalc-frontend-dev": app_tmpfs,
-        "subnetcalc-frontend-uat": app_tmpfs,
-    },
-}
-
-validated = 0
-for relative_path, services in expectations.items():
-    compose = yaml.safe_load((repo_root / relative_path).read_text(encoding="utf-8"))
-    for service_name, required_tmpfs in services.items():
-        service = compose["services"][service_name]
-        assert service.get("read_only") is True, (relative_path, service_name, "read_only", service.get("read_only"))
-        assert service.get("cap_drop") == ["ALL"], (relative_path, service_name, "cap_drop", service.get("cap_drop"))
-        assert service.get("security_opt") == ["no-new-privileges:true"], (
-            relative_path,
-            service_name,
-            "security_opt",
-            service.get("security_opt"),
-        )
-        tmpfs_entries = service.get("tmpfs", [])
-        for required in required_tmpfs:
-            assert required in tmpfs_entries, (relative_path, service_name, required, tmpfs_entries)
-        validated += 1
-
-print(f"validated {validated} hardened compose service(s)")
+print(f"validated {len(validated)} hardened compose service(s)")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated 7 hardened compose service(s)"* ]]
+}
+
+@test "docker optimization tests share additional subnetcalc compose hardening helpers" {
+	run uv run --isolated --with pyyaml python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import additional_subnetcalc_compose_hardening_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "compose files harden additional subnetcalc runtime services"'):
+    content.index('\n@test "docker build audit script captures logs sizes and warnings"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "additional subnetcalc compose hardening policy should move" not in line
+]
+
+assert callable(additional_subnetcalc_compose_hardening_contract_violations)
+assert "additional_subnetcalc_compose_hardening_contract_violations" in content
+assert not any("nginx_tmpfs =" in line for line in contract_lines), "additional subnetcalc compose hardening policy should move to tests/app_contracts.py"
+assert not any("app_tmpfs =" in line for line in contract_lines), "additional subnetcalc compose hardening policy should move to tests/app_contracts.py"
+assert not any("yaml.safe_load" in line for line in contract_lines), "additional subnetcalc compose hardening policy should move to tests/app_contracts.py"
+assert not any("subnetcalc-api-dev" in line for line in contract_lines), "additional subnetcalc compose hardening policy should move to tests/app_contracts.py"
+assert not any("read_only" in line and "service.get" in line for line in contract_lines), "additional subnetcalc compose hardening policy should move to tests/app_contracts.py"
+
+print("validated shared additional subnetcalc compose hardening helper usage")
+PY
+
+	[ "$status" -eq 0 ]
+	[[ "${output}" == *"validated shared additional subnetcalc compose hardening helper usage"* ]]
 }
 
 @test "docker build audit script captures logs sizes and warnings" {
@@ -148,29 +538,49 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import docker_build_audit_tooling_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-script = repo_root / "scripts/audit-docker-builds.sh"
-
-assert script.exists(), script
-content = script.read_text(encoding="utf-8")
-
-required_fragments = [
-    "--progress=plain",
-    "docker history",
-    "docker image inspect",
-    "warning",
-    "apps/subnetcalc/app/Dockerfile",
-    "apim-simulator/Dockerfile",
-]
-
-for fragment in required_fragments:
-    assert fragment in content, fragment
+violations = docker_build_audit_tooling_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated docker build audit tooling contract")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated docker build audit tooling contract"* ]]
+}
+
+@test "docker optimization tests share docker build audit tooling helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import docker_build_audit_tooling_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "docker build audit script captures logs sizes and warnings"'):
+    content.index('\n@test "grafana plugin image build uses a host-verified archive instead of downloading in Dockerfile"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "docker build audit tooling policy should move" not in line
+]
+
+assert callable(docker_build_audit_tooling_contract_violations)
+assert "docker_build_audit_tooling_contract_violations" in content
+assert not any("required_fragments =" in line for line in contract_lines), "docker build audit tooling policy should move to tests/app_contracts.py"
+assert not any("--progress=plain" in line for line in contract_lines), "docker build audit tooling policy should move to tests/app_contracts.py"
+assert not any("docker image inspect" in line for line in contract_lines), "docker build audit tooling policy should move to tests/app_contracts.py"
+assert not any("apps/subnetcalc/app/Dockerfile" in line for line in contract_lines), "docker build audit tooling policy should move to tests/app_contracts.py"
+
+print("validated shared docker build audit tooling helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared docker build audit tooling helper usage"* ]]
 }
 
 @test "grafana plugin image build uses a host-verified archive instead of downloading in Dockerfile" {
@@ -180,29 +590,49 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-repo_root = Path(os.environ["REPO_ROOT"])
-dockerfile = (repo_root / "kubernetes/kind/images/grafana-victorialogs/Dockerfile").read_text(encoding="utf-8")
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
-variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
+from tests.app_contracts import grafana_plugin_archive_mirroring_contract_violations
 
-assert 'grafana_victoria_logs_plugin_version' in variables_tf, "missing explicit plugin version variable"
-assert 'grafana_victoria_logs_plugin_sha256' in variables_tf, "missing explicit plugin checksum variable"
-assert "curl -fsSL" not in dockerfile, dockerfile
-assert "apk add" not in dockerfile, dockerfile
-assert "busybox unzip" in dockerfile, dockerfile
-assert "COPY " in dockerfile and "victorialogs.zip" in dockerfile, dockerfile
-assert '"terraform_version_variable": "grafana_victoria_logs_plugin_version"' in image_catalog, image_catalog
-assert '"terraform_sha256_variable": "grafana_victoria_logs_plugin_sha256"' in image_catalog, image_catalog
-assert 'tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_VERSION_VAR}"' in build_script, build_script
-assert 'tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_SHA256_VAR}"' in build_script, build_script
-assert "shasum -a 256" in build_script, build_script
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = grafana_plugin_archive_mirroring_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated grafana plugin archive mirroring contract")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated grafana plugin archive mirroring contract"* ]]
+}
+
+@test "docker optimization tests share grafana plugin archive mirroring helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import grafana_plugin_archive_mirroring_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "grafana plugin image build uses a host-verified archive instead of downloading in Dockerfile"'):
+    content.index('\n@test "local platform image build and sync contracts include IDP images"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "grafana plugin archive mirroring policy should move" not in line
+]
+
+assert callable(grafana_plugin_archive_mirroring_contract_violations)
+assert "grafana_plugin_archive_mirroring_contract_violations" in content
+assert not any("grafana-victorialogs/Dockerfile" in line for line in contract_lines), "grafana plugin archive mirroring policy should move to tests/app_contracts.py"
+assert not any("grafana_victoria_logs_plugin_sha256" in line for line in contract_lines), "grafana plugin archive mirroring policy should move to tests/app_contracts.py"
+assert not any("curl -fsSL" in line for line in contract_lines), "grafana plugin archive mirroring policy should move to tests/app_contracts.py"
+assert not any("victorialogs.zip" in line for line in contract_lines), "grafana plugin archive mirroring policy should move to tests/app_contracts.py"
+
+print("validated shared grafana plugin archive mirroring helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared grafana plugin archive mirroring helper usage"* ]]
 }
 
 @test "local platform image build and sync contracts include IDP images" {
@@ -212,54 +642,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tests.app_contracts import local_platform_image_sync_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
-sync_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea.sh").read_text(encoding="utf-8")
-policies_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh").read_text(encoding="utf-8")
-gitops_tf = (repo_root / "terraform/kubernetes/gitops.tf").read_text(encoding="utf-8")
-variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")
-locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
-
-for image_name, dockerfile_path in {
-    "idp-core": "apps/idp-core/app/Dockerfile",
-    "backstage": "apps/backstage/Dockerfile",
-    "platform-mcp": "apps/platform-mcp/app/Dockerfile",
-}.items():
-    assert f'"id": "{image_name}"' in image_catalog, image_name
-    assert f'lookup(var.external_platform_image_refs, "{image_name}", "")' in locals_tf, image_name
-    assert image_name in variables_tf, image_name
-
-assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in sync_script
-assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in sync_script
-assert "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP" in sync_script
-assert "export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false" in sync_script
-assert "resolve_external_workload_image()" in sync_script
-assert "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in policies_script
-assert "EXTERNAL_PLATFORM_IMAGE_IDP_CORE" in policies_script
-assert "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP" in policies_script
-assert "EXTERNAL_IMAGE_PLATFORM_MCP" not in policies_script
-assert "ensure_grafana_dashboard_provider_paths" in policies_script
-assert "/^    path:[[:space:]]*/" in policies_script
-assert "/var/lib/grafana/dashboards/default" in policies_script
-assert "/var/lib/grafana/dashboards/kubernetes" in policies_script
-assert "/var/lib/grafana/dashboards/cilium" in policies_script
-assert "/var/lib/grafana/dashboards/argocd" in policies_script
-assert 'EXTERNAL_PLATFORM_IMAGE_BACKSTAGE             = lookup(var.external_platform_image_refs, "backstage", "")' not in gitops_tf
-assert 'EXTERNAL_PLATFORM_IMAGE_IDP_CORE              = lookup(var.external_platform_image_refs, "idp-core", "")' not in gitops_tf
-assert 'EXTERNAL_IMAGE_PLATFORM_MCP                   = lookup(var.external_workload_image_refs, "platform-mcp", "")' not in gitops_tf
-assert "GITOPS_RENDER_CONTRACT_FILE" in gitops_tf
-assert "render_external_image_inputs" in policies_script
-assert 'replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"' in policies_script
-assert 'replace_image_ref "${workload_file}" "${image_name}" "${image_ref}"' in policies_script
-assert 'HELM_REGISTRY_CONFIG="${tmp_registry_dir}/registry.json"' in policies_script
-assert 'DOCKER_CONFIG="${tmp_registry_dir}"' in policies_script
-assert "external_platform_backstage" in locals_tf
-assert "external_platform_idp_core" in locals_tf
-assert "external_platform_mcp" in locals_tf
-
-kind_makefile = (repo_root / "kubernetes/kind/Makefile").read_text(encoding="utf-8")
-assert 'GITEA_SYNC_TARGET_TFVARS_FILE="$${GITEA_SYNC_TARGET_TFVARS_FILE:-$(KIND_OPERATOR_OVERRIDES_FILE)}"' in kind_makefile
+violations = local_platform_image_sync_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated local platform IDP image build and sync contract")
 PY
@@ -268,48 +655,48 @@ PY
   [[ "${output}" == *"validated local platform IDP image build and sync contract"* ]]
 }
 
+@test "docker optimization tests share local platform image sync helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import local_platform_image_sync_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "local platform image build and sync contracts include IDP images"'):
+    content.index('\n@test "local platform IDP image cache keys include source fingerprints"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local platform image sync policy should move" not in line
+]
+
+assert callable(local_platform_image_sync_contract_violations)
+assert "local_platform_image_sync_contract_violations" in content
+assert not any("sync-gitea-policies.sh" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
+assert not any("EXTERNAL_PLATFORM_IMAGE_BACKSTAGE" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
+assert not any("external_platform_idp_core" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
+assert not any("GITEA_SYNC_TARGET_TFVARS_FILE" in line for line in contract_lines), "local platform image sync policy should move to tests/app_contracts.py"
+
+print("validated shared local platform image sync helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local platform image sync helper usage"* ]]
+}
+
 @test "local platform IDP image cache keys include source fingerprints" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
 
+from tests.app_contracts import local_platform_source_fingerprint_cache_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
-catalog_lib = (repo_root / "kubernetes/workflow/image-catalog-lib.sh").read_text(encoding="utf-8")
-image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-
-assert "source_fingerprint_tag()" in catalog_lib
-assert "idp_core_source_tag=" in build_script
-assert "backstage_source_tag=" in build_script
-assert "platform_mcp_source_tag=" in build_script
-assert 'image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"' in build_script
-assert 'image_build_catalog_build_and_push platform backstage backstage "${backstage_source_tag}"' in build_script
-assert 'image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"' in build_script
-assert 'image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in image_build_lib
-
-render_script = (repo_root / "kubernetes/kind/scripts/render-operator-overrides.sh").read_text(encoding="utf-8")
-assert "platform_mcp_image_tag=" in render_script
-assert "idp_core_image_tag=" in render_script
-assert "backstage_image_tag=" in render_script
-assert "write_external_platform_images()" in render_script
-assert "prefer_external_platform_images = true" in render_script
-assert "external_platform_image_refs = {" in render_script
-assert "apps/platform-mcp/app/internal" in image_catalog
-assert "apps/idp-core/app/go.mod" in image_catalog
-assert "apps/idp-core/app/internal" in image_catalog
-assert "make -C apps/idp-core/app build-linux" in image_catalog
-assert "apps/backstage/packages" in image_catalog
-assert "apps/apim-simulator/catalog-info.yaml" in image_catalog
-assert "image_catalog_source_tag platform platform-mcp" in render_script
-assert "image_catalog_source_tag platform backstage" in render_script
-assert "image_catalog_source_tag platform idp-core" in render_script
-assert "image_catalog_hcl_refs platform" in render_script
-assert "image_catalog_hcl_refs workload" in render_script
-assert "write_external_workload_images()" in render_script
-assert "image_catalog_external_ids workload" in render_script
-assert "image_catalog_source_tag workload" in render_script
-assert "image_catalog_external_ids()" in catalog_lib
+violations = local_platform_source_fingerprint_cache_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated local platform IDP source fingerprint cache keys")
 PY
@@ -318,27 +705,48 @@ PY
   [[ "${output}" == *"validated local platform IDP source fingerprint cache keys"* ]]
 }
 
+@test "docker optimization tests share local platform source fingerprint cache helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import local_platform_source_fingerprint_cache_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "local platform IDP image cache keys include source fingerprints"'):
+    content.index('\n@test "local Go workload image cache keys include embedded frontend sources"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local platform source fingerprint cache policy should move" not in line
+]
+
+assert callable(local_platform_source_fingerprint_cache_contract_violations)
+assert "local_platform_source_fingerprint_cache_contract_violations" in content
+assert not any("source_fingerprint_tag()" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
+assert not any("idp_core_source_tag=" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
+assert not any("image_catalog_source_tag platform" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
+assert not any("apps/platform-mcp/app/internal" in line for line in contract_lines), "local platform source fingerprint cache policy should move to tests/app_contracts.py"
+
+print("validated shared local platform source fingerprint cache helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local platform source fingerprint cache helper usage"* ]]
+}
+
 @test "local Go workload image cache keys include embedded frontend sources" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
-import json
 import os
 
+from tests.app_contracts import local_go_workload_source_fingerprint_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
-workloads = {image["id"]: image for image in catalog["workload_images"]}
-
-expected_sources = {
-    "sentiment-api": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd", "apps/shared/idpauth", "apps/shared/web"],
-    "sentiment-auth-ui": ["apps/sentiment/app/go.sum", "apps/sentiment/app/internal", "apps/sentiment/app/cmd", "apps/shared/idpauth", "apps/shared/web"],
-    "subnetcalc-api": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/cmd", "apps/shared/idpauth", "apps/shared/web"],
-    "subnetcalc-frontend": ["apps/subnetcalc/app/go.sum", "apps/subnetcalc/app/internal", "apps/subnetcalc/app/internal/app/web", "apps/shared/idpauth", "apps/shared/web"],
-}
-
-for image_id, expected in expected_sources.items():
-    sources = workloads[image_id].get("fingerprint_sources", [])
-    for source in expected:
-        assert source in sources, (image_id, source, sources)
+violations = local_go_workload_source_fingerprint_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated local Go workload source fingerprint cache keys")
 PY
@@ -347,58 +755,68 @@ PY
   [[ "${output}" == *"validated local Go workload source fingerprint cache keys"* ]]
 }
 
+@test "image catalog shared source fingerprints match local Go module imports" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import image_catalog_shared_source_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = image_catalog_shared_source_contract_violations(repo_root)
+assert not violations, violations
+print("validated image catalog shared source fingerprints")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated image catalog shared source fingerprints"* ]]
+}
+
+@test "docker optimization tests share local Go workload source fingerprint helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import local_go_workload_source_fingerprint_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-docker-optimization-contracts.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('@test "local Go workload image cache keys include embedded frontend sources"'):
+    content.index('@test "image catalog shared source fingerprints match local Go module imports"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local Go workload source fingerprint policy should move" not in line
+]
+
+assert callable(local_go_workload_source_fingerprint_contract_violations)
+assert (
+    "local_go_workload_source_fingerprint_contract_violations" in content
+), "local Go workload source fingerprint contracts should call tests/app_contracts.py"
+assert not any('"sentiment-api": [' in line for line in contract_lines), "local Go workload source fingerprint policy should move to tests/app_contracts.py"
+assert not any('"subnetcalc-frontend": [' in line for line in contract_lines), "local Go workload source fingerprint policy should move to tests/app_contracts.py"
+assert not any('"apps/shared/appshell"' in line for line in contract_lines), "local Go workload source fingerprint policy should move to tests/app_contracts.py"
+
+print("validated shared local Go workload source fingerprint helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local Go workload source fingerprint helper usage"* ]]
+}
+
 @test "image catalog owns local platform build specs" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
-import json
 import os
 
+from tests.app_contracts import local_platform_image_build_spec_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-
-expected = {
-    "idp-core": {
-        "context": ".",
-        "dockerfile": "apps/idp-core/app/Dockerfile",
-        "tag": "default",
-        "prebuild": "make -C apps/idp-core/app build-linux",
-    },
-    "platform-mcp": {
-        "context": "apps/platform-mcp/app",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-        "prebuild": "make -C apps/platform-mcp/app build-linux",
-    },
-    "backstage": {
-        "context": "generated-backstage",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-    },
-    "keycloak": {
-        "context": "apps/keycloak",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-    },
-}
-
-images = {
-    image["id"]: image
-    for category in ("platform_images", "workload_images")
-    for image in catalog[category]
-}
-
-for image_id, build in expected.items():
-    catalog_build = images[image_id].get("build")
-    assert catalog_build == build, f"{image_id} catalog build spec drifted: {catalog_build!r}"
-
-assert "image_build_catalog_build_and_push" in build_script
-assert "image_catalog_build_field" in image_build_lib
-assert "image_catalog_default_tag" in image_build_lib
-assert '"${REPO_ROOT}/apps/idp-core/app/Dockerfile"' not in build_script
-assert '"${REPO_ROOT}/apps/platform-mcp/Dockerfile"' not in build_script
-assert '"${REPO_ROOT}/apps/keycloak/Dockerfile"' not in build_script
+violations = local_platform_image_build_spec_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated image catalog local platform build specs")
 PY
@@ -407,85 +825,51 @@ PY
   [[ "${output}" == *"validated image catalog local platform build specs"* ]]
 }
 
+@test "docker optimization tests share local platform image build spec helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import local_platform_image_build_spec_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-docker-optimization-contracts.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog owns local platform build specs"'):
+    content.index('\n@test "image catalog owns local workload build specs for variant builders"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local platform image build spec policy should move" not in line
+]
+
+assert callable(local_platform_image_build_spec_contract_violations)
+assert (
+    "local_platform_image_build_spec_contract_violations" in content
+), "local platform image build spec contracts should call tests/app_contracts.py"
+assert not any('"idp-core": {' in line for line in contract_lines), "local platform image build spec policy should move to tests/app_contracts.py"
+assert not any('"langfuse-demos": {' in line for line in contract_lines), "local platform image build spec policy should move to tests/app_contracts.py"
+assert not any('"apps/shared/appshell"' in line for line in contract_lines), "local platform image build spec policy should move to tests/app_contracts.py"
+
+print("validated shared local platform image build spec helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local platform image build spec helper usage"* ]]
+}
+
 @test "image catalog owns local workload build specs for variant builders" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
-import json
 import os
 
+from tests.app_contracts import local_workload_image_build_spec_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
-
-expected = {
-    "sentiment-api": {
-        "context": "apps/sentiment/app",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-        "prebuild": "make -C apps/sentiment/app build-linux",
-    },
-    "sentiment-auth-ui": {
-        "context": "apps/sentiment/app",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-        "prebuild": "make -C apps/sentiment/app build-linux",
-    },
-    "subnetcalc-api": {
-        "context": "apps/subnetcalc/app",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-        "prebuild": "make -C apps/subnetcalc/app build-linux",
-    },
-    "subnetcalc-apim-simulator": {
-        "context": "apps/apim-simulator",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-    },
-    "subnetcalc-frontend": {
-        "context": "apps/subnetcalc/app",
-        "dockerfile": "Dockerfile",
-        "tag": "default",
-        "prebuild": "make -C apps/subnetcalc/app build-linux",
-    },
-}
-
-workloads = {image["id"]: image for image in catalog["workload_images"]}
-for image_id, build in expected.items():
-    catalog_build = workloads[image_id].get("build")
-    assert catalog_build == build, f"{image_id} catalog build spec drifted: {catalog_build!r}"
-
-scripts = [
-    repo_root / "kubernetes/kind/scripts/build-local-workload-images.sh",
-    repo_root / "kubernetes/scripts/build-local-workload-images.sh",
-]
-variant_wrappers = [
-    repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
-    repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
-]
-image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-hard_coded_paths = [
-    "apps/sentiment/app/Dockerfile",
-    "apps/apim-simulator/Dockerfile",
-]
-
-for script in scripts:
-    content = script.read_text(encoding="utf-8")
-    assert "image_build_catalog_build_loop workload workload" in content, script
-    assert "kubernetes/workflow/image-build-lib.sh" in content, script
-    for hard_coded_path in hard_coded_paths:
-        assert hard_coded_path not in content, (script, hard_coded_path)
-
-for script in variant_wrappers:
-    content = script.read_text(encoding="utf-8")
-    assert "kubernetes/scripts/build-local-workload-images.sh" in content, script
-    for hard_coded_path in hard_coded_paths:
-        assert hard_coded_path not in content, (script, hard_coded_path)
-
-assert "image_catalog_build_specs" in image_build_lib
-assert "image_catalog_build_arg_specs" in image_build_lib
-assert "image_catalog_default_tag" in image_build_lib
-assert "image_build_catalog_build_and_push" in image_build_lib
-assert "image_build_run_prebuild" in image_build_lib
-assert '"${TAG:-latest}"' not in image_build_lib[image_build_lib.index("image_build_catalog_build_loop()"):]
+violations = local_workload_image_build_spec_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated catalog-owned workload build specs for variant builders")
 PY
@@ -494,44 +878,51 @@ PY
   [[ "${output}" == *"validated catalog-owned workload build specs for variant builders"* ]]
 }
 
+@test "docker optimization tests share local workload image build spec helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import local_workload_image_build_spec_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+test_file = repo_root / "tests" / "validate-docker-optimization-contracts.bats"
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog owns local workload build specs for variant builders"'):
+    content.index('\n@test "image catalog owns Grafana VictoriaLogs plugin image build inputs"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local workload image build spec policy should move" not in line
+]
+
+assert callable(local_workload_image_build_spec_contract_violations)
+assert (
+    "local_workload_image_build_spec_contract_violations" in content
+), "local workload image build spec contracts should call tests/app_contracts.py"
+assert not any('"sentiment-api": {' in line for line in contract_lines), "local workload image build spec policy should move to tests/app_contracts.py"
+assert not any('"subnetcalc-apim-simulator": {' in line for line in contract_lines), "local workload image build spec policy should move to tests/app_contracts.py"
+assert not any('"apps/shared/appshell"' in line for line in contract_lines), "local workload image build spec policy should move to tests/app_contracts.py"
+
+print("validated shared local workload image build spec helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local workload image build spec helper usage"* ]]
+}
+
 @test "image catalog owns Grafana VictoriaLogs plugin image build inputs" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
-import json
 import os
 
+from tests.app_contracts import grafana_plugin_catalog_build_input_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-
-grafana = next(image for image in catalog["platform_images"] if image["id"] == "grafana-victorialogs")
-build = grafana["build"]
-
-assert build["grafana_base_image"] == {
-    "source": "docker.io/grafana/grafana",
-    "tag": "12.3.1",
-    "cache_repo": "platform-cache/grafana-grafana",
-}
-assert build["plugin_fetch_image"] == {
-    "source": "docker.io/library/alpine",
-    "tag": "3.22",
-    "cache_repo": "platform-cache/library-alpine",
-}
-assert build["plugin_archive"]["terraform_version_variable"] == "grafana_victoria_logs_plugin_version"
-assert build["plugin_archive"]["terraform_sha256_variable"] == "grafana_victoria_logs_plugin_sha256"
-assert build["plugin_archive"]["url_template"].count("{version}") == 2
-assert build["plugin_archive"]["cache_dir"] == ".run/kind/plugin-cache"
-assert build["version_tag_strategy"] == "grafana-tag-plus-plugin-version"
-
-for removed_default in (
-    'GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG:-12.3.1}"',
-    'PLUGIN_FETCH_IMAGE_SOURCE="${PLUGIN_FETCH_IMAGE_SOURCE:-docker.io/library/alpine:3.22}"',
-    'GRAFANA_BASE_IMAGE_SOURCE="${GRAFANA_BASE_IMAGE_SOURCE:-docker.io/grafana/grafana:${GRAFANA_IMAGE_TAG}}"',
-):
-    assert removed_default not in build_script, removed_default
-
-assert "image_catalog_build_json platform grafana-victorialogs" in build_script
-assert "catalog_grafana_build_value" in build_script
+violations = grafana_plugin_catalog_build_input_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated catalog-owned Grafana VictoriaLogs plugin build inputs")
 PY
@@ -540,36 +931,53 @@ PY
   [[ "${output}" == *"validated catalog-owned Grafana VictoriaLogs plugin build inputs"* ]]
 }
 
+@test "docker optimization tests share Grafana plugin catalog build input helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import grafana_plugin_catalog_build_input_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog owns Grafana VictoriaLogs plugin image build inputs"'):
+    content.index('\n@test "image catalog entries declare version-check policy"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "Grafana plugin catalog build input policy should move" not in line
+]
+
+assert callable(grafana_plugin_catalog_build_input_contract_violations)
+assert "grafana_plugin_catalog_build_input_contract_violations" in content
+assert not any("grafana_base_image" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
+assert not any("plugin_fetch_image" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
+assert not any("version_tag_strategy" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
+assert not any("GRAFANA_IMAGE_TAG" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
+assert not any("catalog_grafana_build_value" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
+
+print("validated shared Grafana plugin catalog build input helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Grafana plugin catalog build input helper usage"* ]]
+}
+
 @test "image catalog entries declare version-check policy" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
-import json
 import os
 
+from tests.app_contracts import (
+    image_catalog_version_check_policy_contract_violations,
+    image_catalog_version_check_policy_count,
+)
+
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog = json.loads((repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8"))
-
-allowed_modes = {
-    "local",
-    "external",
-    "pinned-digest",
-    "checked-elsewhere",
-    "non-comparable",
-}
-
-validated = 0
-for category in ("platform_images", "workload_images"):
-    for image in catalog[category]:
-        policy = image.get("version_check")
-        assert isinstance(policy, dict), f"{category}.{image['id']} missing version_check"
-        mode = policy.get("mode")
-        reason = str(policy.get("reason", "")).strip()
-        assert mode in allowed_modes, f"{category}.{image['id']} has unsupported version_check mode {mode!r}"
-        assert reason, f"{category}.{image['id']} version_check must explain the policy"
-        assert image.get("default_tag") != "latest", (
-            f"{category}.{image['id']} must pin its local registry default tag"
-        )
-        validated += 1
+violations = image_catalog_version_check_policy_contract_violations(repo_root)
+assert not violations, violations
+validated = image_catalog_version_check_policy_count(repo_root)
 
 print(f"validated {validated} image catalog version-check policies")
 PY
@@ -578,36 +986,49 @@ PY
   [[ "${output}" == *"validated 12 image catalog version-check policies"* ]]
 }
 
+@test "docker optimization tests share image catalog version-check helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import image_catalog_version_check_policy_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog entries declare version-check policy"'):
+    content.index('\n@test "Lima and Slicer external image refs match the image catalog"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "image catalog version-check policy should move" not in line
+]
+
+assert callable(image_catalog_version_check_policy_contract_violations)
+assert "image_catalog_version_check_policy_contract_violations" in content
+assert not any("allowed_modes =" in line for line in contract_lines), "image catalog version-check policy should move to tests/app_contracts.py"
+assert not any("policy = image.get" in line for line in contract_lines), "image catalog version-check policy should move to tests/app_contracts.py"
+assert not any("mode = policy.get" in line for line in contract_lines), "image catalog version-check policy should move to tests/app_contracts.py"
+assert not any("reason = str" in line for line in contract_lines), "image catalog version-check policy should move to tests/app_contracts.py"
+assert not any('image.get("default_tag")' in line for line in contract_lines), "image catalog version-check policy should move to tests/app_contracts.py"
+
+print("validated shared image catalog version-check helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image catalog version-check helper usage"* ]]
+}
+
 @test "Lima and Slicer external image refs match the image catalog" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
-import subprocess
-import sys
+
+from tests.app_contracts import image_catalog_target_ref_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-validator = repo_root / "kubernetes/workflow/validate-image-catalog-target-refs.py"
-catalog = repo_root / "kubernetes/workflow/image-catalog.json"
-
-expectations = {
-    "lima": repo_root / "kubernetes/lima/targets/lima.tfvars",
-    "slicer": repo_root / "kubernetes/slicer/targets/slicer.tfvars",
-}
-
-for target, tfvars in expectations.items():
-    subprocess.run(
-        [
-            sys.executable,
-            str(validator),
-            "--catalog",
-            str(catalog),
-            "--target",
-            target,
-            "--tfvars",
-            str(tfvars),
-        ],
-        check=True,
-    )
+violations = image_catalog_target_ref_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated Lima and Slicer external image refs against image catalog")
 PY
@@ -616,41 +1037,48 @@ PY
   [[ "${output}" == *"validated Lima and Slicer external image refs against image catalog"* ]]
 }
 
+@test "docker optimization tests share image catalog target ref helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import image_catalog_target_ref_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "Lima and Slicer external image refs match the image catalog"'):
+    content.index('\n@test "image catalog renders target tfvars external image projection"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "image catalog target ref policy should move" not in line
+]
+
+assert callable(image_catalog_target_ref_contract_violations)
+assert "image_catalog_target_ref_contract_violations" in content
+assert not any("validate-image-catalog-target-refs.py" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
+assert not any("lima.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
+assert not any("slicer.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
+assert not any("subprocess.run" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
+
+print("validated shared image catalog target ref helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image catalog target ref helper usage"* ]]
+}
+
 @test "image catalog renders target tfvars external image projection" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
-import subprocess
-import sys
+
+from tests.app_contracts import image_catalog_target_tfvars_projection_contract_violations
 
 repo_root = Path(os.environ["REPO_ROOT"])
-validator = repo_root / "kubernetes/workflow/validate-image-catalog-target-refs.py"
-catalog = repo_root / "kubernetes/workflow/image-catalog.json"
-script_text = validator.read_text(encoding="utf-8")
-
-assert "--print-expected" in script_text
-
-for target, host in {
-    "lima": "host.lima.internal:5002",
-    "slicer": "192.168.64.1:5002",
-}.items():
-    rendered = subprocess.check_output(
-        [
-            sys.executable,
-            str(validator),
-            "--catalog",
-            str(catalog),
-            "--target",
-            target,
-            "--print-expected",
-        ],
-        text=True,
-    )
-    assert "external_platform_image_refs = {" in rendered, target
-    assert "external_workload_image_refs = {" in rendered, target
-    assert '"platform-mcp"' in rendered and f'{host}/platform/platform-mcp:0.1.0' in rendered, rendered
-    assert '"langfuse-demos"' in rendered and f'{host}/platform/langfuse-demos:0.1.0' in rendered, rendered
-    assert '"sentiment-api"' in rendered and f'{host}/platform/sentiment-api:0.1.0' in rendered, rendered
+violations = image_catalog_target_tfvars_projection_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated generated target tfvars projection from image catalog")
 PY
@@ -659,23 +1087,49 @@ PY
   [[ "${output}" == *"validated generated target tfvars projection from image catalog"* ]]
 }
 
+@test "docker optimization tests share image catalog target tfvars projection helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import image_catalog_target_tfvars_projection_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog renders target tfvars external image projection"'):
+    content.index('\n@test "local platform IDP cache hits are not invalidated by unrelated git commits"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "image catalog target tfvars projection policy should move" not in line
+]
+
+assert callable(image_catalog_target_tfvars_projection_contract_violations)
+assert "image_catalog_target_tfvars_projection_contract_violations" in content
+assert not any("--print-expected" in line for line in contract_lines), "image catalog target tfvars projection policy should move to tests/app_contracts.py"
+assert not any("host.lima.internal:5002" in line for line in contract_lines), "image catalog target tfvars projection policy should move to tests/app_contracts.py"
+assert not any("192.168.64.1:5002" in line for line in contract_lines), "image catalog target tfvars projection policy should move to tests/app_contracts.py"
+assert not any("external_platform_image_refs" in line for line in contract_lines), "image catalog target tfvars projection policy should move to tests/app_contracts.py"
+assert not any("subprocess.check_output" in line for line in contract_lines), "image catalog target tfvars projection policy should move to tests/app_contracts.py"
+
+print("validated shared image catalog target tfvars projection helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image catalog target tfvars projection helper usage"* ]]
+}
+
 @test "local platform IDP cache hits are not invalidated by unrelated git commits" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
 
+from tests.app_contracts import local_platform_cache_hit_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-
-skip_start = image_build_lib.index("image_build_cache_hit()")
-skip_end = image_build_lib.index("return 0", skip_start)
-skip_condition = image_build_lib[skip_start:skip_end]
-
-assert "${fingerprint_tag}" in skip_condition
-assert 'IMAGE_BUILD_REQUIRE_COMMIT_TAG:-0}" = "1"' in skip_condition
-assert "IMAGE_BUILD_REQUIRE_COMMIT_TAG=1" not in build_script
-assert 'image_build_push_optional_tag "${build_ref}" "${commit_ref}"' in image_build_lib
+violations = local_platform_cache_hit_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated local platform IDP cache hits ignore unrelated git commits")
 PY
@@ -684,56 +1138,48 @@ PY
   [[ "${output}" == *"validated local platform IDP cache hits ignore unrelated git commits"* ]]
 }
 
+@test "docker optimization tests share local platform cache-hit helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import local_platform_cache_hit_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "local platform IDP cache hits are not invalidated by unrelated git commits"'):
+    content.index('\n@test "image catalog shared image builder adapter owns variant build mechanics"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "local platform cache-hit policy should move" not in line
+]
+
+assert callable(local_platform_cache_hit_contract_violations)
+assert "local_platform_cache_hit_contract_violations" in content
+assert not any("image_build_cache_hit()" in line for line in contract_lines), "local platform cache-hit policy should move to tests/app_contracts.py"
+assert not any("skip_condition" in line for line in contract_lines), "local platform cache-hit policy should move to tests/app_contracts.py"
+assert not any("IMAGE_BUILD_REQUIRE_COMMIT_TAG" in line for line in contract_lines), "local platform cache-hit policy should move to tests/app_contracts.py"
+assert not any("image_build_push_optional_tag" in line for line in contract_lines), "local platform cache-hit policy should move to tests/app_contracts.py"
+
+print("validated shared local platform cache-hit helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared local platform cache-hit helper usage"* ]]
+}
+
 @test "image catalog shared image builder adapter owns variant build mechanics" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
 
+from tests.app_contracts import image_builder_adapter_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-shared = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-
-required_functions = [
-    "image_build_prepare_args()",
-    "image_build_cache_hit()",
-    "image_build_build_and_push_cached()",
-    "image_build_catalog_build_loop()",
-]
-for function_name in required_functions:
-    assert function_name in shared, function_name
-
-assert 'fingerprint_tag="$(image_catalog_source_tag "${category}" "${image_id}")"' in shared
-assert 'image_build_catalog_build_and_push "${category}" "${image_id}" "${image_name}"' in shared
-assert 'image_build_tag_exists "${CACHE_PUSH_HOST}" "${repo}" "${fingerprint_tag}"' in shared
-
-scripts = [
-    repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh",
-    repo_root / "kubernetes/kind/scripts/build-local-workload-images.sh",
-    repo_root / "kubernetes/scripts/build-local-workload-images.sh",
-]
-for script in scripts:
-    content = script.read_text(encoding="utf-8")
-    assert "kubernetes/workflow/image-build-lib.sh" in content, script
-    assert "image_build_catalog_build_loop" in content or "image_build_catalog_build_and_push" in content, script
-
-variant_wrappers = [
-    repo_root / "kubernetes/lima/scripts/build-local-workload-images.sh",
-    repo_root / "kubernetes/slicer/scripts/build-local-workload-images.sh",
-]
-for script in variant_wrappers:
-    content = script.read_text(encoding="utf-8")
-    assert "kubernetes/scripts/build-local-workload-images.sh" in content, script
-
-workload_scripts = scripts[1:] + variant_wrappers
-for script in workload_scripts:
-    content = script.read_text(encoding="utf-8")
-    for duplicated_function in (
-        "build_and_push()",
-        "catalog_build_context()",
-        "catalog_dockerfile_path()",
-        "catalog_prepare_build_args()",
-        "catalog_build_and_push()",
-    ):
-        assert duplicated_function not in content, (script, duplicated_function)
+violations = image_builder_adapter_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated shared image builder adapter ownership")
 PY
@@ -742,41 +1188,86 @@ PY
   [[ "${output}" == *"validated shared image builder adapter ownership"* ]]
 }
 
+@test "docker optimization tests share image builder adapter helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import image_builder_adapter_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog shared image builder adapter owns variant build mechanics"'):
+    content.index('\n@test "image catalog context adapter owns generated Backstage build context"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "image builder adapter policy should move" not in line
+]
+
+assert callable(image_builder_adapter_contract_violations)
+assert "image_builder_adapter_contract_violations" in content
+assert not any("required_functions =" in line for line in contract_lines), "image builder adapter policy should move to tests/app_contracts.py"
+assert not any("image_build_prepare_args()" in line for line in contract_lines), "image builder adapter policy should move to tests/app_contracts.py"
+assert not any("variant_wrappers =" in line for line in contract_lines), "image builder adapter policy should move to tests/app_contracts.py"
+assert not any("duplicated_function" in line for line in contract_lines), "image builder adapter policy should move to tests/app_contracts.py"
+
+print("validated shared image builder adapter helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image builder adapter helper usage"* ]]
+}
+
 @test "image catalog context adapter owns generated Backstage build context" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
 
+from tests.app_contracts import image_catalog_context_adapter_contract_violations
+
 repo_root = Path(os.environ["REPO_ROOT"])
-context_lib = (repo_root / "kubernetes/workflow/image-catalog-context-lib.sh").read_text(encoding="utf-8")
-image_build_lib = (repo_root / "kubernetes/workflow/image-build-lib.sh").read_text(encoding="utf-8")
-platform_builder = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
-
-for fragment in (
-    "image_catalog_prepare_build_context_adapter()",
-    "image_catalog_prepare_backstage_build_context()",
-    "copy_backstage_app_catalog()",
-    "generated-backstage",
-    "apps/apim-simulator/catalog-info.yaml",
-):
-    assert fragment in context_lib, fragment
-
-for duplicated_fragment in (
-    "copy_backstage_app_catalog()",
-    "copy_backstage_apim_simulator_catalog()",
-    'cp -R "${REPO_ROOT}/apps/backstage/."',
-    'copy_backstage_app_catalog "${context_dir}" "subnetcalc"',
-):
-    assert duplicated_fragment not in platform_builder, duplicated_fragment
-
-assert "kubernetes/workflow/image-catalog-context-lib.sh" in platform_builder
-assert "image_catalog_prepare_build_context_adapter" in image_build_lib
+violations = image_catalog_context_adapter_contract_violations(repo_root)
+assert not violations, violations
 
 print("validated image catalog Backstage context adapter")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated image catalog Backstage context adapter"* ]]
+}
+
+@test "docker optimization tests share image catalog context adapter helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import image_catalog_context_adapter_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "image catalog context adapter owns generated Backstage build context"'):
+    content.index('\n@test "generated Backstage image build passes a lean concrete Docker context"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "image catalog context adapter policy should move" not in line
+]
+
+assert callable(image_catalog_context_adapter_contract_violations)
+assert "image_catalog_context_adapter_contract_violations" in content
+assert not any("context_lib =" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
+assert not any("duplicated_fragment" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
+assert not any("copy_backstage_app_catalog()" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
+assert not any("image_catalog_prepare_build_context_adapter" in line and "assert" in line for line in contract_lines), "image catalog context adapter policy should move to tests/app_contracts.py"
+
+print("validated shared image catalog context adapter helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared image catalog context adapter helper usage"* ]]
 }
 
 @test "generated Backstage image build passes a lean concrete Docker context" {
@@ -825,20 +1316,55 @@ PY
 from pathlib import Path
 import os
 
-repo_root = Path(os.environ["REPO_ROOT"])
-dockerfile = (repo_root / "apps/platform-mcp/app/Dockerfile").read_text(encoding="utf-8")
-makefile = (repo_root / "apps/platform-mcp/app/Makefile").read_text(encoding="utf-8")
+from tests.app_contracts import (
+    go_app_dockerfile_runtime_contract_violations,
+    go_app_makefile_workflow_contract_violations,
+)
 
-assert "FROM dhi.io/static:20260413-alpine3.23" in dockerfile
-assert "COPY .run/platform-mcp /platform-mcp" in dockerfile
-assert "USER 65532:65532" in dockerfile
-assert "ENTRYPOINT [\"/platform-mcp\"]" in dockerfile
-assert "CGO_ENABLED=0 GOOS=linux" in makefile
-assert "go build -trimpath -ldflags=\"-s -w\"" in makefile
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = (
+    go_app_dockerfile_runtime_contract_violations(repo_root)
+    + go_app_makefile_workflow_contract_violations(repo_root)
+)
+assert not violations, violations
 
 print("validated platform MCP Docker image contract")
 PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated platform MCP Docker image contract"* ]]
+}
+
+@test "docker optimization tests share platform MCP runtime helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import go_app_dockerfile_runtime_contract_violations, go_app_makefile_workflow_contract_violations
+
+test_file = Path("tests/validate-docker-optimization-contracts.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "platform MCP Docker image uses the Go single-binary runtime"'):
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "platform MCP runtime policy should move" not in line
+]
+
+assert callable(go_app_dockerfile_runtime_contract_violations)
+assert callable(go_app_makefile_workflow_contract_violations)
+assert "go_app_dockerfile_runtime_contract_violations" in content
+assert "go_app_makefile_workflow_contract_violations" in content
+assert not any("apps/platform-mcp/app/Dockerfile" in line for line in contract_lines), "platform MCP runtime policy should move to tests/app_contracts.py"
+assert not any("COPY --chown=65532:65532 .run/platform-mcp /platform-mcp" in line for line in contract_lines), "platform MCP runtime policy should move to tests/app_contracts.py"
+assert not any("ENTRYPOINT [\\\"/platform-mcp\\\"]" in line for line in contract_lines), "platform MCP runtime policy should move to tests/app_contracts.py"
+assert not any("CGO_ENABLED=0 GOOS=linux" in line for line in contract_lines), "platform MCP runtime policy should move to tests/app_contracts.py"
+assert not any("go build -trimpath" in line for line in contract_lines), "platform MCP runtime policy should move to tests/app_contracts.py"
+
+print("validated shared platform MCP runtime helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared platform MCP runtime helper usage"* ]]
 }

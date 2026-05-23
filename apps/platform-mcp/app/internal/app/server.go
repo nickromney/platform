@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"platform.local/apphttp"
 )
 
 type server struct {
@@ -75,10 +77,10 @@ func NewServer(cfg Config) http.Handler {
 			cfg.ServiceNamespace = defaults.ServiceNamespace
 		}
 	}
-	cfg.PublicBaseURL = strings.TrimRight(cfg.PublicBaseURL, "/")
-	cfg.LLMBaseURL = strings.TrimRight(cfg.LLMBaseURL, "/")
-	cfg.OTLPEndpoint = strings.TrimRight(cfg.OTLPEndpoint, "/")
-	s := &server{cfg: cfg, client: &http.Client{Timeout: 90 * time.Second}}
+	cfg.PublicBaseURL = apphttp.NormalizeURL(cfg.PublicBaseURL)
+	cfg.LLMBaseURL = apphttp.NormalizeURL(cfg.LLMBaseURL)
+	cfg.OTLPEndpoint = apphttp.NormalizeURL(cfg.OTLPEndpoint)
+	s := &server{cfg: cfg, client: apphttp.NewHTTPClient(90 * time.Second)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /.well-known", s.protectedResource)
@@ -88,24 +90,23 @@ func NewServer(cfg Config) http.Handler {
 	mux.HandleFunc("GET /a2a/.well-known/agent-card.json", s.agentCard)
 	mux.HandleFunc("POST /a2a", s.a2a)
 	mux.HandleFunc("POST /mcp", s.mcp)
-	return requestLog(mux)
+	return apphttp.RequestLogger("platform-mcp", nil, mux)
 }
 
 func NewMetricsHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-		_, _ = w.Write([]byte(metrics.render()))
+		apphttp.WritePrometheusMetrics(w, metrics.render())
 	})
 	return mux
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "platform-mcp"})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "platform-mcp"})
 }
 
 func (s *server) protectedResource(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"resource":                 s.cfg.PublicBaseURL + "/mcp",
 		"authorization_servers":    []string{"https://keycloak.127.0.0.1.sslip.io/realms/platform"},
 		"scopes_supported":         []string{"openid", "profile", "mcp.access"},
@@ -114,7 +115,7 @@ func (s *server) protectedResource(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) agentCard(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"protocolVersion":    "0.3.0",
 		"name":               "platform-mcp",
 		"description":        "Local platform agent that can validate MCP, APIM, and agentgateway LLM connectivity.",
@@ -142,7 +143,7 @@ func (s *server) agentCard(w http.ResponseWriter, _ *http.Request) {
 
 func (s *server) a2a(w http.ResponseWriter, r *http.Request) {
 	var req rpcRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	switch req.Method {
@@ -192,7 +193,7 @@ func a2aPrompt(raw json.RawMessage) string {
 
 func (s *server) mcp(w http.ResponseWriter, r *http.Request) {
 	var req rpcRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	switch req.Method {
@@ -396,7 +397,7 @@ func (s *server) openAICompatibleModel(r *http.Request) (string, error) {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&decoded); err != nil {
+	if err := apphttp.DecodeJSONReader(resp.Body, &decoded); err != nil {
 		return "", err
 	}
 	for _, model := range decoded.Data {
@@ -407,17 +408,8 @@ func (s *server) openAICompatibleModel(r *http.Request) (string, error) {
 	return "", fmt.Errorf("no OpenAI-compatible models advertised")
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	defer r.Body.Close()
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(out); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return false
-	}
-	return true
-}
-
 func writeRPC(w http.ResponseWriter, id any, result any) {
-	writeJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 }
 
 func writeRPCTextPayload(w http.ResponseWriter, id any, payload map[string]any) {
@@ -426,21 +418,7 @@ func writeRPCTextPayload(w http.ResponseWriter, id any, payload map[string]any) 
 }
 
 func writeRPCError(w http.ResponseWriter, id any, code int, message string) {
-	writeJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": message}})
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func requestLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("mcp_request method=%s path=%s duration_ms=%d", r.Method, r.URL.Path, time.Since(start).Milliseconds())
-	})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": message}})
 }
 
 func (m *toolMetrics) observe(tool string, status string, duration time.Duration) {

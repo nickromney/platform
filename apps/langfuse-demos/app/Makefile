@@ -1,4 +1,4 @@
-.PHONY: help prereqs test build build-linux run-chat run-agent run-evals
+.PHONY: help prereqs test js-check build build-linux run-chat run-agent run-evals update clean
 
 LANGFUSE_DEMOS_LOCAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 LOCAL_OPENAI_BASE_URL ?= http://127.0.0.1:8000/v1
@@ -7,11 +7,14 @@ help:
 	@echo "Langfuse demo apps:"
 	@echo "  prereqs      Check Go plus the optional host oMLX OpenAI-compatible server"
 	@echo "  test         Run Go unit tests"
+	@echo "  js-check     Check vanilla JavaScript source contracts"
 	@echo "  build        Build the local binary at .run/langfuse-demos"
-	@echo "  build-linux  Build the Linux binary used by kind images"
+	@echo "  build-linux  Build the Linux binary used by compose/kind images"
 	@echo "  run-chat     Run the trace chat role"
 	@echo "  run-agent    Run the tool agent role"
 	@echo "  run-evals    Run the eval runner role"
+	@echo "  update       Report dependency lock update status"
+	@echo "  clean        Remove generated .run artifacts"
 
 prereqs:
 	@set -euo pipefail; \
@@ -40,6 +43,10 @@ prereqs:
 test:
 	go test ./...
 
+js-check:
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html internal/app/web/style.css
+	deno check --check-js internal/app/web/app.js
+
 build:
 	@mkdir -p .run
 	go build -trimpath -ldflags="-s -w" -o .run/langfuse-demos ./cmd/langfuse-demos
@@ -56,3 +63,9 @@ run-agent:
 
 run-evals:
 	DEMO_ROLE=eval-runner PORT=18093 go run ./cmd/langfuse-demos
+
+update:
+	@echo "langfuse-demos: Go-only app; no package-manager locks to update"
+
+clean:
+	rm -rf .run

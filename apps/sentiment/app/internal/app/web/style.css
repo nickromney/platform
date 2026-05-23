@@ -1,215 +1,50 @@
 :root {
-  color-scheme: light dark;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: var(--page);
-  color: var(--text);
-  --app-shell-width: 1040px;
-  --page: #f6f8fb;
-  --surface: #ffffff;
-  --field: #ffffff;
-  --muted: #5d6b7c;
-  --border: #cfdae6;
-  --field-border: #b9c5d3;
-  --text: #17202a;
-  --accent: #2459b2;
-  --error: #9b1c1c;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #101418;
-    --surface: #151b21;
-    --field: #0f1419;
-    --muted: #b7c4d3;
-    --border: #2d3945;
-    --field-border: #3a4855;
-    --text: #e8eef4;
-    --accent: #2d6cdf;
-    --error: #ffb4ab;
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --page: #101418;
-  --surface: #151b21;
-  --field: #0f1419;
-  --muted: #b7c4d3;
-  --border: #2d3945;
-  --field-border: #3a4855;
-  --text: #e8eef4;
-  --accent: #2d6cdf;
-  --error: #ffb4ab;
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --page: #f6f8fb;
-  --surface: #ffffff;
-  --field: #ffffff;
-  --muted: #5d6b7c;
-  --border: #cfdae6;
-  --field-border: #b9c5d3;
-  --text: #17202a;
-  --accent: #2459b2;
-  --error: #9b1c1c;
-}
-
-body {
-  margin: 0;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-main {
-  width: min(1040px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 32px 0;
-}
-
-header {
-  margin-bottom: 24px;
-}
-
-section {
-  margin: 16px 0;
-  padding: 18px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 700;
-}
-
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
-
-input,
-select {
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--field-border);
-  border-radius: 6px;
-  background: var(--field);
-  color: var(--text);
-}
-
-textarea {
-  width: 100%;
-  resize: vertical;
-  border: 1px solid var(--field-border);
-  border-radius: 6px;
-  padding: 10px;
-  background: var(--field);
-  color: var(--text);
-}
-
-button {
-  min-height: 40px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--accent);
-  color: white;
-  cursor: pointer;
-}
-
-.notice {
-  border-color: #376397;
+	--app-shell-width: 1040px;
 }
 
 .comment-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 12px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 12px;
 }
 
 .samples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 
 .samples button {
-  border: 1px solid var(--field-border);
-  background: var(--field);
-  color: var(--text);
+	border: 1px solid var(--field-border);
+	background: var(--field);
+	color: var(--text);
 }
 
 .analyse-action {
-  margin-left: auto;
-  min-width: 120px;
+	margin-left: auto;
+	min-width: 120px;
 }
 
 .comment {
-  border-top: 1px solid var(--border);
-  padding: 12px 0;
+	border-top: 1px solid var(--border);
+	padding: 12px 0;
 }
 
 .diagnostics {
-  margin-bottom: 16px;
-}
-
-.diagnostics table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 8px;
-}
-
-.diagnostics th,
-.diagnostics td {
-  border-bottom: 1px solid var(--border);
-  padding: 8px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.diagnostics td {
-  overflow-wrap: anywhere;
-}
-
-.network-path {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.hop {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px;
-  background: var(--field);
-}
-
-.hop-arrow {
-  color: var(--accent);
-  font-weight: 700;
-  text-align: center;
+	margin-bottom: 16px;
 }
 
 .label {
-  display: inline-block;
-  min-width: 76px;
-  font-weight: 700;
-  text-transform: capitalize;
+	display: inline-block;
+	min-width: 76px;
+	font-weight: 700;
+	text-transform: capitalize;
 }
 
 .meta {
-  color: var(--muted);
-  font-size: 0.9rem;
+	color: var(--muted);
+	font-size: 0.9rem;
 }

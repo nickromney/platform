@@ -12,7 +12,7 @@ setup() {
   mkdir -p "${FIXTURE_ROOT}/apps/demo"
   mkdir -p "${FIXTURE_ROOT}/apps/sentiment"
   mkdir -p "${FIXTURE_ROOT}/apps/subnetcalc"
-  mkdir -p "${FIXTURE_ROOT}/apps/apim-simulator"
+  mkdir -p "${FIXTURE_ROOT}/apps/apim-simulator/app"
   mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-react/dist"
   mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-typescript-vite/dist"
   mkdir -p "${FIXTURE_ROOT}/apps/demo/frontend-react/dist/assets"
@@ -69,7 +69,12 @@ version = "0.1.0"
 exclude-newer = "7 days"
 EOF
 
-  touch "${FIXTURE_ROOT}/apps/apim-simulator/Dockerfile"
+  touch "${FIXTURE_ROOT}/apps/apim-simulator/app/Dockerfile"
+  cat >"${FIXTURE_ROOT}/apps/apim-simulator/app/go.mod" <<'EOF'
+module platform.local/apim-simulator
+
+go 1.26
+EOF
   cat >"${FIXTURE_ROOT}/apps/apim-simulator/catalog-info.yaml" <<'EOF'
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -185,7 +190,7 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"actions/checkout v6.0.2 resolves to the pinned SHA"* ]]
-  [[ "${output}" == *"apim-simulator is integrated under apps/apim-simulator; version 0.4.0"* ]]
+  [[ "${output}" == *"apim-simulator is integrated under apps/apim-simulator as a go app"* ]]
   [[ "${output}" == *"All .npmrc files set min-release-age=7"* ]]
   [[ "${output}" == *"All bunfig.toml files set minimumReleaseAge=604800"* ]]
   [[ "${output}" == *"All uv-managed pyproject.toml files set exclude-newer='7 days'"* ]]

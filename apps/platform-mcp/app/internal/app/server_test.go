@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -35,6 +36,36 @@ func TestMCPInitializeAndToolsList(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("tools/list missing %s tool: %s", want, rec.Body.String())
 		}
+	}
+}
+
+func TestMCPRejectsTrailingJSON(t *testing.T) {
+	srv := NewServer(Config{PublicBaseURL: "https://mcpserver.dev.127.0.0.1.sslip.io"})
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"} {}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("trailing JSON returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"error":"invalid JSON body"`) {
+		t.Fatalf("trailing JSON body = %s", rec.Body.String())
+	}
+}
+
+func TestServerUsesSharedRequestLogger(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if !strings.Contains(text, `apphttp.RequestLogger("platform-mcp"`) {
+		t.Fatalf("server.go should use shared apphttp request logger")
+	}
+	if strings.Contains(text, "func requestLog(") {
+		t.Fatalf("server.go should not keep local requestLog wrapper")
 	}
 }
 
@@ -282,6 +313,12 @@ func TestMetricsExposeToolCallsForPrometheusScrape(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("metrics returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Fatalf("metrics Content-Type=%q", got)
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("metrics X-Content-Type-Options=%q", got)
 	}
 	body := rec.Body.String()
 	for _, want := range []string{

@@ -17,33 +17,13 @@
       </div>
       <div class="header-actions">
         <p id="auth-state" class="auth-state">Not signed in.</p>
-        <button id="logout-btn" type="button" hidden>Sign Out</button>
-        <button id="theme-switcher" class="theme-toggle" type="button" aria-label="Theme: system. Switch to light theme." title="Theme: system. Switch to light theme." data-theme-choice="system">
-          <svg data-theme-icon="system" aria-hidden="true" viewBox="0 0 24 24">
-            <rect x="3" y="4" width="18" height="12" rx="2"></rect>
-            <path d="M8 20h8"></path>
-            <path d="M12 16v4"></path>
-          </svg>
-          <svg data-theme-icon="light" aria-hidden="true" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M12 2v2"></path>
-            <path d="M12 20v2"></path>
-            <path d="m4.93 4.93 1.41 1.41"></path>
-            <path d="m17.66 17.66 1.41 1.41"></path>
-            <path d="M2 12h2"></path>
-            <path d="M20 12h2"></path>
-            <path d="m6.34 17.66-1.41 1.41"></path>
-            <path d="m19.07 4.93-1.41 1.41"></path>
-          </svg>
-          <svg data-theme-icon="dark" aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M20 14.5A8 8 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"></path>
-          </svg>
-        </button>
+        <button id="logout-btn" class="sign-in-link" type="button" hidden>Sign Out</button>
+        <button id="theme-switcher" class="theme-toggle" type="button" aria-label="Theme: system. Switch to light theme." title="Theme: system. Switch to light theme." data-theme-choice="system"></button>
       </div>
     </header>
     <main id="main" tabindex="-1">
       <div class="app-workspace">
-        <section class="conversation" aria-labelledby="conversation-title">
+        <section class="app-panel conversation" aria-labelledby="conversation-title">
           <h2 id="conversation-title" class="sr-only">Conversation</h2>
           <ol id="messages" class="messages" aria-live="polite" aria-label="Conversation messages"></ol>
           <form id="chat-form" class="composer">
@@ -70,7 +50,7 @@
           </form>
         </section>
         <aside class="inspector" aria-label="MCP inspector">
-        <section class="panel" aria-labelledby="connectors-title">
+        <section class="app-panel panel" aria-labelledby="connectors-title">
           <div class="panel-header">
             <h2 id="connectors-title">Connectors</h2>
             <button id="discover" type="button">Refresh Discovery</button>
@@ -132,21 +112,22 @@
           </form>
           <div id="connector-list" class="connector-list" aria-live="polite"></div>
         </section>
-        <section class="panel" aria-labelledby="connection-title">
+        <section class="app-panel panel" aria-labelledby="connection-title">
           <h2 id="connection-title">Connection</h2>
           <dl>
             <dt>MCP URL</dt><dd id="mcp-url">Loading</dd>
             <dt>Model</dt><dd id="model-provider">Loading</dd>
+            <dt>Trace</dt><dd id="trace-provider">Loading</dd>
             <dt>Deps</dt><dd id="dependencies">Loading</dd>
-            <dt>Last action</dt><dd id="status">Starting</dd>
+            <dt>Last action</dt><dd id="status" role="status" aria-live="polite">Starting</dd>
           </dl>
           <div id="network-path"></div>
         </section>
-        <section class="panel" aria-labelledby="last-tool-title">
+        <section class="app-panel panel" aria-labelledby="last-tool-title">
           <h2 id="last-tool-title">Last Tool</h2>
           <pre id="tool-output" tabindex="0" aria-label="Last tool output">{}</pre>
         </section>
-        <section class="panel" aria-labelledby="discovery-title">
+        <section class="app-panel panel" aria-labelledby="discovery-title">
           <h2 id="discovery-title">Discovery</h2>
           <pre id="discovery-output" tabindex="0" aria-label="Discovery output">{}</pre>
         </section>
@@ -154,6 +135,8 @@
       </div>
     </main>
     <script src="/runtime-config.js"></script>
+    <script src="/idpauth.js"></script>
+    <script src="/app-shell.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

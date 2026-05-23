@@ -1,0 +1,65 @@
+name: Build apim-simulator image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "examples/**"
+      - "shared/**"
+      - ".gitea/workflows/**"
+  workflow_dispatch:
+
+env:
+  DOCKER_HOST: unix:///var/run/docker.sock
+  WORKDIR: /tmp/apim-simulator
+  APP_REPO_NAME: apim-simulator
+
+jobs:
+  build:
+    runs-on: [self-hosted, in-cluster]
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - name: Clone repo
+        run: |
+          set -e
+          : "${GITEA_HTTP_BASE:?}"
+          : "${GITEA_REPO_OWNER:?}"
+          : "${REGISTRY_USERNAME:?}"
+          : "${REGISTRY_PWD:?}"
+          rm -rf "${WORKDIR}"
+          git clone "${GITEA_HTTP_BASE}/${GITEA_REPO_OWNER}/${APP_REPO_NAME}.git" "${WORKDIR}"
+          cd "${WORKDIR}" && git checkout main
+
+      - name: Log in to registry
+        run: |
+          set -e
+          : "${REGISTRY_HOST:?}"
+          echo "${REGISTRY_PWD}" | docker login "${REGISTRY_HOST}" -u "${REGISTRY_USERNAME}" --password-stdin
+
+      - name: Build Go runtime binary
+        run: |
+          set -e
+          : "${APPS_DIR:?}"
+          docker run --rm \
+            -v "${APPS_DIR}/apim-simulator/app:/src" \
+            -v "${APPS_DIR}/shared:/shared:ro" \
+            -w /src \
+            -e CGO_ENABLED=0 \
+            -e GOOS=linux \
+            -e GOARCH=amd64 \
+            dhi.io/golang:1.26-alpine3.23-dev \
+            sh -c 'mkdir -p .run && go build -trimpath -ldflags="-s -w" -o .run/apim-simulator ./cmd/apim-simulator'
+
+      - name: Build and push runtime image
+        run: |
+          set -e
+          : "${APPS_DIR:?}"
+          cd "${WORKDIR}"
+          TAG="$(git rev-parse --short=12 HEAD)"
+          docker build --provenance=false -f "${APPS_DIR}/apim-simulator/app/Dockerfile" -t "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${APPS_DIR}/apim-simulator"
+          docker tag "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}" "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:${TAG}"
+          docker push "${REGISTRY_HOST}/${GITEA_REPO_OWNER}/subnetcalc-apim-simulator:latest"
