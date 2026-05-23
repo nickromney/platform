@@ -11,7 +11,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: apim-simulator
-  title: APIM Simulator Gateway
+  title: APIM Simulator
   description: Config-driven APIM-compatible gateway and management plane for local API platform testing.
   tags:
     - apim

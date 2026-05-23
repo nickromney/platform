@@ -70,7 +70,7 @@ PARALLELISM=4
 MODE="default"
 WORKFLOW_DOCKERFILES=(
   "apps/subnetcalc/app/Dockerfile"
-  "apps/apim-simulator/Dockerfile"
+  "apps/apim-simulator/app/Dockerfile"
   "apps/sentiment/app/Dockerfile"
   "apps/chatgpt-sim/app/Dockerfile"
   "apps/langfuse-demos/app/Dockerfile"

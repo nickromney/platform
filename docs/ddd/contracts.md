@@ -105,7 +105,7 @@ outside the request path above.
   `auth_method`.
 - **Class:** Conformist. Apps accept whatever headers the selected auth method
   injects.
-- **Auth method enum** (authoritative in `apps/subnetcalc/app-go/internal/app/server.go`):
+- **Auth method enum** (authoritative in `apps/subnetcalc/app/internal/app/server.go`):
   - `none` — caller identity is `"anonymous"`
   - `oidc` — `Authorization: Bearer <token>`, identity from the token claims
 - **Safe pre-launch changes:** adding a new auth method value; documenting
@@ -118,7 +118,7 @@ outside the request path above.
 - **Shape:** REST under `/api/v1/...`.
 - **Class:** Open Host Service published by `subnetcalc`. Frontends conform.
 - **Published endpoints (authoritative in
-  `apps/subnetcalc/app-go/internal/app/server.go`):**
+  `apps/subnetcalc/app/internal/app/server.go`):**
   - `GET /api/v1/health`
   - `GET /api/v1/health/ready`, `GET /api/v1/health/live`
   - `GET /api/whoami`, `GET /api/v1/whoami`
@@ -130,10 +130,11 @@ outside the request path above.
   - `POST /api/v1/provider-ranges/cache/refresh`
   - `POST /api/v1/provider-ranges/cache/invalidate`
   - `POST /api/v1/network-plan/allocate`
-- **Shared types:** the React and TypeScript-Vite frontends both consume
-  `@subnetcalc/shared-frontend`, which holds the wire types. That package is a
-  deliberate Shared Kernel between frontends, not between a frontend and the
-  backend.
+- **Shared browser types:** the vanilla browser apps keep app-local
+  `api-types.d.ts` files and import common browser contract types from
+  `apps/shared/web/api-types.d.ts`. That shared file is a deliberate Shared
+  Kernel for dependency-free browser apps, not a frontend build package and
+  not a backend contract generator.
 - **`lookup` is a frontend orchestration**, not a backend endpoint. It
   composes `validate`, `check-private`, `check-cloudflare`, and `subnet-info`
   and records per-call timing. This stays a frontend concept pre-launch.

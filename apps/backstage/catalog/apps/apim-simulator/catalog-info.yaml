@@ -11,20 +11,27 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: apim-simulator
-  title: APIM Simulator Gateway
+  title: APIM Simulator
   description: Config-driven APIM-compatible gateway and management plane for local API platform testing.
   tags:
     - apim
     - gateway
     - local
   annotations:
-    backstage.io/source-location: url:https://github.com/nickromney/apim-simulator/tree/main/
+    backstage.io/source-location: url:https://gitea.admin.127.0.0.1.sslip.io/platform/platform/src/branch/main/apps/apim-simulator/
+    backstage.io/kubernetes-label-selector: app.kubernetes.io/name=subnetcalc-apim-simulator
   links:
     - url: http://localhost:8000/apim/health
-      title: Gateway health
+      title: Standalone health
+      icon: api
+    - url: https://subnetcalc.dev.127.0.0.1.sslip.io/api
+      title: Platform gateway
       icon: api
     - url: http://localhost:8000
       title: Local frontend
+      icon: dashboard
+    - url: https://grafana.admin.127.0.0.1.sslip.io
+      title: Grafana
       icon: dashboard
 spec:
   type: service

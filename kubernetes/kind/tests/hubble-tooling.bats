@@ -378,6 +378,21 @@ EOF
   [[ "${output}" =~ tcp[[:space:]]+-[[:space:]]+10\.0\.0\.25[[:space:]]+workload[[:space:]]+datadog[[:space:]]+cluster-agent[[:space:]]+5005 ]]
 }
 
+@test "hubble-summarise-flows avoids unknown placeholders for sparse flow records" {
+  input_file="${BATS_TEST_TMPDIR}/sparse-flow.jsonl"
+
+  cat > "${input_file}" <<'EOF'
+{"flow":{"verdict":"FORWARDED","source":{},"destination":{}}}
+EOF
+
+  run "${SUMMARIZE_SCRIPT}" --execute --input "${input_file}" --report edges --aggregate-by workload --direction all --format tsv
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"unknown"* ]]
+  [[ "${output}" != *"UNKNOWN"* ]]
+  [[ "${output}" == *$'\n1\tnot reported\tFORWARDED\tnot reported\t\tunclassified\tunclassified\t\tunclassified\t'* ]]
+}
+
 @test "hubble-summarise-flows supports table output as an explicit alias" {
   input_file="${BATS_TEST_TMPDIR}/table-alias.jsonl"
 

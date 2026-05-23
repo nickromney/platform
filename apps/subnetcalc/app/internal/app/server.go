@@ -2,15 +2,9 @@ package app
 
 import (
 	"embed"
-	"encoding/json"
-	"errors"
-	"io/fs"
-	"log/slog"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"strings"
 
+	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
 )
@@ -51,11 +45,18 @@ func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 	}
 	if cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /runtime-config.js", server.runtimeConfig)
-		mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
-		mux.HandleFunc("GET /favicon.ico", server.favicon)
-		mux.HandleFunc("/", server.static)
+		appshell.RegisterSharedAssets(mux, idpauth.BrowserBundle)
+		mux.HandleFunc("GET /favicon.ico", appshell.SVGFavicon(subnetcalcFaviconSVG))
+		mux.HandleFunc("GET /signed-out.html", appshell.SignedOutPage(appshell.SignedOutPageConfig{
+			AppName:     "IPv4 Subnet Calculator",
+			Tagline:     "Vanilla HTML, CSS, JavaScript, and a Go API.",
+			SessionName: "subnet calculator",
+			Stylesheet:  "/style.css",
+			Favicon:     "/favicon.ico",
+		}))
+		mux.Handle("/", appshell.StaticFiles(web, "web"))
 	}
-	return logMiddleware(mux)
+	return apphttp.RequestLogger("subnetcalc", nil, mux)
 }
 
 type server struct {
@@ -65,27 +66,23 @@ type server struct {
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteBrowserAppHealth(w, map[string]any{
 		"status":                          "healthy",
 		"service":                         "Subnet Calculator API (Go)",
 		"version":                         "1.0.0",
 		"using_live_cloudflare_ranges":    false,
-		"dependency_footprint":            "go-stdlib-plus-oidc",
-		"frontend_dependency_footprint":   "vanilla",
 		"server_side_token_validation":    s.cfg.AuthMode == "oidc",
-		"transitive_javascript_packages":  0,
-		"transitive_python_packages":      0,
 		"intentional_backend_dependency":  "github.com/coreos/go-oidc/v3/oidc",
 		"intentional_frontend_dependency": "none",
 	})
 }
 
 func (s *server) ready(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "ready", "")
 }
 
 func (s *server) live(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "alive"})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "alive", "")
 }
 
 func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +90,7 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, claims)
+	apphttp.WriteJSON(w, http.StatusOK, claims)
 }
 
 func (s *server) requireAuth(next http.Handler) http.Handler {
@@ -106,138 +103,38 @@ func (s *server) requireAuth(next http.Handler) http.Handler {
 }
 
 func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
-	if strings.EqualFold(s.cfg.AuthMode, "none") {
-		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
-	}
-	if s.verifier == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "OIDC verifier is not configured"})
+	claims, failure := (idpauth.Authenticator{Mode: s.cfg.AuthMode, Verifier: s.verifier}).CurrentUser(r)
+	if failure != nil {
+		apphttp.WriteError(w, failure.StatusCode, failure.MessageFor(idpauth.AuthFailureMessages{
+			MissingBearerToken: "Missing or invalid bearer token",
+			InvalidToken:       "Invalid token",
+		}))
 		return idpauth.UserClaims{}, false
-	}
-	token := idpauth.BearerToken(r)
-	if token == "" {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Missing or invalid bearer token"})
-		return idpauth.UserClaims{}, false
-	}
-	claims, err := s.verifier.Verify(r.Context(), token)
-	if err != nil {
-		status := http.StatusUnauthorized
-		if !errors.Is(err, idpauth.ErrInvalidToken) {
-			status = http.StatusBadGateway
-		}
-		writeJSON(w, status, errorResponse{Error: "Invalid token"})
-		return idpauth.UserClaims{}, false
-	}
-	if claims.Groups == nil {
-		claims.Groups = []string{}
 	}
 	return claims, true
 }
 
-func (s *server) static(w http.ResponseWriter, r *http.Request) {
-	sub, err := fs.Sub(web, "web")
-	if err != nil {
-		http.Error(w, "static assets unavailable", http.StatusInternalServerError)
-		return
-	}
-	setFrontendCacheHeaders(w)
-	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
-}
-
 func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
-	redirectURI := s.cfg.OIDCRedirect
-	if redirectURI == "" {
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
-		redirectURI = scheme + "://" + r.Host + "/"
-	}
-	payload := map[string]string{
-		"authMethod":    s.cfg.AuthMode,
-		"apiAuthMethod": s.cfg.APIAuthMode,
-		"backendURL":    s.cfg.BackendURL,
-		"oidcAuthority": strings.TrimRight(s.cfg.OIDCIssuer, "/"),
-		"oidcClientId":  s.cfg.OIDCClientID,
-		"oidcRedirect":  redirectURI,
-	}
-	runtimePayload := map[string]any{}
-	for key, value := range payload {
-		runtimePayload[key] = value
-	}
-	runtimePayload["showNetworkPath"] = parseBoolDefault(s.cfg.ShowNetworkPath, true)
-	if s.cfg.NetworkHops != "" {
-		var hops any
-		if err := json.Unmarshal([]byte(s.cfg.NetworkHops), &hops); err == nil {
-			runtimePayload["networkHops"] = hops
-		}
-	}
-	encoded, err := json.Marshal(runtimePayload)
-	if err != nil {
-		http.Error(w, "runtime config unavailable", http.StatusInternalServerError)
-		return
-	}
-	setFrontendCacheHeaders(w)
-	w.Header().Set("Content-Type", "application/javascript")
-	_, _ = w.Write([]byte("window.SUBNETCALC_RUNTIME_CONFIG = "))
-	_, _ = w.Write(encoded)
-	_, _ = w.Write([]byte(";\n"))
-}
-
-func setFrontendCacheHeaders(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
+	runtimePayload := appshell.RuntimeConfigPayload(r, appshell.RuntimeConfigOptions{
+		Base: map[string]any{
+			"authMethod":    s.cfg.AuthMode,
+			"apiAuthMethod": s.cfg.APIAuthMode,
+			"backendURL":    s.cfg.BackendURL,
+			"oidcAuthority": apphttp.NormalizeURL(s.cfg.OIDCIssuer),
+			"oidcClientId":  s.cfg.OIDCClientID,
+		},
+		OIDCRedirect:        s.cfg.OIDCRedirect,
+		IncludeOIDCRedirect: true,
+		ShowNetworkPath:     s.cfg.ShowNetworkPath,
+		NetworkHopsJSON:     s.cfg.NetworkHops,
+	})
+	appshell.WriteScriptConfigForRequest(w, r, "window.SUBNETCALC_RUNTIME_CONFIG", runtimePayload)
 }
 
 func (s *server) apiProxy() http.Handler {
-	if s.cfg.BackendURL == "" {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "BACKEND_URL is not configured"})
-		})
-	}
-	target, err := url.Parse(s.cfg.BackendURL)
-	if err != nil {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "BACKEND_URL is invalid"})
-		})
-	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "Backend API unavailable"})
-	}
-	return proxy
-}
-
-func (s *server) favicon(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "image/svg+xml")
-	_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#151b21"/><path d="M12 18h40v8H12zm0 20h40v8H12z" fill="#2d6cdf"/><path d="M18 12v40m28-40v40" stroke="#e8eef4" stroke-width="4"/></svg>`))
-}
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	writeJSONHeader(w, status)
-	if err := json.NewEncoder(w).Encode(value); err != nil {
-		slog.Error("write response", "error", err)
-	}
-}
-
-func writeJSONHeader(w http.ResponseWriter, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-}
-
-func parseBoolDefault(value string, fallback bool) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "":
-		return fallback
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-func logMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
+	return apphttp.NewAPIProxy(apphttp.APIProxyConfig{
+		BackendURL: s.cfg.BackendURL,
 	})
 }
+
+const subnetcalcFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#151b21"/><path d="M12 18h40v8H12zm0 20h40v8H12z" fill="#2d6cdf"/><path d="M18 12v40m28-40v40" stroke="#e8eef4" stroke-width="4"/></svg>`

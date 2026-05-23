@@ -1048,6 +1048,16 @@ spec:
       ports:
         - protocol: TCP
           port: 3000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dev
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: chatgpt-sim
+      ports:
+        - protocol: TCP
+          port: 3000
   egress:
     - to:
         - namespaceSelector:

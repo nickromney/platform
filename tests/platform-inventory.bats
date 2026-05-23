@@ -64,3 +64,33 @@ EOF
   [[ "${output}" == *"Overall: blocked"* ]]
   [[ "${output}" == *"Active variant: none"* ]]
 }
+
+@test "platform inventory text output avoids unknown placeholders for missing health fields" {
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  workflow_stub="${BATS_TEST_TMPDIR}/platform-workflow.sh"
+
+  cat >"${status_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"generated_at":"2026-05-03T12:00:00Z","active_variant":null,"variants_order":[],"variants":{},"host_runtimes":{},"host_runtimes_order":[],"registry_auth":{},"registry_auth_order":[]}\n'
+EOF
+  chmod +x "${status_stub}"
+
+  cat >"${workflow_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"variant":{"id":"kind"},"stage":"900","action":"status","contexts":[],"contract_requirements":[],"effective_config":{}}\n'
+EOF
+  chmod +x "${workflow_stub}"
+
+  run env \
+    PLATFORM_INVENTORY_STATUS_SCRIPT="${status_stub}" \
+    PLATFORM_INVENTORY_WORKFLOW_SCRIPT="${workflow_stub}" \
+    "${SCRIPT}" --execute --variant kind --stage 900 --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Overall: not reported"* ]]
+  [[ "${output}" == *"Active variant: none"* ]]
+  [[ "${output}" != *"unknown"* ]]
+  [[ "${output}" != *"Unknown"* ]]
+}

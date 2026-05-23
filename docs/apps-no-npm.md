@@ -10,7 +10,7 @@ platform capability that should not be handwritten.
 For `subnetcalc`, the default runtime is now:
 
 ```text
-Codebase: apps/subnetcalc/app-go
+Codebase: apps/subnetcalc/app
 Local compose image: subnetcalc-go
 Platform images: subnetcalc-api, subnetcalc-frontend
 Frontend microservice: RUNTIME_ROLE=frontend
@@ -28,7 +28,7 @@ backend role exposes the subnet API and `/api/whoami`.
 
 The frontend source remains plain static files. The Go frontend role is a
 container delivery adapter for compose and kind, not a requirement for hosting.
-`make -C apps/subnetcalc/app-go static-dist` copies the same HTML, CSS, and
+`make -C apps/subnetcalc/app static-dist` copies the same HTML, CSS, and
 JavaScript into `.run/frontend-static/` for S3, Azure Storage static website, or
 CDN-style deployments behind a gateway that provides `/api/*`.
 
@@ -37,7 +37,7 @@ the tree for now as compatibility examples, but they are no longer the default
 subnetcalc path. They should be retired or moved behind clearly named legacy
 targets once Kubernetes and documentation wiring have caught up.
 
-The Gitea image workflow follows the same default: it builds `app-go` once and
+The Gitea image workflow follows the same default: it builds `apps/subnetcalc/app` once and
 pushes `subnetcalc-api` and `subnetcalc-frontend` from that shared runtime. It
 no longer builds the deprecated FastAPI, APIM simulator, React, or Vite
 examples as part of the app's default image pipeline, and the active image names
@@ -46,7 +46,7 @@ do not carry deprecated implementation names.
 For `sentiment`, the default runtime now follows the same pattern:
 
 ```text
-Codebase: apps/sentiment/app-go
+Codebase: apps/sentiment/app
 Frontend microservice: RUNTIME_ROLE=frontend
 Backend microservice: RUNTIME_ROLE=backend
 Frontend implementation: embedded vanilla HTML, CSS, and JavaScript
@@ -57,14 +57,14 @@ Runtime image: Alpine, non-root, read-only compose root filesystem
 
 The historical Node/Hugging Face SST API and Vite auth UI remain in-tree for
 comparison and for any future model-backed experiment, but the default compose
-and Kubernetes image catalog build from `apps/sentiment/app-go`.
+and Kubernetes image catalog build from `apps/sentiment/app`.
 
-`make -C apps/sentiment/app-go static-dist` provides the same static artifact
+`make -C apps/sentiment/app static-dist` provides the same static artifact
 option for the sentiment UI. The Go frontend role remains useful for the local
 two-microservice container demo because it supplies the `/api/*` proxy without
 nginx.
 
-The Gitea image workflow now builds `app-go` once and pushes both
+The Gitea image workflow now builds `apps/sentiment/app` once and pushes both
 `sentiment-api` and `sentiment-auth-ui` from that shared runtime. The nested
 legacy workflows under the old Node API and Vite UI directories are retained as
 deprecated examples, not as the default app build.
@@ -72,9 +72,9 @@ deprecated examples, not as the default app build.
 ## Current Subnetcalc Verification
 
 ```bash
-make -C apps/subnetcalc/app-go test
+make -C apps/subnetcalc/app test
 make -C apps/subnetcalc test
-make -C apps/sentiment/app-go test
+make -C apps/sentiment/app test
 make -C apps/sentiment test
 ```
 
@@ -84,10 +84,10 @@ frontend-to-backend API proxy, then tear the stack down.
 
 ## APIM simulator operator console
 
-`apps/apim-simulator/ui` is now a static operator console: `index.html`,
-`styles.css`, and `app.js` are copied directly into the nginx runtime image.
-There is no React, Vite, TypeScript, npm install, or frontend build step for
-the default console.
+`apps/apim-simulator/app/internal/app/web` is now the static operator console:
+`index.html`, `style.css`, and `app.js` are embedded in the Go runtime. There
+is no React, Vite, TypeScript, npm install, or frontend build step for the
+default console.
 
 The APIM todo demo frontend follows the same shape in
 `apps/apim-simulator/examples/todo-app/frontend-astro`: `index.html`,
@@ -97,15 +97,14 @@ generation. The directory name is retained for compatibility, but Astro,
 TypeScript, Playwright, and npm package files have been removed from that
 frontend path.
 
-The APIM simulator backend remains the Python/FastAPI simulator. That service
-has a larger contract surface and keeps its dependency graph explicit. The
-frontend cleanup is still useful because the operator console is just a
-management client over the existing `/apim/management/*` API, and the todo
-frontend is just a browser client over the APIM-protected todo API.
+The APIM simulator backend is now a Go single-binary runtime under
+`apps/apim-simulator/app`. The simulator still has a larger contract surface
+than the small sample apps, but it keeps the default path inspectable and avoids
+Python package installation.
 
 ## IDP core
 
-`apps/idp-core` now ships a Go stdlib implementation from `app-go`. It preserves
+`apps/idp-core` now ships a Go stdlib implementation from `app`. It preserves
 the portal API routes for catalog reads, runtime status, and dry-run workflow
 planning, while the Docker image copies a single prebuilt binary into an Alpine
 runtime. The previous FastAPI implementation remains in-tree as a deprecated
@@ -120,7 +119,7 @@ sample apps and remains gated out of constrained local profiles. The companion
 
 ## Platform MCP
 
-`apps/platform-mcp` now ships only the Go implementation under `app-go`. It uses
+`apps/platform-mcp` now ships only the Go implementation under `app`. It uses
 Go stdlib HTTP and JSON for the current Streamable HTTP MCP surface and keeps
 LLM access behind agentgateway through the `model_ping` tool.
 

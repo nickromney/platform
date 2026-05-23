@@ -1,9 +1,6 @@
 package app
 
-import (
-	"os"
-	"strings"
-)
+import "platform.local/apphttp"
 
 type Config struct {
 	Port             string
@@ -18,35 +15,16 @@ type Config struct {
 }
 
 func ConfigFromEnv() Config {
-	port := env("PORT", "8080")
+	port := apphttp.Env("PORT", "8080")
 	return Config{
 		Port:             port,
-		MetricsEnabled:   envBool("PLATFORM_MCP_METRICS_ENABLED", true),
-		MetricsPort:      env("PLATFORM_MCP_METRICS_PORT", "9090"),
-		PublicBaseURL:    strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:"+port), "/"),
-		LLMBaseURL:       strings.TrimRight(env("LLM_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"), "/"),
-		LLMModel:         env("LLM_MODEL", ""),
-		OTLPEndpoint:     strings.TrimRight(env("OTEL_EXPORTER_OTLP_ENDPOINT", ""), "/"),
-		ServiceName:      env("OTEL_SERVICE_NAME", "platform-mcp"),
-		ServiceNamespace: env("OTEL_SERVICE_NAMESPACE", "platform"),
-	}
-}
-
-func env(key, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func envBool(key string, fallback bool) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
-	switch value {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return fallback
+		MetricsEnabled:   apphttp.EnvBool("PLATFORM_MCP_METRICS_ENABLED", true),
+		MetricsPort:      apphttp.Env("PLATFORM_MCP_METRICS_PORT", "9090"),
+		PublicBaseURL:    apphttp.EnvURL("PUBLIC_BASE_URL", "http://localhost:"+port),
+		LLMBaseURL:       apphttp.EnvURL("LLM_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"),
+		LLMModel:         apphttp.Env("LLM_MODEL", ""),
+		OTLPEndpoint:     apphttp.EnvURL("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		ServiceName:      apphttp.Env("OTEL_SERVICE_NAME", "platform-mcp"),
+		ServiceNamespace: apphttp.Env("OTEL_SERVICE_NAMESPACE", "platform"),
 	}
 }

@@ -161,7 +161,7 @@ EOF
   echo "# KIND_WORKER_COUNT counts worker nodes. Total kind nodes = workers + 1 control-plane."
   echo "worker_count = ${worker_count}"
   if [ "${backstage_mode}" = "auto" ]; then
-    echo "# KIND_ENABLE_BACKSTAGE=auto, Docker MemTotal=${backstage_detected_memory:-unknown}, minimum=${backstage_min_docker_memory_bytes}"
+    echo "# KIND_ENABLE_BACKSTAGE=auto, Docker MemTotal=${backstage_detected_memory:-not reported}, minimum=${backstage_min_docker_memory_bytes}"
   else
     echo "# KIND_ENABLE_BACKSTAGE=${backstage_mode}"
   fi

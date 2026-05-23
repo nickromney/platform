@@ -116,5 +116,6 @@ make prereqs
 
 ## Sentiment Runtime Requirement
 
-The shipped sentiment demo runs SST in-process inside `sentiment-api`, so the
-default kind path does not require any host-side model endpoint.
+The shipped sentiment demo runs the Go lexicon classifier in-process inside
+`sentiment-api`, so the default kind path does not require any host-side LLM
+endpoint.

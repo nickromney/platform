@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"platform.local/apphttp"
+	"platform.local/appshell"
 	"platform.local/idpauth"
 )
 
@@ -20,6 +23,18 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		srv.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s returned %d: %s", path, rec.Code, rec.Body.String())
+		}
+		if path == "/api/v1/health" {
+			var health map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+				t.Fatalf("%s returned invalid health JSON: %v", path, err)
+			}
+			if got := health["dependency_footprint"]; got != "go-plus-shared-idpauth" {
+				t.Fatalf("%s dependency_footprint=%v, want go-plus-shared-idpauth", path, got)
+			}
+			if got := health["frontend_dependency_footprint"]; got != "vanilla" {
+				t.Fatalf("%s frontend_dependency_footprint=%v, want vanilla", path, got)
+			}
 		}
 	}
 
@@ -51,6 +66,21 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		t.Fatalf("shared app shell CSS Cache-Control=%q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.js", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared app shell JS returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{"PlatformAppShell", "initializeThemeSwitcher", "toggleTheme", "pce-theme"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("shared app shell JS missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("shared app shell JS Cache-Control=%q", got)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -60,6 +90,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	for _, text := range []string{
 		"IPv4 Subnet Calculator",
 		`/app-shell.css`,
+		`/app-shell.js`,
 		"Signed out",
 		"Sign in now",
 		"/.auth/login/sso",
@@ -67,10 +98,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		`class="theme-toggle"`,
 		"redirect-delay",
 		"Redirecting to sign in in 5 seconds",
-		"pce-theme",
-		"setTimeout(() => {",
-		"window.location.assign(loginLink.href)",
-		"5000",
+		"window.PlatformAppShell.initializeSignedOutRedirect()",
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
@@ -84,6 +112,34 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("signed-out Cache-Control=%q", got)
+	}
+}
+
+func TestServerUsesSharedHTTPErrorHelpers(t *testing.T) {
+	files := []string{"server.go", "calculator.go", "types.go"}
+	sources := make(map[string]string, len(files))
+	for _, file := range files {
+		source, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources[file] = string(source)
+	}
+	combined := sources["server.go"] + sources["calculator.go"] + sources["types.go"]
+
+	for _, text := range []string{
+		"apphttp.WriteError(",
+		"apphttp.DecodeJSONError(",
+		"apphttp.NewAPIProxy(apphttp.APIProxyConfig{",
+	} {
+		if !strings.Contains(combined, text) {
+			t.Fatalf("subnetcalc should use shared HTTP helper %q", text)
+		}
+	}
+	for _, text := range []string{"type errorResponse", "errorResponse{"} {
+		if strings.Contains(combined, text) {
+			t.Fatalf("subnetcalc should not keep local JSON error helper %q", text)
+		}
 	}
 }
 
@@ -119,6 +175,29 @@ func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
 	}
 }
 
+func TestFrontendAPIProxyPrefersForwardedAccessToken(t *testing.T) {
+	var gotAuth string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		apphttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}))
+	t.Cleanup(backend.Close)
+
+	frontend := NewServer(Config{RuntimeRole: "frontend", BackendURL: backend.URL}, nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ipv4/validate", strings.NewReader(`{"ip":"10.0.0.1"}`))
+	req.Header.Set("Authorization", "Bearer id-token")
+	req.Header.Set("X-Auth-Request-Access-Token", "access-token")
+	rec := httptest.NewRecorder()
+	frontend.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("frontend proxy returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if gotAuth != "Bearer access-token" {
+		t.Fatalf("Authorization=%q, want forwarded access token", gotAuth)
+	}
+}
+
 func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 	appJS, err := web.ReadFile("web/app.js")
 	if err != nil {
@@ -140,10 +219,8 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 		"Provider Range Check",
 		"Subnet Information",
 		"Performance Timing",
-		"API Call Timing",
-		"Network Path",
-		"Request (UTC)",
-		"Response (UTC)",
+		"apiTimingElement",
+		"renderNetworkPathInto(",
 		"Total Response Time",
 	}
 	for _, text := range required {
@@ -156,15 +233,37 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 			t.Fatalf("frontend missing %q", text)
 		}
 	}
+	if !strings.Contains(string(appJS), `requireSelectorAll("[data-example]")`) {
+		t.Fatalf("frontend must use shared selector helper for example buttons")
+	}
+	if strings.Contains(string(appJS), `document.querySelectorAll("[data-example]")`) {
+		t.Fatalf("frontend must not query example buttons directly")
+	}
+	if !strings.Contains(string(appJS), `withSubmitterBusy(event, "Loading",`) ||
+		!strings.Contains(string(appJS), `withSubmitterBusy(event, "Validating",`) {
+		t.Fatalf("frontend must use shared submit busy helper for lookup and token validation")
+	}
+	if !strings.Contains(string(appJS), `setText(content, "Loading...")`) {
+		t.Fatalf("frontend must use shared text helper for loading results")
+	}
+	if strings.Contains(string(appJS), `content.textContent = "Loading..."`) {
+		t.Fatalf("frontend must not write loading results text directly")
+	}
 	for _, text := range []string{"network-plan-form", "Network Plan", "network-plan/allocate"} {
 		if strings.Contains(string(indexHTML)+string(appJS), text) {
 			t.Fatalf("frontend must not expose removed network allocation feature %q", text)
 		}
 	}
-	for _, text := range []string{"box-sizing: border-box", "textarea"} {
+	for _, text := range []string{"textarea"} {
 		if !strings.Contains(string(styleCSS), text) {
 			t.Fatalf("frontend CSS missing %q", text)
 		}
+	}
+	sharedReq := httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
+	sharedRec := httptest.NewRecorder()
+	appshell.Stylesheet(sharedRec, sharedReq)
+	if !strings.Contains(sharedRec.Body.String(), "box-sizing: border-box") {
+		t.Fatalf("shared app shell CSS missing global box-sizing reset")
 	}
 }
 
@@ -188,33 +287,42 @@ func TestFrontendThemeSupportsSystemPreference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signedOutHTML, err := web.ReadFile("web/signed-out.html")
-	if err != nil {
-		t.Fatal(err)
+	srv := NewServer(Config{RuntimeRole: "frontend"}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("signed-out page returned %d: %s", rec.Code, rec.Body.String())
 	}
-	styleCSS, err := web.ReadFile("web/style.css")
-	if err != nil {
-		t.Fatal(err)
-	}
+	signedOutHTML := rec.Body.String()
 
 	for _, text := range []string{
 		`data-theme="system"`,
-		"themePreference",
-		`matchMedia("(prefers-color-scheme: dark)")`,
-		"pce-theme",
-		"themeCookieDomain",
-		`document.cookie`,
-		`["system", "light", "dark"]`,
+		`/app-shell.js`,
+		"PlatformAppShell",
+		`readRuntimeConfig("SUBNETCALC_RUNTIME_CONFIG")`,
+		"initializeThemeSwitcher()",
 	} {
-		if !strings.Contains(string(indexHTML)+string(signedOutHTML)+string(appJS), text) {
+		if !strings.Contains(string(indexHTML)+signedOutHTML+string(appJS), text) {
 			t.Fatalf("frontend theme support missing %q", text)
 		}
 	}
-	if strings.Contains(string(appJS), `localStorage.setItem("theme"`) {
-		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
+	for _, text := range []string{
+		"function readThemeCookie",
+		"function writeThemeCookie",
+		"function themeCookieDomain",
+		`document.cookie`,
+		`localStorage.setItem("theme"`,
+	} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("theme implementation must live in shared app shell, not app.js %q", text)
+		}
 	}
-	if !strings.Contains(string(styleCSS), `:root[data-theme="dark"]`) {
-		t.Fatalf("frontend CSS must support explicit dark theme")
+	sharedReq := httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
+	sharedRec := httptest.NewRecorder()
+	appshell.Stylesheet(sharedRec, sharedReq)
+	if !strings.Contains(sharedRec.Body.String(), `:root[data-theme="dark"]`) {
+		t.Fatalf("shared app shell CSS must support explicit dark theme")
 	}
 }
 
@@ -287,6 +395,20 @@ func TestIPv4SpecialSubnetsAndValidation(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid mode returned %d", rec.Code)
+	}
+}
+
+func TestIPv4SubnetInfoRejectsTrailingJSON(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ipv4/subnet-info", strings.NewReader(`{"network":"10.0.0.0/24","mode":"Standard"} {}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("trailing JSON returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"Invalid JSON body"}` {
+		t.Fatalf("unexpected trailing JSON body: %s", rec.Body.String())
 	}
 }
 
@@ -406,6 +528,25 @@ func TestProviderRangeCheckSupportsKnownProviders(t *testing.T) {
 				t.Fatalf("is_provider_range=%v, want %v: %#v", got["is_provider_range"], tt.want, got)
 			}
 		})
+	}
+}
+
+func TestProviderRangeCheckRejectsUnsupportedProviderExplicitly(t *testing.T) {
+	srv := NewServer(Config{AuthMode: "none"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provider-ranges/check", strings.NewReader(`{"provider":"example","address":"203.0.113.1"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var got map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["error"] != "Unsupported provider" {
+		t.Fatalf("error=%q", got["error"])
 	}
 }
 
@@ -566,7 +707,7 @@ func TestRuntimeConfigExposesOIDCSettingsForVanillaFrontend(t *testing.T) {
 	srv := NewServer(Config{
 		AuthMode:     "oidc",
 		APIAuthMode:  "oidc",
-		OIDCIssuer:   "http://keycloak.example.test/realms/subnetcalc",
+		OIDCIssuer:   "http://keycloak.example.test/realms/subnetcalc///",
 		OIDCClientID: "frontend-app",
 		OIDCAudience: "api-app",
 		OIDCJWKSURI:  "http://keycloak:8080/realms/subnetcalc/protocol/openid-connect/certs",
@@ -596,6 +737,25 @@ func TestRuntimeConfigExposesOIDCSettingsForVanillaFrontend(t *testing.T) {
 	} {
 		if !strings.Contains(body, text) {
 			t.Fatalf("runtime config missing %q in %s", text, body)
+		}
+	}
+}
+
+func TestRuntimeConfigUsesSharedURLNormalization(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{
+		`"oidcAuthority": apphttp.NormalizeURL(s.cfg.OIDCIssuer)`,
+		`strings.TrimRight(s.cfg.OIDCIssuer`,
+	} {
+		has := strings.Contains(string(source), text)
+		if strings.Contains(text, "NormalizeURL") && !has {
+			t.Fatalf("server.go should normalize OIDC issuer through shared apphttp helper")
+		}
+		if strings.Contains(text, "TrimRight") && has {
+			t.Fatalf("server.go should not hand-roll OIDC issuer URL normalization")
 		}
 	}
 }
@@ -687,18 +847,18 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		`<main id="main" tabindex="-1">`,
 		`<header>`,
 		`/app-shell.css`,
+		`/app-shell.js`,
 		`class="header-actions"`,
 		`id="theme-switcher"`,
 		`class="theme-toggle"`,
-		`data-theme-icon="light"`,
-		`data-theme-icon="dark"`,
-		`data-theme-icon="system"`,
 		`data-theme="system"`,
 		`/runtime-config.js`,
+		`/idpauth.js`,
 		`id="auth-state"`,
-		`id="logout-btn"`,
+		`id="logout-btn" class="sign-in-link"`,
 		`>Sign Out<`,
-		`id="results" tabindex="-1" aria-live="polite"`,
+		`id="api-status" class="app-panel notice" role="status" aria-live="polite"`,
+		`id="results" class="app-panel" tabindex="-1" aria-live="polite"`,
 	} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
@@ -721,50 +881,100 @@ func TestFrontendKeepsThemeSwitcherAndSendsBearerTokenToAPIs(t *testing.T) {
 		t.Fatalf("frontend shell actions must be ordered auth, sign out, theme: %s", html)
 	}
 	for _, text := range []string{
-		"readThemeCookie()",
-		"writeThemeCookie(nextTheme)",
+		"PlatformAppShell",
+		"initializeThemeSwitcher()",
+		"requireElement",
+		"inputElement",
+		"selectElement",
+		"fetchJSON",
+		"fetchJSONWithTiming",
+		"errorMessage",
+		"renderNetworkPathInto",
+		"resolveNetworkHops",
 		"apiAuthHeaders()",
-		"apiRequiresOidcToken()",
+		"apiRequiresOIDCToken(runtimeConfig())",
 		"apiReadyForUserAction()",
+		"apiActionReady(runtimeConfig(), inputElement(\"token-input\").value)",
 		"authRequiredMessage()",
-		"Sign in before running API calls",
-		"expiredSessionMessage()",
-		"Session expired. Sign out and sign in again to refresh API access.",
-		"authSessionExpired(error)",
-		"invalid or expired access token",
-		"apiTraceHeaders()",
-		"\"x-apim-trace\": \"true\"",
+		`apiAuthRequiredMessage("running API calls", "the calculator")`,
+		"apiErrorMessage(runtimeConfig(), error",
+		"apiJSONHeaders(runtimeConfig(), apiAuthHeaders())",
 		"Authorization: `Bearer ${token}`",
-		"usesGatewayAuth()",
+		"usesGatewayAuth(runtimeConfig())",
 		"refreshGatewayIdentity()",
 		"const showAuthPanel = showOidc || gateway",
-		`document.getElementById("auth-panel").hidden = !showOidc`,
-		`document.getElementById("auth-state").hidden = !showAuthPanel`,
+		`authPanel.hidden = !showOidc`,
+		`authState.hidden = !showAuthPanel`,
 		"tokenInput.hidden = gateway",
 		"whoamiButton.hidden = gateway",
 		"prepareResults()",
 		"focusResults()",
-		`document.getElementById("results").focus()`,
-		"fetch(\"/.auth/me\"",
-		"gatewayDisplayName(session)",
+		`resultsPanel.focus()`,
+		"decodeAPIMTrace",
+		"PlatformIdpAuth",
+		"initializeGatewayAuthState(authState, logoutButton",
+		"errorMessage: (error) =>",
+		"fetchOIDCProviderMetadata(config)",
 		"gatewayLogoutURL()",
-		"/oauth2/sign_out",
-		"rd\", \"/signed-out.html\"",
-		"return oauthSignOut.toString();",
-		"/protocol/openid-connect/token",
-		"OIDC/JWT validated by backend",
-		"No auth mode",
-		"Backend URI:",
-		"runtimeConfig().backendURL || \"same process\"",
-		"Network Path",
+		"formatAPIHealthStatus(data, runtimeConfig())",
+		"renderStatusInto(authState",
+		"renderNetworkPathInto(",
 		"const backendURL = config.backendURL || \"same process\"",
 		"const backendRole =",
 		"config.apiAuthMethod === \"oidc\"",
 		"Static UI and same-origin API proxy",
-		"APIM Trace ID",
+		"apiTimingElement",
+		"keyValueArticleElement",
+		"renderElementsInto(",
+		`@typedef {import("./api-types.d.ts").KeyValueTableRow} KeyValueTableRow`,
+		"@type {KeyValueTableRow[]}",
 	} {
 		if !strings.Contains(string(appJS), text) {
 			t.Fatalf("frontend app.js missing %q", text)
+		}
+	}
+	for _, text := range []string{
+		"function normalizeGatewaySession",
+		"function gatewayDisplayName",
+		"function gatewayLogoutURL",
+		"function readThemeCookie",
+		"function writeThemeCookie",
+		"function themeCookieDomain",
+		"function requireElement",
+		"function inputElement",
+		"function selectElement",
+		"async function parseJSONResponse",
+		"parseJSONResponse(response)",
+		"const response = await fetch(path",
+		"function isNetworkHop",
+		"traceId: response.headers.get",
+		"correlationId: response.headers.get",
+		"<summary>Network Path",
+		"fetchGatewaySession()",
+		"writeGatewayAuthState(authState, logoutButton, session)",
+		"function apiRequiresOidcToken",
+		"function usesGatewayAuth",
+		"function expiredSessionMessage",
+		"function authSessionExpired",
+		"function escapeHTML",
+		"content.innerHTML",
+		"insertAdjacentHTML",
+		"renderAPITiming",
+		"error.message",
+		`Array<[string, string | number | boolean | null | undefined]>`,
+		"authState.textContent",
+		"/protocol/openid-connect/token",
+		"/protocol/openid-connect/logout",
+		"window.SUBNETCALC_RUNTIME_CONFIG",
+		"The backend validates JWT/OIDC tokens, so the calculator",
+	} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("frontend app.js should use shared helper instead of %q", text)
+		}
+	}
+	for _, text := range []string{"pce-theme", "document.cookie"} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("theme implementation must live in shared app shell, not app.js %q", text)
 		}
 	}
 }

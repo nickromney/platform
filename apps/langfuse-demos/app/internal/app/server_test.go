@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func (f roundTripFunc) Do(r *http.Request) (*http.Response, error) {
 func TestHealthMetricsAndFrontendAreLightweight(t *testing.T) {
 	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
 
-	for _, target := range []string{"/health", "/", "/runtime-config.js", "/metrics"} {
+	for _, target := range []string{"/", "/runtime-config.js", "/metrics"} {
 		req := httptest.NewRequest(http.MethodGet, target, nil)
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
@@ -28,10 +29,30 @@ func TestHealthMetricsAndFrontendAreLightweight(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	for _, text := range []string{"Langfuse Trace Chat", "/api/run", "traceId", "score-list"} {
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var health map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&health); err != nil {
+		t.Fatalf("health did not return JSON: %v", err)
+	}
+	if got := health["dependency_footprint"]; got != "go-plus-shared-idpauth" {
+		t.Fatalf("dependency_footprint=%v, want go-plus-shared-idpauth", got)
+	}
+	if got := health["frontend_dependency_footprint"]; got != "vanilla" {
+		t.Fatalf("frontend_dependency_footprint=%v, want vanilla", got)
+	}
+	if _, ok := health["dependencies"]; ok {
+		t.Fatalf("health should use canonical dependency_footprint fields, got legacy dependencies in %v", health)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	for _, text := range []string{"Langfuse Trace Chat", "/api/run", "traceId", "score-list", "/app-shell.css", "/app-shell.js"} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
 		}
@@ -40,10 +61,58 @@ func TestHealthMetricsAndFrontendAreLightweight(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Fatalf("metrics Content-Type=%q", got)
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("metrics X-Content-Type-Options=%q", got)
+	}
 	for _, text := range []string{"langfuse_demo_runs_total", "langfuse_demo_llm_calls_total", `role="trace-chat"`} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("metrics missing %q: %s", text, rec.Body.String())
 		}
+	}
+}
+
+func TestServerUsesSharedHTTPJSONHelpersDirectly(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, required := range []string{
+		"apphttp.WriteJSON(w, http.StatusOK",
+		"apphttp.DecodeJSONError(w, r, &req",
+		"apphttp.FirstNonEmpty(",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("server.go missing shared HTTP helper call %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"func writeJSON(",
+		"func decodeJSON(",
+		"func firstNonEmpty(",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("server.go should not keep pass-through helper %q", forbidden)
+		}
+	}
+}
+
+func TestRunDemoRejectsInvalidJSONWithCanonicalErrorPayload(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat"}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(`{"prompt":`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid JSON returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"error":"invalid JSON body"}` {
+		t.Fatalf("invalid JSON body = %s", rec.Body.String())
 	}
 }
 
@@ -53,8 +122,41 @@ func TestFrontendFaviconIsHandled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code == http.StatusNotFound {
-		t.Fatalf("favicon should not produce browser console noise: %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("favicon should return an icon response: %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/svg+xml" {
+		t.Fatalf("favicon Content-Type=%q", got)
+	}
+}
+
+func TestFrontendStaticAssetsUseSharedMethodContract(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodHead, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("HEAD frontend returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("HEAD frontend returned body: %s", rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("HEAD frontend Cache-Control=%q", got)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("HEAD frontend Content-Type=%q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/style.css", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST static asset returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
+		t.Fatalf("POST static asset Allow=%q", got)
 	}
 }
 
@@ -68,9 +170,37 @@ func TestFrontendUsesSharedAuthShellControls(t *testing.T) {
 		t.Fatalf("frontend returned %d: %s", rec.Code, rec.Body.String())
 	}
 	html := rec.Body.String()
-	for _, text := range []string{`class="header-actions"`, `id="auth-state"`, `class="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `/oauth2/sign_out?rd=/signed-out.html`, `/idpauth.js`} {
+	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `class="header-actions"`, `id="auth-state"`, `class="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="theme-switcher"`, `class="theme-toggle"`, `/oauth2/sign_out?rd=/signed-out.html`, `/idpauth.js`, `/app-shell.css`, `/app-shell.js`, `class="app-panel results" aria-live="polite" aria-labelledby="results-heading"`, `<h2 id="results-heading">Run Results</h2>`} {
 		if !strings.Contains(html, text) {
 			t.Fatalf("frontend missing auth shell control %q: %s", text, html)
+		}
+	}
+}
+
+func TestSharedAppShellBundleIsServed(t *testing.T) {
+	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/app-shell.js", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("app-shell bundle returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{`PlatformAppShell`, `initializeThemeSwitcher`, `pce-theme`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("app-shell bundle missing %q: %s", text, rec.Body.String())
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("app-shell stylesheet returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{`.header-actions`, `.auth-state`, `.theme-toggle`, `.sign-in-link`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("app-shell stylesheet missing %q: %s", text, rec.Body.String())
 		}
 	}
 }
@@ -114,15 +244,24 @@ func TestFrontendUsesSharedGatewayIdentityNormalization(t *testing.T) {
 		t.Fatalf("app.js returned %d: %s", rec.Code, rec.Body.String())
 	}
 	script := rec.Body.String()
-	for _, text := range []string{`window.PlatformIdpAuth`, `idpAuth.fetchGatewaySession`, `idpAuth.gatewayDisplayName`} {
+	for _, text := range []string{`PlatformIdpAuth`, `PlatformAppShell`, `readRuntimeConfig("LANGFUSE_DEMO_CONFIG")`, `initializeGatewayAuthState(authState, logoutButton`, `path: "/.auth/me"`, `ignoreErrors: true`, `bindGatewayLogout(logoutButton)`, `initializeThemeSwitcher()`, `requireElement`, `formElement`, `formElement("run-form")`, `postJSON`, `fetchText`, `withButtonBusy`, `withSubmitterBusy`, `setText`, `renderStatusInto`, `renderListInto`, `errorMessage(`, `not reported`} {
 		if !strings.Contains(script, text) {
 			t.Fatalf("app.js missing shared gateway identity helper %q: %s", text, script)
 		}
 	}
-	for _, text := range []string{`function normalizeGatewaySession`, `function gatewayDisplayName`} {
+	if !strings.Contains(script, "setText(\n\t\t\tmetricsOutput,") {
+		t.Fatalf("app.js should route metrics output through the shared text helper: %s", script)
+	}
+	for _, text := range []string{`window.LANGFUSE_DEMO_CONFIG || {}`, `setText(runStatus`, `error instanceof Error ? error.message : String(error)`, `fetchGatewaySession("/.auth/me")`, `writeGatewayAuthState(authState, logoutButton, session)`, `function normalizeGatewaySession`, `function gatewayDisplayName`, `function readThemeCookie`, `document.cookie`, `pce-theme`, `HTMLFormElement`, `idpAuth?.bindGatewayLogout`, `const idpAuth = window.PlatformIdpAuth`, `const appShell = window.PlatformAppShell`, `function setText`, `function renderList`, `await response.json()`, `parseJSONResponse(response)`} {
 		if strings.Contains(script, text) {
-			t.Fatalf("app.js should consume shared idpauth bundle, but still defines %q: %s", text, script)
+			t.Fatalf("app.js should consume shared shell bundles, but still defines %q: %s", text, script)
 		}
+	}
+	if strings.Contains(script, `metricsOutput.textContent`) {
+		t.Fatalf("app.js should not write metrics output text directly: %s", script)
+	}
+	if strings.Contains(script, "unk"+"nown") {
+		t.Fatalf("app.js should not expose placeholder status labels: %s", script)
 	}
 }
 
@@ -135,7 +274,7 @@ func TestSharedIdpAuthBundleIsServed(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("idpauth bundle returned %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, text := range []string{`window.PlatformIdpAuth`, `normalizeGatewaySession`, `gatewayDisplayName`} {
+	for _, text := range []string{`PlatformIdpAuth`, `normalizeGatewaySession`, `gatewayDisplayName`, `bindGatewayLogout`, `writeGatewayAuthState`} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("idpauth bundle missing %q: %s", text, rec.Body.String())
 		}
@@ -145,15 +284,15 @@ func TestSharedIdpAuthBundleIsServed(t *testing.T) {
 func TestFrontendMobileHeaderStacksShellControls(t *testing.T) {
 	srv := NewServer(Config{Role: "trace-chat", LangfuseHost: "http://langfuse", OpenAIBaseURL: "http://llm/v1", OpenAIModel: "local"}, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/style.css", nil)
+	req := httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("style.css returned %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("app-shell.css returned %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, text := range []string{`@media (max-width: 820px)`, `header { flex-direction: column;`, `.header-actions { width: 100%;`} {
+	for _, text := range []string{`@media (max-width: 720px)`, `flex-direction: column;`, `.header-actions`, `@media (max-width: 520px)`, `flex: 1 1 160px;`} {
 		if !strings.Contains(rec.Body.String(), text) {
-			t.Fatalf("style.css missing mobile shell rule %q: %s", text, rec.Body.String())
+			t.Fatalf("app-shell.css missing mobile shell rule %q: %s", text, rec.Body.String())
 		}
 	}
 }
@@ -181,7 +320,7 @@ func TestFrontendShowsMetricsPanelOnMainView(t *testing.T) {
 		t.Fatalf("app.js returned %d: %s", rec.Code, rec.Body.String())
 	}
 	script := rec.Body.String()
-	for _, text := range []string{`refreshMetrics`, `cfg.metricsEndpoint || "/metrics"`, `#metrics-output`} {
+	for _, text := range []string{`refreshMetrics`, `cfg.metricsEndpoint || "/metrics"`, `requireElement("metrics-output")`} {
 		if !strings.Contains(script, text) {
 			t.Fatalf("app.js missing metrics panel behavior %q: %s", text, script)
 		}
@@ -252,6 +391,15 @@ func TestConfigDefaultsGiveLocalOMLXSufficientTime(t *testing.T) {
 	}
 	if cfg.LangfuseTimeout != 15*time.Second {
 		t.Fatalf("Langfuse ingestion timeout should remain tight, got %s", cfg.LangfuseTimeout)
+	}
+}
+
+func TestConfigNormalizesPublicBaseURL(t *testing.T) {
+	t.Setenv("PUBLIC_BASE_URL", "https://langfuse-demos.127.0.0.1.sslip.io///")
+
+	cfg := ConfigFromEnv()
+	if cfg.PublicBaseURL != "https://langfuse-demos.127.0.0.1.sslip.io" {
+		t.Fatalf("public base URL should not keep trailing slash noise, got %q", cfg.PublicBaseURL)
 	}
 }
 
@@ -487,6 +635,15 @@ func TestTraceChatUsesBoundedLLMTimeoutAndStillIngestsFallbackTrace(t *testing.T
 	}
 	if !strings.Contains(rec.Body.String(), `"llmStatus":"error"`) || !strings.Contains(rec.Body.String(), `"langfuseStatus":"ok"`) {
 		t.Fatalf("unexpected timeout response: %s", rec.Body.String())
+	}
+}
+
+func TestStatusJoinsUseExplicitMissingLabel(t *testing.T) {
+	if got := joinStatuses("", " ", ""); got != "not reported" {
+		t.Fatalf("empty joined status should be explicit, got %q", got)
+	}
+	if got := joinAgentStatuses("", ""); got != "not reported" {
+		t.Fatalf("empty joined agent status should be explicit, got %q", got)
 	}
 }
 

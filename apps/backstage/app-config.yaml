@@ -114,9 +114,21 @@ catalog:
       target: ../../catalog/entities.yaml
 
     - type: file
-      target: ../../catalog/apps/platform-mcp/catalog-info.yaml
+      target: ../../catalog/apps/langfuse/catalog-info.yaml
 
     # App-owned catalog data, kept beside each demo app's code and docs.
+    - type: file
+      target: ../../../idp-core/catalog-info.yaml
+
+    - type: file
+      target: ../../../platform-mcp/catalog-info.yaml
+
+    - type: file
+      target: ../../../langfuse-demos/catalog-info.yaml
+
+    - type: file
+      target: ../../../chatgpt-sim/catalog-info.yaml
+
     - type: file
       target: ../../../subnetcalc/catalog-info.yaml
 

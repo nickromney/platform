@@ -138,8 +138,11 @@ The platform now has a first-class service catalog at
 `catalog/platform-apps.json`. Treat that file as the source of intent for
 application ownership, environments, app/environment RBAC, secret bindings,
 deployment evidence, and scorecards. Current app/environment surfaces include
-`chatgpt-sim-dev`, `sentiment-dev`, `sentiment-uat`,
-`subnetcalc-dev`, and `subnetcalc-uat`.
+`backstage-local`, `idp-core-local`, `platform-mcp-local`,
+`mcp-inspector-local`, `chatgpt-sim-dev`, `langfuse-local`,
+`langfuse-trace-chat-dev`, `langfuse-tool-agent-dev`,
+`langfuse-eval-runner-dev`, `apim-simulator-local`, `subnetcalc-dev`,
+`subnetcalc-uat`, `sentiment-dev`, and `sentiment-uat`.
 
 | Term | Meaning in the solution | Aliases or ambiguity |
 | --- | --- | --- |
@@ -187,10 +190,10 @@ deployment evidence, and scorecards. Current app/environment surfaces include
 | sentiment label | the classification result | `positive, negative, neutral`. |
 | confidence | certainty score | Numerical classification certainty. |
 | mixed signals | text with conflicting cues | Specific classification state. |
-| classifier | the classification model | SST-based analysis engine. |
+| classifier | the classification engine | Deterministic lexicon classifier in the default Go runtime; legacy model-backed variants are historical experiments. |
 | recent comments | the query/read model | Log of prior classifications. |
 | analysis latency | classification time | Telemetry field. |
-| warm on start | preloading the classifier | Readiness state. |
+| classifier readiness | whether the classifier can accept requests | The default Go lexicon classifier is available at process start; legacy model-backed warmup is not part of the shipped path. |
 
 ## Resolved Questions
 
@@ -198,7 +201,7 @@ These were open for a while. They are resolved here so the pre-launch
 vocabulary is stable.
 
 - `lookup` is a **frontend orchestration term**, not a domain term. It is
-  the React client's name for the composed call over validation,
+  the browser frontend's name for the composed call over validation,
   private-range classification, Cloudflare membership, and subnet info. The
   backend does not need a `lookup` endpoint to ship.
 - `target` stays a **Makefile and workflow noun**. `variant` is the DDD

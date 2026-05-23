@@ -99,7 +99,7 @@ not_ready="$(
     | ((.status.initContainerStatuses // []) + (.status.containerStatuses // [])) as $statuses
     | [ $statuses[]? | select((.ready // true) != true) | .name ] as $not_ready
     | select(($not_ready | length) > 0)
-    | "\($ns)\t\($pod)\tcontainers=\($not_ready | join(","))\tphase=\(.status.phase // "Unknown")"
+    | "\($ns)\t\($pod)\tcontainers=\($not_ready | join(","))\tphase=\(.status.phase // "not reported")"
   '
 )"
 if [[ -n "${not_ready}" ]]; then

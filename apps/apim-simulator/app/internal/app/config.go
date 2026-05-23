@@ -6,6 +6,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"platform.local/apphttp"
 )
 
 type Config struct {
@@ -194,7 +196,7 @@ func LoadConfig(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if strings.EqualFold(os.Getenv("APIM_CONFIG_TEMPLATE_SUBSTITUTE"), "true") {
+	if apphttp.EnvBool("APIM_CONFIG_TEMPLATE_SUBSTITUTE", false) {
 		data = []byte(substituteEnv(string(data)))
 	}
 	var cfg Config
@@ -314,7 +316,7 @@ func substituteEnv(input string) string {
 		if len(parts) == 0 {
 			return match
 		}
-		if value := os.Getenv(parts[1]); value != "" {
+		if value := apphttp.Env(parts[1], ""); value != "" {
 			return value
 		}
 		if len(parts) > 3 {
@@ -340,20 +342,4 @@ func firstString(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func splitHeaderValues(values []string) []string {
-	seen := map[string]bool{}
-	result := []string{}
-	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
-			trimmed := strings.TrimSpace(part)
-			if trimmed == "" || seen[trimmed] {
-				continue
-			}
-			seen[trimmed] = true
-			result = append(result, trimmed)
-		}
-	}
-	return result
 }

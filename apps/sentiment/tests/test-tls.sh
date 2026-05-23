@@ -169,7 +169,7 @@ cipher=$(echo "$result" | grep -E "(^    Cipher    :|Cipher is )" | awk '{print 
 if echo "$cipher" | grep -qE "TLS_AES_128_GCM_SHA256|TLS_AES_256_GCM_SHA384|TLS_CHACHA20_POLY1305_SHA256"; then
     pass "Mozilla Modern cipher in use: $cipher"
 else
-    fail "Expected a Mozilla Modern TLS 1.3 cipher, got: '${cipher:-unknown}'"
+    fail "Expected a Mozilla Modern TLS 1.3 cipher, got: '${cipher:-no cipher reported}'"
 fi
 
 # ---------------------------------------------------------------------------

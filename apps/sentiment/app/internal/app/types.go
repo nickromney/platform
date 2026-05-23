@@ -42,7 +42,3 @@ type classifyResponse struct {
 	Confidence float64 `json:"confidence"`
 	LatencyMS  int64   `json:"latency_ms"`
 }
-
-type errorResponse struct {
-	Error string `json:"error"`
-}

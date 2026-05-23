@@ -4,7 +4,7 @@ This is a deeper DDD pass over `subnetcalc`.
 
 The historical implementation is spread across multiple frontend and backend
 shapes, but the domain core is much narrower than the hosting matrix. The
-default implementation now lives in `apps/subnetcalc/app-go` and runs as two
+default implementation now lives in `apps/subnetcalc/app` and runs as two
 microservices from one small Go image: a frontend role for vanilla static
 assets and a backend role for the API and OIDC token validation.
 
@@ -27,9 +27,9 @@ Supporting concerns are:
 
 That split is already visible in the code:
 
-- the default core calculation rules sit in [calculator.go](../../apps/subnetcalc/app-go/internal/app/calculator.go)
-- the default auth boundary sits in [oidc.go](../../apps/subnetcalc/app-go/internal/app/oidc.go)
-- the default frontend orchestration sits in [app.js](../../apps/subnetcalc/app-go/internal/app/web/app.js)
+- the default core calculation rules sit in [calculator.go](../../apps/subnetcalc/app/internal/app/calculator.go)
+- the default auth boundary sits in [server.go](../../apps/subnetcalc/app/internal/app/server.go)
+- the default frontend orchestration sits in [app.js](../../apps/subnetcalc/app/internal/app/web/app.js)
 - legacy comparison variants still include FastAPI, Flask, Vite, and React
 - the APIM simulator has its own contract and policy language in
   [contract_matrix.yml](../../apps/apim-simulator/contracts/contract_matrix.yml)
@@ -93,7 +93,7 @@ The current tests already describe real domain rules:
   reservation rules.
 
 Those rules are visible in the Go contract tests at
-[server_test.go](../../apps/subnetcalc/app-go/internal/app/server_test.go), with
+[server_test.go](../../apps/subnetcalc/app/internal/app/server_test.go), with
 the older FastAPI tests retained as migration references.
 
 ## Auth Is A Boundary, Not The Core Model
@@ -113,8 +113,8 @@ selected claims from `/api/whoami`, but it is not authoritative. That keeps
 header, token, and platform details out of subnet rules.
 
 The default auth surface is visible in
-[oidc.go](../../apps/subnetcalc/app-go/internal/app/oidc.go) and
-[server_test.go](../../apps/subnetcalc/app-go/internal/app/server_test.go).
+[server.go](../../apps/subnetcalc/app/internal/app/server.go) and
+[server_test.go](../../apps/subnetcalc/app/internal/app/server_test.go).
 
 ## APIM Is A Separate Supporting Context
 

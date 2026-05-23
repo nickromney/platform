@@ -55,7 +55,8 @@ wait_for_url "http://localhost:18084/health" "chatgpt-sim health"
 wait_for_url "http://localhost:18084/" "chatgpt-sim frontend"
 
 curl -fsS "http://localhost:18084/" | grep -q "<title>ChatGPT Sim</title>"
-curl -fsS "http://localhost:18084/health" | grep -q '"dependencies":"go-stdlib-only"'
+curl -fsS "http://localhost:18084/health" | grep -q '"dependency_footprint":"go-plus-shared-idpauth"'
+curl -fsS "http://localhost:18084/health" | grep -q '"frontend_dependency_footprint":"vanilla"'
 curl -fsS \
   -H "Content-Type: application/json" \
   -d '{"message":"who am I?","tool":"auto"}' \

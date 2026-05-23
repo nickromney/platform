@@ -151,7 +151,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_CI_MODE=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; image_ref_availability 'available/image:1'"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "unknown" ]
+  [ "${output}" = "not-checked" ]
 }
 
 @test "check-version parses app cooldown policies and locked dependency versions" {
@@ -658,10 +658,10 @@ EOF
 
 @test "check-version classifies non-comparable image tags for manual follow-up" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
-    \"\$(image_status_when_latest_unknown 'ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest' 'ghcr.io')\" \
-    \"\$(image_status_when_latest_unknown 'mcr.microsoft.com/dotnet/aspnet:9.0' 'mcr.microsoft.com')\" \
-    \"\$(image_status_when_latest_unknown 'mcr.microsoft.com/azure-functions/python:4-python3.13' 'mcr.microsoft.com')\" \
-    \"\$(image_status_when_latest_unknown 'ghcr.io/example/demo' 'ghcr.io')\""
+    \"\$(image_status_without_latest 'ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest' 'ghcr.io')\" \
+    \"\$(image_status_without_latest 'mcr.microsoft.com/dotnet/aspnet:9.0' 'mcr.microsoft.com')\" \
+    \"\$(image_status_without_latest 'mcr.microsoft.com/azure-functions/python:4-python3.13' 'mcr.microsoft.com')\" \
+    \"\$(image_status_without_latest 'ghcr.io/example/demo' 'ghcr.io')\""
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(printf 'floating tag\nmajor.minor pin\nvendor composite tag\ntag missing from image reference')" ]
@@ -682,7 +682,7 @@ EOF
 }
 
 @test "check-version JSON report exposes machine-friendly status fields for agents" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; EXPECTED_CLUSTER_NAME='kind-local'; CLUSTER_OK=1; EXPECT_KIND_PROVISIONING='true'; CODE_ARGOCD_IMAGE_REF=''; CONFIGURED_ARGOCD_IMAGE_STATUS='unknown'; LATEST_PREFERRED_ARGOCD_IMAGE_REF=''; LATEST_PREFERRED_ARGOCD_IMAGE_STATUS='unknown'; emit_json_report \
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; EXPECTED_CLUSTER_NAME='kind-local'; CLUSTER_OK=1; EXPECT_KIND_PROVISIONING='true'; CODE_ARGOCD_IMAGE_REF=''; CONFIGURED_ARGOCD_IMAGE_STATUS='not-checked'; LATEST_PREFERRED_ARGOCD_IMAGE_REF=''; LATEST_PREFERRED_ARGOCD_IMAGE_STATUS='not-checked'; emit_json_report \
     \$'argo-cd chart\t9.0.0\t9.0.0\t9.0.0\tv9.0.0\tv9.0.0\t\tv9.0.0\tcurrent' \
     '' \
     \$'kind release tag\tv0.29.0\tv0.29.0\tcurrent' \

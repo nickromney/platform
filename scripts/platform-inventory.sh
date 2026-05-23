@@ -103,7 +103,7 @@ print_inventory() {
       printf '%s\n' "${inventory_json}"
       ;;
     text)
-      jq -r '"Variant: \(.variant)\nStage: \(.stage)\nOverall: \(.health_summary.overall_state // "unknown")\nActive variant: \(.health_summary.active_variant // "none")"' <<<"${inventory_json}"
+      jq -r '"Variant: \(.variant)\nStage: \(.stage)\nOverall: \(.health_summary.overall_state // "not reported")\nActive variant: \(.health_summary.active_variant // "none")"' <<<"${inventory_json}"
       ;;
   esac
 }

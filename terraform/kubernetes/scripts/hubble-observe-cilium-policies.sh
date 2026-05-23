@@ -409,7 +409,7 @@ resolve_output_context() {
   fi
 
   if [[ -z "${context_value}" ]]; then
-    context_value="unknown-context"
+    context_value="context-not-reported"
   fi
 
   sanitize_filename "${context_value}"

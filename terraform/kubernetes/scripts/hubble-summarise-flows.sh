@@ -296,7 +296,7 @@ def endpoint_class($flow; $ep; $side):
   elif endpoint_namespace($ep) != "" then "workload"
   elif (flow_names($flow; $side) | length) > 0 then "name"
   elif flow_ip($flow; $side) != "" then "ip"
-  else "unknown"
+  else "unclassified"
   end;
 def endpoint_id($flow; $ep; $side):
   if endpoint_workload($ep) != "" then endpoint_workload($ep)
@@ -313,7 +313,7 @@ def flow_protocol($flow):
   elif (($flow.l4 // {}).SCTP // null) != null then "sctp"
   elif (($flow.l4 // {}).ICMPv4 // null) != null then "icmpv4"
   elif (($flow.l4 // {}).ICMPv6 // null) != null then "icmpv6"
-  else "unknown"
+  else "not reported"
   end;
 def destination_port($flow):
   if (($flow.l4 // {}).TCP // null) != null then (($flow.l4.TCP.destination_port // $flow.l4.TCP.destinationPort // 0) | tostring)
@@ -321,7 +321,7 @@ def destination_port($flow):
   elif (($flow.l4 // {}).SCTP // null) != null then (($flow.l4.SCTP.destination_port // $flow.l4.SCTP.destinationPort // 0) | tostring)
   else ""
   end;
-def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "UNKNOWN");
+def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "not reported");
 def direction_match($flow):
   if $direction == "all" then true
   else ((direction_value($flow) | ascii_downcase) == $direction)
@@ -385,7 +385,7 @@ def endpoint_class($flow; $ep; $side):
   elif endpoint_namespace($ep) != "" then "workload"
   elif (flow_names($flow; $side) | length) > 0 then "name"
   elif flow_ip($flow; $side) != "" then "ip"
-  else "unknown"
+  else "unclassified"
   end;
 def endpoint_id($flow; $ep; $side):
   if endpoint_workload($ep) != "" then endpoint_workload($ep)
@@ -402,7 +402,7 @@ def flow_protocol($flow):
   elif (($flow.l4 // {}).SCTP // null) != null then "sctp"
   elif (($flow.l4 // {}).ICMPv4 // null) != null then "icmpv4"
   elif (($flow.l4 // {}).ICMPv6 // null) != null then "icmpv6"
-  else "unknown"
+  else "not reported"
   end;
 def source_port($flow):
   if (($flow.l4 // {}).TCP // null) != null then (($flow.l4.TCP.source_port // $flow.l4.TCP.sourcePort // 0) | tostring)
@@ -416,7 +416,7 @@ def destination_port($flow):
   elif (($flow.l4 // {}).SCTP // null) != null then (($flow.l4.SCTP.destination_port // $flow.l4.SCTP.destinationPort // 0) | tostring)
   else ""
   end;
-def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "UNKNOWN");
+def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "not reported");
 def direction_match($flow):
   if $direction == "all" then true
   else ((direction_value($flow) | ascii_downcase) == $direction)
@@ -488,7 +488,7 @@ def endpoint_id($ep):
   if endpoint_workload($ep) != "" then endpoint_workload($ep)
   else endpoint_pod($ep)
   end;
-def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "UNKNOWN");
+def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "not reported");
 def direction_match($flow):
   if $direction == "all" then true
   else ((direction_value($flow) | ascii_downcase) == $direction)
@@ -556,7 +556,7 @@ def endpoint_class($flow; $ep; $side):
   elif endpoint_namespace($ep) != "" then "workload"
   elif (flow_names($flow; $side) | length) > 0 then "name"
   elif flow_ip($flow; $side) != "" then "ip"
-  else "unknown"
+  else "unclassified"
   end;
 def endpoint_id($flow; $ep; $side):
   if endpoint_workload($ep) != "" then endpoint_workload($ep)
@@ -573,7 +573,7 @@ def flow_protocol($flow):
   elif (($flow.l4 // {}).SCTP // null) != null then "sctp"
   elif (($flow.l4 // {}).ICMPv4 // null) != null then "icmpv4"
   elif (($flow.l4 // {}).ICMPv6 // null) != null then "icmpv6"
-  else "unknown"
+  else "not reported"
   end;
 def destination_port($flow):
   if (($flow.l4 // {}).TCP // null) != null then (($flow.l4.TCP.destination_port // $flow.l4.TCP.destinationPort // 0) | tostring)
@@ -581,7 +581,7 @@ def destination_port($flow):
   elif (($flow.l4 // {}).SCTP // null) != null then (($flow.l4.SCTP.destination_port // $flow.l4.SCTP.destinationPort // 0) | tostring)
   else ""
   end;
-def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "UNKNOWN");
+def direction_value($flow): ($flow.traffic_direction // $flow.trafficDirection // "not reported");
 def direction_match($flow):
   if $direction == "all" then true
   else ((direction_value($flow) | ascii_downcase) == $direction)

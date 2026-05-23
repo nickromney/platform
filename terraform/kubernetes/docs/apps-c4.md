@@ -158,7 +158,7 @@ Control points:
 | `oauth2-proxy -> sentiment-router` | Authenticated reverse proxy | `sso-hardened` plus `sentiment-router-ingress` | Mirrors the subnetcalc entry path. |
 | `sentiment-router -> sentiment-auth-ui` | Router UI path | `sentiment-frontend-ingress` | Frontend is isolated behind the router. |
 | `sentiment-router -> sentiment-api` | Router API path | `sentiment-router-http-routes` plus `sentiment-backend-ingress` | UI and API stay separate. |
-| `sentiment-api -> in-process SST classifier` | Sentiment inference | `sentiment-api` application code and workload config | No inference network hop in the shipped runtime. |
+| `sentiment-api -> in-process Go lexicon classifier` | Sentiment inference | `sentiment-api` application code and workload config | No inference network hop in the shipped runtime. |
 | `sentiment-api -> otel-collector` | Trace export | `sentiment-api-egress` | Observability remains part of the application path even when inference stays local to the pod. |
 | `subnetcalc-api -> otel-collector` | Trace export | `subnetcalc-api-http-routes` | Observability is part of the application path, not an afterthought. |
 

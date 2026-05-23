@@ -831,9 +831,9 @@ expected_from_tfvars() {
   local v
   v=$(tfvar_bool "$key")
   if [[ "${#TFVARS_FILES[@]}" -eq 0 ]]; then
-    echo "unknown"
+    echo "not reported"
   elif [[ -z "$v" ]]; then
-    echo "unknown"
+    echo "not reported"
   else
     echo "$v"
   fi
@@ -843,13 +843,13 @@ expected_cilium_from_tfvars() {
   local v
   v=$(tfvar_get cni_provider)
   if [[ "${#TFVARS_FILES[@]}" -eq 0 || -z "$v" ]]; then
-    echo "unknown"
+    echo "not reported"
   elif [[ "$v" == "cilium" ]]; then
     echo "true"
   elif [[ "$v" == "none" ]]; then
     echo "false"
   else
-    echo "unknown"
+    echo "not reported"
   fi
 }
 
@@ -883,7 +883,7 @@ EXPECT_APP_REPO_SENTIMENT=$(expected_from_tfvars enable_app_repo_sentiment)
 EXPECT_LANGFUSE=$(expected_from_tfvars enable_langfuse)
 EXPECT_LANGFUSE_DEMOS=$(expected_from_tfvars enable_langfuse_demos)
 EXPECT_PREFER_EXTERNAL_WORKLOAD_IMAGES=$(expected_from_tfvars prefer_external_workload_images)
-if [[ -z "${EXPECT_CILIUM_POLICIES}" || "${EXPECT_CILIUM_POLICIES}" == "unknown" ]]; then
+if [[ -z "${EXPECT_CILIUM_POLICIES}" || "${EXPECT_CILIUM_POLICIES}" == "not reported" ]]; then
   EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"
 fi
 [[ -n "${EXPECT_CILIUM_POLICY_AUDIT_MODE}" ]] || EXPECT_CILIUM_POLICY_AUDIT_MODE="false"
@@ -1263,7 +1263,7 @@ else
   if [[ "${EXPECT_KIND_PROVISIONING}" == "false" ]]; then
     ok "Using existing kubeconfig-backed cluster (${EXPECTED_CLUSTER_NAME})"
   else
-    warn "Cluster provisioning mode unknown${tfvars_hint}; using kubectl reachability"
+    warn "Cluster provisioning mode not reported${tfvars_hint}; using kubectl reachability"
   fi
 fi
 
@@ -1337,7 +1337,7 @@ else
   if [[ "${EXPECT_WIREGUARD}" == "false" ]]; then
     ok "WireGuard not enabled (enable_cilium_wireguard=false${tfvars_hint})"
   else
-    ok "WireGuard status unknown (enable_cilium_wireguard not set${tfvars_hint})"
+    ok "WireGuard status not reported (enable_cilium_wireguard not set${tfvars_hint})"
   fi
 fi
 

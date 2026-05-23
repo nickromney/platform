@@ -20,7 +20,7 @@ sequenceDiagram
     else API path
         Router->>API: Forward /api/*
         Note over Router,API: Cilium: sentiment-router-http-routes + sentiment-backend-ingress
-        API->>API: Run in-process SST classifier
-        Note over API: SST classifier is preloaded at startup
+        API->>API: Run in-process Go lexicon classifier
+        Note over API: Classifier is available at process start
         API->>OTel: Emit traces
     end

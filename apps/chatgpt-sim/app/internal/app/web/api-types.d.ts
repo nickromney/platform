@@ -10,10 +10,18 @@ export type { ApiDiagnostics, GatewaySession, NetworkHop };
 export interface RuntimeConfig extends RuntimeConfigBase {
 	mcpUrl?: string;
 	modelProvider?: string;
-	dependencies?: string;
+	traceProvider?: string;
+	dependencyFootprint?: string;
 }
 
-export interface ConnectorOAuthMetadata {
+export type APIPrimitive = string | number | boolean | null;
+export type APIValue = APIPrimitive | APIRecord | APIValue[];
+
+export interface APIRecord {
+	[key: string]: APIValue | undefined;
+}
+
+export interface ConnectorOAuthMetadata extends APIRecord {
 	authorization_endpoint?: string;
 	token_endpoint?: string;
 	registration_endpoint?: string;
@@ -21,7 +29,25 @@ export interface ConnectorOAuthMetadata {
 	scopes_supported?: string[];
 }
 
-export interface ConnectorSummary {
+export interface ConnectorDiscovery extends APIRecord {
+	metadata_url?: string;
+	protected_resource?: APIRecord;
+	oauth_authorization_server?: ConnectorOAuthMetadata;
+	oidc_configuration?: APIRecord;
+}
+
+export interface MCPContentItem extends APIRecord {
+	type: string;
+	text?: string;
+}
+
+export interface MCPToolResult extends APIRecord {
+	content?: MCPContentItem[];
+	structuredContent?: APIRecord;
+	isError?: boolean;
+}
+
+export interface ConnectorSummary extends APIRecord {
 	id: string;
 	name: string;
 	url?: string;
@@ -30,19 +56,44 @@ export interface ConnectorSummary {
 	login_url?: string;
 	error?: string;
 	oauth?: ConnectorOAuthMetadata;
-	oauth_advanced?: Record<string, unknown>;
-	discovery?: unknown;
+	oauth_advanced?: APIRecord;
+	discovery?: ConnectorDiscovery;
+}
+
+export interface ModelRouteMetadata {
+	provider: string;
+	model?: string;
+	route?: string;
+	status?: string;
+	source?: string;
+	error?: string;
+}
+
+export interface TraceMetadata {
+	provider: string;
+	status: string;
+	traceId: string;
+	error?: string;
+}
+
+export interface MCPStep {
+	method: string;
+	status: string | number;
+	route?: string;
+	response?: APIRecord;
+	error?: string;
 }
 
 export interface ChatResponse {
 	assistant: string;
 	selected_tool: string;
-	model?: Record<string, unknown>;
+	model?: ModelRouteMetadata;
+	trace?: TraceMetadata;
 	connector?: ConnectorSummary;
-	tool_arguments?: Record<string, unknown>;
-	tool_result?: unknown;
-	mcp_steps?: unknown[];
-	discovery?: unknown;
+	tool_arguments?: APIRecord;
+	tool_result?: MCPToolResult;
+	mcp_steps?: MCPStep[];
+	discovery?: ConnectorDiscovery;
 }
 
 export interface ConnectorListResponse {
@@ -51,9 +102,8 @@ export interface ConnectorListResponse {
 
 export interface ApiError extends Error {
 	status?: number;
-	payload?: {
+	payload?: APIRecord & {
 		connector?: ConnectorSummary;
-		[key: string]: unknown;
 	};
 }
 

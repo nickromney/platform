@@ -7,13 +7,13 @@ compose files in this app directory, without Kubernetes or Terraform.
 
 - `compose.yml` is the primary local runtime.
 - `compose.tls.yml` is a thin overlay that adds a TLS 1.3 front door.
-- The default runtime path is `sentiment-api -> in-process SST classifier`.
+- The default runtime path is `sentiment-api -> Go lexicon classifier`.
 
 ## Compose Files
 
 | File | Role |
 | --- | --- |
-| [`compose.yml`](../compose.yml) | Main authenticated local stack: Keycloak, oauth2-proxy, edge router, API, UI, and SST inference. |
+| [`compose.yml`](../compose.yml) | Main authenticated local stack: Keycloak, oauth2-proxy, edge router, API, UI, and deterministic lexicon classification. |
 | [`compose.tls.yml`](../compose.tls.yml) | Optional TLS 1.3 overlay in front of `oauth2-proxy`. |
 
 ## System Context
@@ -27,7 +27,7 @@ flowchart LR
     Edge["edge nginx<br/>internal router"]
     UI["sentiment-auth-frontend<br/>static SPA"]
     API["sentiment-api"]
-    SST["SST classifier<br/>loaded inside sentiment-api"]
+    Lexicon["Go lexicon classifier<br/>inside sentiment-api"]
 
     Browser -->|"default HTTP"| OAuth
     Browser -->|"optional TLS"| TLS
@@ -36,7 +36,7 @@ flowchart LR
     OAuth --> Edge
     Edge -->|" / "| UI
     Edge -->|" /api/* "| API
-    API -->|"default"| SST
+    API -->|"default"| Lexicon
 ```
 
 ## Runtime Slices
@@ -45,7 +45,7 @@ flowchart LR
   management, then forwards all authenticated traffic upstream.
 - `edge` is the internal application router. It sends `/api/*` to
   `sentiment-api` and everything else to the static UI.
-- `sentiment-api` owns inference routing. The browser never chooses the model
+- `sentiment-api` owns classification. The browser never chooses a classifier
   path.
 - `POST /api/v1/comments` analyzes and persists a comment. `POST
   /api/v1/sentiment/classify` uses the same analyzer but returns only the
@@ -58,11 +58,7 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     [*] --> Start
-    Start --> ChooseAnalyzer
-    ChooseAnalyzer --> LoadClassifier: SENTIMENT_ANALYZER=sst
-    LoadClassifier --> WarmClassifier: SENTIMENT_WARM_ON_START=true
-    LoadClassifier --> Ready: SENTIMENT_WARM_ON_START=false
-    WarmClassifier --> Ready
+    Start --> Ready: load Go lexicon rules
     Ready --> ClassifyRequest
     ClassifyRequest --> Ready
 ```
@@ -77,7 +73,7 @@ sequenceDiagram
     participant E as edge
     participant UI as sentiment-auth-frontend
     participant API as sentiment-api
-    participant S as SST classifier
+    participant C as Go lexicon classifier
 
     B->>O: GET /
     O-->>B: Redirect to Keycloak login
@@ -91,10 +87,8 @@ sequenceDiagram
     B->>O: GET /api/...
     O->>E: Forward authenticated API request
     E->>API: Route /api/*
-    alt default SST analyzer
-        API->>S: Classify sentiment in-process
-        S-->>API: Label + confidence
-    end
+    API->>C: Classify sentiment in-process
+    C-->>API: Label + confidence
     API-->>B: JSON result
 ```
 
@@ -124,11 +118,10 @@ flowchart LR
 | `oauth2-proxy` -> `edge` | Authenticated upstream | Keeps auth separate from the app router. |
 | `edge` -> `sentiment-auth-frontend` | UI split | Static assets and API stay separate. |
 | `edge` -> `sentiment-api` | API split | `/api/*` stays on the backend path. |
-| `sentiment-api` -> in-process SST classifier | Default inference path | Fully local and self-contained. |
-| `sentiment-api` -> APIM simulator AI gateway | Optional inference path | Uses APIM-style routing in front of local or external OpenAI-compatible model endpoints. |
+| `sentiment-api` -> Go lexicon classifier | Default inference path | Fully local and self-contained. |
 
 ## Practical Reading Guide
 
 - Use the system context diagram when you want to know which containers matter.
-- Use the state diagram when you want to know when the SST classifier is loaded.
+- Use the state diagram when you want to know when the classifier is ready.
 - Use the sequence diagram when debugging auth, routing, or upstream latency.

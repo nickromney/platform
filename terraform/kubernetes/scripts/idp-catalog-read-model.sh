@@ -69,7 +69,7 @@ catalog_text() {
         .name,
         .owner,
         .lifecycle,
-        (.environments | map(.name + ":" + (.rbac.group // "unknown")) | join(",")),
+        (.environments | map(.name + ":" + (.rbac.group // "not-declared")) | join(",")),
         (.secrets | map(.name) | join(","))
       ]
     | @tsv
@@ -111,7 +111,7 @@ deployments_text() {
         .name,
         .namespace,
         .route,
-        (.rbac.group // "unknown")
+        (.rbac.group // "not-declared")
       ]
     | @tsv
   ' "${CATALOG_FILE}" |
@@ -129,8 +129,8 @@ secrets_json() {
       | . + {
           app: $app.name,
           owner: $app.owner,
-          binding: (.binding // "unknown"),
-          rotation: (.rotation // "unknown")
+          binding: (.binding // "not declared"),
+          rotation: (.rotation // "not declared")
         }
     ]
   }' "${CATALOG_FILE}"
@@ -143,8 +143,8 @@ secrets_text() {
     | [
         $app.name,
         .name,
-        (.binding // "unknown"),
-        (.rotation // "unknown")
+        (.binding // "not-declared"),
+        (.rotation // "not-declared")
       ]
     | @tsv
   ' "${CATALOG_FILE}" |

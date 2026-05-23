@@ -6,29 +6,28 @@ setup() {
   export APIM_ROOT="${REPO_ROOT}/apps/apim-simulator"
 }
 
-@test "apim simulator make help exposes update workflow" {
+@test "apim simulator make help exposes Go app workflow" {
   run make -C "${APIM_ROOT}" help
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Code Quality and Tooling:"* ]]
+  [[ "${output}" == *"App:"* ]]
   [[ "${output}" == *"update"* ]]
-  [[ "${output}" == *"Update uv and Backstage Yarn locks"* ]]
+  [[ "${output}" == *"No dependency locks are managed at this wrapper level"* ]]
 }
 
-@test "apim simulator update covers uv and backstage locks" {
+@test "apim simulator update is a Go-only no-op" {
   run make -n -C "${APIM_ROOT}" update
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"uv lock"* ]]
-  [[ "${output}" == *"cd backstage/app && yarn install --mode=update-lockfile"* ]]
+  [[ "${output}" == *"apim-simulator: Go-only app; no package-manager locks to update"* ]]
 }
 
-@test "apim simulator frontend check uses Biome and Deno without npm UI manifests" {
-  run make -C "${APIM_ROOT}" frontend-check
+@test "apim simulator app js-check uses Biome and Deno without npm manifests" {
+  run make -C "${APIM_ROOT}" app-js-check
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"test -f ui/api-types.d.ts"* ]]
-  [[ "${output}" == *"biome check ui/app.js ui/api-types.d.ts ui/index.html ui/styles.css"* ]]
-  [[ "${output}" == *"deno check --check-js ui/app.js"* ]]
-  [[ "${output}" == *"! test -f ui/package.json"* ]]
+  [[ "${output}" == *"biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html internal/app/web/style.css"* ]]
+  [[ "${output}" == *"deno check --check-js internal/app/web/app.js"* ]]
+  [ ! -e "${APIM_ROOT}/app/package.json" ]
+  [ ! -e "${APIM_ROOT}/app/internal/app/web/package.json" ]
 }

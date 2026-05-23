@@ -283,6 +283,30 @@ EOF
   [[ "${output}" == *"make -C kubernetes/slicer test"* ]]
 }
 
+@test "root prereqs and test list every top-level app Makefile entrypoint" {
+  app_entrypoints="$(
+    cd "${REPO_ROOT}"
+    {
+      printf '%s\n' apps
+      find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname
+    } | LC_ALL=C sort
+  )"
+
+  run make -C "${REPO_ROOT}" prereqs
+
+  [ "${status}" -eq 0 ]
+  while IFS= read -r app_entrypoint; do
+    [[ "${output}" == *"make -C ${app_entrypoint} prereqs"* ]]
+  done <<<"${app_entrypoints}"
+
+  run make -C "${REPO_ROOT}" test
+
+  [ "${status}" -eq 0 ]
+  while IFS= read -r app_entrypoint; do
+    [[ "${output}" == *"make -C ${app_entrypoint} test"* ]]
+  done <<<"${app_entrypoints}"
+}
+
 @test "docker compose test resolves the backend helper in execute mode" {
   compose_backend_stub="${BATS_TEST_TMPDIR}/compose-backend.sh"
   compose_cmd_stub="${BATS_TEST_TMPDIR}/compose-cmd.sh"

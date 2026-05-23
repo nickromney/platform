@@ -34,7 +34,7 @@ services:
   apim-simulator:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: app/Dockerfile
     image: apim-simulator:latest
     read_only: true
     cap_drop:
@@ -96,7 +96,7 @@ services:
       - --auth-logging=true
       - --request-logging=true
       - --upstream-timeout=180s
-      - --skip-auth-regex=^/(styles\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
+      - --skip-auth-regex=^/(style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
       - --reverse-proxy=true
       - --skip-provider-button=true
     depends_on:

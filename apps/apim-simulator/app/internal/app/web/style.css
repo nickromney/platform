@@ -1,0 +1,81 @@
+:root {
+	--app-shell-width: 1180px;
+}
+
+h1 {
+	margin: 0;
+	font-size: 2.4rem;
+}
+h2 {
+	margin: 0 0 12px;
+}
+p {
+	color: var(--muted);
+}
+
+pre {
+	max-height: 420px;
+}
+
+.form-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 120px;
+	gap: 10px;
+}
+
+.metrics {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.metrics article {
+	padding: 14px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 18px;
+}
+
+li {
+	display: grid;
+	gap: 3px;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--line);
+}
+
+li span {
+	color: var(--muted);
+}
+
+.metrics strong {
+	display: block;
+	font-size: 2rem;
+}
+.metrics span {
+	color: var(--muted);
+}
+
+.replay {
+	display: grid;
+	grid-template-columns: 120px minmax(0, 1fr);
+	gap: 10px;
+}
+
+.replay textarea,
+.replay button {
+	grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+	.grid,
+	.metrics,
+	.replay,
+	.form-row {
+		grid-template-columns: 1fr;
+	}
+}

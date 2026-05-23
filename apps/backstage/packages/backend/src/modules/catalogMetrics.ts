@@ -25,14 +25,18 @@ type CatalogEntity = {
 
 const DEFAULT_CATALOG_FILES = [
   'catalog/entities.yaml',
+  'catalog/apps/idp-core/catalog-info.yaml',
   'catalog/apps/platform-mcp/catalog-info.yaml',
+  'catalog/apps/langfuse/catalog-info.yaml',
+  'catalog/apps/langfuse-demos/catalog-info.yaml',
+  'catalog/apps/chatgpt-sim/catalog-info.yaml',
   'catalog/apps/subnetcalc/catalog-info.yaml',
   'catalog/apps/apim-simulator/catalog-info.yaml',
   'catalog/apps/sentiment/catalog-info.yaml',
 ];
 
 function metricNameLabel(value: string | undefined): string {
-  return (value || 'unknown').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return (value || 'not_declared').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function gauge(name: string, labels: Record<string, string>, value: number): string {
@@ -99,7 +103,7 @@ export function renderCatalogMetrics(): string {
 
   const kindCounts = new Map<string, number>();
   for (const entity of entities) {
-    const kind = entity.kind || 'unknown';
+    const kind = entity.kind || 'not_declared';
     kindCounts.set(kind, (kindCounts.get(kind) || 0) + 1);
   }
   for (const [kind, count] of [...kindCounts.entries()].sort()) {
@@ -112,7 +116,7 @@ export function renderCatalogMetrics(): string {
   );
   const componentTypeCounts = new Map<string, number>();
   for (const component of components) {
-    const type = component.spec?.type || 'unknown';
+    const type = component.spec?.type || 'not_declared';
     componentTypeCounts.set(type, (componentTypeCounts.get(type) || 0) + 1);
   }
   for (const [type, count] of [...componentTypeCounts.entries()].sort()) {
@@ -130,11 +134,11 @@ export function renderCatalogMetrics(): string {
       gauge(
         'backstage_catalog_component_locality_total',
         {
-          component: component.metadata?.name || 'unknown',
-          owner: component.spec?.owner || 'unknown',
-          lifecycle: component.spec?.lifecycle || 'unknown',
-          system: component.spec?.system || 'unknown',
-          type: component.spec?.type || 'unknown',
+          component: component.metadata?.name || 'not_declared',
+          owner: component.spec?.owner || 'not_declared',
+          lifecycle: component.spec?.lifecycle || 'not_declared',
+          system: component.spec?.system || 'not_declared',
+          type: component.spec?.type || 'not_declared',
         },
         1,
       ),
@@ -143,7 +147,7 @@ export function renderCatalogMetrics(): string {
 
   const componentLinkCounts = new Map<string, number>();
   for (const component of components) {
-    const componentName = component.metadata?.name || 'unknown';
+    const componentName = component.metadata?.name || 'not_declared';
     for (const link of component.metadata?.links || []) {
       const kind = linkKind(link.title, link.url);
       const key = `${componentName}\u0000${kind}`;

@@ -2,6 +2,7 @@ SHELL := /bin/bash
 MAKE_KNOWN_GOALS := help prereqs test status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
+APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
 LINT_YAML_SCRIPT ?= scripts/lint-yaml.sh
 LINT_MARKDOWN_SCRIPT ?= scripts/lint-markdown.sh
 LINT_BASH32_SCRIPT ?= scripts/check-bash32-compat.sh
@@ -109,10 +110,7 @@ prereqs:
 	@echo ""
 	@echo "Run one of:"
 	@echo "  make -C .devcontainer prereqs"
-	@echo "  make -C apps prereqs"
-	@echo "  make -C apps/apim-simulator prereqs"
-	@echo "  make -C apps/sentiment prereqs"
-	@echo "  make -C apps/subnetcalc prereqs"
+	@$(APP_ENTRYPOINT_DIRS_CMD) | sed 's#^#  make -C #' | sed 's#$$# prereqs#'
 	@echo "  make -C docker/compose prereqs"
 	@echo "  make -C sites/docs prereqs"
 	@echo "  make -C kubernetes/kind prereqs"
@@ -126,10 +124,7 @@ test:
 	@echo "Root test is informational."
 	@echo ""
 	@echo "Run one of:"
-	@echo "  make -C apps test"
-	@echo "  make -C apps/apim-simulator test"
-	@echo "  make -C apps/sentiment test"
-	@echo "  make -C apps/subnetcalc test"
+	@$(APP_ENTRYPOINT_DIRS_CMD) | sed 's#^#  make -C #' | sed 's#$$# test#'
 	@echo "  make -C docker/compose test"
 	@echo "  make -C sites/docs test"
 	@echo "  make -C kubernetes/kind test"

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"platform.local/apphttp"
+	"platform.local/appshell"
 	"platform.local/idpauth"
 )
 
@@ -25,6 +27,21 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		}
 		if !strings.Contains(rec.Body.String(), `"status"`) {
 			t.Fatalf("%s returned unexpected body: %s", path, rec.Body.String())
+		}
+		if path == "/health" || path == "/api/v1/health" {
+			var health map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+				t.Fatalf("%s returned invalid health JSON: %v", path, err)
+			}
+			if got := health["dependency_footprint"]; got != "go-plus-shared-idpauth" {
+				t.Fatalf("%s dependency_footprint=%v, want go-plus-shared-idpauth", path, got)
+			}
+			if got := health["frontend_dependency_footprint"]; got != "vanilla" {
+				t.Fatalf("%s frontend_dependency_footprint=%v, want vanilla", path, got)
+			}
+			if _, ok := health["dependencies"]; ok {
+				t.Fatalf("%s should use canonical dependency_footprint fields, got legacy dependencies in %v", path, health)
+			}
 		}
 		if path == "/api/v1/health" {
 			for _, text := range []string{`"service":"Sentiment API (Go)"`, `"version":"1.0.0"`, `"server_side_token_validation":false`} {
@@ -63,6 +80,21 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		t.Fatalf("shared app shell CSS Cache-Control=%q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.js", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared app shell JS returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{"PlatformAppShell", "initializeThemeSwitcher", "toggleTheme", "pce-theme"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("shared app shell JS missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("shared app shell JS Cache-Control=%q", got)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -72,6 +104,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	for _, text := range []string{
 		"Sentiment",
 		`/app-shell.css`,
+		`/app-shell.js`,
 		"Signed out",
 		"Sign in now",
 		"/.auth/login/sso",
@@ -79,10 +112,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		`class="theme-toggle"`,
 		"redirect-delay",
 		"Redirecting to sign in in 5 seconds",
-		"pce-theme",
-		"setTimeout(() => {",
-		"window.location.assign(loginLink.href)",
-		"5000",
+		"window.PlatformAppShell.initializeSignedOutRedirect()",
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
@@ -96,6 +126,34 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("signed-out Cache-Control=%q", got)
+	}
+}
+
+func TestServerUsesSharedHTTPErrorHelpers(t *testing.T) {
+	serverSource, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	typesSource, err := os.ReadFile("types.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverText := string(serverSource)
+	typesText := string(typesSource)
+
+	for _, text := range []string{
+		"apphttp.WriteError(",
+		"apphttp.DecodeJSONError(",
+		"apphttp.NewAPIProxy(apphttp.APIProxyConfig{",
+	} {
+		if !strings.Contains(serverText, text) {
+			t.Fatalf("sentiment server should use shared HTTP helper %q", text)
+		}
+	}
+	for _, text := range []string{"type errorResponse", "errorResponse{"} {
+		if strings.Contains(serverText, text) || strings.Contains(typesText, text) {
+			t.Fatalf("sentiment server should not keep local JSON error helper %q", text)
+		}
 	}
 }
 
@@ -188,6 +246,15 @@ func TestClassifyDoesNotPersistAndRejectsEmptyText(t *testing.T) {
 	}
 }
 
+func TestClassifyRejectsTrailingJSON(t *testing.T) {
+	srv := NewServer(Config{RuntimeRole: "backend", DataDir: t.TempDir()})
+
+	rec := post(t, srv, "/api/v1/sentiment/classify", `{"text":"clear enough"} {}`, http.StatusBadRequest)
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"invalid JSON body"}` {
+		t.Fatalf("unexpected trailing JSON body: %s", rec.Body.String())
+	}
+}
+
 func TestRuntimeRolesKeepFrontendAndBackendSeparate(t *testing.T) {
 	backend := NewServer(Config{RuntimeRole: "backend", DataDir: t.TempDir()})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -224,7 +291,7 @@ func TestFrontendAPIProxyPrefersForwardedAccessToken(t *testing.T) {
 	var gotAuth string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		writeJSON(w, http.StatusOK, map[string][]Comment{"items": []Comment{}})
+		apphttp.WriteJSON(w, http.StatusOK, map[string][]Comment{"items": []Comment{}})
 	}))
 	t.Cleanup(backend.Close)
 
@@ -247,7 +314,7 @@ func TestFrontendAPIProxyFallsBackToAuthorizationHeader(t *testing.T) {
 	var gotAuth string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		writeJSON(w, http.StatusOK, map[string][]Comment{"items": []Comment{}})
+		apphttp.WriteJSON(w, http.StatusOK, map[string][]Comment{"items": []Comment{}})
 	}))
 	t.Cleanup(backend.Close)
 
@@ -377,7 +444,7 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `/app-shell.css`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `data-theme-icon="light"`, `data-theme-icon="dark"`, `data-theme-icon="system"`, `id="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="api-status"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
+	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `/app-shell.css`, `/app-shell.js`, `/idpauth.js`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `id="auth-state"`, `id="logout-btn" class="sign-in-link"`, `>Sign Out<`, `id="api-status" class="app-panel notice" role="status" aria-live="polite"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
@@ -404,69 +471,110 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatalf("frontend diagnostics must render after comments: %s", html)
 	}
 	for _, text := range []string{
-		"readThemeCookie()",
-		"writeThemeCookie(nextTheme)",
-		"pce-theme",
-		"themeCookieDomain",
-		"document.cookie",
-		"toggleTheme",
-		"themePreference",
-		`matchMedia("(prefers-color-scheme: dark)")`,
-		`["system", "light", "dark"]`,
-		"window.SENTIMENT_RUNTIME_CONFIG",
+		"PlatformAppShell",
+		"initializeThemeSwitcher()",
+		"requireElement",
+		"requireSelector",
+		"buttonSelector",
+		`buttonSelector('[data-action="analyze"]')`,
+		"textAreaElement",
+		"withSubmitterBusy",
+		"renderNetworkPathInto",
+		"resolveNetworkHops",
+		"fetchJSON",
+		"fetchJSONWithTiming",
+		"errorMessage",
+		"apiTimingElement",
+		"renderElementsInto",
+		`readRuntimeConfig("SENTIMENT_RUNTIME_CONFIG")`,
 		"checkHealth()",
-		"API Status:",
-		"Backend URI:",
-		"runtimeConfig().backendURL || \"same process\"",
-		"OIDC/JWT validated by backend",
-		"No auth mode",
+		"formatAPIHealthStatus(data, runtimeConfig())",
 		"apiReadyForUserAction()",
+		"apiActionReady(runtimeConfig())",
+		"usesGatewayAuth(runtimeConfig())",
 		"authRequiredMessage()",
-		"Sign in before using sentiment analysis",
-		"expiredSessionMessage()",
-		"Session expired. Sign out and sign in again to refresh API access.",
-		"authSessionExpired(error)",
-		"invalid or expired access token",
+		`apiAuthRequiredMessage("using sentiment analysis")`,
+		"apiErrorMessage(runtimeConfig(), error",
 		"API authentication is disabled for this environment",
-		"usesGatewayAuth()",
-		"fetchGatewaySession()",
-		"fetch(\"/.auth/me\"",
-		"payload.clientPrincipal",
-		"gatewayDisplayName(session)",
-		"/oauth2/sign_out?rd=/signed-out.html",
+		"usesGatewayAuth(runtimeConfig())",
+		"PlatformIdpAuth",
+		"initializeGatewayAuthState(authState, logoutButton)",
+		"bindGatewayLogout(",
 		"timedFetchJSON(",
-		"apiURL(",
+		"apiPath(runtimeConfig()",
 		"formatTimestamp(item.timestamp)",
-		"Timestamp unavailable",
 		`[data-sample="negative"]`,
 		"I am disappointed and frustrated. This was a poor experience.",
-		"parseJSONResponse(response)",
+		"fetchJSONWithTiming(url",
+		"decodeAPIMTrace",
 		"apiBasePath",
 		"backendURL",
-		"x-apim-trace",
-		"x-apim-trace-id",
-		"x-correlation-id",
-		"Request (UTC)",
-		"Response (UTC)",
-		"API Call Timing",
-		"Network Path",
+		"apiJSONHeaders(runtimeConfig())",
+		"apiTimingElement(timing",
+		"renderNetworkPathInto(",
+		"renderStatusInto(statusEl",
+		"diagnosticsEl.replaceChildren(",
 		"configuredNetworkHops()",
-		"showNetworkPath",
+		"shouldShowNetworkPath(runtimeConfig())",
 	} {
 		if !strings.Contains(string(appJS), text) {
 			t.Fatalf("frontend app.js missing %q", text)
 		}
 	}
-	if strings.Contains(string(appJS), `localStorage.setItem("theme"`) {
-		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
+	for _, text := range []string{
+		"function fetchGatewaySession",
+		"function normalizeGatewaySession",
+		"function gatewayDisplayName",
+		"function readThemeCookie",
+		"function writeThemeCookie",
+		"function themeCookieDomain",
+		"function requireElement",
+		"HTMLButtonElement",
+		`requireSelector('[data-action="analyze"]')`,
+		"function textAreaElement",
+		"async function parseJSONResponse",
+		"parseJSONResponse(response)",
+		"const response = await fetch(url",
+		"function isNetworkHop",
+		"traceId: response.headers.get",
+		"correlationId: response.headers.get",
+		"<summary>Network Path",
+		"fetchGatewaySession()",
+		"writeGatewayAuthState(authState, logoutButton, session)",
+		"function usesGatewayAuth",
+		"function expiredSessionMessage",
+		"function authSessionExpired",
+		"function escapeHTML",
+		"commentsEl.innerHTML",
+		"diagnosticsEl.innerHTML",
+		"renderAPITiming(timing",
+		"renderNetworkPath(configuredNetworkHops())",
+		`<article class="comment">`,
+		"error.message",
+		`Array<[string, string | number | boolean | null | undefined]>`,
+		"statusEl.textContent",
+		"window.SENTIMENT_RUNTIME_CONFIG",
+		"The backend validates JWT/OIDC tokens, so this frontend",
+	} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("frontend app.js should use shared helper instead of %q", text)
+		}
+	}
+	for _, text := range []string{"pce-theme", "document.cookie"} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("theme implementation must live in shared app shell, not app.js %q", text)
+		}
 	}
 
 	styleCSS, err := web.ReadFile("web/style.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(styleCSS), `:root[data-theme="dark"]`) {
-		t.Fatalf("frontend style.css missing explicit dark theme override")
+	sharedReq := httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
+	sharedRec := httptest.NewRecorder()
+	appshell.Stylesheet(sharedRec, sharedReq)
+	if !strings.Contains(sharedRec.Body.String(), `:root[data-theme="dark"]`) {
+		t.Fatalf("shared app shell CSS missing explicit dark theme override")
 	}
 	for _, text := range []string{
 		`.auth-state`,

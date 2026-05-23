@@ -1,9 +1,10 @@
 FROM dhi.io/static:20260413-alpine3.23
 
-COPY .run/subnetcalc /subnetcalc
+COPY --chown=65532:65532 .run/subnetcalc /subnetcalc
 
 USER 65532:65532
-ENV PORT=8080
+ENV PORT=8080 \
+    HOME=/tmp
 EXPOSE 8080
 
 ENTRYPOINT ["/subnetcalc"]

@@ -2,16 +2,10 @@ package app
 
 import (
 	"embed"
-	"encoding/json"
-	"errors"
-	"io/fs"
-	"log/slog"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"strconv"
 	"strings"
 
+	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
 )
@@ -56,9 +50,15 @@ func NewServer(cfg Config, verifier ...idpauth.TokenVerifier) http.Handler {
 	}
 	if cfg.RuntimeRole == "frontend" || cfg.RuntimeRole == "all" {
 		mux.HandleFunc("GET /runtime-config.js", srv.runtimeConfig)
-		mux.HandleFunc("GET /app-shell.css", appshell.Stylesheet)
-		mux.HandleFunc("GET /favicon.ico", srv.favicon)
-		mux.HandleFunc("/", srv.static)
+		appshell.RegisterSharedAssets(mux, idpauth.BrowserBundle)
+		mux.HandleFunc("GET /favicon.ico", appshell.SVGFavicon(sentimentFaviconSVG))
+		mux.HandleFunc("GET /signed-out.html", appshell.SignedOutPage(appshell.SignedOutPageConfig{
+			AppName:     "Sentiment",
+			Tagline:     "Classify comments with a minimal vanilla UI and Go API.",
+			SessionName: "sentiment",
+			Stylesheet:  "/style.css",
+		}))
+		mux.Handle("/", appshell.StaticFiles(web, "web"))
 	}
 	return mux
 }
@@ -71,10 +71,10 @@ type server struct {
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 	if err := s.store.ensure(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	apphttp.WriteBrowserAppHealth(w, map[string]any{
 		"status":                       "ok",
 		"role":                         "backend",
 		"service":                      "Sentiment API (Go)",
@@ -85,14 +85,14 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *server) ready(w http.ResponseWriter, _ *http.Request) {
 	if err := s.store.ensure(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready", "role": "backend"})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "ready", "backend")
 }
 
 func (s *server) live(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "alive", "role": "backend"})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "alive", "backend")
 }
 
 func (s *server) frontendHealth(w http.ResponseWriter, _ *http.Request) {
@@ -104,7 +104,7 @@ func (s *server) frontendHealth(w http.ResponseWriter, _ *http.Request) {
 	if role == "backend" {
 		service = "sentiment-api"
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
+	apphttp.WriteBrowserAppHealth(w, map[string]any{
 		"status":  "ok",
 		"role":    role,
 		"service": service,
@@ -112,11 +112,11 @@ func (s *server) frontendHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) frontendReady(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready", "role": s.cfg.RuntimeRole})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "ready", s.cfg.RuntimeRole)
 }
 
 func (s *server) frontendLive(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "alive", "role": s.cfg.RuntimeRole})
+	apphttp.WriteRoleStatus(w, http.StatusOK, "alive", s.cfg.RuntimeRole)
 }
 
 func (s *server) requireAuth(next http.Handler) http.Handler {
@@ -133,194 +133,78 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, claims)
+	apphttp.WriteJSON(w, http.StatusOK, claims)
 }
 
 func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
-	if strings.EqualFold(s.cfg.AuthMode, "none") {
-		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
-	}
-	if s.verifier == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "OIDC verifier is not configured"})
+	claims, failure := (idpauth.Authenticator{Mode: s.cfg.AuthMode, Verifier: s.verifier}).CurrentUser(r)
+	if failure != nil {
+		apphttp.WriteError(w, failure.StatusCode, failure.Message)
 		return idpauth.UserClaims{}, false
-	}
-	token := idpauth.BearerToken(r)
-	if token == "" {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "missing bearer token"})
-		return idpauth.UserClaims{}, false
-	}
-	claims, err := s.verifier.Verify(r.Context(), token)
-	if err != nil {
-		status := http.StatusUnauthorized
-		if !errors.Is(err, idpauth.ErrInvalidToken) {
-			status = http.StatusBadGateway
-		}
-		writeJSON(w, status, errorResponse{Error: "invalid token"})
-		return idpauth.UserClaims{}, false
-	}
-	if claims.Groups == nil {
-		claims.Groups = []string{}
 	}
 	return claims, true
 }
 
 func (s *server) listComments(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 25
-	}
+	limit := apphttp.QueryInt(r, "limit", 25)
 	comments, err := s.store.list(limit)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string][]Comment{"items": comments})
+	apphttp.WriteJSON(w, http.StatusOK, map[string][]Comment{"items": comments})
 }
 
 func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 	var req classifyRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	text := strings.TrimSpace(req.Text)
 	if text == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "text is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "text is required")
 		return
 	}
 	result := classify(text)
 	comment := newComment(text, result)
 	if err := s.store.append(comment); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, comment)
+	apphttp.WriteJSON(w, http.StatusOK, comment)
 }
 
 func (s *server) classifyOnly(w http.ResponseWriter, r *http.Request) {
 	var req classifyRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 		return
 	}
 	text := strings.TrimSpace(req.Text)
 	if text == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "text is required"})
+		apphttp.WriteError(w, http.StatusBadRequest, "text is required")
 		return
 	}
-	writeJSON(w, http.StatusOK, classify(text))
+	apphttp.WriteJSON(w, http.StatusOK, classify(text))
 }
 
-func (s *server) static(w http.ResponseWriter, r *http.Request) {
-	sub, err := fs.Sub(web, "web")
-	if err != nil {
-		http.Error(w, "static assets unavailable", http.StatusInternalServerError)
-		return
-	}
-	setFrontendCacheHeaders(w)
-	http.FileServer(http.FS(sub)).ServeHTTP(w, r)
+func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
+	payload := appshell.RuntimeConfigPayload(r, appshell.RuntimeConfigOptions{
+		Base: map[string]any{
+			"authMethod":    s.cfg.AuthMode,
+			"apiAuthMethod": s.cfg.APIAuthMode,
+			"apiBasePath":   apphttp.StringDefault(s.cfg.APIBasePath, "/api/v1"),
+			"backendURL":    s.cfg.BackendURL,
+		},
+		ShowNetworkPath: s.cfg.ShowNetworkPath,
+		NetworkHopsJSON: s.cfg.NetworkHops,
+	})
+	appshell.WriteScriptConfigForRequest(w, r, "window.SENTIMENT_RUNTIME_CONFIG", payload)
 }
 
-func (s *server) favicon(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *server) runtimeConfig(w http.ResponseWriter, _ *http.Request) {
-	payload := map[string]any{
-		"authMethod":      s.cfg.AuthMode,
-		"apiAuthMethod":   s.cfg.APIAuthMode,
-		"apiBasePath":     defaultString(s.cfg.APIBasePath, "/api/v1"),
-		"backendURL":      s.cfg.BackendURL,
-		"showNetworkPath": parseBoolDefault(s.cfg.ShowNetworkPath, true),
-	}
-	if s.cfg.NetworkHops != "" {
-		var hops any
-		if err := json.Unmarshal([]byte(s.cfg.NetworkHops), &hops); err == nil {
-			payload["networkHops"] = hops
-		}
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		http.Error(w, "runtime config unavailable", http.StatusInternalServerError)
-		return
-	}
-	setFrontendCacheHeaders(w)
-	w.Header().Set("Content-Type", "application/javascript")
-	_, _ = w.Write([]byte("window.SENTIMENT_RUNTIME_CONFIG = "))
-	_, _ = w.Write(encoded)
-	_, _ = w.Write([]byte(";\n"))
-}
-
-func parseBoolDefault(value string, fallback bool) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "":
-		return fallback
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-func defaultString(value, fallback string) string {
-	if value != "" {
-		return value
-	}
-	return fallback
-}
-
-func setFrontendCacheHeaders(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
-}
+const sentimentFaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#17202a"/><path d="M18 24c6-10 22-10 28 0M18 40c6 10 22 10 28 0" fill="none" stroke="#4f9d7e" stroke-width="6" stroke-linecap="round"/><circle cx="24" cy="31" r="3" fill="#e8eef4"/><circle cx="40" cy="31" r="3" fill="#e8eef4"/></svg>`
 
 func (s *server) apiProxy() http.Handler {
-	if s.cfg.BackendURL == "" {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "BACKEND_URL is not configured"})
-		})
-	}
-	target, err := url.Parse(s.cfg.BackendURL)
-	if err != nil {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "BACKEND_URL is invalid"})
-		})
-	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	baseDirector := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		baseDirector(r)
-		if auth := apiProxyAuthorization(r.Header); auth != "" {
-			r.Header.Set("Authorization", auth)
-		}
-	}
-	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "Backend API unavailable"})
-	}
-	return proxy
-}
-
-func apiProxyAuthorization(headers http.Header) string {
-	for _, name := range []string{"X-Auth-Request-Access-Token", "X-Forwarded-Access-Token"} {
-		if token := strings.TrimSpace(headers.Get(name)); token != "" {
-			return "Bearer " + token
-		}
-	}
-	return strings.TrimSpace(headers.Get("Authorization"))
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	defer r.Body.Close()
-	if err := json.NewDecoder(r.Body).Decode(out); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON body"})
-		return false
-	}
-	return true
-}
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(value); err != nil {
-		slog.Error("write response", "error", err)
-	}
+	return apphttp.NewAPIProxy(apphttp.APIProxyConfig{
+		BackendURL: s.cfg.BackendURL,
+	})
 }

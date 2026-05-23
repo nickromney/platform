@@ -214,6 +214,175 @@
       }
     },
     {
+      "name": "langfuse",
+      "display_name": "Langfuse",
+      "owner": "platform",
+      "lifecycle": "platform",
+      "source": {
+        "repo": "platform",
+        "path": "terraform/kubernetes/apps/langfuse"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["langfuse"]
+      },
+      "environments": [
+        {
+          "name": "local",
+          "type": "platform",
+          "namespace": "langfuse",
+          "route": "https://langfuse.admin.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "platform-viewers",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "langfuse-secrets",
+          "binding": "langfuse",
+          "rotation": "demo"
+        },
+        {
+          "name": "langfuse-keycloak-oidc",
+          "binding": "sso",
+          "rotation": "platform"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
+      "name": "langfuse-trace-chat",
+      "display_name": "Langfuse Trace Chat",
+      "owner": "platform",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/langfuse-demos"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["langfuse-demos"]
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://lf-chat.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "platform-viewers",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "langfuse-api-keys",
+          "binding": "langfuse",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
+      "name": "langfuse-tool-agent",
+      "display_name": "Langfuse Tool Agent",
+      "owner": "platform",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/langfuse-demos"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["langfuse-demos"]
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://lf-agent.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "platform-viewers",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "langfuse-api-keys",
+          "binding": "langfuse",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
+      "name": "langfuse-eval-runner",
+      "display_name": "Langfuse Eval Runner",
+      "owner": "platform",
+      "lifecycle": "demo",
+      "source": {
+        "repo": "platform",
+        "path": "apps/langfuse-demos"
+      },
+      "deployment": {
+        "strategy": "gitops",
+        "controller": "argocd",
+        "applications": ["langfuse-demos"]
+      },
+      "environments": [
+        {
+          "name": "dev",
+          "type": "development",
+          "namespace": "dev",
+          "route": "https://lf-evals.dev.127.0.0.1.sslip.io",
+          "rbac": {
+            "group": "platform-viewers",
+            "viewer": true,
+            "mutator": false
+          }
+        }
+      ],
+      "secrets": [
+        {
+          "name": "langfuse-api-keys",
+          "binding": "langfuse",
+          "rotation": "demo"
+        }
+      ],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": true
+      }
+    },
+    {
       "name": "apim-simulator",
       "display_name": "APIM Simulator",
       "owner": "apim-simulator-maintainers",

@@ -238,24 +238,24 @@ workflow_files() {
 check_apim_simulator_vendor() {
   section "APIM Simulator"
 
-  local output pyproject_path dockerfile_path catalog_path
-  pyproject_path="${APIM_SIMULATOR_VENDOR_DIR}/pyproject.toml"
-  dockerfile_path="${APIM_SIMULATOR_VENDOR_DIR}/Dockerfile"
+  local output gomod_path dockerfile_path catalog_path
+  gomod_path="${APIM_SIMULATOR_VENDOR_DIR}/app/go.mod"
+  dockerfile_path="${APIM_SIMULATOR_VENDOR_DIR}/app/Dockerfile"
   catalog_path="${APIM_SIMULATOR_VENDOR_DIR}/catalog-info.yaml"
-  if [[ ! -f "${pyproject_path}" || ! -f "${dockerfile_path}" || ! -f "${catalog_path}" ]]; then
+  if [[ ! -f "${gomod_path}" || ! -f "${dockerfile_path}" || ! -f "${catalog_path}" ]]; then
     fail_note "Integrated apim-simulator metadata is incomplete or inconsistent"
-    printf 'expected pyproject.toml, Dockerfile, and catalog-info.yaml under %s\n' "${APIM_SIMULATOR_VENDOR_DIR}"
+    printf 'expected app/go.mod, app/Dockerfile, and catalog-info.yaml under %s\n' "${APIM_SIMULATOR_VENDOR_DIR}"
     return
   fi
-  output="$(run_inline_python "${pyproject_path}" <<'PY'
+  output="$(run_inline_python "${gomod_path}" <<'PY'
 import sys
-import tomllib
 from pathlib import Path
 
-project = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["project"]
-if project["name"] != "apim-simulator":
-    raise SystemExit(f"unexpected project name: {project['name']}")
-print(project["version"])
+lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+module = next((line.split()[1] for line in lines if line.startswith("module ")), "")
+if module != "platform.local/apim-simulator":
+    raise SystemExit(f"unexpected Go module: {module}")
+print("go")
 PY
   )" || {
     fail_note "Integrated apim-simulator metadata is incomplete or inconsistent"
@@ -263,7 +263,7 @@ PY
     return
   }
 
-  ok "apim-simulator is integrated under apps/apim-simulator; version ${output}"
+  ok "apim-simulator is integrated under apps/apim-simulator as a ${output} app"
 }
 
 check_npm_age_gates() {

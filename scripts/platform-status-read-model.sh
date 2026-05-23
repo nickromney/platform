@@ -128,7 +128,7 @@ build_read_model_json() {
                   runtime_present: ($variant.runtime_present // false)
                 },
                 readiness: {
-                  state: ($variant.state // "unknown"),
+                  state: ($variant.state // "not reported"),
                   ready: ((($variant.blockers // []) | length) == 0),
                   checks: ($variant.readiness // {})
                 },
@@ -151,7 +151,7 @@ print_read_model() {
       ;;
     text)
       jq -r '
-        "Overall: \(.overall_state // "unknown")",
+        "Overall: \(.overall_state // "not reported")",
         "Active owner: \(.active_owner.variant_path // "none")",
         (
           .variants_order[] as $key

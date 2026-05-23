@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,33 @@ func request(t *testing.T, server http.Handler, method, path string, body any) (
 		t.Fatalf("decode response: %v\n%s", err, rec.Body.String())
 	}
 	return rec, payload
+}
+
+func rawJSONRequest(t *testing.T, server http.Handler, method, path, body string) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("content-type", "application/json")
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v\n%s", err, rec.Body.String())
+	}
+	return rec, payload
+}
+
+func TestServerUsesSharedStringDefault(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if !strings.Contains(text, "apphttp.StringDefault(") {
+		t.Fatalf("server.go should use shared apphttp string defaulting")
+	}
+	if strings.Contains(text, "func defaultString(") {
+		t.Fatalf("server.go should not keep app-local defaultString helper")
+	}
 }
 
 func assertSchemaShaped(t *testing.T, record map[string]any, schemaName string) {
@@ -345,13 +373,29 @@ func TestWorkflowDryRunsUseSelectedAdapters(t *testing.T) {
 		t.Fatalf("secret command = %#v", secretPlan["commands"])
 	}
 
-	rec, unknown := request(t, server, http.MethodPost, "/api/v1/workflows/environments/dry-run", map[string]any{
+	rec, unsupported := request(t, server, http.MethodPost, "/api/v1/workflows/environments/dry-run", map[string]any{
 		"runtime":     "docker-compose",
 		"app":         "hello-platform",
 		"environment": "preview",
 	})
-	if rec.Code != http.StatusBadRequest || unknown["detail"] != "unknown runtime: docker-compose" {
-		t.Fatalf("unknown runtime = %d %#v", rec.Code, unknown)
+	if rec.Code != http.StatusBadRequest || unsupported["detail"] != "unsupported runtime: docker-compose" {
+		t.Fatalf("unsupported runtime = %d %#v", rec.Code, unsupported)
+	}
+}
+
+func TestWorkflowDryRunRejectsTrailingJSON(t *testing.T) {
+	server := testServer(t)
+
+	rec, payload := rawJSONRequest(
+		t,
+		server,
+		http.MethodPost,
+		"/api/v1/workflows/environments/dry-run",
+		`{"runtime":"kind","app":"hello-platform","environment":"preview"} {}`,
+	)
+
+	if rec.Code != http.StatusBadRequest || payload["detail"] != "invalid JSON body" {
+		t.Fatalf("trailing JSON response = %d %#v", rec.Code, payload)
 	}
 }
 
@@ -389,17 +433,43 @@ func TestCatalogDerivedReadModels(t *testing.T) {
 
 	_, secrets := request(t, server, http.MethodGet, "/api/v1/secrets", nil)
 	firstSecret := secrets["secrets"].([]any)[0].(map[string]any)
-	if firstSecret["binding"] != "unknown" || firstSecret["scope"] != "runtime" {
+	if firstSecret["binding"] != "not declared" || firstSecret["rotation"] != "not declared" || firstSecret["scope"] != "runtime" {
 		t.Fatalf("secret projection = %#v", firstSecret)
 	}
 	assertSchemaShaped(t, firstSecret, "secret-binding.schema.json")
 
 	_, scorecards := request(t, server, http.MethodGet, "/api/v1/scorecards", nil)
 	firstScorecard := scorecards["scorecards"].([]any)[0].(map[string]any)
-	if firstScorecard["has_owner"] != true || firstScorecard["tier"] != "gold" {
+	if firstScorecard["has_owner"] != true || firstScorecard["runtime_profile"] != "not declared" || firstScorecard["tier"] != "gold" {
 		t.Fatalf("scorecard projection = %#v", firstScorecard)
 	}
 	assertSchemaShaped(t, firstScorecard, "scorecard.schema.json")
+}
+
+func TestStatusFallbacksUseExplicitUnavailableState(t *testing.T) {
+	dir := t.TempDir()
+	server, err := NewServer(Config{AuditPath: filepath.Join(dir, "audit.jsonl"), CatalogPath: filepath.Join(dir, "missing.json"), Runtime: "kind"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, status := request(t, server, http.MethodGet, "/api/v1/status", nil)
+	if status["overall_state"] != "unavailable" || status["source_status"] != "unconfigured" {
+		t.Fatalf("default status fallback should be explicit: %#v", status)
+	}
+
+	server, err = NewServer(Config{
+		AuditPath: filepath.Join(dir, "audit.jsonl"),
+		Runtime:   "kind",
+		StatusCmd: []string{"/bin/sh", "-c", "exit 12"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, status = request(t, server, http.MethodGet, "/api/v1/status", nil)
+	if status["overall_state"] != "unavailable" || status["source_status"] != "unavailable" {
+		t.Fatalf("failed status provider fallback should be explicit: %#v", status)
+	}
 }
 
 func TestAllAdaptersImplementDryRunContracts(t *testing.T) {

@@ -48,3 +48,11 @@ spec:
         - ports:
             - port: "80"
               protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": langfuse
+            "k8s:app.kubernetes.io/name": langfuse
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP

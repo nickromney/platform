@@ -56,6 +56,33 @@ EOF
   [ "${output}" = "update available" ]
 }
 
+@test "check-provider-version reports failed registry lookups without unknown placeholders" {
+  stack_dir="${BATS_TEST_TMPDIR}/stack"
+  mkdir -p "${stack_dir}"
+
+  cat >"${stack_dir}/.terraform.lock.hcl" <<'EOF'
+provider "registry.opentofu.org/hashicorp/kubernetes" {
+  version     = "3.0.1"
+  constraints = "~> 3.0"
+}
+EOF
+
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 22
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  run env STACK_DIR="${stack_dir}" CHECK_VERSION_FORMAT=json "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  json_output="${output}"
+
+  run jq -r '[.providers[0].latest, .providers[0].status] | @tsv' <<<"${json_output}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'not reported\tregistry lookup failed' ]
+}
+
 @test "terraform kubernetes module pins provider constraints in config and lockfile" {
   run grep -Fn 'version = "~> 3.1"' "${REPO_ROOT}/terraform/kubernetes/main.tf"
 

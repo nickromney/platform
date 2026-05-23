@@ -72,12 +72,8 @@
         "version_tag_strategy": "grafana-tag-plus-plugin-version"
       },
       "fingerprint_sources": [
-        "apps/sentiment/app/Dockerfile",
-        "apps/sentiment/app/Makefile",
-        "apps/sentiment/app/go.mod",
-        "apps/sentiment/app/go.sum",
-        "apps/sentiment/app/cmd",
-        "apps/sentiment/app/internal"
+        "kubernetes/kind/images/grafana-victorialogs/Dockerfile",
+        "kubernetes/workflow/image-catalog.json"
       ],
       "version_check": {
         "mode": "checked-elsewhere",
@@ -103,6 +99,7 @@
         "apps/idp-core/app/go.mod",
         "apps/idp-core/app/cmd",
         "apps/idp-core/app/internal",
+        "apps/shared/apphttp",
         "catalog/platform-apps.json"
       ],
       "version_check": {
@@ -147,7 +144,8 @@
         "apps/platform-mcp/app/Makefile",
         "apps/platform-mcp/app/go.mod",
         "apps/platform-mcp/app/cmd",
-        "apps/platform-mcp/app/internal"
+        "apps/platform-mcp/app/internal",
+        "apps/shared/apphttp"
       ],
       "version_check": {
         "mode": "local",
@@ -171,11 +169,13 @@
         "apps/chatgpt-sim/app/Makefile",
         "apps/chatgpt-sim/app/go.mod",
         "apps/chatgpt-sim/app/go.sum",
+        "apps/shared/apphttp",
         "apps/shared/appshell",
         "apps/shared/idpauth",
         "apps/shared/web",
         "apps/chatgpt-sim/app/cmd",
-        "apps/chatgpt-sim/app/internal"
+        "apps/chatgpt-sim/app/internal",
+        "apps/chatgpt-sim/app/internal/app/web"
       ],
       "version_check": {
         "mode": "local",
@@ -200,7 +200,11 @@
         "apps/langfuse-demos/app/go.sum",
         "apps/langfuse-demos/app/cmd",
         "apps/langfuse-demos/app/internal",
-        "apps/shared/idpauth"
+        "apps/langfuse-demos/app/internal/app/web",
+        "apps/shared/apphttp",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web"
       ],
       "version_check": {
         "mode": "local",
@@ -225,11 +229,13 @@
         "apps/sentiment/app/Makefile",
         "apps/sentiment/app/go.mod",
         "apps/sentiment/app/go.sum",
+        "apps/shared/apphttp",
         "apps/shared/appshell",
         "apps/shared/idpauth",
         "apps/shared/web",
         "apps/sentiment/app/cmd",
-        "apps/sentiment/app/internal"
+        "apps/sentiment/app/internal",
+        "apps/sentiment/app/internal/app/web"
       ],
       "version_check": {
         "mode": "local",
@@ -252,11 +258,13 @@
         "apps/sentiment/app/Makefile",
         "apps/sentiment/app/go.mod",
         "apps/sentiment/app/go.sum",
+        "apps/shared/apphttp",
         "apps/shared/appshell",
         "apps/shared/idpauth",
         "apps/shared/web",
         "apps/sentiment/app/cmd",
-        "apps/sentiment/app/internal"
+        "apps/sentiment/app/internal",
+        "apps/sentiment/app/internal/app/web"
       ],
       "version_check": {
         "mode": "local",
@@ -279,6 +287,7 @@
         "apps/subnetcalc/app/Makefile",
         "apps/subnetcalc/app/go.mod",
         "apps/subnetcalc/app/go.sum",
+        "apps/shared/apphttp",
         "apps/shared/appshell",
         "apps/shared/idpauth",
         "apps/shared/web",
@@ -298,14 +307,20 @@
       "default_tag": "0.4.0",
       "build": {
         "context": "apps/apim-simulator",
-        "dockerfile": "Dockerfile",
-        "tag": "default"
+        "dockerfile": "app/Dockerfile",
+        "tag": "default",
+        "prebuild": "make -C apps/apim-simulator/app build-linux"
       },
       "fingerprint_sources": [
-        "apps/apim-simulator/Dockerfile",
+        "apps/apim-simulator/app/Dockerfile",
         "apps/apim-simulator/app/go.mod",
         "apps/apim-simulator/app/go.sum",
+        "apps/shared/apphttp",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
         "apps/apim-simulator/app",
+        "apps/apim-simulator/app/internal/app/web",
         "apps/apim-simulator/examples"
       ],
       "version_check": {
@@ -329,6 +344,7 @@
         "apps/subnetcalc/app/Makefile",
         "apps/subnetcalc/app/go.mod",
         "apps/subnetcalc/app/go.sum",
+        "apps/shared/apphttp",
         "apps/shared/appshell",
         "apps/shared/idpauth",
         "apps/shared/web",

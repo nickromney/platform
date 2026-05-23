@@ -11,7 +11,8 @@ This view answers three related questions:
 Important notes:
 
 - this is a source-tree composition view, not a shipped stage-default view
-- the checked-in sentiment policy set now models only the shipped SST path
+- the checked-in sentiment policy set now models only the shipped Go lexicon
+  classifier path
 
 Active filters:
 

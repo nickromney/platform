@@ -6,6 +6,7 @@ package idpauth
 import (
 	"context"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"platform.local/apphttp"
 )
 
 //go:embed web/idpauth.js
@@ -28,6 +30,7 @@ type UserClaims struct {
 	PreferredUsername string   `json:"preferred_username,omitempty"`
 	Email             string   `json:"email,omitempty"`
 	Groups            []string `json:"groups"`
+	Roles             []string `json:"roles,omitempty"`
 }
 
 // GatewayClaim is the browser-facing claim shape used by /.auth/me endpoints.
@@ -44,10 +47,219 @@ type GatewaySession struct {
 	Claims       []GatewayClaim `json:"claims"`
 }
 
+type clientPrincipal struct {
+	IdentityProvider string         `json:"auth_typ"`
+	NameClaimType    string         `json:"name_typ"`
+	RoleClaimType    string         `json:"role_typ"`
+	Claims           []GatewayClaim `json:"claims"`
+}
+
 // TokenVerifier verifies a raw bearer token string and returns the claims
 // if valid. Implementations must be safe for concurrent use.
 type TokenVerifier interface {
 	Verify(ctx context.Context, token string) (UserClaims, error)
+}
+
+// Authenticator centralizes the common platform app bearer-token decision.
+// Apps keep their own response shape, but share auth mode, verifier, status,
+// and anonymous-user semantics through this module.
+type Authenticator struct {
+	Mode     string
+	Verifier TokenVerifier
+}
+
+// RuntimeAuthConfig is the shared auth-related environment contract used by
+// the lightweight Go apps. It keeps provider-neutral auth mode and OIDC
+// settings in one place while apps retain their local non-auth config.
+type RuntimeAuthConfig struct {
+	AuthMode     string
+	APIAuthMode  string
+	RuntimeRole  string
+	OIDCIssuer   string
+	OIDCAudience string
+	OIDCClientID string
+	OIDCJWKSURI  string
+	OIDCRedirect string
+}
+
+// RuntimeAuthConfigFromEnv reads the common platform app auth environment.
+func RuntimeAuthConfigFromEnv(defaultRuntimeRole string) RuntimeAuthConfig {
+	authMode := strings.ToLower(apphttp.Env("AUTH_METHOD", "none"))
+	apiAuthMode := strings.ToLower(apphttp.Env("API_AUTH_METHOD", ""))
+	if apiAuthMode == "" {
+		apiAuthMode = authMode
+	}
+	return RuntimeAuthConfig{
+		AuthMode:     authMode,
+		APIAuthMode:  apiAuthMode,
+		RuntimeRole:  strings.ToLower(apphttp.Env("RUNTIME_ROLE", defaultRuntimeRole)),
+		OIDCIssuer:   apphttp.FirstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY"),
+		OIDCAudience: apphttp.Env("OIDC_AUDIENCE", ""),
+		OIDCClientID: apphttp.Env("OIDC_CLIENT_ID", ""),
+		OIDCJWKSURI:  apphttp.Env("OIDC_JWKS_URI", ""),
+		OIDCRedirect: apphttp.Env("OIDC_REDIRECT_URI", ""),
+	}
+}
+
+// VerifierAudience returns the audience used by server-side OIDC token
+// verification, falling back to the browser client ID for apps that share one
+// OIDC client between browser login and API verification.
+func (c RuntimeAuthConfig) VerifierAudience() string {
+	if strings.TrimSpace(c.OIDCAudience) != "" {
+		return c.OIDCAudience
+	}
+	return c.OIDCClientID
+}
+
+// ShouldVerifyOIDC reports whether this process should configure an in-process
+// OIDC verifier. Browser-only frontend roles normally rely on the gateway.
+func (c RuntimeAuthConfig) ShouldVerifyOIDC(frontendRole string) bool {
+	return c.AuthMode == "oidc" && c.RuntimeRole != strings.ToLower(frontendRole)
+}
+
+// AuthFailure describes the HTTP-relevant reason an authentication attempt
+// failed. Message is safe to expose to browser/API callers.
+type AuthFailure struct {
+	StatusCode int
+	Message    string
+	Err        error
+}
+
+// AuthFailureMessages lets apps keep local public wording while relying on
+// idpauth's canonical failure decisions.
+type AuthFailureMessages struct {
+	MissingBearerToken string
+	InvalidToken       string
+}
+
+// MessageFor returns failure text rendered with optional app-specific labels.
+func (f *AuthFailure) MessageFor(messages AuthFailureMessages) string {
+	if f == nil {
+		return ""
+	}
+	switch f.Message {
+	case "missing bearer token":
+		if messages.MissingBearerToken != "" {
+			return messages.MissingBearerToken
+		}
+	case "invalid token":
+		if messages.InvalidToken != "" {
+			return messages.InvalidToken
+		}
+	}
+	return f.Message
+}
+
+// CurrentUser returns the authenticated user for the request, or a failure
+// that the caller can render in its local error response shape.
+func (a Authenticator) CurrentUser(r *http.Request) (UserClaims, *AuthFailure) {
+	if strings.EqualFold(a.Mode, "none") || strings.TrimSpace(a.Mode) == "" {
+		return UserClaims{Subject: "anonymous", Groups: []string{}}, nil
+	}
+	if a.Verifier == nil {
+		return UserClaims{}, &AuthFailure{
+			StatusCode: http.StatusServiceUnavailable,
+			Message:    "OIDC verifier is not configured",
+		}
+	}
+	token := BearerToken(r)
+	if token == "" {
+		return UserClaims{}, &AuthFailure{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "missing bearer token",
+		}
+	}
+	claims, err := a.Verifier.Verify(r.Context(), token)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if !errors.Is(err, ErrInvalidToken) {
+			status = http.StatusBadGateway
+		}
+		return UserClaims{}, &AuthFailure{
+			StatusCode: status,
+			Message:    "invalid token",
+			Err:        err,
+		}
+	}
+	if claims.Groups == nil {
+		claims.Groups = []string{}
+	}
+	if claims.Roles == nil {
+		claims.Roles = []string{}
+	}
+	return claims, nil
+}
+
+// AccessPolicy describes simple provider-neutral authorization checks over the
+// normalized user claims exposed by Authenticator.
+type AccessPolicy struct {
+	RequiredGroups []string
+	RequiredRoles  []string
+	RequiredClaims map[string]string
+}
+
+// Evaluate returns nil when claims satisfy every configured access requirement.
+func (p AccessPolicy) Evaluate(claims UserClaims) *AuthFailure {
+	if missing := missingRequiredValue(p.RequiredGroups, claims.Groups); missing != "" {
+		return &AuthFailure{
+			StatusCode: http.StatusForbidden,
+			Message:    "missing required group",
+		}
+	}
+	if missing := missingRequiredValue(p.RequiredRoles, claims.Roles); missing != "" {
+		return &AuthFailure{
+			StatusCode: http.StatusForbidden,
+			Message:    "missing required role",
+		}
+	}
+	for name, want := range p.RequiredClaims {
+		if !containsString(claimValues(claims, name), want) {
+			return &AuthFailure{
+				StatusCode: http.StatusForbidden,
+				Message:    "missing required claim",
+			}
+		}
+	}
+	return nil
+}
+
+func missingRequiredValue(required, actual []string) string {
+	for _, value := range required {
+		if trimmed := strings.TrimSpace(value); trimmed != "" && !containsString(actual, trimmed) {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func containsString(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return true
+	}
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), want) {
+			return true
+		}
+	}
+	return false
+}
+
+func claimValues(claims UserClaims, name string) []string {
+	switch canonicalClaimType(name) {
+	case "sub":
+		return []string{claims.Subject}
+	case "email":
+		return []string{claims.Email}
+	case "preferred_username":
+		return []string{claims.PreferredUsername}
+	case "groups":
+		return claims.Groups
+	case "roles":
+		return claims.Roles
+	default:
+		return nil
+	}
 }
 
 // OIDCVerifier implements TokenVerifier using the coreos/go-oidc library.
@@ -102,26 +314,31 @@ func BearerToken(r *http.Request) string {
 	return fields[1]
 }
 
-// GatewaySessionFromHeaders normalizes oauth2-proxy identity headers into the
-// browser-facing session shape used by platform apps. It prefers email for
-// display and stable user id because X-Forwarded-User is often an opaque OIDC
-// subject UUID.
+// GatewaySessionFromHeaders normalizes common gateway identity headers into the
+// browser-facing session shape used by platform apps. It accepts oauth2-proxy
+// auth-request headers and Azure App Service/EasyAuth client-principal headers.
+// It prefers human-readable identity values for display because forwarded user
+// IDs are often opaque OIDC subject UUIDs.
 func GatewaySessionFromHeaders(header http.Header) (GatewaySession, bool) {
-	email := firstNonEmpty(
+	if session, ok := azureClientPrincipalSession(header); ok {
+		return session, true
+	}
+
+	email := apphttp.FirstNonEmpty(
 		header.Get("X-Auth-Request-Email"),
 		header.Get("X-Forwarded-Email"),
 	)
-	preferredUsername := firstNonEmpty(
+	preferredUsername := apphttp.FirstNonEmpty(
 		header.Get("X-Auth-Request-Preferred-Username"),
 		header.Get("X-Forwarded-Preferred-Username"),
 	)
-	subject := firstNonEmpty(
+	subject := apphttp.FirstNonEmpty(
 		header.Get("X-Auth-Request-Subject"),
 		header.Get("X-Forwarded-Subject"),
 		header.Get("X-Auth-Request-User"),
 		header.Get("X-Forwarded-User"),
 	)
-	displayName := firstNonEmpty(email, preferredUsername, subject)
+	displayName := apphttp.FirstNonEmpty(email, preferredUsername, subject)
 	if displayName == "" {
 		return GatewaySession{}, false
 	}
@@ -134,48 +351,137 @@ func GatewaySessionFromHeaders(header http.Header) (GatewaySession, bool) {
 	}
 	addClaim("sub", subject)
 	addClaim("email", email)
-	addClaim("name", firstNonEmpty(email, preferredUsername, subject))
+	addClaim("name", apphttp.FirstNonEmpty(email, preferredUsername, subject))
 	addClaim("preferred_username", preferredUsername)
-	for _, group := range splitHeaderValues(header.Values("X-Auth-Request-Groups")) {
+	for _, group := range splitHeaderValues(headerValues(header, "X-Auth-Request-Groups", "X-Forwarded-Groups")) {
 		addClaim("groups", group)
+	}
+	for _, role := range splitHeaderValues(headerValues(header, "X-Auth-Request-Roles", "X-Forwarded-Roles")) {
+		addClaim("roles", role)
 	}
 
 	return GatewaySession{
 		ProviderName: "oauth2-proxy",
-		UserID:       firstNonEmpty(email, preferredUsername, subject),
+		UserID:       apphttp.FirstNonEmpty(email, preferredUsername, subject),
 		UserDetails:  displayName,
 		Claims:       claims,
 	}, true
 }
 
+func azureClientPrincipalSession(header http.Header) (GatewaySession, bool) {
+	encoded := apphttp.FirstNonEmpty(header.Get("X-MS-CLIENT-PRINCIPAL"))
+	if encoded == "" {
+		return GatewaySession{}, false
+	}
+	payload, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return GatewaySession{}, false
+	}
+	var principal clientPrincipal
+	if err := json.Unmarshal(payload, &principal); err != nil {
+		return GatewaySession{}, false
+	}
+	displayName := apphttp.FirstNonEmpty(
+		claimValue(principal.Claims, "emailaddress", "email"),
+		claimValue(principal.Claims, "upn", "preferred_username", "unique_name"),
+		claimValue(principal.Claims, "name"),
+		header.Get("X-MS-CLIENT-PRINCIPAL-NAME"),
+		header.Get("X-MS-CLIENT-PRINCIPAL-ID"),
+	)
+	if displayName == "" {
+		return GatewaySession{}, false
+	}
+	claims := canonicalGatewayClaims(principal.Claims)
+	return GatewaySession{
+		ProviderName: apphttp.FirstNonEmpty(header.Get("X-MS-CLIENT-PRINCIPAL-IDP"), principal.IdentityProvider),
+		UserID: apphttp.FirstNonEmpty(
+			claimValue(claims, "email"),
+			claimValue(claims, "preferred_username"),
+			claimValue(claims, "oid"),
+			header.Get("X-MS-CLIENT-PRINCIPAL-ID"),
+			displayName,
+		),
+		UserDetails: displayName,
+		Claims:      claims,
+	}, true
+}
+
+func canonicalGatewayClaims(claims []GatewayClaim) []GatewayClaim {
+	out := make([]GatewayClaim, 0, len(claims))
+	for _, claim := range claims {
+		kind := canonicalClaimType(claim.Type)
+		value := strings.TrimSpace(claim.Value)
+		if kind != "" && value != "" {
+			out = append(out, GatewayClaim{Type: kind, Value: value})
+		}
+	}
+	return out
+}
+
+func canonicalClaimType(kind string) string {
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	if normalized == "" {
+		return ""
+	}
+	switch {
+	case strings.HasSuffix(normalized, "/emailaddress"):
+		return "email"
+	case strings.HasSuffix(normalized, "/name"):
+		return "name"
+	case strings.HasSuffix(normalized, "/upn"):
+		return "preferred_username"
+	case strings.HasSuffix(normalized, "/role"):
+		return "roles"
+	}
+	switch normalized {
+	case "emailaddress":
+		return "email"
+	case "upn", "unique_name":
+		return "preferred_username"
+	case "role":
+		return "roles"
+	default:
+		return normalized
+	}
+}
+
+func claimValue(claims []GatewayClaim, names ...string) string {
+	for _, name := range names {
+		for _, claim := range claims {
+			if canonicalClaimType(claim.Type) == name && strings.TrimSpace(claim.Value) != "" {
+				return strings.TrimSpace(claim.Value)
+			}
+		}
+	}
+	return ""
+}
+
 // WriteClientPrincipalSession writes the object-shaped /.auth/me response used
 // by simple static apps.
 func WriteClientPrincipalSession(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	session, ok := GatewaySessionFromHeaders(r.Header)
 	if !ok {
-		_ = json.NewEncoder(w).Encode(map[string]any{"clientPrincipal": nil})
+		apphttp.WriteNoCacheJSON(w, http.StatusOK, map[string]any{"clientPrincipal": nil})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{"clientPrincipal": session})
+	apphttp.WriteNoCacheJSON(w, http.StatusOK, map[string]any{"clientPrincipal": session})
 }
 
 // WriteSessionArray writes the array-shaped /.auth/me response used by older
 // gateway-auth app shells.
 func WriteSessionArray(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	session, ok := GatewaySessionFromHeaders(r.Header)
 	if !ok {
-		_ = json.NewEncoder(w).Encode([]any{})
+		apphttp.WriteNoCacheJSON(w, http.StatusOK, []any{})
 		return
 	}
-	_ = json.NewEncoder(w).Encode([]GatewaySession{session})
+	apphttp.WriteNoCacheJSON(w, http.StatusOK, []GatewaySession{session})
 }
 
 // BrowserBundle serves the shared browser auth helper bundle.
 func BrowserBundle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		apphttp.MethodNotAllowed(w, http.MethodGet, http.MethodHead)
 		return
 	}
 	b, err := browserAssets.ReadFile("web/idpauth.js")
@@ -184,20 +490,23 @@ func BrowserBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	noCacheHeaders(w)
 	if r.Method == http.MethodHead {
 		return
 	}
 	_, _ = w.Write(b)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
+func noCacheHeaders(w http.ResponseWriter) {
+	apphttp.NoCacheHeaders(w)
+}
+
+func headerValues(header http.Header, names ...string) []string {
+	var out []string
+	for _, name := range names {
+		out = append(out, header.Values(name)...)
 	}
-	return ""
+	return out
 }
 
 func splitHeaderValues(values []string) []string {

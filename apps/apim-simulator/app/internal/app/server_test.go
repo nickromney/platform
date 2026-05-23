@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -33,6 +34,18 @@ func TestHealthAndEmbeddedConsole(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s returned %d: %s", path, rec.Code, rec.Body.String())
 		}
+		if path == "/apim/health" {
+			var health map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+				t.Fatalf("%s returned invalid health JSON: %v", path, err)
+			}
+			if got := health["dependency_footprint"]; got != "go-plus-shared-idpauth" {
+				t.Fatalf("%s dependency_footprint=%v, want go-plus-shared-idpauth", path, got)
+			}
+			if got := health["frontend_dependency_footprint"]; got != "vanilla" {
+				t.Fatalf("%s frontend_dependency_footprint=%v, want vanilla", path, got)
+			}
+		}
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -43,6 +56,39 @@ func TestHealthAndEmbeddedConsole(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "APIM Simulator") {
 		t.Fatalf("console did not render APIM shell: %s", rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.js", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared app shell JS returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{"PlatformAppShell", "initializeThemeSwitcher", "toggleTheme", "pce-theme"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("shared app shell JS missing %q: %s", text, rec.Body.String())
+		}
+	}
+}
+
+func TestEmbeddedConsoleHeadRequestsReturnHeadersOnly(t *testing.T) {
+	srv := NewServer(Config{AllowAnonymous: true}, nil)
+
+	req := httptest.NewRequest(http.MethodHead, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("console HEAD returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("console HEAD returned body: %s", rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("console HEAD Cache-Control=%q", got)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("console HEAD Content-Type=%q", got)
 	}
 }
 
@@ -73,6 +119,20 @@ func TestGatewayIdentityEndpointUsesOAuth2ProxyHeaders(t *testing.T) {
 	}
 }
 
+func TestServerUsesSharedRequestBodyReader(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if !strings.Contains(text, "apphttp.ReadRequestBody(") {
+		t.Fatalf("server.go should use shared apphttp.ReadRequestBody for raw request bodies")
+	}
+	if strings.Contains(text, "io.ReadAll(r.Body)") {
+		t.Fatalf("server.go should not read request bodies with io.ReadAll directly")
+	}
+}
+
 func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 	indexHTML, err := web.ReadFile("web/index.html")
 	if err != nil {
@@ -84,30 +144,98 @@ func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 	}
 
 	for _, text := range []string{
+		`<html lang="en" data-theme="system">`,
 		`id="auth-state"`,
 		`Not signed in.`,
-		`id="logout-btn"`,
+		`id="logout-btn" class="sign-in-link" type="button" hidden`,
 		`>Sign Out<`,
+		`id="status" class="app-panel notice" role="status" aria-live="polite"`,
+		`<label for="tenant-key">Tenant Key</label>`,
+		`id="tenant-key" name="tenant_key"`,
+		`<label for="method">HTTP method</label>`,
+		`id="method" name="method"`,
+		`<label for="path">Request path</label>`,
+		`id="path" name="path"`,
+		`<label for="headers">Request headers</label>`,
+		`id="headers" name="headers"`,
+		`<label for="body">Request body</label>`,
+		`id="body" name="body"`,
+		`/idpauth.js`,
+		`/app-shell.js`,
 	} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("console index missing %q", text)
 		}
 	}
 	for _, text := range []string{
-		`fetch("/.auth/me"`,
-		`Signed in as ${gatewayDisplayName(session)}`,
-		`gatewayLogoutURL()`,
-		`/oauth2/sign_out`,
-		`rd", "/signed-out.html"`,
+		`PlatformIdpAuth`,
+		`PlatformAppShell`,
+		`initializeThemeSwitcher()`,
+		`fetchJSON`,
+		`errorMessage`,
+		`parseJSONObjectText`,
+		`renderJSONInto`,
+		`setText`,
+		`renderSummaryListInto`,
+		`withButtonBusy`,
+		`withSubmitterBusy`,
+		`buttonElement`,
+		`requireElement`,
+		`inputElement`,
+		`selectElement`,
+		`textAreaElement`,
+		`initializeGatewayAuthState(authState, logoutButton`,
+		`errorMessage: (error) =>`,
+		`bindGatewayLogout(logoutButton)`,
 	} {
 		if !strings.Contains(string(appJS), text) {
 			t.Fatalf("console app missing %q", text)
 		}
 	}
+	for _, text := range []string{
+		`function normalizeGatewaySession`,
+		`function gatewayDisplayName`,
+		`function gatewayLogoutURL`,
+		`function readThemeCookie`,
+		`function writeThemeCookie`,
+		`function themeCookieDomain`,
+		`function escapeHTML`,
+		`function formatError`,
+		`error instanceof Error ? error.message : String(error)`,
+		`JSON.stringify(data, null, 2)`,
+		`JSON.stringify(payload.items, null, 2)`,
+		`writeGatewayAuthState(authState, logoutButton, session)`,
+		`fetchGatewaySession()`,
+		`response.json()`,
+		`return parseJSONResponse(response)`,
+		`throw new Error(await response.text())`,
+		`function inputElement`,
+		`function selectElement`,
+		`function textAreaElement`,
+		`HTMLButtonElement`,
+		`replayResult.textContent`,
+		`traces.textContent`,
+		`metricApis.textContent`,
+		`metricRoutes.textContent`,
+		`metricProducts.textContent`,
+		`metricSubscriptions.textContent`,
+	} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("console app should use shared helper instead of %q", text)
+		}
+	}
+	for _, text := range []string{"pce-theme", "document.cookie"} {
+		if strings.Contains(string(appJS), text) {
+			t.Fatalf("theme implementation must live in shared app shell, not app.js %q", text)
+		}
+	}
 
-	signedOutHTML, err := web.ReadFile("web/signed-out.html")
-	if err != nil {
-		t.Fatal(err)
+	srv := NewServer(Config{AllowAnonymous: true}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("signed-out page returned %d: %s", rec.Code, rec.Body.String())
 	}
 	for _, text := range []string{
 		`<title>Signed out - APIM Simulator</title>`,
@@ -115,8 +243,8 @@ func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 		`>Sign in now<`,
 		`Your APIM simulator session has ended.`,
 	} {
-		if !strings.Contains(string(signedOutHTML), text) {
-			t.Fatalf("signed-out page missing %q", text)
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
 	}
 }
@@ -170,6 +298,66 @@ func TestGatewayProxiesHostMatchedRouteAndRecordsTrace(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "subnetcalc-dev") {
 		t.Fatalf("trace payload missing route: %s", rec.Body.String())
+	}
+}
+
+func TestGatewayEnforcesRouteAuthorizationPolicy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}))
+	defer backend.Close()
+
+	srv := NewServer(Config{
+		AllowAnonymous: false,
+		Routes: []RouteConfig{{
+			Name:            "admin-api",
+			PathPrefix:      "/admin",
+			UpstreamBaseURL: backend.URL,
+			Authz: RouteAuthzConfig{
+				RequiredGroups: []string{"platform-admins"},
+				RequiredRoles:  []string{"approver"},
+				RequiredClaims: map[string]string{"email": "alex@example.test"},
+			},
+		}},
+	}, staticVerifier{claims: idpauth.UserClaims{
+		Subject: "user-123",
+		Email:   "alex@example.test",
+		Groups:  []string{"platform-admins"},
+		Roles:   []string{"approver"},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/health", nil)
+	req.Header.Set("Authorization", "Bearer good")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authorized route returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	denied := NewServer(Config{
+		AllowAnonymous: false,
+		Routes: []RouteConfig{{
+			Name:            "admin-api",
+			PathPrefix:      "/admin",
+			UpstreamBaseURL: backend.URL,
+			Authz:           RouteAuthzConfig{RequiredRoles: []string{"operator"}},
+		}},
+	}, staticVerifier{claims: idpauth.UserClaims{
+		Subject: "user-123",
+		Email:   "alex@example.test",
+		Groups:  []string{"platform-admins"},
+		Roles:   []string{"approver"},
+	}})
+
+	req = httptest.NewRequest(http.MethodGet, "/admin/health", nil)
+	req.Header.Set("Authorization", "Bearer good")
+	rec = httptest.NewRecorder()
+	denied.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized route returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"missing required role"}` {
+		t.Fatalf("unexpected authorization error body: %s", rec.Body.String())
 	}
 }
 
@@ -263,6 +451,28 @@ func TestManagementResourceCollectionsRetainAPIMSurface(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("product create returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/apim/management/products", strings.NewReader(`{"id":"too-large","name":"`+strings.Repeat("x", 1<<20)+`"}`))
+	req.Header.Set("X-Apim-Tenant-Key", "tenant")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("oversized product payload returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"error":"Invalid product payload"}` {
+		t.Fatalf("oversized product error payload=%q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/apim/management/products", strings.NewReader(`{"id":"bad","name":"Bad"} {}`))
+	req.Header.Set("X-Apim-Tenant-Key", "tenant")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("trailing JSON product payload returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"error":"Invalid product payload"}` {
+		t.Fatalf("trailing JSON product error payload=%q", got)
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/apim/management/products/pro", nil)

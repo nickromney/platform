@@ -64,15 +64,3 @@ func allDigits(value string) bool {
 	}
 	return true
 }
-
-func originAllowed(allowed []string, origin string) bool {
-	if len(allowed) == 0 {
-		return false
-	}
-	for _, item := range allowed {
-		if item == "*" || item == origin {
-			return true
-		}
-	}
-	return false
-}

@@ -1,5 +1,5 @@
 USE_COMMON_HELP := 1
-MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites app-test app-js-check up up-tls down logs ps smoke urls
+MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites app-test app-js-check up up-tls down logs ps smoke compose-smoke urls
 MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
 include ../../mk/common.mk
@@ -24,7 +24,7 @@ KEYCLOAK_URL := http://localhost:8300
 COMPOSE := $(COMPOSE_CMD) -f compose.yml
 COMPOSE_TLS := $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
 
-.PHONY: help prereqs test update check-prerequisites app-test app-js-check build up up-tls down logs ps smoke urls
+.PHONY: help prereqs test update check-prerequisites app-test app-js-check build up up-tls down logs ps smoke compose-smoke urls
 
 export PLATFORM_ENV_FILE
 export PLATFORM_ENV_TEMPLATE
@@ -81,12 +81,14 @@ logs: check-prerequisites ## Tail compose logs
 ps: check-prerequisites ## Show compose container status
 	@$(COMPOSE) ps
 
-smoke: check-prerequisites ## Run the local compose smoke test
+smoke: compose-smoke ## Alias for compose-smoke
+
+compose-smoke: check-prerequisites ## Run the local compose smoke test
 	@./tests/compose-smoke.sh --execute
 
 ##@ Test
 test: app-test app-js-check ## Run Go tests, JS contract checks, and the local compose smoke test
-	@$(MAKE) --no-print-directory smoke
+	@$(MAKE) --no-print-directory compose-smoke
 
 update: ## Update Bun dependency locks for each sentiment dependency root
 	@echo "No dependency update required for the default Go sentiment runtime."

@@ -1,12 +1,12 @@
 %%{init: {"theme": "base", "themeVariables": {"background": "#ffffff"}}}%%
 C4Dynamic
-    title Sentiment API path in shipped SST mode
+    title Sentiment API path in shipped Go lexicon mode
 
     Person(browser, "Browser", "Interactive user agent")
     Container(gateway, "platform-gateway", "Ingress / reverse proxy", "Shared entrypoint")
     Container(oauth, "oauth2-proxy", "OAuth2 reverse proxy", "Sentiment auth boundary")
     Container(router, "sentiment-router", "NGINX", "Routes UI and API traffic")
-    Container(api, "sentiment-api", "API service", "Runs the shipped in-process SST classifier and emits traces")
+    Container(api, "sentiment-api", "Go API", "Runs the shipped in-process Go lexicon classifier and emits traces")
     Container(otel, "otel-collector", "OpenTelemetry Collector", "Shared telemetry sink")
 
     RelIndex(1, browser, gateway, "HTTPS request")

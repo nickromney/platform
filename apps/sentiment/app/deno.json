@@ -2,7 +2,6 @@
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "dom.asynciterable", "es2023"],
     "strict": false,
-    "noImplicitAny": false,
-    "useUnknownInCatchVariables": false
+    "noImplicitAny": false
   }
 }

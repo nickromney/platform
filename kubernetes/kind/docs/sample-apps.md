@@ -53,7 +53,7 @@ flowchart LR
     sso --> router["sentiment-router"]
     router --> fe["sentiment-auth-ui"]
     router --> api["sentiment-api"]
-    api -. "default in-process inference" .-> sst["SST classifier"]
+    api -. "default in-process inference" .-> classifier["Go lexicon classifier"]
 ```
 
 Without SSO, remove the `oauth2-proxy` hop and start at `sentiment-router`.
@@ -61,8 +61,8 @@ Without SSO, remove the `oauth2-proxy` hop and start at `sentiment-router`.
 For the shipped kind stages, the key points are:
 
 - `sentiment-router` talks to `sentiment-auth-ui` and `sentiment-api`, not to an APIM simulator
-- `sentiment-api` serves the default SST classifier in-process
+- `sentiment-api` serves the deterministic lexicon classifier in-process
 - the shared workload config keeps inference inside `sentiment-api`
 
-That means the shipped kind path does not require a host-side model endpoint
+That means the shipped kind path does not require a host-side LLM endpoint
 for sentiment to work.

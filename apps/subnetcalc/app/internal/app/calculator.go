@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"platform.local/apphttp"
 )
 
 func newSubnetAnalyzer(sourceOverrides map[string]string) *subnetAnalyzer {
@@ -107,110 +109,110 @@ type providerRangeSet struct {
 
 func (s *server) validateAddress(w http.ResponseWriter, r *http.Request) {
 	var req validateRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	if req.Address == "" {
-		writeJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: "Missing address"})
+		apphttp.WriteError(w, http.StatusUnprocessableEntity, "Missing address")
 		return
 	}
 	resp, err := s.analyzer.validateAddress(req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) checkPrivate(w http.ResponseWriter, r *http.Request) {
 	var req validateRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.checkPrivate(req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) checkCloudflare(w http.ResponseWriter, r *http.Request) {
 	var req validateRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.checkCloudflare(req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) checkProviderRange(w http.ResponseWriter, r *http.Request) {
 	var req providerRangeRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.checkProviderRange(req.Provider, req.Address)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) invalidateProviderRangeCache(w http.ResponseWriter, r *http.Request) {
 	var req providerRangeRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.invalidateProviderRangeCache(req.Provider)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) refreshProviderRangeCache(w http.ResponseWriter, r *http.Request) {
 	var req providerRangeRequest
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.refreshProviderRangeCache(r, req.Provider)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) subnetInfoIPv4(w http.ResponseWriter, r *http.Request) {
 	var req subnetIPv4Request
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.subnetInfoIPv4(req.Network, req.Mode)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) subnetInfoIPv6(w http.ResponseWriter, r *http.Request) {
 	var req subnetIPv6Request
-	if !decodeJSON(w, r, &req) {
+	if !apphttp.DecodeJSONError(w, r, &req, "Invalid JSON body") {
 		return
 	}
 	resp, err := s.analyzer.subnetInfoIPv6(req.Network)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	apphttp.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (a *subnetAnalyzer) validateAddress(value string) (map[string]any, error) {
@@ -282,7 +284,7 @@ func (a *subnetAnalyzer) checkProviderRange(provider, value string) (map[string]
 	defer a.mu.RUnlock()
 	rangeSet, ok := a.providers[provider]
 	if !ok {
-		return nil, fmt.Errorf("Unknown provider")
+		return nil, fmt.Errorf("Unsupported provider")
 	}
 	target := ipOrNet{ip: ip, network: network}
 	ranges := rangeSet.effectiveIPv6()
@@ -346,7 +348,7 @@ func (a *subnetAnalyzer) invalidateProviderRangeCache(provider string) (map[stri
 	defer a.mu.Unlock()
 	rangeSet, ok := a.providers[provider]
 	if !ok {
-		return nil, fmt.Errorf("Unknown provider")
+		return nil, fmt.Errorf("Unsupported provider")
 	}
 	rangeSet.liveIPv4 = nil
 	rangeSet.liveIPv6 = nil
@@ -368,13 +370,13 @@ func (a *subnetAnalyzer) refreshProviderRangeCache(r *http.Request, provider str
 	rangeSet, ok := a.providers[provider]
 	a.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("Unknown provider")
+		return nil, fmt.Errorf("Unsupported provider")
 	}
 	if rangeSet.refreshURL == "" {
 		return nil, fmt.Errorf("Provider does not have a configured refresh source")
 	}
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := apphttp.NewHTTPClient(20 * time.Second)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, rangeSet.refreshURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid provider refresh source")
@@ -597,15 +599,6 @@ func modeOffset(mode string) (uint32, error) {
 	default:
 		return 0, fmt.Errorf("invalid mode")
 	}
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	defer r.Body.Close()
-	if err := json.NewDecoder(r.Body).Decode(out); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Invalid JSON body"})
-		return false
-	}
-	return true
 }
 
 func parseAnyIPOrNet(value string) (net.IP, *net.IPNet, bool) {

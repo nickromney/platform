@@ -158,6 +158,8 @@ from pathlib import Path
 
 import yaml
 
+from tests.app_contracts import backstage_production_catalog_targets
+
 repo_root = Path(os.environ["REPO_ROOT"])
 app_dir = repo_root / "apps/backstage"
 gitattributes = (repo_root / ".gitattributes").read_text(encoding="utf-8")
@@ -206,9 +208,8 @@ assert "POSTGRES_" not in (app_dir / "app-config.production.yaml").read_text(enc
 assert production["techdocs"]["generator"]["runIn"] == "local"
 
 targets = {loc["target"] for loc in production["catalog"]["locations"]}
-assert "./catalog/entities.yaml" in targets
-assert "./catalog/apps/platform-mcp/catalog-info.yaml" in targets
-assert "./catalog/apps/apim-simulator/catalog-info.yaml" in targets
+for expected_target in backstage_production_catalog_targets(repo_root):
+    assert expected_target in targets, expected_target
 assert "./catalog/templates/platform-service/template.yaml" in targets
 
 assert "@backstage/plugin-scaffolder-backend" in backend
@@ -269,19 +270,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
+from tests.app_contracts import backstage_local_catalog_documents
 
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog_files = [
-    repo_root / "apps/backstage/catalog/entities.yaml",
-    repo_root / "apps/backstage/catalog/apps/platform-mcp/catalog-info.yaml",
-    repo_root / "apps/subnetcalc/catalog-info.yaml",
-    repo_root / "apps/apim-simulator/catalog-info.yaml",
-    repo_root / "apps/sentiment/catalog-info.yaml",
-]
-docs = []
-for catalog_file in catalog_files:
-    docs.extend(yaml.safe_load_all(catalog_file.read_text(encoding="utf-8")))
+docs = backstage_local_catalog_documents(repo_root)
 entities = {
     (doc["kind"], doc["metadata"]["name"]): doc
     for doc in docs
@@ -294,6 +286,10 @@ for name, (selector, source_path) in {
     "chatgpt-sim": ("app=chatgpt-sim", "apps/chatgpt-sim/"),
     "platform-mcp": ("app=platform-mcp", "apps/platform-mcp/"),
     "mcp-inspector": ("app=mcp-inspector", "apps/platform-mcp/"),
+    "langfuse": ("app.kubernetes.io/name=langfuse", "terraform/kubernetes/apps/langfuse/"),
+    "langfuse-trace-chat": ("app.kubernetes.io/name=langfuse-trace-chat", "apps/langfuse-demos/"),
+    "langfuse-tool-agent": ("app.kubernetes.io/name=langfuse-tool-agent", "apps/langfuse-demos/"),
+    "langfuse-eval-runner": ("app.kubernetes.io/name=langfuse-eval-runner", "apps/langfuse-demos/"),
     "subnetcalc": ("app=subnetcalc", "apps/subnetcalc/"),
     "sentiment": ("app=sentiment", "apps/sentiment/"),
 }.items():
@@ -315,10 +311,17 @@ assert entities[("Component", "platform-mcp")]["spec"]["consumesApis"] == [
     "sentiment-api",
     "apim-simulator-gateway-api",
 ]
+platform_mcp_tags = set(entities[("Component", "platform-mcp")]["metadata"].get("tags", []))
+assert "go" in platform_mcp_tags
+assert "python" not in platform_mcp_tags
 assert entities[("Component", "mcp-inspector")]["spec"]["dependsOn"] == [
     "component:default/platform-mcp"
 ]
 assert entities[("Component", "mcp-inspector")]["spec"]["consumesApis"] == ["platform-mcp-api"]
+for component_name in ("langfuse-trace-chat", "langfuse-tool-agent", "langfuse-eval-runner"):
+    assert entities[("Component", component_name)]["spec"]["dependsOn"] == [
+        "component:default/langfuse"
+    ]
 assert entities[("Component", "subnetcalc")]["spec"]["dependsOn"] == [
     "component:default/idp-core",
     "component:default/apim-simulator",
@@ -349,6 +352,14 @@ mcp_inspector_links = {
 assert platform_mcp_links["MCP Endpoint"] == "https://mcp.127.0.0.1.sslip.io/mcp"
 assert platform_mcp_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
 assert mcp_inspector_links["MCP Console"] == "https://mcp-console.127.0.0.1.sslip.io"
+for component_name, route in {
+    "langfuse": "https://langfuse.admin.127.0.0.1.sslip.io",
+    "langfuse-trace-chat": "https://lf-chat.dev.127.0.0.1.sslip.io",
+    "langfuse-tool-agent": "https://lf-agent.dev.127.0.0.1.sslip.io",
+    "langfuse-eval-runner": "https://lf-evals.dev.127.0.0.1.sslip.io",
+}.items():
+    links = {link["url"] for link in entities[("Component", component_name)]["metadata"]["links"]}
+    assert route in links
 
 print("validated Backstage catalog annotations and API relations")
 PY
@@ -357,51 +368,120 @@ PY
   [[ "${output}" == *"validated Backstage catalog annotations and API relations"* ]]
 }
 
-@test "IDP application inventory includes MCP server and inspector console" {
+@test "Backstage bundled app catalogs mirror app-owned catalog facts" {
   run uv run --isolated python - <<'PY'
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
+from tests.app_contracts import (
+    backstage_app_catalog_mirror_contract_violations,
+    canonical_go_app_catalog_ownership_contract_violations,
+)
+
 repo_root = Path(os.environ["REPO_ROOT"])
-catalog = json.loads((repo_root / "catalog/platform-apps.json").read_text(encoding="utf-8"))
-apps = {app["name"]: app for app in catalog["applications"]}
-
-assert "platform-mcp" in apps
-assert "mcp-inspector" in apps
-
-platform_mcp = apps["platform-mcp"]
-mcp_inspector = apps["mcp-inspector"]
-
-assert platform_mcp["owner"] == "platform"
-assert platform_mcp["source"]["path"] == "apps/platform-mcp"
-assert platform_mcp["deployment"]["applications"] == ["mcp"]
-assert any(
-    env["name"] == "local"
-    and env["namespace"] == "mcp"
-    and env["route"] == "https://mcp.127.0.0.1.sslip.io/mcp"
-    for env in platform_mcp["environments"]
-)
-assert platform_mcp["scorecard"]["has_network_policy"] is True
-
-assert mcp_inspector["owner"] == "platform"
-assert mcp_inspector["source"]["path"] == "apps/platform-mcp"
-assert mcp_inspector["deployment"]["applications"] == ["mcp"]
-assert any(
-    env["name"] == "local"
-    and env["namespace"] == "mcp"
-    and env["route"] == "https://mcp-console.127.0.0.1.sslip.io"
-    for env in mcp_inspector["environments"]
-)
-assert mcp_inspector["scorecard"]["has_network_policy"] is True
-
-print("validated MCP inventory entries")
+violations = canonical_go_app_catalog_ownership_contract_violations(repo_root)
+assert not violations, violations
+violations = backstage_app_catalog_mirror_contract_violations(repo_root)
+assert not violations, violations
+print("validated Backstage bundled app catalog mirrors")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated MCP inventory entries"* ]]
+  [[ "${output}" == *"validated Backstage bundled app catalog mirrors"* ]]
+}
+
+@test "Backstage portal tests share app-owned catalog mirror helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import (
+    app_owned_catalog_files,
+    backstage_local_catalog_documents,
+    backstage_app_catalog_mirror_contract_violations,
+    canonical_go_app_catalog_ownership_contract_violations,
+)
+
+test_file = Path("tests/backstage-portal.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "Backstage bundled app catalogs mirror app-owned catalog facts"'):
+    content.index('\n@test "IDP application inventory includes platform MCP and Langfuse surfaces"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "app-owned catalog mirror policy should move" not in line
+    and "Backstage catalog file discovery should move" not in line
+]
+
+assert callable(backstage_app_catalog_mirror_contract_violations)
+assert callable(app_owned_catalog_files)
+assert callable(backstage_local_catalog_documents)
+assert callable(canonical_go_app_catalog_ownership_contract_violations)
+assert "app_owned_catalog_files" in test_body
+assert "backstage_local_catalog_documents" in content
+assert "backstage_app_catalog_mirror_contract_violations" in test_body
+assert "canonical_go_app_catalog_ownership_contract_violations" in test_body
+assert not any("catalog_files = [" in line for line in contract_lines), "Backstage catalog file discovery should move to tests/app_contracts.py"
+assert not any("apps = [" in line for line in contract_lines), "app-owned catalog mirror policy should move to tests/app_contracts.py"
+assert not any("apps/backstage/catalog/apps" in line for line in contract_lines), "app-owned catalog mirror policy should move to tests/app_contracts.py"
+assert not any("app-config.production.yaml" in line for line in contract_lines), "app-owned catalog mirror policy should move to tests/app_contracts.py"
+
+print("validated shared Backstage app catalog mirror helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared Backstage app catalog mirror helper usage"* ]]
+}
+
+@test "IDP application inventory includes platform MCP and Langfuse surfaces" {
+  run uv run --isolated python - <<'PY'
+import os
+from pathlib import Path
+
+from tests.app_contracts import platform_mcp_langfuse_inventory_contract_violations
+
+violations = platform_mcp_langfuse_inventory_contract_violations(Path(os.environ["REPO_ROOT"]))
+assert not violations, violations
+
+print("validated platform MCP and Langfuse inventory entries")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated platform MCP and Langfuse inventory entries"* ]]
+}
+
+@test "Backstage portal tests share platform MCP and Langfuse inventory helpers" {
+  run uv run --isolated python - <<'PY'
+from pathlib import Path
+
+from tests.app_contracts import platform_mcp_langfuse_inventory_contract_violations
+
+test_file = Path("tests/backstage-portal.bats")
+content = test_file.read_text(encoding="utf-8")
+test_body = content[
+    content.index('\n@test "IDP application inventory includes platform MCP and Langfuse surfaces"'):
+    content.index('\n@test "local platform image flow builds Backstage instead of the old React portal"')
+]
+contract_lines = [
+    line
+    for line in test_body.splitlines()
+    if "platform MCP and Langfuse inventory policy should move" not in line
+]
+
+assert callable(platform_mcp_langfuse_inventory_contract_violations)
+assert "platform_mcp_langfuse_inventory_contract_violations" in test_body
+assert not any("json.loads" in line for line in contract_lines), "platform MCP and Langfuse inventory policy should move to tests/app_contracts.py"
+assert not any("lf-chat.dev.127.0.0.1.sslip.io" in line for line in contract_lines), "platform MCP and Langfuse inventory policy should move to tests/app_contracts.py"
+assert not any("apps/platform-mcp" in line and "assert" in line for line in contract_lines), "platform MCP and Langfuse inventory policy should move to tests/app_contracts.py"
+
+print("validated shared platform MCP and Langfuse inventory helper usage")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared platform MCP and Langfuse inventory helper usage"* ]]
 }
 
 @test "local platform image flow builds Backstage instead of the old React portal" {
@@ -437,7 +517,7 @@ for target, registry_host in {
     "slicer": "192.168.64.1:5002",
 }.items():
     tfvars = (repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars").read_text(encoding="utf-8")
-    assert f'backstage      = "{registry_host}/platform/backstage:1.0.0"' in tfvars
+    assert f'backstage' in tfvars and f'= "{registry_host}/platform/backstage:1.0.0"' in tfvars
 
 print("validated Backstage local image flow")
 PY
@@ -572,6 +652,14 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated Backstage self-service app factory template"* ]]
+}
+
+@test "Backstage Gitea publisher uses named JSON request body types" {
+  run rg -n 'body\?: unknown|Record<string,\s*unknown>|body\?: any|Array<\{ url: string; method: string; body\?: any \}>' \
+    "${REPO_ROOT}/apps/backstage/packages/backend/src/modules/giteaRepoPublish.ts" \
+    "${REPO_ROOT}/apps/backstage/packages/backend/src/modules/giteaRepoPublish.test.ts"
+
+  [ "${status}" -eq 1 ]
 }
 
 @test "Backstage publishes app templates to Gitea with in-cluster credentials" {

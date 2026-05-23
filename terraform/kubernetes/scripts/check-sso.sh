@@ -175,7 +175,7 @@ print_http_head() {
       warn "HTTPS ${url} -> ${code}"
     fi
   else
-    warn "HTTPS ${url} -> ${code:-unknown}"
+    warn "HTTPS ${url} -> ${code:-not reported}"
   fi
 }
 

@@ -207,7 +207,7 @@ fix_vm_dns() {
     if [ "${current_nameserver}" = "${gw}" ]; then
       echo "INFO: ${server_vm} already points at gateway resolver ${gw}; continuing" >&2
     else
-      echo "INFO: could not pin ${server_vm} DNS to gateway resolver ${gw}; continuing with the guest default resolver (${current_nameserver:-unknown})" >&2
+      echo "INFO: could not pin ${server_vm} DNS to gateway resolver ${gw}; continuing with the guest default resolver (${current_nameserver:-nameserver not reported})" >&2
     fi
   fi
 }

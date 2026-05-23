@@ -8,7 +8,7 @@ C4Dynamic
     Container(router, "subnetcalc-router", "NGINX", "Routes UI and API traffic")
     Container(apim, "subnetcalc-apim-simulator", "APIM simulator", "Validates auth context and forwards /api traffic")
     Container(keycloak, "Keycloak", "OIDC provider", "Publishes issuer and JWKS metadata")
-    Container(api, "subnetcalc-api", "FastAPI", "CIDR calculation and Cloudflare range logic")
+    Container(api, "subnetcalc-api", "Go API", "CIDR calculation and Cloudflare range logic")
     Container(otel, "otel-collector", "OpenTelemetry Collector", "Shared telemetry sink")
 
     RelIndex(1, browser, gateway, "HTTPS request")

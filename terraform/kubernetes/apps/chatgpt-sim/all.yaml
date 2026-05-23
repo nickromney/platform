@@ -62,6 +62,20 @@ spec:
                 ]
             - name: LLM_URL
               value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1/chat/completions
+            - name: LLM_MODEL
+              value: Qwen3.5-9B-MLX-4bit
+            - name: LLM_TIMEOUT_SECONDS
+              value: "1"
+            - name: LLM_MAX_TOKENS
+              value: "32"
+            - name: LANGFUSE_HOST
+              value: http://langfuse-web.langfuse.svc.cluster.local:3000
+            - name: LANGFUSE_PUBLIC_KEY
+              value: pk-lf-local-platform
+            - name: LANGFUSE_SECRET_KEY
+              value: sk-lf-local-platform
+            - name: LANGFUSE_TIMEOUT_SECONDS
+              value: "1"
             - name: HOME
               value: /tmp
           ports:

@@ -1468,7 +1468,7 @@ image_ref_non_comparable_status() {
   printf '\n'
 }
 
-image_status_when_latest_unknown() {
+image_status_without_latest() {
   local image_ref="$1"
   local registry="$2"
   local availability=""
@@ -1942,23 +1942,23 @@ image_ref_availability() {
   local registry=""
 
   if [ -z "${image_ref}" ]; then
-    printf "unknown\n"
+    printf "not-checked\n"
     return 0
   fi
 
   if [ "${CHECK_VERSION_CI_MODE}" = "1" ]; then
-    printf "unknown\n"
+    printf "not-checked\n"
     return 0
   fi
 
   registry="$(image_ref_registry "${image_ref}")"
   if [ "${registry}" = "dhi.io" ] && [ "${CHECK_VERSION_PROBE_PRIVATE_IMAGES:-0}" != "1" ]; then
-    printf "unknown\n"
+    printf "not-checked\n"
     return 0
   fi
 
   if ! command -v docker >/dev/null 2>&1; then
-    printf "unknown\n"
+    printf "not-checked\n"
     return 0
   fi
 
@@ -1969,7 +1969,7 @@ image_ref_availability() {
   fi
 
   if [ "${rc}" -eq 124 ]; then
-    printf "unknown\n"
+    printf "not-checked\n"
     return 0
   fi
 
@@ -2065,10 +2065,10 @@ print_preferred_image_row() {
 
   case "${configured_state}" in
     missing) color="${RED}" ;;
-    auth-required|unknown) color="${YELLOW}" ;;
+    auth-required|not-checked) color="${YELLOW}" ;;
     available)
       case "${candidate_state}" in
-        missing|auth-required|unknown) color="${YELLOW}" ;;
+        missing|auth-required|not-checked) color="${YELLOW}" ;;
       esac
       ;;
   esac
@@ -2239,7 +2239,7 @@ print_row() {
       available) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image available (${dhi_tag})" ;;
       missing) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image missing (${dhi_tag})" ;;
       auth-required) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image requires auth (${dhi_tag})" ;;
-      unknown) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image unverified (${dhi_tag})" ;;
+      not-checked) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image not checked (${dhi_tag})" ;;
       *) codebase_latest_state="codebase != latest (${codebase} vs ${latest}); preferred image candidate ${dhi_tag}" ;;
     esac
   else
@@ -2370,7 +2370,7 @@ check_preload_image_ref_alignment() {
   local matches has_exact mismatch_count
 
   if [ -z "${expected_ref}" ]; then
-    warn "preload image check skipped for ${component}: expected image ref is unknown"
+    warn "preload image check skipped for ${component}: expected image ref not reported"
     return 0
   fi
 
@@ -2420,7 +2420,7 @@ check_preload_repo_tag_alignment() {
   local matches has_expected mismatch_count
 
   if [ -z "${expected_tag}" ]; then
-    warn "preload image check skipped for ${component}: expected chart appVersion is unknown"
+    warn "preload image check skipped for ${component}: expected chart appVersion not reported"
     return 0
   fi
 
@@ -2988,9 +2988,9 @@ emit_external_image_row() {
   esac
 
   if [ -z "${current_tag}" ]; then
-    status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
+    status="$(image_status_without_latest "${image_ref}" "${registry}")"
   elif [ -z "${latest_tag}" ]; then
-    status="$(image_status_when_latest_unknown "${image_ref}" "${registry}")"
+    status="$(image_status_without_latest "${image_ref}" "${registry}")"
   else
     status="$(external_image_update_status "${current_tag}" "${latest_tag}")"
   fi
@@ -3175,15 +3175,15 @@ emit_json_report() {
           elif ($row.deployed == "" and $row.codebase != "" and $row.latest != "" and $row.codebase == $row.latest) then
             "not_deployed_current"
           elif $row.deployed == "Unavailable" then
-            "deployed_unknown"
+            "deployed_unavailable"
           elif ($row.deployed != "" and $row.codebase != "" and $row.deployed != $row.codebase) then
             "deployed_drift"
           elif ($row.codebase != "" and $row.latest != "" and $row.codebase != $row.latest) then
             "update_available"
           elif $row.codebase == "" then
-            "codebase_unknown"
+            "codebase_not_reported"
           elif $row.latest == "" then
-            "latest_unknown"
+            "latest_not_reported"
           elif $row.deployed == "" then
             "not_deployed"
           else

@@ -1,7 +1,7 @@
 # Compose configuration for sentiment (local equivalent of kind-local demo)
 # Works with both docker compose and podman-compose.
 #
-# The local stack uses the same SST-backed sentiment path as the Kubernetes demo.
+# The local stack uses the default Go lexicon classifier path.
 
 x-app-runtime-hardening: &app-runtime-hardening
   read_only: true

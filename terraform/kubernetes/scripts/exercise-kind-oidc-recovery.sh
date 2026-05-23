@@ -129,8 +129,8 @@ STATUS_CODE="unexpected_failure"
 STATUS_GROUP="failure"
 SUMMARY=""
 FORCED=false
-PRE_STATE="unknown"
-POST_STATE="unknown"
+PRE_STATE="not_checked"
+POST_STATE="not_checked"
 RECOVERY_EXIT_CODE=0
 
 record_step() {

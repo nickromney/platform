@@ -51,7 +51,7 @@ IMAGE_SPECS=(
   "platform-security-scan/sentiment-api:scan|apps/sentiment/app|apps/sentiment/app/Dockerfile|"
   "platform-security-scan/sentiment-auth-ui:scan|apps/sentiment/app|apps/sentiment/app/Dockerfile|"
   "platform-security-scan/subnetcalc-go:scan|apps/subnetcalc/app|apps/subnetcalc/app/Dockerfile|"
-  "platform-security-scan/subnetcalc-apim-simulator:scan|apps/apim-simulator|apps/apim-simulator/Dockerfile|"
+  "platform-security-scan/subnetcalc-apim-simulator:scan|apps/apim-simulator|apps/apim-simulator/app/Dockerfile|"
 )
 
 scan_failed=0
@@ -161,9 +161,9 @@ append_report_findings() {
         | [
             $report,
             "vulnerability",
-            ($result.Target // "unknown"),
-            (.Severity // "UNKNOWN"),
-            (.VulnerabilityID // .PkgName // "unknown"),
+            ($result.Target // "target not reported"),
+            (if (.Severity // "") == "UNKNOWN" or (.Severity // "") == "" then "severity not reported" else .Severity end),
+            (.VulnerabilityID // .PkgName // "finding id not reported"),
             (.PkgName // ""),
             (.InstalledVersion // ""),
             (.FixedVersion // ""),
@@ -175,9 +175,9 @@ append_report_findings() {
         | [
             $report,
             "misconfiguration",
-            ($result.Target // "unknown"),
-            (.Severity // "UNKNOWN"),
-            (.ID // "unknown"),
+            ($result.Target // "target not reported"),
+            (if (.Severity // "") == "UNKNOWN" or (.Severity // "") == "" then "severity not reported" else .Severity end),
+            (.ID // "finding id not reported"),
             "",
             "",
             "",
@@ -189,8 +189,8 @@ append_report_findings() {
         | [
             $report,
             "secret",
-            ($result.Target // "unknown"),
-            (.Severity // "UNKNOWN"),
+            ($result.Target // "target not reported"),
+            (if (.Severity // "") == "UNKNOWN" or (.Severity // "") == "" then "severity not reported" else .Severity end),
             (.RuleID // "secret"),
             "",
             "",
@@ -203,8 +203,8 @@ append_report_findings() {
         | [
             $report,
             "license",
-            ($result.Target // "unknown"),
-            (.Severity // "UNKNOWN"),
+            ($result.Target // "target not reported"),
+            (if (.Severity // "") == "UNKNOWN" or (.Severity // "") == "" then "severity not reported" else .Severity end),
             (.Name // "license"),
             "",
             "",
@@ -230,7 +230,7 @@ report_summary() {
       order[2] = "HIGH"
       order[3] = "MEDIUM"
       order[4] = "LOW"
-      order[5] = "UNKNOWN"
+      order[5] = "severity not reported"
     }
     $1 == report {
       total++
@@ -305,7 +305,7 @@ total_counts() {
       order[2] = "HIGH"
       order[3] = "MEDIUM"
       order[4] = "LOW"
-      order[5] = "UNKNOWN"
+      order[5] = "severity not reported"
     }
     {
       total++

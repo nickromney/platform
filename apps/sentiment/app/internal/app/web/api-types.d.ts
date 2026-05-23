@@ -5,6 +5,7 @@ export type {
 	ApiDiagnostics,
 	CookieClearResult,
 	GatewaySession,
+	KeyValueTableRow,
 	LoggedInUser,
 	LogoutResult,
 	NetworkHop,
@@ -20,6 +21,17 @@ export interface SentimentComment {
 	label: "positive" | "negative" | "neutral";
 	confidence: number;
 	latency_ms: number;
+}
+
+export interface HealthResponse {
+	status: string;
+	service: string;
+	version: string;
+	server_side_token_validation?: boolean;
+}
+
+export interface CommentListResponse {
+	items?: SentimentComment[];
 }
 
 declare global {

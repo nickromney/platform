@@ -2,14 +2,18 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
+
+	"platform.local/apphttp"
 )
 
-func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
+func TestShellHealthAndFrontendReportSharedDependencyFootprint(t *testing.T) {
 	srv := NewServer(Config{Role: "shell", MCPURL: "http://mcp.example/mcp"}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -18,8 +22,18 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("health returned %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `"dependencies":"go-stdlib-only"`) {
-		t.Fatalf("health did not report stdlib footprint: %s", rec.Body.String())
+	var health map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&health); err != nil {
+		t.Fatalf("health did not return JSON: %v", err)
+	}
+	if got := health["dependency_footprint"]; got != "go-plus-shared-idpauth" {
+		t.Fatalf("dependency_footprint=%v, want go-plus-shared-idpauth", got)
+	}
+	if got := health["frontend_dependency_footprint"]; got != "vanilla" {
+		t.Fatalf("frontend_dependency_footprint=%v, want vanilla", got)
+	}
+	if _, ok := health["dependencies"]; ok {
+		t.Fatalf("health should use canonical dependency_footprint fields, got legacy dependencies in %v", health)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
@@ -33,6 +47,7 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	}
 	for _, text := range []string{
 		`/app-shell.css`,
+		`/app-shell.js`,
 		`data-theme="system"`,
 		`class="header-actions"`,
 		`id="auth-state"`,
@@ -40,9 +55,6 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		`>Sign Out<`,
 		`id="theme-switcher"`,
 		`class="theme-toggle"`,
-		`data-theme-icon="light"`,
-		`data-theme-icon="dark"`,
-		`data-theme-icon="system"`,
 		`id="network-path"`,
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
@@ -68,6 +80,21 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		t.Fatalf("shared app shell CSS Cache-Control=%q", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/app-shell.js", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shared app shell JS returned %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, text := range []string{"PlatformAppShell", "initializeThemeSwitcher", "toggleTheme", "pce-theme"} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("shared app shell JS missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
+		t.Fatalf("shared app shell JS Cache-Control=%q", got)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/signed-out.html", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -77,6 +104,7 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	for _, text := range []string{
 		"ChatGPT Sim",
 		`/app-shell.css`,
+		`/app-shell.js`,
 		"Signed out",
 		"Sign in now",
 		"/.auth/login/sso",
@@ -84,10 +112,7 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 		`class="theme-toggle"`,
 		"redirect-delay",
 		"Redirecting to sign in in 5 seconds",
-		"pce-theme",
-		"setTimeout(() => {",
-		"window.location.assign(loginLink.href)",
-		"5000",
+		"window.PlatformAppShell.initializeSignedOutRedirect()",
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
@@ -99,6 +124,20 @@ func TestShellHealthAndFrontendAreStdlibOnly(t *testing.T) {
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("signed-out Cache-Control=%q", got)
 	}
+}
+
+type selectiveSlowClient struct {
+	delegate *http.Client
+	slowHost string
+	delay    time.Duration
+}
+
+func (c selectiveSlowClient) Do(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == c.slowHost {
+		time.Sleep(c.delay)
+		return nil, errors.New("slow client finished after caller budget")
+	}
+	return c.delegate.Do(req)
 }
 
 func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
@@ -117,17 +156,16 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 		`<main id="main" tabindex="-1">`,
 		`<header>`,
 		`/app-shell.css`,
+		`/idpauth.js`,
 		`class="header-actions"`,
 		`id="auth-state"`,
-		`id="logout-btn"`,
+		`id="logout-btn" class="sign-in-link"`,
 		`>Sign Out<`,
 		`id="theme-switcher"`,
 		`class="theme-toggle"`,
-		`data-theme-icon="light"`,
-		`data-theme-icon="dark"`,
-		`data-theme-icon="system"`,
+		`id="status" role="status" aria-live="polite"`,
 		`id="network-path"`,
-		`<section class="conversation"`,
+		`<section class="app-panel conversation"`,
 		`<aside class="inspector"`,
 	} {
 		if !strings.Contains(html, text) {
@@ -143,7 +181,7 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 			t.Fatalf("protected frontend index must not render login control %q: %s", text, html)
 		}
 	}
-	if strings.Index(html, `<header>`) > strings.Index(html, `<section class="conversation"`) {
+	if strings.Index(html, `<header>`) > strings.Index(html, `<section class="app-panel conversation"`) {
 		t.Fatalf("frontend shell header must be the first app section before content: %s", html)
 	}
 	if strings.Index(html, `id="logout-btn"`) > strings.Index(html, `id="theme-switcher"`) {
@@ -152,34 +190,117 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 
 	js := string(appJS)
 	for _, text := range []string{
-		"payload.clientPrincipal",
-		"return null;",
-		`window.location.assign("/oauth2/sign_out?rd=/signed-out.html")`,
-		"readThemeCookie()",
-		"writeThemeCookie(nextTheme)",
-		"pce-theme",
-		"themeCookieDomain",
-		"document.cookie",
-		"renderNetworkPath()",
-		"Network Path",
+		"PlatformIdpAuth",
+		"PlatformAppShell",
+		`readRuntimeConfig("PCE_CHATGPT_GO_CONFIG")`,
+		"initializeThemeSwitcher()",
+		"requireElement",
+		"inputElement",
+		"selectElement",
+		"renderNetworkPathInto",
+		"resolveNetworkHops",
+		"fetchJSON",
+		"setText",
+		"networkPathEl",
+		"configuredNetworkHops()",
+		"config.showNetworkPath !== false",
+		"withButtonBusy",
+		"withSubmitterBusy",
+		"errorMessage",
+		"renderElementsInto",
+		"renderJSONInto",
+		"bindGatewayLogout(",
+		"initializeGatewayAuthState(",
+		"ignoreErrors: true",
 		"showNetworkPath",
+		"setTextDefault",
+		`config.mcpUrl, "not configured"`,
 	} {
 		if !strings.Contains(js, text) {
 			t.Fatalf("frontend auth code missing %q: %s", text, js)
 		}
 	}
-	if strings.Contains(js, `localStorage.setItem("theme"`) {
-		t.Fatalf("theme preference must be written to the shared cookie, not localStorage")
+	for _, text := range []string{
+		"function fetchGatewaySession",
+		"fetchGatewaySession()",
+		"writeGatewayAuthState(authState, logoutButton, session)",
+		"function normalizeGatewaySession",
+		"function gatewayDisplayName",
+		"function readThemeCookie",
+		"function writeThemeCookie",
+		"window.PCE_CHATGPT_GO_CONFIG || {}",
+		"function themeCookieDomain",
+		"function requireElement",
+		"function inputElement",
+		"function selectElement",
+		"function renderNetworkPath",
+		"async function requestJSON",
+		"async function fetchJSON",
+		"const response = await fetch(url)",
+		"new Error(payload.error",
+		"error.status = response.status",
+		"error.payload = payload",
+		"function isNetworkHop",
+		"<summary>Network Path",
+		"function escapeHTML",
+		"function escapeAttr",
+		"connectorList.innerHTML",
+		"function renderConnector",
+		"<article",
+		"error.message",
+		"JSON.stringify(result.discovery, null, 2)",
+		"JSON.stringify(result, null, 2)",
+		"JSON.stringify(\n\t\t\tresult.discovery || result,\n\t\t\tnull,\n\t\t\t2,\n\t\t)",
+		"JSON.stringify(item.oauth_advanced, null, 2)",
+		`config.mcpUrl || "` + "unk" + `nown"`,
+		`requireElement("mcp-url").textContent`,
+		`requireElement("model-provider").textContent`,
+		`requireElement("dependencies").textContent`,
+	} {
+		if strings.Contains(js, text) {
+			t.Fatalf("frontend app code should use shared helper instead of %q", text)
+		}
+	}
+	for _, text := range []string{"pce-theme", "document.cookie"} {
+		if strings.Contains(js, text) {
+			t.Fatalf("theme implementation must live in shared app shell, not app.js %q", text)
+		}
 	}
 }
 
 func TestRuntimeConfigIncludesNetworkPathToggle(t *testing.T) {
 	srv := NewServer(Config{
-		Role:            "shell",
-		MCPURL:          "http://mcp.example/mcp",
-		ShowNetworkPath: "false",
-		NetworkHops:     `[{"label":"Browser","detail":"localhost","role":"User agent"}]`,
+		Role:              "shell",
+		MCPURL:            "http://mcp.example/mcp",
+		LLMURL:            "http://llm.example/v1/chat/completions",
+		LangfuseHost:      "http://langfuse.example",
+		LangfusePublicKey: "pk-test",
+		LangfuseSecretKey: "sk-test",
+		OIDCIssuer:        "http://keycloak.example.test/realms/chatgpt-sim///",
+		OIDCClientID:      "chatgpt-sim",
+		ShowNetworkPath:   "false",
+		NetworkHops:       `[{"label":"Browser","detail":"localhost","role":"User agent"}]`,
 	}, nil)
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthRec := httptest.NewRecorder()
+	srv.ServeHTTP(healthRec, healthReq)
+	if healthRec.Code != http.StatusOK {
+		t.Fatalf("health returned %d: %s", healthRec.Code, healthRec.Body.String())
+	}
+	for _, text := range []string{
+		`"model_provider":"openai-compatible via agentgateway"`,
+		`"llm_configured":true`,
+		`"trace_provider":"langfuse"`,
+		`"trace_ingestion":"configured"`,
+	} {
+		if !strings.Contains(healthRec.Body.String(), text) {
+			t.Fatalf("health missing runtime wiring %q: %s", text, healthRec.Body.String())
+		}
+	}
+	if strings.Contains(healthRec.Body.String(), "sk-test") || strings.Contains(healthRec.Body.String(), "pk-test") {
+		t.Fatalf("health must not expose Langfuse credentials: %s", healthRec.Body.String())
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/runtime-config.js", nil)
 	rec := httptest.NewRecorder()
@@ -189,11 +310,36 @@ func TestRuntimeConfigIncludesNetworkPathToggle(t *testing.T) {
 		t.Fatalf("runtime config returned %d: %s", rec.Code, rec.Body.String())
 	}
 	for _, text := range []string{
+		`"dependencyFootprint":"go-plus-shared-idpauth"`,
+		`"modelProvider":"openai-compatible via agentgateway"`,
+		`"oidcAuthority":"http://keycloak.example.test/realms/chatgpt-sim"`,
+		`"oidcClientId":"chatgpt-sim"`,
+		`"traceProvider":"langfuse configured"`,
 		`"showNetworkPath":false`,
 		`"networkHops":[{"detail":"localhost","label":"Browser","role":"User agent"}]`,
 	} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("runtime config missing %q: %s", text, rec.Body.String())
+		}
+	}
+	if strings.Contains(rec.Body.String(), "sk-test") || strings.Contains(rec.Body.String(), "pk-test") {
+		t.Fatalf("runtime config must not expose Langfuse credentials: %s", rec.Body.String())
+	}
+
+	indexHTML, err := web.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appJS, err := web.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(indexHTML), `id="trace-provider"`) {
+		t.Fatalf("frontend connection panel must expose trace provider status: %s", string(indexHTML))
+	}
+	for _, text := range []string{`requireElement("trace-provider")`, `config.traceProvider`, `"disabled"`} {
+		if !strings.Contains(string(appJS), text) {
+			t.Fatalf("frontend app must render trace provider runtime config missing %q: %s", text, string(appJS))
 		}
 	}
 }
@@ -216,7 +362,7 @@ func TestFrontendComposerStaysCompact(t *testing.T) {
 		`.inspector {`,
 		`max-height: min(680px, calc(100vh - 152px));`,
 		`@media (max-width: 840px)`,
-		`.conversation { min-height: 0; }`,
+		`min-height: 0;`,
 		`.composer {`,
 		`padding: 10px;`,
 		`min-height: 58px;`,
@@ -322,7 +468,33 @@ func TestChatUsesConfiguredOpenAICompatibleModelWithMCPContext(t *testing.T) {
 		_, _ = w.Write([]byte(`{"model":"agentgateway-test-model","choices":[{"message":{"role":"assistant","content":"The MCP server says you are local-chatgpt-go-user."}}]}`))
 	}))
 	defer llm.Close()
-	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMURL: llm.URL + "/v1/chat/completions", LLMModel: "agentgateway-test-model"}, mcp.Client())
+	langfuseRequests := make(chan map[string]any, 1)
+	langfuse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/public/ingestion" {
+			http.NotFound(w, r)
+			return
+		}
+		user, password, ok := r.BasicAuth()
+		if !ok || user != "pk-test" || password != "sk-test" {
+			t.Fatalf("missing Langfuse basic auth: %q %q ok=%v", user, password, ok)
+		}
+		var langfuseRequest map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&langfuseRequest); err != nil {
+			t.Fatal(err)
+		}
+		langfuseRequests <- langfuseRequest
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer langfuse.Close()
+	shell := NewServer(Config{
+		Role:              "shell",
+		MCPURL:            mcp.URL + "/mcp",
+		LLMURL:            llm.URL + "/v1/chat/completions",
+		LLMModel:          "agentgateway-test-model",
+		LangfuseHost:      langfuse.URL,
+		LangfusePublicKey: "pk-test",
+		LangfuseSecretKey: "sk-test",
+	}, mcp.Client())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"who am I?","tool":"auto"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -353,6 +525,23 @@ func TestChatUsesConfiguredOpenAICompatibleModelWithMCPContext(t *testing.T) {
 	}
 	if !strings.Contains(string(encodedMessages), "platform shell has already executed") || !strings.Contains(string(encodedMessages), "Observed MCP tool result") {
 		t.Fatalf("LLM request did not clearly ground the completion in an executed MCP call: %s", encodedMessages)
+	}
+	trace := payload["trace"].(map[string]any)
+	if trace["provider"] != "langfuse" || trace["status"] != "ok" || !strings.HasPrefix(trace["traceId"].(string), "chatgpt-sim-") {
+		t.Fatalf("trace metadata=%#v", trace)
+	}
+	var langfuseRequest map[string]any
+	select {
+	case langfuseRequest = <-langfuseRequests:
+	case <-time.After(time.Second):
+		t.Fatal("Langfuse ingestion was not sent after queued trace response")
+	}
+	batch := langfuseRequest["batch"].([]any)
+	encodedBatch, _ := json.Marshal(batch)
+	for _, text := range []string{"trace-create", "generation-create", "chatgpt-sim.chat", "agentgateway-test-model", "whoami", "local-chatgpt-go-user"} {
+		if !strings.Contains(string(encodedBatch), text) {
+			t.Fatalf("Langfuse batch missing %q: %s", text, encodedBatch)
+		}
 	}
 }
 
@@ -458,7 +647,7 @@ func TestChatDiscoversOpenAICompatibleModelWhenNotConfigured(t *testing.T) {
 	if llmRequest["model"] != "served-local-model" {
 		t.Fatalf("model sent to LLM=%v", llmRequest["model"])
 	}
-	if llmRequest["max_tokens"] != float64(256) {
+	if llmRequest["max_tokens"] != float64(32) {
 		t.Fatalf("max_tokens sent to LLM=%v", llmRequest["max_tokens"])
 	}
 	var payload map[string]any
@@ -468,6 +657,149 @@ func TestChatDiscoversOpenAICompatibleModelWhenNotConfigured(t *testing.T) {
 	model := payload["model"].(map[string]any)
 	if model["model"] != "served-local-model" {
 		t.Fatalf("response model metadata=%#v", model)
+	}
+}
+
+func TestModelPingUsesFastOpenAICompatibleModelsEndpoint(t *testing.T) {
+	mcp := httptest.NewServer(NewServer(Config{Role: "mcp"}, nil))
+	defer mcp.Close()
+	var sawModels bool
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			sawModels = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"served-local-model","object":"model"}]}`))
+		case "/v1/chat/completions":
+			t.Fatal("model_ping must not spend the interactive budget on generation")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer llm.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMURL: llm.URL + "/v1/chat/completions"}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"ping the model","tool":"model_ping"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !sawModels {
+		t.Fatal("model_ping did not call /v1/models")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["selected_tool"] != "model_ping" {
+		t.Fatalf("selected_tool=%v", payload["selected_tool"])
+	}
+	model := payload["model"].(map[string]any)
+	if model["status"] != "ok" || model["model"] != "served-local-model" || model["source"] != "llm.models" {
+		t.Fatalf("model metadata=%#v", model)
+	}
+	if strings.Contains(rec.Body.String(), "exceeded") {
+		t.Fatalf("model_ping should not return a timeout-shaped tool error: %s", rec.Body.String())
+	}
+}
+
+func TestChatFallsBackWhenOpenAICompatibleModelExceedsAppTimeout(t *testing.T) {
+	mcp := httptest.NewServer(NewServer(Config{Role: "mcp"}, nil))
+	defer mcp.Close()
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"late"}}]}`))
+		}
+	}))
+	defer llm.Close()
+	shell := NewServer(Config{
+		Role:       "shell",
+		MCPURL:     mcp.URL + "/mcp",
+		LLMURL:     llm.URL + "/v1/chat/completions",
+		LLMModel:   "slow-model",
+		LLMTimeout: 50 * time.Millisecond,
+	}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"who am I?","tool":"whoami"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	shell.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	model, ok := payload["model"].(map[string]any)
+	if !ok {
+		t.Fatalf("model metadata missing in payload: %#v", payload)
+	}
+	errText, ok := model["error"].(string)
+	if !ok {
+		t.Fatalf("model error missing in metadata: %#v", model)
+	}
+	if model["status"] != "unavailable" || (!strings.Contains(errText, "timeout") && !strings.Contains(errText, "deadline") && !strings.Contains(errText, "exceeded")) {
+		t.Fatalf("model metadata=%#v", model)
+	}
+}
+
+func TestChatFallsBackWhenOpenAICompatibleClientIgnoresTimeout(t *testing.T) {
+	mcp := httptest.NewServer(NewServer(Config{Role: "mcp"}, nil))
+	defer mcp.Close()
+	llm := httptest.NewServer(http.NotFoundHandler())
+	defer llm.Close()
+	llmURL, err := url.Parse(llm.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shell := NewServer(Config{
+		Role:       "shell",
+		MCPURL:     mcp.URL + "/mcp",
+		LLMURL:     llm.URL + "/v1/chat/completions",
+		LLMModel:   "slow-model",
+		LLMTimeout: 50 * time.Millisecond,
+	}, selectiveSlowClient{delegate: mcp.Client(), slowHost: llmURL.Host, delay: 200 * time.Millisecond})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"who am I?","tool":"whoami"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	started := time.Now()
+	shell.ServeHTTP(rec, req)
+	elapsed := time.Since(started)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Fatalf("chat took %s, want bounded fallback", elapsed)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	model, ok := payload["model"].(map[string]any)
+	if !ok {
+		t.Fatalf("model metadata missing in payload: %#v", payload)
+	}
+	errText, ok := model["error"].(string)
+	if !ok {
+		t.Fatalf("model error missing in metadata: %#v", model)
+	}
+	if model["status"] != "unavailable" || !strings.Contains(errText, "exceeded") {
+		t.Fatalf("model metadata=%#v", model)
 	}
 }
 
@@ -506,8 +838,39 @@ func TestLocalLLMRoleServesOpenAICompatibleChatCompletions(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("completion returned %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `"choices"`) || !strings.Contains(rec.Body.String(), "local-chatgpt-go-user") {
+	if !strings.Contains(rec.Body.String(), `"choices"`) || !strings.Contains(rec.Body.String(), "local-chatgpt-go-user") || !strings.Contains(rec.Body.String(), "local deterministic stub") {
 		t.Fatalf("completion response is not OpenAI-compatible enough for compose: %s", rec.Body.String())
+	}
+}
+
+func TestLocalLLMRoleUsesExplicitMissingSubjectLabel(t *testing.T) {
+	srv := NewServer(Config{Role: "llm"}, nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"local","messages":[{"role":"user","content":"who am I?"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("completion returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "unk"+"nown") || !strings.Contains(rec.Body.String(), "not provided") {
+		t.Fatalf("completion response should avoid ambiguous placeholders: %s", rec.Body.String())
+	}
+}
+
+func TestLocalLLMRoleDefaultModelNameMakesStubExplicit(t *testing.T) {
+	srv := NewServer(Config{Role: "llm"}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("models returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":"go-local-openai-compatible-stub"`) {
+		t.Fatalf("default local model must be clearly identified as a stub: %s", rec.Body.String())
 	}
 }
 
@@ -600,6 +963,22 @@ func TestConfigFromEnvSeedsAPIMGatedMCPConnector(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvDefaultsLLMToInteractiveLatencyBudget(t *testing.T) {
+	t.Setenv("LLM_TIMEOUT_SECONDS", "")
+
+	cfg := ConfigFromEnv()
+
+	if cfg.LLMTimeout != time.Second {
+		t.Fatalf("LLMTimeout=%s, want 1s", cfg.LLMTimeout)
+	}
+	if cfg.LLMMaxTokens != 32 {
+		t.Fatalf("LLMMaxTokens=%d, want 32", cfg.LLMMaxTokens)
+	}
+	if cfg.LangfuseTimeout != time.Second {
+		t.Fatalf("LangfuseTimeout=%s, want 1s", cfg.LangfuseTimeout)
+	}
+}
+
 func TestConnectorWithoutInternalURLDoesNotUseGlobalMCPInternalURL(t *testing.T) {
 	s := &server{cfg: Config{MCPInternalURL: "http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000/mcp"}}
 	if got := s.resolveMCPURL("http://direct-mcp.dev.svc.cluster.local:8080/mcp", ""); got != "http://direct-mcp.dev.svc.cluster.local:8080/mcp" {
@@ -612,7 +991,7 @@ func TestConnectorWithoutInternalURLDoesNotUseGlobalMCPInternalURL(t *testing.T)
 		switch r.URL.Path {
 		case "/.well-known/oauth-protected-resource/mcp":
 			protectedHost = r.Host
-			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
 		case "/mcp":
 			mcpHost = r.Host
 			NewServer(Config{Role: "mcp"}, nil).ServeHTTP(w, r)
@@ -741,11 +1120,14 @@ func TestSSOBearerConnectorDoesNotFallBackToLocalBearer(t *testing.T) {
 	rec := httptest.NewRecorder()
 	shell.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "requires an SSO bearer token") {
 		t.Fatalf("missing clear SSO token error: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"isError":true`) {
+		t.Fatalf("SSO token failure must be reported as a tool error: %s", rec.Body.String())
 	}
 }
 
@@ -753,9 +1135,9 @@ func TestMCPHTTPErrorIncludesResponseDetail(t *testing.T) {
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/.well-known/oauth-protected-resource/mcp":
-			writeJSON(w, http.StatusOK, map[string]any{"resource": mcpResource(r), "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": mcpResource(r), "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
 		case "/mcp":
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"detail": "Invalid or expired access token"})
+			apphttp.WriteJSON(w, http.StatusUnauthorized, map[string]string{"detail": "Invalid or expired access token"})
 		default:
 			http.NotFound(w, r)
 		}
@@ -768,11 +1150,81 @@ func TestMCPHTTPErrorIncludesResponseDetail(t *testing.T) {
 	rec := httptest.NewRecorder()
 	shell.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "401 Unauthorized from initialize: Invalid or expired access token") {
 		t.Fatalf("missing response detail in error: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"isError":true`) {
+		t.Fatalf("MCP HTTP failure must be reported as a tool error: %s", rec.Body.String())
+	}
+}
+
+func TestChatReturnsJSONBeforeProxyTimeoutWhenMCPConnectorHangs(t *testing.T) {
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-protected-resource/mcp":
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": mcpResource(r), "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+		case "/mcp":
+			time.Sleep(200 * time.Millisecond)
+			writeRPC(w, 1, map[string]any{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mcp.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMTimeout: 5 * time.Millisecond}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"call the model","tool":"model_ping"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	started := time.Now()
+	shell.ServeHTTP(rec, req)
+	elapsed := time.Since(started)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Fatalf("chat took %s, want bounded JSON error", elapsed)
+	}
+	if !strings.Contains(rec.Body.String(), "MCP connector call exceeded") {
+		t.Fatalf("missing bounded MCP timeout error: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"isError":true`) {
+		t.Fatalf("bounded MCP timeout must be reported as a tool error: %s", rec.Body.String())
+	}
+}
+
+func TestChatReturnsJSONBeforeProxyTimeoutWhenMCPDiscoveryHangs(t *testing.T) {
+	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-protected-resource/mcp":
+			time.Sleep(200 * time.Millisecond)
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": mcpResource(r), "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mcp.Close()
+	shell := NewServer(Config{Role: "shell", MCPURL: mcp.URL + "/mcp", LLMTimeout: 5 * time.Millisecond}, mcp.Client())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"which tools do you have","tool":"tools/list"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	started := time.Now()
+	shell.ServeHTTP(rec, req)
+	elapsed := time.Since(started)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Fatalf("chat took %s, want bounded discovery error", elapsed)
+	}
+	if !strings.Contains(rec.Body.String(), "MCP discovery exceeded") {
+		t.Fatalf("missing bounded discovery timeout error: %s", rec.Body.String())
 	}
 }
 
@@ -1047,11 +1499,11 @@ func TestShellCanDiscussDiscoveredMCPTools(t *testing.T) {
 func TestShellTreatsRouteExamplesAsDiscovery(t *testing.T) {
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
-			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
 			return
 		}
 		var req rpcRequest
-		if !decodeJSON(w, r, &req) {
+		if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 			return
 		}
 		switch req.Method {
@@ -1089,11 +1541,11 @@ func TestShellTreatsRouteExamplesAsDiscovery(t *testing.T) {
 func TestShellDiscoveryQuestionDoesNotRequireLLM(t *testing.T) {
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
-			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
 			return
 		}
 		var req rpcRequest
-		if !decodeJSON(w, r, &req) {
+		if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 			return
 		}
 		switch req.Method {
@@ -1132,11 +1584,11 @@ func TestShellDiscoveryQuestionDoesNotRequireLLM(t *testing.T) {
 func TestAutoToolSelectionUsesAdvertisedMCPTools(t *testing.T) {
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
-			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
 			return
 		}
 		var req rpcRequest
-		if !decodeJSON(w, r, &req) {
+		if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 			return
 		}
 		switch req.Method {
@@ -1181,11 +1633,11 @@ func TestAutoToolSelectionUsesAdvertisedMCPTools(t *testing.T) {
 func TestChatReportsMCPJSONRPCErrorMessage(t *testing.T) {
 	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
-			writeJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"resource": "http://" + r.Host + "/mcp", "authorization_servers": []string{}, "scopes_supported": []string{"mcp.access"}})
 			return
 		}
 		var req rpcRequest
-		if !decodeJSON(w, r, &req) {
+		if !apphttp.DecodeJSONError(w, r, &req, "invalid JSON body") {
 			return
 		}
 		switch req.Method {
@@ -1207,11 +1659,14 @@ func TestChatReportsMCPJSONRPCErrorMessage(t *testing.T) {
 	rec := httptest.NewRecorder()
 	shell.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("chat returned %d: %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "json-rpc error from tools/call: llm gateway returned 503") {
 		t.Fatalf("chat did not report JSON-RPC error detail: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"isError":true`) {
+		t.Fatalf("JSON-RPC failure must be reported as a tool error: %s", rec.Body.String())
 	}
 }
 

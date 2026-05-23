@@ -1,133 +1,179 @@
 // @ts-check
+/// <reference lib="dom" />
 
-const cfg = window.LANGFUSE_DEMO_CONFIG || {};
-const form = document.querySelector("#run-form");
-const promptField = /** @type {HTMLTextAreaElement | null} */ (document.querySelector("#prompt"));
-const title = document.querySelector("#app-title");
-const traceID = document.querySelector("#trace-id");
-const langfuseStatus = document.querySelector("#langfuse-status");
-const llmStatus = document.querySelector("#llm-status");
-const answer = document.querySelector("#answer");
-const stepList = document.querySelector("#step-list");
-const scoreList = document.querySelector("#score-list");
-const button = form?.querySelector("button");
-const promptLabel = document.querySelector("#prompt-label");
-const scenarioCopy = document.querySelector("#scenario-copy");
-const prereqNote = document.querySelector("#prereq-note");
-const capabilityList = document.querySelector("#capability-list");
-const logoutButton = /** @type {HTMLButtonElement | null} */ (document.querySelector("#logout-btn"));
-const authState = document.querySelector("#auth-state");
-const metricsOutput = document.querySelector("#metrics-output");
-const refreshMetricsButton = /** @type {HTMLButtonElement | null} */ (document.querySelector("#refresh-metrics"));
-const idpAuth = window.PlatformIdpAuth;
+/** @typedef {import("./api-types.d.ts").DemoPayload} DemoPayload */
+/** @typedef {import("./api-types.d.ts").RuntimeConfig} RuntimeConfig */
+
+const { bindGatewayLogout, initializeGatewayAuthState } =
+	window.PlatformIdpAuth;
+const {
+	buttonElement,
+	errorMessage,
+	fetchText,
+	formElement,
+	initializeThemeSwitcher,
+	postJSON,
+	readRuntimeConfig,
+	renderListInto,
+	renderStatusInto,
+	requireElement,
+	setText,
+	setTextDefault,
+	textDefault,
+	textAreaElement,
+	withButtonBusy,
+	withSubmitterBusy,
+} = window.PlatformAppShell;
+const cfg = /** @type {RuntimeConfig} */ (
+	readRuntimeConfig("LANGFUSE_DEMO_CONFIG")
+);
+const form = formElement("run-form");
+const promptField = textAreaElement("prompt");
+const title = requireElement("app-title");
+const traceID = requireElement("trace-id");
+const runStatus = requireElement("run-status");
+const langfuseStatus = requireElement("langfuse-status");
+const llmStatus = requireElement("llm-status");
+const answer = requireElement("answer");
+const stepList = requireElement("step-list");
+const scoreList = requireElement("score-list");
+const button = buttonElement("run-button");
+const promptLabel = requireElement("prompt-label");
+const scenarioCopy = requireElement("scenario-copy");
+const prereqNote = requireElement("prereq-note");
+const capabilityList = requireElement("capability-list");
+const logoutButton = buttonElement("logout-btn");
+const authState = requireElement("auth-state");
+const metricsOutput = requireElement("metrics-output");
+const refreshMetricsButton = buttonElement("refresh-metrics");
 
 document.body.dataset.role = cfg.role || "trace-chat";
+initializeThemeSwitcher();
 
-if (title && cfg.demoName) {
-  title.textContent = cfg.demoName;
-  document.title = cfg.demoName;
+if (cfg.demoName) {
+	title.textContent = cfg.demoName;
+	document.title = cfg.demoName;
 }
-setText(scenarioCopy, cfg.scenarioCopy || "");
-setText(prereqNote, cfg.llmPrerequisite || "");
-setText(promptLabel, cfg.promptLabel || "Prompt");
-if (promptField && cfg.defaultPrompt) {
-  promptField.value = cfg.defaultPrompt;
+setTextDefault(scenarioCopy, cfg.scenarioCopy, "");
+setTextDefault(prereqNote, cfg.llmPrerequisite, "");
+setTextDefault(promptLabel, cfg.promptLabel, "Prompt");
+if (cfg.defaultPrompt) {
+	promptField.value = cfg.defaultPrompt;
 }
-if (button && cfg.actionLabel) {
-  button.textContent = cfg.actionLabel;
+if (cfg.actionLabel) {
+	button.textContent = cfg.actionLabel;
 }
 renderCapabilities(Array.isArray(cfg.capabilities) ? cfg.capabilities : []);
 
-logoutButton?.addEventListener("click", () => {
-  window.location.assign(logoutButton.dataset.signOutUrl || "/oauth2/sign_out?rd=/signed-out.html");
-});
+bindGatewayLogout(logoutButton);
 
 initializeAuthState();
 refreshMetrics();
 
-refreshMetricsButton?.addEventListener("click", () => {
-  refreshMetrics();
+refreshMetricsButton.addEventListener("click", async () => {
+	await withButtonBusy(refreshMetricsButton, "Refreshing", refreshMetrics);
 });
 
-form?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!promptField || !button) return;
-  button.disabled = true;
-  setText(langfuseStatus, "running");
-  setText(llmStatus, "running");
-  try {
-    const response = await fetch(cfg.runEndpoint || "/api/run", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({prompt: promptField.value}),
-    });
-    const payload = await response.json();
-    render(payload);
-    refreshMetrics();
-  } catch (error) {
-    setText(answer, error instanceof Error ? error.message : String(error));
-    setText(langfuseStatus, "error");
-    setText(llmStatus, "unknown");
-  } finally {
-    button.disabled = false;
-  }
-});
+form.addEventListener("submit", submitRun);
 
-async function initializeAuthState() {
-  if (!authState || !logoutButton || !idpAuth) return;
-  try {
-    const session = await idpAuth.fetchGatewaySession("/.auth/me");
-    if (session) {
-      authState.textContent = `Signed in as ${idpAuth.gatewayDisplayName(session)}`;
-      logoutButton.hidden = false;
-      return;
-    }
-  } catch (error) {
-    // Direct local runs do not expose forwarded SSO identity headers.
-  }
-  authState.textContent = "Not signed in.";
-  logoutButton.hidden = true;
+/**
+ * @param {SubmitEvent} event
+ */
+async function submitRun(event) {
+	event.preventDefault();
+	renderStatusInto(runStatus, "Running...");
+	setText(langfuseStatus, "running");
+	setText(llmStatus, "running");
+	try {
+		await withSubmitterBusy(event, "Running...", async () => {
+			/** @type {DemoPayload} */
+			const payload = await postJSON(cfg.runEndpoint || "/api/run", {
+				prompt: promptField.value,
+			});
+			render(payload);
+			refreshMetrics();
+		});
+	} catch (error) {
+		setText(
+			answer,
+			errorMessage(error instanceof Error ? error : String(error)),
+		);
+		renderStatusInto(runStatus, "Run failed.", true);
+		setText(langfuseStatus, "error");
+		setText(llmStatus, "error");
+	}
 }
 
+async function initializeAuthState() {
+	await initializeGatewayAuthState(authState, logoutButton, {
+		path: "/.auth/me",
+		ignoreErrors: true,
+	});
+}
+
+/**
+ * @param {DemoPayload} payload
+ */
 function render(payload) {
-  setText(traceID, payload.traceId || "missing");
-  setText(langfuseStatus, payload.langfuseStatus || "unknown");
-  setText(llmStatus, payload.llmStatus || "unknown");
-  setText(answer, payload.answer || "No answer returned.");
-  renderList(stepList, payload.steps || [], (step) => `${step.name}: ${step.status} (${step.type}) ${step.detail || ""}`);
-  renderList(scoreList, payload.scores || [], (score) => `${score.name}: ${score.value} ${score.comment || ""}`);
+	setTextDefault(traceID, payload.traceId, "missing");
+	setTextDefault(langfuseStatus, payload.langfuseStatus, "not reported");
+	setTextDefault(llmStatus, payload.llmStatus, "not reported");
+	setTextDefault(answer, payload.answer, "No answer returned.");
+	renderStatusInto(
+		runStatus,
+		runStatusMessage(payload),
+		runHasError(payload) ? "error" : "success",
+	);
+	renderListInto(
+		stepList,
+		payload.steps || [],
+		(step) =>
+			`${step.name}: ${step.status} (${step.type}) ${textDefault(step.detail, "")}`,
+	);
+	renderListInto(
+		scoreList,
+		payload.scores || [],
+		(score) =>
+			`${score.name}: ${score.value} ${textDefault(score.comment, "")}`,
+	);
+}
+
+/**
+ * @param {DemoPayload} payload
+ */
+function runHasError(payload) {
+	return payload.langfuseStatus === "error" || payload.llmStatus === "error";
+}
+
+/**
+ * @param {DemoPayload} payload
+ */
+function runStatusMessage(payload) {
+	const trace = textDefault(payload.traceId, "no trace id");
+	const langfuse = textDefault(payload.langfuseStatus, "not reported");
+	const llm = textDefault(payload.llmStatus, "not reported");
+	return `Run complete. Trace: ${trace}. Langfuse: ${langfuse}. LLM: ${llm}.`;
 }
 
 async function refreshMetrics() {
-  if (!metricsOutput) return;
-  try {
-    const response = await fetch(cfg.metricsEndpoint || "/metrics", {cache: "no-store"});
-    metricsOutput.textContent = await response.text();
-  } catch (error) {
-    metricsOutput.textContent = error instanceof Error ? error.message : String(error);
-  }
+	try {
+		setText(
+			metricsOutput,
+			await fetchText(cfg.metricsEndpoint || "/metrics", {
+				cache: "no-store",
+			}),
+		);
+	} catch (error) {
+		setText(
+			metricsOutput,
+			errorMessage(error instanceof Error ? error : String(error)),
+		);
+	}
 }
 
-function renderList(node, items, format) {
-  if (!node) return;
-  node.textContent = "";
-  for (const item of items) {
-    const li = document.createElement("li");
-    li.textContent = format(item);
-    node.append(li);
-  }
-}
-
+/**
+ * @param {string[]} items
+ */
 function renderCapabilities(items) {
-  if (!capabilityList) return;
-  capabilityList.textContent = "";
-  for (const item of items) {
-    const li = document.createElement("li");
-    li.textContent = item;
-    capabilityList.append(li);
-  }
-}
-
-function setText(node, value) {
-  if (node) node.textContent = value;
+	renderListInto(capabilityList, items, (item) => item);
 }
