@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"platform.local/appconfig"
 	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
@@ -255,7 +256,7 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 		{Role: "system", Content: "Plan one or two tool calls. Return a compact plan."},
 		{Role: "user", Content: req.Prompt},
 	})
-	planText := apphttp.FirstNonEmpty(plan.Content, "Deterministic plan: run policy_check and memory_lookup, then answer.")
+	planText := appconfig.FirstNonEmpty(plan.Content, "Deterministic plan: run policy_check and memory_lookup, then answer.")
 	policyDetail := "prompt_present=true; langfuse_configured=" + fmt.Sprint(s.langfuseConfigured())
 	memoryDetail := "memory_lookup=local-platform-stage-920-langfuse"
 	finalPrompt := fmt.Sprintf("User prompt: %s\nPlan: %s\nTool results: %s; %s", req.Prompt, planText, policyDetail, memoryDetail)
@@ -264,7 +265,7 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 		{Role: "system", Content: "Use tool results and produce a concise agent answer."},
 		{Role: "user", Content: finalPrompt},
 	})
-	answer := apphttp.FirstNonEmpty(final.Content, fmt.Sprintf(
+	answer := appconfig.FirstNonEmpty(final.Content, fmt.Sprintf(
 		"Agent completed with deterministic tool evidence: policy_check passed, memory_lookup returned %s. Langfuse receives the planner attempt, tool spans, final generation attempt, and scores.",
 		strings.TrimPrefix(memoryDetail, "memory_lookup="),
 	))
@@ -295,7 +296,7 @@ func (s *server) runToolAgent(ctx context.Context, req runRequest, started time.
 			{Name: "planner", Type: "generation", Status: planDisplayStatus, Detail: truncate(planText, 120), TraceID: traceID, SpanID: planID, Duration: plan.DurationMillis},
 			{Name: "policy_check", Type: "tool", Status: "ok", Detail: policyDetail, TraceID: traceID, SpanID: toolPolicyID},
 			{Name: "memory_lookup", Type: "tool", Status: "ok", Detail: memoryDetail, TraceID: traceID, SpanID: toolMemoryID},
-			{Name: "final-response", Type: "generation", Status: finalDisplayStatus, Detail: apphttp.FirstNonEmpty(final.Content, "deterministic synthesis"), TraceID: traceID, SpanID: finalID, Duration: final.DurationMillis},
+			{Name: "final-response", Type: "generation", Status: finalDisplayStatus, Detail: appconfig.FirstNonEmpty(final.Content, "deterministic synthesis"), TraceID: traceID, SpanID: finalID, Duration: final.DurationMillis},
 		},
 		Scores:         scores,
 		LLMStatus:      joinAgentStatuses(planDisplayStatus, finalDisplayStatus),
@@ -326,7 +327,7 @@ func (s *server) runEvalRunner(ctx context.Context, req runRequest, started time
 			{Role: "system", Content: "Answer for an evaluation harness. Keep it one sentence."},
 			{Role: "user", Content: tc.Prompt},
 		})
-		output := apphttp.FirstNonEmpty(llm.Content, "Langfuse trace and score replay fallback output.")
+		output := appconfig.FirstNonEmpty(llm.Content, "Langfuse trace and score replay fallback output.")
 		scoreValue := boolFloat(strings.Contains(strings.ToLower(output), strings.ToLower(tc.Expected)))
 		total += scoreValue
 		score := demoScore{Name: "expected_keyword_match", Value: scoreValue, DataType: "BOOLEAN", Comment: tc.Name + " expects " + tc.Expected}

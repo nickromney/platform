@@ -1,6 +1,8 @@
 package app
 
-import "platform.local/apphttp"
+import (
+	"platform.local/appconfig"
+)
 
 type Config struct {
 	Port             string
@@ -15,16 +17,16 @@ type Config struct {
 }
 
 func ConfigFromEnv() Config {
-	port := apphttp.Env("PORT", "8080")
+	port := appconfig.Env("PORT", "8080")
 	return Config{
 		Port:             port,
-		MetricsEnabled:   apphttp.EnvBool("PLATFORM_MCP_METRICS_ENABLED", true),
-		MetricsPort:      apphttp.Env("PLATFORM_MCP_METRICS_PORT", "9090"),
-		PublicBaseURL:    apphttp.EnvURL("PUBLIC_BASE_URL", "http://localhost:"+port),
-		LLMBaseURL:       apphttp.EnvURL("LLM_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"),
-		LLMModel:         apphttp.Env("LLM_MODEL", ""),
-		OTLPEndpoint:     apphttp.EnvURL("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		ServiceName:      apphttp.Env("OTEL_SERVICE_NAME", "platform-mcp"),
-		ServiceNamespace: apphttp.Env("OTEL_SERVICE_NAMESPACE", "platform"),
+		MetricsEnabled:   appconfig.EnvBool("PLATFORM_MCP_METRICS_ENABLED", true),
+		MetricsPort:      appconfig.Env("PLATFORM_MCP_METRICS_PORT", "9090"),
+		PublicBaseURL:    appconfig.EnvURL("PUBLIC_BASE_URL", "http://localhost:"+port),
+		LLMBaseURL:       appconfig.EnvURL("LLM_BASE_URL", "http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1"),
+		LLMModel:         appconfig.Env("LLM_MODEL", ""),
+		OTLPEndpoint:     appconfig.EnvURL("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		ServiceName:      appconfig.Env("OTEL_SERVICE_NAME", "platform-mcp"),
+		ServiceNamespace: appconfig.Env("OTEL_SERVICE_NAMESPACE", "platform"),
 	}
 }

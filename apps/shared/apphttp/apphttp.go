@@ -9,36 +9,19 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"platform.local/apphealth"
 )
 
 const defaultJSONBodyLimit int64 = 1 << 20
 
 const DefaultReadHeaderTimeout = 5 * time.Second
 
-const DefaultHealthcheckTimeout = time.Second
-
-const DependencyFootprintGoSharedIDPAuth = "go-plus-shared-idpauth"
-
-const FrontendDependencyFootprintVanilla = "vanilla"
-
-func BrowserAppHealth(payload map[string]any) map[string]any {
-	health := make(map[string]any, len(payload)+4)
-	for key, value := range payload {
-		health[key] = value
-	}
-	health["dependency_footprint"] = DependencyFootprintGoSharedIDPAuth
-	health["frontend_dependency_footprint"] = FrontendDependencyFootprintVanilla
-	health["transitive_javascript_packages"] = 0
-	health["transitive_python_packages"] = 0
-	return health
-}
-
 func WriteBrowserAppHealth(w http.ResponseWriter, payload map[string]any) {
-	WriteJSON(w, http.StatusOK, BrowserAppHealth(payload))
+	WriteJSON(w, http.StatusOK, apphealth.BrowserAppHealth(payload))
 }
 
 func RoleStatus(status string, role string) map[string]string {
@@ -59,22 +42,6 @@ func ErrorPayload(message string) map[string]string {
 
 func WriteError(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, ErrorPayload(message))
-}
-
-func StringDefault(value, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func FirstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 type CORSConfig struct {
@@ -174,7 +141,7 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 
 func NewServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:              NormalizeAddr(addr),
+		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
 	}
@@ -189,81 +156,6 @@ func IgnoreServerClosed(err error) error {
 		return nil
 	}
 	return err
-}
-
-func NormalizeAddr(addr string) string {
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return ":8080"
-	}
-	if strings.Contains(addr, ":") {
-		return addr
-	}
-	return ":" + addr
-}
-
-func Env(key, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func EnvURL(key, fallback string) string {
-	return NormalizeURL(Env(key, fallback))
-}
-
-func NormalizeURL(value string) string {
-	value = strings.TrimSpace(value)
-	trimmed := strings.TrimRight(value, "/")
-	if trimmed == "" && value == "/" {
-		return "/"
-	}
-	return trimmed
-}
-
-func FirstEnv(keys ...string) string {
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func EnvBool(key string, fallback bool) bool {
-	switch strings.ToLower(Env(key, "")) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return fallback
-	}
-}
-
-func EnvSeconds(key string, fallback time.Duration) time.Duration {
-	raw := Env(key, "")
-	if raw == "" {
-		return fallback
-	}
-	seconds, err := strconv.ParseFloat(raw, 64)
-	if err != nil || seconds <= 0 {
-		return fallback
-	}
-	return time.Duration(seconds * float64(time.Second))
-}
-
-func EnvInt(key string, fallback int) int {
-	raw := Env(key, "")
-	if raw == "" {
-		return fallback
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return fallback
-	}
-	return value
 }
 
 func QueryInt(r *http.Request, key string, fallback int) int {
@@ -283,52 +175,9 @@ func QueryInt(r *http.Request, key string, fallback int) int {
 
 func NewHTTPClient(timeout time.Duration) *http.Client {
 	if timeout <= 0 {
-		timeout = DefaultHealthcheckTimeout
+		timeout = 1 * time.Second
 	}
 	return &http.Client{Timeout: timeout}
-}
-
-func LocalHealthURL(port string, path string) string {
-	port = strings.TrimPrefix(strings.TrimSpace(NormalizeAddr(port)), ":")
-	path = strings.TrimSpace(path)
-	if path == "" {
-		path = "/health"
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return "http://127.0.0.1:" + port + path
-}
-
-func CheckLocalHealth(port string, path string) bool {
-	return CheckHealthURL(LocalHealthURL(port, path), DefaultHealthcheckTimeout)
-}
-
-func HealthcheckCommand(args []string) bool {
-	return len(args) == 2 && args[1] == "healthcheck"
-}
-
-func HandleHealthcheckCommand(portFallback string, path string) bool {
-	if !HealthcheckCommand(os.Args) {
-		return false
-	}
-	if !CheckLocalHealth(Env("PORT", portFallback), path) {
-		os.Exit(1)
-	}
-	return true
-}
-
-func CheckHealthURL(rawURL string, timeout time.Duration) bool {
-	if timeout <= 0 {
-		timeout = DefaultHealthcheckTimeout
-	}
-	client := http.Client{Timeout: timeout}
-	resp, err := client.Get(rawURL)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
 }
 
 func WriteJSON(w http.ResponseWriter, status int, value any) {

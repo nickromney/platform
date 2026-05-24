@@ -83,7 +83,7 @@ func TestServerUsesSharedHTTPJSONHelpersDirectly(t *testing.T) {
 	for _, required := range []string{
 		"apphttp.WriteJSON(w, http.StatusOK",
 		"apphttp.DecodeJSONError(w, r, &req",
-		"apphttp.FirstNonEmpty(",
+		"appconfig.FirstNonEmpty(",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("server.go missing shared HTTP helper call %q", required)

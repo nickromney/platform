@@ -6,25 +6,27 @@ import (
 	"os"
 
 	"platform.local/apim-simulator/internal/app"
+	"platform.local/appconfig"
+	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idpauth"
 )
 
 func main() {
-	if apphttp.HandleHealthcheckCommand("8000", "/apim/health") {
+	if apphealth.HandleHealthcheckCommand("8000", "/apim/health") {
 		return
 	}
 
 	cfg := app.Config{
-		Addr: apphttp.NormalizeAddr(apphttp.Env("PORT", "8000")),
+		Addr: appconfig.NormalizeAddr(appconfig.Env("PORT", "8000")),
 	}
-	if path := firstExistingPath(apphttp.Env("APIM_CONFIG_PATH", ""), apphttp.Env("APIM_CONFIG_SOURCE_PATH", "")); path != "" {
+	if path := firstExistingPath(appconfig.Env("APIM_CONFIG_PATH", ""), appconfig.Env("APIM_CONFIG_SOURCE_PATH", "")); path != "" {
 		loaded, err := app.LoadConfig(path)
 		if err != nil {
 			log.Fatalf("load config: %v", err)
 		}
 		cfg = loaded
-		cfg.Addr = apphttp.NormalizeAddr(apphttp.Env("PORT", "8000"))
+		cfg.Addr = appconfig.NormalizeAddr(appconfig.Env("PORT", "8000"))
 	}
 	cfg.ApplyRuntimeDefaults()
 

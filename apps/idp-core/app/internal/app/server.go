@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"platform.local/appconfig"
 	"platform.local/apphttp"
+	"platform.local/idp-core/internal/catalog"
+	"platform.local/idp-core/internal/workflow"
 )
 
 type Config struct {
@@ -29,6 +31,7 @@ type Server struct {
 	runtime     string
 	statusCmd   []string
 	mux         *http.ServeMux
+	registry    *workflow.Registry
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -41,12 +44,18 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.Runtime == "" {
 		cfg.Runtime = "kind"
 	}
+	registry := workflow.NewRegistry()
+	registry.Register(&workflow.GenericAdapter{})
+	registry.Register(workflow.NewMakeAdapter("kind", "Local kind workflow adapter", "kubernetes/kind", "kind"))
+	registry.Register(workflow.NewMakeAdapter("lima", "Local Lima workflow adapter", "kubernetes/lima", "lima"))
+
 	s := &Server{
 		auditPath:   cfg.AuditPath,
 		catalogPath: cfg.CatalogPath,
 		runtime:     cfg.Runtime,
 		statusCmd:   cfg.StatusCmd,
 		mux:         http.NewServeMux(),
+		registry:    registry,
 	}
 	s.routes()
 	return s, nil
@@ -64,15 +73,26 @@ func (s *Server) routes() {
 		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "healthy", "service": "idp-core"})
 	})
 	s.mux.HandleFunc("GET /api/v1/runtimes", func(w http.ResponseWriter, r *http.Request) {
-		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"runtimes": runtimeInfos()})
+		var list []map[string]string
+		for _, a := range s.registry.List() {
+			list = append(list, map[string]string{"name": a.Name(), "description": a.Description()})
+		}
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"runtimes": list})
 	})
 	s.mux.HandleFunc("GET /api/v1/runtime", func(w http.ResponseWriter, r *http.Request) {
-		adapter, err := adapterFor(s.runtime)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+		adapter, ok := s.registry.Get(s.runtime)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "unsupported runtime: "+s.runtime)
 			return
 		}
-		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"active_runtime": adapter.info(), "runtimes": runtimeInfos()})
+		var list []map[string]string
+		for _, a := range s.registry.List() {
+			list = append(list, map[string]string{"name": a.Name(), "description": a.Description()})
+		}
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{
+			"active_runtime": map[string]string{"name": adapter.Name(), "description": adapter.Description()},
+			"runtimes":       list,
+		})
 	})
 	s.mux.HandleFunc("GET /api/v1/status", s.status)
 	s.mux.HandleFunc("GET /api/v1/catalog/apps", s.catalogApps)
@@ -95,9 +115,9 @@ func (s *Server) routes() {
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
-	adapter, err := adapterFor(s.runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	adapter, ok := s.registry.Get(s.runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+s.runtime)
 		return
 	}
 	payload := map[string]any{
@@ -111,128 +131,70 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if len(s.statusCmd) > 0 {
 		payload = collectStatus(s.statusCmd)
 	}
-	payload["runtime"] = adapter.Name
+	payload["runtime"] = adapter.Name()
 	apphttp.WriteJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) catalogApps(w http.ResponseWriter, r *http.Request) {
-	catalog, err := s.catalog()
+	c, err := catalog.Load(s.catalogPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"applications": arrayValue(catalog["applications"])})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"applications": c.Applications})
 }
 
 func (s *Server) catalogApp(w http.ResponseWriter, r *http.Request) {
-	catalog, err := s.catalog()
+	c, err := catalog.Load(s.catalogPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	name := r.PathValue("app")
-	for _, item := range arrayValue(catalog["applications"]) {
-		app, ok := item.(map[string]any)
-		if ok && stringValue(app["name"]) == name {
-			apphttp.WriteJSON(w, http.StatusOK, app)
-			return
-		}
+	if app, ok := c.GetApp(name); ok {
+		apphttp.WriteJSON(w, http.StatusOK, app)
+		return
 	}
 	writeError(w, http.StatusNotFound, "app not found: "+name)
 }
 
 func (s *Server) deployments(w http.ResponseWriter, r *http.Request) {
-	catalog, err := s.catalog()
+	c, err := catalog.Load(s.catalogPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	var records []map[string]any
-	for _, item := range arrayValue(catalog["applications"]) {
-		app, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		baseDeployment := mapValue(app["deployment"])
-		for _, envItem := range arrayValue(app["environments"]) {
-			env := mapValue(envItem)
-			envDeployment := mapValue(env["deployment"])
-			records = append(records, map[string]any{
-				"app":         stringValue(app["name"]),
-				"environment": stringValue(env["name"]),
-				"route":       optionalString(env["route"]),
-				"controller":  baseDeployment["controller"],
-				"image":       firstString(envDeployment["image"], baseDeployment["image"]),
-				"health":      firstString(env["health"], app["health"]),
-				"sync":        firstString(env["sync"], baseDeployment["sync"]),
-			})
-		}
-	}
-	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"deployments": records})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"deployments": c.ListDeployments()})
 }
 
 func (s *Server) secrets(w http.ResponseWriter, r *http.Request) {
-	catalog, err := s.catalog()
+	c, err := catalog.Load(s.catalogPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	var records []map[string]any
-	for _, item := range arrayValue(catalog["applications"]) {
-		app, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, secretItem := range arrayValue(app["secrets"]) {
-			secret := copyMap(mapValue(secretItem))
-			secret["app"] = stringValue(app["name"])
-			if _, ok := secret["binding"]; !ok {
-				secret["binding"] = "not declared"
-			}
-			if _, ok := secret["rotation"]; !ok {
-				secret["rotation"] = "not declared"
-			}
-			records = append(records, secret)
-		}
-	}
-	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"secrets": records})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"secrets": c.ListSecrets()})
 }
 
 func (s *Server) scorecards(w http.ResponseWriter, r *http.Request) {
-	catalog, err := s.catalog()
+	c, err := catalog.Load(s.catalogPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	var records []map[string]any
-	for _, item := range arrayValue(catalog["applications"]) {
-		app, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		scorecard := copyMap(mapValue(app["scorecard"]))
-		defaultValue(scorecard, "runtime_profile", "not declared")
-		defaultValue(scorecard, "has_health_endpoint", false)
-		defaultValue(scorecard, "has_network_policy", false)
-		if _, ok := scorecard["has_owner"]; !ok {
-			scorecard["has_owner"] = stringValue(app["owner"]) != ""
-		}
-		scorecard["app"] = stringValue(app["name"])
-		records = append(records, scorecard)
-	}
-	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"scorecards": records})
+	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"scorecards": c.ListScorecards()})
 }
 
 func (s *Server) actions(w http.ResponseWriter, r *http.Request) {
-	adapter, err := adapterFor(s.runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	adapter, ok := s.registry.Get(s.runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+s.runtime)
 		return
 	}
 	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"actions": []map[string]any{
-		{"id": "environment.create", "label": "Create environment", "runtime": adapter.Name, "dry_run": true},
-		{"id": "deployment.promote", "label": "Promote deployment", "runtime": adapter.Name, "dry_run": true},
-		{"id": "app.scaffold", "label": "Scaffold app", "runtime": adapter.Name, "dry_run": true},
+		{"id": "environment.create", "label": "Create environment", "runtime": adapter.Name(), "dry_run": true},
+		{"id": "deployment.promote", "label": "Promote deployment", "runtime": adapter.Name(), "dry_run": true},
+		{"id": "app.scaffold", "label": "Scaffold app", "runtime": adapter.Name(), "dry_run": true},
 	}})
 }
 
@@ -241,19 +203,23 @@ func (s *Server) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	request, ok := decodeObject(w, r)
+	payload, ok := decodeObject(w, r)
 	if !ok {
 		return
 	}
-	request["action"] = "create"
-	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
-	adapter, err := adapterFor(runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	runtime := appconfig.StringDefault(stringValue(payload["runtime"]), s.runtime)
+	adapter, ok := s.registry.Get(runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+runtime)
 		return
 	}
-	plan := adapter.planEnvironment(request)
-	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("environment.create", adapter.Name, plan, request))
+	req := workflow.EnvironmentRequest{
+		App:         stringValue(payload["app"]),
+		Environment: stringValue(payload["environment"]),
+		Action:      "create",
+	}
+	plan := adapter.PlanEnvironment(req)
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("environment.create", adapter.Name(), plan, payload))
 }
 
 func (s *Server) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
@@ -261,20 +227,25 @@ func (s *Server) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	runtime := apphttp.StringDefault(r.URL.Query().Get("runtime"), "kind")
-	adapter, err := adapterFor(runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	runtime := appconfig.StringDefault(r.URL.Query().Get("runtime"), s.runtime)
+	adapter, ok := s.registry.Get(runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+runtime)
 		return
 	}
-	request := map[string]any{
-		"runtime":     adapter.Name,
+	payload := map[string]any{
+		"runtime":     adapter.Name(),
 		"action":      "delete",
 		"app":         r.PathValue("app"),
 		"environment": r.PathValue("environment"),
 	}
-	plan := adapter.planEnvironment(request)
-	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("environment.delete", adapter.Name, plan, request))
+	req := workflow.EnvironmentRequest{
+		App:         stringValue(payload["app"]),
+		Environment: stringValue(payload["environment"]),
+		Action:      "delete",
+	}
+	plan := adapter.PlanEnvironment(req)
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("environment.delete", adapter.Name(), plan, payload))
 }
 
 func (s *Server) promoteDeployment(w http.ResponseWriter, r *http.Request) {
@@ -290,21 +261,26 @@ func (s *Server) deploymentAction(w http.ResponseWriter, r *http.Request, action
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	request, ok := decodeObject(w, r)
+	payload, ok := decodeObject(w, r)
 	if !ok {
 		return
 	}
-	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
-	adapter, err := adapterFor(runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	runtime := appconfig.StringDefault(stringValue(payload["runtime"]), s.runtime)
+	adapter, ok := s.registry.Get(runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+runtime)
 		return
 	}
-	plan := adapter.planDeployment(request)
-	if rollback {
-		plan["summary"] = fmt.Sprintf("would roll back %s/%s on %s", stringValue(request["app"]), stringValue(request["environment"]), adapter.Name)
+	req := workflow.DeploymentRequest{
+		App:         stringValue(payload["app"]),
+		Environment: stringValue(payload["environment"]),
+		Image:       stringValue(payload["image"]),
 	}
-	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse(action, adapter.Name, plan, request))
+	plan := adapter.PlanDeployment(req)
+	if rollback {
+		plan.Summary = fmt.Sprintf("would roll back %s/%s on %s", req.App, req.Environment, adapter.Name())
+	}
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse(action, adapter.Name(), plan, payload))
 }
 
 func (s *Server) scaffoldApp(w http.ResponseWriter, r *http.Request) {
@@ -312,75 +288,80 @@ func (s *Server) scaffoldApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "apply mode is not implemented")
 		return
 	}
-	request, ok := decodeObject(w, r)
+	payload, ok := decodeObject(w, r)
 	if !ok {
 		return
 	}
-	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
-	adapter, err := adapterFor(runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	runtime := appconfig.StringDefault(stringValue(payload["runtime"]), s.runtime)
+	adapter, ok := s.registry.Get(runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+runtime)
 		return
 	}
-	envRequest := map[string]any{"runtime": adapter.Name, "action": "create", "app": request["app"], "environment": "dev"}
-	plan := adapter.planEnvironment(envRequest)
-	plan["summary"] = fmt.Sprintf("would scaffold app %s for %s on %s", stringValue(request["app"]), stringValue(request["owner"]), adapter.Name)
-	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("app.scaffold", adapter.Name, plan, request))
+	req := workflow.EnvironmentRequest{
+		App:         stringValue(payload["app"]),
+		Environment: "dev",
+		Action:      "create",
+	}
+	plan := adapter.PlanEnvironment(req)
+	plan.Summary = fmt.Sprintf("would scaffold app %s for %s on %s", req.App, stringValue(payload["owner"]), adapter.Name())
+	apphttp.WriteJSON(w, http.StatusOK, s.workflowResponse("app.scaffold", adapter.Name(), plan, payload))
 }
 
 func (s *Server) environmentDryRun(w http.ResponseWriter, r *http.Request) {
-	s.workflowDryRun(w, r, "environment", func(adapter runtimeAdapter, request map[string]any) map[string]any {
-		return adapter.planEnvironment(request)
+	s.workflowDryRun(w, r, "environment", func(adapter workflow.Adapter, payload map[string]any) *workflow.Plan {
+		return adapter.PlanEnvironment(workflow.EnvironmentRequest{
+			App:         stringValue(payload["app"]),
+			Environment: stringValue(payload["environment"]),
+			Action:      appconfig.StringDefault(stringValue(payload["action"]), "create"),
+		})
 	})
 }
 
 func (s *Server) deploymentDryRun(w http.ResponseWriter, r *http.Request) {
-	s.workflowDryRun(w, r, "deployment", func(adapter runtimeAdapter, request map[string]any) map[string]any {
-		return adapter.planDeployment(request)
+	s.workflowDryRun(w, r, "deployment", func(adapter workflow.Adapter, payload map[string]any) *workflow.Plan {
+		return adapter.PlanDeployment(workflow.DeploymentRequest{
+			App:         stringValue(payload["app"]),
+			Environment: stringValue(payload["environment"]),
+			Image:       stringValue(payload["image"]),
+		})
 	})
 }
 
 func (s *Server) secretDryRun(w http.ResponseWriter, r *http.Request) {
-	s.workflowDryRun(w, r, "secret", func(adapter runtimeAdapter, request map[string]any) map[string]any {
-		return adapter.planSecret(request)
+	s.workflowDryRun(w, r, "secret", func(adapter workflow.Adapter, payload map[string]any) *workflow.Plan {
+		return adapter.PlanSecret(workflow.SecretRequest{
+			App:         stringValue(payload["app"]),
+			Environment: stringValue(payload["environment"]),
+			Secret:      stringValue(payload["secret"]),
+			Keys:        stringSlice(payload["keys"]),
+		})
 	})
 }
 
-func (s *Server) workflowDryRun(w http.ResponseWriter, r *http.Request, workflow string, planner func(runtimeAdapter, map[string]any) map[string]any) {
-	request, ok := decodeObject(w, r)
+func (s *Server) workflowDryRun(w http.ResponseWriter, r *http.Request, workflowName string, planner func(workflow.Adapter, map[string]any) *workflow.Plan) {
+	payload, ok := decodeObject(w, r)
 	if !ok {
 		return
 	}
-	runtime := apphttp.StringDefault(stringValue(request["runtime"]), "kind")
-	adapter, err := adapterFor(runtime)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	runtime := appconfig.StringDefault(stringValue(payload["runtime"]), s.runtime)
+	adapter, ok := s.registry.Get(runtime)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported runtime: "+runtime)
 		return
 	}
-	plan := planner(adapter, request)
-	audit := s.writeAudit(workflow+".dry_run", adapter.Name, workflow, request)
+	plan := planner(adapter, payload)
+	audit := s.writeAudit(workflowName+".dry_run", adapter.Name(), workflowName, payload)
 	apphttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"dry_run":  true,
-		"runtime":  adapter.Name,
-		"workflow": workflow,
+		"runtime":  adapter.Name(),
+		"workflow": workflowName,
 		"plan":     plan,
 		"audit":    audit,
 	})
 }
 
-func (s *Server) catalog() (map[string]any, error) {
-	data, err := os.ReadFile(s.catalogPath)
-	if err != nil {
-		return nil, err
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
-}
-
-func (s *Server) workflowResponse(action, runtime string, plan map[string]any, request map[string]any) map[string]any {
+func (s *Server) workflowResponse(action, runtime string, plan *workflow.Plan, request map[string]any) map[string]any {
 	audit := s.writeAudit(action, runtime, strings.SplitN(action, ".", 2)[0], withDryRun(request))
 	return map[string]any{"dry_run": true, "action": action, "runtime": runtime, "plan": plan, "audit": audit}
 }
@@ -488,13 +469,6 @@ func uuid() string {
 	return text[0:8] + "-" + text[8:12] + "-" + text[12:16] + "-" + text[16:20] + "-" + text[20:32]
 }
 
-func arrayValue(value any) []any {
-	if out, ok := value.([]any); ok {
-		return out
-	}
-	return []any{}
-}
-
 func mapValue(value any) map[string]any {
 	if out, ok := value.(map[string]any); ok {
 		return out
@@ -521,125 +495,6 @@ func stringValue(value any) string {
 		return out
 	}
 	return ""
-}
-
-func optionalString(value any) any {
-	if out := stringValue(value); out != "" {
-		return out
-	}
-	return nil
-}
-
-func firstString(values ...any) any {
-	for _, value := range values {
-		if out := stringValue(value); out != "" {
-			return out
-		}
-	}
-	return nil
-}
-
-type runtimeAdapter struct {
-	Name        string
-	Description string
-	Kind        string
-	MakeDir     string
-	DisplayName string
-}
-
-func runtimeInfos() []map[string]string {
-	return []map[string]string{
-		{"name": "generic_kubernetes", "description": "Generic Kubernetes workflow adapter"},
-		{"name": "kind", "description": "Local kind workflow adapter"},
-		{"name": "lima", "description": "Local Lima workflow adapter"},
-	}
-}
-
-func adapterFor(name string) (runtimeAdapter, error) {
-	switch name {
-	case "generic_kubernetes":
-		return runtimeAdapter{Name: name, Description: "Generic Kubernetes workflow adapter", Kind: "generic"}, nil
-	case "kind":
-		return runtimeAdapter{Name: name, Description: "Local kind workflow adapter", Kind: "make", MakeDir: "kubernetes/kind", DisplayName: "kind"}, nil
-	case "lima":
-		return runtimeAdapter{Name: name, Description: "Local Lima workflow adapter", Kind: "make", MakeDir: "kubernetes/lima", DisplayName: "lima"}, nil
-	default:
-		return runtimeAdapter{}, errors.New("unsupported runtime: " + name)
-	}
-}
-
-func (a runtimeAdapter) info() map[string]string {
-	return map[string]string{"name": a.Name, "description": a.Description}
-}
-
-func (a runtimeAdapter) planEnvironment(request map[string]any) map[string]any {
-	app := stringValue(request["app"])
-	environment := stringValue(request["environment"])
-	action := apphttp.StringDefault(stringValue(request["action"]), "create")
-	if a.Kind == "generic" {
-		namespace := app + "-" + environment
-		verb := "create namespace"
-		if action != "create" {
-			verb = "delete namespace"
-		}
-		return plan(a.Name,
-			fmt.Sprintf("would %s environment %s for %s on generic Kubernetes", action, environment, app),
-			[]string{fmt.Sprintf("kubectl %s %s --dry-run=client -o yaml", verb, namespace)},
-			[]string{"Namespace/" + namespace},
-		)
-	}
-	return plan(a.Name,
-		fmt.Sprintf("would %s environment %s for %s on %s", action, environment, app, a.DisplayName),
-		[]string{fmt.Sprintf("make -C %s idp-env ACTION=%s APP=%s ENV=%s DRY_RUN=1", a.MakeDir, action, app, environment)},
-		[]string{fmt.Sprintf("EnvironmentRequest/%s/%s", app, environment)},
-	)
-}
-
-func (a runtimeAdapter) planDeployment(request map[string]any) map[string]any {
-	app := stringValue(request["app"])
-	environment := stringValue(request["environment"])
-	image := stringValue(request["image"])
-	if a.Kind == "generic" {
-		namespace := app + "-" + environment
-		return plan(a.Name,
-			fmt.Sprintf("would deploy %s to %s/%s on generic Kubernetes", image, app, environment),
-			[]string{fmt.Sprintf("kubectl set image deployment/%s %s=%s --namespace %s --dry-run=server", app, app, image, namespace)},
-			[]string{fmt.Sprintf("Deployment/%s/%s", namespace, app)},
-		)
-	}
-	return plan(a.Name,
-		fmt.Sprintf("would deploy %s to %s/%s on %s", image, app, environment, a.DisplayName),
-		[]string{fmt.Sprintf("make -C %s idp-deployments APP=%s ENV=%s IMAGE=%s DRY_RUN=1", a.MakeDir, app, environment, image)},
-		[]string{fmt.Sprintf("Deployment/%s/%s", app, environment)},
-	)
-}
-
-func (a runtimeAdapter) planSecret(request map[string]any) map[string]any {
-	app := stringValue(request["app"])
-	environment := stringValue(request["environment"])
-	secret := stringValue(request["secret"])
-	keys := stringSlice(request["keys"])
-	if a.Kind == "generic" {
-		namespace := app + "-" + environment
-		var literals []string
-		for _, key := range keys {
-			literals = append(literals, "--from-literal="+key+"=<redacted>")
-		}
-		return plan(a.Name,
-			fmt.Sprintf("would reconcile secret %s for %s/%s on generic Kubernetes", secret, app, environment),
-			[]string{fmt.Sprintf("kubectl create secret generic %s --namespace %s %s --dry-run=client -o yaml", secret, namespace, strings.Join(literals, " "))},
-			[]string{fmt.Sprintf("Secret/%s/%s", namespace, secret)},
-		)
-	}
-	return plan(a.Name,
-		fmt.Sprintf("would reconcile secret %s for %s/%s on %s", secret, app, environment, a.DisplayName),
-		[]string{fmt.Sprintf("make -C %s idp-secrets APP=%s ENV=%s SECRET=%s KEYS=%s DRY_RUN=1", a.MakeDir, app, environment, secret, strings.Join(keys, ","))},
-		[]string{fmt.Sprintf("Secret/%s/%s/%s", app, environment, secret)},
-	)
-}
-
-func plan(runtime, summary string, commands, manifests []string) map[string]any {
-	return map[string]any{"dry_run": true, "runtime": runtime, "summary": summary, "commands": commands, "manifests": manifests}
 }
 
 func stringSlice(value any) []string {

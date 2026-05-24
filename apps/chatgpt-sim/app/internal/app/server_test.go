@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -340,6 +341,25 @@ func TestRuntimeConfigIncludesNetworkPathToggle(t *testing.T) {
 	for _, text := range []string{`requireElement("trace-provider")`, `config.traceProvider`, `"disabled"`} {
 		if !strings.Contains(string(appJS), text) {
 			t.Fatalf("frontend app must render trace provider runtime config missing %q: %s", text, string(appJS))
+		}
+	}
+}
+
+func TestServerUsesSharedOIDCIssuerNormalization(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{
+		`appconfig.NormalizeURL(s.cfg.OIDCIssuer)`,
+		`strings.TrimRight(s.cfg.OIDCIssuer`,
+	} {
+		has := strings.Contains(string(source), text)
+		if strings.Contains(text, "NormalizeURL") && !has {
+			t.Fatalf("server.go should normalize OIDC issuer through shared apphttp helper")
+		}
+		if strings.Contains(text, "TrimRight") && has {
+			t.Fatalf("server.go should not hand-roll OIDC issuer URL normalization")
 		}
 	}
 }

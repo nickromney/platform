@@ -4,13 +4,15 @@ import (
 	"context"
 	"log"
 
+	"platform.local/appconfig"
+	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idpauth"
 	"platform.local/sentiment/internal/app"
 )
 
 func main() {
-	if apphttp.HandleHealthcheckCommand("8080", "/health") {
+	if apphealth.HandleHealthcheckCommand("8080", "/health") {
 		return
 	}
 
@@ -19,17 +21,17 @@ func main() {
 		AuthMode:        auth.AuthMode,
 		APIAuthMode:     auth.APIAuthMode,
 		RuntimeRole:     auth.RuntimeRole,
-		BackendURL:      apphttp.Env("BACKEND_URL", ""),
-		APIBasePath:     apphttp.Env("API_BASE_PATH", "/api/v1"),
+		BackendURL:      appconfig.Env("BACKEND_URL", ""),
+		APIBasePath:     appconfig.Env("API_BASE_PATH", "/api/v1"),
 		OIDCIssuer:      auth.OIDCIssuer,
 		OIDCAudience:    auth.OIDCAudience,
 		OIDCJWKSURI:     auth.OIDCJWKSURI,
-		DataDir:         apphttp.Env("DATA_DIR", "/tmp/sentiment"),
-		CSVPath:         apphttp.Env("CSV_PATH", ""),
-		NetworkHops:     apphttp.Env("NETWORK_HOPS", ""),
-		ShowNetworkPath: apphttp.Env("SHOW_NETWORK_PATH", ""),
+		DataDir:         appconfig.Env("DATA_DIR", "/tmp/sentiment"),
+		CSVPath:         appconfig.Env("CSV_PATH", ""),
+		NetworkHops:     appconfig.Env("NETWORK_HOPS", ""),
+		ShowNetworkPath: appconfig.Env("SHOW_NETWORK_PATH", ""),
 	}
-	addr := apphttp.NormalizeAddr(apphttp.Env("PORT", "8080"))
+	addr := appconfig.NormalizeAddr(appconfig.Env("PORT", "8080"))
 	var verifier idpauth.TokenVerifier
 	if auth.ShouldVerifyOIDC("frontend") {
 		oidcVerifier, err := idpauth.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, auth.VerifierAudience(), cfg.OIDCJWKSURI)

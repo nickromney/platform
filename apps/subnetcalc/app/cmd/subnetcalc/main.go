@@ -4,30 +4,32 @@ import (
 	"context"
 	"log"
 
+	"platform.local/appconfig"
+	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idpauth"
 	"platform.local/subnetcalc/internal/app"
 )
 
 func main() {
-	if apphttp.HandleHealthcheckCommand("8080", "/api/v1/health") {
+	if apphealth.HandleHealthcheckCommand("8080", "/api/v1/health") {
 		return
 	}
 
 	auth := idpauth.RuntimeAuthConfigFromEnv("all")
 	cfg := app.Config{
-		Addr:            apphttp.NormalizeAddr(apphttp.Env("PORT", "8080")),
+		Addr:            appconfig.NormalizeAddr(appconfig.Env("PORT", "8080")),
 		AuthMode:        auth.AuthMode,
 		APIAuthMode:     auth.APIAuthMode,
 		RuntimeRole:     auth.RuntimeRole,
-		BackendURL:      apphttp.Env("BACKEND_URL", ""),
+		BackendURL:      appconfig.Env("BACKEND_URL", ""),
 		OIDCIssuer:      auth.OIDCIssuer,
 		OIDCClientID:    auth.OIDCClientID,
 		OIDCAudience:    auth.OIDCAudience,
 		OIDCJWKSURI:     auth.OIDCJWKSURI,
 		OIDCRedirect:    auth.OIDCRedirect,
-		NetworkHops:     apphttp.Env("NETWORK_HOPS", ""),
-		ShowNetworkPath: apphttp.Env("SHOW_NETWORK_PATH", ""),
+		NetworkHops:     appconfig.Env("NETWORK_HOPS", ""),
+		ShowNetworkPath: appconfig.Env("SHOW_NETWORK_PATH", ""),
 	}
 
 	var verifier idpauth.TokenVerifier

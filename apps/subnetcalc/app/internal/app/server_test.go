@@ -747,7 +747,7 @@ func TestRuntimeConfigUsesSharedURLNormalization(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{
-		`"oidcAuthority": apphttp.NormalizeURL(s.cfg.OIDCIssuer)`,
+		`"oidcAuthority": appconfig.NormalizeURL(s.cfg.OIDCIssuer)`,
 		`strings.TrimRight(s.cfg.OIDCIssuer`,
 	} {
 		has := strings.Contains(string(source), text)

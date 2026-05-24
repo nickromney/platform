@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"platform.local/appconfig"
+	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
@@ -1039,12 +1041,12 @@ func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 		Base: map[string]any{
 			"authMethod":          s.cfg.AuthMode,
 			"apiAuthMethod":       s.cfg.APIAuthMode,
-			"oidcAuthority":       apphttp.NormalizeURL(s.cfg.OIDCIssuer),
+			"oidcAuthority":       appconfig.NormalizeURL(s.cfg.OIDCIssuer),
 			"oidcClientId":        s.cfg.OIDCClientID,
 			"mcpUrl":              s.cfg.MCPURL,
 			"modelProvider":       s.modelProvider(),
 			"traceProvider":       s.traceProvider(),
-			"dependencyFootprint": apphttp.DependencyFootprintGoSharedIDPAuth,
+			"dependencyFootprint": apphealth.DependencyFootprintGoSharedIDPAuth,
 		},
 		OIDCRedirect:        s.cfg.OIDCRedirect,
 		IncludeOIDCRedirect: true,
@@ -1903,7 +1905,7 @@ type connector struct {
 }
 
 func (r *connectorRequest) normalizeOAuthAdvanced() {
-	r.OAuthClientMode = apphttp.StringDefault(strings.TrimSpace(r.OAuthClientMode), "USER_DEFINED")
+	r.OAuthClientMode = appconfig.StringDefault(strings.TrimSpace(r.OAuthClientMode), "USER_DEFINED")
 	r.OAuthClientID = strings.TrimSpace(r.OAuthClientID)
 	r.OAuthClientSecret = strings.TrimSpace(r.OAuthClientSecret)
 	r.OAuthTokenEndpointAuthMethod = strings.TrimSpace(r.OAuthTokenEndpointAuthMethod)

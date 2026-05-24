@@ -34,8 +34,8 @@ func TestSharedFallbackHelperIsUsedForGatewayIdentitySelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(source)
-	if !strings.Contains(text, "apphttp.FirstNonEmpty(") {
-		t.Fatalf("idpauth should use shared apphttp.FirstNonEmpty helper")
+	if !strings.Contains(text, "appconfig.FirstNonEmpty(") {
+		t.Fatalf("idpauth should use shared appconfig.FirstNonEmpty helper")
 	}
 	if strings.Contains(text, "func firstNonEmpty(") {
 		t.Fatalf("idpauth should not keep a local firstNonEmpty helper")
