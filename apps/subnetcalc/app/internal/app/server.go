@@ -4,6 +4,7 @@ import (
 	"embed"
 	"net/http"
 
+	"platform.local/appconfig"
 	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
@@ -120,7 +121,7 @@ func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 			"authMethod":    s.cfg.AuthMode,
 			"apiAuthMethod": s.cfg.APIAuthMode,
 			"backendURL":    s.cfg.BackendURL,
-			"oidcAuthority": apphttp.NormalizeURL(s.cfg.OIDCIssuer),
+			"oidcAuthority": appconfig.NormalizeURL(s.cfg.OIDCIssuer),
 			"oidcClientId":  s.cfg.OIDCClientID,
 		},
 		OIDCRedirect:        s.cfg.OIDCRedirect,

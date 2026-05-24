@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"platform.local/appconfig"
 	"platform.local/apphttp"
 )
 
@@ -77,9 +78,9 @@ func NewServer(cfg Config) http.Handler {
 			cfg.ServiceNamespace = defaults.ServiceNamespace
 		}
 	}
-	cfg.PublicBaseURL = apphttp.NormalizeURL(cfg.PublicBaseURL)
-	cfg.LLMBaseURL = apphttp.NormalizeURL(cfg.LLMBaseURL)
-	cfg.OTLPEndpoint = apphttp.NormalizeURL(cfg.OTLPEndpoint)
+	cfg.PublicBaseURL = appconfig.NormalizeURL(cfg.PublicBaseURL)
+	cfg.LLMBaseURL = appconfig.NormalizeURL(cfg.LLMBaseURL)
+	cfg.OTLPEndpoint = appconfig.NormalizeURL(cfg.OTLPEndpoint)
 	s := &server{cfg: cfg, client: apphttp.NewHTTPClient(90 * time.Second)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)

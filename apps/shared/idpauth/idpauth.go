@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"platform.local/appconfig"
 	"platform.local/apphttp"
 )
 
@@ -84,20 +85,20 @@ type RuntimeAuthConfig struct {
 
 // RuntimeAuthConfigFromEnv reads the common platform app auth environment.
 func RuntimeAuthConfigFromEnv(defaultRuntimeRole string) RuntimeAuthConfig {
-	authMode := strings.ToLower(apphttp.Env("AUTH_METHOD", "none"))
-	apiAuthMode := strings.ToLower(apphttp.Env("API_AUTH_METHOD", ""))
+	authMode := strings.ToLower(appconfig.Env("AUTH_METHOD", "none"))
+	apiAuthMode := strings.ToLower(appconfig.Env("API_AUTH_METHOD", ""))
 	if apiAuthMode == "" {
 		apiAuthMode = authMode
 	}
 	return RuntimeAuthConfig{
 		AuthMode:     authMode,
 		APIAuthMode:  apiAuthMode,
-		RuntimeRole:  strings.ToLower(apphttp.Env("RUNTIME_ROLE", defaultRuntimeRole)),
-		OIDCIssuer:   apphttp.FirstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY"),
-		OIDCAudience: apphttp.Env("OIDC_AUDIENCE", ""),
-		OIDCClientID: apphttp.Env("OIDC_CLIENT_ID", ""),
-		OIDCJWKSURI:  apphttp.Env("OIDC_JWKS_URI", ""),
-		OIDCRedirect: apphttp.Env("OIDC_REDIRECT_URI", ""),
+		RuntimeRole:  strings.ToLower(appconfig.Env("RUNTIME_ROLE", defaultRuntimeRole)),
+		OIDCIssuer:   appconfig.FirstEnv("OIDC_ISSUER_URL", "OIDC_AUTHORITY"),
+		OIDCAudience: appconfig.Env("OIDC_AUDIENCE", ""),
+		OIDCClientID: appconfig.Env("OIDC_CLIENT_ID", ""),
+		OIDCJWKSURI:  appconfig.Env("OIDC_JWKS_URI", ""),
+		OIDCRedirect: appconfig.Env("OIDC_REDIRECT_URI", ""),
 	}
 }
 
@@ -324,21 +325,21 @@ func GatewaySessionFromHeaders(header http.Header) (GatewaySession, bool) {
 		return session, true
 	}
 
-	email := apphttp.FirstNonEmpty(
+	email := appconfig.FirstNonEmpty(
 		header.Get("X-Auth-Request-Email"),
 		header.Get("X-Forwarded-Email"),
 	)
-	preferredUsername := apphttp.FirstNonEmpty(
+	preferredUsername := appconfig.FirstNonEmpty(
 		header.Get("X-Auth-Request-Preferred-Username"),
 		header.Get("X-Forwarded-Preferred-Username"),
 	)
-	subject := apphttp.FirstNonEmpty(
+	subject := appconfig.FirstNonEmpty(
 		header.Get("X-Auth-Request-Subject"),
 		header.Get("X-Forwarded-Subject"),
 		header.Get("X-Auth-Request-User"),
 		header.Get("X-Forwarded-User"),
 	)
-	displayName := apphttp.FirstNonEmpty(email, preferredUsername, subject)
+	displayName := appconfig.FirstNonEmpty(email, preferredUsername, subject)
 	if displayName == "" {
 		return GatewaySession{}, false
 	}
@@ -351,7 +352,7 @@ func GatewaySessionFromHeaders(header http.Header) (GatewaySession, bool) {
 	}
 	addClaim("sub", subject)
 	addClaim("email", email)
-	addClaim("name", apphttp.FirstNonEmpty(email, preferredUsername, subject))
+	addClaim("name", appconfig.FirstNonEmpty(email, preferredUsername, subject))
 	addClaim("preferred_username", preferredUsername)
 	for _, group := range splitHeaderValues(headerValues(header, "X-Auth-Request-Groups", "X-Forwarded-Groups")) {
 		addClaim("groups", group)
@@ -362,14 +363,14 @@ func GatewaySessionFromHeaders(header http.Header) (GatewaySession, bool) {
 
 	return GatewaySession{
 		ProviderName: "oauth2-proxy",
-		UserID:       apphttp.FirstNonEmpty(email, preferredUsername, subject),
+		UserID:       appconfig.FirstNonEmpty(email, preferredUsername, subject),
 		UserDetails:  displayName,
 		Claims:       claims,
 	}, true
 }
 
 func azureClientPrincipalSession(header http.Header) (GatewaySession, bool) {
-	encoded := apphttp.FirstNonEmpty(header.Get("X-MS-CLIENT-PRINCIPAL"))
+	encoded := appconfig.FirstNonEmpty(header.Get("X-MS-CLIENT-PRINCIPAL"))
 	if encoded == "" {
 		return GatewaySession{}, false
 	}
@@ -381,7 +382,7 @@ func azureClientPrincipalSession(header http.Header) (GatewaySession, bool) {
 	if err := json.Unmarshal(payload, &principal); err != nil {
 		return GatewaySession{}, false
 	}
-	displayName := apphttp.FirstNonEmpty(
+	displayName := appconfig.FirstNonEmpty(
 		claimValue(principal.Claims, "emailaddress", "email"),
 		claimValue(principal.Claims, "upn", "preferred_username", "unique_name"),
 		claimValue(principal.Claims, "name"),
@@ -393,8 +394,8 @@ func azureClientPrincipalSession(header http.Header) (GatewaySession, bool) {
 	}
 	claims := canonicalGatewayClaims(principal.Claims)
 	return GatewaySession{
-		ProviderName: apphttp.FirstNonEmpty(header.Get("X-MS-CLIENT-PRINCIPAL-IDP"), principal.IdentityProvider),
-		UserID: apphttp.FirstNonEmpty(
+		ProviderName: appconfig.FirstNonEmpty(header.Get("X-MS-CLIENT-PRINCIPAL-IDP"), principal.IdentityProvider),
+		UserID: appconfig.FirstNonEmpty(
 			claimValue(claims, "email"),
 			claimValue(claims, "preferred_username"),
 			claimValue(claims, "oid"),

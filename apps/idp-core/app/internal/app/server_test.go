@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"platform.local/idp-core/internal/workflow"
 )
 
 func testServer(t *testing.T) *Server {
@@ -67,8 +69,8 @@ func TestServerUsesSharedStringDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(source)
-	if !strings.Contains(text, "apphttp.StringDefault(") {
-		t.Fatalf("server.go should use shared apphttp string defaulting")
+	if !strings.Contains(text, "appconfig.StringDefault(") {
+		t.Fatalf("server.go should use shared appconfig string defaulting")
 	}
 	if strings.Contains(text, "func defaultString(") {
 		t.Fatalf("server.go should not keep app-local defaultString helper")
@@ -473,18 +475,26 @@ func TestStatusFallbacksUseExplicitUnavailableState(t *testing.T) {
 }
 
 func TestAllAdaptersImplementDryRunContracts(t *testing.T) {
-	for _, info := range runtimeInfos() {
-		adapter, err := adapterFor(info["name"])
-		if err != nil {
-			t.Fatal(err)
-		}
-		environment := adapter.planEnvironment(map[string]any{"action": "create", "app": "hello-platform", "environment": "preview"})
-		deployment := adapter.planDeployment(map[string]any{"app": "hello-platform", "environment": "preview", "image": "registry.local/hello-platform:test"})
-		secret := adapter.planSecret(map[string]any{"app": "hello-platform", "environment": "preview", "secret": "api-token", "keys": []any{"token"}})
-		for _, plan := range []map[string]any{environment, deployment, secret} {
-			if plan["dry_run"] != true || plan["runtime"] != adapter.Name || len(plan["commands"].([]string)) == 0 || len(plan["manifests"].([]string)) == 0 {
-				t.Fatalf("%s plan = %#v", adapter.Name, plan)
+	registry := workflow.NewRegistry()
+	registry.Register(&workflow.GenericAdapter{})
+	registry.Register(workflow.NewMakeAdapter("kind", "Local kind workflow adapter", "kubernetes/kind", "kind"))
+	registry.Register(workflow.NewMakeAdapter("lima", "Local Lima workflow adapter", "kubernetes/lima", "lima"))
+
+	for _, adapter := range registry.List() {
+		environment := adapter.PlanEnvironment(workflow.EnvironmentRequest{Action: "create", App: "hello-platform", Environment: "preview"})
+		deployment := adapter.PlanDeployment(workflow.DeploymentRequest{App: "hello-platform", Environment: "preview", Image: "registry.local/hello-platform:test"})
+		secret := adapter.PlanSecret(workflow.SecretRequest{App: "hello-platform", Environment: "preview", Secret: "api-token", Keys: []string{"token"}})
+		for _, plan := range []*workflow.Plan{environment, deployment, secret} {
+			if plan.DryRun != true || plan.Runtime != adapter.Name() || len(plan.Commands) == 0 || len(plan.Manifests) == 0 {
+				t.Fatalf("%s plan = %#v", adapter.Name(), plan)
 			}
 		}
 	}
+}
+
+func arrayValue(value any) []any {
+	if out, ok := value.([]any); ok {
+		return out
+	}
+	return []any{}
 }

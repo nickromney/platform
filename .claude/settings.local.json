@@ -13,7 +13,10 @@
       "Bash(GONOSUMDB=platform.local go build *)",
       "Bash(go version *)",
       "Bash(GONOSUMDB=platform.local GOFLAGS=-mod=mod go build *)",
-      "Bash(GONOSUMDB=platform.local go work *)"
+      "Bash(GONOSUMDB=platform.local go work *)",
+      "Bash(make -C apps chatgpt-sim-test)",
+      "Bash(make -C apps js-check)",
+      "Bash(bats tests/app-layout-consistency.bats tests/validate-app-runtime-surfaces.bats)"
     ]
   }
 }

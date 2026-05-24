@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"platform.local/appconfig"
 	"platform.local/apphttp"
 	"platform.local/appshell"
 	"platform.local/idpauth"
@@ -192,7 +193,7 @@ func (s *server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 		Base: map[string]any{
 			"authMethod":    s.cfg.AuthMode,
 			"apiAuthMethod": s.cfg.APIAuthMode,
-			"apiBasePath":   apphttp.StringDefault(s.cfg.APIBasePath, "/api/v1"),
+			"apiBasePath":   appconfig.StringDefault(s.cfg.APIBasePath, "/api/v1"),
 			"backendURL":    s.cfg.BackendURL,
 		},
 		ShowNetworkPath: s.cfg.ShowNetworkPath,

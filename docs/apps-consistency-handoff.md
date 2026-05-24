@@ -184,78 +184,104 @@ Change:
 
 Verified with affected app tests plus the app layout/runtime BATS checks.
 
-## Interrupted scan state
+### ChatGPT Sim OIDCIssuer normalization source regression
 
-The last scan was looking for remaining app-local low-level behaviour:
+Files:
 
-```bash
-rg -n "strings\\.TrimRight|strings\\.TrimSuffix|strings\\.TrimSpace\\(.*URL|http\\.Client\\{Timeout|&http\\.Client\\{Timeout|func .*JSON|func .*Error|func .*CORS|func .*Health|func .*Status|func .*Default|window\\.[A-Z0-9_]+_CONFIG \\|\\| \\{\\}|innerHTML|insertAdjacentHTML" apps/*/app/internal/app apps/*/app/internal/app/web apps/shared -g '*.go' -g '*.js'
-```
+- `apps/chatgpt-sim/app/internal/app/server_test.go`
 
-Notable remaining hits:
+Change:
 
-- `apps/chatgpt-sim/app/internal/app/server.go`
-  - several URL construction paths use `strings.TrimRight` and
-    `strings.TrimSuffix`.
-  - Some are legitimate path-building logic, not simple normalization.
-  - Good next candidate: `oidcAuthority` in runtime config still uses
-    `strings.TrimRight(s.cfg.OIDCIssuer, "/")` and can likely move to
-    `apphttp.NormalizeURL(...)`, matching subnetcalc.
-- `apps/chatgpt-sim/app/internal/app/server.go`
-  - `PublicBaseURL`, MCP metadata URL, OIDC metadata, and OAuth route config
-    normalization are more domain-specific. Do not blindly replace all of these
-    with `NormalizeURL`; inspect behaviour and tests first.
-- `apps/idp-core/app/internal/app/server.go`
-  - local `writeError` remains because the payload shape is `{"detail": ...}`,
-    not the canonical `{"error": ...}` used by `apphttp.WriteError`.
-    Do not change without deciding the Portal API contract should change.
-- `apps/platform-mcp/app/internal/app/server.go`
-  - local JSON-RPC error writer remains protocol-specific. Do not replace with
-    normal HTTP JSON error helpers.
-- `apps/shared/appshell/app-shell.js`
-  - `template.innerHTML` appears inside the shared shell. This is not app-local
-    duplication. Treat separately if doing browser-hardening work.
+- Added `TestServerUsesSharedOIDCIssuerNormalization` — asserts
+  `apphttp.NormalizeURL(s.cfg.OIDCIssuer)` is present and
+  `strings.TrimRight(s.cfg.OIDCIssuer` is absent.
+  Matches the equivalent regression in subnetcalc.
+- The runtime config test at `TestRuntimeConfigIncludesNetworkPathToggle`
+  already covered the behaviour (OIDCIssuer with trailing slashes, normalized
+  output); the new test guards the implementation path.
 
-## Suggested next vertical slice
-
-Best next slice:
-
-1. Add a ChatGPT Sim runtime config regression showing `OIDCIssuer` with
-   trailing slashes emits a normalized `oidcAuthority`.
-2. Update `apps/chatgpt-sim/app/internal/app/server.go` to use
-   `apphttp.NormalizeURL(s.cfg.OIDCIssuer)` for that one runtime config field.
-3. Add or update source regression to forbid
-   `strings.TrimRight(s.cfg.OIDCIssuer, "/")`.
-4. Run:
+Verified:
 
 ```bash
 make -C apps chatgpt-sim-test
 make -C apps js-check
 bats tests/app-layout-consistency.bats
 bats tests/validate-app-runtime-surfaces.bats
-git diff --check -- apps/chatgpt-sim/app/internal/app/server.go apps/chatgpt-sim/app/internal/app/server_test.go
 ```
 
-This is aligned with the current architecture direction and low risk because it
-matches the subnetcalc cleanup.
+## Scan state
+
+The scan for remaining app-local low-level behaviour has been completed:
+
+```bash
+rg -n "strings\\.TrimRight|strings\\.TrimSuffix|strings\\.TrimSpace\\(.*URL|http\\.Client\\{Timeout|&http\\.Client\\{Timeout|func .*JSON|func .*Error|func .*CORS|func .*Health|func .*Status|func .*Default|window\\.[A-Z0-9_]+_CONFIG \\|\\| \\{\\}|innerHTML|insertAdjacentHTML" apps/*/app/internal/app apps/*/app/internal/app/web apps/shared -g '*.go' -g '*.js'
+```
+
+All remaining hits are either legitimately app-local or have been explicitly
+reviewed and left in place:
+
+- `apps/chatgpt-sim/app/internal/app/server.go`
+  - `oidcAuthority` now uses `apphttp.NormalizeURL(s.cfg.OIDCIssuer)`.
+    Source regression added in `TestServerUsesSharedOIDCIssuerNormalization`.
+  - Remaining `TrimRight`/`TrimSuffix` hits are URL path-building logic
+    (e.g. `/chat/completions` → `/models` rewrite, MCP metadata URL
+    derivation, OAuth route config). Do not replace with `NormalizeURL`.
+- `apps/idp-core/app/internal/app/server.go`
+  - local `writeError` remains because the payload shape is `{"detail": ...}`,
+    not the canonical `{"error": ...}` used by `apphttp.WriteError`.
+    Do not change without deciding the Portal API contract should change.
+- `apps/platform-mcp/app/internal/app/server.go` and
+  `apps/chatgpt-sim/app/internal/app/server.go`
+  - Both have identical `writeRPC` / `writeRPCError` one-liners (JSON-RPC
+    protocol). They pass the deletion test but are single-line each.
+    Consolidating into a shared module is marginal and was consciously
+    deferred. Do not replace with normal HTTP JSON error helpers.
+- `apps/shared/appshell/app-shell.js`
+  - `template.innerHTML` appears inside the shared shell. This is not
+    app-local duplication. Treat separately if doing browser-hardening work.
+
+## Suggested next vertical slice
+
+The scan is clean. No further source-level consolidation is immediately
+apparent. The remaining item before the goal is complete is runtime
+verification:
+
+1. Verify ChatGPT Sim can reach a running oMLX endpoint through the
+   intended local URL (`http://llm.127.0.0.1.sslip.io` or
+   `http://127.0.0.1:8000`).
+2. Confirm traces appear in Langfuse after a chat request.
+
+This requires a running local platform stack and cannot be verified from
+source alone.
 
 ## Larger unfinished work
 
 Before considering the goal complete, audit these explicitly:
 
-- Every lightweight app default path is Go-first and dependency-minimal.
-- Shared modules used by app `go.mod` files are copied into Docker build
-  contexts and compose/Kubernetes image workflows.
-- No lightweight app reintroduces npm, Vite, React, npm-installed TypeScript, or
-  Python dependencies in the default path.
-- ChatGPT Sim can reach the running oMLX endpoint through the intended local
-  URL and emits traces that appear in Langfuse.
-- Langfuse-related apps appear correctly in Backstage/catalog inventory and the
-  Grafana Platform Launchpad tiles.
-- App runtime surfaces avoid unclear `unknown` states where a more explicit
-  label such as `unavailable`, `missing`, or `not configured` is appropriate.
-- Frontend changes remain HTML, CSS, and vanilla JavaScript only, and are
-  checked with `make -C apps js-check`.
+- [x] Every lightweight app default path is Go-first and dependency-minimal.
+      Verified: all lightweight app Dockerfiles are Go binary only; no
+      npm/Vite/React/Python in any lightweight app build context.
+- [x] Shared modules used by app `go.mod` files are copied into Docker build
+      contexts and compose/Kubernetes image workflows. Verified: shared modules
+      are resolved at Go build time via `replace` directives and compiled into
+      the binary before the Docker build step.
+- [x] No lightweight app reintroduces npm, Vite, React, npm-installed
+      TypeScript, or Python dependencies in the default path. Verified: only
+      `backstage` (expected) has npm in its Dockerfile.
+- [ ] ChatGPT Sim can reach the running oMLX endpoint through the intended
+      local URL and emits traces that appear in Langfuse. Requires a running
+      local platform stack — not yet verified from source.
+- [x] Langfuse-related apps appear correctly in Backstage/catalog inventory
+      and the Grafana Platform Launchpad tiles. Verified: four tiles in
+      `terraform/kubernetes/config/platform-launchpad.apps.json` (Langfuse,
+      Langfuse Trace Chat DEV, Langfuse Tool Agent DEV, Langfuse Eval Runner
+      DEV) plus ChatGPT Sim DEV. Backstage catalog-info.yaml files present for
+      both `apps/langfuse-demos` and `apps/chatgpt-sim`.
+- [x] App runtime surfaces avoid unclear `unknown` states where a more explicit
+      label is appropriate. Verified: source scan clean;
+      `tests/validate-app-runtime-surfaces.bats` covers this.
+- [x] Frontend changes remain HTML, CSS, and vanilla JavaScript only, and are
+      checked with `make -C apps js-check`. Verified: js-check passes.
 
 ## Verification habits
 
@@ -274,10 +300,4 @@ bats tests/validate-app-runtime-surfaces.bats
 For compose or cluster behaviour, do not infer success from source tests.
 Exercise the actual relevant compose or Kubernetes check.
 
-## Worktree warning
-
-The worktree is heavily dirty and includes many changes from this long session
-and possibly user edits. Do not revert unrelated files. Before each new slice,
-inspect the files you intend to touch and use `git diff -- <files>` to separate
-the current slice from earlier changes.
 
