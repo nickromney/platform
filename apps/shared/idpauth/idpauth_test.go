@@ -174,6 +174,95 @@ func TestBrowserBundleRejectsUnsupportedMethodsWithAllowHeader(t *testing.T) {
 	}
 }
 
+func TestBootstrapVerifierReturnsNilWhenShouldVerifyIsFalse(t *testing.T) {
+	v, err := BootstrapVerifier("", "", "", false)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if v != nil {
+		t.Fatalf("expected nil verifier, got %v", v)
+	}
+}
+
+func TestBootstrapVerifierReturnsErrorWhenIssuerMissing(t *testing.T) {
+	// NewOIDCVerifier requires issuer and audience; passing empty values must error.
+	v, err := BootstrapVerifier("", "audience", "", true)
+	if err == nil {
+		t.Fatalf("expected error for missing issuer, got verifier %v", v)
+	}
+	if v != nil {
+		t.Fatalf("expected nil verifier on error, got %v", v)
+	}
+}
+
+func TestAuthenticatorMiddlewareCallsNextOnSuccess(t *testing.T) {
+	auth := Authenticator{
+		Mode:     "oidc",
+		Verifier: staticVerifier{claims: UserClaims{Subject: "user-123"}},
+	}
+	middleware := auth.Middleware(AuthFailureMessages{})
+
+	nextCalled := false
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if !nextCalled {
+		t.Fatal("expected next handler to be called")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestAuthenticatorMiddlewareBlocksOnFailure(t *testing.T) {
+	auth := Authenticator{Mode: "oidc", Verifier: nil}
+	middleware := auth.Middleware(AuthFailureMessages{})
+
+	nextCalled := false
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if nextCalled {
+		t.Fatal("expected next handler NOT to be called when auth fails")
+	}
+}
+
+func TestAuthenticatorMiddlewareUsesCustomMessages(t *testing.T) {
+	// Supply a verifier so CurrentUser reaches the token check.
+	// With no Authorization header the "missing bearer token" failure fires,
+	// and the custom MissingBearerToken message should be used.
+	auth := Authenticator{
+		Mode:     "oidc",
+		Verifier: staticVerifier{claims: UserClaims{Subject: "user-123"}},
+	}
+	msgs := AuthFailureMessages{
+		MissingBearerToken: "Custom: token required",
+	}
+	handler := auth.Middleware(msgs)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil) // no Authorization header
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "Custom: token required") {
+		t.Fatalf("expected custom message, got %q", rec.Body.String())
+	}
+}
+
 func TestAuthenticatorNormalizesBearerTokenDecisions(t *testing.T) {
 	auth := Authenticator{
 		Mode:     "oidc",

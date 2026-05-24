@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 
@@ -30,13 +29,9 @@ func main() {
 	}
 	cfg.ApplyRuntimeDefaults()
 
-	var verifier idpauth.TokenVerifier
-	if cfg.OIDC.Issuer != "" && !cfg.AllowAnonymous {
-		oidcVerifier, err := idpauth.NewOIDCVerifier(context.Background(), cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.JWKSURI)
-		if err != nil {
-			log.Fatalf("configure oidc: %v", err)
-		}
-		verifier = oidcVerifier
+	verifier, err := idpauth.BootstrapVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.JWKSURI, cfg.OIDC.Issuer != "" && !cfg.AllowAnonymous)
+	if err != nil {
+		log.Fatalf("configure oidc: %v", err)
 	}
 
 	log.Printf("apim-simulator listening on %s", cfg.Addr)

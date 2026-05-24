@@ -706,15 +706,18 @@ func (m Model) nextItems() []menuItem {
 	items := make([]menuItem, 0, len(stages))
 	for _, stage := range stages {
 		items = append(items, menuItem{
-			Label: fmt.Sprintf("%s apply", stageDisplay(stage)),
+			Label: fmt.Sprintf("%s apply", m.stageDisplay(stage)),
 			Value: "next:" + stage,
 		})
 	}
 	return items
 }
 
-func stageDisplay(stage string) string {
-	return stage
+func (m Model) stageDisplay(stageID string) string {
+	if opt, ok := m.stageOption(stageID); ok && opt.Label != "" {
+		return opt.Label
+	}
+	return stageID
 }
 
 func (m Model) stageShortcutValue(shortcut rune) (string, bool) {
@@ -730,7 +733,7 @@ func (m Model) stageShortcutValue(shortcut rune) (string, bool) {
 func (m Model) selectNext(value string) (tea.Model, tea.Cmd) {
 	stage := strings.TrimPrefix(value, "next:")
 	m.stage = stage
-	m.stageLabel = stageDisplay(stage)
+	m.stageLabel = m.stageDisplay(stage)
 	m.action = "apply"
 	m.appIndex = 0
 	m.appOverrides = map[string]string{}
@@ -821,7 +824,7 @@ func (m *Model) applyPresetBundle(bundle string) {
 		}
 		if profile.Stage != "" {
 			m.stage = profile.Stage
-			m.stageLabel = stageDisplay(profile.Stage)
+			m.stageLabel = m.stageDisplay(profile.Stage)
 		}
 		m.presetResourceProfile = profile.Presets["resource_profile"]
 		m.presetImageDistribution = profile.Presets["image_distribution"]
@@ -1263,9 +1266,9 @@ func (m Model) actionHint(item menuItem) string {
 		return "Choose optional preset overlays before selecting plan, apply, or a read-only helper."
 	}
 	if !m.hasAppToggles() {
-		return fmt.Sprintf("%s on stage %s skips app toggles; %s", item.Label, stageDisplay(m.stage), appToggleStageSummary(m.options.UIRules.AppToggleStages))
+		return fmt.Sprintf("%s on stage %s skips app toggles; %s", item.Label, m.stageDisplay(m.stage), appToggleStageSummary(m.options.UIRules.AppToggleStages))
 	}
-	return fmt.Sprintf("%s on stage %s can include app toggle overrides before preview.", item.Label, stageDisplay(m.stage))
+	return fmt.Sprintf("%s on stage %s can include app toggle overrides before preview.", item.Label, m.stageDisplay(m.stage))
 }
 
 func (m Model) stageOption(stageID string) (stageOption, bool) {

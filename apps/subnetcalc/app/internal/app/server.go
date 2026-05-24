@@ -27,17 +27,21 @@ func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 	mux := http.NewServeMux()
 	server := &server{cfg: cfg, verifier: verifier, analyzer: newSubnetAnalyzer(cfg.ProviderRangeSources)}
 	if cfg.RuntimeRole == "backend" || cfg.RuntimeRole == "all" {
+		requireAuth := idpauth.Authenticator{Mode: cfg.AuthMode, Verifier: verifier}.Middleware(idpauth.AuthFailureMessages{
+			MissingBearerToken: "Missing or invalid bearer token",
+			InvalidToken:       "Invalid token",
+		})
 		mux.HandleFunc("GET /api/v1/health", server.health)
 		mux.HandleFunc("GET /api/v1/health/ready", server.ready)
 		mux.HandleFunc("GET /api/v1/health/live", server.live)
-		mux.Handle("POST /api/v1/ipv4/validate", server.requireAuth(http.HandlerFunc(server.validateAddress)))
-		mux.Handle("POST /api/v1/ipv4/check-private", server.requireAuth(http.HandlerFunc(server.checkPrivate)))
-		mux.Handle("POST /api/v1/ipv4/check-cloudflare", server.requireAuth(http.HandlerFunc(server.checkCloudflare)))
-		mux.Handle("POST /api/v1/provider-ranges/check", server.requireAuth(http.HandlerFunc(server.checkProviderRange)))
-		mux.Handle("POST /api/v1/provider-ranges/cache/invalidate", server.requireAuth(http.HandlerFunc(server.invalidateProviderRangeCache)))
-		mux.Handle("POST /api/v1/provider-ranges/cache/refresh", server.requireAuth(http.HandlerFunc(server.refreshProviderRangeCache)))
-		mux.Handle("POST /api/v1/ipv4/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv4)))
-		mux.Handle("POST /api/v1/ipv6/subnet-info", server.requireAuth(http.HandlerFunc(server.subnetInfoIPv6)))
+		mux.Handle("POST /api/v1/ipv4/validate", requireAuth(http.HandlerFunc(server.validateAddress)))
+		mux.Handle("POST /api/v1/ipv4/check-private", requireAuth(http.HandlerFunc(server.checkPrivate)))
+		mux.Handle("POST /api/v1/ipv4/check-cloudflare", requireAuth(http.HandlerFunc(server.checkCloudflare)))
+		mux.Handle("POST /api/v1/provider-ranges/check", requireAuth(http.HandlerFunc(server.checkProviderRange)))
+		mux.Handle("POST /api/v1/provider-ranges/cache/invalidate", requireAuth(http.HandlerFunc(server.invalidateProviderRangeCache)))
+		mux.Handle("POST /api/v1/provider-ranges/cache/refresh", requireAuth(http.HandlerFunc(server.refreshProviderRangeCache)))
+		mux.Handle("POST /api/v1/ipv4/subnet-info", requireAuth(http.HandlerFunc(server.subnetInfoIPv4)))
+		mux.Handle("POST /api/v1/ipv6/subnet-info", requireAuth(http.HandlerFunc(server.subnetInfoIPv6)))
 		mux.HandleFunc("GET /api/whoami", server.whoami)
 		mux.HandleFunc("GET /api/v1/whoami", server.whoami)
 	}
@@ -92,15 +96,6 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apphttp.WriteJSON(w, http.StatusOK, claims)
-}
-
-func (s *server) requireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := s.currentUser(w, r); !ok {
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {

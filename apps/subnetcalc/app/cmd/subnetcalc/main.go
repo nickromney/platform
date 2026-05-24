@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 
 	"platform.local/appconfig"
@@ -32,13 +31,9 @@ func main() {
 		ShowNetworkPath: appconfig.Env("SHOW_NETWORK_PATH", ""),
 	}
 
-	var verifier idpauth.TokenVerifier
-	if auth.ShouldVerifyOIDC("frontend") {
-		oidcVerifier, err := idpauth.NewOIDCVerifier(context.Background(), cfg.OIDCIssuer, auth.VerifierAudience(), cfg.OIDCJWKSURI)
-		if err != nil {
-			log.Fatalf("configure oidc: %v", err)
-		}
-		verifier = oidcVerifier
+	verifier, err := idpauth.BootstrapVerifier(auth.OIDCIssuer, auth.VerifierAudience(), auth.OIDCJWKSURI, auth.ShouldVerifyOIDC("frontend"))
+	if err != nil {
+		log.Fatalf("configure oidc: %v", err)
 	}
 
 	log.Printf("subnetcalc listening on %s auth=%s", cfg.Addr, cfg.AuthMode)
