@@ -151,6 +151,42 @@ func (f *AuthFailure) MessageFor(messages AuthFailureMessages) string {
 	return f.Message
 }
 
+// BootstrapVerifier constructs an OIDC TokenVerifier when shouldVerify is
+// true and the required fields are present. Returns nil, nil when
+// shouldVerify is false so callers can skip the conditional and treat a nil
+// verifier as the no-auth case. Uses context.Background() because verifier
+// construction is a startup operation with no caller-imposed deadline.
+func BootstrapVerifier(issuer, audience, jwksURI string, shouldVerify bool) (TokenVerifier, error) {
+	if !shouldVerify {
+		return nil, nil
+	}
+	v, err := NewOIDCVerifier(context.Background(), issuer, audience, jwksURI)
+	if err != nil {
+		return nil, err // explicit nil interface — avoids the typed-nil-in-interface trap
+	}
+	return v, nil
+}
+
+// Middleware returns an HTTP middleware that gates handlers on successful
+// authentication. On failure it writes an error response using the optional
+// custom messages and returns without calling next.
+//
+// Note: this middleware belongs in idpauth, not apphttp. idpauth already
+// imports apphttp; placing RequireAuth in apphttp would create a circular
+// import. Future explorers: do not re-suggest apphttp.RequireAuth.
+func (a Authenticator) Middleware(msgs AuthFailureMessages) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, failure := a.CurrentUser(r)
+			if failure != nil {
+				apphttp.WriteError(w, failure.StatusCode, failure.MessageFor(msgs))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // CurrentUser returns the authenticated user for the request, or a failure
 // that the caller can render in its local error response shape.
 func (a Authenticator) CurrentUser(r *http.Request) (UserClaims, *AuthFailure) {

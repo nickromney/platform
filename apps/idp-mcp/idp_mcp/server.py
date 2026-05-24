@@ -48,44 +48,46 @@ class IdpApiClient:
         return json.loads(response_body or "{}")
 
 
-def tool_definitions() -> list[dict[str, Any]]:
-    return [
-        {
-            "name": "platform_status",
-            "description": "Read the platform status through the HTTP API.",
-            "inputSchema": {"type": "object", "properties": {}},
-        },
-        {
-            "name": "catalog_list",
-            "description": "Read the platform IDP service catalog through the HTTP API.",
-            "inputSchema": {"type": "object", "properties": {}},
-        },
-        {
-            "name": "environment_create",
-            "description": "Dry-run an application environment request through the HTTP API.",
-            "inputSchema": {
-                "type": "object",
-                "required": ["app", "environment"],
-                "properties": {
-                    "app": {"type": "string"},
-                    "environment": {"type": "string"},
-                    "runtime": {"type": "string"},
-                },
+# TOOLS maps each MCP tool name to its JSON-schema and a handler callable.
+# Adding a tool requires editing exactly one place: this dict.
+TOOLS: dict[str, dict[str, Any]] = {
+    "platform_status": {
+        "description": "Read the platform status through the HTTP API.",
+        "inputSchema": {"type": "object", "properties": {}},
+        "handler": lambda client, _args: client.platform_status(),
+    },
+    "catalog_list": {
+        "description": "Read the platform IDP service catalog through the HTTP API.",
+        "inputSchema": {"type": "object", "properties": {}},
+        "handler": lambda client, _args: client.catalog_list(),
+    },
+    "environment_create": {
+        "description": "Dry-run an application environment request through the HTTP API.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["app", "environment"],
+            "properties": {
+                "app": {"type": "string"},
+                "environment": {"type": "string"},
+                "runtime": {"type": "string"},
             },
         },
+        "handler": lambda client, args: client.create_environment(args),
+    },
+}
+
+
+def tool_definitions() -> list[dict[str, Any]]:
+    return [
+        {"name": name, "description": spec["description"], "inputSchema": spec["inputSchema"]}
+        for name, spec in TOOLS.items()
     ]
 
 
 def handle_tool_call(client: IdpApiClient, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    if name == "platform_status":
-        result = client.platform_status()
-    elif name == "catalog_list":
-        result = client.catalog_list()
-    elif name == "environment_create":
-        result = client.create_environment(arguments)
-    else:
+    if name not in TOOLS:
         raise ValueError(f"unsupported tool: {name}")
-
+    result = TOOLS[name]["handler"](client, arguments)
     return {
         "content": [
             {

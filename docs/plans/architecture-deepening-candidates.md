@@ -1024,4 +1024,146 @@ Decision:
 
 ## Next Architecture Deepening Items
 
-No pending architecture deepening items are currently recorded in this note.
+### Apps/ Go Code — Pass 1 (2026-05-24)
+
+Scope: `apps/` Go shared libraries and app servers. Previous passes covered
+kubernetes, scripts, and tools. These candidates cover the lightweight Go apps
+and their shared modules.
+
+#### A. Add `idpauth.BootstrapVerifier` — collapse duplicated OIDC setup
+
+**Files:**
+`apps/subnetcalc/app/cmd/subnetcalc/main.go` ·
+`apps/sentiment/app/cmd/sentiment/main.go` ·
+`apps/chatgpt-sim/app/cmd/chatgpt-sim/main.go` ·
+`apps/apim-simulator/app/cmd/apim-simulator/main.go` ·
+`apps/shared/idpauth/idpauth.go`
+
+**Problem:**
+Each app main.go has the same 6-line pattern: call `NewOIDCVerifier`, handle
+the error with `log.Fatalf`, assign the result to `verifier`. The pattern
+varies only in the `shouldVerify` condition (which differs per app role
+semantics). The pattern is shallow — the interface nearly matches the
+implementation.
+
+**Candidate solution:**
+Add `idpauth.BootstrapVerifier(ctx context.Context, cfg RuntimeAuthConfig,
+shouldVerify bool) (TokenVerifier, error)` to `idpauth`. Each app's main.go
+calls this once; the `if shouldVerify` branch and error handling are absorbed
+into the module.
+
+**Grilling decisions:**
+- `shouldVerify` is passed by the caller rather than computed inside, because
+  chatgpt-sim uses a role-specific condition (`cfg.Role == "shell"`) that
+  differs from the `ShouldVerifyOIDC("frontend")` pattern used by
+  subnetcalc/sentiment.
+- `apim-simulator` uses its own OIDC config struct (not `RuntimeAuthConfig`),
+  so it would need a compatible overload or a small adapter call.
+- `idp-core` does not use `RuntimeAuthConfigFromEnv`; it is not a target.
+
+**Expected benefits:**
+Locality: OIDC bootstrap error handling concentrates in one module. Leverage:
+one call per app replaces a 6-line if/NewOIDCVerifier/Fatalf block.
+
+**Strength:** Strong
+
+#### B. Add `idpauth.Authenticator.Middleware` — extract repeated auth gate
+
+**Files:**
+`apps/subnetcalc/app/internal/app/server.go` ·
+`apps/sentiment/app/internal/app/server.go` ·
+`apps/chatgpt-sim/app/internal/app/server.go` ·
+`apps/shared/idpauth/idpauth.go`
+
+**Problem:**
+`requireAuth` (5 lines) and `currentUser` (8 lines) are copied identically
+into every app server.go. The only variation is the error messages passed to
+`AuthFailureMessages`.
+
+**Candidate solution:**
+Add `(a Authenticator) Middleware(msgs AuthFailureMessages) func(http.Handler)
+http.Handler` to `idpauth`. Each app's server.go replaces the per-server
+methods with one wiring call.
+
+**Grilling constraint discovered:**
+`apphttp.RequireAuth` would create a **circular import**: `idpauth` already
+imports `apphttp`, so `apphttp` cannot import `idpauth`. The seam belongs in
+`idpauth`, not `apphttp`. Future explorers: do not re-suggest moving this
+middleware to `apphttp`.
+
+**Expected benefits:**
+Locality: auth middleware bugs fix in one place. Leverage: one tested
+middleware, three wiring points. Interface shrinks: `requireAuth` and
+`currentUser` are deleted from each app.
+
+**Strength:** Strong
+
+#### C. Accept `idpauth` as auth+HTTP integration module (not pure domain)
+
+**Finding:**
+`idpauth` already imports `apphttp`. `WriteClientPrincipalSession`,
+`WriteSessionArray`, and `BrowserBundle` are HTTP handlers sitting inside the
+auth module. This is not leakage — it is the intended design: `idpauth` is
+the auth+HTTP integration layer.
+
+Separating HTTP concerns from `idpauth` would require splitting it into
+`idpauth-domain` (pure: UserClaims, TokenVerifier, Authenticator, AccessPolicy)
+and `idpauth` (integration: imports domain + apphttp, provides Middleware,
+WriteClientPrincipalSession, etc.). That restructuring is possible but invasive.
+
+**Decision:**
+Accept the current module boundary. Record here so future architecture passes
+do not re-suggest moving `WriteClientPrincipalSession` to `apphttp` (which
+would create the same circular import).
+
+**Strength:** Worth exploring as future module split if idpauth grows
+
+#### D. Sentiment store seam — speculative
+
+**Files:** `apps/sentiment/app/internal/app/store.go` · `server.go`
+
+**Finding:**
+`newStore(cfg)` is called inside `NewServer`; `store` is an unexported
+concrete struct. Tests use `t.TempDir()` which hits real I/O. By the
+"one adapter = hypothetical seam" rule, this seam is not yet real — only
+one store implementation exists. Tests are already isolated via temp dirs.
+
+**Decision:**
+Defer. If a second store adapter appears (in-memory, S3-backed), introduce the
+interface at that point.
+
+**Strength:** Speculative
+
+#### Bug fixed during pass
+
+`apps/idp-core/app/cmd/idp-core/main.go` contained developer debugging
+commentary accidentally committed (lines referencing `write_file` and editor
+reasoning). Removed in this pass (2026-05-24).
+
+---
+
+### Apps/ Go Code — Pass 2 (2026-05-24)
+
+Scope: Implementation of grilled candidates A, B (idpauth); cleanup of E
+(platform-tui stageDisplay); F (idp-mcp tool registry). Identified one
+speculative future candidate.
+
+#### Implemented: A, B, C (ADR), E, F
+
+See `docs/plans/architecture-review-20260524.md` (Loop 2 section) for full details.
+
+#### Speculative: platform-mcp tool registry consolidation
+
+**Files:** `apps/platform-mcp/app/internal/app/server.go`
+
+**Finding:** `mcp()` handler defines tool schemas in `tools/list` and dispatches
+in `tools/call` — the same dual-list pattern fixed in `idp-mcp`. Adding a fourth
+tool would require editing two switch cases. With 3 tools, the duplication is low
+friction. With Go's typed error handling, metrics tracking per tool, and varied
+handler signatures (`s.modelPing(r, args)` vs pure `d2Validate(args)`), a
+consolidated registry type is more complex than the Python equivalent.
+
+**Decision:** Defer. If a 4th MCP tool is added, revisit. The handler protocol
+differences mean the fix would add more code than it removes at current scale.
+
+**Strength:** Speculative

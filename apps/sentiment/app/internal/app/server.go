@@ -37,14 +37,15 @@ func NewServer(cfg Config, verifier ...idpauth.TokenVerifier) http.Handler {
 		mux.HandleFunc("GET /health/live", srv.frontendLive)
 	}
 	if cfg.RuntimeRole == "backend" || cfg.RuntimeRole == "all" {
+		requireAuth := idpauth.Authenticator{Mode: cfg.AuthMode, Verifier: tokenVerifier}.Middleware(idpauth.AuthFailureMessages{})
 		mux.HandleFunc("GET /api/v1/health", srv.health)
 		mux.HandleFunc("GET /api/v1/health/ready", srv.ready)
 		mux.HandleFunc("GET /api/v1/health/live", srv.live)
 		mux.HandleFunc("GET /api/whoami", srv.whoami)
 		mux.HandleFunc("GET /api/v1/whoami", srv.whoami)
-		mux.Handle("GET /api/v1/comments", srv.requireAuth(http.HandlerFunc(srv.listComments)))
-		mux.Handle("POST /api/v1/comments", srv.requireAuth(http.HandlerFunc(srv.createComment)))
-		mux.Handle("POST /api/v1/sentiment/classify", srv.requireAuth(http.HandlerFunc(srv.classifyOnly)))
+		mux.Handle("GET /api/v1/comments", requireAuth(http.HandlerFunc(srv.listComments)))
+		mux.Handle("POST /api/v1/comments", requireAuth(http.HandlerFunc(srv.createComment)))
+		mux.Handle("POST /api/v1/sentiment/classify", requireAuth(http.HandlerFunc(srv.classifyOnly)))
 	}
 	if cfg.RuntimeRole == "frontend" {
 		mux.Handle("/api/", srv.apiProxy())
@@ -118,15 +119,6 @@ func (s *server) frontendReady(w http.ResponseWriter, _ *http.Request) {
 
 func (s *server) frontendLive(w http.ResponseWriter, _ *http.Request) {
 	apphttp.WriteRoleStatus(w, http.StatusOK, "alive", s.cfg.RuntimeRole)
-}
-
-func (s *server) requireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := s.currentUser(w, r); !ok {
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (s *server) whoami(w http.ResponseWriter, r *http.Request) {

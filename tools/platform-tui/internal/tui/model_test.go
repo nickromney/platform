@@ -732,7 +732,7 @@ esac
 	m = next
 	m = drainRun(m, cmd, t)
 
-	for _, label := range []string{"600 apply", "900 apply"} {
+	for _, label := range []string{"policies apply", "sso apply"} {
 		if !hasLabel(m.items(), label) {
 			t.Fatalf("expected next option %q after successful 500 apply, got %#v", label, m.items())
 		}
@@ -741,7 +741,7 @@ esac
 		t.Fatalf("expected Back to keep focus after success, got %q", got)
 	}
 
-	next, cmd = selectLabel(m, t, "900 apply")
+	next, cmd = selectLabel(m, t, "sso apply")
 	m = next
 	if cmd == nil {
 		t.Fatalf("expected next option to load preview")
@@ -789,7 +789,7 @@ esac
 	m = next
 	m = drainRun(m, cmd, t)
 
-	for _, label := range []string{"700 apply", "800 apply", "900 apply"} {
+	for _, label := range []string{"app-repos apply", "observability apply", "sso apply"} {
 		if !hasLabel(m.items(), label) {
 			t.Fatalf("expected next option %q after successful 600 apply, got %#v", label, m.items())
 		}

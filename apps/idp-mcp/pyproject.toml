@@ -7,5 +7,10 @@ dependencies = []
 [tool.uv]
 exclude-newer = "7 days"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
 [project.scripts]
 idp-mcp = "idp_mcp.server:main"
