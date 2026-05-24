@@ -7,8 +7,8 @@ This plan was reviewed against the current platform repo and the cloned
 
 The repo already has:
 
-- FastAPI IDP core, Backstage developer portal, SDK, and MCP client code.
-- Runtime adapters for `kind`, `lima`, and `generic_kubernetes`.
+- Go IDP core, Backstage developer portal, SDK, and MCP client code.
+- Runtime adapters for `generic_kubernetes`, `kind`, `lima`, and `slicer`.
 - Catalog, deployment, secret, scorecard, runtime, action, and audit schemas.
 - Kubernetes manifests for `idp-core` and `backstage`.
 - SSO HTTPRoutes for:

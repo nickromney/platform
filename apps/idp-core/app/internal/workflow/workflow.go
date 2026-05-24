@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -48,6 +49,15 @@ func NewRegistry() *Registry {
 	return &Registry{adapters: make(map[string]Adapter)}
 }
 
+func NewPlatformRuntimeRegistry() *Registry {
+	registry := NewRegistry()
+	registry.Register(&GenericAdapter{})
+	registry.Register(NewMakeAdapter("kind", "Local kind workflow adapter", "kubernetes/kind", "kind"))
+	registry.Register(NewMakeAdapter("lima", "Local Lima workflow adapter", "kubernetes/lima", "lima"))
+	registry.Register(NewMakeAdapter("slicer", "Local Slicer workflow adapter", "kubernetes/slicer", "slicer"))
+	return registry
+}
+
 func (r *Registry) Register(a Adapter) {
 	r.adapters[a.Name()] = a
 }
@@ -58,11 +68,15 @@ func (r *Registry) Get(name string) (Adapter, bool) {
 }
 
 func (r *Registry) List() []Adapter {
-	var list []Adapter
-	// Sort or just return. For now, simple list.
-	// We can add logic to ensure kind is first if needed.
-	for _, a := range r.adapters {
-		list = append(list, a)
+	names := make([]string, 0, len(r.adapters))
+	for name := range r.adapters {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	list := make([]Adapter, 0, len(names))
+	for _, name := range names {
+		list = append(list, r.adapters[name])
 	}
 	return list
 }

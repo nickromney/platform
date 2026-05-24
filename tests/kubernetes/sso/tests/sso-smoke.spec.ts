@@ -1181,7 +1181,7 @@ async function fetchJsonThroughBrowser(page: Page, path: string) {
 async function portalApiJsonWorks(page: Page) {
   const runtime = await fetchJsonThroughBrowser(page, '/api/v1/runtime')
   expect(typeof runtime?.active_runtime?.name).toBe('string')
-  expect(['generic_kubernetes', 'kind', 'lima']).toContain(runtime.active_runtime.name)
+  expect(['generic_kubernetes', 'kind', 'lima', 'slicer']).toContain(runtime.active_runtime.name)
 
   const catalog = await fetchJsonThroughBrowser(page, '/api/v1/catalog/apps')
   expect(Array.isArray(catalog?.applications)).toBe(true)

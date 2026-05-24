@@ -21,10 +21,11 @@
 
 ## Grilled and Resolved Candidates
 
-### A. `idpauth.BootstrapVerifier` — STRONG, unimplemented
+### A. `idpauth.BootstrapVerifier` — STRONG, later implemented in Loop 2
 
 **The duplication:**
-```
+
+```text
 subnetcalc/main.go:35-42  │ var verifier idpauth.TokenVerifier
 sentiment/main.go:35-42   │ if auth.ShouldVerifyOIDC("frontend") {
 chatgpt-sim/main.go:21-27 │     oidcVerifier, err := idpauth.NewOIDCVerifier(...)
@@ -34,6 +35,7 @@ apim-simulator/main.go:33 │     if err != nil { log.Fatalf(...) }
 ```
 
 **Proposed interface** (to add to `apps/shared/idpauth/idpauth.go`):
+
 ```go
 // BootstrapVerifier constructs an OIDC verifier when shouldVerify is true and
 // the required config fields are present. Returns nil without error when
@@ -48,6 +50,7 @@ func BootstrapVerifier(ctx context.Context, cfg RuntimeAuthConfig, shouldVerify 
 ```
 
 **Call sites after:**
+
 - subnetcalc: `verifier, err := idpauth.BootstrapVerifier(ctx, auth, auth.ShouldVerifyOIDC("frontend"))`
 - sentiment: same
 - chatgpt-sim: `verifier, err := idpauth.BootstrapVerifier(ctx, auth, cfg.AuthMode == "oidc" && cfg.Role == "shell")`
@@ -56,9 +59,10 @@ func BootstrapVerifier(ctx context.Context, cfg RuntimeAuthConfig, shouldVerify 
 
 ---
 
-### B. `idpauth.Authenticator.Middleware` — STRONG, unimplemented
+### B. `idpauth.Authenticator.Middleware` — STRONG, later implemented in Loop 2
 
 **The duplication** (identical in subnetcalc, sentiment, chatgpt-sim `server.go`):
+
 ```go
 func (s *server) requireAuth(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +81,7 @@ func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.Us
 ```
 
 **Proposed interface** (to add to `apps/shared/idpauth/idpauth.go`):
+
 ```go
 // Middleware returns an HTTP middleware that gates handlers on successful
 // authentication. On failure it writes an error response using the optional
@@ -99,6 +104,7 @@ func (a Authenticator) Middleware(msgs AuthFailureMessages) func(http.Handler) h
 `RequireAuth` belongs in `idpauth`, NOT `apphttp`. Future explorers: do not re-suggest `apphttp.RequireAuth`.
 
 **Call site after** (subnetcalc server.go):
+
 ```go
 auth := idpauth.Authenticator{Mode: cfg.AuthMode, Verifier: verifier}
 requireAuth := auth.Middleware(idpauth.AuthFailureMessages{
@@ -138,21 +144,23 @@ By the "one adapter = hypothetical seam" rule: defer until a second implementati
 
 ---
 
-## Second-Pass Findings (not yet grilled)
+## Second-Pass Findings (resolved in Loop 2)
 
 ### E. `tools/platform-tui` — shallow helpers and missing tests
 
-**Highest priority:**
+**Resolved findings:**
+
 - `internal/tui/model.go`: `stageDisplay()` (line ~716) is a **no-op** — returns its argument unchanged. Delete it.
 - `internal/tui/model.go`: `appToggleStageSummary()` and `appDefaultOverride()` are each called from exactly one site. Inline them or delete the indirection.
 - No tests for `resizeOutputViewport()` dimension calculation (viewport fallback widths/heights at lines ~608-619)
 - No tests for `loadWorkflowOptionsFromScript()` error paths (script failures are silently swallowed)
 
 **Lower priority:**
+
 - `cmd/platform-tui/main.go`: `getenv()` and `isTerminal()` are untested private helpers. Inline or delete.
 - `clearRunResult()`, `focusPreviewItem()`, `setRunOutput()` are shallow coordinators with no invariant logic. Inline or remove.
 
-**Strength:** Worth exploring (cleanup pass, not structural)
+**Strength:** Resolved cleanup pass, not structural
 
 ---
 
@@ -162,6 +170,7 @@ Tool names appear **twice**: once in `tool_definitions()` schema (lines 51-76) a
 `handle_tool_call()` dispatch switch (lines 79-87). A new tool requires editing both places.
 
 **Proposed shape:**
+
 ```python
 TOOLS = {
     "platform_status": {
@@ -172,12 +181,13 @@ TOOLS = {
     # ...
 }
 ```
+
 Generate `tool_definitions()` from `TOOLS.values()` and dispatch from `TOOLS[name]["handler"]`.
 
 Also: zero test coverage for `_request()`, `platform_status()`, `catalog_list()`, `create_environment()`.
 Only `from_env()` is tested.
 
-**Strength:** Worth exploring
+**Strength:** Resolved
 
 ---
 
@@ -200,6 +210,7 @@ to `apps/shared/idpauth/idpauth.go`. Bug found during testing and fixed: the ori
 implementation returned `NewOIDCVerifier(...)` directly, which would return a non-nil
 interface wrapping a typed nil pointer on error (the Go interface-nil trap). Fixed by
 explicitly returning `nil, err`. Updated all four main.go files:
+
 - `apps/subnetcalc/app/cmd/subnetcalc/main.go` — removed 6-line OIDC block + `"context"` import
 - `apps/sentiment/app/cmd/sentiment/main.go` — same
 - `apps/chatgpt-sim/app/cmd/chatgpt-sim/main.go` — same
@@ -209,6 +220,7 @@ explicitly returning `nil, err`. Updated all four main.go files:
 
 Added `(Authenticator).Middleware(msgs AuthFailureMessages) func(http.Handler) http.Handler`
 to `apps/shared/idpauth/idpauth.go`. Updated three server.go files:
+
 - `apps/subnetcalc/app/internal/app/server.go` — wired `Middleware` in `NewServer`, deleted `requireAuth` method
 - `apps/sentiment/app/internal/app/server.go` — same
 - `apps/chatgpt-sim/app/internal/app/server.go` — deleted `requireAuth` (was dead code: defined but never called)
@@ -254,6 +266,47 @@ Added `pytest` as dev dependency; `uv run pytest` now covers dispatch logic.
 | `apps/idp-mcp/tests/test_server.py` | Add 7 dispatch/registry tests |
 | `apps/idp-mcp/pyproject.toml` | Add `pytest` dev dependency |
 | `tools/platform-tui/internal/tui/model.go` | Fix `stageDisplay` (no-op → label lookup) |
+
+---
+
+## Loop 3 — Implemented (2026-05-24)
+
+### G. `idp-core` runtime Adapter registry — implemented
+
+Second-pass review found that `apps/idp-core/app/internal/app/server.go`
+still constructed the runtime Adapter registry inline and exposed only
+`generic_kubernetes`, `kind`, and `lima`. That contradicted the current
+Local Stack Operations language where Slicer is a first-class local variant,
+and it left the registry as a shallow map wrapper with nondeterministic list
+order.
+
+Implemented:
+
+- Added `workflow.NewPlatformRuntimeRegistry()` as the single Portal API
+  runtime Adapter registry.
+- Added the Slicer Make-backed runtime Adapter.
+- Made `Registry.List()` deterministic by sorting Adapter names.
+- Updated Portal API, browser SSO, and DDD/runtime-portability docs to include
+  `slicer` in the current runtime Adapter set.
+
+Tests added:
+
+- `apps/idp-core/app/internal/workflow/workflow_test.go` proves the registry
+  exposes `generic_kubernetes`, `kind`, `lima`, and `slicer` in deterministic
+  order.
+- The existing Portal API runtime test now asserts the same public runtime
+  list.
+
+### Remaining Loop 3 Findings
+
+No high or medium recommendations remain from this pass. The remaining known
+items are deliberately low/speculative:
+
+- `apps/platform-mcp` tool registry consolidation remains deferred until a
+  fourth tool appears.
+- `sentiment` store interface remains deferred until a second store Adapter
+  exists.
+- The terminal TUI minimal no-contract fallback should remain startup-only.
 
 ---
 

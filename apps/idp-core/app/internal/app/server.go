@@ -44,10 +44,7 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.Runtime == "" {
 		cfg.Runtime = "kind"
 	}
-	registry := workflow.NewRegistry()
-	registry.Register(&workflow.GenericAdapter{})
-	registry.Register(workflow.NewMakeAdapter("kind", "Local kind workflow adapter", "kubernetes/kind", "kind"))
-	registry.Register(workflow.NewMakeAdapter("lima", "Local Lima workflow adapter", "kubernetes/lima", "lima"))
+	registry := workflow.NewPlatformRuntimeRegistry()
 
 	s := &Server{
 		auditPath:   cfg.AuditPath,

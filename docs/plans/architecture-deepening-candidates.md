@@ -1053,6 +1053,7 @@ calls this once; the `if shouldVerify` branch and error handling are absorbed
 into the module.
 
 **Grilling decisions:**
+
 - `shouldVerify` is passed by the caller rather than computed inside, because
   chatgpt-sim uses a role-specific condition (`cfg.Role == "shell"`) that
   differs from the `ShouldVerifyOIDC("frontend")` pattern used by
@@ -1065,7 +1066,7 @@ into the module.
 Locality: OIDC bootstrap error handling concentrates in one module. Leverage:
 one call per app replaces a 6-line if/NewOIDCVerifier/Fatalf block.
 
-**Strength:** Strong
+**Strength:** Strong, implemented
 
 #### B. Add `idpauth.Authenticator.Middleware` — extract repeated auth gate
 
@@ -1096,7 +1097,7 @@ Locality: auth middleware bugs fix in one place. Leverage: one tested
 middleware, three wiring points. Interface shrinks: `requireAuth` and
 `currentUser` are deleted from each app.
 
-**Strength:** Strong
+**Strength:** Strong, implemented
 
 #### C. Accept `idpauth` as auth+HTTP integration module (not pure domain)
 
@@ -1116,7 +1117,7 @@ Accept the current module boundary. Record here so future architecture passes
 do not re-suggest moving `WriteClientPrincipalSession` to `apphttp` (which
 would create the same circular import).
 
-**Strength:** Worth exploring as future module split if idpauth grows
+**Strength:** Speculative future module split if idpauth grows
 
 #### D. Sentiment store seam — speculative
 
@@ -1167,3 +1168,26 @@ consolidated registry type is more complex than the Python equivalent.
 differences mean the fix would add more code than it removes at current scale.
 
 **Strength:** Speculative
+
+#### Implemented: idp-core runtime Adapter registry
+
+**Files:** `apps/idp-core/app/internal/workflow/workflow.go` ·
+`apps/idp-core/app/internal/app/server.go`
+
+**Problem:**
+The Portal API runtime Adapter registry was constructed inline in `NewServer`,
+listed Adapters through map iteration order, and omitted the current Slicer
+local variant. That left runtime Adapter facts split between DDD docs, local
+variant contracts, and app server wiring.
+
+**Solution:**
+Added `workflow.NewPlatformRuntimeRegistry()` as the single registry module,
+registered `generic_kubernetes`, `kind`, `lima`, and `slicer`, and made
+`Registry.List()` deterministic.
+
+**Expected benefits:**
+Locality: the Portal API runtime Adapter set lives behind one workflow module
+Interface. Leverage: server routes, tests, SDK/MCP callers, and browser SSO
+smoke checks observe the same stable runtime list.
+
+**Strength:** Medium, implemented

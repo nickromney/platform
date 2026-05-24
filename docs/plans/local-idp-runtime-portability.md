@@ -1,13 +1,13 @@
 # Local IDP Runtime Portability
 
 The developer portal, SDK, MCP, and TUI are runtime-agnostic surfaces over the
-IDP. Runtime-specific behavior belongs behind the FastAPI IDP core adapter
+IDP. Runtime-specific behavior belongs behind the Go IDP core adapter
 interface.
 
 ```text
 Developer portal / SDK / MCP / TUI
             |
-      FastAPI IDP Core
+        Go IDP Core
             |
     Runtime Adapter Interface
             |
@@ -21,6 +21,6 @@ bare-metal identity integration.
 
 The first portable baseline is `generic_kubernetes`: given kubeconfig, Argo CD
 URL, registry config, gateway domain, and catalog path, it can expose the same
-FastAPI contract without a developer portal rewrite. Kind remains the default
-local Docker-backed runtime, and Lima proves the same portal can target a
-VM-backed k3s runtime.
+Portal API contract without a developer portal rewrite. Kind remains the
+default local Docker-backed runtime, while Lima and Slicer prove the same
+portal can target VM-backed k3s runtimes.
