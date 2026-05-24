@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"platform.local/appconfig"
 	"platform.local/apphealth"
 )
 
@@ -20,8 +21,18 @@ const defaultJSONBodyLimit int64 = 1 << 20
 
 const DefaultReadHeaderTimeout = 5 * time.Second
 
+const DependencyFootprintGoSharedIDPAuth = apphealth.DependencyFootprintGoSharedIDPAuth
+
+const FrontendDependencyFootprintVanilla = apphealth.FrontendDependencyFootprintVanilla
+
+const DefaultHealthcheckTimeout = apphealth.DefaultHealthcheckTimeout
+
+func BrowserAppHealth(payload map[string]any) map[string]any {
+	return apphealth.BrowserAppHealth(payload)
+}
+
 func WriteBrowserAppHealth(w http.ResponseWriter, payload map[string]any) {
-	WriteJSON(w, http.StatusOK, apphealth.BrowserAppHealth(payload))
+	WriteJSON(w, http.StatusOK, BrowserAppHealth(payload))
 }
 
 func RoleStatus(status string, role string) map[string]string {
@@ -141,7 +152,7 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 
 func NewServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:              addr,
+		Addr:              NormalizeAddr(addr),
 		Handler:           handler,
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
 	}
@@ -171,6 +182,62 @@ func QueryInt(r *http.Request, key string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func Env(key, fallback string) string {
+	return appconfig.Env(key, fallback)
+}
+
+func EnvURL(key, fallback string) string {
+	return appconfig.EnvURL(key, fallback)
+}
+
+func NormalizeURL(value string) string {
+	return appconfig.NormalizeURL(value)
+}
+
+func FirstEnv(keys ...string) string {
+	return appconfig.FirstEnv(keys...)
+}
+
+func EnvBool(key string, fallback bool) bool {
+	return appconfig.EnvBool(key, fallback)
+}
+
+func EnvSeconds(key string, fallback time.Duration) time.Duration {
+	return appconfig.EnvSeconds(key, fallback)
+}
+
+func EnvInt(key string, fallback int) int {
+	return appconfig.EnvInt(key, fallback)
+}
+
+func NormalizeAddr(addr string) string {
+	return appconfig.NormalizeAddr(addr)
+}
+
+func StringDefault(value, fallback string) string {
+	return appconfig.StringDefault(value, fallback)
+}
+
+func FirstNonEmpty(values ...string) string {
+	return appconfig.FirstNonEmpty(values...)
+}
+
+func CheckHealthURL(rawURL string, timeout time.Duration) bool {
+	return apphealth.CheckHealthURL(rawURL, timeout)
+}
+
+func LocalHealthURL(port string, path string) string {
+	return apphealth.LocalHealthURL(port, path)
+}
+
+func CheckLocalHealth(port string, path string) bool {
+	return apphealth.CheckLocalHealth(port, path)
+}
+
+func HealthcheckCommand(args []string) bool {
+	return apphealth.HealthcheckCommand(args)
 }
 
 func NewHTTPClient(timeout time.Duration) *http.Client {

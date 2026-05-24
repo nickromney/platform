@@ -73,7 +73,7 @@ domain language.
 | portal surface | browser-facing navigation or admin UI for platform operators | Current examples: Grafana Launchpad, Argo CD, Headlamp, Gitea, Keycloak, Hubble, and Policy Reporter. |
 | developer portal | the Backstage/Port-like browser UI over the local IDP | Public host: `portal.127.0.0.1.sslip.io`; this is a surface, not the whole platform. |
 | portal API | the small Go product API consumed by the developer portal, SDK, MCP, and TUI | Public host: `portal-api.127.0.0.1.sslip.io`; it exposes IDP contracts and dry-run workflows, not Terraform internals. |
-| runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `kind`, `lima`, and `generic_kubernetes`; future adapters may include Slicer, AKS, EKS, and bare-metal Kubernetes. |
+| runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `generic_kubernetes`, `kind`, `lima`, and `slicer`; future adapters may include AKS, EKS, and bare-metal Kubernetes. |
 | status surface | CLI or dashboard view that summarizes current state | Current examples: `platform status`, variant `status` targets, Argo CD Applications, and Grafana Launchpad health tiles. |
 
 ## Image Distribution Language
