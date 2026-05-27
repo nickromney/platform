@@ -408,71 +408,49 @@ render_assignment() {
   printf '%s = %s\n\n' "${key}" "${rendered}"
 }
 
-render_hcl_literal() {
-  local value_json="$1"
-
-  jq -nr --argjson value "${value_json}" '
-    def hcl_key:
-      if test("^[A-Za-z_][A-Za-z0-9_]*$") then . else @json end;
-    def hcl:
-      if type == "boolean" or type == "number" then tostring
-      elif type == "object" then
-        "{\n" + (to_entries | map("  " + (.key | hcl_key) + " = " + (.value | hcl)) | join("\n")) + "\n}"
-      else @json
-      end;
-    $value | hcl
-  '
-}
-
-render_assignment_json() {
-  local key="$1"
-  local value_json="$2"
-  local source="$3"
-
-  printf '# Source: %s\n' "${source}"
-  printf '%s = %s\n\n' "${key}" "$(render_hcl_literal "${value_json}")"
-}
-
-render_preset_overlay() {
-  local group="$1"
-  local preset="$2"
-  local source="preset ${group//_/-}=${preset}"
+render_preset_tfvars() {
   local registry_host=""
-  local entry=""
-  local key=""
-  local value_json=""
-
-  [[ "${preset}" != "default" ]] || return 0
   registry_host="$(local_registry_runtime_host)"
 
-  jq -c \
-    --arg group "${group}" \
-    --arg preset "${preset}" \
-    --arg registry_host "${registry_host}" '
+  jq -r \
+    --arg registry_host "${registry_host}" \
+    --arg resource_profile "${PRESET_RESOURCE_PROFILE}" \
+    --arg image_distribution "${PRESET_IMAGE_DISTRIBUTION}" \
+    --arg observability_stack "${PRESET_OBSERVABILITY_STACK}" \
+    --arg identity_stack "${PRESET_IDENTITY_STACK}" \
+    --arg app_set "${PRESET_APP_SET}" \
+    '
+      def selected_presets:
+        [
+          {group: "resource_profile", preset: $resource_profile},
+          {group: "image_distribution", preset: $image_distribution},
+          {group: "observability_stack", preset: $observability_stack},
+          {group: "identity_stack", preset: $identity_stack},
+          {group: "app_set", preset: $app_set}
+        ]
+        | map(select(.preset != "default"));
       def subvars:
         if type == "object" then with_entries(.value |= subvars)
         elif type == "array" then map(subvars)
         elif type == "string" then gsub("\\$\\{local_registry_runtime_host\\}"; $registry_host)
         else . end;
-      .presets[]
-      | select(.group == $group and .id == $preset)
+      def hcl_key:
+        if test("^[A-Za-z_][A-Za-z0-9_]*$") then . else @json end;
+      def hcl:
+        if type == "boolean" or type == "number" then tostring
+        elif type == "object" then
+          "{\n" + (to_entries | map("  " + (.key | hcl_key) + " = " + (.value | hcl)) | join("\n")) + "\n}"
+        else @json
+        end;
+      selected_presets[] as $selection
+      | .presets[]
+      | select(.group == $selection.group and .id == $selection.preset)
+      | ("preset " + ($selection.group | gsub("_"; "-")) + "=" + $selection.preset) as $source
       | .overlay
       | subvars
       | to_entries[]
-    ' "${WORKFLOW_OPTIONS_FILE}" |
-    while IFS= read -r entry; do
-      key="$(jq -r '.key' <<<"${entry}")"
-      value_json="$(jq -c '.value' <<<"${entry}")"
-      render_assignment_json "${key}" "${value_json}" "${source}"
-    done
-}
-
-render_preset_tfvars() {
-  render_preset_overlay resource_profile "${PRESET_RESOURCE_PROFILE}"
-  render_preset_overlay image_distribution "${PRESET_IMAGE_DISTRIBUTION}"
-  render_preset_overlay observability_stack "${PRESET_OBSERVABILITY_STACK}"
-  render_preset_overlay identity_stack "${PRESET_IDENTITY_STACK}"
-  render_preset_overlay app_set "${PRESET_APP_SET}"
+      | "# Source: \($source)\n\(.key) = \(.value | hcl)\n"
+    ' "${WORKFLOW_OPTIONS_FILE}"
 }
 
 render_custom_overrides() {

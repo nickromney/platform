@@ -1,0 +1,30 @@
+ 104  },
+  97  ],
+  86  {
+  84 -r .key
+  84 -c .value
+  84  if type == "boolean" or type == "number" then tostring
+  84  if test("^[A-Za-z_][A-Za-z0-9_]*$") then . else @json end;
+  84  end;
+  84  else @json
+  84  elif type == "object" then
+  84  def hcl_key:
+  84  def hcl:
+  84  $value | hcl
+  84  "{\n" + (to_entries | map(" " + (.key | hcl_key) + " = " + (.value | hcl)) | join("\n")) + "\n}"
+  84  
+  45  }
+  45 
+  36 -nr --argjson value false 
+  32 -nr --argjson value true 
+  31 # Source: preset resource-profile=local-idp-12gb
+  30  "variants": [
+  28  "slicer"
+  27  "kind",
+  26  "lima",
+  22  ]
+  20  | select(.group == $group and .id == $preset)
+  17  "overlay": {
+  16  "cluster-access",
+  14  "context": "platform-stack",
+  11 -r --arg id kind .variants[] | select(.id == $id) | .variant_contract | .registry.runtime_host // empty /Users/nickromney/Developer/personal/platform/.run/workflow/options.json

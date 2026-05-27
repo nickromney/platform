@@ -1,0 +1,2 @@
+8865800def2dac60f43eb642b3af5d27b729842b76d149d0d6737d288b3d2ffe  tests/artifacts/perf/20260527T203710Z-workflow-preview/golden-output.json
+174ea404da5f7150fca209b73551067dc2454e0ef4b12e16424aa693d956c4a5  tests/artifacts/perf/20260527T203710Z-workflow-preview/golden.tfvars
