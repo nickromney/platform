@@ -23,6 +23,8 @@ Pass 1 result: batching preset overlay HCL rendering reduced the same 20-run com
 
 Pass 2 result: batching selected preset validation reduced the same 20-run command to mean 198.9ms, sigma 33.8ms. Artifact: `post-pass2-hyperfine.json`.
 
+Pass 3 result: experimental batching of explicit `--preset` parse validation measured mean 197.1ms, sigma 37.7ms. This is inside the variance envelope versus pass 2, so the code change was not retained. Artifact: `post-pass3-hyperfine.json`.
+
 Decomposition:
 
 | Segment | Mean | Evidence |
@@ -75,3 +77,9 @@ Decomposition:
 - Floating-point: N/A.
 - RNG seeds: N/A.
 - Golden outputs: `shasum -a 256 -c golden_checksums.txt` passed after the change.
+
+## Pass 3 Disposition
+
+- Candidate change: Batch explicit `--preset` parse validation.
+- Outcome: Rejected after measurement.
+- Reason: The candidate removed subprocess calls, but 198.9ms -> 197.1ms over 20 runs is below the 10% variance threshold and not worth the added parsing state.
