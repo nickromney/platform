@@ -248,69 +248,47 @@ set_preset() {
   printf -v "${var_name}" '%s' "${value}"
 }
 
-stage_number() {
-  printf '%s' "$1"
-}
-
-stage_at_least() {
-  local minimum="$1"
-  local value=""
-
-  value="$(stage_number "${STAGE}")"
-  [[ "${value}" =~ ^[0-9]+$ ]] && [[ "${value}" -ge "${minimum}" ]]
-}
-
-preset_supported_by_variant() {
-  local group="$1"
-  local preset="$2"
-
-  jq -e \
-    --arg group "${group}" \
-    --arg preset "${preset}" \
-    --arg variant "${TARGET}" \
-    '.presets[]
-      | select(.group == $group and .id == $preset)
-      | (.variants // [])
-      | index($variant)' "${WORKFLOW_OPTIONS_FILE}" >/dev/null
-}
-
-preset_stage_requirement() {
-  local group="$1"
-  local preset="$2"
-
-  jq -r \
-    --arg group "${group}" \
-    --arg preset "${preset}" \
-    '.presets[]
-      | select(.group == $group and .id == $preset)
-      | .introduced_at_stage // empty' "${WORKFLOW_OPTIONS_FILE}"
-}
-
-validate_selected_preset() {
-  local group="$1"
-  local preset="$2"
-  local display_group="${group//_/-}"
-  local stage_requirement=""
-
-  [[ "${preset}" != "default" ]] || return 0
-
-  if ! preset_supported_by_variant "${group}" "${preset}"; then
-    die_usage "Preset ${display_group}=${preset} is not available for variant ${TARGET}"
-  fi
-
-  stage_requirement="$(preset_stage_requirement "${group}" "${preset}")"
-  if [[ -n "${stage_requirement}" ]]; then
-    stage_at_least "${stage_requirement}" || die_usage "Preset ${display_group}=${preset} requires stage ${stage_requirement} or later"
-  fi
-}
-
 validate_preset_selection() {
-  validate_selected_preset resource_profile "${PRESET_RESOURCE_PROFILE}"
-  validate_selected_preset image_distribution "${PRESET_IMAGE_DISTRIBUTION}"
-  validate_selected_preset network_profile "${PRESET_NETWORK_PROFILE}"
-  validate_selected_preset observability_stack "${PRESET_OBSERVABILITY_STACK}"
-  validate_selected_preset identity_stack "${PRESET_IDENTITY_STACK}"
-  validate_selected_preset app_set "${PRESET_APP_SET}"
+  local error=""
+
+  error="$(
+    jq -r \
+      --arg variant "${TARGET}" \
+      --arg stage "${STAGE}" \
+      --arg resource_profile "${PRESET_RESOURCE_PROFILE}" \
+      --arg image_distribution "${PRESET_IMAGE_DISTRIBUTION}" \
+      --arg network_profile "${PRESET_NETWORK_PROFILE}" \
+      --arg observability_stack "${PRESET_OBSERVABILITY_STACK}" \
+      --arg identity_stack "${PRESET_IDENTITY_STACK}" \
+      --arg app_set "${PRESET_APP_SET}" \
+      '
+        def selected_presets:
+          [
+            {group: "resource_profile", preset: $resource_profile},
+            {group: "image_distribution", preset: $image_distribution},
+            {group: "network_profile", preset: $network_profile},
+            {group: "observability_stack", preset: $observability_stack},
+            {group: "identity_stack", preset: $identity_stack},
+            {group: "app_set", preset: $app_set}
+          ]
+          | map(select(.preset != "default"));
+        def display_group($group):
+          $group | gsub("_"; "-");
+        def selected_preset_error($options; $selection):
+          ([$options.presets[] | select(.group == $selection.group and .id == $selection.preset)][0]) as $preset
+          | (display_group($selection.group)) as $display_group
+          | if (($preset.variants // []) | index($variant) | not) then
+              "Preset \($display_group)=\($selection.preset) is not available for variant \($variant)"
+            elif (($preset.introduced_at_stage // "") != "" and (($stage | tonumber) < ($preset.introduced_at_stage | tonumber))) then
+              "Preset \($display_group)=\($selection.preset) requires stage \($preset.introduced_at_stage) or later"
+            else
+              empty
+            end;
+        . as $options
+        | [selected_presets[] | selected_preset_error($options; .)][0] // empty
+      ' "${WORKFLOW_OPTIONS_FILE}"
+  )"
+  [[ -z "${error}" ]] || die_usage "${error}"
 }
 
 normalize_custom_bool() {

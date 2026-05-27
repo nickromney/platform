@@ -21,6 +21,8 @@ Baseline: 20 warm-cache hyperfine runs, mean 1.778s, median 1.760s, sigma 0.354s
 
 Pass 1 result: batching preset overlay HCL rendering reduced the same 20-run command to mean 286.6ms, sigma 63.6ms. Artifact: `post-pass1-hyperfine.json`.
 
+Pass 2 result: batching selected preset validation reduced the same 20-run command to mean 198.9ms, sigma 33.8ms. Artifact: `post-pass2-hyperfine.json`.
+
 Decomposition:
 
 | Segment | Mean | Evidence |
@@ -61,6 +63,15 @@ Decomposition:
 - Change: Batch selected preset overlay HCL rendering into one `jq` call.
 - Ordering preserved: yes, selected preset groups stay in the original `resource_profile`, `image_distribution`, `observability_stack`, `identity_stack`, `app_set` order, and each overlay still uses `to_entries`.
 - Tie-breaking unchanged: N/A, duplicate assignments remain emitted in the same precedence order.
+- Floating-point: N/A.
+- RNG seeds: N/A.
+- Golden outputs: `shasum -a 256 -c golden_checksums.txt` passed after the change.
+
+## Pass 2 Isomorphism Proof
+
+- Change: Batch selected preset validation into one `jq` call.
+- Ordering preserved: yes, validation still evaluates `resource_profile`, `image_distribution`, `network_profile`, `observability_stack`, `identity_stack`, then `app_set`; a regression test covers first-failure ordering.
+- Tie-breaking unchanged: N/A.
 - Floating-point: N/A.
 - RNG seeds: N/A.
 - Golden outputs: `shasum -a 256 -c golden_checksums.txt` passed after the change.

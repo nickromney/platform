@@ -201,6 +201,16 @@ setup() {
 
   [ "${status}" -eq 2 ]
   [[ "${output}" == *"Preset network-profile=default-cni is not available for variant kind"* ]]
+
+  run "${SCRIPT}" preview --execute \
+    --variant lima \
+    --stage 700 \
+    --preset resource-profile=local-idp-12gb \
+    --preset observability-stack=lgtm
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Preset resource-profile=local-idp-12gb is not available for variant lima"* ]]
+  [[ "${output}" != *"Preset observability-stack=lgtm requires stage 800 or later"* ]]
 }
 
 @test "platform workflow rejects removed 950-local-idp stage" {
