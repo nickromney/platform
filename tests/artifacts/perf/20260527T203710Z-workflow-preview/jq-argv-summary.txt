@@ -1,0 +1,9 @@
+Preset-heavy preview before optimization: 311 jq invocations.
+
+Top subprocess clusters:
+- 84 x `jq -r .key` while splitting preset overlay entries.
+- 84 x `jq -c .value` while splitting preset overlay entries.
+- 84 x `jq -nr --argjson value ...` while rendering each HCL literal.
+- 11 x variant registry runtime host lookup.
+- 10 x full preset overlay scans.
+- 20 x selected preset validation checks across 5 non-default presets.

@@ -1,0 +1,9 @@
+Preset-heavy preview after pass 1: 43 jq invocations.
+
+Remaining subprocess clusters:
+- 20 x selected preset validation checks across 5 non-default presets.
+- 3 x variant registry runtime host lookup.
+- 2 x target path lookup.
+- 2 x app override validation.
+- 2 x batched preset overlay rendering.
+- 1 x workflow options rendering.
