@@ -86,6 +86,10 @@ esac
     workflow.chmod(workflow.stat().st_mode | stat.S_IXUSR)
 
 
+def csrf_headers(client: TestClient) -> dict[str, str]:
+    return {"x-csrf-token": str(client.app.state.csrf_token)}
+
+
 def test_app_serves_htmx_page_and_static_asset(tmp_path: Path) -> None:
     write_workflow_stub(tmp_path)
     client = TestClient(create_app(repo_root=tmp_path))
@@ -115,6 +119,8 @@ def test_app_serves_htmx_page_and_static_asset(tmp_path: Path) -> None:
     assert 'data-variant="kubernetes/slicer"' in page.text
     assert 'name="variant"' in page.text
     assert 'name="target"' not in page.text
+    assert 'hx-headers="{&quot;X-CSRF-Token&quot;:' in page.text
+    assert 'name="csrf_token"' in page.text
     assert "syncGuidedTabState()" in page.text
     assert "updateQuickActionState()" not in page.text
     assert "selectStage(stage)" in page.text
@@ -186,6 +192,7 @@ def test_preview_failure_layout_keeps_error_details_reachable(tmp_path: Path) ->
     page = client.get("/")
     preview = client.post(
         "/preview",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "200", "action": "apply", "auto_approve": "1"},
     )
 
@@ -207,6 +214,7 @@ def test_preview_fragment_uses_shared_workflow_script(tmp_path: Path) -> None:
 
     response = client.post(
         "/preview",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "500", "action": "apply", "auto_approve": "1"},
     )
 
@@ -255,6 +263,7 @@ def test_state_reset_preview_is_non_interactive(tmp_path: Path) -> None:
 
     response = client.post(
         "/preview",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "900", "action": "state-reset"},
     )
 
@@ -269,6 +278,7 @@ def test_read_only_preview_has_read_only_badge_and_no_auto_approve(tmp_path: Pat
 
     response = client.post(
         "/preview",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "900", "action": "check-health", "auto_approve": "1", "source": "action button"},
     )
 
@@ -309,6 +319,7 @@ def test_run_fragment_polls_job_and_offers_next_actions(tmp_path: Path) -> None:
 
     response = client.post(
         "/run",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "500", "action": "apply", "auto_approve": "1"},
     )
 
@@ -335,12 +346,28 @@ def test_run_fragment_polls_job_and_offers_next_actions(tmp_path: Path) -> None:
     assert "Preview again" in status.text
 
 
+def test_run_fragment_rejects_missing_csrf_token_without_starting_job(tmp_path: Path) -> None:
+    write_workflow_stub(tmp_path)
+    app = create_app(repo_root=tmp_path)
+    client = TestClient(app)
+
+    response = client.post(
+        "/run",
+        data={"variant": "kubernetes/kind", "stage": "500", "action": "apply", "auto_approve": "1"},
+    )
+
+    assert response.status_code == 403
+    assert app.state.command_history.snapshot() == []
+    assert app.state.jobs.jobs == {}
+
+
 def test_preview_preserves_latest_completed_output(tmp_path: Path) -> None:
     write_workflow_stub(tmp_path)
     client = TestClient(create_app(repo_root=tmp_path))
 
     response = client.post(
         "/run",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "600", "action": "plan"},
     )
     assert response.status_code == 200
@@ -357,6 +384,7 @@ def test_preview_preserves_latest_completed_output(tmp_path: Path) -> None:
 
     preview = client.post(
         "/preview",
+        headers=csrf_headers(client),
         data={"variant": "kubernetes/kind", "stage": "900", "action": "plan"},
     )
 
@@ -378,6 +406,7 @@ def test_command_history_keeps_last_five_run_commands(tmp_path: Path) -> None:
     for stage in ("100", "200", "300", "400", "500", "600"):
         response = client.post(
             "/run",
+            headers=csrf_headers(client),
             data={"variant": "kubernetes/kind", "stage": stage, "action": "plan"},
         )
         assert response.status_code == 200

@@ -837,106 +837,41 @@ func (m *Model) applyPresetBundle(bundle string) {
 }
 
 func (m Model) appDefault(app string) bool {
-	tfvar := appTFVarName(app)
-	for _, preset := range m.options.Presets {
-		if preset.Group != "app_set" || preset.ID != m.presetAppSet || preset.Overlay == nil {
-			continue
-		}
-		if value, ok := preset.Overlay[tfvar].(bool); ok {
-			return value
-		}
-	}
-	return m.hasAppToggles()
+	return m.workflowSelection().AppDefault(app)
 }
 
 func (m Model) hasAppToggles() bool {
-	for _, stage := range m.options.UIRules.AppToggleStages {
-		if stage == m.stage {
-			return true
-		}
-	}
-	for _, stage := range m.options.Stages {
-		if stage.ID == m.stage {
-			return stage.AppToggles
-		}
-	}
-	return false
+	return m.workflowSelection().HasAppToggles()
 }
 
 func (m Model) actionSupportsAppToggles(action string) bool {
-	for _, allowed := range m.options.UIRules.AppToggleActions {
-		if allowed == action {
-			return true
-		}
-	}
-	for _, option := range m.options.ActionMetadata {
-		if option.ID == action {
-			return option.SupportsAppToggles
-		}
-	}
-	return false
+	return m.workflowSelection().ActionSupportsAppToggles(action)
 }
 
 func (m Model) workflowArgs(subcommand string) []string {
-	args := []string{subcommand, "--execute"}
-	if subcommand == "preview" {
-		args = append(args, "--output", "json")
-	}
-	args = append(args, "--variant", m.variant, "--stage", m.stage, "--action", m.action)
-	if m.presetResourceProfile != "" {
-		args = append(args, "--preset", "resource-profile="+m.presetResourceProfile)
-	}
-	if m.presetImageDistribution != "" {
-		args = append(args, "--preset", "image-distribution="+m.presetImageDistribution)
-	}
-	if m.presetNetworkProfile != "" {
-		args = append(args, "--preset", "network-profile="+m.presetNetworkProfile)
-	}
-	if m.presetObservabilityStack != "" {
-		args = append(args, "--preset", "observability-stack="+m.presetObservabilityStack)
-	}
-	if m.presetIdentityStack != "" {
-		args = append(args, "--preset", "identity-stack="+m.presetIdentityStack)
-	}
-	if m.presetAppSet != "" {
-		args = append(args, "--preset", "app-set="+m.presetAppSet)
-	}
-	if m.customWorkerCount != "" {
-		args = append(args, "--set", "worker_count="+m.customWorkerCount)
-	}
-	if m.customNodeImage != "" {
-		args = append(args, "--set", "node_image="+m.customNodeImage)
-	}
-	for _, app := range m.options.Apps {
-		override := m.appOverrides[app]
-		if override != "" && override != appDefaultOverride(app, m.appDefault(app)) {
-			args = append(args, "--app", override)
-		}
-	}
-	if m.actionUsesAutoApprove(m.action) {
-		args = append(args, "--auto-approve")
-	}
-	return args
+	return m.workflowSelection().WorkflowArgs(subcommand)
 }
 
 func (m Model) actionUsesAutoApprove(action string) bool {
-	for _, option := range m.options.ActionMetadata {
-		if option.ID == action {
-			return option.UsesAutoApprove
-		}
-	}
-	return action == "apply" || action == "reset" || action == "state-reset"
+	return m.workflowSelection().ActionUsesAutoApprove(action)
 }
 
-func appDefaultOverride(app string, enabled bool) string {
-	if enabled {
-		return app + "=on"
+func (m Model) workflowSelection() WorkflowSelection {
+	return WorkflowSelection{
+		Options:                  m.options,
+		Variant:                  m.variant,
+		Stage:                    m.stage,
+		Action:                   m.action,
+		AppOverrides:             m.appOverrides,
+		PresetResourceProfile:    m.presetResourceProfile,
+		PresetImageDistribution:  m.presetImageDistribution,
+		PresetNetworkProfile:     m.presetNetworkProfile,
+		PresetObservabilityStack: m.presetObservabilityStack,
+		PresetIdentityStack:      m.presetIdentityStack,
+		PresetAppSet:             m.presetAppSet,
+		CustomWorkerCount:        m.customWorkerCount,
+		CustomNodeImage:          m.customNodeImage,
 	}
-	return app + "=off"
-}
-
-func appTFVarName(app string) string {
-	return "enable_app_repo_" + strings.ReplaceAll(app, "-", "_")
 }
 
 func (m Model) loadPreviewCmd() tea.Cmd {

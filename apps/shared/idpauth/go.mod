@@ -9,7 +9,7 @@ require (
 )
 
 require (
-	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
 	platform.local/apphealth v0.0.0-00010101000000-000000000000 // indirect
 )
