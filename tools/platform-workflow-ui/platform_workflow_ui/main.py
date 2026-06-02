@@ -4,6 +4,7 @@ import html
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import threading
@@ -12,25 +13,26 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from platform_workflow_ui.workflow import (
     JobStore,
     WORKFLOW_OPTIONS,
+    WorkflowSelection,
     build_workflow_args,
+    history_payload,
     parse_preview,
     run_inventory_json,
     run_workflow_json,
-    app_default,
     stage_default,
-    stage_has_app_toggles,
     variant_to_target,
 )
 
 
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
+CSRF_FIELD = "csrf_token"
 UI_RULES = WORKFLOW_OPTIONS.get("ui_rules", {})
 STAGE_METADATA = {stage["id"]: stage for stage in WORKFLOW_OPTIONS["stages"]}
 ACTION_METADATA = {action["id"]: action for action in WORKFLOW_OPTIONS.get("action_metadata", [])}
@@ -85,6 +87,7 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
     app.state.repo_root = resolved_root
     app.state.jobs = job_store or JobStore(resolved_root)
     app.state.command_history = CommandHistory()
+    app.state.csrf_token = secrets.token_urlsafe(32)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     @app.get("/health")
@@ -93,7 +96,7 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return page()
+        return page(str(app.state.csrf_token))
 
     @app.get("/favicon.ico")
     def favicon() -> Response:
@@ -151,27 +154,12 @@ def create_app(repo_root: Path | None = None, job_store: JobStore | None = None)
         return job_fragment(job, app.state.command_history.snapshot())
 
     @app.post("/next", response_class=HTMLResponse)
-    def next_fragment(
-        variant: str = Form(...),
-        stage: str = Form(...),
-        action: str = Form("apply"),
-    ) -> str:
-        payload = {
-            "variant": variant,
-            "stage": stage,
-            "action": action,
-            "auto_approve": action in {"apply", "reset", "state-reset"},
-            "preset_resource_profile": "default",
-            "preset_image_distribution": "default",
-            "preset_network_profile": "default",
-            "preset_observability_stack": "default",
-            "preset_identity_stack": "default",
-            "preset_app_set": "default",
-            "custom_worker_count": "",
-            "custom_node_image": "",
-            "custom_enable_backstage": "",
-        }
-        payload.update({app_name: "" for app_name in APP_NAMES})
+    async def next_fragment(request: Request) -> str:
+        form = await verified_form(request)
+        variant = str(form.get("variant") or "kubernetes/kind")
+        stage = str(form.get("stage") or "900")
+        action = str(form.get("action") or "apply")
+        payload = WorkflowSelection.from_mapping({"variant": variant, "stage": stage, "action": action}).to_payload()
         return render_preview(resolved_root, payload, app.state.command_history.snapshot())
 
     return app
@@ -218,58 +206,18 @@ class CommandHistory:
             return [dict(item) for item in self._items]
 
 
-def form_value(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "true" if value else ""
-    return str(value)
-
-
-def history_payload(payload: dict[str, Any]) -> dict[str, str]:
-    keys = (
-        "variant",
-        "stage",
-        "action",
-        *APP_NAMES,
-        "preset_resource_profile",
-        "preset_image_distribution",
-        "preset_network_profile",
-        "preset_observability_stack",
-        "preset_identity_stack",
-        "preset_app_set",
-        "custom_worker_count",
-        "custom_node_image",
-        "custom_enable_backstage",
-        "auto_approve",
-        "command",
-        "source",
-    )
-    return {key: form_value(payload.get(key)) for key in keys}
-
-
 async def form_payload(request: Request) -> dict[str, Any]:
+    form = await verified_form(request)
+    return WorkflowSelection.from_mapping(form).to_payload()
+
+
+async def verified_form(request: Request) -> Any:
     form = await request.form()
-    action = str(form.get("action") or "apply")
-    return {
-        "variant": str(form.get("variant") or "kubernetes/kind"),
-        "stage": str(form.get("stage") or "900"),
-        "action": action,
-        **{app_name: str(form.get(app_name) or "") for app_name in APP_NAMES},
-        "preset_resource_profile": str(form.get("preset_resource_profile") or "default"),
-        "preset_image_distribution": str(form.get("preset_image_distribution") or "default"),
-        "preset_network_profile": str(form.get("preset_network_profile") or "default"),
-        "preset_observability_stack": str(form.get("preset_observability_stack") or "default"),
-        "preset_identity_stack": str(form.get("preset_identity_stack") or "default"),
-        "preset_app_set": str(form.get("preset_app_set") or "default"),
-        "custom_worker_count": str(form.get("custom_worker_count") or ""),
-        "custom_node_image": str(form.get("custom_node_image") or ""),
-        "custom_enable_backstage": str(form.get("custom_enable_backstage") or ""),
-        "auto_approve": str(form.get("auto_approve") or "") in {"1", "true", "on"} or action in {"apply", "reset", "state-reset"},
-        "command": str(form.get("command") or ""),
-        "dry_run": str(form.get("dry_run") or "") in {"1", "true", "on"},
-        "source": str(form.get("source") or "dropdowns"),
-    }
+    expected = str(getattr(request.app.state, "csrf_token", ""))
+    supplied = str(form.get(CSRF_FIELD) or request.headers.get("x-csrf-token") or "")
+    if not expected or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(status_code=403, detail="invalid CSRF token")
+    return form
 
 
 def render_preview(repo_root: Path, payload: dict[str, Any], history: list[dict[str, Any]] | None = None) -> str:
@@ -372,8 +320,10 @@ def expert_tab() -> str:
 """
 
 
-def page() -> str:
+def page(csrf_token: str) -> str:
     variant_paths_by_id = {variant["id"]: variant["path"] for variant in WORKFLOW_OPTIONS["variants"]}
+    csrf_headers = html.escape(json.dumps({"X-CSRF-Token": csrf_token}), quote=True)
+    csrf_value = html.escape(csrf_token, quote=True)
     preset_defaults = {f"preset_{group['id']}": group.get("default", "default") for group in WORKFLOW_OPTIONS["preset_groups"]}
     app_names_json = json.dumps(APP_NAMES)
     app_toggle_stages_json = json.dumps(UI_RULES.get("app_toggle_stages", []), sort_keys=True)
@@ -412,7 +362,7 @@ def page() -> str:
   <script src="/static/htmx.min.js"></script>
   <style>{styles()}</style>
 </head>
-<body>
+<body hx-headers="{csrf_headers}">
   <main>
     <form id="workflow-form"
       hx-post="/preview"
@@ -439,6 +389,7 @@ def page() -> str:
         {expert_tab()}
       </div>
       <section class="quick-actions" aria-label="Quick actions"></section>
+      <input type="hidden" name="{CSRF_FIELD}" value="{csrf_value}">
       <input type="hidden" name="auto_approve" value="1">
       <input type="hidden" name="source" value="dropdowns">
     </form>

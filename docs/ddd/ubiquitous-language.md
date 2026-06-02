@@ -64,6 +64,7 @@ domain language.
 | blocker | a concrete reason an operation should stop | Technical debt or safety gate. |
 | ownership | which variant currently owns shared local ingress | Expressed in `platform status` output. |
 | guided workflow | operator intent captured as variant, stage, action, and optional app toggles | The TUI, browser workflow UI, MCP tools, and scripts all converge on this contract. |
+| workflow selection | normalized guided workflow input before preview or execution | Includes variant, stage, action, presets, custom overrides, app toggles, source, and dry-run choice. |
 | workflow core | non-interactive command builder for guided workflows | Implemented by `scripts/platform-workflow.sh`; it previews or runs Makefile commands and writes generated tfvars only when toggles require them. |
 | command preview | reviewable command produced before execution | The safety handoff for TUI and GUI flows; mutating actions should be visible as Make commands before they run. |
 | generated operator tfvars | temporary app-toggle override file under `.run/operator/` | Created by the workflow core for app selections such as `sentiment=off`; safe to delete and not source of long-term platform intent. |

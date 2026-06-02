@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -21,6 +21,7 @@ def load_workflow_options(repo_root: Path | None = None) -> dict[str, Any]:
 
 
 WORKFLOW_OPTIONS = load_workflow_options()
+APP_NAMES = [str(name) for name in WORKFLOW_OPTIONS.get("apps", [])]
 APP_STAGES = {stage["id"] for stage in WORKFLOW_OPTIONS.get("stages", []) if stage.get("app_toggles")}
 PRESET_FIELD_GROUPS = {
     f"preset_{group['id']}": group["id"].replace("_", "-") for group in WORKFLOW_OPTIONS.get("preset_groups", [])
@@ -32,6 +33,138 @@ CUSTOM_OVERRIDE_FIELDS = {
 }
 VARIANT_TARGETS = {variant["path"]: variant["id"] for variant in WORKFLOW_OPTIONS.get("variants", [])}
 NEXT_APPLY_STAGES = WORKFLOW_OPTIONS.get("ui_rules", {}).get("next_apply_stages_by_stage", {})
+TRUTHY_FORM_VALUES = {"1", "true", "on"}
+HISTORY_FIELDS = (
+    "variant",
+    "stage",
+    "action",
+    *APP_NAMES,
+    *PRESET_FIELD_GROUPS.keys(),
+    *CUSTOM_OVERRIDE_FIELDS.keys(),
+    "auto_approve",
+    "command",
+    "dry_run",
+    "source",
+)
+
+
+def form_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else ""
+    return str(value)
+
+
+def action_uses_auto_approve(action: str) -> bool:
+    for option in WORKFLOW_OPTIONS.get("action_metadata", []):
+        if option.get("id") == action:
+            return bool(option.get("uses_auto_approve"))
+    return action in {"apply", "reset", "state-reset"}
+
+
+@dataclass(frozen=True)
+class WorkflowSelection:
+    variant: str = "kubernetes/kind"
+    stage: str = "900"
+    action: str = "apply"
+    apps: dict[str, str] = field(default_factory=dict)
+    presets: dict[str, str] = field(default_factory=dict)
+    custom_overrides: dict[str, str] = field(default_factory=dict)
+    auto_approve: bool = False
+    command: str = ""
+    dry_run: bool = False
+    source: str = "dropdowns"
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, Any]) -> "WorkflowSelection":
+        action = _text(values, "action", "apply")
+        return cls(
+            variant=_text(values, "variant", "kubernetes/kind"),
+            stage=_text(values, "stage", "900"),
+            action=action,
+            apps={app_name: _text(values, app_name) for app_name in APP_NAMES},
+            presets={field_name: _text(values, field_name, "default") for field_name in PRESET_FIELD_GROUPS},
+            custom_overrides={field_name: _text(values, field_name) for field_name in CUSTOM_OVERRIDE_FIELDS},
+            auto_approve=_truthy(values.get("auto_approve")) or action_uses_auto_approve(action),
+            command=_text(values, "command"),
+            dry_run=_truthy(values.get("dry_run")),
+            source=_text(values, "source", "dropdowns"),
+        )
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "variant": self.variant,
+            "stage": self.stage,
+            "action": self.action,
+            **self.apps,
+            **self.presets,
+            **self.custom_overrides,
+            "auto_approve": self.auto_approve,
+            "command": self.command,
+            "dry_run": self.dry_run,
+            "source": self.source,
+        }
+
+    def history_payload(self) -> dict[str, str]:
+        payload = self.to_payload()
+        return {key: form_value(payload.get(key)) for key in HISTORY_FIELDS}
+
+    def workflow_args(self, subcommand: str, *, standard_flag: str = "--execute") -> list[str]:
+        args = [subcommand, standard_flag]
+        if subcommand == "preview":
+            args.extend(["--output", "json"])
+        args.extend(["--variant", variant_to_target(self.variant), "--stage", self.stage, "--action", self.action])
+        for field, group in PRESET_FIELD_GROUPS.items():
+            value = self.presets.get(field, "")
+            if value and value != "default":
+                args.extend(["--preset", f"{group}={value}"])
+        for field, option in CUSTOM_OVERRIDE_FIELDS.items():
+            value = self.custom_overrides.get(field, "")
+            if value:
+                args.extend(["--set", f"{option}={value}"])
+        if self.has_app_toggles():
+            for app in APP_NAMES:
+                value = self.apps.get(app, "")
+                default_value = "on" if self.app_default(app) else "off"
+                if value and value != default_value:
+                    args.extend(["--app", f"{app}={value}"])
+        if self.auto_approve and action_uses_auto_approve(self.action):
+            args.append("--auto-approve")
+        return args
+
+    def run_standard_flag(self) -> str:
+        return "--dry-run" if self.dry_run else "--execute"
+
+    def has_app_toggles(self) -> bool:
+        return stage_has_app_toggles(self.stage)
+
+    def app_default(self, app: str) -> bool:
+        app_set = self.presets.get("preset_app_set") or "default"
+        tfvar_name = f"enable_app_repo_{app.replace('-', '_')}"
+        for preset in WORKFLOW_OPTIONS.get("presets", []):
+            if preset.get("group") == "app_set" and preset.get("id") == app_set:
+                overlay = preset.get("overlay", {})
+                if tfvar_name in overlay:
+                    return bool(overlay[tfvar_name])
+        return stage_default(self.stage, app)
+
+
+def _text(values: Mapping[str, Any], key: str, default: str = "") -> str:
+    value = values.get(key)
+    if value is None or value == "":
+        return default
+    return str(value)
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").lower() in TRUTHY_FORM_VALUES
+
+
+def history_payload(payload: Mapping[str, Any]) -> dict[str, str]:
+    return WorkflowSelection.from_mapping(payload).history_payload()
 
 
 def variant_to_target(variant: str) -> str:
@@ -47,14 +180,7 @@ def stage_default(stage: str, app: str) -> bool:
 
 
 def app_default(payload: dict[str, Any], app: str) -> bool:
-    app_set = str(payload.get("preset_app_set") or "default")
-    tfvar_name = f"enable_app_repo_{app.replace('-', '_')}"
-    for preset in WORKFLOW_OPTIONS.get("presets", []):
-        if preset.get("group") == "app_set" and preset.get("id") == app_set:
-            overlay = preset.get("overlay", {})
-            if tfvar_name in overlay:
-                return bool(overlay[tfvar_name])
-    return stage_default(str(payload.get("stage") or "900"), app)
+    return WorkflowSelection.from_mapping(payload).app_default(app)
 
 
 def next_stages(variant: str, stage: str, action: str, succeeded: bool) -> list[str]:
@@ -65,45 +191,7 @@ def next_stages(variant: str, stage: str, action: str, succeeded: bool) -> list[
 
 
 def build_workflow_args(payload: dict[str, Any], *, subcommand: str, standard_flag: str = "--execute") -> list[str]:
-    variant = variant_to_target(str(payload.get("variant") or "kubernetes/kind"))
-    args = [
-        subcommand,
-        standard_flag,
-    ]
-    if subcommand == "preview":
-        args.extend(["--output", "json"])
-    args.extend(
-        [
-            "--variant",
-            variant,
-            "--stage",
-            str(payload.get("stage") or "900"),
-            "--action",
-            str(payload.get("action") or "apply"),
-        ]
-    )
-    for field, group in PRESET_FIELD_GROUPS.items():
-        value = str(payload.get(field) or "")
-        if value and value != "default":
-            args.extend(["--preset", f"{group}={value}"])
-    for field, option in CUSTOM_OVERRIDE_FIELDS.items():
-        value = str(payload.get(field) or "")
-        if value:
-            args.extend(["--set", f"{option}={value}"])
-    if stage_has_app_toggles(str(payload.get("stage") or "900")):
-        for app in WORKFLOW_OPTIONS.get("apps", []):
-            value = str(payload.get(app) or "")
-            default_value = "on" if app_default(payload, app) else "off"
-            if value and value != default_value:
-                args.extend(["--app", f"{app}={value}"])
-    action_uses_auto_approve = {
-        action["id"]
-        for action in WORKFLOW_OPTIONS.get("action_metadata", [])
-        if action.get("uses_auto_approve")
-    }
-    if payload.get("auto_approve") and str(payload.get("action") or "") in action_uses_auto_approve:
-        args.append("--auto-approve")
-    return args
+    return WorkflowSelection.from_mapping(payload).workflow_args(subcommand, standard_flag=standard_flag)
 
 
 def run_workflow_json(repo_root: Path, args: list[str]) -> tuple[int, str, str]:
@@ -157,8 +245,8 @@ class JobStore:
         self.lock = threading.Lock()
 
     def start(self, payload: dict[str, Any], on_finish: Callable[[str | None, int, str], None] | None = None) -> WorkflowJob:
-        standard_flag = "--dry-run" if payload.get("dry_run") else "--execute"
-        args = build_workflow_args(payload, subcommand="apply", standard_flag=standard_flag)
+        selection = WorkflowSelection.from_mapping(payload)
+        args = selection.workflow_args("apply", standard_flag=selection.run_standard_flag())
         job = WorkflowJob(
             id=uuid.uuid4().hex,
             payload=dict(payload),
