@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 IMAGE_BUILD_ARGS=()
+if [ -z "${IMAGE_BUILD_PREBUILD_COMMANDS_FILE:-}" ]; then
+  IMAGE_BUILD_PREBUILD_COMMANDS_FILE="${TMPDIR:-/tmp}/image-build-prebuild-commands.$$"
+  : >"${IMAGE_BUILD_PREBUILD_COMMANDS_FILE}"
+  export IMAGE_BUILD_PREBUILD_COMMANDS_FILE
+fi
 
 image_build_commit_tag() {
   if [ -n "${IMAGE_BUILD_COMMIT_TAG:-}" ]; then
@@ -81,12 +86,20 @@ image_build_run_prebuild() {
   local category="$1"
   local image_id="$2"
   local command=""
+  local cached_command=""
 
   command="$(image_catalog_build_field "${category}" "${image_id}" prebuild)"
   [ -n "${command}" ] || return 0
 
   echo "PREBUILD ${image_id}: ${command}"
+  while IFS= read -r cached_command; do
+    if [ "${cached_command}" = "${command}" ]; then
+      return 0
+    fi
+  done <"${IMAGE_BUILD_PREBUILD_COMMANDS_FILE}"
+
   (cd "${REPO_ROOT}" && eval "${command}")
+  printf '%s\n' "${command}" >>"${IMAGE_BUILD_PREBUILD_COMMANDS_FILE}"
 }
 
 image_build_resolve_context() {

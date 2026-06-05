@@ -1311,6 +1311,68 @@ PY
   [[ "${output}" == *"validated generated Backstage Docker context"* ]]
 }
 
+@test "image build prebuild hooks run once for identical commands" {
+  catalog="${BATS_TEST_TMPDIR}/image-catalog.json"
+  prebuild_log="${BATS_TEST_TMPDIR}/prebuild.log"
+  build_log="${BATS_TEST_TMPDIR}/build.log"
+
+  cat >"${catalog}" <<JSON
+{
+  "namespace": "platform",
+  "platform_images": [],
+  "workload_images": [
+    {
+      "id": "first",
+      "image_name": "first",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "Dockerfile",
+        "prebuild": "printf '%s\\\\n' prebuild >> \\"${prebuild_log}\\""
+      }
+    },
+    {
+      "id": "second",
+      "image_name": "second",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "Dockerfile",
+        "prebuild": "printf '%s\\\\n' prebuild >> \\"${prebuild_log}\\""
+      }
+    }
+  ]
+}
+JSON
+
+  touch "${BATS_TEST_TMPDIR}/Dockerfile"
+
+  run bash -lc "
+    set -euo pipefail
+    export REPO_ROOT='${BATS_TEST_TMPDIR}'
+    export IMAGE_CATALOG_FILE='${catalog}'
+    export CACHE_PUSH_HOST=127.0.0.1:5002
+    export IMAGE_NAMESPACE=platform
+    export TAG=latest
+    export FORCE_REBUILD=1
+    source '${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
+    source '${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh'
+
+    tag_exists_in_cache() { return 1; }
+    docker_push_local_registry() { :; }
+    docker() { :; }
+    docker_build_local() { printf '%s\n' \"\$*\" >>'${build_log}'; }
+
+    image_build_catalog_build_loop workload workload
+  "
+
+  [ "${status}" -eq 0 ]
+  prebuild_count="$(wc -l <"${prebuild_log}" | tr -d ' ')"
+  build_count="$(wc -l <"${build_log}" | tr -d ' ')"
+  [ "${prebuild_count}" -eq 1 ]
+  [ "${build_count}" -eq 2 ]
+}
+
 @test "platform MCP Docker image uses the Go single-binary runtime" {
   run uv run --isolated python - <<'PY'
 from pathlib import Path
