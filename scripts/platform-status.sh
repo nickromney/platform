@@ -1311,6 +1311,7 @@ actions_json="$(
     build_action_json kind-idp-env-create 'IDP environment request' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr' 0
     build_action_json kind-idp-deployments 'IDP deployments' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-deployments' 0
     build_action_json kind-idp-secrets 'IDP secrets' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-secrets' 0
+    build_action_json kind-idp-scorecards 'IDP scorecards' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-scorecards' 0
     build_action_json kind-gitea-repo-lifecycle-demo 'Gitea repo lifecycle demo' kind kubernetes/kind 1 '' 'make -C kubernetes/kind gitea-repo-lifecycle-demo REPO_NAME=chatgpt-sim' 0
 
     build_action_json lima-status 'Kubernetes Lima status' lima kubernetes/lima 1 '' 'make -C kubernetes/lima status' 0

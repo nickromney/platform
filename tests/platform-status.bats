@@ -275,12 +275,13 @@ EOF
       (.actions | any(.id == "kind-idp-env-create" and (.command | contains("idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr")))),
       (.actions | any(.id == "kind-idp-deployments" and .command == "make -C kubernetes/kind idp-deployments")),
       (.actions | any(.id == "kind-idp-secrets" and .command == "make -C kubernetes/kind idp-secrets")),
+      (.actions | any(.id == "kind-idp-scorecards" and .command == "make -C kubernetes/kind idp-scorecards")),
       (.actions | any(.id == "kind-gitea-repo-lifecycle-demo" and (.command | contains("gitea-repo-lifecycle-demo"))))
     ] | map(tostring) | join("|")
   ' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'true|true|true|true|true' ]
+  [ "${output}" = 'true|true|true|true|true|true' ]
 }
 
 @test "platform status falls back to docker ps when docker info is unavailable" {

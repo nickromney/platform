@@ -105,7 +105,7 @@ VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-ss
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -207,6 +207,7 @@ help:
 	@echo "  make idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr [DRY_RUN=1]"
 	@echo "  make idp-deployments                          Show the app/environment deployment read model"
 	@echo "  make idp-secrets                              Show app secret bindings and rotation posture"
+	@echo "  make idp-scorecards                           Show app readiness and security scorecards"
 	@echo "  make idp-api                                  Start or preview the Go IDP core"
 	@echo "  make backstage                                Start or preview the Backstage developer portal"
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
@@ -813,6 +814,10 @@ idp-deployments:
 .PHONY: idp-secrets
 idp-secrets:
 	@"$(STACK_DIR)/scripts/idp-secrets.sh" $(READONLY_MODE_FLAG)
+
+.PHONY: idp-scorecards
+idp-scorecards:
+	@"$(STACK_DIR)/scripts/idp-scorecards.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: idp-api
 idp-api:
