@@ -127,6 +127,67 @@ EOF
   ! grep -Fq 'expected_name=good.sh' "${SHELL_AUDIT_HELPER_LOG}"
 }
 
+@test "shell audit reuses interface capture files without cat subprocesses" {
+  write_tracked_executable_file "scripts/good.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
+usage() {
+  printf '%s\n' \
+    'Usage: good.sh [--dry-run] [--execute]' \
+    '' \
+    'Options:' \
+    '  --dry-run  Show a summary and exit before side effects' \
+    '  --execute  Execute the script body; without it the script prints help and/or preview output'
+}
+
+shell_cli_handle_standard_no_args usage "would do the safe thing" "$@"
+EOF
+
+  local probe_bin="${BATS_TEST_TMPDIR}/probe-bin"
+  mkdir -p "${probe_bin}"
+  export SHELL_AUDIT_CAPTURE_HELPER_LOG="${BATS_TEST_TMPDIR}/capture-helper-calls.log"
+
+  cat >"${probe_bin}/mktemp" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'mktemp\t%s\n' "$*" >>"${SHELL_AUDIT_CAPTURE_HELPER_LOG:-/dev/null}"
+exec /usr/bin/mktemp "$@"
+EOF
+  chmod +x "${probe_bin}/mktemp"
+
+  cat >"${probe_bin}/cat" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'cat\t%s\n' "$*" >>"${SHELL_AUDIT_CAPTURE_HELPER_LOG:-/dev/null}"
+exec /bin/cat "$@"
+EOF
+  chmod +x "${probe_bin}/cat"
+
+  cat >"${probe_bin}/rm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'rm\t%s\n' "$*" >>"${SHELL_AUDIT_CAPTURE_HELPER_LOG:-/dev/null}"
+exec /bin/rm "$@"
+EOF
+  chmod +x "${probe_bin}/rm"
+
+  run env PATH="${probe_bin}:/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
+
+  [ "${status}" -eq 0 ]
+  mktemp_count="$(grep -c '^mktemp' "${SHELL_AUDIT_CAPTURE_HELPER_LOG}" || true)"
+  cat_count="$(grep -c '^cat' "${SHELL_AUDIT_CAPTURE_HELPER_LOG}" || true)"
+  rm_count="$(grep -c '^rm' "${SHELL_AUDIT_CAPTURE_HELPER_LOG}" || true)"
+
+  [ "${mktemp_count}" -le 2 ]
+  [ "${cat_count}" -eq 0 ]
+  [ "${rm_count}" -le 1 ]
+}
+
 @test "shell audit rejects shared-helper entrypoints with mismatched descriptor metadata" {
   write_tracked_executable_file "scripts/described.sh" <<'EOF'
 #!/usr/bin/env bash

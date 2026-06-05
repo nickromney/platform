@@ -59,6 +59,22 @@ interface_failures=()
 descriptor_failures=()
 library_entrypoint_failures=()
 scope_paths=()
+SHELL_AUDIT_PROBE_STDOUT_FILE=""
+SHELL_AUDIT_PROBE_STDERR_FILE=""
+
+cleanup_interface_probe_files() {
+  rm -f "${SHELL_AUDIT_PROBE_STDOUT_FILE}" "${SHELL_AUDIT_PROBE_STDERR_FILE}"
+}
+
+ensure_interface_probe_files() {
+  if [[ -n "${SHELL_AUDIT_PROBE_STDOUT_FILE}" && -n "${SHELL_AUDIT_PROBE_STDERR_FILE}" ]]; then
+    return 0
+  fi
+
+  SHELL_AUDIT_PROBE_STDOUT_FILE="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stdout.XXXXXX")"
+  trap cleanup_interface_probe_files EXIT
+  SHELL_AUDIT_PROBE_STDERR_FILE="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stderr.XXXXXX")"
+}
 
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
@@ -161,9 +177,9 @@ run_interface_probe() {
   local file="$1"
   shift
 
-  local stdout_file=""
-  local stderr_file=""
   local rc=0
+  local stdout_output=""
+  local stderr_output=""
   local -a env_cmd=(env -i "PATH=${PATH}")
 
   if [[ -n "${HOME:-}" ]]; then
@@ -173,35 +189,36 @@ run_interface_probe() {
     env_cmd+=("TMPDIR=${TMPDIR}")
   fi
 
-  stdout_file="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stdout.XXXXXX")"
-  stderr_file="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stderr.XXXXXX")"
+  ensure_interface_probe_files
+  : >"${SHELL_AUDIT_PROBE_STDOUT_FILE}"
+  : >"${SHELL_AUDIT_PROBE_STDERR_FILE}"
 
-  if "${env_cmd[@]}" "${file}" "$@" >"${stdout_file}" 2>"${stderr_file}"; then
+  if "${env_cmd[@]}" "${file}" "$@" >"${SHELL_AUDIT_PROBE_STDOUT_FILE}" 2>"${SHELL_AUDIT_PROBE_STDERR_FILE}"; then
     rc=0
   else
     rc=$?
   fi
 
   if [[ "${rc}" -ne 0 ]]; then
-    SHELL_AUDIT_LAST_ERROR="$(head -n 1 "${stderr_file}" || true)"
+    SHELL_AUDIT_LAST_ERROR=""
+    IFS= read -r SHELL_AUDIT_LAST_ERROR <"${SHELL_AUDIT_PROBE_STDERR_FILE}" || true
     if [[ -z "${SHELL_AUDIT_LAST_ERROR}" ]]; then
-      SHELL_AUDIT_LAST_ERROR="$(head -n 1 "${stdout_file}" || true)"
+      IFS= read -r SHELL_AUDIT_LAST_ERROR <"${SHELL_AUDIT_PROBE_STDOUT_FILE}" || true
     fi
     if [[ -z "${SHELL_AUDIT_LAST_ERROR}" ]]; then
       SHELL_AUDIT_LAST_ERROR="exit ${rc}"
     fi
-    rm -f "${stdout_file}" "${stderr_file}"
     return 1
   fi
 
-  SHELL_AUDIT_LAST_OUTPUT="$(
-    {
-      cat "${stdout_file}"
-      cat "${stderr_file}"
-    } 2>/dev/null
-  )"
+  stdout_output="$(<"${SHELL_AUDIT_PROBE_STDOUT_FILE}")"
+  stderr_output="$(<"${SHELL_AUDIT_PROBE_STDERR_FILE}")"
+  if [[ -n "${stdout_output}" && -n "${stderr_output}" ]]; then
+    SHELL_AUDIT_LAST_OUTPUT="${stdout_output}"$'\n'"${stderr_output}"
+  else
+    SHELL_AUDIT_LAST_OUTPUT="${stdout_output}${stderr_output}"
+  fi
 
-  rm -f "${stdout_file}" "${stderr_file}"
   return 0
 }
 
