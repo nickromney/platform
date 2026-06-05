@@ -263,6 +263,38 @@ func TestAuthenticatorMiddlewareUsesCustomMessages(t *testing.T) {
 	}
 }
 
+func TestAuthenticatorCurrentUserOrWriteErrorUsesCustomMessages(t *testing.T) {
+	auth := Authenticator{
+		Mode:     "oidc",
+		Verifier: staticVerifier{claims: UserClaims{Subject: "user-123"}},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/whoami", nil)
+	rec := httptest.NewRecorder()
+
+	claims, ok := auth.CurrentUserOrWriteError(rec, req, AuthFailureMessages{
+		MissingBearerToken: "Custom: token required",
+	})
+	if ok {
+		t.Fatalf("expected auth failure, got claims %#v", claims)
+	}
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Custom: token required") {
+		t.Fatalf("expected custom message, got %q", rec.Body.String())
+	}
+
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec = httptest.NewRecorder()
+	claims, ok = auth.CurrentUserOrWriteError(rec, req, AuthFailureMessages{})
+	if !ok || claims.Subject != "user-123" {
+		t.Fatalf("expected authenticated user, ok=%v claims=%#v", ok, claims)
+	}
+	if rec.Code != http.StatusOK || rec.Body.Len() != 0 {
+		t.Fatalf("successful auth should not write response: status=%d body=%q", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAuthenticatorNormalizesBearerTokenDecisions(t *testing.T) {
 	auth := Authenticator{
 		Mode:     "oidc",

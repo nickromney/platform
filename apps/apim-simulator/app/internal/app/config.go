@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"platform.local/appconfig"
+	"platform.local/apphttp"
 )
 
 type Config struct {
@@ -196,7 +196,7 @@ func LoadConfig(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if appconfig.EnvBool("APIM_CONFIG_TEMPLATE_SUBSTITUTE", false) {
+	if apphttp.EnvBool("APIM_CONFIG_TEMPLATE_SUBSTITUTE", false) {
 		data = []byte(substituteEnv(string(data)))
 	}
 	var cfg Config
@@ -316,7 +316,7 @@ func substituteEnv(input string) string {
 		if len(parts) == 0 {
 			return match
 		}
-		if value := appconfig.Env(parts[1], ""); value != "" {
+		if value := apphttp.Env(parts[1], ""); value != "" {
 			return value
 		}
 		if len(parts) > 3 {
