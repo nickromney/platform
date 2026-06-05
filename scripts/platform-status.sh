@@ -6,10 +6,46 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
+PLATFORM_STATUS_VARIANTS_DIR="${PLATFORM_STATUS_VARIANTS_DIR:-${REPO_ROOT}/kubernetes/variants}"
 CHECK_DOCKER_REGISTRY_AUTH_SCRIPT="${PLATFORM_STATUS_CHECK_DOCKER_REGISTRY_AUTH_SCRIPT:-${REPO_ROOT}/kubernetes/kind/scripts/check-docker-registry-auth.sh}"
-KIND_KUBECONFIG_PATH="${PLATFORM_STATUS_KIND_KUBECONFIG_PATH:-${HOME}/.kube/kind-kind-local.yaml}"
-LIMA_KUBECONFIG_PATH="${PLATFORM_STATUS_LIMA_KUBECONFIG_PATH:-${HOME}/.kube/limavm-k3s.yaml}"
-SLICER_KUBECONFIG_PATH="${PLATFORM_STATUS_SLICER_KUBECONFIG_PATH:-${HOME}/.kube/slicer-k3s.yaml}"
+variant_contract_value() {
+  local variant="$1"
+  local jq_filter="$2"
+  local fallback="$3"
+  local contract_file="${PLATFORM_STATUS_VARIANTS_DIR}/${variant}/variant.json"
+  local value=""
+
+  if [ -f "${contract_file}" ] && command -v jq >/dev/null 2>&1; then
+    value="$(jq -r "${jq_filter} // empty" "${contract_file}" 2>/dev/null || true)"
+  fi
+
+  if [ -n "${value}" ] && [ "${value}" != "null" ]; then
+    printf '%s\n' "${value}"
+  else
+    printf '%s\n' "${fallback}"
+  fi
+}
+
+expand_home_path() {
+  case "$1" in
+    \~)
+      printf '%s\n' "${HOME}"
+      ;;
+    \~/*)
+      printf '%s/%s\n' "${HOME}" "${1#~/}"
+      ;;
+    *)
+      printf '%s\n' "$1"
+      ;;
+  esac
+}
+
+KIND_KUBECONFIG_CONTEXT="${PLATFORM_STATUS_KIND_KUBECONFIG_CONTEXT:-$(variant_contract_value kind '.cluster_access.kubeconfig_context' 'kind-kind-local')}"
+LIMA_KUBECONFIG_CONTEXT="${PLATFORM_STATUS_LIMA_KUBECONFIG_CONTEXT:-$(variant_contract_value lima '.cluster_access.kubeconfig_context' 'limavm-k3s')}"
+SLICER_KUBECONFIG_CONTEXT="${PLATFORM_STATUS_SLICER_KUBECONFIG_CONTEXT:-$(variant_contract_value slicer '.cluster_access.kubeconfig_context' 'slicer-k3s')}"
+KIND_KUBECONFIG_PATH="${PLATFORM_STATUS_KIND_KUBECONFIG_PATH:-$(expand_home_path "$(variant_contract_value kind '.cluster_access.kubeconfig_path' "${HOME}/.kube/kind-kind-local.yaml")")}"
+LIMA_KUBECONFIG_PATH="${PLATFORM_STATUS_LIMA_KUBECONFIG_PATH:-$(expand_home_path "$(variant_contract_value lima '.cluster_access.kubeconfig_path' "${HOME}/.kube/limavm-k3s.yaml")")}"
+SLICER_KUBECONFIG_PATH="${PLATFORM_STATUS_SLICER_KUBECONFIG_PATH:-$(expand_home_path "$(variant_contract_value slicer '.cluster_access.kubeconfig_path' "${HOME}/.kube/slicer-k3s.yaml")")}"
 SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 output_format="human"
 PLATFORM_SHARED_PORTS="${PLATFORM_STATUS_SHARED_PORTS:-443 30022 30080 30090 31235 3301 3302}"
@@ -361,10 +397,11 @@ build_project_json() {
   local serving="$6"
   local runtime_present="$7"
   local kubeconfig_path="$8"
-  local version="${9-}"
-  local shared_ports_text="${10-}"
-  local blockers_text="${11-}"
-  local readiness_json="${12-}"
+  local kubeconfig_context="$9"
+  local version="${10-}"
+  local shared_ports_text="${11-}"
+  local blockers_text="${12-}"
+  local readiness_json="${13-}"
 
   jq -cn \
     --arg key "${key}" \
@@ -373,6 +410,7 @@ build_project_json() {
     --arg runtime_family "${runtime_family}" \
     --arg state "${state}" \
     --arg kubeconfig_path "${kubeconfig_path}" \
+    --arg kubeconfig_context "${kubeconfig_context}" \
     --arg version "${version}" \
     --argjson serving "$(bool_json "${serving}")" \
     --argjson runtime_present "$(bool_json "${runtime_present}")" \
@@ -388,6 +426,7 @@ build_project_json() {
       serving: $serving,
       runtime_present: $runtime_present,
       kubeconfig_path: $kubeconfig_path,
+      kubeconfig_context: $kubeconfig_context,
       version: (if $version == "" then null else $version end),
       shared_ports: $shared_ports,
       blockers: $blockers,
@@ -936,9 +975,9 @@ if ports_include_number "${slicer_ports}" 443; then
   slicer_serving=1
 fi
 
-kind_version="$(kube_version_for "${KIND_KUBECONFIG_PATH}" 'kind-kind-local')"
-lima_version="$(kube_version_for "${LIMA_KUBECONFIG_PATH}" 'limavm-k3s')"
-slicer_version="$(kube_version_for "${SLICER_KUBECONFIG_PATH}" 'slicer-k3s')"
+kind_version="$(kube_version_for "${KIND_KUBECONFIG_PATH}" "${KIND_KUBECONFIG_CONTEXT}")"
+lima_version="$(kube_version_for "${LIMA_KUBECONFIG_PATH}" "${LIMA_KUBECONFIG_CONTEXT}")"
+slicer_version="$(kube_version_for "${SLICER_KUBECONFIG_PATH}" "${SLICER_KUBECONFIG_CONTEXT}")"
 
 kind_state="absent"
 if [ "${kind_runtime_present}" -eq 1 ]; then
@@ -1161,9 +1200,9 @@ slicer_readiness_json="$(jq -cn \
     bootstrap_client_name: (if $bootstrap_client_name == "" then null else $bootstrap_client_name end)
   }')"
 
-kind_project_json="$(build_project_json kind kubernetes/kind 'Kind local cluster' docker "${kind_state}" "${kind_serving}" "${kind_runtime_present}" "${KIND_KUBECONFIG_PATH}" "${kind_version}" "${kind_ports}" "${kind_blockers}" "${kind_readiness_json}")"
-lima_project_json="$(build_project_json lima kubernetes/lima 'Kubernetes Lima cluster' lima "${lima_state}" "${lima_serving}" "${lima_runtime_present}" "${LIMA_KUBECONFIG_PATH}" "${lima_version}" "${lima_ports}" "${lima_blockers}" "${lima_readiness_json}")"
-slicer_project_json="$(build_project_json slicer kubernetes/slicer 'Slicer local cluster' slicer "${slicer_state}" "${slicer_serving}" "${slicer_runtime_present}" "${SLICER_KUBECONFIG_PATH}" "${slicer_version}" "${slicer_ports}" "${slicer_blockers}" "${slicer_readiness_json}")"
+kind_project_json="$(build_project_json kind kubernetes/kind 'Kind local cluster' docker "${kind_state}" "${kind_serving}" "${kind_runtime_present}" "${KIND_KUBECONFIG_PATH}" "${KIND_KUBECONFIG_CONTEXT}" "${kind_version}" "${kind_ports}" "${kind_blockers}" "${kind_readiness_json}")"
+lima_project_json="$(build_project_json lima kubernetes/lima 'Kubernetes Lima cluster' lima "${lima_state}" "${lima_serving}" "${lima_runtime_present}" "${LIMA_KUBECONFIG_PATH}" "${LIMA_KUBECONFIG_CONTEXT}" "${lima_version}" "${lima_ports}" "${lima_blockers}" "${lima_readiness_json}")"
+slicer_project_json="$(build_project_json slicer kubernetes/slicer 'Slicer local cluster' slicer "${slicer_state}" "${slicer_serving}" "${slicer_runtime_present}" "${SLICER_KUBECONFIG_PATH}" "${SLICER_KUBECONFIG_CONTEXT}" "${slicer_version}" "${slicer_ports}" "${slicer_blockers}" "${slicer_readiness_json}")"
 
 active_cluster_variant=""
 active_cluster_variant_path=""
