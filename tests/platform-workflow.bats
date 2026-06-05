@@ -143,6 +143,38 @@ setup() {
   [ "${output}" = "env KIND_IMAGE_DISTRIBUTION_MODE=registry KIND_LOCAL_IMAGE_CACHE_HOST=host.docker.internal:5002 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002 PLATFORM_TFVARS=${tfvars_file} make -C kubernetes/kind 900 apply AUTO_APPROVE=1"$'\n'"env KIND_IMAGE_DISTRIBUTION_MODE=registry KIND_LOCAL_IMAGE_CACHE_HOST=host.docker.internal:5002 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002 PLATFORM_TFVARS=${tfvars_file} make -C kubernetes/kind 900 apply AUTO_APPROVE=1"$'\n'"scripts/platform-workflow.sh apply --execute --variant kind --stage 900 --action apply --preset image-distribution=local-cache --app sentiment=false --tfvars-file ${tfvars_file} --auto-approve"$'\n'"scripts/platform-workflow.sh apply --dry-run --variant kind --stage 900 --action apply --preset image-distribution=local-cache --app sentiment=false --tfvars-file ${tfvars_file} --auto-approve"$'\n'"scripts/platform-workflow.sh preview --execute --output json --variant kind --stage 900 --action apply --preset image-distribution=local-cache --app sentiment=false --tfvars-file ${tfvars_file} --auto-approve"$'\n'"make -C kubernetes/kind readiness" ]
 }
 
+@test "platform workflow memoizes variant registry contract lookups" {
+  tfvars_file="${BATS_TEST_TMPDIR}/operator/kind-stage900-no-sentiment.tfvars"
+  test_bin="${BATS_TEST_TMPDIR}/bin"
+  jq_log="${BATS_TEST_TMPDIR}/jq.log"
+  real_jq="$(command -v jq)"
+  mkdir -p "${test_bin}"
+
+  cat >"${test_bin}/jq" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >>"${jq_log}"
+exec "${real_jq}" "\$@"
+EOF
+  chmod +x "${test_bin}/jq"
+
+  run env PATH="${test_bin}:${PATH}" "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --preset image-distribution=local-cache \
+    --app sentiment=off \
+    --tfvars-file "${tfvars_file}" \
+    --auto-approve \
+    --output json
+
+  [ "${status}" -eq 0 ]
+  runtime_host_lookups="$(grep -c '.variant_contract | .registry.runtime_host' "${jq_log}" || true)"
+  push_host_lookups="$(grep -c '.variant_contract | .registry.push_host' "${jq_log}" || true)"
+  [ "${runtime_host_lookups}" -le 1 ]
+  [ "${push_host_lookups}" -le 1 ]
+}
+
 @test "platform workflow renders preset overlays and custom overrides" {
   tfvars_file="${BATS_TEST_TMPDIR}/operator/kind-stage900-local-idp.tfvars"
 

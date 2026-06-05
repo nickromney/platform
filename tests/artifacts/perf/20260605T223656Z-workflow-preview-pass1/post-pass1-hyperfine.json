@@ -1,0 +1,50 @@
+{
+  "results": [
+    {
+      "command": "scripts/platform-workflow.sh preview --execute --variant kind --stage 900 --action plan --preset resource-profile=local-idp-12gb --preset image-distribution=local-cache --preset observability-stack=lgtm --preset identity-stack=dex --preset app-set=no-reference-apps --set worker_count=2 --app sentiment=off --app subnetcalc=on --output json > /tmp/platform-workflow-preview-benchmark.json",
+      "mean": 0.1762924593,
+      "stddev": 0.01173702997237041,
+      "median": 0.17731561760000003,
+      "user": 0.08261586000000001,
+      "system": 0.07541192,
+      "min": 0.15570101260000002,
+      "max": 0.1957970136,
+      "times": [
+        0.1746771806,
+        0.18624438860000003,
+        0.1957970136,
+        0.16898901360000002,
+        0.18158722160000001,
+        0.16647755560000002,
+        0.16831634660000003,
+        0.15570101260000002,
+        0.18518080560000003,
+        0.17995405460000002
+      ],
+      "memory_usage_byte": [
+        8257536,
+        8257536,
+        8323072,
+        8323072,
+        8323072,
+        8323072,
+        8323072,
+        8323072,
+        8323072,
+        8323072
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

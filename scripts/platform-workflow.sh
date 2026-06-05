@@ -25,6 +25,10 @@ PRESET_IDENTITY_STACK="default"
 PRESET_APP_SET="default"
 CUSTOM_OVERRIDES=()
 WORKFLOW_SCRIPT_ARGS=()
+LOCAL_REGISTRY_RUNTIME_HOST_CACHE=""
+LOCAL_REGISTRY_RUNTIME_HOST_CACHE_SET=0
+LOCAL_REGISTRY_PUSH_HOST_CACHE=""
+LOCAL_REGISTRY_PUSH_HOST_CACHE_SET=0
 
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
@@ -359,11 +363,24 @@ app_tfvar_name() {
 }
 
 local_registry_runtime_host() {
-  variant_contract_value "${TARGET}" '.registry.runtime_host'
+  if [[ "${LOCAL_REGISTRY_RUNTIME_HOST_CACHE_SET}" -ne 1 ]]; then
+    LOCAL_REGISTRY_RUNTIME_HOST_CACHE="$(variant_contract_value "${TARGET}" '.registry.runtime_host')"
+    LOCAL_REGISTRY_RUNTIME_HOST_CACHE_SET=1
+  fi
+  printf '%s\n' "${LOCAL_REGISTRY_RUNTIME_HOST_CACHE}"
 }
 
 local_registry_push_host() {
-  variant_contract_value "${TARGET}" '.registry.push_host'
+  if [[ "${LOCAL_REGISTRY_PUSH_HOST_CACHE_SET}" -ne 1 ]]; then
+    LOCAL_REGISTRY_PUSH_HOST_CACHE="$(variant_contract_value "${TARGET}" '.registry.push_host')"
+    LOCAL_REGISTRY_PUSH_HOST_CACHE_SET=1
+  fi
+  printf '%s\n' "${LOCAL_REGISTRY_PUSH_HOST_CACHE}"
+}
+
+prime_variant_registry_cache() {
+  local_registry_runtime_host >/dev/null
+  local_registry_push_host >/dev/null
 }
 
 hcl_string() {
@@ -1023,6 +1040,7 @@ if [[ -z "${TFVARS_FILE}" ]]; then
 fi
 
 STACK_PATH="$(target_path "${TARGET}")"
+prime_variant_registry_cache
 build_command_args "${STACK_PATH}"
 
 if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
