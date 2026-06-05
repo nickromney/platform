@@ -1,0 +1,40 @@
+
+GitHub Actions
+WARN .github/workflows/release.yml: actions/checkout v6.0.2 upstream resolution skipped
+WARN .github/workflows/release.yml: actions/setup-node v6.4.0 upstream resolution skipped
+WARN .github/workflows/version-audit.yml: actions/checkout v6.0.2 upstream resolution skipped
+WARN .github/workflows/version-audit.yml: actions/setup-node v6.4.0 upstream resolution skipped
+WARN apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/build.yaml: actions/checkout v6.0.2 upstream resolution skipped
+WARN apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml: actions/checkout v6.0.2 upstream resolution skipped
+
+APIM Simulator
+OK   apim-simulator is integrated under apps/apim-simulator as a go app
+
+npm Age Gates
+OK   All .npmrc files set min-release-age=7
+
+Bun Age Gates
+OK   All bunfig.toml files set minimumReleaseAge=604800
+
+uv Age Gates
+OK   All uv-managed pyproject.toml files set exclude-newer='7 days'
+
+Backstage Catalog Pins
+OK   subnetcalc: Backstage entity apiVersion is pinned to backstage.io/v1alpha1
+OK   subnetcalc: API definition is pinned to OpenAPI 3.0.3
+OK   subnetcalc: API info.version is an explicit semver pin
+OK   subnetcalc: TechDocs source is pinned to the app directory
+OK   subnetcalc: TechDocs plugin is declared explicitly
+OK   subnetcalc: TechDocs docs_dir is pinned to the app root
+OK   sentiment: Backstage entity apiVersion is pinned to backstage.io/v1alpha1
+OK   sentiment: API definition is pinned to OpenAPI 3.0.3
+OK   sentiment: API info.version is an explicit semver pin
+OK   sentiment: TechDocs source is pinned to the app directory
+OK   sentiment: TechDocs plugin is declared explicitly
+OK   sentiment: TechDocs docs_dir is pinned to the app root
+OK   All Backstage catalog and TechDocs pins passed.
+
+Frontend Budgets
+WARN No frontend budget file configured
+
+All version checks passed.

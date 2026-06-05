@@ -1,0 +1,9 @@
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform/.github/workflows/release.yml
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform/.github/workflows/version-audit.yml
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/build.yaml
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform/apps/apim-simulator/app/go.mod
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform 7 /Users/nickromney/Developer/personal/platform/apps/apim-simulator
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform 604800 /Users/nickromney/Developer/personal/platform/apps/apim-simulator
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform 7 days /Users/nickromney/Developer/personal/platform/apps/apim-simulator
+uv	run --isolated python - /Users/nickromney/Developer/personal/platform
