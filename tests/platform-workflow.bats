@@ -37,6 +37,29 @@ setup() {
   [ "${output}" = "kind,lima,slicer" ]
 }
 
+@test "platform workflow options avoids preview command setup" {
+  test_bin="${BATS_TEST_TMPDIR}/bin"
+  jq_log="${BATS_TEST_TMPDIR}/jq-options.log"
+  real_jq="$(command -v jq)"
+  mkdir -p "${test_bin}"
+
+  cat >"${test_bin}/jq" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >>"${jq_log}"
+exec "${real_jq}" "\$@"
+EOF
+  chmod +x "${test_bin}/jq"
+
+  run env PATH="${test_bin}:${PATH}" "${SCRIPT}" options --execute --output json
+
+  [ "${status}" -eq 0 ]
+  registry_lookups="$(grep -c '.variant_contract | .registry.' "${jq_log}" || true)"
+  action_metadata_lookups="$(grep -c '.action_metadata' "${jq_log}" || true)"
+  [ "${registry_lookups}" -eq 0 ]
+  [ "${action_metadata_lookups}" -eq 0 ]
+}
+
 @test "platform workflow previews stage 920 Langfuse commands" {
   run "${SCRIPT}" preview --execute --variant kind --stage 920 --action plan --output json
 

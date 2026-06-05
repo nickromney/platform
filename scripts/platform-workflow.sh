@@ -1030,6 +1030,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${SUBCOMMAND}" = "options" ]]; then
+  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would list platform workflow options"
+    exit 0
+  fi
+
+  if [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+    usage
+    shell_cli_print_dry_run_summary "would list platform workflow options"
+    exit 0
+  fi
+
+  print_options
+  exit 0
+fi
+
 validate_target "${TARGET}"
 validate_stage "${STAGE}"
 validate_action "${ACTION}"

@@ -1,0 +1,2 @@
+ecba919b93a29f2a341cac4a46e95ca452f1083eb2a4a7c43cae738261214cb8  tests/artifacts/perf/20260605T224133Z-workflow-options-pass2/render-options-golden.json
+ecba919b93a29f2a341cac4a46e95ca452f1083eb2a4a7c43cae738261214cb8  tests/artifacts/perf/20260605T224133Z-workflow-options-pass2/workflow-options-golden.json
