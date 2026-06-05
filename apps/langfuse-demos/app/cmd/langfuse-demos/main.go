@@ -5,13 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/langfuse-demos/internal/app"
 )
 
 func main() {
-	if apphealth.HandleHealthcheckCommand("8080", "/health") {
+	if apphttp.HandleHealthcheckCommand("8080", "/health") {
 		return
 	}
 	cfg := app.ConfigFromEnv()

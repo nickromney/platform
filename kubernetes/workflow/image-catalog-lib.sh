@@ -11,7 +11,7 @@ source_fingerprint_tag() {
   local digest
 
   digest="$(
-    cd "${REPO_ROOT}"
+    cd "${REPO_ROOT}" || exit 1
     find "$@" -type f -print |
       LC_ALL=C sort |
       while IFS= read -r source_file; do
@@ -51,6 +51,13 @@ image_catalog_source_tag() {
   if [ "${#sources[@]}" -eq 0 ]; then
     return 0
   fi
+
+  for source in "${sources[@]}"; do
+    if [ ! -e "${REPO_ROOT}/${source}" ] && [ ! -e "${source}" ]; then
+      echo "${0##*/}: ${category}.${image_id} fingerprint source not found: ${source}" >&2
+      return 1
+    fi
+  done
 
   source_fingerprint_tag "${sources[@]}"
 }

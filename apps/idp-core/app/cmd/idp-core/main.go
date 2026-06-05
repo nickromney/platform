@@ -4,13 +4,12 @@ import (
 	"log"
 
 	"platform.local/appconfig"
-	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idp-core/internal/app"
 )
 
 func main() {
-	if apphealth.HandleHealthcheckCommand(appconfig.Env("PORT", "8080"), "/health") {
+	if apphttp.HandleHealthcheckCommand(appconfig.Env("PORT", "8080"), "/health") {
 		return
 	}
 	addr := appconfig.NormalizeAddr(appconfig.Env("PORT", "8080"))

@@ -240,6 +240,10 @@ func HealthcheckCommand(args []string) bool {
 	return apphealth.HealthcheckCommand(args)
 }
 
+func HandleHealthcheckCommand(port string, path string) bool {
+	return apphealth.HandleHealthcheckCommand(port, path)
+}
+
 func NewHTTPClient(timeout time.Duration) *http.Client {
 	if timeout <= 0 {
 		timeout = 1 * time.Second
