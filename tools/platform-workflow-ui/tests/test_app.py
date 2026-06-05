@@ -59,7 +59,7 @@ esac
     inventory.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-printf '{"schema_version":"0.1","variant":"kind","stage":"900","generated_at":"2026-05-03T12:00:00Z","health_summary":{"overall_state":"ready","active_variant":"kind"},"variants_order":["kind","lima","slicer"],"variants":{"kind":{"state":"ready","blockers":[]},"lima":{"state":"absent","blockers":["Lima stopped"]},"slicer":{"state":"absent","blockers":[]}}}\\n'
+printf '{"schema_version":"0.1","variant":"kind","stage":"900","generated_at":"2026-05-03T12:00:00Z","health_summary":{"overall_state":"ready","active_variant":"kind"},"variants_order":["kind","lima","slicer"],"variants":{"kind":{"state":"ready","blockers":[]},"lima":{"state":"absent","blockers":["shared host ports claimed by kubernetes/kind"],"readiness":{"blocker_count":1,"recommended_action":{"command":"make -C kubernetes/kind stop-kind"}},"blocker_facts":[{"message":"shared host ports claimed by kubernetes/kind","recommended_action":{"command":"make -C kubernetes/kind stop-kind"}}]},"slicer":{"state":"absent","blockers":[]}}}\\n'
 """,
         encoding="utf-8",
     )
@@ -315,7 +315,8 @@ def test_inventory_fragment_uses_read_model_command(tmp_path: Path) -> None:
     assert "bun" in response.text
     assert "Overall <strong>ready</strong>" in response.text
     assert "Active variant <strong>kind</strong>" in response.text
-    assert "Lima stopped" in response.text
+    assert "shared host ports claimed by kubernetes/kind" in response.text
+    assert "make -C kubernetes/kind stop-kind" in response.text
 
 
 def test_run_fragment_polls_job_and_offers_next_actions(tmp_path: Path) -> None:

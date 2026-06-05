@@ -48,29 +48,6 @@ build_read_model_json() {
   status_json="$("${STATUS_SCRIPT}" --execute --output json)"
 
   jq -n --argjson status "${status_json}" '
-    def blocker_facts($variant_key; $variant_path):
-      (.blockers // [])
-      | to_entries
-      | map(
-          (.value | tostring) as $message
-          | (
-              if ($message | test("^(?<claim>.+) claimed by (?<owner>.+)$")) then
-                ($message | capture("^(?<claim>.+) claimed by (?<owner>.+)$"))
-              else
-                null
-              end
-            ) as $claim
-          | {
-              id: ($variant_key + "-blocker-" + (.key | tostring)),
-              variant: $variant_key,
-              variant_path: $variant_path,
-              message: $message,
-              blocks_readiness: true,
-              claim: (if $claim then $claim.claim else null end),
-              blocking_owner: (if $claim then $claim.owner else null end)
-            }
-        );
-
     def action_facts($actions; $variant_key):
       ($actions // [])
       | map(select(.variant == $variant_key))
@@ -82,6 +59,62 @@ build_read_model_json() {
           reason,
           dangerous
         });
+
+    def action_for_blocking_owner($actions; $blocking_owner):
+      if ($blocking_owner == null or $blocking_owner == "") then
+        null
+      else
+        (
+          ($actions // [])
+          | map(select(
+              .variant_path == $blocking_owner
+              and .enabled
+              and (.dangerous | not)
+              and ((.id // "") | endswith("-stop"))
+            ))
+          | .[0]
+        ) // (
+          ($actions // [])
+          | map(select(
+              .variant_path == $blocking_owner
+              and .enabled
+              and (.dangerous | not)
+            ))
+          | .[0]
+        ) // null
+      end;
+
+    def blocker_facts($actions; $variant_key; $variant_path):
+      (.blockers // [])
+      | to_entries
+      | map(
+          (.value | tostring) as $message
+          | (
+              if ($message | test("^(?<claim>.+) claimed by (?<owner>.+)$")) then
+                ($message | capture("^(?<claim>.+) claimed by (?<owner>.+)$"))
+              else
+                null
+              end
+            ) as $claim
+          | (if $claim then action_for_blocking_owner($actions; $claim.owner) else null end) as $recommended_action
+          | {
+              id: ($variant_key + "-blocker-" + (.key | tostring)),
+              variant: $variant_key,
+              variant_path: $variant_path,
+              message: $message,
+              blocks_readiness: true,
+              claim: (if $claim then $claim.claim else null end),
+              blocking_owner: (if $claim then $claim.owner else null end),
+              recommended_action: (if $recommended_action then {
+                id: $recommended_action.id,
+                label: $recommended_action.label,
+                command: $recommended_action.command,
+                enabled: $recommended_action.enabled,
+                reason: $recommended_action.reason,
+                dangerous: $recommended_action.dangerous
+              } else null end)
+            }
+        );
 
     def recommended_action($actions; $variant_key):
       (action_facts($actions; $variant_key)) as $facts
@@ -97,6 +130,14 @@ build_read_model_json() {
           $facts
           | .[0]
         ) // null;
+
+    def readiness_action($actions; $variant_key; $blockers):
+      (
+        $blockers
+        | map(.recommended_action)
+        | map(select(. != null))
+        | .[0]
+      ) // recommended_action($actions; $variant_key);
 
     $status as $s
     | {
@@ -117,6 +158,7 @@ build_read_model_json() {
           reduce (($s.variants_order // [])[]) as $key ({};
             ($s.variants[$key] // {}) as $variant
             | ($variant.path // null) as $variant_path
+            | ($variant | blocker_facts($s.actions; $key; $variant_path)) as $blockers
             | .[$key] = {
                 ownership: {
                   variant: $key,
@@ -129,10 +171,13 @@ build_read_model_json() {
                 },
                 readiness: {
                   state: ($variant.state // "not reported"),
-                  ready: ((($variant.blockers // []) | length) == 0),
+                  ready: (($blockers | length) == 0),
+                  blocker_count: ($blockers | length),
+                  blocking_owners: ($blockers | map(.blocking_owner) | map(select(. != null)) | unique),
+                  recommended_action: readiness_action($s.actions; $key; $blockers),
                   checks: ($variant.readiness // {})
                 },
-                blockers: ($variant | blocker_facts($key; $variant_path)),
+                blockers: $blockers,
                 recommended_action: recommended_action($s.actions; $key),
                 actions: action_facts($s.actions; $key)
               }
@@ -156,7 +201,7 @@ print_read_model() {
         (
           .variants_order[] as $key
           | .variants[$key] as $variant
-          | "\($variant.ownership.variant_path): \($variant.readiness.state) blocker_count=\($variant.blockers | length) recommended=\($variant.recommended_action.command // "none")"
+          | "\($variant.ownership.variant_path): \($variant.readiness.state) blocker_count=\($variant.readiness.blocker_count // ($variant.blockers | length)) recommended=\($variant.readiness.recommended_action.command // $variant.recommended_action.command // "none")"
         )
       ' <<<"${read_model_json}"
       ;;
