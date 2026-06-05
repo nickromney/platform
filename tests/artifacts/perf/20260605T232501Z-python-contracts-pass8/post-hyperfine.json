@@ -1,0 +1,35 @@
+{
+  "results": [
+    {
+      "command": "bats tests/validate-docker-optimization-contracts.bats > /tmp/validate-docker-benchmark.txt",
+      "mean": 3.9382697729,
+      "stddev": 0.05532779413080279,
+      "median": 3.9197627313,
+      "user": 2.72365994,
+      "system": 0.96992314,
+      "min": 3.8819826063,
+      "max": 4.017059731300001,
+      "times": [
+        3.9197627313,
+        3.9717547313,
+        4.017059731300001,
+        3.9007890643,
+        3.8819826063
+      ],
+      "memory_usage_byte": [
+        23822336,
+        23822336,
+        23822336,
+        23822336,
+        23822336
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

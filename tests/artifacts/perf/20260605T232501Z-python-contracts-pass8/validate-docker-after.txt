@@ -1,0 +1,55 @@
+1..54
+ok 1 subnetcalc Go runtime image stays package-manager-free
+ok 2 APIM simulator image follows the Go single-binary runtime contract
+ok 3 lightweight Go app images avoid package manager runtimes
+ok 4 local Go app runtime binaries are owned by the non-root runtime user
+ok 5 local Go app runtime images use writable temp home for the non-root user
+ok 6 docker optimization tests share Go app Dockerfile runtime helpers
+ok 7 local Go app Makefiles create their binary output directory
+ok 8 local Go app Makefiles build trimmed stripped binaries by default
+ok 9 local Go app Makefiles share the Linux binary build contract
+ok 10 local Go app Makefiles expose help for focused workflows
+ok 11 local Go app Makefiles expose clean for generated run artifacts
+ok 12 docker optimization tests share local Go app Makefile workflow helpers
+ok 13 shared app module Makefiles expose focused help
+ok 14 docker optimization tests share shared app module Makefile helpers
+ok 15 browser app js-check targets cover shipped vanilla web assets
+ok 16 docker optimization tests share browser app js-check asset helpers
+ok 17 local Go app commands use the shared hardened HTTP server helper
+ok 18 Go apps decode upstream JSON through shared apphttp helper
+ok 19 docker optimization tests share hardened Go command HTTP helpers
+ok 20 compose files harden additional subnetcalc runtime services
+ok 21 docker optimization tests share additional subnetcalc compose hardening helpers
+ok 22 docker build audit script captures logs sizes and warnings
+ok 23 docker optimization tests share docker build audit tooling helpers
+ok 24 grafana plugin image build uses a host-verified archive instead of downloading in Dockerfile
+ok 25 docker optimization tests share grafana plugin archive mirroring helpers
+ok 26 local platform image build and sync contracts include IDP images
+ok 27 docker optimization tests share local platform image sync helpers
+ok 28 local platform IDP image cache keys include source fingerprints
+ok 29 docker optimization tests share local platform source fingerprint cache helpers
+ok 30 local Go workload image cache keys include embedded frontend sources
+ok 31 image catalog shared source fingerprints match local Go module imports
+ok 32 docker optimization tests share local Go workload source fingerprint helpers
+ok 33 image catalog owns local platform build specs
+ok 34 docker optimization tests share local platform image build spec helpers
+ok 35 image catalog owns local workload build specs for variant builders
+ok 36 docker optimization tests share local workload image build spec helpers
+ok 37 image catalog owns Grafana VictoriaLogs plugin image build inputs
+ok 38 docker optimization tests share Grafana plugin catalog build input helpers
+ok 39 image catalog entries declare version-check policy
+ok 40 docker optimization tests share image catalog version-check helpers
+ok 41 Lima and Slicer external image refs match the image catalog
+ok 42 docker optimization tests share image catalog target ref helpers
+ok 43 image catalog renders target tfvars external image projection
+ok 44 docker optimization tests share image catalog target tfvars projection helpers
+ok 45 local platform IDP cache hits are not invalidated by unrelated git commits
+ok 46 docker optimization tests share local platform cache-hit helpers
+ok 47 image catalog shared image builder adapter owns variant build mechanics
+ok 48 docker optimization tests share image builder adapter helpers
+ok 49 image catalog context adapter owns generated Backstage build context
+ok 50 docker optimization tests share image catalog context adapter helpers
+ok 51 generated Backstage image build passes a lean concrete Docker context
+ok 52 image build prebuild hooks run once for identical commands
+ok 53 platform MCP Docker image uses the Go single-binary runtime
+ok 54 docker optimization tests share platform MCP runtime helpers
