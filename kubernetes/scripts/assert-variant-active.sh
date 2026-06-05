@@ -43,7 +43,30 @@ blocked() {
 }
 
 stop_hint_for_variant_path() {
-  case "${1:-}" in
+  local variant_path="${1:-}"
+  local status_json="${2:-}"
+  local status_hint=""
+
+  if [ -n "${status_json}" ]; then
+    status_hint="$(
+      jq -r --arg path "${variant_path}" '
+        (.actions // [])
+        | map(select(
+            .variant_path == $path
+            and (.enabled // false)
+            and ((.dangerous // false) | not)
+            and ((.id // "") | endswith("-stop"))
+          ))
+        | .[0].command // empty
+      ' <<<"${status_json}"
+    )"
+    if [ -n "${status_hint}" ]; then
+      printf '%s\n' "${status_hint}"
+      return 0
+    fi
+  fi
+
+  case "${variant_path}" in
     kubernetes/kind)
       printf 'make -C kubernetes/kind stop-kind'
       ;;
@@ -81,7 +104,7 @@ if [ "${overall_state}" = "conflict" ]; then
 fi
 
 if [ -n "${active_variant_path}" ] && [ "${active_variant_path}" != "${EXPECTED_VARIANT_PATH}" ]; then
-  stop_hint="$(stop_hint_for_variant_path "${active_variant_path}")"
+  stop_hint="$(stop_hint_for_variant_path "${active_variant_path}" "${status_json}")"
   message="This machine is currently owned by ${active_variant_path}, not ${EXPECTED_VARIANT_PATH}."
   if [ -n "${stop_hint}" ]; then
     message+=$'\n'"Clear the conflicting surface first:"$'\n'"  ${stop_hint}"

@@ -41,6 +41,36 @@ EOF
   [ ! -e "${kubectl_log}" ]
 }
 
+@test "uses platform status stop action for the conflicting variant" {
+  kubectl_log="${BATS_TEST_TMPDIR}/kubectl.log"
+
+  cat >"${STATUS_STUB}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"}},"actions":[{"id":"lima-stop","variant":"lima","variant_path":"kubernetes/lima","enabled":true,"dangerous":false,"command":"make -C kubernetes/lima stop-from-status"}]}'
+EOF
+  chmod +x "${STATUS_STUB}"
+
+  cat >"${TEST_BIN}/kubectl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'kubectl %s\n' "\$*" >>"${kubectl_log}"
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/kubectl"
+
+  run env \
+    PLATFORM_STATUS_SCRIPT="${STATUS_STUB}" \
+    EXPECTED_VARIANT_PATH="kubernetes/kind" \
+    KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"make -C kubernetes/lima stop-from-status"* ]]
+  [[ "${output}" != *"make -C kubernetes/lima stop-lima"* ]]
+  [ ! -e "${kubectl_log}" ]
+}
+
 @test "blocks checks when the expected variant is not running" {
   kubectl_log="${BATS_TEST_TMPDIR}/kubectl.log"
 
