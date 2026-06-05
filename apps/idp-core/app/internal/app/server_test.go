@@ -214,6 +214,30 @@ func TestHealthRuntimeAndCatalog(t *testing.T) {
 	}
 }
 
+func TestOpenAPIUsesRegisteredRouteSpecs(t *testing.T) {
+	paths := openAPI()["paths"].(map[string]any)
+	for _, path := range []string{
+		"/api/v1/runtime",
+		"/api/v1/status",
+		"/api/v1/catalog/apps",
+		"/api/v1/deployments",
+		"/api/v1/secrets",
+		"/api/v1/scorecards",
+		"/api/v1/actions",
+		"/api/v1/environments",
+		"/api/v1/environments/{app}/{environment}",
+		"/api/v1/deployments/promote",
+		"/api/v1/workflows/secrets/dry-run",
+	} {
+		if _, ok := paths[path]; !ok {
+			t.Fatalf("openapi paths missing %s in %#v", path, paths)
+		}
+	}
+	if _, ok := paths["/api/v1/environments/{app_name}/{environment}"]; ok {
+		t.Fatalf("openapi should use registered route parameter names: %#v", paths)
+	}
+}
+
 func TestCORSAllowsPortalOrigins(t *testing.T) {
 	server := testServer(t)
 

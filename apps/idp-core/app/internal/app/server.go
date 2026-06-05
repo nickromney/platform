@@ -34,6 +34,50 @@ type Server struct {
 	registry    *workflow.Registry
 }
 
+const (
+	apiPathRuntimes                  = "/api/v1/runtimes"
+	apiPathRuntime                   = "/api/v1/runtime"
+	apiPathStatus                    = "/api/v1/status"
+	apiPathCatalogApps               = "/api/v1/catalog/apps"
+	apiPathCatalogApp                = "/api/v1/catalog/apps/{app}"
+	apiPathDeployments               = "/api/v1/deployments"
+	apiPathSecrets                   = "/api/v1/secrets"
+	apiPathScorecards                = "/api/v1/scorecards"
+	apiPathActions                   = "/api/v1/actions"
+	apiPathOpenAPI                   = "/openapi.json"
+	apiPathEnvironments              = "/api/v1/environments"
+	apiPathEnvironment               = "/api/v1/environments/{app}/{environment}"
+	apiPathDeploymentPromote         = "/api/v1/deployments/promote"
+	apiPathDeploymentRollback        = "/api/v1/deployments/rollback"
+	apiPathAppsScaffold              = "/api/v1/apps/scaffold"
+	apiPathWorkflowEnvironmentDryRun = "/api/v1/workflows/environments/dry-run"
+	apiPathWorkflowDeploymentDryRun  = "/api/v1/workflows/deployments/dry-run"
+	apiPathWorkflowSecretDryRun      = "/api/v1/workflows/secrets/dry-run"
+)
+
+var idpAPIPathSpecs = []struct {
+	method string
+	path   string
+}{
+	{"get", apiPathRuntimes},
+	{"get", apiPathRuntime},
+	{"get", apiPathStatus},
+	{"get", apiPathCatalogApps},
+	{"get", apiPathCatalogApp},
+	{"get", apiPathDeployments},
+	{"get", apiPathSecrets},
+	{"get", apiPathScorecards},
+	{"get", apiPathActions},
+	{"post", apiPathEnvironments},
+	{"delete", apiPathEnvironment},
+	{"post", apiPathDeploymentPromote},
+	{"post", apiPathDeploymentRollback},
+	{"post", apiPathAppsScaffold},
+	{"post", apiPathWorkflowEnvironmentDryRun},
+	{"post", apiPathWorkflowDeploymentDryRun},
+	{"post", apiPathWorkflowSecretDryRun},
+}
+
 func NewServer(cfg Config) (*Server, error) {
 	if cfg.AuditPath == "" {
 		cfg.AuditPath = "/tmp/idp-core/audit.jsonl"
@@ -69,14 +113,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "healthy", "service": "idp-core"})
 	})
-	s.mux.HandleFunc("GET /api/v1/runtimes", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("GET "+apiPathRuntimes, func(w http.ResponseWriter, r *http.Request) {
 		var list []map[string]string
 		for _, a := range s.registry.List() {
 			list = append(list, map[string]string{"name": a.Name(), "description": a.Description()})
 		}
 		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"runtimes": list})
 	})
-	s.mux.HandleFunc("GET /api/v1/runtime", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("GET "+apiPathRuntime, func(w http.ResponseWriter, r *http.Request) {
 		adapter, ok := s.registry.Get(s.runtime)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "unsupported runtime: "+s.runtime)
@@ -91,24 +135,24 @@ func (s *Server) routes() {
 			"runtimes":       list,
 		})
 	})
-	s.mux.HandleFunc("GET /api/v1/status", s.status)
-	s.mux.HandleFunc("GET /api/v1/catalog/apps", s.catalogApps)
-	s.mux.HandleFunc("GET /api/v1/catalog/apps/{app}", s.catalogApp)
-	s.mux.HandleFunc("GET /api/v1/deployments", s.deployments)
-	s.mux.HandleFunc("GET /api/v1/secrets", s.secrets)
-	s.mux.HandleFunc("GET /api/v1/scorecards", s.scorecards)
-	s.mux.HandleFunc("GET /api/v1/actions", s.actions)
-	s.mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("GET "+apiPathStatus, s.status)
+	s.mux.HandleFunc("GET "+apiPathCatalogApps, s.catalogApps)
+	s.mux.HandleFunc("GET "+apiPathCatalogApp, s.catalogApp)
+	s.mux.HandleFunc("GET "+apiPathDeployments, s.deployments)
+	s.mux.HandleFunc("GET "+apiPathSecrets, s.secrets)
+	s.mux.HandleFunc("GET "+apiPathScorecards, s.scorecards)
+	s.mux.HandleFunc("GET "+apiPathActions, s.actions)
+	s.mux.HandleFunc("GET "+apiPathOpenAPI, func(w http.ResponseWriter, r *http.Request) {
 		apphttp.WriteJSON(w, http.StatusOK, openAPI())
 	})
-	s.mux.HandleFunc("POST /api/v1/environments", s.createEnvironment)
-	s.mux.HandleFunc("DELETE /api/v1/environments/{app}/{environment}", s.deleteEnvironment)
-	s.mux.HandleFunc("POST /api/v1/deployments/promote", s.promoteDeployment)
-	s.mux.HandleFunc("POST /api/v1/deployments/rollback", s.rollbackDeployment)
-	s.mux.HandleFunc("POST /api/v1/apps/scaffold", s.scaffoldApp)
-	s.mux.HandleFunc("POST /api/v1/workflows/environments/dry-run", s.environmentDryRun)
-	s.mux.HandleFunc("POST /api/v1/workflows/deployments/dry-run", s.deploymentDryRun)
-	s.mux.HandleFunc("POST /api/v1/workflows/secrets/dry-run", s.secretDryRun)
+	s.mux.HandleFunc("POST "+apiPathEnvironments, s.createEnvironment)
+	s.mux.HandleFunc("DELETE "+apiPathEnvironment, s.deleteEnvironment)
+	s.mux.HandleFunc("POST "+apiPathDeploymentPromote, s.promoteDeployment)
+	s.mux.HandleFunc("POST "+apiPathDeploymentRollback, s.rollbackDeployment)
+	s.mux.HandleFunc("POST "+apiPathAppsScaffold, s.scaffoldApp)
+	s.mux.HandleFunc("POST "+apiPathWorkflowEnvironmentDryRun, s.environmentDryRun)
+	s.mux.HandleFunc("POST "+apiPathWorkflowDeploymentDryRun, s.deploymentDryRun)
+	s.mux.HandleFunc("POST "+apiPathWorkflowSecretDryRun, s.secretDryRun)
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
@@ -510,18 +554,7 @@ func stringSlice(value any) []string {
 
 func openAPI() map[string]any {
 	paths := map[string]any{}
-	for _, item := range []struct {
-		method string
-		path   string
-	}{
-		{"get", "/api/v1/runtimes"},
-		{"get", "/api/v1/status"},
-		{"post", "/api/v1/environments"},
-		{"delete", "/api/v1/environments/{app_name}/{environment}"},
-		{"post", "/api/v1/deployments/promote"},
-		{"post", "/api/v1/deployments/rollback"},
-		{"post", "/api/v1/workflows/secrets/dry-run"},
-	} {
+	for _, item := range idpAPIPathSpecs {
 		methods := mapValue(paths[item.path])
 		methods[item.method] = map[string]any{"operationId": strings.ReplaceAll(strings.Trim(item.path, "/"), "/", "_")}
 		paths[item.path] = methods

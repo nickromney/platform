@@ -95,3 +95,50 @@ PY
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated HTTP-only MCP wrapper"* ]]
 }
+
+@test "IDP SDK and MCP share named API path registries" {
+  run uv run --isolated python - <<'PY'
+from __future__ import annotations
+
+import ast
+import os
+import re
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+sdk = (repo_root / "apps/idp-sdk/src/index.ts").read_text(encoding="utf-8")
+mcp = (repo_root / "apps/idp-mcp/idp_mcp/server.py").read_text(encoding="utf-8")
+
+assert "IDP_API_PATHS" in sdk, "SDK should centralize endpoint strings in IDP_API_PATHS"
+assert "IDP_API_PATHS" in mcp, "MCP should centralize endpoint strings in IDP_API_PATHS"
+
+sdk_paths = dict(re.findall(r"(\w+):\s*\"(/[^\"]+)\"", sdk))
+tree = ast.parse(mcp)
+mcp_paths: dict[str, str] = {}
+for node in tree.body:
+    if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "IDP_API_PATHS" for target in node.targets):
+        for key, value in zip(node.value.keys, node.value.values, strict=True):
+            if isinstance(key, ast.Constant) and isinstance(value, ast.Constant):
+                mcp_paths[str(key.value)] = str(value.value)
+
+expected = {
+    "runtime": "/api/v1/runtime",
+    "status": "/api/v1/status",
+    "catalogApps": "/api/v1/catalog/apps",
+    "environments": "/api/v1/environments",
+    "deploymentPromote": "/api/v1/deployments/promote",
+}
+for key, path in expected.items():
+    assert sdk_paths.get(key) == path, (key, sdk_paths.get(key))
+    assert mcp_paths.get(key) == path, (key, mcp_paths.get(key))
+
+for raw_path in expected.values():
+    assert sdk.count(f'"{raw_path}"') == 1, f"SDK should declare {raw_path} once"
+    assert mcp.count(f'"{raw_path}"') == 1, f"MCP should declare {raw_path} once"
+
+print("validated named IDP API path registries")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated named IDP API path registries"* ]]
+}

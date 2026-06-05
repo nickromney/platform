@@ -10,6 +10,18 @@ from typing import Any
 
 DEFAULT_IDP_API_BASE_URL = "https://portal-api.127.0.0.1.sslip.io"
 
+IDP_API_PATHS = {
+    "runtime": "/api/v1/runtime",
+    "status": "/api/v1/status",
+    "catalogApps": "/api/v1/catalog/apps",
+    "deployments": "/api/v1/deployments",
+    "secrets": "/api/v1/secrets",
+    "scorecards": "/api/v1/scorecards",
+    "actions": "/api/v1/actions",
+    "environments": "/api/v1/environments",
+    "deploymentPromote": "/api/v1/deployments/promote",
+}
+
 
 @dataclass(frozen=True)
 class IdpApiClient:
@@ -20,14 +32,14 @@ class IdpApiClient:
         return cls(os.environ.get("IDP_API_BASE_URL", DEFAULT_IDP_API_BASE_URL).rstrip("/"))
 
     def platform_status(self) -> dict[str, Any]:
-        return self._request("GET", "/api/v1/status")
+        return self._request("GET", IDP_API_PATHS["status"])
 
     def catalog_list(self) -> dict[str, Any]:
-        return self._request("GET", "/api/v1/catalog/apps")
+        return self._request("GET", IDP_API_PATHS["catalogApps"])
 
     def create_environment(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = {"runtime": "kind", **payload}
-        return self._request("POST", "/api/v1/environments?dry_run=true", request)
+        return self._request("POST", f'{IDP_API_PATHS["environments"]}?dry_run=true', request)
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         body = None if payload is None else json.dumps(payload).encode("utf-8")
