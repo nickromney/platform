@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 IMAGE_CATALOG_FILE="${IMAGE_CATALOG_FILE:-${REPO_ROOT}/kubernetes/workflow/image-catalog.json}"
+if [ -z "${IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE:-}" ]; then
+  IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE="${TMPDIR:-/tmp}/image-catalog-source-tags.$$"
+  : >"${IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE}"
+  export IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE
+fi
 
 image_catalog_require() {
   command -v jq >/dev/null 2>&1 || { echo "${0##*/}: jq not found" >&2; exit 1; }
@@ -45,11 +50,46 @@ image_catalog_entry_exists() {
   jq -e --arg id "${image_id}" ".${category}_images[]? | select(.id == \$id)" "${IMAGE_CATALOG_FILE}" >/dev/null
 }
 
+image_catalog_source_tag_cache_key() {
+  local cache_key=""
+  local source=""
+
+  for source in "$@"; do
+    cache_key+="${source}"$'\034'
+  done
+  printf '%s\n' "${cache_key}"
+}
+
+image_catalog_cached_source_tag() {
+  local cache_key="$1"
+  local cached_key=""
+  local cached_value=""
+
+  [ -f "${IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE}" ] || return 1
+  while IFS=$'\t' read -r cached_key cached_value; do
+    if [ "${cached_key}" = "${cache_key}" ]; then
+      printf '%s\n' "${cached_value}"
+      return 0
+    fi
+  done <"${IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE}"
+
+  return 1
+}
+
+image_catalog_remember_source_tag() {
+  local cache_key="$1"
+  local source_tag="$2"
+
+  printf '%s\t%s\n' "${cache_key}" "${source_tag}" >>"${IMAGE_CATALOG_SOURCE_TAG_CACHE_FILE}"
+}
+
 image_catalog_source_tag() {
   local category="$1"
   local image_id="$2"
   local sources=()
   local source=""
+  local cache_key=""
+  local source_tag=""
 
   if ! image_catalog_entry_exists "${category}" "${image_id}"; then
     echo "${0##*/}: ${category}.${image_id} not found in image catalog" >&2
@@ -65,6 +105,11 @@ image_catalog_source_tag() {
     return 0
   fi
 
+  cache_key="$(image_catalog_source_tag_cache_key "${sources[@]}")"
+  if image_catalog_cached_source_tag "${cache_key}"; then
+    return 0
+  fi
+
   for source in "${sources[@]}"; do
     if [ ! -e "${REPO_ROOT}/${source}" ] && [ ! -e "${source}" ]; then
       echo "${0##*/}: ${category}.${image_id} fingerprint source not found: ${source}" >&2
@@ -72,7 +117,9 @@ image_catalog_source_tag() {
     fi
   done
 
-  source_fingerprint_tag "${sources[@]}"
+  source_tag="$(source_fingerprint_tag "${sources[@]}")"
+  image_catalog_remember_source_tag "${cache_key}" "${source_tag}"
+  printf '%s\n' "${source_tag}"
 }
 
 image_catalog_external_ids() {
