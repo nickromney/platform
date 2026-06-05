@@ -73,6 +73,22 @@ kind_argocd_app_synced_healthy() {
   [[ "${output}" =~ kind\ node\ tag[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+ ]]
 }
 
+@test "check-version reports kind-load minimum for Kubernetes 1.36 node images" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; minimum=\"\$(kind_load_minimum_version_for_node_tag 'v1.36.1')\"; printf '%s\n' \"\${minimum}\"; print_observed_latest_row 'kind load minimum for node tag' 'v0.31.0' \"\${minimum}\" 'installed cli' 'minimum for v1.36.1 node image'"
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "v0.32.0" ]
+  [[ "${lines[1]}" == *$'kind load minimum for node tag\tv0.31.0\tv0.32.0\t'* ]]
+  [[ "${lines[1]}" == *"installed cli != latest minimum for v1.36.1 node image (v0.31.0 vs v0.32.0)"* ]]
+}
+
+@test "check-version keeps running when kindest node tag lookup is unavailable" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; docker_hub_repo_tags() { return 1; }; kindest_node_latest_tag; printf 'after lookup\n'"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "after lookup" ]
+}
+
 @test "check-version accepts --ci in dry-run mode" {
   run "${SCRIPT}" --dry-run --ci
 
@@ -96,6 +112,52 @@ kind_argocd_app_synced_healthy() {
   [[ "${lines[1]}" =~ ^[0-9a-f]{64}$ ]]
   [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.28.0\tv0.28.0\t'* ]]
   [[ "${lines[2]}" == *"latest release tag (v0.28.0)"* ]]
+}
+
+@test "check-version reports Gitea chart image override as the code tag" {
+  local stack_dir="${BATS_TEST_TMPDIR}/terraform/kubernetes"
+  mkdir -p "${stack_dir}"
+  cat >"${stack_dir}/gitea.tf" <<'EOF'
+resource "kubectl_manifest" "argocd_app_gitea" {
+  yaml_body = <<__YAML__
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea
+spec:
+  source:
+    chart: gitea
+    targetRevision: 12.6.0
+    helm:
+      values: |
+        image:
+          repository: gitea/gitea
+          tag: "1.26.0"
+        service:
+          http:
+            type: ClusterIP
+__YAML__
+}
+EOF
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    source '${SCRIPT}'
+    EXPECTED_CLUSTER_NAME='kind-local'
+    CLUSTER_OK=1
+    EXPECT_KIND_PROVISIONING='true'
+    CODE_ARGOCD_IMAGE_REF=''
+    CONFIGURED_ARGOCD_IMAGE_STATUS=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_REF=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=''
+    tag=\"\$(terraform_argocd_application_image_tag '${stack_dir}/gitea.tf' gitea)\"
+    row=\"\$(print_row 'gitea chart' '12.6.0' '12.6.0' '12.6.0' '1.26.0' \"\${tag}\" '' '1.26.1' '0')\"
+    emit_json_report \"\${row}\" '' '' '' '' | jq -r '.components[0] | [.code_tag, .latest_tag, .status_code, (.update_available | tostring), .status_text] | @tsv'
+  "
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == $'1.26.0\t1.26.1\tupdate_available\ttrue\t'* ]]
+  [[ "${output}" == *"code tag != latest tag (1.26.0 vs 1.26.1)"* ]]
 }
 
 @test "check-version reads k3s pins from local variant Makefiles" {

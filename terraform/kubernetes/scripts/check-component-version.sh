@@ -1624,6 +1624,97 @@ helm_chart_app_version() {
   printf "%s\n" "${result}"
 }
 
+terraform_string_value_or_default() {
+  local value="$1"
+  local variable_name=""
+
+  value="$(trim_surrounding_whitespace "${value}")"
+
+  if [[ "${value}" =~ ^\$\{var\.([A-Za-z0-9_]+)\}$ ]]; then
+    variable_name="${BASH_REMATCH[1]}"
+    tf_default_from_variables "${variable_name}"
+    return 0
+  fi
+
+  printf '%s\n' "${value}"
+}
+
+terraform_argocd_application_image_tag() {
+  local file="$1"
+  local app_name="$2"
+  local value=""
+
+  [ -f "${file}" ] || return 0
+
+  value="$(
+    awk -v app_name="${app_name}" '
+      function trim(value) {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        return value
+      }
+
+      function unquote(value) {
+        value = trim(value)
+        gsub(/^["\047]|["\047]$/, "", value)
+        return value
+      }
+
+      BEGIN {
+        resource_pattern = "resource \"kubectl_manifest\" \"argocd_app_" app_name "\""
+      }
+
+      index($0, resource_pattern) {
+        in_resource = 1
+      }
+
+      in_resource && /^[[:space:]]*yaml_body[[:space:]]*=[[:space:]]*<<-?/ {
+        marker = $0
+        sub(/^.*<<-?/, "", marker)
+        gsub(/[" \t]/, "", marker)
+        in_yaml = 1
+        next
+      }
+
+      in_yaml && marker != "" && $0 == marker {
+        exit
+      }
+
+      in_yaml {
+        line = $0
+
+        if (line ~ /^[[:space:]]*image:[[:space:]]*$/) {
+          image_indent = line
+          sub(/image:[[:space:]]*$/, "", image_indent)
+          image_indent_len = length(image_indent)
+          in_image = 1
+          next
+        }
+
+        if (in_image) {
+          if (line ~ /^[[:space:]]*$/) {
+            next
+          }
+
+          current_indent = line
+          sub(/[^[:space:]].*$/, "", current_indent)
+          current_indent_len = length(current_indent)
+
+          if (current_indent_len <= image_indent_len) {
+            in_image = 0
+          } else if (line ~ /^[[:space:]]*tag:[[:space:]]*/) {
+            value = line
+            sub(/^[[:space:]]*tag:[[:space:]]*/, "", value)
+            print unquote(value)
+            exit
+          }
+        }
+      }
+    ' "${file}" 2>/dev/null || true
+  )"
+
+  terraform_string_value_or_default "${value}"
+}
+
 image_tag_from_ref() {
   local image_ref="$1"
   local no_digest last_segment
@@ -1802,7 +1893,7 @@ oci_registry_repo_tags() {
 kindest_node_latest_tag() {
   docker_hub_repo_tags "kindest" "node" 2>/dev/null | \
     grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | \
-    sort -V | tail -n 1
+    sort -V | tail -n 1 || true
 }
 
 makefile_variable_value() {
@@ -1838,6 +1929,19 @@ kind_installed_version() {
 
   version="$(kind --version 2>/dev/null | sed -E 's/^kind version[[:space:]]+//; s/[[:space:]].*$//' | xargs || true)"
   echo "${version}"
+}
+
+kind_load_minimum_version_for_node_tag() {
+  local node_tag="$1"
+  local node_version="${node_tag#v}"
+
+  if [ -z "${node_version}" ]; then
+    return 0
+  fi
+
+  if version_gte "${node_version}" "1.36.0"; then
+    printf '%s\n' "v0.32.0"
+  fi
 }
 
 normalize_semver_like_tag() {
@@ -2197,6 +2301,9 @@ print_row() {
   local all_match=0
   local codebase_matches_latest=0
   local not_deployed_current=0
+  local tag_update_available=0
+  local deployed_tag_drift=0
+  local tag_latest_state=""
 
   if [ -n "$codebase" ] && [ -n "$latest" ] && [ "$codebase" != "$latest" ]; then
     if [ "${prefer_hardened}" = "1" ]; then
@@ -2208,16 +2315,31 @@ print_row() {
     fi
   fi
 
+  if [ -n "$codebase_tag" ] && [ -n "$latest_tag" ] && [ "$codebase_tag" != "$latest_tag" ]; then
+    tag_update_available=1
+    update_available=1
+    tag_latest_state="; code tag != latest tag (${codebase_tag} vs ${latest_tag})"
+  fi
+
+  if [ "${CLUSTER_OK:-0}" -eq 1 ] && [ -n "$deployed_tag" ] && [ "$deployed_tag" != "Unavailable" ] && \
+    [ -n "$codebase_tag" ] && [ "$deployed_tag" != "$codebase_tag" ]; then
+    deployed_tag_drift=1
+  fi
+
   if [ -n "$codebase" ] && [ -n "$latest" ] && [ "$codebase" = "$latest" ]; then
     codebase_matches_latest=1
   fi
 
-  if [ "${CLUSTER_OK}" -ne 1 ]; then
+  if [ "${CLUSTER_OK:-0}" -ne 1 ]; then
     deploy_state="deployed ? (${CHECK_VERSION_DEPLOYED_REASON})"
   elif [ -z "$deployed" ]; then
     deploy_state="not deployed"
   elif [ -n "$codebase" ] && [ "$deployed" = "$codebase" ]; then
-    deploy_state="deployed == codebase (${codebase})"
+    if [ "${deployed_tag_drift}" -eq 1 ]; then
+      deploy_state="deployed tag != code tag (${deployed_tag} vs ${codebase_tag})"
+    else
+      deploy_state="deployed == codebase (${codebase})"
+    fi
   else
     if [ -n "$codebase" ]; then
       deploy_state="deployed != codebase (${deployed} vs ${codebase})"
@@ -2245,19 +2367,21 @@ print_row() {
   else
     codebase_latest_state="codebase != latest (${codebase} vs ${latest})"
   fi
+  codebase_latest_state="${codebase_latest_state}${tag_latest_state}"
 
   if [ -n "$codebase" ] && [ -n "$deployed" ] && [ -n "$latest" ] && \
-    [ "$codebase" = "$deployed" ] && [ "$codebase" = "$latest" ]; then
+    [ "$codebase" = "$deployed" ] && [ "$codebase" = "$latest" ] && \
+    [ "${tag_update_available}" -eq 0 ] && [ "${deployed_tag_drift}" -eq 0 ]; then
     all_match=1
     status="deployed == codebase == latest (${codebase})"
-  elif [ -z "$deployed" ] && [ "${codebase_matches_latest}" -eq 1 ]; then
+  elif [ -z "$deployed" ] && [ "${codebase_matches_latest}" -eq 1 ] && [ "${tag_update_available}" -eq 0 ]; then
     not_deployed_current=1
     status="not deployed; ${codebase_latest_state}"
   else
     status="${deploy_state}; ${codebase_latest_state}"
   fi
 
-  if [[ "$deploy_state" == deployed\ !=* ]]; then
+  if [[ "$deploy_state" == deployed\ !=* ]] || [[ "$deploy_state" == deployed\ tag\ !=* ]]; then
     status="${RED}${status}${NC}"
   elif [ "${all_match}" -eq 1 ] || [ "${not_deployed_current}" -eq 1 ]; then
     status="${GREEN}${status}${NC}"
@@ -3165,20 +3289,38 @@ emit_json_report() {
     printf '%s\n' "${component_rows}" | \
       tsv_rows_to_json_array '["component","deployed","codebase","latest","deploy_tag","code_tag","preferred_tag","latest_tag","status"]' | \
       jq '
+        def tag_update_available($row):
+          ($row.code_tag != "" and $row.latest_tag != "" and $row.code_tag != $row.latest_tag);
+        def deployed_tag_drift($row):
+          (
+            $row.deployed != "" and $row.deployed != "Unavailable" and
+            $row.deploy_tag != "" and $row.deploy_tag != "Unavailable" and
+            $row.code_tag != "" and $row.deploy_tag != $row.code_tag
+          );
         def component_status_code($row):
           if (
             $row.deployed != "" and $row.deployed != "Unavailable" and
             $row.codebase != "" and $row.latest != "" and
-            $row.deployed == $row.codebase and $row.codebase == $row.latest
+            $row.deployed == $row.codebase and $row.codebase == $row.latest and
+            (tag_update_available($row) | not) and (deployed_tag_drift($row) | not)
           ) then
             "current"
-          elif ($row.deployed == "" and $row.codebase != "" and $row.latest != "" and $row.codebase == $row.latest) then
+          elif (
+            $row.deployed == "" and $row.codebase != "" and $row.latest != "" and
+            $row.codebase == $row.latest and (tag_update_available($row) | not)
+          ) then
             "not_deployed_current"
           elif $row.deployed == "Unavailable" then
             "deployed_unavailable"
-          elif ($row.deployed != "" and $row.codebase != "" and $row.deployed != $row.codebase) then
+          elif (
+            ($row.deployed != "" and $row.codebase != "" and $row.deployed != $row.codebase) or
+            deployed_tag_drift($row)
+          ) then
             "deployed_drift"
-          elif ($row.codebase != "" and $row.latest != "" and $row.codebase != $row.latest) then
+          elif (
+            ($row.codebase != "" and $row.latest != "" and $row.codebase != $row.latest) or
+            tag_update_available($row)
+          ) then
             "update_available"
           elif $row.codebase == "" then
             "codebase_not_reported"
@@ -3206,7 +3348,12 @@ emit_json_report() {
             status_text: .status,
             status_code: $status_code,
             status_group: component_status_group($status_code),
-            update_available: (.codebase != "" and .latest != "" and .codebase != .latest),
+            update_available: (
+              (.codebase != "" and .latest != "" and .codebase != .latest) or
+              tag_update_available(.)
+            ),
+            tag_update_available: tag_update_available(.),
+            deployed_tag_drift: deployed_tag_drift(.),
             deployed_available: (.deployed != "" and .deployed != "Unavailable")
           }
           | del(.status)
@@ -3500,7 +3647,9 @@ main() {
   CODETAG_SIGNOZ=""
   CODETAG_ARGOCD_CHART=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${CODE_ARGOCD}")
   CODETAG_ARGOCD="${CODETAG_ARGOCD_CHART}"
-  CODETAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${CODE_GITEA}")
+  CODETAG_GITEA_CHART=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${CODE_GITEA}")
+  CODETAG_GITEA_OVERRIDE=$(terraform_argocd_application_image_tag "${STACK_DIR}/gitea.tf" "gitea")
+  CODETAG_GITEA="${CODETAG_GITEA_OVERRIDE:-${CODETAG_GITEA_CHART}}"
   CODETAG_CILIUM=$(helm_chart_app_version "cilium" "https://helm.cilium.io" "cilium" "${CODE_CILIUM}")
   if [ "${EXPECT_PROMETHEUS}" = "true" ]; then CODETAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${CODE_PROMETHEUS}"); fi
   if [ "${EXPECT_GRAFANA}" = "true" ]; then CODETAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${CODE_GRAFANA}"); fi
@@ -3609,6 +3758,7 @@ main() {
   DEPLOYEDTAG_CILIUM=""
   DEPLOYEDTAG_ARGOCD=""
   DEPLOYED_ARGOCD_IMAGE_REF=""
+  DEPLOYED_GITEA_IMAGE_REF=""
   DEPLOYEDTAG_GITEA=""
   DEPLOYEDTAG_PROMETHEUS=""
   DEPLOYEDTAG_GRAFANA=""
@@ -3632,6 +3782,7 @@ main() {
     DEPLOYED_ARGOCD_IMAGE_REF=$(k8s_deployment_container_image "argocd" "argocd-server" "server")
 
     DEPLOYED_GITEA=$(argocd_app_deployed_chart_version "gitea" "gitea")
+    DEPLOYED_GITEA_IMAGE_REF=$(k8s_deployment_container_image "gitea" "gitea" "gitea")
     if [ "${EXPECT_PROMETHEUS}" = "true" ]; then DEPLOYED_PROMETHEUS=$(argocd_app_deployed_chart_version "prometheus" "prometheus"); fi
     if [ "${EXPECT_GRAFANA}" = "true" ]; then DEPLOYED_GRAFANA=$(argocd_app_deployed_chart_version "grafana" "grafana"); fi
     if [ "${EXPECT_LOKI}" = "true" ]; then DEPLOYED_LOKI=$(argocd_app_deployed_chart_version "loki" "loki"); fi
@@ -3656,7 +3807,10 @@ main() {
     if [ -z "${DEPLOYEDTAG_ARGOCD}" ]; then
       DEPLOYEDTAG_ARGOCD=$(helm_chart_app_version "argo" "https://argoproj.github.io/argo-helm" "argo-cd" "${DEPLOYED_ARGOCD}")
     fi
-    DEPLOYEDTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${DEPLOYED_GITEA}")
+    DEPLOYEDTAG_GITEA=$(image_tag_from_ref "${DEPLOYED_GITEA_IMAGE_REF}")
+    if [ -z "${DEPLOYEDTAG_GITEA}" ]; then
+      DEPLOYEDTAG_GITEA=$(helm_chart_app_version "gitea" "https://dl.gitea.io/charts/" "gitea" "${DEPLOYED_GITEA}")
+    fi
     if [ "${EXPECT_PROMETHEUS}" = "true" ]; then DEPLOYEDTAG_PROMETHEUS=$(helm_chart_app_version "prometheus-community" "https://prometheus-community.github.io/helm-charts" "prometheus" "${DEPLOYED_PROMETHEUS}"); fi
     if [ "${EXPECT_GRAFANA}" = "true" ]; then DEPLOYEDTAG_GRAFANA=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "grafana" "${DEPLOYED_GRAFANA}"); fi
     if [ "${EXPECT_LOKI}" = "true" ]; then DEPLOYEDTAG_LOKI=$(helm_chart_app_version "grafana" "https://grafana.github.io/helm-charts" "loki" "${DEPLOYED_LOKI}"); fi
@@ -3732,6 +3886,7 @@ main() {
   preferred_image_rows_sorted="$(printf "%s\n" "${image_rows[@]}" | sort -t $'\t' -k1,1 || true)"
 
   INSTALLED_KIND="$(kind_installed_version)"
+  KIND_LOAD_MINIMUM_KIND_TAG="$(kind_load_minimum_version_for_node_tag "${CODE_KIND_NODE_TAG}")"
   progress "Checking latest Grafana VictoriaLogs plugin release tag"
   LATEST_GRAFANA_VICTORIA_LOGS_PLUGIN_TAG="$(github_latest_release_tag "VictoriaMetrics/victorialogs-datasource")"
   progress "Checking latest kind release tag"
@@ -3745,6 +3900,9 @@ main() {
   kind_rows+=("$(print_observed_latest_row "grafana victorialogs plugin" "${CODE_GRAFANA_VICTORIA_LOGS_PLUGIN_VERSION}" "${LATEST_GRAFANA_VICTORIA_LOGS_PLUGIN_TAG}" "codebase" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind release tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${LATEST_KIND_RELEASE_TAG}" "installed cli" "release tag")")
   kind_rows+=("$(print_observed_latest_row "kind node tag" "${CODE_KIND_NODE_TAG}" "${LATEST_KIND_NODE_TAG}" "codebase" "node tag")")
+  if [ -n "${KIND_LOAD_MINIMUM_KIND_TAG}" ]; then
+    kind_rows+=("$(print_observed_latest_row "kind load minimum for node tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${KIND_LOAD_MINIMUM_KIND_TAG}" "installed cli" "minimum for ${CODE_KIND_NODE_TAG} node image")")
+  fi
   kind_rows+=("$(print_observed_latest_row "lima k3s release tag" "${CODE_LIMA_K3S_VERSION}" "${LATEST_K3S_RELEASE_TAG}" "codebase" "release tag")")
   kind_rows+=("$(print_observed_latest_row "slicer k3s release tag" "${CODE_SLICER_K3S_VERSION}" "${LATEST_K3S_RELEASE_TAG}" "codebase" "release tag")")
   kind_rows_sorted="$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)"
