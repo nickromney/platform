@@ -1,0 +1,16 @@
+before grep 1804
+before awk 416
+before mktemp 710
+before cat 710
+before rm 355
+before sed 47
+before head 15
+before git 2
+after grep 924
+after awk 96
+after mktemp 710
+after cat 710
+after rm 355
+after sed 46
+after head 11
+after git 2

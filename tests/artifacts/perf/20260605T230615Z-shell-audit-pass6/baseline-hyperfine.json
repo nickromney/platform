@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "command": "scripts/audit-shell-scripts.sh --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/kind/scripts --path terraform/kubernetes/scripts > /tmp/shell-audit-benchmark.txt",
+      "mean": 15.580952792860002,
+      "stddev": 0.22848084450360354,
+      "median": 15.69608157086,
+      "user": 5.357595719999999,
+      "system": 7.53224794,
+      "min": 15.31780990386,
+      "max": 15.72896690386,
+      "times": [
+        15.69608157086,
+        15.72896690386,
+        15.31780990386
+      ],
+      "memory_usage_byte": [
+        106151936,
+        106151936,
+        106151936
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

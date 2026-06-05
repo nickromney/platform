@@ -79,6 +79,54 @@ EOF
   [[ "${output}" == *"INFO dry-run: would do the safe thing"* ]]
 }
 
+@test "shell audit validates interface output without grep or awk subprocesses" {
+  write_tracked_executable_file "scripts/good.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/shell-cli.sh"
+
+usage() {
+  cat <<USAGE
+Usage: good.sh [--dry-run] [--execute]
+
+$(shell_cli_standard_options)
+USAGE
+}
+
+shell_cli_handle_standard_no_args usage "would do the safe thing" "$@"
+EOF
+
+  local probe_bin="${BATS_TEST_TMPDIR}/probe-bin"
+  mkdir -p "${probe_bin}"
+  export SHELL_AUDIT_HELPER_LOG="${BATS_TEST_TMPDIR}/helper-calls.log"
+
+  cat >"${probe_bin}/grep" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'grep\t%s\n' "$*" >>"${SHELL_AUDIT_HELPER_LOG}"
+exec /usr/bin/grep "$@"
+EOF
+  chmod +x "${probe_bin}/grep"
+
+  cat >"${probe_bin}/awk" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'awk\t%s\n' "$*" >>"${SHELL_AUDIT_HELPER_LOG}"
+exec /usr/bin/awk "$@"
+EOF
+  chmod +x "${probe_bin}/awk"
+
+  run env PATH="${probe_bin}:/usr/bin:/bin" /bin/bash "${TEST_REPO}/scripts/audit-shell-scripts.sh" --execute
+
+  [ "${status}" -eq 0 ]
+  ! grep -Fq 'Usage:' "${SHELL_AUDIT_HELPER_LOG}"
+  ! grep -Fq -- '--dry-run' "${SHELL_AUDIT_HELPER_LOG}"
+  ! grep -Fq 'expected_name=good.sh' "${SHELL_AUDIT_HELPER_LOG}"
+}
+
 @test "shell audit rejects shared-helper entrypoints with mismatched descriptor metadata" {
   write_tracked_executable_file "scripts/described.sh" <<'EOF'
 #!/usr/bin/env bash
