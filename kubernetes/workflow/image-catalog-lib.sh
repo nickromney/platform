@@ -37,11 +37,24 @@ image_catalog_sources() {
   jq -r --arg id "${image_id}" ".${category}_images[] | select(.id == \$id) | .fingerprint_sources[]?" "${IMAGE_CATALOG_FILE}"
 }
 
+image_catalog_entry_exists() {
+  local category="$1"
+  local image_id="$2"
+
+  image_catalog_require
+  jq -e --arg id "${image_id}" ".${category}_images[]? | select(.id == \$id)" "${IMAGE_CATALOG_FILE}" >/dev/null
+}
+
 image_catalog_source_tag() {
   local category="$1"
   local image_id="$2"
   local sources=()
   local source=""
+
+  if ! image_catalog_entry_exists "${category}" "${image_id}"; then
+    echo "${0##*/}: ${category}.${image_id} not found in image catalog" >&2
+    return 1
+  fi
 
   while IFS= read -r source; do
     [ -n "${source}" ] || continue
