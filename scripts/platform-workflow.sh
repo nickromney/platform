@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WORKFLOW_OPTIONS_BASE_FILE="${REPO_ROOT}/kubernetes/workflow/options.json"
 WORKFLOW_OPTIONS_RENDERER="${REPO_ROOT}/kubernetes/workflow/render-options.sh"
 WORKFLOW_OPTIONS_FILE="${PLATFORM_WORKFLOW_OPTIONS_FILE:-${REPO_ROOT}/.run/workflow/options.json}"
 # shellcheck source=/dev/null
@@ -25,6 +24,7 @@ PRESET_OBSERVABILITY_STACK="default"
 PRESET_IDENTITY_STACK="default"
 PRESET_APP_SET="default"
 CUSTOM_OVERRIDES=()
+WORKFLOW_SCRIPT_ARGS=()
 
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
@@ -663,6 +663,93 @@ command_string() {
   shell_cli_print_command "${WORKFLOW_COMMAND_ARGS[@]}"
 }
 
+append_workflow_script_preset_arg() {
+  local group="$1"
+  local value="$2"
+
+  [[ "${value}" != "default" ]] || return 0
+  WORKFLOW_SCRIPT_ARGS+=(--preset "${group}=${value}")
+}
+
+build_workflow_script_args() {
+  local subcommand="$1"
+  local standard_flag="$2"
+  local override=""
+
+  WORKFLOW_SCRIPT_ARGS=("${subcommand}" "${standard_flag}")
+  if [[ "${subcommand}" = "preview" ]]; then
+    WORKFLOW_SCRIPT_ARGS+=(--output json)
+  fi
+  WORKFLOW_SCRIPT_ARGS+=(--variant "${TARGET}" --stage "${STAGE}" --action "${ACTION}")
+
+  append_workflow_script_preset_arg resource-profile "${PRESET_RESOURCE_PROFILE}"
+  append_workflow_script_preset_arg image-distribution "${PRESET_IMAGE_DISTRIBUTION}"
+  append_workflow_script_preset_arg network-profile "${PRESET_NETWORK_PROFILE}"
+  append_workflow_script_preset_arg observability-stack "${PRESET_OBSERVABILITY_STACK}"
+  append_workflow_script_preset_arg identity-stack "${PRESET_IDENTITY_STACK}"
+  append_workflow_script_preset_arg app-set "${PRESET_APP_SET}"
+
+  for override in "${CUSTOM_OVERRIDES[@]}"; do
+    WORKFLOW_SCRIPT_ARGS+=(--set "${override}")
+  done
+  for override in "${APP_OVERRIDES[@]}"; do
+    WORKFLOW_SCRIPT_ARGS+=(--app "${override}")
+  done
+  if has_tfvars_overrides; then
+    WORKFLOW_SCRIPT_ARGS+=(--tfvars-file "${TFVARS_FILE}")
+  fi
+  if [[ "${AUTO_APPROVE}" = "1" ]] && action_uses_auto_approve "${ACTION}"; then
+    WORKFLOW_SCRIPT_ARGS+=(--auto-approve)
+  fi
+}
+
+workflow_command_string() {
+  local subcommand="$1"
+  local standard_flag="$2"
+
+  build_workflow_script_args "${subcommand}" "${standard_flag}"
+  shell_cli_print_command scripts/platform-workflow.sh "${WORKFLOW_SCRIPT_ARGS[@]}"
+}
+
+readiness_command_string() {
+  local command=""
+
+  command="$(variant_contract_value "${TARGET}" '.readiness.command')"
+  if [[ -n "${command}" ]]; then
+    printf '%s' "${command}"
+    return 0
+  fi
+  shell_cli_print_command make -C "${STACK_PATH}" readiness
+}
+
+command_preview_json() {
+  local make_command=""
+  local workflow_execute=""
+  local workflow_dry_run=""
+  local workflow_preview_json=""
+  local readiness_command=""
+
+  make_command="$(command_string)"
+  workflow_execute="$(workflow_command_string apply --execute)"
+  workflow_dry_run="$(workflow_command_string apply --dry-run)"
+  workflow_preview_json="$(workflow_command_string preview --execute)"
+  readiness_command="$(readiness_command_string)"
+
+  jq -n \
+    --arg make_command "${make_command}" \
+    --arg workflow_execute "${workflow_execute}" \
+    --arg workflow_dry_run "${workflow_dry_run}" \
+    --arg workflow_preview_json "${workflow_preview_json}" \
+    --arg readiness_command "${readiness_command}" \
+    '{
+      make: $make_command,
+      workflow_execute: $workflow_execute,
+      workflow_dry_run: $workflow_dry_run,
+      workflow_preview_json: $workflow_preview_json,
+      readiness: $readiness_command
+    }'
+}
+
 print_options() {
   case "${OUTPUT_FORMAT}" in
     text)
@@ -742,6 +829,7 @@ print_preview() {
         --argjson warnings "$(warnings_json)" \
         --argjson has_tfvars "$(has_tfvars_overrides && printf true || printf false)" \
         --argjson app_overrides "$(app_overrides_json)" \
+        --argjson command_preview "$(command_preview_json)" \
         '{
           variant: ($options.variants[] | select(.id == $variant_id)),
           stack_path: $stack_path,
@@ -770,7 +858,8 @@ print_preview() {
           custom_overrides: $custom_overrides,
           warnings: $warnings,
           app_overrides: $app_overrides,
-          command: $command
+          command: $command,
+          command_preview: $command_preview
         }'
       ;;
     *) die_usage "Invalid --output '${OUTPUT_FORMAT}'. Expected text or json" ;;

@@ -732,6 +732,9 @@ def advanced_overrides_panel() -> str:
 
 
 def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, Any]) -> str:
+    command_preview = result.get("command_preview")
+    if not isinstance(command_preview, dict):
+        command_preview = {}
     command = html.escape(str(result.get("command", "")))
     variant = html.escape(str(payload["variant"]))
     stage = html.escape(str(result.get("stage", payload["stage"])))
@@ -749,8 +752,8 @@ def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, An
     presets = preset_summary_panel(result)
     warnings = warnings_panel(result)
     tfvars = generated_tfvars_panel(result)
-    workflow_execute = html.escape(workflow_command(payload, standard_flag="--execute"))
-    workflow_dry_run = html.escape(workflow_command(payload, standard_flag="--dry-run"))
+    workflow_execute = html.escape(str(command_preview.get("workflow_execute") or workflow_command(payload, standard_flag="--execute")))
+    workflow_dry_run = html.escape(str(command_preview.get("workflow_dry_run") or workflow_command(payload, standard_flag="--dry-run")))
     preflight = preflight_badges(repo_root, payload)
     hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": ""})
     dry_run_hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": "1"})

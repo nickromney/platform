@@ -122,6 +122,27 @@ setup() {
   [ "${output}" = "kubernetes/slicer"$'\n'"create"$'\n'"platform-stack"$'\n'"cluster-access,ingress,identity"$'\n'"stage_baseline>variant_defaults>resource_profile>image_distribution>network_profile>observability_stack>identity_stack>app_set>custom_overrides" ]
 }
 
+@test "platform workflow json preview owns operator command previews" {
+  tfvars_file="${BATS_TEST_TMPDIR}/operator/kind-stage900-no-sentiment.tfvars"
+
+  run "${SCRIPT}" preview --execute \
+    --variant kind \
+    --stage 900 \
+    --action apply \
+    --preset image-distribution=local-cache \
+    --app sentiment=off \
+    --tfvars-file "${tfvars_file}" \
+    --auto-approve \
+    --output json
+
+  [ "${status}" -eq 0 ]
+  preview_json="${output}"
+
+  run jq -r '.command, .command_preview.make, .command_preview.workflow_execute, .command_preview.workflow_dry_run, .command_preview.workflow_preview_json, .command_preview.readiness' <<<"${preview_json}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "env KIND_IMAGE_DISTRIBUTION_MODE=registry KIND_LOCAL_IMAGE_CACHE_HOST=host.docker.internal:5002 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002 PLATFORM_TFVARS=${tfvars_file} make -C kubernetes/kind 900 apply AUTO_APPROVE=1"$'\n'"env KIND_IMAGE_DISTRIBUTION_MODE=registry KIND_LOCAL_IMAGE_CACHE_HOST=host.docker.internal:5002 KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=127.0.0.1:5002 PLATFORM_TFVARS=${tfvars_file} make -C kubernetes/kind 900 apply AUTO_APPROVE=1"$'\n'"scripts/platform-workflow.sh apply --execute --variant kind --stage 900 --action apply --preset image-distribution=local-cache --app sentiment=false --tfvars-file ${tfvars_file} --auto-approve"$'\n'"scripts/platform-workflow.sh apply --dry-run --variant kind --stage 900 --action apply --preset image-distribution=local-cache --app sentiment=false --tfvars-file ${tfvars_file} --auto-approve"$'\n'"scripts/platform-workflow.sh preview --execute --output json --variant kind --stage 900 --action apply --preset image-distribution=local-cache --app sentiment=false --tfvars-file ${tfvars_file} --auto-approve"$'\n'"make -C kubernetes/kind readiness" ]
+}
+
 @test "platform workflow renders preset overlays and custom overrides" {
   tfvars_file="${BATS_TEST_TMPDIR}/operator/kind-stage900-local-idp.tfvars"
 
