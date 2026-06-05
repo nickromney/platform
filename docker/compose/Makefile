@@ -16,7 +16,7 @@ endif
 
 .PHONY: help prereqs check-docker-prerequisites check-mkcert-prerequisites check-host-ports check-https-443-available certs config build up up-dev up-uat up-portal up-all down logs ps urls check-backstage test test-backstage
 
-COMPOSE := $(COMPOSE_CMD) -f compose.yml
+COMPOSE = $(COMPOSE_CMD) -f compose.yml
 COMPOSE_ENV := OAUTH2_PROXY_CLIENT_SECRET=compose-oauth2-proxy-secret
 COMPOSE_TEST_COOKIE_SECRET := 0123456789abcdef0123456789abcdef
 COMPOSE_TEST_ENV := $(COMPOSE_ENV) OAUTH2_PROXY_COOKIE_SECRET=$${OAUTH2_PROXY_COOKIE_SECRET:-$(COMPOSE_TEST_COOKIE_SECRET)}

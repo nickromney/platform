@@ -1,0 +1,95 @@
+slicer demo (Slicer microVM + k3s + shared Terraform platform stack)
+
+Workflow syntax:
+  make 100 apply
+  make 900 plan
+  make 920 plan
+  make 900 apply AUTO_APPROVE=1
+  make 920 apply AUTO_APPROVE=1
+
+Accepted variants:
+  make apply 100
+  make 900 check-security
+
+Targets:
+  make apply        100|200|300|...|920 [AUTO_APPROVE=1]
+  make check-app    APP=grafana [EXTENDED=1]
+  make check-cluster
+  make check-gateway-stack
+  make check-gateway-urls
+  make check-health
+  make check-host-ports
+  make check-kind-stopped
+  make check-lima-stopped
+  make check-provider-version
+  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i
+  make check-security
+  make check-sso
+  make check-sso-e2e
+  make check-stage-monotonicity
+  make check-version [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]
+  make check-vm-health
+  make configure-k3s-apiserver-oidc
+  make daemon-down
+  make daemon-up
+  make env
+  make ensure-host-forwards
+  make ensure-image-cache
+  make gitea-sync
+  make launchpad-render
+  make merge-default-kubeconfig
+  make plan         100|200|300|...|920
+  make prereqs
+  make reset        [AUTO_APPROVE=1]
+  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only
+  make show-urls
+  make start        Alias for slicer-vm-up
+  make slicer-vm-up
+  make status
+  make stop
+  make stop-host-forwards
+  make sync-image-cache
+  make test
+  make test-idempotence STAGE=100 [DRY_RUN=1]
+  make build-local-platform-images
+
+Stages:
+  100 - cluster available
+  200 - cilium (or default-CNI no-op placeholder)
+  300 - hubble (or default-CNI no-op placeholder)
+  400 - argocd core
+  500 - gitea
+  600 - policies (or default-CNI no-op placeholder)
+  700 - app repos
+  800 - observability
+  900 - sso
+  920 - langfuse
+
+Stage examples:
+  make 100 plan
+  make 900 apply AUTO_APPROVE=1
+  make 920 apply AUTO_APPROVE=1
+  make 900 check-security
+
+Default kubeconfigs:
+  slicer -> ~/.kube/slicer-k3s.yaml (split by default; merge explicitly into ~/.kube/config if needed)
+
+Networking profiles:
+  SLICER_NETWORK_PROFILE=cilium  -> k3s with flannel disabled, then stages 200/300 add Cilium/Hubble
+  SLICER_NETWORK_PROFILE=default -> keep k3s default CNI; stages 200/300 become no-op placeholders
+  Switching profiles requires a fresh VM reset; bootstrap refuses in-place flannel/Cilium flips.
+
+Slicer endpoint:
+  default (macOS)         -> ~/slicer-mac/slicer.sock
+  override                -> SLICER_URL=<socket|http://...> or SLICER_SOCKET=/path/to.sock
+  Docker-only hosts       -> use ../kind (Slicer is optional, not the teaching path)
+
+Local helper modes:
+  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge ~/.kube/slicer-k3s.yaml into ~/.kube/config (default: 0)
+  SLICER_HOST_FORWARDS_MODE=auto|on|off                -> manage localhost forwards for stable localhost URLs/checks (default: auto)
+  SLICER_ALLOW_EXISTING_K3S=1                          -> let stage 100 reuse an existing k3s install and only refresh kubeconfig
+  SLICER_RESET_PRUNE_ALL_IMAGES=1                      -> troubleshooting-only: reset also deletes ~/slicer-mac/*.img
+  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)
+  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)
+  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)
+  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under <repo>/.run/profiles

@@ -31,6 +31,27 @@ PY
   [[ "${output}" == *"validated apps Makefile help workflow contract"* ]]
 }
 
+@test "apps make help does not scan wrapper Makefiles for delegated targets" {
+  grep_stub_dir="${BATS_TEST_TMPDIR}/bin"
+  grep_log="${BATS_TEST_TMPDIR}/grep.log"
+  mkdir -p "${grep_stub_dir}"
+
+  cat >"${grep_stub_dir}/grep" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'grep %s\n' "\$*" >>"${grep_log}"
+exec /usr/bin/grep "\$@"
+EOF
+  chmod +x "${grep_stub_dir}/grep"
+
+  run env PATH="${grep_stub_dir}:${PATH}" make -C "${REPO_ROOT}/apps" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Workflow:"* ]]
+  [[ "${output}" == *"Security:"* ]]
+  [ ! -e "${grep_log}" ]
+}
+
 @test "apps prereqs stays Trivy-optional" {
   run make -C "${REPO_ROOT}/apps" prereqs
 

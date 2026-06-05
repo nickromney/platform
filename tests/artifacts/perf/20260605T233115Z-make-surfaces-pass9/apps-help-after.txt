@@ -1,0 +1,33 @@
+Workflow:
+  js-check                 Check dependency-free typed JavaScript contracts for lightweight apps
+  prereqs                  Check shared app workflow prerequisites without requiring Trivy
+  test                     Run the default app checks
+  update                   Update dependency locks across app roots using native package managers
+
+Security:
+  trivy                    Alias for trivy-scan
+  trivy-prereqs            Check Trivy runner and local prerequisites
+  trivy-scan               Scan local apps/ source trees and the canonical workload images
+  trivy-scan-all           Scan local apps/, workload images, and the optional in-cluster Gitea mirrors
+  trivy-scan-fs            Scan local apps/ source trees for vulnerabilities, misconfigurations, and secrets
+  trivy-scan-gitea         Scan the seeded Gitea app repos instead of only local apps/
+  trivy-scan-images        Build and scan the canonical workload images used by the Kubernetes demos
+
+Smoke:
+  apim-simulator-test      Run the APIM Simulator Go unit tests
+  chatgpt-sim-test         Run the ChatGPT Sim Go unit tests
+  compose-smoke            Run the compose smoke checks for app-local stacks
+  compose-smoke-apim-simulator Run the APIM simulator direct public compose smoke check
+  compose-smoke-chatgpt-sim Run the lightweight ChatGPT Sim compose smoke check
+  compose-smoke-idp-core   Run the lightweight IDP Core compose smoke check
+  compose-smoke-platform-mcp Run the lightweight Platform MCP compose smoke check
+  compose-smoke-sentiment  Run the lightweight sentiment compose smoke check
+  compose-smoke-subnetcalc Run the lightweight subnetcalc compose smoke check
+  idp-core-test            Run the IDP Core Go unit tests
+  langfuse-demos-test      Run the Langfuse demos Go unit tests
+  platform-mcp-test        Run the Platform MCP Go unit tests
+  sentiment-test           Run the sentiment Go unit tests
+  shared-apphttp-test      Run the shared app HTTP Go unit tests
+  shared-appshell-test     Run the shared app shell Go unit tests
+  shared-idpauth-test      Run the shared IDP auth Go unit tests
+  subnetcalc-test          Run the subnetcalc Go unit tests

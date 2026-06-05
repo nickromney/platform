@@ -341,10 +341,10 @@ def apps_makefile_wrapper_dir_function_contract_violations(repo_root: Path) -> t
     required_fragments = (
         "define app_wrapper_dirs_with_target",
         "$(shell for makefile in ./*/Makefile; do grep -q '^$(1):' \"$$makefile\" || continue; dirname \"$$makefile\" | cut -c3-; done | LC_ALL=C sort)",
-        "APP_COMPOSE_SMOKE_DIRS := $(call app_wrapper_dirs_with_target,compose-smoke)",
-        "APP_JS_CHECK_DIRS := $(call app_wrapper_dirs_with_target,app-js-check)",
-        "APP_TEST_DIRS := $(call app_wrapper_dirs_with_target,test)",
-        "APP_UPDATE_DIRS := $(call app_wrapper_dirs_with_target,update)",
+        "APP_COMPOSE_SMOKE_DIRS = $(call app_wrapper_dirs_with_target,compose-smoke)",
+        "APP_JS_CHECK_DIRS = $(call app_wrapper_dirs_with_target,app-js-check)",
+        "APP_TEST_DIRS = $(call app_wrapper_dirs_with_target,test)",
+        "APP_UPDATE_DIRS = $(call app_wrapper_dirs_with_target,update)",
     )
     violations = [
         f"apps Makefile missing shared wrapper dir helper fragment: {fragment}"

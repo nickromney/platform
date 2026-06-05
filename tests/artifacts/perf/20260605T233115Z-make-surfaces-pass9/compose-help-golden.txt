@@ -1,0 +1,25 @@
+Prerequisites:
+  certs                    Generate or refresh the mkcert TLS certs for the compose edge
+  check-docker-prerequisites Check that a supported compose backend is installed and running
+  check-host-ports         Check that the compose host ports are free before startup
+  check-https-443-available Check whether host port 443 is free for direct HTTPS binding
+  check-mkcert-prerequisites Check that mkcert is installed and its local CA exists
+  prereqs                  Check that a supported compose backend and mkcert are usable
+
+Compose:
+  build                    Build the shared compose app images
+  config                   Validate the full compose graph
+  down                     Stop the compose platform and remove orphaned containers
+  logs                     Tail compose logs; optionally pass SERVICE=<name>
+  ps                       Show compose container status
+  up                       Start the full dev + uat compose platform
+  up-all                   Start the shared services plus subnetcalc dev and uat
+  up-dev                   Start the shared services plus subnetcalc dev
+  up-portal                Start the shared services plus Backstage portal
+  up-uat                   Start the shared services plus subnetcalc uat
+  urls                     Print the operator URLs and demo credentials
+
+Verification:
+  check-backstage          Start and smoke-check the Backstage compose portal
+  test                     Validate the compose topology renders cleanly
+  test-backstage           Run the live Backstage compose red/green smoke proof

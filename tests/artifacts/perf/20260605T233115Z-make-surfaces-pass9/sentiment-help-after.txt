@@ -1,0 +1,22 @@
+Setup:
+  app-js-check             Check vanilla JavaScript source contracts
+  app-test                 Run Go unit tests
+  build                    Build the local compose images
+  check-prerequisites      Check that a supported compose backend is installed and running
+  prereqs                  Check local prerequisites
+
+Run:
+  compose-smoke            Run the local compose smoke test
+  logs                     Tail compose logs
+  ps                       Show compose container status
+  smoke                    Alias for compose-smoke
+  up                       Start the authenticated compose stack and print the local URL
+  up-tls                   Start the TLS compose stack and print the HTTPS URL
+  urls                     Print the local URLs for the app and Keycloak
+
+Test:
+  test                     Run Go tests, JS contract checks, and the local compose smoke test
+  update                   Update Bun dependency locks for each sentiment dependency root
+
+Cleanup:
+  down                     Stop the compose stack

@@ -1,0 +1,55 @@
+Platform workspace Makefile guide
+
+This root Makefile is primarily informational.
+Use the focused Makefiles directly with make -C <dir> ... for stack and app workflows.
+
+Focused Makefiles:
+  apps/Makefile
+  apps/apim-simulator/Makefile
+  apps/apim-simulator/app/Makefile
+  apps/chatgpt-sim/Makefile
+  apps/chatgpt-sim/app/Makefile
+  apps/idp-core/Makefile
+  apps/idp-core/app/Makefile
+  apps/langfuse-demos/Makefile
+  apps/langfuse-demos/app/Makefile
+  apps/platform-mcp/Makefile
+  apps/platform-mcp/app/Makefile
+  apps/sentiment/Makefile
+  apps/sentiment/app/Makefile
+  apps/shared/apphttp/Makefile
+  apps/shared/appshell/Makefile
+  apps/shared/idpauth/Makefile
+  apps/subnetcalc/Makefile
+  apps/subnetcalc/app/Makefile
+  docker/compose/Makefile
+  kubernetes/kind/Makefile
+  kubernetes/lima/Makefile
+  kubernetes/slicer/Makefile
+  sites/docs/Makefile
+  tools/platform-tui/Makefile
+
+Root shortcuts:
+  make apps                                                    Show the app/frontend Makefiles
+  make build-tui                                               Build the optional Bubble Tea platform TUI into tools/platform-tui/bin/
+  make check-version                                           Verify repo-level dependency/version guardrails
+  make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1] Preview or clear repo-generated local state plus optional host caches
+  make docker                                                  Show the Docker/Compose Makefiles
+  make docker-safe-clean [AUTO_APPROVE=1]                      Preview or run conservative Docker cleanup that preserves the current kind cluster
+  make fmt                                                     Apply repo-level auto-formatters
+  make kubernetes                                              Show the staged Kubernetes Makefiles
+  make lint                                                    Run repo-level reporting checks
+  make lint-bash32                                             Run Bash 3.2 shell compatibility checks
+  make lint-cilium-live                                        Validate deployed Cilium policies via the current kubeconfig
+  make lint-kyverno-live                                       Validate deployed Kyverno policy matches via the current kubeconfig
+  make lint-shell                                              Run repo shell audit checks
+  make makefiles                                               List every Makefile in the repo
+  make prereqs                                                 Show the focused prerequisite entrypoints
+  make release VERSION=0.3.0                                   Bump VERSION, run checks, and create a release commit
+  make release-dry-run VERSION=0.3.0                           Preview the release commit flow
+  make release-tag VERSION=0.3.0                               Create an annotated v-version tag from main
+  make sonar-scan SONAR_SCAN_REPO=apps/apim-simulator          Run SonarQube on any local repo
+  make status [STATUS_FORMAT=text|json]                        Show root local-runtime status across kind/Lima/Slicer
+  make test                                                    Show the focused test entrypoints
+  make tui                                                     Open the Bubble Tea local runtime chooser
+  make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]                 Serve the browser workflow chooser on local HTTPS

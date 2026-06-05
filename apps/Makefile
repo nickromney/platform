@@ -11,10 +11,10 @@ define app_wrapper_dirs_with_target
 $(shell for makefile in ./*/Makefile; do grep -q '^$(1):' "$$makefile" || continue; dirname "$$makefile" | cut -c3-; done | LC_ALL=C sort)
 endef
 
-APP_COMPOSE_SMOKE_DIRS := $(call app_wrapper_dirs_with_target,compose-smoke)
-APP_JS_CHECK_DIRS := $(call app_wrapper_dirs_with_target,app-js-check)
-APP_TEST_DIRS := $(call app_wrapper_dirs_with_target,test)
-APP_UPDATE_DIRS := $(call app_wrapper_dirs_with_target,update)
+APP_COMPOSE_SMOKE_DIRS = $(call app_wrapper_dirs_with_target,compose-smoke)
+APP_JS_CHECK_DIRS = $(call app_wrapper_dirs_with_target,app-js-check)
+APP_TEST_DIRS = $(call app_wrapper_dirs_with_target,test)
+APP_UPDATE_DIRS = $(call app_wrapper_dirs_with_target,update)
 
 .PHONY: prereqs test js-check update trivy trivy-prereqs trivy-scan trivy-scan-fs trivy-scan-images trivy-scan-gitea trivy-scan-all compose-smoke compose-smoke-apim-simulator compose-smoke-chatgpt-sim compose-smoke-idp-core compose-smoke-platform-mcp compose-smoke-sentiment compose-smoke-subnetcalc apim-simulator-test chatgpt-sim-test idp-core-test langfuse-demos-test platform-mcp-test sentiment-test shared-apphttp-test shared-appshell-test shared-idpauth-test subnetcalc-test
 

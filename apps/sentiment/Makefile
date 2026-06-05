@@ -21,8 +21,8 @@ APP_URL := $(APP_BASE_URL)/oauth2/sign_in
 APP_TLS_BASE_URL := https://localhost:8443
 APP_TLS_URL := $(APP_TLS_BASE_URL)/oauth2/sign_in
 KEYCLOAK_URL := http://localhost:8300
-COMPOSE := $(COMPOSE_CMD) -f compose.yml
-COMPOSE_TLS := $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
+COMPOSE = $(COMPOSE_CMD) -f compose.yml
+COMPOSE_TLS = $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
 
 .PHONY: help prereqs test update check-prerequisites app-test app-js-check build up up-tls down logs ps smoke compose-smoke urls
 
