@@ -59,7 +59,7 @@ build_inventory_json() {
   local workflow_json=""
 
   status_json="$("${STATUS_SCRIPT}" --execute --output json)"
-  read_model_json="$(PLATFORM_STATUS_READ_MODEL_STATUS_SCRIPT="${STATUS_SCRIPT}" "${READ_MODEL_SCRIPT}" --execute --output json)"
+  read_model_json="$(PLATFORM_STATUS_READ_MODEL_STATUS_JSON="${status_json}" PLATFORM_STATUS_READ_MODEL_STATUS_SCRIPT="${STATUS_SCRIPT}" "${READ_MODEL_SCRIPT}" --execute --output json)"
   workflow_json="$("${WORKFLOW_SCRIPT}" preview --execute --variant "${VARIANT}" --stage "${STAGE}" --action status --output json)"
 
   jq -n \

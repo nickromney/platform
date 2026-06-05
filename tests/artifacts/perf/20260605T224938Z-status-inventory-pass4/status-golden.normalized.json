@@ -1,0 +1,638 @@
+{
+  "overall_state": "idle",
+  "active_cluster_variant": null,
+  "active_cluster_variant_path": null,
+  "active_variant": null,
+  "active_variant_path": null,
+  "foreign_ports": [
+    "127.0.0.1:30022",
+    "127.0.0.1:30080",
+    "127.0.0.1:30090",
+    "127.0.0.1:31235",
+    "127.0.0.1:3302",
+    "127.0.0.1:443",
+    "127.0.0.1:6443"
+  ],
+  "platforms": {
+    "docker": {
+      "name": "docker",
+      "available": true,
+      "running": false,
+      "detail": "daemon unreachable"
+    },
+    "colima": {
+      "name": "colima",
+      "available": false,
+      "running": false,
+      "detail": "colima not found"
+    },
+    "podman": {
+      "name": "podman",
+      "available": false,
+      "running": false,
+      "detail": "podman not found"
+    },
+    "lima": {
+      "name": "lima",
+      "available": true,
+      "running": false,
+      "detail": "instances=cloud1:Stopped,cloud2:Stopped,cloud3:Stopped,sbox-lima:Stopped"
+    },
+    "slicer": {
+      "name": "slicer",
+      "available": true,
+      "running": false,
+      "detail": "endpoint unreachable"
+    }
+  },
+  "platforms_order": [
+    "docker",
+    "colima",
+    "podman",
+    "lima",
+    "slicer"
+  ],
+  "host_runtimes": {
+    "docker": {
+      "name": "docker",
+      "available": true,
+      "running": false,
+      "detail": "daemon unreachable"
+    },
+    "colima": {
+      "name": "colima",
+      "available": false,
+      "running": false,
+      "detail": "colima not found"
+    },
+    "podman": {
+      "name": "podman",
+      "available": false,
+      "running": false,
+      "detail": "podman not found"
+    }
+  },
+  "host_runtimes_order": [
+    "docker",
+    "colima",
+    "podman"
+  ],
+  "registry_auth": {
+    "dhi_io": {
+      "registry": "dhi.io",
+      "authenticated": false,
+      "source": "docker-credential-desktop",
+      "detail": "Docker Hardened Images (dhi.io) credentials not found via docker-credential-desktop (run: docker login dhi.io)"
+    },
+    "docker_io": {
+      "registry": "docker.io",
+      "authenticated": false,
+      "source": "docker-credential-desktop",
+      "detail": "Docker Hub credentials not found via docker-credential-desktop (run: docker login)"
+    }
+  },
+  "registry_auth_order": [
+    "dhi_io",
+    "docker_io"
+  ],
+  "cluster_variants": {
+    "kind": {
+      "key": "kind",
+      "path": "kubernetes/kind",
+      "label": "Kind local cluster",
+      "runtime_family": "docker",
+      "state": "absent",
+      "serving": false,
+      "runtime_present": false,
+      "kubeconfig_path": "/Users/nickromney/~/.kube/kind-kind-local.yaml",
+      "kubeconfig_context": "kind-kind-local",
+      "version": null,
+      "shared_ports": [],
+      "blockers": [
+        "Docker daemon not reachable",
+        "Docker Hardened Images (dhi.io) auth missing",
+        "Docker Hub auth missing",
+        "127.0.0.1:30022 is already in use by a non-platform process",
+        "127.0.0.1:30080 is already in use by a non-platform process",
+        "127.0.0.1:30090 is already in use by a non-platform process",
+        "127.0.0.1:31235 is already in use by a non-platform process",
+        "127.0.0.1:3302 is already in use by a non-platform process",
+        "127.0.0.1:443 is already in use by a non-platform process",
+        "127.0.0.1:6443 is already in use by a non-platform process"
+      ],
+      "readiness": {
+        "docker_available": true,
+        "docker_daemon": false,
+        "docker_context": "desktop-linux",
+        "kind_available": true,
+        "dhi_auth": false,
+        "docker_hub_auth": false
+      }
+    },
+    "lima": {
+      "key": "lima",
+      "path": "kubernetes/lima",
+      "label": "Kubernetes Lima cluster",
+      "runtime_family": "lima",
+      "state": "absent",
+      "serving": false,
+      "runtime_present": false,
+      "kubeconfig_path": "/Users/nickromney/~/.kube/limavm-k3s.yaml",
+      "kubeconfig_context": "limavm-k3s",
+      "version": null,
+      "shared_ports": [],
+      "blockers": [
+        "Docker daemon not reachable",
+        "127.0.0.1:30022 is already in use by a non-platform process",
+        "127.0.0.1:30080 is already in use by a non-platform process",
+        "127.0.0.1:30090 is already in use by a non-platform process",
+        "127.0.0.1:31235 is already in use by a non-platform process",
+        "127.0.0.1:3302 is already in use by a non-platform process",
+        "127.0.0.1:443 is already in use by a non-platform process",
+        "127.0.0.1:6443 is already in use by a non-platform process"
+      ],
+      "readiness": {
+        "docker_available": true,
+        "docker_daemon": false,
+        "docker_context": "desktop-linux",
+        "limactl_available": true,
+        "bootstrap_client": true,
+        "bootstrap_client_name": "k3sup-pro"
+      }
+    },
+    "slicer": {
+      "key": "slicer",
+      "path": "kubernetes/slicer",
+      "label": "Slicer local cluster",
+      "runtime_family": "slicer",
+      "state": "absent",
+      "serving": false,
+      "runtime_present": false,
+      "kubeconfig_path": "/Users/nickromney/~/.kube/slicer-k3s.yaml",
+      "kubeconfig_context": "slicer-k3s",
+      "version": null,
+      "shared_ports": [],
+      "blockers": [
+        "Docker daemon not reachable",
+        "Slicer endpoint is not reachable",
+        "127.0.0.1:30022 is already in use by a non-platform process",
+        "127.0.0.1:30080 is already in use by a non-platform process",
+        "127.0.0.1:30090 is already in use by a non-platform process",
+        "127.0.0.1:31235 is already in use by a non-platform process",
+        "127.0.0.1:3302 is already in use by a non-platform process",
+        "127.0.0.1:443 is already in use by a non-platform process",
+        "127.0.0.1:6443 is already in use by a non-platform process"
+      ],
+      "readiness": {
+        "docker_available": true,
+        "docker_daemon": false,
+        "docker_context": "desktop-linux",
+        "slicer_available": true,
+        "slicer_endpoint_reachable": false,
+        "bootstrap_client": true,
+        "bootstrap_client_name": "k3sup-pro"
+      }
+    }
+  },
+  "cluster_variants_order": [
+    "kind",
+    "lima",
+    "slicer"
+  ],
+  "variants": {
+    "kind": {
+      "key": "kind",
+      "path": "kubernetes/kind",
+      "label": "Kind local cluster",
+      "runtime_family": "docker",
+      "state": "absent",
+      "serving": false,
+      "runtime_present": false,
+      "kubeconfig_path": "/Users/nickromney/~/.kube/kind-kind-local.yaml",
+      "kubeconfig_context": "kind-kind-local",
+      "version": null,
+      "shared_ports": [],
+      "blockers": [
+        "Docker daemon not reachable",
+        "Docker Hardened Images (dhi.io) auth missing",
+        "Docker Hub auth missing",
+        "127.0.0.1:30022 is already in use by a non-platform process",
+        "127.0.0.1:30080 is already in use by a non-platform process",
+        "127.0.0.1:30090 is already in use by a non-platform process",
+        "127.0.0.1:31235 is already in use by a non-platform process",
+        "127.0.0.1:3302 is already in use by a non-platform process",
+        "127.0.0.1:443 is already in use by a non-platform process",
+        "127.0.0.1:6443 is already in use by a non-platform process"
+      ],
+      "readiness": {
+        "docker_available": true,
+        "docker_daemon": false,
+        "docker_context": "desktop-linux",
+        "kind_available": true,
+        "dhi_auth": false,
+        "docker_hub_auth": false
+      }
+    },
+    "lima": {
+      "key": "lima",
+      "path": "kubernetes/lima",
+      "label": "Kubernetes Lima cluster",
+      "runtime_family": "lima",
+      "state": "absent",
+      "serving": false,
+      "runtime_present": false,
+      "kubeconfig_path": "/Users/nickromney/~/.kube/limavm-k3s.yaml",
+      "kubeconfig_context": "limavm-k3s",
+      "version": null,
+      "shared_ports": [],
+      "blockers": [
+        "Docker daemon not reachable",
+        "127.0.0.1:30022 is already in use by a non-platform process",
+        "127.0.0.1:30080 is already in use by a non-platform process",
+        "127.0.0.1:30090 is already in use by a non-platform process",
+        "127.0.0.1:31235 is already in use by a non-platform process",
+        "127.0.0.1:3302 is already in use by a non-platform process",
+        "127.0.0.1:443 is already in use by a non-platform process",
+        "127.0.0.1:6443 is already in use by a non-platform process"
+      ],
+      "readiness": {
+        "docker_available": true,
+        "docker_daemon": false,
+        "docker_context": "desktop-linux",
+        "limactl_available": true,
+        "bootstrap_client": true,
+        "bootstrap_client_name": "k3sup-pro"
+      }
+    },
+    "slicer": {
+      "key": "slicer",
+      "path": "kubernetes/slicer",
+      "label": "Slicer local cluster",
+      "runtime_family": "slicer",
+      "state": "absent",
+      "serving": false,
+      "runtime_present": false,
+      "kubeconfig_path": "/Users/nickromney/~/.kube/slicer-k3s.yaml",
+      "kubeconfig_context": "slicer-k3s",
+      "version": null,
+      "shared_ports": [],
+      "blockers": [
+        "Docker daemon not reachable",
+        "Slicer endpoint is not reachable",
+        "127.0.0.1:30022 is already in use by a non-platform process",
+        "127.0.0.1:30080 is already in use by a non-platform process",
+        "127.0.0.1:30090 is already in use by a non-platform process",
+        "127.0.0.1:31235 is already in use by a non-platform process",
+        "127.0.0.1:3302 is already in use by a non-platform process",
+        "127.0.0.1:443 is already in use by a non-platform process",
+        "127.0.0.1:6443 is already in use by a non-platform process"
+      ],
+      "readiness": {
+        "docker_available": true,
+        "docker_daemon": false,
+        "docker_context": "desktop-linux",
+        "slicer_available": true,
+        "slicer_endpoint_reachable": false,
+        "bootstrap_client": true,
+        "bootstrap_client_name": "k3sup-pro"
+      }
+    }
+  },
+  "variants_order": [
+    "kind",
+    "lima",
+    "slicer"
+  ],
+  "actions": [
+    {
+      "id": "kind-status",
+      "label": "Kind status",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind status",
+      "dangerous": false
+    },
+    {
+      "id": "kind-prereqs",
+      "label": "Kind prereqs",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind prereqs",
+      "dangerous": false
+    },
+    {
+      "id": "kind-check-health",
+      "label": "Kind health",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "kubernetes/kind is not running",
+      "command": "make -C kubernetes/kind check-health",
+      "dangerous": false
+    },
+    {
+      "id": "kind-show-urls",
+      "label": "Kind URLs",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "kubernetes/kind is not running",
+      "command": "make -C kubernetes/kind show-urls",
+      "dangerous": false
+    },
+    {
+      "id": "kind-stop",
+      "label": "Stop kind",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "kubernetes/kind is not present",
+      "command": "make -C kubernetes/kind stop-kind",
+      "dangerous": false
+    },
+    {
+      "id": "kind-reset",
+      "label": "Reset kind",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "kubernetes/kind is not present",
+      "command": "make -C kubernetes/kind reset AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "kind-apply-100",
+      "label": "Kind stage 100 apply",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "make -C kubernetes/kind 100 apply AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "kind-apply-900",
+      "label": "Kind stage 900 apply",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "make -C kubernetes/kind 900 apply AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "kind-switch",
+      "label": "Switch to kind",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "AUTO_APPROVE=1 make -C kubernetes/kind reset && make -C kubernetes/kind 100 apply && make -C kubernetes/kind 900 apply",
+      "dangerous": true
+    },
+    {
+      "id": "kind-idp-catalog",
+      "label": "IDP catalog",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind idp-catalog",
+      "dangerous": false
+    },
+    {
+      "id": "kind-idp-env-create",
+      "label": "IDP environment request",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr",
+      "dangerous": false
+    },
+    {
+      "id": "kind-idp-deployments",
+      "label": "IDP deployments",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind idp-deployments",
+      "dangerous": false
+    },
+    {
+      "id": "kind-idp-secrets",
+      "label": "IDP secrets",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind idp-secrets",
+      "dangerous": false
+    },
+    {
+      "id": "kind-idp-scorecards",
+      "label": "IDP scorecards",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind idp-scorecards",
+      "dangerous": false
+    },
+    {
+      "id": "kind-gitea-repo-lifecycle-demo",
+      "label": "Gitea repo lifecycle demo",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind gitea-repo-lifecycle-demo REPO_NAME=chatgpt-sim",
+      "dangerous": false
+    },
+    {
+      "id": "lima-status",
+      "label": "Kubernetes Lima status",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/lima status",
+      "dangerous": false
+    },
+    {
+      "id": "lima-prereqs",
+      "label": "Kubernetes Lima prereqs",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/lima prereqs",
+      "dangerous": false
+    },
+    {
+      "id": "lima-check-health",
+      "label": "Kubernetes Lima health",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "kubernetes/lima is not running",
+      "command": "make -C kubernetes/lima check-health",
+      "dangerous": false
+    },
+    {
+      "id": "lima-show-urls",
+      "label": "Kubernetes Lima URLs",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "kubernetes/lima is not running",
+      "command": "make -C kubernetes/lima show-urls",
+      "dangerous": false
+    },
+    {
+      "id": "lima-stop",
+      "label": "Stop Kubernetes Lima",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "kubernetes/lima is not present",
+      "command": "make -C kubernetes/lima stop-lima",
+      "dangerous": false
+    },
+    {
+      "id": "lima-reset",
+      "label": "Reset Kubernetes Lima",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "kubernetes/lima is not present",
+      "command": "make -C kubernetes/lima reset AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "lima-apply-100",
+      "label": "Kubernetes Lima stage 100 apply",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "make -C kubernetes/lima 100 apply AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "lima-apply-900",
+      "label": "Kubernetes Lima stage 900 apply",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "make -C kubernetes/lima 900 apply AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "lima-switch",
+      "label": "Switch to Kubernetes Lima",
+      "variant": "lima",
+      "variant_path": "kubernetes/lima",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "AUTO_APPROVE=1 make -C kubernetes/lima reset && make -C kubernetes/lima 100 apply && make -C kubernetes/lima 900 apply",
+      "dangerous": true
+    },
+    {
+      "id": "slicer-status",
+      "label": "Slicer status",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/slicer status",
+      "dangerous": false
+    },
+    {
+      "id": "slicer-prereqs",
+      "label": "Slicer prereqs",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/slicer prereqs",
+      "dangerous": false
+    },
+    {
+      "id": "slicer-check-health",
+      "label": "Slicer health",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "kubernetes/slicer is not running",
+      "command": "make -C kubernetes/slicer check-health",
+      "dangerous": false
+    },
+    {
+      "id": "slicer-show-urls",
+      "label": "Slicer URLs",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "kubernetes/slicer is not running",
+      "command": "make -C kubernetes/slicer show-urls",
+      "dangerous": false
+    },
+    {
+      "id": "slicer-stop",
+      "label": "Stop Slicer",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "kubernetes/slicer is not present",
+      "command": "make -C kubernetes/slicer stop-slicer",
+      "dangerous": false
+    },
+    {
+      "id": "slicer-reset",
+      "label": "Reset Slicer",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "kubernetes/slicer is not present",
+      "command": "make -C kubernetes/slicer reset AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "slicer-apply-100",
+      "label": "Slicer stage 100 apply",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "make -C kubernetes/slicer 100 apply AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "slicer-apply-900",
+      "label": "Slicer stage 900 apply",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "make -C kubernetes/slicer 900 apply AUTO_APPROVE=1",
+      "dangerous": true
+    },
+    {
+      "id": "slicer-switch",
+      "label": "Switch to Slicer",
+      "variant": "slicer",
+      "variant_path": "kubernetes/slicer",
+      "enabled": false,
+      "reason": "Docker daemon not reachable",
+      "command": "AUTO_APPROVE=1 make -C kubernetes/slicer reset && make -C kubernetes/slicer 100 apply && make -C kubernetes/slicer 900 apply",
+      "dangerous": true
+    }
+  ]
+}

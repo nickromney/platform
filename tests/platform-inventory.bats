@@ -78,6 +78,37 @@ EOF
   [[ "${output}" == *"Active variant: none"* ]]
 }
 
+@test "platform inventory reuses one status probe for the read model" {
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  workflow_stub="${BATS_TEST_TMPDIR}/platform-workflow.sh"
+  status_log="${BATS_TEST_TMPDIR}/status.log"
+
+  cat >"${status_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'status probe\n' >>"${status_log}"
+printf '{"generated_at":"2026-05-03T12:00:00Z","overall_state":"ready","active_variant":"kind","active_variant_path":"kubernetes/kind","variants_order":["kind"],"variants":{"kind":{"key":"kind","path":"kubernetes/kind","label":"Kind local cluster","runtime_family":"docker","state":"ready","serving":true,"runtime_present":true,"blockers":[],"readiness":{"kind_available":true}}},"actions":[],"host_runtimes":{},"host_runtimes_order":[],"registry_auth":{},"registry_auth_order":[]}\n'
+EOF
+  chmod +x "${status_stub}"
+
+  cat >"${workflow_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"variant":{"id":"kind"},"stage":"900","action":"status","contexts":[],"contract_requirements":[],"effective_config":{}}\n'
+EOF
+  chmod +x "${workflow_stub}"
+
+  run env \
+    PLATFORM_INVENTORY_STATUS_SCRIPT="${status_stub}" \
+    PLATFORM_INVENTORY_READ_MODEL_SCRIPT="${REPO_ROOT}/scripts/platform-status-read-model.sh" \
+    PLATFORM_INVENTORY_WORKFLOW_SCRIPT="${workflow_stub}" \
+    "${SCRIPT}" --execute --variant kind --stage 900 --output json
+
+  [ "${status}" -eq 0 ]
+  status_probe_count="$(wc -l <"${status_log}" | tr -d ' ')"
+  [ "${status_probe_count}" -eq 1 ]
+}
+
 @test "platform inventory text output avoids unknown placeholders for missing health fields" {
   status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
   workflow_stub="${BATS_TEST_TMPDIR}/platform-workflow.sh"

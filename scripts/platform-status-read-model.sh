@@ -45,7 +45,11 @@ validate_output() {
 build_read_model_json() {
   local status_json=""
 
-  status_json="$("${STATUS_SCRIPT}" --execute --output json)"
+  if [ -n "${PLATFORM_STATUS_READ_MODEL_STATUS_JSON:-}" ]; then
+    status_json="${PLATFORM_STATUS_READ_MODEL_STATUS_JSON}"
+  else
+    status_json="$("${STATUS_SCRIPT}" --execute --output json)"
+  fi
 
   jq -n --argjson status "${status_json}" '
     def action_facts($actions; $variant_key):
