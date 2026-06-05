@@ -49,7 +49,7 @@ LIMA_SHARED_PORT_TUNNEL_PORTS ?= 30022 30070 30080 30090 30302 30443 31235
 K3SUP_CONTEXT ?= limavm-k3s
 KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
-K3S_VERSION ?= v1.35.4+k3s1
+K3S_VERSION ?= v1.36.1+k3s1
 K3S_CHANNEL ?= stable
 K3S_SERVER_EXTRA_ARGS ?= --flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb
 K3S_AGENT_EXTRA_ARGS ?=

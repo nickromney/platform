@@ -19,7 +19,7 @@ variable "worker_count" {
 variable "node_image" {
   description = "Kind node image."
   type        = string
-  default     = "kindest/node:v1.35.1"
+  default     = "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
 }
 
 variable "kind_api_server_port" {
@@ -392,13 +392,13 @@ variable "public_demo_allow_actions_runner_host_mounts" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.19.3"
+  default     = "1.19.4"
 }
 
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.5.9"
+  default     = "9.5.19"
 }
 
 variable "argocd_image_repository" {
@@ -410,7 +410,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.3.8-debian13"
+  default     = "3.4.3-debian13"
 }
 
 variable "provision_argocd" {
@@ -434,19 +434,19 @@ variable "argocd_notifications_enabled" {
 variable "gitea_chart_version" {
   description = "Gitea chart version."
   type        = string
-  default     = "12.5.3"
+  default     = "12.6.0"
 }
 
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.3.0"
+  default     = "29.10.0"
 }
 
 variable "prometheus_image_tag" {
   description = "Prometheus hardened container image tag."
   type        = string
-  default     = "3.11.3-debian13"
+  default     = "3.12.0-debian13"
 }
 
 variable "grafana_chart_version" {
@@ -494,19 +494,19 @@ variable "grafana_sidecar_image_tag" {
 variable "grafana_victoria_logs_plugin_version" {
   description = "VictoriaLogs Grafana datasource plugin release version used for prebaked local Grafana images."
   type        = string
-  default     = "0.26.3"
+  default     = "0.28.0"
 }
 
 variable "grafana_victoria_logs_plugin_sha256" {
   description = "SHA-256 checksum for the VictoriaLogs Grafana datasource plugin archive used for prebaked local Grafana images."
   type        = string
-  default     = "e9a452b866427f0de23e466b1af8228fbb1344267f929fb6b354f830279c748a"
+  default     = "0c309eeba1b20bb52e99c4204309f5a8a49fc8ac4ee394279b2bec23eab81d8d"
 }
 
 variable "grafana_victoria_logs_plugin_url" {
   description = "VictoriaLogs Grafana datasource plugin bundle URL for chart-managed runtime installs. Leave empty when the plugin is already baked into the Grafana image."
   type        = string
-  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.26.3/victoriametrics-logs-datasource-v0.26.3.zip;victoriametrics-logs-datasource"
+  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.28.0/victoriametrics-logs-datasource-v0.28.0.zip;victoriametrics-logs-datasource"
 }
 
 variable "grafana_liveness_initial_delay_seconds" {
@@ -530,7 +530,7 @@ variable "loki_image_tag" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.12.2"
+  default     = "0.13.6"
 }
 
 variable "tempo_chart_version" {
@@ -548,13 +548,13 @@ variable "signoz_chart_version" {
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.41.0"
+  default     = "0.42.0"
 }
 
 variable "kyverno_chart_version" {
   description = "Kyverno chart version."
   type        = string
-  default     = "3.7.2"
+  default     = "3.8.1"
 }
 
 variable "policy_reporter_chart_version" {
@@ -578,13 +578,13 @@ variable "hardened_image_registry" {
 variable "dex_chart_version" {
   description = "Dex chart version (charts.dexidp.io)."
   type        = string
-  default     = "0.24.0"
+  default     = "0.24.1"
 }
 
 variable "keycloak_image" {
   description = "Keycloak image used for the Kubernetes stage-900 IdP."
   type        = string
-  default     = "quay.io/keycloak/keycloak:26.6.1"
+  default     = "quay.io/keycloak/keycloak:26.6.3"
 }
 
 variable "keycloak_postgres_image" {
@@ -602,19 +602,19 @@ variable "keycloak_realm" {
 variable "oauth2_proxy_chart_version" {
   description = "oauth2-proxy chart version (oauth2-proxy.github.io/manifests)."
   type        = string
-  default     = "10.4.3"
+  default     = "10.6.0"
 }
 
 variable "oauth2_proxy_session_store_image" {
   description = "Redis-compatible image used for oauth2-proxy server-side session storage."
   type        = string
-  default     = "ecr-public.aws.com/docker/library/redis:8.2.3-alpine"
+  default     = "ecr-public.aws.com/docker/library/redis:8.2.7-alpine"
 }
 
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.152.0"
+  default     = "0.158.1"
 }
 
 # -----------------------------------------------------------------------------

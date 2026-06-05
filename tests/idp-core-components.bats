@@ -851,7 +851,7 @@ assert match, "missing oauth2_proxy_session_store_image variable"
 default_match = re.search(r'default\s+=\s+"([^"]+)"', match.group("body"))
 assert default_match, "missing oauth2_proxy_session_store_image default"
 
-expected = "ecr-public.aws.com/docker/library/redis:8.2.3-alpine"
+expected = "ecr-public.aws.com/docker/library/redis:8.2.7-alpine"
 image = default_match.group(1)
 assert image == expected, image
 assert '"ecr-public.aws.com/*"' in policy, "Kyverno policy must approve the ECR Public preload source"

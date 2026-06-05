@@ -52,9 +52,9 @@ kind_argocd_app_synced_healthy() {
   run env KUBECONFIG="${KIND_KUBECONFIG}" timeout 300 "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ gitea\ chart[[:space:]]+${expected_gitea}[[:space:]]+${expected_gitea} ]]
+  [[ "${output}" =~ gitea\ chart[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+[[:space:]]+${expected_gitea} ]]
   [[ "${output}" =~ policy-reporter[[:space:]]+${expected_policy_reporter}[[:space:]]+${expected_policy_reporter} ]]
-  [[ "${output}" =~ prometheus\ chart[[:space:]]+${expected_prometheus}[[:space:]]+${expected_prometheus} ]]
+  [[ "${output}" =~ prometheus\ chart[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+[[:space:]]+${expected_prometheus} ]]
   [[ ! "${output}" =~ gitea\ chart[[:space:]]+${expected_gitea}[[:space:]]+$ ]]
   [[ ! "${output}" =~ policy-reporter[[:space:]]+${expected_policy_reporter}[[:space:]]+$ ]]
   [[ ! "${output}" =~ prometheus\ chart[[:space:]]+${expected_prometheus}[[:space:]]+$ ]]
@@ -88,30 +88,30 @@ kind_argocd_app_synced_healthy() {
 }
 
 @test "check-version reports the Grafana VictoriaLogs plugin version from Terraform defaults" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.26.3' 'codebase' 'release tag'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.28.0' 'codebase' 'release tag'"
 
   [ "${status}" -eq 0 ]
   [ "${#lines[@]}" -eq 3 ]
-  [ "${lines[0]}" = "0.26.3" ]
+  [ "${lines[0]}" = "0.28.0" ]
   [[ "${lines[1]}" =~ ^[0-9a-f]{64}$ ]]
-  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.26.3\tv0.26.3\t'* ]]
-  [[ "${lines[2]}" == *"latest release tag (v0.26.3)"* ]]
+  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.28.0\tv0.28.0\t'* ]]
+  [[ "${lines[2]}" == *"latest release tag (v0.28.0)"* ]]
 }
 
 @test "check-version reads k3s pins from local variant Makefiles" {
   local makefile="${BATS_TEST_TMPDIR}/Makefile"
   cat >"${makefile}" <<'EOF'
 OTHER_VERSION ?= v0.0.1
-K3S_VERSION ?= v1.35.4+k3s1 # keep in sync with latest supported k3s
+K3S_VERSION ?= v1.36.1+k3s1 # keep in sync with latest supported k3s
 EOF
 
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(makefile_variable_value '${makefile}' K3S_VERSION)\"; print_observed_latest_row 'lima k3s release tag' \"\$(makefile_variable_value '${makefile}' K3S_VERSION)\" 'v1.35.4+k3s1' 'codebase' 'release tag'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(makefile_variable_value '${makefile}' K3S_VERSION)\"; print_observed_latest_row 'lima k3s release tag' \"\$(makefile_variable_value '${makefile}' K3S_VERSION)\" 'v1.36.1+k3s1' 'codebase' 'release tag'"
 
   [ "${status}" -eq 0 ]
   [ "${#lines[@]}" -eq 2 ]
-  [ "${lines[0]}" = "v1.35.4+k3s1" ]
-  [[ "${lines[1]}" == *$'lima k3s release tag\tv1.35.4+k3s1\tv1.35.4+k3s1\t'* ]]
-  [[ "${lines[1]}" == *"latest release tag (v1.35.4+k3s1)"* ]]
+  [ "${lines[0]}" = "v1.36.1+k3s1" ]
+  [[ "${lines[1]}" == *$'lima k3s release tag\tv1.36.1+k3s1\tv1.36.1+k3s1\t'* ]]
+  [[ "${lines[1]}" == *"latest release tag (v1.36.1+k3s1)"* ]]
 }
 
 @test "check-version classifies docker manifest probe results" {
@@ -241,7 +241,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     image_catalog_version_check_projection | awk -F '\t' '\$2 == \"sentiment-api\" { print \$1, \$2, \$6 } \$2 == \"grafana-victorialogs\" { print \$1, \$2, \$6 }'; \
     if image_ref_is_internal 'host.lima.internal:5002/platform/sentiment-api:0.1.0'; then echo catalog-local; else echo external; fi; \
-    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.26.3'"
+    image_catalog_version_check_status_for_ref 'host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.28.0'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"workload sentiment-api local"* ]]
@@ -309,10 +309,10 @@ EOF
 }
 
 @test "check-version renders long tags with aligned spacing" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.3.8-debian13\tv3.3.8\tok' \$'cert-manager\tv1.20.2\tv1.20.2\tok' | render_tsv_table"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \$'Component\tDeployTag\tCodeTag\tStatus' \$'---------\t---------\t-------\t------' \$'argo-cd chart\t3.4.3-debian13\tv3.3.8\tok' \$'cert-manager\tv1.20.2\tv1.20.2\tok' | render_tsv_table"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.3\.8-debian13[[:space:]][[:space:]]+v3\.3\.8[[:space:]][[:space:]]+ok ]]
+  [[ "${output}" =~ argo-cd\ chart[[:space:]]+3\.4\.3-debian13[[:space:]][[:space:]]+v3\.3\.8[[:space:]][[:space:]]+ok ]]
 }
 
 @test "check-version converts TSV rows into JSON objects without ANSI codes" {
@@ -569,7 +569,7 @@ EOF
 
 @test "check-version does not report older discovered image tags as updates" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
-    \"\$(external_image_update_status '26.6.1' '23.0.4')\" \
+    \"\$(external_image_update_status '26.6.3' '23.0.4')\" \
     \"\$(external_image_update_status 'v7.15.2' 'v7.14.2')\" \
     \"\$(external_image_update_status '9.0' '10.0.6')\""
 
@@ -580,13 +580,13 @@ EOF
 @test "check-version resolves latest pinned image tags within the current release series" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; \
     docker_hub_repo_tags() { printf '%s\n' '3.14.4-alpine3.23' '3.12.14-alpine3.23' '3.12.13-alpine3.23'; }; \
-    oci_registry_repo_tags() { printf '%s\n' '26.7.0' '26.6.2' '26.6.1'; }; \
+    oci_registry_repo_tags() { printf '%s\n' '26.7.0' '26.6.2' '26.6.3'; }; \
     printf '%s\n' \
       \"\$(docker_hub_latest_tag_for_ref 'python:3.12.13-alpine3.23')\" \
-      \"\$(oci_registry_latest_tag_for_ref 'quay.io/keycloak/keycloak:26.6.1')\""
+      \"\$(oci_registry_latest_tag_for_ref 'quay.io/keycloak/keycloak:26.6.3')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "$(printf '3.12.14-alpine3.23\n26.6.2')" ]
+  [ "${output}" = "$(printf '3.12.14-alpine3.23\n26.6.3')" ]
 }
 
 @test "check-version follows OCI pagination when resolving latest pinned image tags" {
@@ -623,10 +623,10 @@ done
 
 case "${url}" in
   "https://quay.io/v2/keycloak/keycloak/tags/list?n=1000")
-    printf 'HTTP/2 200\r\nlink: </v2/keycloak/keycloak/tags/list?n=100&last=26.6.1>; rel=\"next\"\r\n\r\n' >"${headers_file}"
-    printf '%s\n' '{"tags":["26.6.1","26.5.9"]}' >"${body_file}"
+    printf 'HTTP/2 200\r\nlink: </v2/keycloak/keycloak/tags/list?n=100&last=26.6.3>; rel=\"next\"\r\n\r\n' >"${headers_file}"
+    printf '%s\n' '{"tags":["26.6.3","26.5.9"]}' >"${body_file}"
     ;;
-  "https://quay.io/v2/keycloak/keycloak/tags/list?n=100&last=26.6.1")
+  "https://quay.io/v2/keycloak/keycloak/tags/list?n=100&last=26.6.3")
     printf 'HTTP/2 200\r\n\r\n' >"${headers_file}"
     printf '%s\n' '{"tags":["26.6.2","26.7.0"]}' >"${body_file}"
     ;;
@@ -638,10 +638,10 @@ esac
 EOF
   chmod +x "${stub_bin}/curl"
 
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(oci_registry_latest_tag_for_ref 'quay.io/keycloak/keycloak:26.6.1')\""
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 PATH='${stub_bin}:'\"\$PATH\"; source '${SCRIPT}'; printf '%s\n' \"\$(oci_registry_latest_tag_for_ref 'quay.io/keycloak/keycloak:26.6.3')\""
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "26.6.2" ]
+  [ "${output}" = "26.6.3" ]
 }
 
 @test "check-version does not auto-upgrade floating track tags" {

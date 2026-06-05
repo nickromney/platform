@@ -46,7 +46,7 @@
       "id": "grafana-victorialogs",
       "hcl_key": "grafana",
       "image_name": "grafana-victorialogs",
-      "default_tag": "12.3.1-v0.26.3",
+      "default_tag": "12.3.1-v0.28.0",
       "build": {
         "context": "generated-grafana-victorialogs",
         "dockerfile": "Dockerfile",
@@ -111,7 +111,7 @@
       "id": "keycloak",
       "hcl_key": "keycloak",
       "image_name": "keycloak",
-      "default_tag": "26.6.1",
+      "default_tag": "26.6.3",
       "external_ref": false,
       "build": {
         "context": "apps/keycloak",

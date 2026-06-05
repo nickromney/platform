@@ -149,7 +149,7 @@ run "sso_enabled" {
     sso_provider       = "keycloak"
     gitea_admin_pwd    = "test-admin-password"
 
-    dex_chart_version          = "0.24.0"
+    dex_chart_version          = "0.24.1"
     oauth2_proxy_chart_version = "10.1.4"
 
     platform_gateway_routes_path = "apps/platform-gateway-routes-sso"
