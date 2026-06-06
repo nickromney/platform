@@ -301,6 +301,33 @@ func TestGatewayProxiesHostMatchedRouteAndRecordsTrace(t *testing.T) {
 	}
 }
 
+func TestGatewayRouteReportsMissingBearerTokenWithAPIMMessage(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	}))
+	defer backend.Close()
+
+	srv := NewServer(Config{
+		AllowAnonymous: false,
+		Routes: []RouteConfig{{
+			Name:            "protected-api",
+			PathPrefix:      "/api",
+			UpstreamBaseURL: backend.URL,
+		}},
+	}, staticVerifier{claims: idpauth.UserClaims{Subject: "user-123"}})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"Missing bearer token"}` {
+		t.Fatalf("unexpected auth error body: %s", rec.Body.String())
+	}
+}
+
 func TestGatewayEnforcesRouteAuthorizationPolicy(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"ready"}`))

@@ -349,6 +349,27 @@ EOF
   [ "${output}" = "make -C kubernetes/lima 900 check-health" ]
 }
 
+@test "platform workflow previews readiness commands for every variant contract" {
+  local variant
+  local preview_json
+  local expected_command
+
+  for variant in kind lima slicer; do
+    expected_command="$(jq -r '.readiness.command' "${REPO_ROOT}/kubernetes/variants/${variant}/variant.json")"
+
+    run "${SCRIPT}" preview --execute --variant "${variant}" --action readiness --output json
+    [ "${status}" -eq 0 ]
+    preview_json="${output}"
+
+    run jq -r '.command, .command_preview.readiness' <<<"${preview_json}"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "${expected_command}"$'\n'"${expected_command}" ]
+
+    run make -C "${REPO_ROOT}/kubernetes/${variant}" -n readiness
+    [ "${status}" -eq 0 ]
+  done
+}
+
 @test "platform workflow ignores auto approve for read-only helpers" {
   for action in readiness status show-urls check-health check-security check-rbac; do
     run "${SCRIPT}" preview --execute --variant kind --stage 900 --action "${action}" --auto-approve --output json

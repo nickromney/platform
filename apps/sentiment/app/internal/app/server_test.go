@@ -398,6 +398,24 @@ func TestWhoamiExposesSafeIdentity(t *testing.T) {
 	}
 }
 
+func TestWhoamiRequiresBearerTokenWhenOIDCIsEnabled(t *testing.T) {
+	srv := NewServer(
+		Config{RuntimeRole: "backend", AuthMode: "oidc", DataDir: t.TempDir()},
+		fakeVerifier{claims: idpauth.UserClaims{Subject: "user-123"}},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"missing bearer token"}` {
+		t.Fatalf("unexpected missing-token body: %s", rec.Body.String())
+	}
+}
+
 func TestRuntimeConfigExposesFrontendAndAPIAuthModes(t *testing.T) {
 	srv := NewServer(Config{
 		RuntimeRole:     "frontend",
