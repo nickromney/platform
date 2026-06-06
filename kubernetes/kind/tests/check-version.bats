@@ -82,6 +82,13 @@ kind_argocd_app_synced_healthy() {
   [[ "${lines[1]}" == *"installed cli != latest minimum for v1.36.1 node image (v0.31.0 vs v0.32.0)"* ]]
 }
 
+@test "check-version derives kind-load minimum from digest-pinned kindest node image refs" {
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; tag=\"\$(image_tag_from_ref 'kindest/node:v1.36.1@sha256:3489c086d30d6e72d53b706ae3b6fd43f9416a834873a3a0e9c3e9400ae987e6')\"; printf '%s\n%s\n' \"\${tag}\" \"\$(kind_load_minimum_version_for_node_tag \"\${tag}\")\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'v1.36.1\nv0.32.0')" ]
+}
+
 @test "check-version keeps running when kindest node tag lookup is unavailable" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; docker_hub_repo_tags() { return 1; }; kindest_node_latest_tag; printf 'after lookup\n'"
 
@@ -158,6 +165,26 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == $'1.26.0\t1.26.1\tupdate_available\ttrue\t'* ]]
   [[ "${output}" == *"code tag != latest tag (1.26.0 vs 1.26.1)"* ]]
+}
+
+@test "check-version JSON reports deployed Gitea image tag drift separately from chart version" {
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_FORMAT=json
+    source '${SCRIPT}'
+    EXPECTED_CLUSTER_NAME='kind-local'
+    CLUSTER_OK=1
+    EXPECT_KIND_PROVISIONING='true'
+    CODE_ARGOCD_IMAGE_REF=''
+    CONFIGURED_ARGOCD_IMAGE_STATUS=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_REF=''
+    LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=''
+    row=\"\$(print_row 'gitea chart' '12.6.0' '12.6.0' '12.6.0' '1.25.5' '1.26.0' '' '1.26.0' '0')\"
+    emit_json_report \"\${row}\" '' '' '' '' | jq -r '.components[0] | [.component, .status_code, .status_group, (.deployed_tag_drift | tostring), .status_text] | @tsv'
+  "
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == $'gitea chart\tdeployed_drift\tdrift\ttrue\t'* ]]
+  [[ "${output}" == *"deployed tag != code tag (1.25.5 vs 1.26.0)"* ]]
 }
 
 @test "check-version reads k3s pins from local variant Makefiles" {
@@ -322,6 +349,40 @@ EOF
   [[ "${output}" == *"prometheus Prometheus repo-tag chart-app-version"* ]]
   [[ "${output}" == *"image_catalog_preload_alignment_projection"* ]]
   [[ "${output}" != *'check_preload_repo_tag_alignment "${preload_file}" "Prometheus"'* ]]
+}
+
+@test "check-version reports stale preload image candidates from catalog alignment checks" {
+  local preload_file="${BATS_TEST_TMPDIR}/preload-images.txt"
+  cat >"${preload_file}" <<'EOF'
+quay.io/prometheus/prometheus:v2.54.0
+quay.io/prometheus/prometheus:v2.55.0
+EOF
+
+  run bash -lc "
+    export CHECK_VERSION_LIB_ONLY=1
+    source '${SCRIPT}'
+    image_catalog_preload_alignment_projection() {
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        'prometheus' \
+        'Prometheus' \
+        'repo-tag' \
+        '^quay[.]io/prometheus/prometheus:' \
+        's|^.*:([^[:space:]]+)$|\1|' \
+        'prometheus_chart_app_version' \
+        'latest' \
+        'checked-elsewhere' \
+        'warn' \
+        'test-fixture' \
+        'EXPECT_PROMETHEUS'
+    }
+    PRELOAD_IMAGES_FILE='${preload_file}'
+    EXPECT_PROMETHEUS=true
+    check_preload_image_version_alignment '' 'v2.55.0' '' '' '' ''
+  "
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"stale preload candidate (line 1): quay.io/prometheus/prometheus:v2.54.0 (expected Prometheus tag v2.55.0)"* ]]
+  [[ "${output}" == *"Prometheus preload includes 1 non-matching tag line(s); expected tag is v2.55.0"* ]]
 }
 
 @test "check-version reports not deployed current components as current" {

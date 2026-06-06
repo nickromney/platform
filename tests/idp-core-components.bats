@@ -133,6 +133,29 @@ JSON
   [ "${status}" -eq 0 ]
 }
 
+@test "IDP scorecard command previews without inspecting the catalog" {
+  fixture_catalog="${BATS_TEST_TMPDIR}/platform-apps.json"
+  cat >"${fixture_catalog}" <<'JSON'
+{
+  "applications": []
+}
+JSON
+
+  run env PLATFORM_APP_CATALOG="${fixture_catalog}" \
+    "${REPO_ROOT}/terraform/kubernetes/scripts/idp-scorecards.sh" --format json
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"would inspect the IDP scorecard model"* ]]
+  [[ "${output}" != *"platform.idp.scorecard-read-model/v1"* ]]
+}
+
+@test "IDP scorecard command rejects unsupported output formats" {
+  run "${REPO_ROOT}/terraform/kubernetes/scripts/idp-scorecards.sh" --execute --format xml
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"Unknown --format xml; expected text or json"* ]]
+}
+
 @test "identity and access edge contract exposes OIDC RBAC and API audience facts" {
   jq_path="$(command -v jq)"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -927,6 +950,10 @@ PY
   run make -C "${REPO_ROOT}/kubernetes/kind" idp-env DRY_RUN=1 ACTION=create APP=chatgpt-sim ENV=preview-nr
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"would create environment preview-nr for chatgpt-sim"* ]]
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" idp-scorecards DRY_RUN=1
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"would inspect the IDP scorecard model"* ]]
 }
 
 @test "self-service environment requests render a usable workload base reference" {

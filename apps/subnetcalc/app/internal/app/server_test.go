@@ -688,7 +688,21 @@ func TestWhoamiRequiresValidBearerToken(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("missing token returned %d", rec.Code)
+		t.Fatalf("missing token returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"Missing or invalid bearer token"}` {
+		t.Fatalf("unexpected missing-token body: %s", rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/whoami", nil)
+	req.Header.Set("Authorization", "Bearer bad-token")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid token returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"Invalid token"}` {
+		t.Fatalf("unexpected invalid-token body: %s", rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/whoami", nil)

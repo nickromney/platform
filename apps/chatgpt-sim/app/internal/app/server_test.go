@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"platform.local/apphttp"
+	"platform.local/idpauth"
 )
 
 func TestShellHealthAndFrontendReportSharedDependencyFootprint(t *testing.T) {
@@ -1690,6 +1692,25 @@ func TestChatReportsMCPJSONRPCErrorMessage(t *testing.T) {
 	}
 }
 
+func TestWhoamiRequiresBearerTokenWhenOIDCIsEnabled(t *testing.T) {
+	srv := NewServer(
+		Config{Role: "shell", AuthMode: "oidc"},
+		nil,
+		fakeVerifier{claims: idpauth.UserClaims{Subject: "user-123"}},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != `{"error":"missing bearer token"}` {
+		t.Fatalf("unexpected missing-token body: %s", rec.Body.String())
+	}
+}
+
 func TestMCPRequiresBearerToken(t *testing.T) {
 	srv := NewServer(Config{Role: "mcp", PublicBaseURL: "http://mcp.local"}, nil)
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
@@ -1703,4 +1724,19 @@ func TestMCPRequiresBearerToken(t *testing.T) {
 	if !strings.Contains(rec.Header().Get("WWW-Authenticate"), `resource_metadata="http://mcp.local/.well-known/oauth-protected-resource/mcp"`) {
 		t.Fatalf("challenge header=%q", rec.Header().Get("WWW-Authenticate"))
 	}
+}
+
+type fakeVerifier struct {
+	claims idpauth.UserClaims
+	err    error
+}
+
+func (v fakeVerifier) Verify(_ context.Context, token string) (idpauth.UserClaims, error) {
+	if token != "valid-token" {
+		return idpauth.UserClaims{}, idpauth.ErrInvalidToken
+	}
+	if v.err != nil {
+		return idpauth.UserClaims{}, v.err
+	}
+	return v.claims, nil
 }
