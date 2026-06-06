@@ -6,13 +6,12 @@ import (
 
 	"platform.local/apim-simulator/internal/app"
 	"platform.local/appconfig"
-	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idpauth"
 )
 
 func main() {
-	if apphealth.HandleHealthcheckCommand("8000", "/apim/health") {
+	if apphttp.HandleHealthcheckCommand("8000", "/apim/health") {
 		return
 	}
 

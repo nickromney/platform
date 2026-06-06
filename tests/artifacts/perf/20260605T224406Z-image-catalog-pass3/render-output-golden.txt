@@ -1,0 +1,1 @@
+tests/artifacts/perf/20260605T224406Z-image-catalog-pass3/operator-overrides-golden.tfvars

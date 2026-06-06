@@ -5,7 +5,7 @@ kubeconfig_path      = "~/.kube/config"
 kubeconfig_context   = "" # Stage 100 creates the cluster, so the context may not exist yet.
 kind_api_server_port = 6443
 worker_count         = 1
-node_image           = "kindest/node:v1.35.1"
+node_image           = "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
 
 enable_image_preload            = true
 cni_provider                    = "none"

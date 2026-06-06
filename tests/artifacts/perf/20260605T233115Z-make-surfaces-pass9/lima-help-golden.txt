@@ -1,0 +1,92 @@
+lima demo (Lima VM + k3s + shared Terraform platform stack)
+
+Workflow syntax:
+  make 100 apply
+  make 900 plan
+  make 920 plan
+  make 900 apply AUTO_APPROVE=1
+  make 920 apply AUTO_APPROVE=1
+
+Accepted variants:
+  make apply 100
+  make 900 check-security
+
+Targets:
+  make apply        100|200|300|...|920 [AUTO_APPROVE=1]
+  make bootstrap-k3s
+  make build-workload-images
+  make build-local-platform-images
+  make check-app    APP=grafana [EXTENDED=1]
+  make check-cluster
+  make check-gateway-stack
+  make check-gateway-urls
+  make check-health
+  make check-kind-stopped
+  make check-slicer-stopped
+  make check-provider-version
+  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i
+  make check-security
+  make check-sso
+  make check-sso-e2e
+  make check-stage-monotonicity
+  make check-version [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]
+  make configure-k3s-apiserver-oidc
+  make exercise-k3s-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=k3s-restart]
+  make ensure-host-gateway-proxy
+  make env
+  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo
+  make idp-api                                  Start or preview the Go IDP core
+  make backstage                                Start or preview the Backstage developer portal
+  make idp-sdk                                  Generate or preview the IDP SDK
+  make idp-mcp                                  Start or preview the IDP MCP server
+  make init
+  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory
+  make lima-vms-up
+  make merge-default-kubeconfig
+  make plan         100|200|300|...|920
+  make prereqs
+  make proxy-status
+  make reset        [AUTO_APPROVE=1]
+  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only
+  make show-urls
+  make status
+  make stop                                    Alias for stop-lima
+  make stop-lima
+  make stop-host-gateway-proxy
+  make sync-image-cache
+  make test
+  make test-idempotence STAGE=100 [DRY_RUN=1]
+
+Stages:
+  100 - cluster available
+  200 - cilium
+  300 - hubble
+  400 - argocd core
+  500 - gitea
+  600 - policies
+  700 - app repos
+  800 - observability
+  900 - sso
+  920 - langfuse
+
+Stage examples:
+  make 100 plan
+  make 900 apply AUTO_APPROVE=1
+  make 920 apply AUTO_APPROVE=1
+  make 900 check-security
+
+Default kubeconfigs:
+  lima -> ~/.kube/limavm-k3s.yaml (split by default; merge explicitly into ~/.kube/config if needed)
+
+Aliases:
+  make start                                   Alias for lima-vms-up
+
+Local helper modes:
+  LIMA_HOST_GATEWAY_PROXY_MODE=auto|on|off             -> manage host gateway proxies for localhost-backed flows (default: auto)
+  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge ~/.kube/limavm-k3s.yaml into ~/.kube/config (default: 0)
+  OIDC_RECOVERY_FORMAT=text|json                       -> render the Lima OIDC restart drill as human text or machine-readable JSON (default: text)
+  OIDC_RECOVERY_FORCE_MODE=k3s-restart                 -> controlled perturbation used to force the Lima OIDC restart path (default: k3s-restart)
+  PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto|on|off          -> manage/sync the host registry cache (default: auto, stage>=700)
+  PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=auto|on|off -> build/push platform shortcut images to the cache (default: auto, stage>=800 when enabled)
+  PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto|on|off -> build/push app workload images to the cache (default: auto, stage>=700)
+  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under <repo>/.run/profiles

@@ -68,6 +68,7 @@ LOCK_FILE=""
 REFRESH_LOCK=0
 PARALLELISM=4
 MODE="default"
+KIND_LOAD_MIN_VERSION="v0.32.0"
 WORKFLOW_DOCKERFILES=(
   "apps/subnetcalc/app/Dockerfile"
   "apps/apim-simulator/app/Dockerfile"
@@ -554,6 +555,54 @@ docker_inspect_field_safe() {
   return "$rc"
 }
 
+kind_installed_version() {
+  local version=""
+
+  version="$(kind version -q 2>/dev/null | xargs || true)"
+  if [[ -n "${version}" ]]; then
+    printf '%s\n' "${version}"
+    return 0
+  fi
+
+  kind --version 2>/dev/null | sed -E 's/^kind version[[:space:]]+//; s/[[:space:]].*$//' | xargs || true
+}
+
+semver_core() {
+  local version="${1:-}"
+
+  version="${version#v}"
+  if [[ "${version}" =~ ^([0-9]+[.][0-9]+[.][0-9]+) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  fi
+}
+
+semver_at_least() {
+  local observed
+  local minimum
+  local first
+
+  observed="$(semver_core "$1")"
+  minimum="$(semver_core "$2")"
+  [[ -n "${observed}" && -n "${minimum}" ]] || return 1
+
+  first="$(printf '%s\n%s\n' "${minimum}" "${observed}" | sort -V | head -n 1)"
+  [[ "${first}" == "${minimum}" ]]
+}
+
+ensure_kind_load_cli_compatible() {
+  local installed=""
+
+  require_cmd kind
+  installed="$(kind_installed_version)"
+  if semver_at_least "${installed}" "${KIND_LOAD_MIN_VERSION}"; then
+    return 0
+  fi
+
+  echo "kind load requires kind ${KIND_LOAD_MIN_VERSION} or newer for Kubernetes 1.36 node images; installed kind ${installed:-unknown}." >&2
+  echo "Upgrade kind or use --pull-only / registry image distribution instead of the kind load path." >&2
+  exit 1
+}
+
 detect_target_platform() {
   if [[ -n "$USER_PLATFORM" ]]; then
     echo "$USER_PLATFORM"
@@ -912,6 +961,10 @@ fi
 if [[ "$MODE" == "print-images" ]]; then
   printf '%s\n' "$images"
   exit 0
+fi
+
+if [[ "$MODE" != "pull-only" ]]; then
+  ensure_kind_load_cli_compatible
 fi
 
 require_cmd docker

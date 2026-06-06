@@ -10,7 +10,7 @@ journeys.
   `oauth2-proxy` in front of platform and app routes.
 - Dex remains in the code as a supported provider shape behind
   `sso_provider`, but it is no longer the local stage-900 teaching path.
-- The Sentiment compose stack already uses Keycloak 26.6.1 with a templated
+- The Sentiment compose stack already uses Keycloak 26.6.3 with a templated
   realm import and an `oauth2-proxy` client.
 - Demo identities now carry groups:
   - `platform-admins`

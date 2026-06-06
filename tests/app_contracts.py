@@ -341,10 +341,10 @@ def apps_makefile_wrapper_dir_function_contract_violations(repo_root: Path) -> t
     required_fragments = (
         "define app_wrapper_dirs_with_target",
         "$(shell for makefile in ./*/Makefile; do grep -q '^$(1):' \"$$makefile\" || continue; dirname \"$$makefile\" | cut -c3-; done | LC_ALL=C sort)",
-        "APP_COMPOSE_SMOKE_DIRS := $(call app_wrapper_dirs_with_target,compose-smoke)",
-        "APP_JS_CHECK_DIRS := $(call app_wrapper_dirs_with_target,app-js-check)",
-        "APP_TEST_DIRS := $(call app_wrapper_dirs_with_target,test)",
-        "APP_UPDATE_DIRS := $(call app_wrapper_dirs_with_target,update)",
+        "APP_COMPOSE_SMOKE_DIRS = $(call app_wrapper_dirs_with_target,compose-smoke)",
+        "APP_JS_CHECK_DIRS = $(call app_wrapper_dirs_with_target,app-js-check)",
+        "APP_TEST_DIRS = $(call app_wrapper_dirs_with_target,test)",
+        "APP_UPDATE_DIRS = $(call app_wrapper_dirs_with_target,update)",
     )
     violations = [
         f"apps Makefile missing shared wrapper dir helper fragment: {fragment}"
@@ -1212,7 +1212,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     violations: list[str] = []
 
     for fragment in (
-        "FROM quay.io/keycloak/keycloak:26.6.1 AS builder",
+        "FROM quay.io/keycloak/keycloak:26.6.3 AS builder",
         "ENV KC_DB=postgres",
         "ENV KC_CACHE=local",
         "RUN /opt/keycloak/bin/kc.sh build",
@@ -1248,7 +1248,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     else:
         build = keycloak.get("build", {})
         expected_values = {
-            "default_tag": "26.6.1",
+            "default_tag": "26.6.3",
             "build.context": "apps/keycloak",
             "build.dockerfile": "Dockerfile",
         }
@@ -1269,7 +1269,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     for target, registry_host in target_registry_hosts.items():
         tfvars_path = repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars"
         tfvars = tfvars_path.read_text(encoding="utf-8")
-        expected_image = f"{registry_host}/platform/keycloak:26.6.1"
+        expected_image = f"{registry_host}/platform/keycloak:26.6.3"
         if not re.search(
             rf'(?m)^\s*keycloak_image\s*=\s*"{re.escape(expected_image)}"\s*$',
             tfvars,
@@ -5645,16 +5645,16 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
             "FROM dhi.io/node:22-debian13 AS runtime": 1,
         },
         "apps/sentiment/compose.yml": {
-            "image: quay.io/keycloak/keycloak:26.6.1": 1,
+            "image: quay.io/keycloak/keycloak:26.6.3": 1,
             "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
         },
         "apps/subnetcalc/app/Dockerfile": {
             "FROM dhi.io/static:20260413-alpine3.23": 1,
         },
         "terraform/kubernetes/apps/gitea-actions-runner/deployment.yaml": {
-            "image: docker:29.4.1-cli": 1,
+            "image: docker:29.4.3-cli": 1,
             "image: gitea/act_runner:0.4.1": 2,
-            "image: kindest/node:v1.35.1": 1,
+            "image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5": 1,
         },
         "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
             "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
@@ -5703,9 +5703,9 @@ def preload_image_required_refs() -> tuple[str, ...]:
     return (
         "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
         "ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1",
-        "docker:29.4.1-cli",
+        "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
-        "kindest/node:v1.35.1",
+        "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
         "dhi.io/golang:1.26-alpine3.23-dev",
         "dhi.io/static:20260413-alpine3.23",
         "python:3.12.13-alpine3.23",
@@ -5727,9 +5727,9 @@ def preload_image_retired_refs() -> tuple[str, ...]:
 def preload_image_lock_refs() -> tuple[str, ...]:
     return (
         "ghcr.io/nginx/nginx-gateway-fabric:2.5.1",
-        "docker:29.4.1-cli",
+        "docker:29.4.3-cli",
         "gitea/act_runner:0.4.1",
-        "kindest/node:v1.35.1",
+        "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
         "python:3.12.13-alpine3.23",
         "docker.io/curlimages/curl:8.19.0",
         "curlimages/curl:8.19.0",
@@ -5767,8 +5767,8 @@ def langfuse_runtime_image_refs() -> tuple[str, ...]:
         "docker.io/langfuse/langfuse:3",
         "docker.io/langfuse/langfuse-worker:3",
         "docker.io/postgres:17.6-alpine",
-        "docker.io/redis:8.2.3-alpine",
-        "docker.io/clickhouse/clickhouse-server:25.5.6",
+        "docker.io/redis:8.2.7-alpine",
+        "docker.io/clickhouse/clickhouse-server:25.5.11",
         "cgr.dev/chainguard/minio:latest",
         "cgr.dev/chainguard/busybox:latest",
     )

@@ -732,6 +732,9 @@ def advanced_overrides_panel() -> str:
 
 
 def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, Any]) -> str:
+    command_preview = result.get("command_preview")
+    if not isinstance(command_preview, dict):
+        command_preview = {}
     command = html.escape(str(result.get("command", "")))
     variant = html.escape(str(payload["variant"]))
     stage = html.escape(str(result.get("stage", payload["stage"])))
@@ -749,8 +752,8 @@ def preview_panel(repo_root: Path, result: dict[str, Any], payload: dict[str, An
     presets = preset_summary_panel(result)
     warnings = warnings_panel(result)
     tfvars = generated_tfvars_panel(result)
-    workflow_execute = html.escape(workflow_command(payload, standard_flag="--execute"))
-    workflow_dry_run = html.escape(workflow_command(payload, standard_flag="--dry-run"))
+    workflow_execute = html.escape(str(command_preview.get("workflow_execute") or workflow_command(payload, standard_flag="--execute")))
+    workflow_dry_run = html.escape(str(command_preview.get("workflow_dry_run") or workflow_command(payload, standard_flag="--dry-run")))
     preflight = preflight_badges(repo_root, payload)
     hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": ""})
     dry_run_hidden = hidden_inputs({**payload, "command": str(result.get("command", "")), "dry_run": "1"})
@@ -1007,11 +1010,7 @@ def prereq_variant_rows(payload: dict[str, Any]) -> str:
             item = variants.get(str(variant_id), {})
             if not isinstance(item, dict):
                 continue
-            blockers = item.get("blockers")
-            if isinstance(blockers, list) and blockers:
-                blocker_text = ", ".join(str(blocker) for blocker in blockers[:3])
-            else:
-                blocker_text = "No blockers reported"
+            blocker_text = variant_readiness_note(item)
             rows.append(
                 f"""
 <div class="inventory-card {prereq_state_class(str(item.get('state') or 'not reported'))}">
@@ -1024,6 +1023,55 @@ def prereq_variant_rows(payload: dict[str, Any]) -> str:
     if not rows:
         rows.append('<div class="inventory-card"><span>Status</span><strong>not reported</strong><small>No variant status rows reported.</small></div>')
     return "".join(rows)
+
+
+def variant_readiness_note(item: dict[str, Any]) -> str:
+    blockers = item.get("blockers")
+    messages = []
+    if isinstance(blockers, list):
+        for blocker in blockers[:3]:
+            if isinstance(blocker, dict):
+                message = blocker.get("message")
+                messages.append(str(message if message is not None else blocker))
+            else:
+                messages.append(str(blocker))
+    if not messages:
+        blocker_facts = item.get("blocker_facts")
+        if isinstance(blocker_facts, list):
+            for fact in blocker_facts[:3]:
+                if isinstance(fact, dict):
+                    message = fact.get("message")
+                    if message:
+                        messages.append(str(message))
+
+    action = variant_readiness_action(item)
+    if not messages:
+        return f"Next: {action}" if action else "No blockers reported"
+
+    text = ", ".join(messages)
+    return f"{text}. Next: {action}" if action else text
+
+
+def variant_readiness_action(item: dict[str, Any]) -> str:
+    readiness = item.get("readiness")
+    if isinstance(readiness, dict):
+        action = readiness.get("recommended_action")
+        if isinstance(action, dict) and action.get("command"):
+            return str(action["command"])
+
+    blocker_facts = item.get("blocker_facts")
+    if isinstance(blocker_facts, list):
+        for fact in blocker_facts:
+            if not isinstance(fact, dict):
+                continue
+            action = fact.get("recommended_action")
+            if isinstance(action, dict) and action.get("command"):
+                return str(action["command"])
+
+    action = item.get("recommended_action")
+    if isinstance(action, dict) and action.get("command"):
+        return str(action["command"])
+    return ""
 
 
 def prereq_runtime_rows(payload: dict[str, Any]) -> str:

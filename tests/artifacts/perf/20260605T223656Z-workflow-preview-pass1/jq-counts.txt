@@ -1,0 +1,3 @@
+before_jq_invocations=36
+after_jq_invocations=34
+after_runtime_host_lookups=1

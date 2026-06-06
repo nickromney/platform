@@ -40,7 +40,7 @@
     }
   },
   "readiness": {
-    "command": "make -C kubernetes/lima prereqs",
+    "command": "make -C kubernetes/lima readiness",
     "facets": ["operator_prereqs", "active_variant", "cluster_access", "host_access_path", "stage_contracts", "blockers"]
   },
   "blockers": {

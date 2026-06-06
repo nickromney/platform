@@ -557,8 +557,8 @@ EOF
   [[ "${output}" == *"image: docker.io/langfuse/langfuse:3"* ]]
   [[ "${output}" == *"image: docker.io/langfuse/langfuse-worker:3"* ]]
   [[ "${output}" == *"image: docker.io/postgres:17.6-alpine"* ]]
-  [[ "${output}" == *"image: docker.io/redis:8.2.3-alpine"* ]]
-  [[ "${output}" == *"image: docker.io/clickhouse/clickhouse-server:25.5.6"* ]]
+  [[ "${output}" == *"image: docker.io/redis:8.2.7-alpine"* ]]
+  [[ "${output}" == *"image: docker.io/clickhouse/clickhouse-server:25.5.11"* ]]
   [[ "${output}" == *"image: cgr.dev/chainguard/minio:latest"* ]]
   [[ "${output}" == *'encryption-key: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"'* ]]
   [[ "${output}" == *"langfuse.admin.127.0.0.1.sslip.io"* ]]
@@ -634,7 +634,7 @@ EOF
   apps_dir="${BATS_TEST_TMPDIR}/apps"
   mkdir -p "${apps_dir}"
 
-  run bash -lc "export ENABLE_PROMETHEUS=true ENABLE_GRAFANA=true ENABLE_VICTORIA_LOGS=true ENABLE_LOKI=false ENABLE_TEMPO=false ENABLE_SIGNOZ=false ENABLE_OTEL_GATEWAY=false OPENTELEMETRY_COLLECTOR_CHART_VERSION=0.152.0; source '${SCRIPT}'; render_otel_gateway_manifest '${apps_dir}'; cat '${apps_dir}/96-otel-collector-prometheus.application.yaml'"
+  run bash -lc "export ENABLE_PROMETHEUS=true ENABLE_GRAFANA=true ENABLE_VICTORIA_LOGS=true ENABLE_LOKI=false ENABLE_TEMPO=false ENABLE_SIGNOZ=false ENABLE_OTEL_GATEWAY=false OPENTELEMETRY_COLLECTOR_CHART_VERSION=0.158.1; source '${SCRIPT}'; render_otel_gateway_manifest '${apps_dir}'; cat '${apps_dir}/96-otel-collector-prometheus.application.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"otlphttp/victoria-logs"* ]]
@@ -1011,12 +1011,12 @@ spec:
 __GRAFANA_PLUGINS_VALUES__
 EOF
 
-  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_GRAFANA='host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.26.3'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'; render_grafana_application_manifest '${app_file}'"
+  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_GRAFANA='host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.28.0'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'; render_grafana_application_manifest '${app_file}'"
 
   [ "${status}" -eq 0 ]
   grep -Fq "registry: host.docker.internal:5002" "${app_file}"
   grep -Fq "repository: platform/grafana-victorialogs" "${app_file}"
-  grep -Fq "tag: 12.3.1-v0.26.3" "${app_file}"
+  grep -Fq "tag: 12.3.1-v0.28.0" "${app_file}"
   grep -Fq "plugins: []" "${app_file}"
 }
 

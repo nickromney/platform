@@ -1,0 +1,26 @@
+{
+  "namespace": "platform",
+  "platform_images": [],
+  "workload_images": [
+    {
+      "id": "first",
+      "image_name": "first",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "apps/sentiment/app/Dockerfile",
+        "prebuild": "make -C apps/shared/apphttp test >/dev/null"
+      }
+    },
+    {
+      "id": "second",
+      "image_name": "second",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "apps/sentiment/app/Dockerfile",
+        "prebuild": "make -C apps/shared/apphttp test >/dev/null"
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "command": "scripts/audit-shell-scripts.sh --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/kind/scripts --path terraform/kubernetes/scripts > tests/artifacts/perf/20260605T233559Z-convergence-pass10/shell-audit-after.txt",
+      "mean": 10.73843638322,
+      "stddev": 0.5441588156159024,
+      "median": 10.93169657722,
+      "user": 3.9034994199999997,
+      "system": 5.145825273333333,
+      "min": 10.12402574422,
+      "max": 11.15958682822,
+      "times": [
+        10.12402574422,
+        10.93169657722,
+        11.15958682822
+      ],
+      "memory_usage_byte": [
+        105824256,
+        105824256,
+        106070016
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

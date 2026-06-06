@@ -1,0 +1,3 @@
+8e12321fbe80e15a7986e066f1112f0936102f12e1765c4087ca992b1ed33895  tests/artifacts/perf/20260605T231654Z-go-apps-pass7/go-apps-test-golden.txt
+1c1fead8dfc612640aaf46edc72fbb77a897a191a2bf2ef576110449f9c116d4  tests/artifacts/perf/20260605T231654Z-go-apps-pass7/prebuild-dedupe-baseline-output.txt
+1c1fead8dfc612640aaf46edc72fbb77a897a191a2bf2ef576110449f9c116d4  tests/artifacts/perf/20260605T231654Z-go-apps-pass7/prebuild-dedupe-after-output.txt

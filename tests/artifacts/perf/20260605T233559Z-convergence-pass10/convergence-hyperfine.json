@@ -1,0 +1,129 @@
+{
+  "results": [
+    {
+      "command": "scripts/audit-shell-scripts.sh --execute --path scripts/audit-shell-scripts.sh --path scripts/lib --path scripts/suggest-make-goal.sh --path kubernetes/scripts --path kubernetes/kind/scripts --path terraform/kubernetes/scripts > /tmp/platform-convergence-shell-audit.txt",
+      "mean": 13.897712063253332,
+      "stddev": 0.4369767151838333,
+      "median": 13.78623389692,
+      "user": 4.825973779999999,
+      "system": 6.774953280000001,
+      "min": 13.52727264692,
+      "max": 14.37962964592,
+      "times": [
+        14.37962964592,
+        13.78623389692,
+        13.52727264692
+      ],
+      "memory_usage_byte": [
+        105463808,
+        105463808,
+        105758720
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "KIND_OPERATOR_OVERRIDES_FILE=/tmp/platform-convergence-operator-overrides.tfvars KIND_IMAGE_DISTRIBUTION_MODE=registry KIND_ENABLE_BACKSTAGE=on kubernetes/kind/scripts/render-operator-overrides.sh --execute > /tmp/platform-convergence-operator-overrides.txt",
+      "mean": 3.2684797992533334,
+      "stddev": 0.07347264402156789,
+      "median": 3.24269472992,
+      "user": 1.4641721133333334,
+      "system": 0.4756196133333333,
+      "min": 3.2113753549200004,
+      "max": 3.35136931292,
+      "times": [
+        3.2113753549200004,
+        3.35136931292,
+        3.24269472992
+      ],
+      "memory_usage_byte": [
+        105758720,
+        105758720,
+        105758720
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "scripts/platform-inventory.sh --execute --variant kind --stage 900 --output json > /tmp/platform-convergence-inventory.json",
+      "mean": 3.441438743586667,
+      "stddev": 0.05065095172724474,
+      "median": 3.4437406049200003,
+      "user": 0.010056446666666666,
+      "system": 0.00861828,
+      "min": 3.3896761049200004,
+      "max": 3.49089952092,
+      "times": [
+        3.4437406049200003,
+        3.49089952092,
+        3.3896761049200004
+      ],
+      "memory_usage_byte": [
+        105758720,
+        105758720,
+        105758720
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "bats tests/validate-docker-optimization-contracts.bats > /tmp/platform-convergence-docker-contracts.txt",
+      "mean": 3.9812425909199995,
+      "stddev": 0.07464290605495397,
+      "median": 3.95301272992,
+      "user": 2.7524521133333333,
+      "system": 0.9792962799999998,
+      "min": 3.9248318549200003,
+      "max": 4.06588318792,
+      "times": [
+        3.9248318549200003,
+        3.95301272992,
+        4.06588318792
+      ],
+      "memory_usage_byte": [
+        105758720,
+        105758720,
+        105758720
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "make -C kubernetes/kind help > /tmp/platform-convergence-kind-help.txt",
+      "mean": 0.13574066058666667,
+      "stddev": 0.009881191617186674,
+      "median": 0.13031014692,
+      "user": 0.05424444666666667,
+      "system": 0.06285394666666667,
+      "min": 0.12976568792,
+      "max": 0.14714614692,
+      "times": [
+        0.14714614692,
+        0.13031014692,
+        0.12976568792
+      ],
+      "memory_usage_byte": [
+        105758720,
+        105758720,
+        105758720
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

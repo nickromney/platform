@@ -1,0 +1,6 @@
+PREBUILD first: make -C apps/shared/apphttp test >/dev/null
+BUILD first
+PUSH  127.0.0.1:5002/platform/first:0.1.0
+PREBUILD second: make -C apps/shared/apphttp test >/dev/null
+BUILD second
+PUSH  127.0.0.1:5002/platform/second:0.1.0

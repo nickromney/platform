@@ -14,7 +14,7 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
-Usage: @SCRIPT_NAME@ --projection catalog|deployments|secrets [--format text|json]
+Usage: @SCRIPT_NAME@ --projection catalog|deployments|secrets|scorecards [--format text|json]
 
 Projects the local IDP service catalog into operator read models.
 EOF
@@ -152,6 +152,42 @@ secrets_text() {
          { printf "%-18s %-34s %-14s %s\n", $1, $2, $3, $4 }'
 }
 
+scorecards_json() {
+  jq '{
+    schema_version: "platform.idp.scorecard-read-model/v1",
+    scorecards: [
+      .applications[]
+      | {
+          app: .name,
+          runtime_profile: (.scorecard.runtime_profile // "not declared"),
+          has_health_endpoint: (.scorecard.has_health_endpoint // false),
+          has_network_policy: (.scorecard.has_network_policy // false),
+          has_owner: ((.scorecard.has_owner // false) or ((.owner // "") != "")),
+          has_model_card: (if .scorecard.has_model_card == true then true else null end),
+          tier: .scorecard.tier
+        }
+      | with_entries(select(.value != null))
+    ]
+  }' "${CATALOG_FILE}"
+}
+
+scorecards_text() {
+  jq -r '
+    .applications[]
+    | [
+        .name,
+        (.scorecard.runtime_profile // "not-declared"),
+        ((.scorecard.has_health_endpoint // false) | tostring),
+        ((.scorecard.has_network_policy // false) | tostring),
+        (((.scorecard.has_owner // false) or ((.owner // "") != "")) | tostring),
+        (.scorecard.tier // "not-declared")
+      ]
+    | @tsv
+  ' "${CATALOG_FILE}" |
+    awk 'BEGIN { printf "%-18s %-18s %-10s %-14s %-10s %s\n", "APP", "RUNTIME_PROFILE", "HEALTH", "NETWORK_POLICY", "OWNER", "TIER" }
+         { printf "%-18s %-18s %-10s %-14s %-10s %s\n", $1, $2, $3, $4, $5, $6 }'
+}
+
 case "${PROJECTION}:${OUTPUT_FORMAT}" in
   catalog:json) catalog_json ;;
   catalog:text) catalog_text ;;
@@ -159,6 +195,8 @@ case "${PROJECTION}:${OUTPUT_FORMAT}" in
   deployments:text) deployments_text ;;
   secrets:json) secrets_json ;;
   secrets:text) secrets_text ;;
+  scorecards:json) scorecards_json ;;
+  scorecards:text) scorecards_text ;;
   :*) fail "--projection is required" ;;
-  *:*) fail "Unknown projection/format ${PROJECTION}:${OUTPUT_FORMAT}; expected projection catalog|deployments|secrets and format text|json" ;;
+  *:*) fail "Unknown projection/format ${PROJECTION}:${OUTPUT_FORMAT}; expected projection catalog|deployments|secrets|scorecards and format text|json" ;;
 esac

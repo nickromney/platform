@@ -229,6 +229,67 @@ EOF
   [[ "${output}" == *"All frontend package and bundle budgets passed."* ]]
 }
 
+@test "check-version batches workflow action parsing when upstream resolution is skipped" {
+  mkdir -p "${FIXTURE_ROOT}/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows"
+
+  cat >"${FIXTURE_ROOT}/.github/workflows/build.yml" <<'EOF'
+name: Build
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+EOF
+
+  cat >"${FIXTURE_ROOT}/apps/backstage/catalog/templates/platform-service/content/.gitea/workflows/review-environment.yaml" <<'EOF'
+name: Review environment
+jobs:
+  review:
+    steps:
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+EOF
+
+  real_uv_path="$(command -v uv)"
+  export REAL_UV_PATH="${real_uv_path}"
+  export UV_CALL_LOG="${BATS_TEST_TMPDIR}/uv-calls.log"
+  cat >"${FAKE_BIN}/uv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+{
+  first=1
+  for arg in "$@"; do
+    if [[ "${first}" == "1" ]]; then
+      first=0
+    else
+      printf '\t'
+    fi
+    printf '%s' "${arg}"
+  done
+  printf '\n'
+} >>"${UV_CALL_LOG}"
+
+exec "${REAL_UV_PATH}" "$@"
+EOF
+  chmod +x "${FAKE_BIN}/uv"
+
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_SKIP_UPSTREAM=1 \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  workflow_scan_count="$(
+    awk -F '\t' -v root="${FIXTURE_ROOT}" '
+      $1 == "run" && $2 == "--isolated" && $3 == "python" && $4 == "-" && index($5, root "/") == 1 && $5 ~ /\.(yml|yaml)$/ {
+        count += 1
+      }
+      END { print count + 0 }
+    ' "${UV_CALL_LOG}"
+  )"
+  [ "${workflow_scan_count}" -eq 1 ]
+}
+
 @test "check-version fails when a frontend package budget regresses" {
   cat >"${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" <<'EOF'
 {

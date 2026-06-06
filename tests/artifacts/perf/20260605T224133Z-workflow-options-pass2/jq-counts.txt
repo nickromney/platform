@@ -1,0 +1,3 @@
+before_jq_invocations=10
+after_jq_invocations=2
+after_registry_lookups=0

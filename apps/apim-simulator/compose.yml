@@ -1,6 +1,6 @@
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.6.1
+    image: quay.io/keycloak/keycloak:26.6.3
     profiles: ["sso"]
     entrypoint: ["/bin/sh", "/opt/keycloak/local/start-with-templated-realm.sh"]
     environment:

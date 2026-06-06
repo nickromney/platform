@@ -1,0 +1,96 @@
+{
+  "results": [
+    {
+      "command": "bash -lc 'set -euo pipefail; cd /Users/nickromney/Developer/personal/platform; export REPO_ROOT=$PWD; export IMAGE_CATALOG_FILE=tests/artifacts/perf/20260605T231654Z-go-apps-pass7/prebuild-dedupe-catalog.json; export CACHE_PUSH_HOST=127.0.0.1:5002; export IMAGE_NAMESPACE=platform; export TAG=latest; export FORCE_REBUILD=1; export IMAGE_BUILD_PREBUILD_COMMANDS_FILE=/dev/null; source kubernetes/workflow/image-catalog-lib.sh; source kubernetes/workflow/image-build-lib.sh; tag_exists_in_cache(){ return 1; }; docker_push_local_registry(){ :; }; docker(){ :; }; docker_build_local(){ :; }; image_build_catalog_build_loop workload workload > /tmp/prebuild-dedupe-benchmark.txt'",
+      "mean": 0.28319000668,
+      "stddev": 0.010474165011922738,
+      "median": 0.27840126928,
+      "user": 0.24272859999999996,
+      "system": 0.7890512199999999,
+      "min": 0.27285108128,
+      "max": 0.30648649828,
+      "times": [
+        0.27634562328,
+        0.28842508128,
+        0.28982941528,
+        0.29028699828,
+        0.27800491528,
+        0.27658491528,
+        0.27285108128,
+        0.27428791528,
+        0.27879762328,
+        0.30648649828
+      ],
+      "memory_usage_byte": [
+        40812544,
+        40812544,
+        41336832,
+        42090496,
+        42090496,
+        42090496,
+        43122688,
+        43122688,
+        43122688,
+        43122688
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "bash -lc 'set -euo pipefail; cd /Users/nickromney/Developer/personal/platform; export REPO_ROOT=$PWD; export IMAGE_CATALOG_FILE=tests/artifacts/perf/20260605T231654Z-go-apps-pass7/prebuild-dedupe-catalog.json; export CACHE_PUSH_HOST=127.0.0.1:5002; export IMAGE_NAMESPACE=platform; export TAG=latest; export FORCE_REBUILD=1; source kubernetes/workflow/image-catalog-lib.sh; source kubernetes/workflow/image-build-lib.sh; tag_exists_in_cache(){ return 1; }; docker_push_local_registry(){ :; }; docker(){ :; }; docker_build_local(){ :; }; image_build_catalog_build_loop workload workload > /tmp/prebuild-dedupe-benchmark.txt'",
+      "mean": 0.17296373988,
+      "stddev": 0.009441727792970494,
+      "median": 0.17123162278,
+      "user": 0.1353559,
+      "system": 0.38845472000000003,
+      "min": 0.16065812328,
+      "max": 0.19115999828000002,
+      "times": [
+        0.16282508128,
+        0.17285604028,
+        0.18024099828,
+        0.19115999828000002,
+        0.17148803928,
+        0.16914395728,
+        0.16065812328,
+        0.16696624828,
+        0.18332370628000003,
+        0.17097520628
+      ],
+      "memory_usage_byte": [
+        43122688,
+        43122688,
+        43122688,
+        43122688,
+        43122688,
+        43122688,
+        43122688,
+        43122688,
+        43122688,
+        43122688
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

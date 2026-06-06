@@ -10,6 +10,7 @@ OUTPUT_FORMAT="json"
 VARIANT="kind"
 STAGE="900"
 STATUS_SCRIPT="${PLATFORM_INVENTORY_STATUS_SCRIPT:-${REPO_ROOT}/scripts/platform-status.sh}"
+READ_MODEL_SCRIPT="${PLATFORM_INVENTORY_READ_MODEL_SCRIPT:-${REPO_ROOT}/scripts/platform-status-read-model.sh}"
 WORKFLOW_SCRIPT="${PLATFORM_INVENTORY_WORKFLOW_SCRIPT:-${REPO_ROOT}/scripts/platform-workflow.sh}"
 
 usage() {
@@ -54,21 +55,46 @@ validate_output() {
 
 build_inventory_json() {
   local status_json=""
+  local read_model_json=""
   local workflow_json=""
 
   status_json="$("${STATUS_SCRIPT}" --execute --output json)"
+  read_model_json="$(PLATFORM_STATUS_READ_MODEL_STATUS_JSON="${status_json}" PLATFORM_STATUS_READ_MODEL_STATUS_SCRIPT="${STATUS_SCRIPT}" "${READ_MODEL_SCRIPT}" --execute --output json)"
   workflow_json="$("${WORKFLOW_SCRIPT}" preview --execute --variant "${VARIANT}" --stage "${STAGE}" --action status --output json)"
 
   jq -n \
     --arg variant "${VARIANT}" \
     --arg stage "${STAGE}" \
     --argjson status "${status_json}" \
+    --argjson read_model "${read_model_json}" \
     --argjson workflow "${workflow_json}" \
-    '{
+    '
+    def inventory_variant($status_variant; $model_variant):
+      if ($model_variant == null) then
+        $status_variant
+      else
+        $status_variant + {
+          key: ($model_variant.ownership.variant // $status_variant.key),
+          path: ($model_variant.ownership.variant_path // $status_variant.path),
+          label: ($model_variant.ownership.label // $status_variant.label),
+          runtime_family: ($model_variant.ownership.runtime_family // $status_variant.runtime_family),
+          state: ($model_variant.readiness.state // $status_variant.state),
+          serving: ($model_variant.ownership.serving // $status_variant.serving),
+          runtime_present: ($model_variant.ownership.runtime_present // $status_variant.runtime_present),
+          ownership: $model_variant.ownership,
+          readiness: $model_variant.readiness,
+          blockers: (($model_variant.blockers // []) | map(.message // tostring)),
+          blocker_facts: ($model_variant.blockers // []),
+          recommended_action: ($model_variant.readiness.recommended_action // $model_variant.recommended_action),
+          actions: ($model_variant.actions // [])
+        }
+      end;
+
+    {
       schema_version: "0.1",
       variant: $variant,
       stage: $stage,
-      generated_at: $status.generated_at,
+      generated_at: ($read_model.generated_at // $status.generated_at),
       observed_live_state: true,
       terraform_truth: false,
       workflow: {
@@ -80,16 +106,21 @@ build_inventory_json() {
         effective_config: $workflow.effective_config
       },
       health_summary: {
-        overall_state: $status.overall_state,
-        active_variant: $status.active_variant,
-        active_variant_path: $status.active_variant_path
+        overall_state: ($read_model.overall_state // $status.overall_state),
+        active_variant: ($read_model.active_owner.variant // $status.active_variant),
+        active_variant_path: ($read_model.active_owner.variant_path // $status.active_variant_path)
       },
-      variants: $status.variants,
-      variants_order: $status.variants_order,
+      variants: (
+        reduce (($read_model.variants_order // $status.variants_order // [])[]) as $key ({};
+          .[$key] = inventory_variant(($status.variants[$key] // {}); ($read_model.variants[$key] // null))
+        )
+      ),
+      variants_order: ($read_model.variants_order // $status.variants_order),
       host_runtimes: $status.host_runtimes,
       host_runtimes_order: $status.host_runtimes_order,
       registry_auth: $status.registry_auth,
       registry_auth_order: $status.registry_auth_order,
+      status_read_model: $read_model,
       raw_status: $status
     }'
 }

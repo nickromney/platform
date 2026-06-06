@@ -110,7 +110,7 @@ Image preloading is explicit. The preload helper still stays opt-in:
 Kind now also has an operator-facing image distribution knob. The default is the faster Docker Desktop path:
 
 - `KIND_IMAGE_DISTRIBUTION_MODE=registry` is the default. It disables `kind load`, disables the in-cluster Actions runner path, mirrors the hot image set into the shared host registry on `127.0.0.1:5002`, and points workload manifests at `host.docker.internal:5002/...`.
-- `KIND_IMAGE_DISTRIBUTION_MODE=load` keeps the old `kind load` path.
+- `KIND_IMAGE_DISTRIBUTION_MODE=load` keeps the old `kind load` path and requires `kind` v0.32.0 or newer for the Kubernetes 1.36 node images.
 - `KIND_IMAGE_DISTRIBUTION_MODE=hybrid` does the same registry-based workload path, but also requires `KIND_BAKED_NODE_IMAGE=<image-ref>` so the stable node hot set can already be present in the custom kind node image.
 - `KIND_IMAGE_DISTRIBUTION_MODE=baked` disables `kind load` and uses `KIND_BAKED_NODE_IMAGE=<image-ref>`, while leaving the later-stage in-cluster Actions path intact.
 

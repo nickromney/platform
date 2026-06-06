@@ -349,6 +349,26 @@ EOF
   [ "${output}" = $'backend --print --execute\nbackend --print --execute\ncompose -f compose.yml --profile dev --profile uat --profile portal config -q' ]
 }
 
+@test "docker compose help does not resolve the backend helper" {
+  compose_backend_stub="${BATS_TEST_TMPDIR}/compose-backend.sh"
+  log_file="${BATS_TEST_TMPDIR}/compose-backend.log"
+
+  cat >"${compose_backend_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'backend %s\n' "\$*" >>"${log_file}"
+printf '/bin/false\n'
+EOF
+  chmod +x "${compose_backend_stub}"
+
+  run make -C "${REPO_ROOT}/docker/compose" help COMPOSE_BACKEND_SCRIPT="${compose_backend_stub}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Prerequisites:"* ]]
+  [[ "${output}" == *"Compose:"* ]]
+  [ ! -e "${log_file}" ]
+}
+
 @test "docker compose prereqs fails cleanly when the repo env file is missing" {
   missing_env="${BATS_TEST_TMPDIR}/missing.env"
 

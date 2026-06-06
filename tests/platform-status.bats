@@ -202,6 +202,36 @@ EOF
   [ "${output}" = 'idle|null|absent|absent|absent|kind,lima,slicer' ]
 }
 
+@test "platform status sources kubeconfig facts from variant contracts" {
+  variants_dir="${BATS_TEST_TMPDIR}/variants"
+  mkdir -p "${variants_dir}/kind" "${variants_dir}/lima" "${variants_dir}/slicer"
+  cat >"${variants_dir}/kind/variant.json" <<JSON
+{"id":"kind","path":"kubernetes/kind","cluster_access":{"kubeconfig_path":"${BATS_TEST_TMPDIR}/contract-kind.yaml","kubeconfig_context":"contract-kind"}}
+JSON
+  cat >"${variants_dir}/lima/variant.json" <<JSON
+{"id":"lima","path":"kubernetes/lima","cluster_access":{"kubeconfig_path":"${BATS_TEST_TMPDIR}/contract-lima.yaml","kubeconfig_context":"contract-lima"}}
+JSON
+  cat >"${variants_dir}/slicer/variant.json" <<JSON
+{"id":"slicer","path":"kubernetes/slicer","cluster_access":{"kubeconfig_path":"${BATS_TEST_TMPDIR}/contract-slicer.yaml","kubeconfig_context":"contract-slicer"}}
+JSON
+
+  run env PLATFORM_STATUS_VARIANTS_DIR="${variants_dir}" "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -r '[
+    .variants.kind.kubeconfig_path,
+    .variants.kind.kubeconfig_context,
+    .variants.lima.kubeconfig_path,
+    .variants.lima.kubeconfig_context,
+    .variants.slicer.kubeconfig_path,
+    .variants.slicer.kubeconfig_context
+  ] | join("|")' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${BATS_TEST_TMPDIR}/contract-kind.yaml|contract-kind|${BATS_TEST_TMPDIR}/contract-lima.yaml|contract-lima|${BATS_TEST_TMPDIR}/contract-slicer.yaml|contract-slicer" ]
+}
+
 @test "the reference variant owns the machine when kind is serving traffic" {
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
   export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
@@ -275,12 +305,13 @@ EOF
       (.actions | any(.id == "kind-idp-env-create" and (.command | contains("idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr")))),
       (.actions | any(.id == "kind-idp-deployments" and .command == "make -C kubernetes/kind idp-deployments")),
       (.actions | any(.id == "kind-idp-secrets" and .command == "make -C kubernetes/kind idp-secrets")),
+      (.actions | any(.id == "kind-idp-scorecards" and .command == "make -C kubernetes/kind idp-scorecards")),
       (.actions | any(.id == "kind-gitea-repo-lifecycle-demo" and (.command | contains("gitea-repo-lifecycle-demo"))))
     ] | map(tostring) | join("|")
   ' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'true|true|true|true|true' ]
+  [ "${output}" = 'true|true|true|true|true|true' ]
 }
 
 @test "platform status falls back to docker ps when docker info is unavailable" {

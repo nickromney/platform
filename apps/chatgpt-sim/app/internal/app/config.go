@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"platform.local/appconfig"
+	"platform.local/apphttp"
 	"platform.local/idpauth"
 )
 
@@ -44,21 +44,21 @@ type ConnectorConfig struct {
 }
 
 func ConfigFromEnv() Config {
-	role := appconfig.Env("ROLE", "")
+	role := apphttp.Env("ROLE", "")
 	if role == "" {
-		role = appconfig.Env("PCE_GO_APP_ROLE", "shell")
+		role = apphttp.Env("PCE_GO_APP_ROLE", "shell")
 	}
-	port := appconfig.Env("PORT", "8080")
-	publicBaseURL := appconfig.EnvURL("PUBLIC_BASE_URL", "http://localhost:"+port)
-	mcpURL := appconfig.Env("MCP_URL", "http://localhost:18082/mcp")
-	mcpInternalURL := appconfig.Env("MCP_INTERNAL_URL", "")
-	mcpConnectors := parseConnectorConfigs(appconfig.Env("MCP_CONNECTORS", ""))
-	llmURL := appconfig.Env("LLM_URL", "")
-	llmModel := appconfig.Env("LLM_MODEL", "")
-	llmMaxTokens := appconfig.EnvInt("LLM_MAX_TOKENS", 32)
-	langfuseHost := appconfig.EnvURL("LANGFUSE_HOST", "")
-	showNetworkPath := appconfig.Env("SHOW_NETWORK_PATH", "")
-	networkHops := appconfig.Env("NETWORK_HOPS", "")
+	port := apphttp.Env("PORT", "8080")
+	publicBaseURL := apphttp.EnvURL("PUBLIC_BASE_URL", "http://localhost:"+port)
+	mcpURL := apphttp.Env("MCP_URL", "http://localhost:18082/mcp")
+	mcpInternalURL := apphttp.Env("MCP_INTERNAL_URL", "")
+	mcpConnectors := parseConnectorConfigs(apphttp.Env("MCP_CONNECTORS", ""))
+	llmURL := apphttp.Env("LLM_URL", "")
+	llmModel := apphttp.Env("LLM_MODEL", "")
+	llmMaxTokens := apphttp.EnvInt("LLM_MAX_TOKENS", 32)
+	langfuseHost := apphttp.EnvURL("LANGFUSE_HOST", "")
+	showNetworkPath := apphttp.Env("SHOW_NETWORK_PATH", "")
+	networkHops := apphttp.Env("NETWORK_HOPS", "")
 	auth := idpauth.RuntimeAuthConfigFromEnv("shell")
 	return Config{
 		Role:              role,
@@ -69,12 +69,12 @@ func ConfigFromEnv() Config {
 		MCPConnectors:     mcpConnectors,
 		LLMURL:            llmURL,
 		LLMModel:          llmModel,
-		LLMTimeout:        appconfig.EnvSeconds("LLM_TIMEOUT_SECONDS", time.Second),
+		LLMTimeout:        apphttp.EnvSeconds("LLM_TIMEOUT_SECONDS", time.Second),
 		LLMMaxTokens:      llmMaxTokens,
 		LangfuseHost:      langfuseHost,
-		LangfusePublicKey: appconfig.Env("LANGFUSE_PUBLIC_KEY", ""),
-		LangfuseSecretKey: appconfig.Env("LANGFUSE_SECRET_KEY", ""),
-		LangfuseTimeout:   appconfig.EnvSeconds("LANGFUSE_TIMEOUT_SECONDS", time.Second),
+		LangfusePublicKey: apphttp.Env("LANGFUSE_PUBLIC_KEY", ""),
+		LangfuseSecretKey: apphttp.Env("LANGFUSE_SECRET_KEY", ""),
+		LangfuseTimeout:   apphttp.EnvSeconds("LANGFUSE_TIMEOUT_SECONDS", time.Second),
 		ShowNetworkPath:   showNetworkPath,
 		NetworkHops:       networkHops,
 		AuthMode:          auth.AuthMode,

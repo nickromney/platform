@@ -150,72 +150,91 @@ tracked_files() {
     -o -type f -name "${pattern}" -print
 }
 
-check_action_pins() {
-  section "GitHub Actions"
+workflow_action_refs() {
+  [[ "$#" -gt 0 ]] || return 0
 
-  local workflow_file_found=0
-  local workflow_file="" refs="" kind="" repo="" ref="" selector="" resolved="" label=""
-
-  while IFS= read -r workflow_file; do
-    [[ -n "${workflow_file}" ]] || continue
-    workflow_file_found=1
-    refs="$(
-      run_inline_python "$workflow_file" <<'PY'
+  run_inline_python "$@" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 pattern = re.compile(r'uses:\s*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^\s#]+)(?:\s*#\s*(v[^\s]+))?')
-seen = set()
-for repo, ref, selector in pattern.findall(Path(sys.argv[1]).read_text(encoding="utf-8")):
-    kind = "sha" if re.fullmatch(r"[0-9a-f]{40}", ref) else "floating"
-    item = (kind, repo, ref, selector)
-    if item in seen:
-        continue
-    seen.add(item)
-    print(f"{kind}\t{repo}\t{ref}\t{selector}")
+
+for raw_path in sys.argv[1:]:
+    workflow_file = Path(raw_path)
+    print(f"FILE\t{workflow_file}")
+    seen = set()
+    for repo, ref, selector in pattern.findall(workflow_file.read_text(encoding="utf-8")):
+        kind = "sha" if re.fullmatch(r"[0-9a-f]{40}", ref) else "floating"
+        item = (kind, repo, ref, selector)
+        if item in seen:
+            continue
+        seen.add(item)
+        print(f"REF\t{workflow_file}\t{kind}\t{repo}\t{ref}\t{selector}")
 PY
-    )"
+}
 
-    label="${workflow_file#"${REPO_ROOT}"/}"
-    if [[ -z "${refs}" ]]; then
-      warn "${label} has no external GitHub Actions"
-      continue
-    fi
+check_action_pins() {
+  section "GitHub Actions"
 
-    while IFS=$'\t' read -r kind repo ref selector; do
-      [[ -n "${repo}" ]] || continue
-      if [[ "${kind}" != "sha" ]]; then
-        fail_note "${label}: ${repo} uses floating ref '${ref}' instead of a 40-character commit SHA"
-        continue
-      fi
+  local workflow_file="" workflow_files_to_check=()
+  local row_type="" kind="" repo="" ref="" selector="" resolved="" label=""
+  local current_workflow_file="" refs_for_workflow=0
 
-      if [[ -z "${selector}" ]]; then
-        fail_note "${label}: ${repo} is pinned by SHA without a trailing '# v...' selector comment"
-        continue
-      fi
-
-      if [[ "${CHECK_VERSION_SKIP_UPSTREAM}" == "1" ]]; then
-        warn "${label}: ${repo} ${selector} upstream resolution skipped"
-        continue
-      fi
-
-      resolved="$(github_commit_sha "${repo}" "${selector}" 2>/dev/null || true)"
-      if [[ -z "${resolved}" ]]; then
-        warn "${label}: could not resolve ${repo} ${selector}"
-        continue
-      fi
-
-      if [[ "${resolved}" == "${ref}" ]]; then
-        ok "${label}: ${repo} ${selector} resolves to the pinned SHA"
-      else
-        fail_note "${label}: ${repo} ${selector} resolves to ${resolved}, but the workflow pins ${ref}"
-      fi
-    done <<< "${refs}"
+  while IFS= read -r workflow_file; do
+    [[ -n "${workflow_file}" ]] || continue
+    workflow_files_to_check+=("${workflow_file}")
   done < <(workflow_files)
 
-  if [[ "${workflow_file_found}" != "1" ]]; then
+  if [[ "${#workflow_files_to_check[@]}" -eq 0 ]]; then
     fail_note "No GitHub workflow files found to validate"
+    return
+  fi
+
+  while IFS=$'\t' read -r row_type workflow_file kind repo ref selector; do
+    case "${row_type}" in
+      FILE)
+        if [[ -n "${current_workflow_file}" && "${refs_for_workflow}" == "0" ]]; then
+          warn "${label} has no external GitHub Actions"
+        fi
+        current_workflow_file="${workflow_file}"
+        label="${workflow_file#"${REPO_ROOT}"/}"
+        refs_for_workflow=0
+        ;;
+      REF)
+        refs_for_workflow=1
+        if [[ "${kind}" != "sha" ]]; then
+          fail_note "${label}: ${repo} uses floating ref '${ref}' instead of a 40-character commit SHA"
+          continue
+        fi
+
+        if [[ -z "${selector}" ]]; then
+          fail_note "${label}: ${repo} is pinned by SHA without a trailing '# v...' selector comment"
+          continue
+        fi
+
+        if [[ "${CHECK_VERSION_SKIP_UPSTREAM}" == "1" ]]; then
+          warn "${label}: ${repo} ${selector} upstream resolution skipped"
+          continue
+        fi
+
+        resolved="$(github_commit_sha "${repo}" "${selector}" 2>/dev/null || true)"
+        if [[ -z "${resolved}" ]]; then
+          warn "${label}: could not resolve ${repo} ${selector}"
+          continue
+        fi
+
+        if [[ "${resolved}" == "${ref}" ]]; then
+          ok "${label}: ${repo} ${selector} resolves to the pinned SHA"
+        else
+          fail_note "${label}: ${repo} ${selector} resolves to ${resolved}, but the workflow pins ${ref}"
+        fi
+        ;;
+    esac
+  done < <(workflow_action_refs "${workflow_files_to_check[@]}")
+
+  if [[ -n "${current_workflow_file}" && "${refs_for_workflow}" == "0" ]]; then
+    warn "${label} has no external GitHub Actions"
   fi
 }
 

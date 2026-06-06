@@ -1,0 +1,12 @@
+55cfb7effc9a3a48651694308ba84c569f9b803e1aaefa69ff06faa7cbe0aa8b  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/apps-help-golden.txt
+55cfb7effc9a3a48651694308ba84c569f9b803e1aaefa69ff06faa7cbe0aa8b  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/apps-help-after.txt
+064915c984a752bfe662d3dc7b6879c843895885ee1c1ccd21e5a267280f329e  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/compose-help-golden.txt
+064915c984a752bfe662d3dc7b6879c843895885ee1c1ccd21e5a267280f329e  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/compose-help-after.txt
+5a217eb777cabac408046da096c0985c8452f84ce886867bc276c095f7c80109  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/kind-help-golden.txt
+5a217eb777cabac408046da096c0985c8452f84ce886867bc276c095f7c80109  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/kind-help-after.txt
+d319b504cbf5f3e22b7d817580f4eb8168e4f374134e3b0582cf854fd847837f  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/lima-help-golden.txt
+d319b504cbf5f3e22b7d817580f4eb8168e4f374134e3b0582cf854fd847837f  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/lima-help-after.txt
+9682f27a5c7ffdc3ef17fac7ec4ef10f439d0e00722d15be252ef7f8c44e3034  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/root-default-golden.txt
+9682f27a5c7ffdc3ef17fac7ec4ef10f439d0e00722d15be252ef7f8c44e3034  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/root-default-after.txt
+20824ce5b35bfe51717830f4067c73a04972f33b7014b1bb9bbde371ac114c3c  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/slicer-help-golden.txt
+20824ce5b35bfe51717830f4067c73a04972f33b7014b1bb9bbde371ac114c3c  tests/artifacts/perf/20260605T233115Z-make-surfaces-pass9/slicer-help-after.txt

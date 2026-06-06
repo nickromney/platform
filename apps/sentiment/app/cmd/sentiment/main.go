@@ -4,14 +4,13 @@ import (
 	"log"
 
 	"platform.local/appconfig"
-	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idpauth"
 	"platform.local/sentiment/internal/app"
 )
 
 func main() {
-	if apphealth.HandleHealthcheckCommand("8080", "/health") {
+	if apphttp.HandleHealthcheckCommand("8080", "/health") {
 		return
 	}
 

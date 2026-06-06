@@ -1,5 +1,17 @@
 export const DEFAULT_IDP_API_BASE_URL = "https://portal-api.127.0.0.1.sslip.io"
 
+export const IDP_API_PATHS = {
+  runtime: "/api/v1/runtime",
+  status: "/api/v1/status",
+  catalogApps: "/api/v1/catalog/apps",
+  deployments: "/api/v1/deployments",
+  secrets: "/api/v1/secrets",
+  scorecards: "/api/v1/scorecards",
+  actions: "/api/v1/actions",
+  environments: "/api/v1/environments",
+  deploymentPromote: "/api/v1/deployments/promote",
+} as const
+
 export type IdpEnvironmentRequest = {
   runtime?: string
   app: string
@@ -23,6 +35,8 @@ export type IdpRuntime = {
     description: string
   }
 }
+
+export type IdpStatus = Record<string, unknown>
 
 export type IdpWorkflowResponse = {
   dry_run: boolean
@@ -52,19 +66,23 @@ export class IdpClient {
   }
 
   async getRuntime(): Promise<IdpRuntime> {
-    return this.request<IdpRuntime>("/api/v1/runtime")
+    return this.request<IdpRuntime>(IDP_API_PATHS.runtime)
+  }
+
+  async getStatus(): Promise<IdpStatus> {
+    return this.request<IdpStatus>(IDP_API_PATHS.status)
   }
 
   async listApps(): Promise<IdpCatalog> {
-    return this.request<IdpCatalog>("/api/v1/catalog/apps")
+    return this.request<IdpCatalog>(IDP_API_PATHS.catalogApps)
   }
 
   async getApp(app: string): Promise<IdpApplication> {
-    return this.request<IdpApplication>(`/api/v1/catalog/apps/${encodeURIComponent(app)}`)
+    return this.request<IdpApplication>(`${IDP_API_PATHS.catalogApps}/${encodeURIComponent(app)}`)
   }
 
   async createEnvironment(request: IdpEnvironmentRequest, dryRun = true): Promise<IdpWorkflowResponse> {
-    return this.request<IdpWorkflowResponse>(`/api/v1/environments?dry_run=${String(dryRun)}`, {
+    return this.request<IdpWorkflowResponse>(`${IDP_API_PATHS.environments}?dry_run=${String(dryRun)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ runtime: "kind", ...request }),
@@ -72,7 +90,7 @@ export class IdpClient {
   }
 
   async promoteDeployment(request: IdpDeploymentRequest, dryRun = true): Promise<IdpWorkflowResponse> {
-    return this.request<IdpWorkflowResponse>(`/api/v1/deployments/promote?dry_run=${String(dryRun)}`, {
+    return this.request<IdpWorkflowResponse>(`${IDP_API_PATHS.deploymentPromote}?dry_run=${String(dryRun)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ runtime: "kind", ...request }),

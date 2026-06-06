@@ -1,0 +1,4 @@
+CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH:-arm64} go build -trimpath -ldflags="-s -w" -o .run/sentiment ./cmd/sentiment
+/opt/homebrew/Cellar/go/1.26.4/libexec/src/runtime/cgroup_linux.go:8:2: package internal/runtime/cgroup is not in std (/opt/homebrew/Cellar/go/1.26.4/libexec/src/internal/runtime/cgroup)
+/opt/homebrew/Cellar/go/1.26.4/libexec/src/runtime/netpoll_epoll.go:11:2: package internal/runtime/syscall/linux is not in std (/opt/homebrew/Cellar/go/1.26.4/libexec/src/internal/runtime/syscall/linux)
+make: *** [build-linux] Error 1

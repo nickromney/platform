@@ -34,7 +34,8 @@ EOF
 @test "check-provider-version fetches provider versions with bounded concurrency" {
   local stack_dir="${BATS_TEST_TMPDIR}/stack"
   local stub_bin="${BATS_TEST_TMPDIR}/bin"
-  mkdir -p "${stack_dir}" "${stub_bin}"
+  local cache_dir="${BATS_TEST_TMPDIR}/cache"
+  mkdir -p "${stack_dir}" "${stub_bin}" "${cache_dir}"
 
   cat >"${stack_dir}/.terraform.lock.hcl" <<'EOF'
 provider "registry.terraform.io/hashicorp/aws" {
@@ -65,7 +66,7 @@ esac
 EOF
   chmod +x "${stub_bin}/curl"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_PARALLEL_JOBS=2 PATH='${stub_bin}:'\"\$PATH\"; start=\$(date +%s); '${SCRIPT}' --execute >/tmp/check-provider-version.out; elapsed=\$(( \$(date +%s) - start )); cat /tmp/check-provider-version.out; printf 'elapsed=%s\n' \"\${elapsed}\""
+  run bash -lc "export STACK_DIR='${stack_dir}' CHECK_PROVIDER_VERSION_CACHE_DIR='${cache_dir}' PLATFORM_PARALLEL_JOBS=2 PATH='${stub_bin}:'\"\$PATH\"; start=\$(date +%s); '${SCRIPT}' --execute >/tmp/check-provider-version.out; elapsed=\$(( \$(date +%s) - start )); cat /tmp/check-provider-version.out; printf 'elapsed=%s\n' \"\${elapsed}\""
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ hashicorp/aws ]]

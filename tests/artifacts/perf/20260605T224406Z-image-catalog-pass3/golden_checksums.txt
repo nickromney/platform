@@ -1,0 +1,2 @@
+6ff6565fac10c38d86f32b8b06bf6d853b10d7dcff195b15f360616c2199edcc  tests/artifacts/perf/20260605T224406Z-image-catalog-pass3/operator-overrides-golden.tfvars
+fc6be01358e7d5a710e8de4dd02ac20d13df064288993799b3ce12405f67308d  tests/artifacts/perf/20260605T224406Z-image-catalog-pass3/render-output-golden.txt

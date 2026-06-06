@@ -1,0 +1,3 @@
+3fc7038a9e9a89e743add59beaf98b46bebd8944a4916b037bd1d24b5581fba1  tests/artifacts/perf/20260605T224938Z-status-inventory-pass4/inventory-golden.normalized.json
+953e50de10ba2308589757bf3fbd57ec4f97ad8775c03c7f4477df3218a2967d  tests/artifacts/perf/20260605T224938Z-status-inventory-pass4/read-model-golden.normalized.json
+361b34bc40b17cc2da077dfd8150231a8024b43e478a333227a8430269a039dc  tests/artifacts/perf/20260605T224938Z-status-inventory-pass4/status-golden.normalized.json

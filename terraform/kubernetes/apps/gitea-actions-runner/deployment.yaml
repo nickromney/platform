@@ -19,9 +19,9 @@ spec:
       serviceAccountName: act-runner
       initContainers:
         # Download Docker CLI and buildx plugin for the runner to use
-        # Pinned to 29.4.1-cli for reproducibility (buildx at /usr/local/libexec/docker/cli-plugins/)
+        # Pinned to 29.4.3-cli for reproducibility (buildx at /usr/local/libexec/docker/cli-plugins/)
         - name: install-docker-cli
-          image: docker:29.4.1-cli
+          image: docker:29.4.3-cli
           command:
             - sh
             - -c
@@ -45,7 +45,7 @@ spec:
         # It carries a kubectl binary that review-environment workflows need
         # for scoped Deployment/Service/HTTPRoute/CiliumNetworkPolicy updates.
         - name: install-kubectl
-          image: kindest/node:v1.35.1
+          image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
           command:
             - sh
             - -c

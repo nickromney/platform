@@ -68,6 +68,16 @@ cat <<'JSON'
       "dangerous": false
     },
     {
+      "id": "kind-stop",
+      "label": "Stop kind",
+      "variant": "kind",
+      "variant_path": "kubernetes/kind",
+      "enabled": true,
+      "reason": null,
+      "command": "make -C kubernetes/kind stop-kind",
+      "dangerous": false
+    },
+    {
       "id": "lima-status",
       "label": "Kubernetes Lima status",
       "variant": "lima",
@@ -114,15 +124,24 @@ EOF
       (.variants.kind.readiness.checks.kind_available | tostring),
       (.variants.lima.ownership.active_owner | tostring),
       (.variants.lima.readiness.ready | tostring),
+      (.variants.lima.readiness.blocker_count | tostring),
+      .variants.lima.readiness.blocking_owners[0],
+      .variants.lima.readiness.recommended_action.command,
       .variants.lima.blockers[0].claim,
       .variants.lima.blockers[0].blocking_owner,
+      .variants.lima.blockers[0].recommended_action.command,
       .variants.lima.recommended_action.command,
       (.variants.lima.actions | length | tostring)
     ] | join("|")
   ' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "0.1|platform-status|true|false|kubernetes/kind|true|true|true|false|false|shared host ports|kubernetes/kind|make -C kubernetes/lima status|2" ]
+  [ "${output}" = "0.1|platform-status|true|false|kubernetes/kind|true|true|true|false|false|1|kubernetes/kind|make -C kubernetes/kind stop-kind|shared host ports|kubernetes/kind|make -C kubernetes/kind stop-kind|make -C kubernetes/lima status|2" ]
+
+  run "${SCRIPT}" --execute --output text
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kubernetes/lima: blocked blocker_count=1 recommended=make -C kubernetes/kind stop-kind"* ]]
 }
 
 @test "status read model reports missing status fields without unknown placeholders" {

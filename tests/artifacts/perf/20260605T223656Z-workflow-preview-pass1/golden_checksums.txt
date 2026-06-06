@@ -1,0 +1,2 @@
+8fbfb7121bf7a60311ef7584d3058709b2d1417b5229067c9a8364ed013c6daa  tests/artifacts/perf/20260605T223656Z-workflow-preview-pass1/golden-output.json
+174ea404da5f7150fca209b73551067dc2454e0ef4b12e16424aa693d956c4a5  .run/operator/kind-stage900.tfvars

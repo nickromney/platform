@@ -1,0 +1,50 @@
+{
+  "results": [
+    {
+      "command": "KIND_OPERATOR_OVERRIDES_FILE=/tmp/operator-overrides-benchmark.tfvars KIND_IMAGE_DISTRIBUTION_MODE=registry KIND_ENABLE_BACKSTAGE=on kubernetes/kind/scripts/render-operator-overrides.sh --execute > /tmp/operator-overrides-benchmark.txt",
+      "mean": 4.1857860433,
+      "stddev": 0.21825059189605567,
+      "median": 4.1471673888,
+      "user": 1.4934385,
+      "system": 0.4996863199999999,
+      "min": 3.9429498263,
+      "max": 4.7075390353,
+      "times": [
+        4.3352214513,
+        4.1372587012999995,
+        4.2057047853,
+        4.2540709933,
+        4.7075390353,
+        4.1570760763,
+        3.9429498263,
+        4.0118023683,
+        4.026072743299999,
+        4.0801644523
+      ],
+      "memory_usage_byte": [
+        7241728,
+        7241728,
+        7258112,
+        7258112,
+        7258112,
+        7258112,
+        7258112,
+        7258112,
+        7258112,
+        7258112
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

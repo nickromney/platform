@@ -37,10 +37,14 @@ case "$1" in
     else
       command="make -C kubernetes/${variant} ${stage} ${action}${auto_approve}"
     fi
+    workflow_execute="core execute ${variant} ${stage} ${action}${auto_approve}"
+    workflow_dry_run="core dry-run ${variant} ${stage} ${action}${auto_approve}"
+    workflow_preview_json="core preview ${variant} ${stage} ${action}${auto_approve}"
+    readiness="make -C kubernetes/${variant} readiness"
     if [[ "$action" == "reset" || "$action" == "state-reset" || "$action" == "status" || "$action" == "show-urls" ]]; then
-      printf '{"variant":{"id":"%s","path":"kubernetes/%s","class":"local-created-cluster","lifecycle_mode":"create","state_scope":"single-local"},"stage":"%s","stage_metadata":{"context":"platform-stack"},"contexts":[{"id":"local-substrate","label":"Local substrate"},{"id":"platform-stack","label":"Platform stack"}],"contract_requirements":[{"id":"cluster-access","label":"Cluster access"},{"id":"identity","label":"Identity"}],"effective_config":{"source_precedence":["stage_baseline","variant_defaults","context_defaults","preset_overlays","custom_overrides"]},"action":"%s","command":"%s"}\\n' "$variant" "$variant" "$stage" "$action" "$command"
+      printf '{"variant":{"id":"%s","path":"kubernetes/%s","class":"local-created-cluster","lifecycle_mode":"create","state_scope":"single-local"},"stage":"%s","stage_metadata":{"context":"platform-stack"},"contexts":[{"id":"local-substrate","label":"Local substrate"},{"id":"platform-stack","label":"Platform stack"}],"contract_requirements":[{"id":"cluster-access","label":"Cluster access"},{"id":"identity","label":"Identity"}],"effective_config":{"source_precedence":["stage_baseline","variant_defaults","context_defaults","preset_overlays","custom_overrides"]},"action":"%s","command":"%s","command_preview":{"make":"%s","workflow_execute":"%s","workflow_dry_run":"%s","workflow_preview_json":"%s","readiness":"%s"}}\\n' "$variant" "$variant" "$stage" "$action" "$command" "$command" "$workflow_execute" "$workflow_dry_run" "$workflow_preview_json" "$readiness"
     else
-      printf '{"variant":{"id":"%s","path":"kubernetes/%s","class":"local-created-cluster","lifecycle_mode":"create","state_scope":"single-local"},"stage":"%s","stage_metadata":{"context":"platform-stack"},"contexts":[{"id":"local-substrate","label":"Local substrate"},{"id":"platform-stack","label":"Platform stack"}],"contract_requirements":[{"id":"cluster-access","label":"Cluster access"},{"id":"identity","label":"Identity"}],"effective_config":{"source_precedence":["stage_baseline","variant_defaults","context_defaults","preset_overlays","custom_overrides"]},"action":"%s","command":"%s"}\\n' "$variant" "$variant" "$stage" "$action" "$command"
+      printf '{"variant":{"id":"%s","path":"kubernetes/%s","class":"local-created-cluster","lifecycle_mode":"create","state_scope":"single-local"},"stage":"%s","stage_metadata":{"context":"platform-stack"},"contexts":[{"id":"local-substrate","label":"Local substrate"},{"id":"platform-stack","label":"Platform stack"}],"contract_requirements":[{"id":"cluster-access","label":"Cluster access"},{"id":"identity","label":"Identity"}],"effective_config":{"source_precedence":["stage_baseline","variant_defaults","context_defaults","preset_overlays","custom_overrides"]},"action":"%s","command":"%s","command_preview":{"make":"%s","workflow_execute":"%s","workflow_dry_run":"%s","workflow_preview_json":"%s","readiness":"%s"}}\\n' "$variant" "$variant" "$stage" "$action" "$command" "$command" "$workflow_execute" "$workflow_dry_run" "$workflow_preview_json" "$readiness"
     fi
     ;;
   apply)
@@ -55,7 +59,7 @@ esac
     inventory.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-printf '{"schema_version":"0.1","variant":"kind","stage":"900","generated_at":"2026-05-03T12:00:00Z","health_summary":{"overall_state":"ready","active_variant":"kind"},"variants_order":["kind","lima","slicer"],"variants":{"kind":{"state":"ready","blockers":[]},"lima":{"state":"absent","blockers":["Lima stopped"]},"slicer":{"state":"absent","blockers":[]}}}\\n'
+printf '{"schema_version":"0.1","variant":"kind","stage":"900","generated_at":"2026-05-03T12:00:00Z","health_summary":{"overall_state":"ready","active_variant":"kind"},"variants_order":["kind","lima","slicer"],"variants":{"kind":{"state":"ready","blockers":[]},"lima":{"state":"absent","blockers":["shared host ports claimed by kubernetes/kind"],"readiness":{"blocker_count":1,"recommended_action":{"command":"make -C kubernetes/kind stop-kind"}},"blocker_facts":[{"message":"shared host ports claimed by kubernetes/kind","recommended_action":{"command":"make -C kubernetes/kind stop-kind"}}]},"slicer":{"state":"absent","blockers":[]}}}\\n'
 """,
         encoding="utf-8",
     )
@@ -240,10 +244,11 @@ def test_preview_fragment_uses_shared_workflow_script(tmp_path: Path) -> None:
     assert "Script inputs" in response.text
     assert "showCommandTab('makefile')" in response.text
     assert "showCommandTab('script')" in response.text
-    assert "scripts/platform-workflow.sh apply --execute --variant kind --stage 500 --action apply --auto-approve" in response.text
+    assert "core execute kind 500 apply AUTO_APPROVE=1" in response.text
     assert "CI step" not in response.text
     assert "set -euo pipefail" not in response.text
     assert "Dry-run uses" in response.text
+    assert "core dry-run kind 500 apply AUTO_APPROVE=1" in response.text
     assert "No state lock" in response.text
     assert "Checked at execution" in response.text
     assert 'id="history"' in response.text
@@ -310,7 +315,8 @@ def test_inventory_fragment_uses_read_model_command(tmp_path: Path) -> None:
     assert "bun" in response.text
     assert "Overall <strong>ready</strong>" in response.text
     assert "Active variant <strong>kind</strong>" in response.text
-    assert "Lima stopped" in response.text
+    assert "shared host ports claimed by kubernetes/kind" in response.text
+    assert "make -C kubernetes/kind stop-kind" in response.text
 
 
 def test_run_fragment_polls_job_and_offers_next_actions(tmp_path: Path) -> None:

@@ -97,6 +97,42 @@ JSON
   [ "${status}" -eq 0 ]
 }
 
+@test "IDP scorecard shell read model includes catalog readiness evidence" {
+  fixture_catalog="${BATS_TEST_TMPDIR}/platform-apps.json"
+  cat >"${fixture_catalog}" <<'JSON'
+{
+  "applications": [
+    {
+      "name": "fixture-service",
+      "owner": "team-platform",
+      "deployment": {"controller": "argocd", "strategy": "gitops"},
+      "environments": [{"name": "dev", "namespace": "dev", "rbac": {"group": "app-fixture-dev"}}],
+      "secrets": [],
+      "scorecard": {
+        "runtime_profile": "restricted",
+        "has_health_endpoint": true,
+        "has_network_policy": true,
+        "has_owner": false,
+        "tier": "gold"
+      }
+    }
+  ]
+}
+JSON
+
+  run env PLATFORM_APP_CATALOG="${fixture_catalog}" \
+    "${REPO_ROOT}/terraform/kubernetes/scripts/idp-scorecards.sh" --execute --format json
+
+  [ "${status}" -eq 0 ]
+  run jq -e '
+    .schema_version == "platform.idp.scorecard-read-model/v1" and
+    all(.scorecards[]; has("app") and has("runtime_profile") and has("has_health_endpoint") and has("has_network_policy") and has("has_owner")) and
+    any(.scorecards[]; .app == "fixture-service" and .runtime_profile == "restricted" and .has_health_endpoint == true and .has_network_policy == true and .has_owner == true and .tier == "gold")
+  ' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "identity and access edge contract exposes OIDC RBAC and API audience facts" {
   jq_path="$(command -v jq)"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -851,7 +887,7 @@ assert match, "missing oauth2_proxy_session_store_image variable"
 default_match = re.search(r'default\s+=\s+"([^"]+)"', match.group("body"))
 assert default_match, "missing oauth2_proxy_session_store_image default"
 
-expected = "ecr-public.aws.com/docker/library/redis:8.2.3-alpine"
+expected = "ecr-public.aws.com/docker/library/redis:8.2.7-alpine"
 image = default_match.group(1)
 assert image == expected, image
 assert '"ecr-public.aws.com/*"' in policy, "Kyverno policy must approve the ECR Public preload source"
@@ -882,6 +918,7 @@ PY
   [[ "${output}" == *"make idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr"* ]]
   [[ "${output}" == *"make idp-deployments"* ]]
   [[ "${output}" == *"make idp-secrets"* ]]
+  [[ "${output}" == *"make idp-scorecards"* ]]
 
   run make -C "${REPO_ROOT}/kubernetes/kind" idp-catalog DRY_RUN=1
   [ "${status}" -eq 0 ]

@@ -54,7 +54,7 @@ assert_image_source() {
 }
 
 @test "subnetcalc Go runtime image stays package-manager-free" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 import os
 from pathlib import Path
 
@@ -72,7 +72,7 @@ PY
 }
 
 @test "APIM simulator image follows the Go single-binary runtime contract" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 import os
 from pathlib import Path
 
@@ -89,7 +89,7 @@ PY
 }
 
 @test "lightweight Go app images avoid package manager runtimes" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 import os
 from pathlib import Path
 
@@ -106,7 +106,7 @@ PY
 }
 
 @test "local Go app runtime binaries are owned by the non-root runtime user" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 import os
 from pathlib import Path
 
@@ -123,7 +123,7 @@ PY
 }
 
 @test "local Go app runtime images use writable temp home for the non-root user" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 import os
 from pathlib import Path
 
@@ -140,7 +140,7 @@ PY
 }
 
 @test "docker optimization tests share Go app Dockerfile runtime helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 import os
 from pathlib import Path
 
@@ -176,7 +176,7 @@ PY
 }
 
 @test "local Go app Makefiles create their binary output directory" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -193,7 +193,7 @@ PY
 }
 
 @test "local Go app Makefiles build trimmed stripped binaries by default" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -210,7 +210,7 @@ PY
 }
 
 @test "local Go app Makefiles share the Linux binary build contract" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -227,7 +227,7 @@ PY
 }
 
 @test "local Go app Makefiles expose help for focused workflows" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -244,7 +244,7 @@ PY
 }
 
 @test "local Go app Makefiles expose clean for generated run artifacts" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -261,7 +261,7 @@ PY
 }
 
 @test "docker optimization tests share local Go app Makefile workflow helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -297,7 +297,7 @@ PY
 }
 
 @test "shared app module Makefiles expose focused help" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -318,7 +318,7 @@ PY
 }
 
 @test "docker optimization tests share shared app module Makefile helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -356,7 +356,7 @@ PY
 }
 
 @test "browser app js-check targets cover shipped vanilla web assets" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import browser_app_js_check_asset_contract_violations
@@ -373,7 +373,7 @@ PY
 }
 
 @test "docker optimization tests share browser app js-check asset helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import browser_app_js_check_asset_contract_violations
@@ -406,7 +406,7 @@ PY
 }
 
 @test "local Go app commands use the shared hardened HTTP server helper" {
-	run uv run --isolated python - <<'PY'
+	run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import hardened_go_command_http_contract_violations
@@ -422,7 +422,7 @@ PY
 }
 
 @test "Go apps decode upstream JSON through shared apphttp helper" {
-	run uv run --isolated python - <<'PY'
+	run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import go_app_upstream_json_decode_contract_violations
@@ -438,7 +438,7 @@ PY
 }
 
 @test "docker optimization tests share hardened Go command HTTP helpers" {
-	run uv run --isolated python - <<'PY'
+	run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import hardened_go_command_http_contract_violations, go_app_upstream_json_decode_contract_violations
@@ -475,7 +475,7 @@ PY
 }
 
 @test "compose files harden additional subnetcalc runtime services" {
-	run uv run --isolated --with pyyaml python - <<'PY'
+	run python3 - <<'PY'
 from __future__ import annotations
 
 import os
@@ -499,7 +499,7 @@ PY
 }
 
 @test "docker optimization tests share additional subnetcalc compose hardening helpers" {
-	run uv run --isolated --with pyyaml python - <<'PY'
+	run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import additional_subnetcalc_compose_hardening_contract_violations
@@ -532,7 +532,7 @@ PY
 }
 
 @test "docker build audit script captures logs sizes and warnings" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from __future__ import annotations
 
 import os
@@ -552,7 +552,7 @@ PY
 }
 
 @test "docker optimization tests share docker build audit tooling helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import docker_build_audit_tooling_contract_violations
@@ -584,7 +584,7 @@ PY
 }
 
 @test "grafana plugin image build uses a host-verified archive instead of downloading in Dockerfile" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from __future__ import annotations
 
 import os
@@ -604,7 +604,7 @@ PY
 }
 
 @test "docker optimization tests share grafana plugin archive mirroring helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import grafana_plugin_archive_mirroring_contract_violations
@@ -636,7 +636,7 @@ PY
 }
 
 @test "local platform image build and sync contracts include IDP images" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from __future__ import annotations
 
 import os
@@ -656,7 +656,7 @@ PY
 }
 
 @test "docker optimization tests share local platform image sync helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import local_platform_image_sync_contract_violations
@@ -688,7 +688,7 @@ PY
 }
 
 @test "local platform IDP image cache keys include source fingerprints" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -706,7 +706,7 @@ PY
 }
 
 @test "docker optimization tests share local platform source fingerprint cache helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import local_platform_source_fingerprint_cache_contract_violations
@@ -738,7 +738,7 @@ PY
 }
 
 @test "local Go workload image cache keys include embedded frontend sources" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -756,7 +756,7 @@ PY
 }
 
 @test "image catalog shared source fingerprints match local Go module imports" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -773,7 +773,7 @@ PY
 }
 
 @test "docker optimization tests share local Go workload source fingerprint helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -808,7 +808,7 @@ PY
 }
 
 @test "image catalog owns local platform build specs" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -826,7 +826,7 @@ PY
 }
 
 @test "docker optimization tests share local platform image build spec helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -861,7 +861,7 @@ PY
 }
 
 @test "image catalog owns local workload build specs for variant builders" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -879,7 +879,7 @@ PY
 }
 
 @test "docker optimization tests share local workload image build spec helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -914,7 +914,7 @@ PY
 }
 
 @test "image catalog owns Grafana VictoriaLogs plugin image build inputs" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -932,7 +932,7 @@ PY
 }
 
 @test "docker optimization tests share Grafana plugin catalog build input helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import grafana_plugin_catalog_build_input_contract_violations
@@ -965,7 +965,7 @@ PY
 }
 
 @test "image catalog entries declare version-check policy" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -987,7 +987,7 @@ PY
 }
 
 @test "docker optimization tests share image catalog version-check helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import image_catalog_version_check_policy_contract_violations
@@ -1020,7 +1020,7 @@ PY
 }
 
 @test "Lima and Slicer external image refs match the image catalog" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -1038,7 +1038,7 @@ PY
 }
 
 @test "docker optimization tests share image catalog target ref helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import image_catalog_target_ref_contract_violations
@@ -1070,7 +1070,7 @@ PY
 }
 
 @test "image catalog renders target tfvars external image projection" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -1088,7 +1088,7 @@ PY
 }
 
 @test "docker optimization tests share image catalog target tfvars projection helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import image_catalog_target_tfvars_projection_contract_violations
@@ -1121,7 +1121,7 @@ PY
 }
 
 @test "local platform IDP cache hits are not invalidated by unrelated git commits" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -1139,7 +1139,7 @@ PY
 }
 
 @test "docker optimization tests share local platform cache-hit helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import local_platform_cache_hit_contract_violations
@@ -1171,7 +1171,7 @@ PY
 }
 
 @test "image catalog shared image builder adapter owns variant build mechanics" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -1189,7 +1189,7 @@ PY
 }
 
 @test "docker optimization tests share image builder adapter helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import image_builder_adapter_contract_violations
@@ -1221,7 +1221,7 @@ PY
 }
 
 @test "image catalog context adapter owns generated Backstage build context" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -1239,7 +1239,7 @@ PY
 }
 
 @test "docker optimization tests share image catalog context adapter helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import image_catalog_context_adapter_contract_violations
@@ -1311,8 +1311,70 @@ PY
   [[ "${output}" == *"validated generated Backstage Docker context"* ]]
 }
 
+@test "image build prebuild hooks run once for identical commands" {
+  catalog="${BATS_TEST_TMPDIR}/image-catalog.json"
+  prebuild_log="${BATS_TEST_TMPDIR}/prebuild.log"
+  build_log="${BATS_TEST_TMPDIR}/build.log"
+
+  cat >"${catalog}" <<JSON
+{
+  "namespace": "platform",
+  "platform_images": [],
+  "workload_images": [
+    {
+      "id": "first",
+      "image_name": "first",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "Dockerfile",
+        "prebuild": "printf '%s\\\\n' prebuild >> \\"${prebuild_log}\\""
+      }
+    },
+    {
+      "id": "second",
+      "image_name": "second",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": ".",
+        "dockerfile": "Dockerfile",
+        "prebuild": "printf '%s\\\\n' prebuild >> \\"${prebuild_log}\\""
+      }
+    }
+  ]
+}
+JSON
+
+  touch "${BATS_TEST_TMPDIR}/Dockerfile"
+
+  run bash -lc "
+    set -euo pipefail
+    export REPO_ROOT='${BATS_TEST_TMPDIR}'
+    export IMAGE_CATALOG_FILE='${catalog}'
+    export CACHE_PUSH_HOST=127.0.0.1:5002
+    export IMAGE_NAMESPACE=platform
+    export TAG=latest
+    export FORCE_REBUILD=1
+    source '${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh'
+    source '${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh'
+
+    tag_exists_in_cache() { return 1; }
+    docker_push_local_registry() { :; }
+    docker() { :; }
+    docker_build_local() { printf '%s\n' \"\$*\" >>'${build_log}'; }
+
+    image_build_catalog_build_loop workload workload
+  "
+
+  [ "${status}" -eq 0 ]
+  prebuild_count="$(wc -l <"${prebuild_log}" | tr -d ' ')"
+  build_count="$(wc -l <"${build_log}" | tr -d ' ')"
+  [ "${prebuild_count}" -eq 1 ]
+  [ "${build_count}" -eq 2 ]
+}
+
 @test "platform MCP Docker image uses the Go single-binary runtime" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 import os
 
@@ -1336,7 +1398,7 @@ PY
 }
 
 @test "docker optimization tests share platform MCP runtime helpers" {
-  run uv run --isolated python - <<'PY'
+  run python3 - <<'PY'
 from pathlib import Path
 
 from tests.app_contracts import go_app_dockerfile_runtime_contract_violations, go_app_makefile_workflow_contract_violations

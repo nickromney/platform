@@ -1,0 +1,104 @@
+kind demo (Docker + kind + Cilium + Argo CD + Gitea + Grafana/Prometheus/VictoriaLogs)
+
+Workflow syntax:
+  make 100 apply
+  make 900 plan
+  make 920 plan
+  make 900 apply AUTO_APPROVE=1
+  make 920 apply AUTO_APPROVE=1
+
+Accepted variants:
+  make apply 100
+  make kind 100 apply
+  make 900 check-security
+
+Targets (workflow syntax above is preferred):
+  make apply        900|920 [AUTO_APPROVE=1]
+  make audit-bootstrap                         Post-bootstrap audit: apps, pods, events, restarts, previous logs
+  make build-local-platform-images             Build host-side platform shortcut images into 127.0.0.1:5002
+  make build-local-workload-images             Build host-side workload shortcut images into 127.0.0.1:5002
+  make check-app  APP=grafana [EXTENDED=1]
+  make check-gateway-stack                      Gateway CRDs, controller, routes, and control-plane signals
+  make check-gateway-urls
+  make check-health
+  make check-lima-stopped
+  make check-provider-version [CHECK_VERSION_FORMAT=text|json]
+  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i
+  make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity
+  make check-slicer-stopped
+  make check-sso
+  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)
+  make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]
+  make check-stage-monotonicity
+  make check-version [CHECK_VERSION_FORMAT=text|json] [CHECK_VERSION_INCLUDE_CANARY=1] [CHECK_VERSION_INCLUDE_ALPHA=1] [CHECK_VERSION_INCLUDE_PRERELEASE=1]
+  make discover-images                          Dump images from running cluster
+  make docker-health
+  make docker-prune-estimate                   Estimate reclaimable space for docker builder prune -af and docker system prune -af
+  make docker-safe-clean [AUTO_APPROVE=1]      Preview or run conservative Docker cleanup that preserves the current kind cluster
+  make env                                     Show local tool versions + Docker daemon status
+  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002
+  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo
+  make gitea-repo-lifecycle-demo [REPO_NAME=chatgpt-sim] [DRY_RUN=1]
+  make idp-catalog                              Show the local IDP service catalog
+  make idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr [DRY_RUN=1]
+  make idp-deployments                          Show the app/environment deployment read model
+  make idp-secrets                              Show app secret bindings and rotation posture
+  make idp-scorecards                           Show app readiness and security scorecards
+  make idp-api                                  Start or preview the Go IDP core
+  make backstage                                Start or preview the Backstage developer portal
+  make idp-sdk                                  Generate or preview the IDP SDK
+  make idp-mcp                                  Start or preview the IDP MCP server
+  make init
+  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory
+  make merge-default-kubeconfig
+  make plan         900
+  make preload-images                           Pull + load images into kind
+  make preload-images-pull-only                 Warm Docker cache only
+  make prereqs
+  make reset        [AUTO_APPROVE=1]
+  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only
+  make show-urls
+  make sync-image-cache                        Mirror the filtered preload image set into the shared host registry
+  make status
+  make start                                   Alias for start-kind
+  make start-kind
+  make stop                                    Alias for stop-kind
+  make stop-kind
+  make test
+  make test-idempotence STAGE=100 [DRY_RUN=1]
+
+Stages:
+  100 - cluster available
+  200 - cilium
+  300 - hubble
+  400 - argocd core
+  500 - gitea + full argocd controllers
+  600 - policies
+  700 - app repos
+  800 - observability
+  900 - sso
+  920 - langfuse
+
+Stage examples:
+  make 100 plan
+  make 900 apply AUTO_APPROVE=1
+  make 900 check-security
+
+Default kubeconfigs:
+  kind -> ~/.kube/kind-kind-local.yaml (split by default; merge explicitly into ~/.kube/config if needed)
+
+Host runtime:
+  macOS -> Docker Desktop
+  Linux -> Docker Engine or Docker Desktop
+
+Local helper modes:
+  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)
+  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge ~/.kube/kind-kind-local.yaml into ~/.kube/config (default: 0)
+  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)
+  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)
+  KIND_BAKED_NODE_IMAGE=<image-ref>                    -> required for KIND_IMAGE_DISTRIBUTION_MODE=hybrid|baked
+  KIND_ENABLE_BACKSTAGE=auto|on|off                    -> Backstage portal gate (auto requires >=10GiB Docker memory)
+  CHECK_VERSION_FORMAT=text|json                       -> render version audits as human text or machine-readable JSON (default: text)
+  OIDC_RECOVERY_FORMAT=text|json                       -> render the OIDC recovery exercise as human text or machine-readable JSON (default: text)
+  OIDC_RECOVERY_FORCE_MODE=nginx-rollout               -> controlled perturbation used to force the explicit recovery branch (default: nginx-rollout)
+  PLATFORM_PROFILE_MODE=off|on|trace                   -> capture apply/plan timings and logs under <repo>/.run/profiles

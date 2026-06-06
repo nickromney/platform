@@ -59,6 +59,22 @@ interface_failures=()
 descriptor_failures=()
 library_entrypoint_failures=()
 scope_paths=()
+SHELL_AUDIT_PROBE_STDOUT_FILE=""
+SHELL_AUDIT_PROBE_STDERR_FILE=""
+
+cleanup_interface_probe_files() {
+  rm -f "${SHELL_AUDIT_PROBE_STDOUT_FILE}" "${SHELL_AUDIT_PROBE_STDERR_FILE}"
+}
+
+ensure_interface_probe_files() {
+  if [[ -n "${SHELL_AUDIT_PROBE_STDOUT_FILE}" && -n "${SHELL_AUDIT_PROBE_STDERR_FILE}" ]]; then
+    return 0
+  fi
+
+  SHELL_AUDIT_PROBE_STDOUT_FILE="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stdout.XXXXXX")"
+  trap cleanup_interface_probe_files EXIT
+  SHELL_AUDIT_PROBE_STDERR_FILE="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stderr.XXXXXX")"
+}
 
 shell_cli_init_standard_flags
 while [[ $# -gt 0 ]]; do
@@ -161,9 +177,9 @@ run_interface_probe() {
   local file="$1"
   shift
 
-  local stdout_file=""
-  local stderr_file=""
   local rc=0
+  local stdout_output=""
+  local stderr_output=""
   local -a env_cmd=(env -i "PATH=${PATH}")
 
   if [[ -n "${HOME:-}" ]]; then
@@ -173,74 +189,99 @@ run_interface_probe() {
     env_cmd+=("TMPDIR=${TMPDIR}")
   fi
 
-  stdout_file="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stdout.XXXXXX")"
-  stderr_file="$(mktemp "${TMPDIR:-/tmp}/shell-audit-stderr.XXXXXX")"
+  ensure_interface_probe_files
+  : >"${SHELL_AUDIT_PROBE_STDOUT_FILE}"
+  : >"${SHELL_AUDIT_PROBE_STDERR_FILE}"
 
-  if "${env_cmd[@]}" "${file}" "$@" >"${stdout_file}" 2>"${stderr_file}"; then
+  if "${env_cmd[@]}" "${file}" "$@" >"${SHELL_AUDIT_PROBE_STDOUT_FILE}" 2>"${SHELL_AUDIT_PROBE_STDERR_FILE}"; then
     rc=0
   else
     rc=$?
   fi
 
   if [[ "${rc}" -ne 0 ]]; then
-    SHELL_AUDIT_LAST_ERROR="$(head -n 1 "${stderr_file}" || true)"
+    SHELL_AUDIT_LAST_ERROR=""
+    IFS= read -r SHELL_AUDIT_LAST_ERROR <"${SHELL_AUDIT_PROBE_STDERR_FILE}" || true
     if [[ -z "${SHELL_AUDIT_LAST_ERROR}" ]]; then
-      SHELL_AUDIT_LAST_ERROR="$(head -n 1 "${stdout_file}" || true)"
+      IFS= read -r SHELL_AUDIT_LAST_ERROR <"${SHELL_AUDIT_PROBE_STDOUT_FILE}" || true
     fi
     if [[ -z "${SHELL_AUDIT_LAST_ERROR}" ]]; then
       SHELL_AUDIT_LAST_ERROR="exit ${rc}"
     fi
-    rm -f "${stdout_file}" "${stderr_file}"
     return 1
   fi
 
-  SHELL_AUDIT_LAST_OUTPUT="$(
-    {
-      cat "${stdout_file}"
-      cat "${stderr_file}"
-    } 2>/dev/null
-  )"
+  stdout_output="$(<"${SHELL_AUDIT_PROBE_STDOUT_FILE}")"
+  stderr_output="$(<"${SHELL_AUDIT_PROBE_STDERR_FILE}")"
+  if [[ -n "${stdout_output}" && -n "${stderr_output}" ]]; then
+    SHELL_AUDIT_LAST_OUTPUT="${stdout_output}"$'\n'"${stderr_output}"
+  else
+    SHELL_AUDIT_LAST_OUTPUT="${stdout_output}${stderr_output}"
+  fi
 
-  rm -f "${stdout_file}" "${stderr_file}"
   return 0
 }
 
 usage_output_names_entrypoint() {
   local output="$1"
   local expected_name="$2"
+  local line=""
+  local text=""
+  local token=""
+  local check_next=0
 
-  awk -v expected_name="${expected_name}" '
-    function first_token(text, parts) {
-      sub(/^[[:space:]]+/, "", text)
-      if (text == "") {
-        return ""
-      }
-      split(text, parts, /[[:space:]]+/)
-      return parts[1]
-    }
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" =~ (^|[[:space:]])Usage: ]]; then
+      text="${line#*Usage:}"
+      token=""
+      read -r token _ <<<"${text}"
+      if [[ "${token}" == "${expected_name}" ]]; then
+        return 0
+      fi
+      if [[ -z "${token}" ]]; then
+        check_next=1
+      else
+        check_next=0
+      fi
+      continue
+    fi
 
-    /(^|[[:space:]])Usage:/ {
-      text = $0
-      sub(/^.*Usage:/, "", text)
-      token = first_token(text)
-      if (token == expected_name) {
-        found = 1
-      }
-      check_next = (token == "")
-      next
-    }
+    if [[ "${check_next}" -eq 1 && "${line}" =~ [^[:space:]] ]]; then
+      token=""
+      read -r token _ <<<"${line}"
+      if [[ "${token}" == "${expected_name}" ]]; then
+        return 0
+      fi
+      check_next=0
+    fi
+  done <<<"${output}"
 
-    check_next && NF {
-      if ($1 == expected_name) {
-        found = 1
-      }
-      check_next = 0
-    }
+  return 1
+}
 
-    END {
-      exit found ? 0 : 1
-    }
-  ' <<<"${output}"
+interface_output_has_usage() {
+  local output="$1"
+
+  [[ "${output}" =~ (^|[[:space:]])Usage: ]]
+}
+
+interface_output_has_bare_contract() {
+  local output="$1"
+  local expected_name="$2"
+
+  interface_output_has_usage "${output}" \
+    && [[ "${output}" == *"INFO dry-run:"* ]] \
+    && usage_output_names_entrypoint "${output}" "${expected_name}"
+}
+
+interface_output_has_help_contract() {
+  local output="$1"
+  local expected_name="$2"
+
+  interface_output_has_usage "${output}" \
+    && [[ "${output}" == *"--dry-run"* ]] \
+    && [[ "${output}" == *"--execute"* ]] \
+    && usage_output_names_entrypoint "${output}" "${expected_name}"
 }
 
 entrypoint_sources_shell_cli_helper() {
@@ -317,9 +358,7 @@ validate_entrypoint_interface() {
 
   if ! run_interface_probe "${file}"; then
     failures="bare invocation (${SHELL_AUDIT_LAST_ERROR})"
-  elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- 'INFO dry-run:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
+  elif ! interface_output_has_bare_contract "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     failures="bare invocation (output did not show help plus dry-run preview; Usage output did not name ${expected_name})"
   fi
 
@@ -328,10 +367,7 @@ validate_entrypoint_interface() {
       failures="${failures}; "
     fi
     failures="${failures}--help (${SHELL_AUDIT_LAST_ERROR})"
-  elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
+  elif ! interface_output_has_help_contract "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     if [[ -n "${failures}" ]]; then
       failures="${failures}; "
     fi
@@ -343,10 +379,7 @@ validate_entrypoint_interface() {
       failures="${failures}; "
     fi
     failures="${failures}--dry-run --help (${SHELL_AUDIT_LAST_ERROR})"
-  elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
+  elif ! interface_output_has_help_contract "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     if [[ -n "${failures}" ]]; then
       failures="${failures}; "
     fi
@@ -358,10 +391,7 @@ validate_entrypoint_interface() {
       failures="${failures}; "
     fi
     failures="${failures}--execute --help (${SHELL_AUDIT_LAST_ERROR})"
-  elif ! grep -Eq '(^|[[:space:]])Usage:' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--dry-run' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! grep -Fq -- '--execute' <<<"${SHELL_AUDIT_LAST_OUTPUT}" \
-    || ! usage_output_names_entrypoint "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
+  elif ! interface_output_has_help_contract "${SHELL_AUDIT_LAST_OUTPUT}" "${expected_name}"; then
     if [[ -n "${failures}" ]]; then
       failures="${failures}; "
     fi

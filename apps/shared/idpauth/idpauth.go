@@ -177,14 +177,24 @@ func BootstrapVerifier(issuer, audience, jwksURI string, shouldVerify bool) (Tok
 func (a Authenticator) Middleware(msgs AuthFailureMessages) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, failure := a.CurrentUser(r)
-			if failure != nil {
-				apphttp.WriteError(w, failure.StatusCode, failure.MessageFor(msgs))
+			if _, ok := a.CurrentUserOrWriteError(w, r, msgs); !ok {
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// CurrentUserOrWriteError returns the authenticated user or writes the
+// canonical app error response for the failure. It belongs in idpauth because
+// this package is the auth+HTTP integration layer; apphttp remains auth-free.
+func (a Authenticator) CurrentUserOrWriteError(w http.ResponseWriter, r *http.Request, msgs AuthFailureMessages) (UserClaims, bool) {
+	claims, failure := a.CurrentUser(r)
+	if failure != nil {
+		apphttp.WriteError(w, failure.StatusCode, failure.MessageFor(msgs))
+		return UserClaims{}, false
+	}
+	return claims, true
 }
 
 // CurrentUser returns the authenticated user for the request, or a failure

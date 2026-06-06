@@ -8,6 +8,7 @@ setup() {
 
 @test "platform inventory combines status and workflow metadata" {
   status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  read_model_stub="${BATS_TEST_TMPDIR}/platform-status-read-model.sh"
   workflow_stub="${BATS_TEST_TMPDIR}/platform-workflow.sh"
 
   cat >"${status_stub}" <<'EOF'
@@ -16,6 +17,17 @@ set -euo pipefail
 printf '{"generated_at":"2026-05-03T12:00:00Z","overall_state":"ready","active_variant":"kind","active_variant_path":"kubernetes/kind","variants_order":["kind"],"variants":{"kind":{"state":"ready","blockers":[]}},"host_runtimes":{},"host_runtimes_order":[],"registry_auth":{},"registry_auth_order":[]}\n'
 EOF
   chmod +x "${status_stub}"
+
+  cat >"${read_model_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" != "--execute --output json" ]]; then
+  printf 'unexpected args: %s\n' "$*" >&2
+  exit 64
+fi
+printf '{"schema_version":"0.1","source":{"name":"platform-status-read-model"},"overall_state":"ready","active_owner":{"variant":"kind","variant_path":"kubernetes/kind"},"variants_order":["kind"],"variants":{"kind":{"ownership":{"variant":"kind","variant_path":"kubernetes/kind","label":"Kind local cluster","runtime_family":"docker","active_owner":true,"serving":true,"runtime_present":true},"readiness":{"state":"ready","ready":false,"blocker_count":1,"blocking_owners":["kubernetes/lima"],"recommended_action":{"id":"lima-stop","command":"make -C kubernetes/lima stop-lima","enabled":true,"dangerous":false},"checks":{"kind_available":true}},"blockers":[{"id":"kind-blocker-0","message":"shared host ports claimed by kubernetes/lima","blocking_owner":"kubernetes/lima","recommended_action":{"id":"lima-stop","command":"make -C kubernetes/lima stop-lima","enabled":true,"dangerous":false}}],"recommended_action":{"id":"kind-status","command":"make -C kubernetes/kind status","enabled":true,"dangerous":false},"actions":[]}}}\n'
+EOF
+  chmod +x "${read_model_stub}"
 
   cat >"${workflow_stub}" <<'EOF'
 #!/usr/bin/env bash
@@ -26,13 +38,14 @@ EOF
 
   run env \
     PLATFORM_INVENTORY_STATUS_SCRIPT="${status_stub}" \
+    PLATFORM_INVENTORY_READ_MODEL_SCRIPT="${read_model_stub}" \
     PLATFORM_INVENTORY_WORKFLOW_SCRIPT="${workflow_stub}" \
     "${SCRIPT}" --execute --variant kind --stage 900 --output json
 
   [ "${status}" -eq 0 ]
-  run jq -r '.variant, .stage, .observed_live_state, .terraform_truth, .health_summary.overall_state, .workflow.contract_requirements[0].id, .variants.kind.state' <<<"${output}"
+  run jq -r '.variant, .stage, .observed_live_state, .terraform_truth, .health_summary.overall_state, .workflow.contract_requirements[0].id, .status_read_model.source.name, .variants.kind.state, (.variants.kind.readiness.blocker_count | tostring), .variants.kind.blockers[0], .variants.kind.blocker_facts[0].recommended_action.command, .variants.kind.recommended_action.command' <<<"${output}"
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'kind\n900\ntrue\nfalse\nready\nidentity\nready' ]
+  [ "${output}" = $'kind\n900\ntrue\nfalse\nready\nidentity\nplatform-status-read-model\nready\n1\nshared host ports claimed by kubernetes/lima\nmake -C kubernetes/lima stop-lima\nmake -C kubernetes/lima stop-lima' ]
 }
 
 @test "platform inventory has a concise text output" {
@@ -63,6 +76,37 @@ EOF
   [[ "${output}" == *"Stage: 700"* ]]
   [[ "${output}" == *"Overall: blocked"* ]]
   [[ "${output}" == *"Active variant: none"* ]]
+}
+
+@test "platform inventory reuses one status probe for the read model" {
+  status_stub="${BATS_TEST_TMPDIR}/platform-status.sh"
+  workflow_stub="${BATS_TEST_TMPDIR}/platform-workflow.sh"
+  status_log="${BATS_TEST_TMPDIR}/status.log"
+
+  cat >"${status_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'status probe\n' >>"${status_log}"
+printf '{"generated_at":"2026-05-03T12:00:00Z","overall_state":"ready","active_variant":"kind","active_variant_path":"kubernetes/kind","variants_order":["kind"],"variants":{"kind":{"key":"kind","path":"kubernetes/kind","label":"Kind local cluster","runtime_family":"docker","state":"ready","serving":true,"runtime_present":true,"blockers":[],"readiness":{"kind_available":true}}},"actions":[],"host_runtimes":{},"host_runtimes_order":[],"registry_auth":{},"registry_auth_order":[]}\n'
+EOF
+  chmod +x "${status_stub}"
+
+  cat >"${workflow_stub}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"variant":{"id":"kind"},"stage":"900","action":"status","contexts":[],"contract_requirements":[],"effective_config":{}}\n'
+EOF
+  chmod +x "${workflow_stub}"
+
+  run env \
+    PLATFORM_INVENTORY_STATUS_SCRIPT="${status_stub}" \
+    PLATFORM_INVENTORY_READ_MODEL_SCRIPT="${REPO_ROOT}/scripts/platform-status-read-model.sh" \
+    PLATFORM_INVENTORY_WORKFLOW_SCRIPT="${workflow_stub}" \
+    "${SCRIPT}" --execute --variant kind --stage 900 --output json
+
+  [ "${status}" -eq 0 ]
+  status_probe_count="$(wc -l <"${status_log}" | tr -d ' ')"
+  [ "${status_probe_count}" -eq 1 ]
 }
 
 @test "platform inventory text output avoids unknown placeholders for missing health fields" {

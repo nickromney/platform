@@ -206,15 +206,10 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request, route Rout
 	if s.cfg.AllowAnonymous || route.AllowAnonymous || (s.cfg.OIDC.Issuer == "" && s.verifier == nil) {
 		return idpauth.UserClaims{Subject: "anonymous", Groups: []string{}}, true
 	}
-	claims, failure := (idpauth.Authenticator{Mode: "oidc", Verifier: s.verifier}).CurrentUser(r)
-	if failure != nil {
-		apphttp.WriteError(w, failure.StatusCode, failure.MessageFor(idpauth.AuthFailureMessages{
-			MissingBearerToken: "Missing bearer token",
-			InvalidToken:       "Invalid bearer token",
-		}))
-		return idpauth.UserClaims{}, false
-	}
-	return claims, true
+	return (idpauth.Authenticator{Mode: "oidc", Verifier: s.verifier}).CurrentUserOrWriteError(w, r, idpauth.AuthFailureMessages{
+		MissingBearerToken: "Missing bearer token",
+		InvalidToken:       "Invalid bearer token",
+	})
 }
 
 func (s *server) authorizeRoute(w http.ResponseWriter, route RouteConfig, claims idpauth.UserClaims) bool {

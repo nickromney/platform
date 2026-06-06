@@ -1,0 +1,1 @@
+OK   shell audit (96 script(s) scanned; 80 executable entrypoint(s) validated; Python execution limited to approved shell wrappers and provision scripts)

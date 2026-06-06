@@ -1,0 +1,9 @@
+   2 -r --arg id kind .variants[] | select(.id == $id) | .path // empty /Users/nickromney/Developer/personal/platform/.run/workflow/options.json
+   1 . /Users/nickromney/Developer/personal/platform/.run/workflow/options.json
+   1 -s 
+   1 -r --arg variant kind --arg stage 700 --arg resource_profile default --arg image_distribution default --arg network_profile default --arg observability_stack default --arg identity_stack default --arg app_set default 
+   1 -r --arg id plan .action_metadata[]? | select(.id == $id) | .uses_stage // false /Users/nickromney/Developer/personal/platform/.run/workflow/options.json
+   1 -r --arg id kind .variants[] | select(.id == $id) | .variant_contract | .registry.runtime_host // empty /Users/nickromney/Developer/personal/platform/.run/workflow/options.json
+   1 -r --arg id kind .variants[] | select(.id == $id) | .variant_contract | .registry.push_host // empty /Users/nickromney/Developer/personal/platform/.run/workflow/options.json
+   1 -e --arg id plan .actions[] | select(. == $id) /Users/nickromney/Developer/personal/platform/.run/workflow/options.json
+   1 -e --arg id 700 .stages[] | select(.id == $id) /Users/nickromney/Developer/personal/platform/.run/workflow/options.json

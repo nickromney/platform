@@ -4,14 +4,13 @@ import (
 	"log"
 
 	"platform.local/appconfig"
-	"platform.local/apphealth"
 	"platform.local/apphttp"
 	"platform.local/idpauth"
 	"platform.local/subnetcalc/internal/app"
 )
 
 func main() {
-	if apphealth.HandleHealthcheckCommand("8080", "/api/v1/health") {
+	if apphttp.HandleHealthcheckCommand("8080", "/api/v1/health") {
 		return
 	}
 

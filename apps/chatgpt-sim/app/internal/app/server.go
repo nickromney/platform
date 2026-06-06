@@ -125,12 +125,7 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) currentUser(w http.ResponseWriter, r *http.Request) (idpauth.UserClaims, bool) {
-	claims, failure := (idpauth.Authenticator{Mode: s.cfg.AuthMode, Verifier: s.verifier}).CurrentUser(r)
-	if failure != nil {
-		apphttp.WriteError(w, failure.StatusCode, failure.Message)
-		return idpauth.UserClaims{}, false
-	}
-	return claims, true
+	return (idpauth.Authenticator{Mode: s.cfg.AuthMode, Verifier: s.verifier}).CurrentUserOrWriteError(w, r, idpauth.AuthFailureMessages{})
 }
 
 func (s *server) gatewaySession(w http.ResponseWriter, r *http.Request) {

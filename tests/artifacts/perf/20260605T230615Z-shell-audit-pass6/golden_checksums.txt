@@ -1,0 +1,1 @@
+1bdce3140a7b0389ec10a3afef4d18f1b10d5e1bb3cb07e7d2fa8f198d2142d1  tests/artifacts/perf/20260605T230615Z-shell-audit-pass6/shell-audit-golden.txt
