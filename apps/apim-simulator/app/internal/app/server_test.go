@@ -145,6 +145,8 @@ func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 
 	for _, text := range []string{
 		`<html lang="en" data-theme="system">`,
+		`@social-5h3ll/5h3ll-ui`,
+		`/app-shell.css`,
 		`id="auth-state"`,
 		`Not signed in.`,
 		`id="logout-btn" class="sign-in-link" type="button" hidden`,
@@ -166,6 +168,9 @@ func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("console index missing %q", text)
 		}
+	}
+	if strings.Contains(string(indexHTML), `href="/style.css"`) {
+		t.Fatalf("console index should not load app-local CSS: %s", string(indexHTML))
 	}
 	for _, text := range []string{
 		`PlatformIdpAuth`,
@@ -239,6 +244,8 @@ func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 	}
 	for _, text := range []string{
 		`<title>Signed out - APIM Simulator</title>`,
+		`@social-5h3ll/5h3ll-ui`,
+		`/app-shell.css`,
 		`id="login-link"`,
 		`>Sign in now<`,
 		`Your APIM simulator session has ended.`,
@@ -246,6 +253,9 @@ func TestEmbeddedConsoleRendersGatewayIdentityControls(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Contains(rec.Body.String(), `href="/style.css"`) {
+		t.Fatalf("signed-out page should not load app-local CSS: %s", rec.Body.String())
 	}
 }
 

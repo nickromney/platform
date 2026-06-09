@@ -30,7 +30,7 @@ Use the guided workflow surfaces when the user asks to operate the local stacks 
 
 - `make tui` opens the Bubble Tea terminal UI from `tools/platform-tui`. It requires Go because it runs the TUI from source. The TUI delegates to `scripts/platform-workflow.sh`, previews the generated Make command, can run it, streams output, keeps scrollback, and supports target, stage, action, reset, state-reset, and app toggle choices.
 - `make build-tui` builds a local TUI binary under `tools/platform-tui/bin/` when you need a reusable executable.
-- `make workflow-ui` serves the browser workflow UI from `tools/platform-workflow-ui` through `scripts/platform-workflow-ui.sh`. It requires `uv`, uses FastAPI + HTMX, defaults to local HTTPS at `https://console.127.0.0.1.sslip.io:8443`, and delegates to the same `scripts/platform-workflow.sh` core as the TUI.
+- `make workflow-ui` serves the browser workflow UI from `tools/platform-workflow-ui` through `scripts/platform-workflow-ui.sh`. It requires Go, uses a small HTMX server, defaults to local HTTPS at `https://console.127.0.0.1.sslip.io:8443`, and delegates to the same `scripts/platform-workflow.sh` core as the TUI.
 - Use `make workflow-ui WORKFLOW_UI_HTTP=http1 WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=8765` when local HTTPS or HTTP/2 gets in the way of browser debugging. Use `WORKFLOW_UI_PORT=<port>` when the default port is busy.
 - Treat both guided surfaces as wrappers over the same contract, not separate deployment systems. If a preview looks wrong, inspect `scripts/platform-workflow.sh` and its tests before changing either UI.
 

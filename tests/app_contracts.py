@@ -8,7 +8,6 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import tomllib
 from typing import Any
 
 
@@ -221,7 +220,7 @@ def platform_launchpad_rendered_dashboard_contract_violations(repo_root: Path) -
 
 
 def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    expected_exceptions = {"backstage", "idp-mcp", "idp-sdk"}
+    expected_exceptions = {"backstage", "idp-sdk"}
     apps_root = repo_root / "apps"
     actual_exceptions = {
         path.name
@@ -236,14 +235,6 @@ def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]
         violations.append(f"{name} is an undocumented non-Go app exception")
     for name in sorted(expected_exceptions - actual_exceptions):
         violations.append(f"{name} non-Go app exception is missing")
-
-    idp_mcp = apps_root / "idp-mcp" / "pyproject.toml"
-    if idp_mcp.exists():
-        config = tomllib.loads(idp_mcp.read_text(encoding="utf-8"))
-        if config.get("project", {}).get("dependencies") != []:
-            violations.append("idp-mcp should stay dependency-free")
-        if config.get("tool", {}).get("uv", {}).get("exclude-newer") != "7 days":
-            violations.append("idp-mcp should keep uv exclude-newer at 7 days")
 
     idp_sdk = apps_root / "idp-sdk"
     if (idp_sdk / "package.json").exists():
@@ -265,7 +256,7 @@ def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]
 
     readme = (apps_root / "README.md").read_text(encoding="utf-8")
     for fragment in (
-        "idp-mcp/`](idp-mcp/) contains a small dependency-free stdlib MCP adapter",
+        "idp-mcp/`](idp-mcp/) contains a small dependency-free Go MCP adapter",
         "idp-sdk/`](idp-sdk/) contains a dependency-free browser `fetch` wrapper",
         "backstage/`](backstage/) contains Portal. It is an intentional Backstage",
     ):
@@ -3737,7 +3728,7 @@ def grafana_plugin_catalog_build_input_contract_violations(repo_root: Path) -> t
 
 
 def image_catalog_target_ref_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.py"
+    validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.sh"
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     expectations = {
         "lima": repo_root / "kubernetes" / "lima" / "targets" / "lima.tfvars",
@@ -3754,7 +3745,6 @@ def image_catalog_target_ref_contract_violations(repo_root: Path) -> tuple[str, 
     for target, tfvars in expectations.items():
         result = subprocess.run(
             [
-                sys.executable,
                 str(validator),
                 "--catalog",
                 str(catalog),
@@ -3775,7 +3765,7 @@ def image_catalog_target_ref_contract_violations(repo_root: Path) -> tuple[str, 
 
 
 def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.py"
+    validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.sh"
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     expected_hosts = {
         "lima": "host.lima.internal:5002",
@@ -3796,12 +3786,11 @@ def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) 
 
     script_text = validator.read_text(encoding="utf-8")
     if "--print-expected" not in script_text:
-        violations.append("validate-image-catalog-target-refs.py should expose --print-expected")
+        violations.append("validate-image-catalog-target-refs.sh should expose --print-expected")
 
     for target, host in expected_hosts.items():
         result = subprocess.run(
             [
-                sys.executable,
                 str(validator),
                 "--catalog",
                 str(catalog),

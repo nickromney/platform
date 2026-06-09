@@ -609,6 +609,6 @@ function performanceElement(totalMs) {
 		[["Total Response Time", `${totalMs}ms (${(totalMs / 1000).toFixed(3)}s)`]],
 		networkPath,
 	);
-	article.className = "performance-timing";
+	article.classList.add("performance-timing");
 	return article;
 }

@@ -89,6 +89,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	}
 	for _, text := range []string{
 		"IPv4 Subnet Calculator",
+		`@social-5h3ll/5h3ll-ui`,
 		`/app-shell.css`,
 		`/app-shell.js`,
 		"Signed out",
@@ -103,6 +104,9 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Contains(rec.Body.String(), `href="/style.css"`) {
+		t.Fatalf("signed-out page should use shared shell styles without subnetcalc-local CSS: %s", rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), `loginLink.href = "/"`) {
 		t.Fatalf("signed-out page must not rewrite SSO login to the local app root: %s", rec.Body.String())
@@ -207,10 +211,6 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	styleCSS, err := web.ReadFile("web/style.css")
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	required := []string{
 		"Validation",
@@ -254,10 +254,8 @@ func TestFrontendRendersE2ESubnetcalcResultSections(t *testing.T) {
 			t.Fatalf("frontend must not expose removed network allocation feature %q", text)
 		}
 	}
-	for _, text := range []string{"textarea"} {
-		if !strings.Contains(string(styleCSS), text) {
-			t.Fatalf("frontend CSS missing %q", text)
-		}
+	if strings.Contains(string(indexHTML), `href="/style.css"`) {
+		t.Fatalf("frontend should not load subnetcalc-local CSS: %s", string(indexHTML))
 	}
 	sharedReq := httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
 	sharedRec := httptest.NewRecorder()

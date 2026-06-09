@@ -1093,7 +1093,7 @@ idp-mcp:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "INFO dry-run: would start IDP MCP server for lima against $(IDP_API_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) uv run python -m idp_mcp.server"; \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) go run ./cmd/idp-mcp"; \
 	fi
 
 .PHONY: test

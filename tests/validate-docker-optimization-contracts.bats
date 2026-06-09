@@ -1057,7 +1057,7 @@ contract_lines = [
 
 assert callable(image_catalog_target_ref_contract_violations)
 assert "image_catalog_target_ref_contract_violations" in content
-assert not any("validate-image-catalog-target-refs.py" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
+assert not any("validate-image-catalog-target-refs.sh" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
 assert not any("lima.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
 assert not any("slicer.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
 assert not any("subprocess.run" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"

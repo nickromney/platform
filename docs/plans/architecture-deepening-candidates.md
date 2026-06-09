@@ -22,8 +22,7 @@ broader context.
 Files:
 
 - `scripts/platform-workflow.sh`
-- `tools/platform-workflow-ui/platform_workflow_ui/workflow.py`
-- `tools/platform-workflow-ui/platform_workflow_ui/main.py`
+- `tools/platform-workflow-ui/cmd/platform-workflow-ui/main.go`
 - `tools/platform-tui/internal/tui/model.go`
 - `tests/platform-workflow.bats`
 - `tests/platform-workflow-ui.bats`
@@ -170,7 +169,7 @@ Files:
 - `apps/idp-core/app/adapters.py`
 - `apps/idp-core/app/models.py`
 - `apps/idp-sdk/src/index.ts`
-- `apps/idp-mcp/idp_mcp/server.py`
+- `apps/idp-mcp/cmd/idp-mcp/main.go`
 - `apps/backstage/catalog/entities.yaml`
 
 Problem:

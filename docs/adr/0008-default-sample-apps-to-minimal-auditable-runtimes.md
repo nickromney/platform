@@ -59,8 +59,8 @@ The Platform MCP server now follows the same lightweight runtime direction. The
 active implementation is the Go server under `apps/platform-mcp/app`, using
 Go stdlib HTTP and JSON for the current MCP surface.
 
-The smaller `apps/idp-mcp` adapter remains dependency-free and uses Python
-stdlib JSON and `urllib.request` directly.
+The smaller `apps/idp-mcp` adapter remains dependency-free and uses Go stdlib
+HTTP and JSON directly.
 
 ## Consequences
 

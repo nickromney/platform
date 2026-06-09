@@ -76,15 +76,7 @@ EOF
 }
 
 @test "restarts the on-device daemon when the local slicer socket is stale" {
-  uv run --isolated python - <<'PY'
-import os
-import socket
-
-path = os.environ["SYSTEM_SOCKET"]
-sock = socket.socket(socket.AF_UNIX)
-sock.bind(path)
-sock.close()
-PY
+  : >"${SYSTEM_SOCKET}"
 
   run env \
     RUN_DIR="${RUN_DIR}" \

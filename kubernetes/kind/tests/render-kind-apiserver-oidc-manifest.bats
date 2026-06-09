@@ -3,7 +3,7 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
-  export HELPER="${REPO_ROOT}/terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.py"
+  export HELPER="${REPO_ROOT}/terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.sh"
 }
 
 @test "render-kind-apiserver-oidc-manifest injects OIDC flags and gateway host alias" {
@@ -21,8 +21,7 @@ spec:
   hostNetwork: true
 EOF
 
-  run uv run --isolated python \
-    "${HELPER}" \
+  run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://dex.example.test/dex" \
@@ -58,8 +57,7 @@ spec:
   hostNetwork: true
 EOF
 
-  run uv run --isolated python \
-    "${HELPER}" \
+  run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://keycloak.example.test/realms/platform" \
@@ -95,8 +93,7 @@ spec:
   hostNetwork: true
 EOF
 
-  run uv run --isolated python \
-    "${HELPER}" \
+  run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://keycloak.example.test/realms/platform" \
@@ -132,8 +129,7 @@ spec:
   hostNetwork: true
 EOF
 
-  run uv run --isolated python \
-    "${HELPER}" \
+  run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
     "https://dex.example.test/dex" \

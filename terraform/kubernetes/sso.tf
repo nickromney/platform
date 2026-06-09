@@ -1281,7 +1281,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
   triggers = {
     configure_script_sha = filesha256(abspath("${local.stack_dir}/scripts/configure-kind-apiserver-oidc.sh"))
     helper_lib_sha       = filesha256(abspath("${local.stack_dir}/scripts/kind-apiserver-oidc-lib.sh"))
-    render_helper_sha    = filesha256(abspath("${local.stack_dir}/scripts/render-kind-apiserver-oidc-manifest.py"))
+    render_helper_sha    = filesha256(abspath("${local.stack_dir}/scripts/render-kind-apiserver-oidc-manifest.sh"))
     gateway_service_uid  = kubernetes_service_v1.platform_gateway_nginx_internal[0].metadata[0].uid
     cluster_name         = var.cluster_name
     oidc_host            = local.sso_public_host

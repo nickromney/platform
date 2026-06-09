@@ -491,6 +491,7 @@ main() {
   local user_name=""
   local delete_file_if_empty="0"
   local positional=()
+  local legacy_positional_form=0
 
   shell_cli_init_standard_flags
   while [[ $# -gt 0 ]]; do
@@ -585,6 +586,11 @@ main() {
   if [[ -z "${command}" && "${#positional[@]}" -gt 0 ]]; then
     command="${positional[0]}"
     positional=("${positional[@]:1}")
+    legacy_positional_form=1
+  fi
+
+  if [[ "${legacy_positional_form}" -eq 1 && "${SHELL_CLI_DRY_RUN}" -ne 1 ]]; then
+    SHELL_CLI_EXECUTE=1
   fi
 
   shell_cli_maybe_execute_or_preview usage print_dry_run_preview

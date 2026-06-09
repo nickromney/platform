@@ -1,65 +1,71 @@
 :root {
   color-scheme: light dark;
-  --page: #f6f8fb;
-  --surface: #ffffff;
-  --field: #ffffff;
-  --muted: #5d6b7c;
-  --border: #cfdae6;
-  --field-border: #b9c5d3;
-  --text: #17202a;
-  --accent: #2459b2;
+  --app-shell-panel-shadow: 0 12px 34px rgb(15 23 42 / 0.08);
+  --app-shell-control-shadow: 0 1px 0 rgb(15 23 42 / 0.06);
+  --page: var(--background, #f6f8fb);
+  --surface: var(--card, #ffffff);
+  --field: var(--input, var(--background, #ffffff));
+  --muted: var(--muted-foreground, #5d6b7c);
+  --app-shell-border: var(--border, #cfdae6);
+  --field-border: var(--input, var(--app-shell-border, #b9c5d3));
+  --text: var(--foreground, #17202a);
+  --accent: var(--primary, #2459b2);
   --success: #0f6b45;
   --warning: #8a5a00;
-  --error: #9b1c1c;
-  --line: var(--border);
+  --error: var(--destructive, #9b1c1c);
+  --line: var(--app-shell-border);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --page: #f6f8fb;
-  --surface: #ffffff;
-  --field: #ffffff;
-  --muted: #5d6b7c;
-  --border: #cfdae6;
-  --field-border: #b9c5d3;
-  --text: #17202a;
-  --accent: #2459b2;
+  --app-shell-panel-shadow: 0 12px 34px rgb(15 23 42 / 0.08);
+  --page: var(--background, #f6f8fb);
+  --surface: var(--card, #ffffff);
+  --field: var(--input, var(--background, #ffffff));
+  --muted: var(--muted-foreground, #5d6b7c);
+  --app-shell-border: var(--border, #cfdae6);
+  --field-border: var(--input, var(--app-shell-border, #b9c5d3));
+  --text: var(--foreground, #17202a);
+  --accent: var(--primary, #2459b2);
   --success: #0f6b45;
   --warning: #8a5a00;
-  --error: #9b1c1c;
-  --line: var(--border);
+  --error: var(--destructive, #9b1c1c);
+  --line: var(--app-shell-border);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #101418;
-  --surface: #151b21;
-  --field: #0f1419;
-  --muted: #b7c4d3;
-  --border: #2d3945;
-  --field-border: #3a4855;
-  --text: #e8eef4;
-  --accent: #2d6cdf;
+  --app-shell-panel-shadow: 0 14px 38px rgb(0 0 0 / 0.28);
+  --page: var(--background, #101418);
+  --surface: var(--card, #151b21);
+  --field: var(--input, var(--background, #0f1419));
+  --muted: var(--muted-foreground, #b7c4d3);
+  --app-shell-border: var(--border, #2d3945);
+  --field-border: var(--input, var(--app-shell-border, #3a4855));
+  --text: var(--foreground, #e8eef4);
+  --accent: var(--primary, #2d6cdf);
   --success: #62d69b;
   --warning: #e6b35a;
-  --error: #ffb4ab;
-  --line: var(--border);
+  --error: var(--destructive, #ffb4ab);
+  --line: var(--app-shell-border);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --page: #101418;
-    --surface: #151b21;
-    --field: #0f1419;
-    --muted: #b7c4d3;
-    --border: #2d3945;
-    --field-border: #3a4855;
-    --text: #e8eef4;
-    --accent: #2d6cdf;
+  :root,
+  :root[data-theme="system"] {
+    --app-shell-panel-shadow: 0 14px 38px rgb(0 0 0 / 0.28);
+    --page: var(--background, #101418);
+    --surface: var(--card, #151b21);
+    --field: var(--input, var(--background, #0f1419));
+    --muted: var(--muted-foreground, #b7c4d3);
+    --app-shell-border: var(--border, #2d3945);
+    --field-border: var(--input, var(--app-shell-border, #3a4855));
+    --text: var(--foreground, #e8eef4);
+    --accent: var(--primary, #2d6cdf);
     --success: #62d69b;
     --warning: #e6b35a;
-    --error: #ffb4ab;
-    --line: var(--border);
+    --error: var(--destructive, #ffb4ab);
+    --line: var(--app-shell-border);
   }
 }
 
@@ -73,6 +79,8 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--text);
+  font-size: var(--desktop-body, 1rem);
+  line-height: var(--lh-desktop-body, 1.5);
   font-family:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -160,7 +168,15 @@ body > main {
   background: var(--field, Canvas);
 }
 
-:where(button, input, textarea, select, .button) {
+:where(
+  button:not(.btn):not(.btn-secondary):not(.btn-outline):not(.btn-ghost):not(
+      .btn-icon-outline
+    ),
+  input:not(.input),
+  textarea:not(.textarea),
+  select:not(.select),
+  .button
+) {
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
@@ -169,7 +185,7 @@ body > main {
   font: inherit;
 }
 
-:where(input, textarea, select) {
+:where(input:not(.input), textarea:not(.textarea), select:not(.select)) {
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
@@ -177,6 +193,7 @@ body > main {
   background: var(--field);
   color: var(--text);
   padding: 8px 10px;
+  box-shadow: var(--app-shell-control-shadow);
 }
 
 :where(label) {
@@ -191,29 +208,40 @@ body > main {
   line-height: 1.4;
 }
 
-:where(button, .button) {
+:where(
+  button:not(.btn):not(.btn-secondary):not(.btn-outline):not(.btn-ghost):not(
+      .btn-icon-outline
+    ),
+  .button
+) {
   max-width: 100%;
   min-width: 0;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-color, #fff);
   padding: 8px 14px;
   cursor: pointer;
   overflow-wrap: anywhere;
   text-align: center;
   touch-action: manipulation;
+  box-shadow: var(--app-shell-control-shadow);
 }
 
-.app-panel {
+.app-panel:not(.card) {
   margin: 16px 0;
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
+  box-shadow: var(--app-shell-panel-shadow);
 }
 
 .notice {
   border-color: var(--accent, currentColor);
+}
+
+.app-panel.card {
+  margin: 16px 0;
 }
 
 .success {
@@ -258,8 +286,9 @@ header > div:first-child {
 
 header h1 {
   margin: 0 0 8px;
-  font-size: 2.25rem;
-  line-height: 1.15;
+  font-size: var(--desktop-heading-03, 2.25rem);
+  line-height: var(--lh-desktop-heading-03, 1.15);
+  letter-spacing: 0;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -267,6 +296,7 @@ header h1 {
 header p {
   margin: 0;
   line-height: 1.4;
+  color: var(--text-secondary, var(--muted));
   overflow-wrap: anywhere;
   text-wrap: pretty;
 }
@@ -282,8 +312,8 @@ header p {
 .auth-state {
   max-width: min(100%, 360px);
   margin: 0;
-  color: var(--text);
-  font-size: 0.9rem;
+  color: var(--text-secondary, var(--muted));
+  font-size: var(--desktop-body-sm, 0.9rem);
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -313,7 +343,7 @@ header p {
 .sign-in-link {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: white;
+  color: var(--text-on-color, white);
   text-decoration: none;
 }
 
@@ -405,7 +435,7 @@ button[aria-busy="true"] {
   place-items: center;
   border-radius: 999px;
   background: var(--accent, currentColor);
-  color: white;
+  color: var(--text-on-color, white);
   content: counter(hop);
   font-size: 0.78rem;
   font-weight: 700;

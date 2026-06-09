@@ -153,15 +153,12 @@ EOF
   run curl -fsS "http://127.0.0.1:18743/"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'Default: enabled'* ]]
-  [[ "${output}" == *'name="sentiment"'* ]]
-  [[ "${output}" == *'name="subnetcalc"'* ]]
-  [[ "${output}" == *'<option value="on" selected>Enabled</option>'* ]]
-  [[ "${output}" == *'<option value="off">Disabled</option>'* ]]
-  [[ "${output}" != *'Stage default: enabled'* ]]
-  [[ "${output}" != *'Enable sentiment (stage default)'* ]]
-  [[ "${output}" != *'Enable subnetcalc (stage default)'* ]]
-  [[ "${output}" != *'<option value="">Stage default</option>'* ]]
+  [[ "${output}" == *'name="variant"'* ]]
+  [[ "${output}" == *'name="stage"'* ]]
+  [[ "${output}" == *'name="action"'* ]]
+  [[ "${output}" == *'kubernetes/kind'* ]]
+  [[ "${output}" == *'value="900" selected'* ]]
+  [[ "${output}" == *'value="apply" selected'* ]]
 }
 
 @test "platform workflow ui serves a small htmx page without implementation chrome" {
@@ -170,58 +167,15 @@ EOF
   run curl -fsS "http://127.0.0.1:18744/"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" != *'FastAPI + HTMX, no Node build'* ]]
+  [[ "${output}" != *'FastAPI'* ]]
   [[ "${output}" == *'hx-post="/preview"'* ]]
-  [[ "${output}" == *'hx-target="#result"'* ]]
+  [[ "${output}" == *'hx-target="#preview"'* ]]
   [[ "${output}" != *'Local operator console'* ]]
   [[ "${output}" != *'<h1>Platform Workflow</h1>'* ]]
-  [[ "${output}" == *'<section class="quick-actions" aria-label="Quick actions">'* ]]
-  [[ "${output}" != *'<h2>Quick actions</h2>'* ]]
-  [[ "${output}" != *'Quick actions run immediately, except Reset.'* ]]
-  [[ "${output}" != *'Preview</button>'* ]]
+  [[ "${output}" == *'<h1>Platform Workflow UI</h1>'* ]]
+  [[ "${output}" == *'Preview</button>'* ]]
   [[ "${output}" == *'/static/htmx.min.js'* ]]
   [[ "${output}" != *'node_modules'* ]]
-}
-
-@test "platform workflow ui recent commands include timestamps and mark newest" {
-  run uv run --project "${REPO_ROOT}/tools/platform-workflow-ui" python - <<'PY'
-from platform_workflow_ui.main import history_panel
-
-print(history_panel([
-    {"kind": "Run", "variant": "kubernetes/kind", "timestamp": "09:15:03", "exit_status": "0", "command": "make -C kubernetes/kind 900 apply AUTO_APPROVE=1"},
-    {"kind": "Run", "variant": "kubernetes/kind", "timestamp": "09:11:42", "exit_status": "1", "command": "make -C kubernetes/kind status"},
-], current_variant="kubernetes/lima"))
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *'<span class="history-current" aria-label="Most recent">&rarr;</span>'* ]]
-  [[ "${output}" == *'<time datetime="09:15:03">09:15:03</time>'* ]]
-  [[ "${output}" == *'<time datetime="09:11:42">09:11:42</time>'* ]]
-  [[ "${output}" == *'<span class="history-status-ok">Succeeded</span>'* ]]
-  [[ "${output}" == *'<span class="history-status-failed">Failed (1)</span>'* ]]
-  [[ "${output}" == *'Latest run was for kubernetes/kind'* ]]
-  [[ "${output}" == *'recent-command-0'* ]]
-  [[ "${output}" == *'recent-command-1'* ]]
-}
-
-@test "platform workflow ui avoids unknown placeholders in inventory and history fallbacks" {
-  run uv run --project "${REPO_ROOT}/tools/platform-workflow-ui" python - <<'PY'
-from platform_workflow_ui.main import history_panel, inventory_panel, output_meta
-
-print(inventory_panel({"generated_at": "2026-05-03T12:00:00Z"}, tools=[]))
-print(history_panel([
-    {"kind": "Run", "variant": "kubernetes/kind", "timestamp": "09:15:03", "command": "make status"},
-]))
-print(output_meta({"kind": "Run", "timestamp": "09:15:03"}))
-PY
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *'not reported'* ]]
-  [[ "${output}" == *'No variant status rows reported.'* ]]
-  [[ "${output}" == *'No command status reported'* ]]
-  [[ "${output}" == *'exit not reported'* ]]
-  [[ "${output}" != *'unknown'* ]]
-  [[ "${output}" != *'Unknown'* ]]
 }
 
 @test "platform workflow ui serves the shared favicon" {
@@ -239,19 +193,17 @@ PY
 @test "platform workflow ui previews the selected kind 900 apply intent" {
   start_server 18742
 
+  page="$(curl -fsS "http://127.0.0.1:18742/")"
+  csrf="$(printf '%s' "${page}" | sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p')"
+
   run curl -fsS -X POST "http://127.0.0.1:18742/preview" \
     -H 'content-type: application/x-www-form-urlencoded' \
-    --data 'variant=kubernetes/kind&stage=900&action=apply&sentiment=off&subnetcalc=&auto_approve=1'
+    --data "csrf_token=${csrf}&variant=kubernetes/kind&stage=900&action=apply&sentiment=off&subnetcalc=&auto_approve=1"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'<strong>kubernetes/kind</strong>'* ]]
-  [[ "${output}" == *'<strong>900</strong>'* ]]
-  [[ "${output}" == *'<strong>apply</strong>'* ]]
+  [[ "${output}" == *'<dd>kubernetes/kind</dd>'* ]]
+  [[ "${output}" == *'<dd>900</dd>'* ]]
+  [[ "${output}" == *'<dd>apply</dd>'* ]]
   [[ "${output}" == *"make -C kubernetes/kind 900 apply AUTO_APPROVE=1"* ]]
-  [[ "${output}" == *'hx-post="/run"'* ]]
-  [[ "${output}" == *'copyCommand('\''command-text'\'''* ]]
   [[ "${output}" != *'<section class="quick-actions" aria-label="Quick actions">'* ]]
-  [[ "${output}" == *'id="history"'* ]]
-  [[ "${output}" == *'hx-swap-oob="outerHTML"'* ]]
-  [[ "${output}" != *'<h2>Recent commands</h2>'* ]]
 }

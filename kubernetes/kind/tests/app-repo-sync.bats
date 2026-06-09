@@ -182,12 +182,8 @@ EOF
     "${REPO_ROOT}/apps/subnetcalc/.gitea/workflows/build-images.yaml" \
     "${REPO_ROOT}/apps/chatgpt-sim/.gitea/workflows/build-images.yaml"; do
     grep -Fq '"shared/**"' "${workflow}"
-    if [[ "${workflow}" == *"/chatgpt-sim/"* ]]; then
-      grep -Fq "COPY shared /shared" "${workflow}"
-    else
-      grep -Fq -- '-v "${APPS_DIR}/shared:/shared:ro"' "${workflow}"
-      ! grep -Fq "COPY shared /shared" "${workflow}"
-    fi
+    grep -Fq -- '-v "${APPS_DIR}/shared:/shared:ro"' "${workflow}"
+    ! grep -Fq "COPY shared /shared" "${workflow}"
   done
 }
 

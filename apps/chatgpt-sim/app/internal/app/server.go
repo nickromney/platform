@@ -75,7 +75,6 @@ func NewServer(cfg Config, client HTTPDoer, verifier ...idpauth.TokenVerifier) h
 			AppName:     "ChatGPT Sim",
 			Tagline:     "MCP connector shell for OAuth discovery and tool calls.",
 			SessionName: "ChatGPT Sim",
-			Stylesheet:  "/style.css",
 			Favicon:     "/favicon.ico",
 			PanelClass:  "panel",
 		}))

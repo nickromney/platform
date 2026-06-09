@@ -12,6 +12,9 @@ HTTP_MODE="h2"
 TLS_CERT_FILE=""
 TLS_KEY_FILE=""
 TLS_CERT_DIR=""
+PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/go/bin:/usr/local/bin:${PATH}"
+PLATFORM_WORKFLOW_UI_GO_BIN="${PLATFORM_WORKFLOW_UI_GO_BIN:-go}"
+export GOCACHE="${GOCACHE:-${REPO_ROOT}/.run/go-cache}"
 
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
@@ -108,20 +111,19 @@ if [[ "${PORT}" =~ ^[0-9]+$ && "${PORT}" -lt 1024 && "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-if ! command -v uv >/dev/null 2>&1; then
-  echo "uv is required for the FastAPI workflow UI." >&2
-  echo "Install uv, or use make tui for the terminal workflow." >&2
+if ! command -v "${PLATFORM_WORKFLOW_UI_GO_BIN}" >/dev/null 2>&1; then
+  echo "Go is required for the HTMX workflow UI." >&2
+  echo "Install Go, run make build-tui on a host with Go, or use focused Makefiles directly." >&2
   exit 1
 fi
 
 export PLATFORM_REPO_ROOT="${REPO_ROOT}"
+GO_WORKFLOW_UI_CMD=("${PLATFORM_WORKFLOW_UI_GO_BIN}" run ./cmd/platform-workflow-ui --repo-root "${REPO_ROOT}" --host "${HOST}" --port "${PORT}" --http "${HTTP_MODE}")
 
 if [[ "${HTTP_MODE}" = "http1" ]]; then
   echo "Open ${scheme}://${HOST}:${PORT}"
-  exec uv run --project "${REPO_ROOT}/tools/platform-workflow-ui" \
-    uvicorn platform_workflow_ui.main:app \
-    --host "${HOST}" \
-    --port "${PORT}"
+  cd "${REPO_ROOT}/tools/platform-workflow-ui"
+  exec "${GO_WORKFLOW_UI_CMD[@]}"
 fi
 
 if [[ -z "${TLS_CERT_FILE}" || -z "${TLS_KEY_FILE}" ]]; then
@@ -140,8 +142,5 @@ if [[ -z "${TLS_CERT_FILE}" || -z "${TLS_KEY_FILE}" ]]; then
 fi
 
 echo "Open ${scheme}://${HOST}:${PORT}"
-exec uv run --project "${REPO_ROOT}/tools/platform-workflow-ui" \
-  hypercorn platform_workflow_ui.main:app \
-  --bind "${HOST}:${PORT}" \
-  --certfile "${TLS_CERT_FILE}" \
-  --keyfile "${TLS_KEY_FILE}"
+cd "${REPO_ROOT}/tools/platform-workflow-ui"
+exec "${GO_WORKFLOW_UI_CMD[@]}" --tls-cert-file "${TLS_CERT_FILE}" --tls-key-file "${TLS_KEY_FILE}"

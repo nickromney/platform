@@ -17,7 +17,7 @@ This directory contains the source applications that feed the local platform dem
   local compose workflows for direct and SSO-protected runs.
 - [`idp-core/`](idp-core/) contains the Portal API as a Go single-binary app
   under `idp-core/app`.
-- [`idp-mcp/`](idp-mcp/) contains a small dependency-free stdlib MCP adapter for
+- [`idp-mcp/`](idp-mcp/) contains a small dependency-free Go MCP adapter for
   the Portal API.
 - [`idp-sdk/`](idp-sdk/) contains a dependency-free browser `fetch` wrapper for
   Portal clients.

@@ -56,7 +56,6 @@ func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 			AppName:     "IPv4 Subnet Calculator",
 			Tagline:     "Vanilla HTML, CSS, JavaScript, and a Go API.",
 			SessionName: "subnet calculator",
-			Stylesheet:  "/style.css",
 			Favicon:     "/favicon.ico",
 		}))
 		mux.Handle("/", appshell.StaticFiles(web, "web"))

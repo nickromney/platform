@@ -297,7 +297,7 @@ Focused verification:
 
 ```bash
 cd apps/idp-core && UV_PROJECT_ENVIRONMENT=/tmp/platform-idp-core-venv uv run --extra dev pytest -q
-python3 scripts/validate-json-schema.py schemas/idp/status.schema.json <sample-status-json>
+scripts/validate-json-schema.sh schemas/idp/status.schema.json <sample-status-json>
 ```
 
 ### 6. `950-local-idp` Profile

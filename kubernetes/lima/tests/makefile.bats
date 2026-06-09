@@ -145,7 +145,7 @@ setup() {
 }
 
 @test "lima target profile rewrites platform-mcp to the local image cache" {
-  run grep -Fn '"platform-mcp" = "host.lima.internal:5002/platform/platform-mcp:0.1.0"' \
+  run grep -En '"platform-mcp"[[:space:]]*=[[:space:]]*"host\.lima\.internal:5002/platform/platform-mcp:0\.1\.0"' \
     "${REPO_ROOT}/kubernetes/lima/targets/lima.tfvars"
 
   [ "${status}" -eq 0 ]

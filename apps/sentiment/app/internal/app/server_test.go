@@ -103,6 +103,7 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 	}
 	for _, text := range []string{
 		"Sentiment",
+		`@social-5h3ll/5h3ll-ui`,
 		`/app-shell.css`,
 		`/app-shell.js`,
 		"Signed out",
@@ -117,6 +118,9 @@ func TestHealthAndStaticFrontend(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Contains(rec.Body.String(), `href="/style.css"`) {
+		t.Fatalf("signed-out page should not load app-local CSS: %s", rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), `loginLink.href = "/"`) {
 		t.Fatalf("signed-out page must not rewrite SSO login to the local app root: %s", rec.Body.String())
@@ -462,12 +466,15 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `/app-shell.css`, `/app-shell.js`, `/idpauth.js`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `id="auth-state"`, `id="logout-btn" class="sign-in-link"`, `>Sign Out<`, `id="api-status" class="app-panel notice" role="status" aria-live="polite"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
+	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `<header>`, `@social-5h3ll/5h3ll-ui`, `/app-shell.css`, `/app-shell.js`, `/idpauth.js`, `class="header-actions"`, `data-theme="system"`, `id="theme-switcher"`, `class="theme-toggle"`, `id="auth-state"`, `id="logout-btn" class="sign-in-link"`, `>Sign Out<`, `id="api-status" class="app-panel notice" role="status" aria-live="polite"`, `Checking API...`, `class="comment-actions"`, `aria-label="Sample comments"`, `data-sample="positive"`, `data-sample="mixed"`, `data-sample="negative"`, `class="analyse-action"`, `>Analyze<`, `id="diagnostics"`} {
 		if !strings.Contains(string(indexHTML), text) {
 			t.Fatalf("frontend index missing %q", text)
 		}
 	}
 	html := string(indexHTML)
+	if strings.Contains(html, `href="/style.css"`) {
+		t.Fatalf("frontend should not load app-local CSS: %s", html)
+	}
 	for _, text := range []string{`id="login-btn"`, `>Sign In<`} {
 		if strings.Contains(html, text) {
 			t.Fatalf("protected frontend index must not render login control %q: %s", text, html)
@@ -584,25 +591,11 @@ func TestFrontendKeepsThemeSwitcherParity(t *testing.T) {
 		}
 	}
 
-	styleCSS, err := web.ReadFile("web/style.css")
-	if err != nil {
-		t.Fatal(err)
-	}
 	sharedReq := httptest.NewRequest(http.MethodGet, "/app-shell.css", nil)
 	sharedRec := httptest.NewRecorder()
 	appshell.Stylesheet(sharedRec, sharedReq)
 	if !strings.Contains(sharedRec.Body.String(), `:root[data-theme="dark"]`) {
 		t.Fatalf("shared app shell CSS missing explicit dark theme override")
-	}
-	for _, text := range []string{
-		`.auth-state`,
-		`.header-actions`,
-		`.theme-toggle`,
-		`.sign-in-link`,
-	} {
-		if strings.Contains(string(styleCSS), text) {
-			t.Fatalf("frontend style.css should not own shared app shell rule %q", text)
-		}
 	}
 }
 

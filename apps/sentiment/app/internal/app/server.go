@@ -58,7 +58,6 @@ func NewServer(cfg Config, verifier ...idpauth.TokenVerifier) http.Handler {
 			AppName:     "Sentiment",
 			Tagline:     "Classify comments with a minimal vanilla UI and Go API.",
 			SessionName: "sentiment",
-			Stylesheet:  "/style.css",
 		}))
 		mux.Handle("/", appshell.StaticFiles(web, "web"))
 	}

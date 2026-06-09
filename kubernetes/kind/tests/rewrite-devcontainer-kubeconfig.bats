@@ -3,7 +3,7 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
-  export HELPER="${REPO_ROOT}/kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.py"
+  export HELPER="${REPO_ROOT}/kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.sh"
 }
 
 @test "rewrite-devcontainer-kubeconfig rewrites localhost server endpoints for host-socket devcontainers" {
@@ -19,7 +19,7 @@ clusters:
   name: kind-kind-local
 EOF
 
-  run uv run --isolated python "${HELPER}" "${kubeconfig}" host.docker.internal localhost
+  run "${HELPER}" "${kubeconfig}" host.docker.internal localhost
 
   [ "${status}" -eq 0 ]
   run cat "${kubeconfig}"

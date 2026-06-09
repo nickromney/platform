@@ -257,7 +257,7 @@ function renderComments(items) {
  */
 function commentElement(item) {
 	const article = document.createElement("article");
-	article.className = "comment";
+	article.className = "comment card";
 
 	const label = document.createElement("span");
 	label.className = "label";

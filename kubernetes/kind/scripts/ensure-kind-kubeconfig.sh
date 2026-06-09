@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
-DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT="${SCRIPT_DIR}/rewrite-devcontainer-kubeconfig.py"
+DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT="${SCRIPT_DIR}/rewrite-devcontainer-kubeconfig.sh"
 CLUSTER_NAME="${CLUSTER_NAME:-kind-local}"
 TARGET_CONTEXT="kind-${CLUSTER_NAME}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${KUBECONFIG:-$HOME/.kube/${TARGET_CONTEXT}.yaml}}"
@@ -106,13 +106,12 @@ rewrite_for_devcontainer_host_socket() {
     echo "Missing helper: ${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" >&2
     return 1
   }
-  have_cmd uv || {
-    echo "uv not found in PATH" >&2
+  have_cmd go || {
+    echo "go not found in PATH" >&2
     return 1
   }
 
-  uv run --isolated python \
-    "${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" \
+  "${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" \
     "${kubeconfig_path}" \
     "${DEVCONTAINER_HOST_ALIAS}" \
     "${DEVCONTAINER_TLS_SERVER_NAME}"

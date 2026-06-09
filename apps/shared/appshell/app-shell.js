@@ -89,11 +89,14 @@
 	/** @param {ThemeMode | string | null | undefined} theme */
 	function applyTheme(theme) {
 		const selected = safeTheme(theme);
+		const dark = resolvedThemeIsDark(selected);
 		const nextTheme =
 			themeOptions[(themeOptions.indexOf(selected) + 1) % themeOptions.length];
 		const switcher = optionalElement("theme-switcher");
 
 		document.documentElement.setAttribute("data-theme", selected);
+		document.documentElement.classList.toggle("dark", dark);
+		document.documentElement.style.colorScheme = dark ? "dark" : "light";
 		if (switcher instanceof HTMLButtonElement) {
 			ensureThemeSwitcherIcons(switcher);
 			switcher.dataset.themeChoice = selected;
@@ -103,6 +106,23 @@
 			);
 			switcher.title = `Theme: ${selected}. Switch to ${nextTheme} theme.`;
 		}
+	}
+
+	/**
+	 * @param {ThemeMode} theme
+	 * @returns {boolean}
+	 */
+	function resolvedThemeIsDark(theme) {
+		if (theme === "dark") {
+			return true;
+		}
+		if (theme === "light") {
+			return false;
+		}
+		return Boolean(
+			window.matchMedia &&
+				window.matchMedia("(prefers-color-scheme: dark)").matches,
+		);
 	}
 
 	/** @param {HTMLButtonElement} switcher */
@@ -241,8 +261,97 @@
 	/** @returns {void} */
 	function initializeThemeSwitcher() {
 		initializeTheme();
+		enhanceVendoredClasses();
 		bindThemeSwitcher();
 		initializeAuthStateRegion();
+	}
+
+	function enhanceVendoredClasses() {
+		addClasses(document.body, "bg-background", "text-foreground", "antialiased");
+		document
+			.querySelectorAll("body > header")
+			.forEach((element) =>
+				addClasses(
+					element,
+					"mx-auto",
+					"flex",
+					"max-w-6xl",
+					"items-start",
+					"justify-between",
+					"gap-4",
+					"px-6",
+					"py-8",
+				),
+			);
+		document
+			.querySelectorAll("body > main")
+			.forEach((element) =>
+				addClasses(element, "mx-auto", "grid", "max-w-6xl", "gap-4", "px-6", "pb-10"),
+			);
+		document.querySelectorAll(".app-panel").forEach((element) => {
+			addClasses(element, "card", "p-6");
+		});
+		document
+			.querySelectorAll("form, .runner, .settings-form, #lookup-form, #provider-form, #auth-panel")
+			.forEach((element) => addClasses(element, "grid", "gap-4"));
+		document.querySelectorAll(".form-row, #identity-form").forEach((element) => {
+			addClasses(element, "grid", "gap-3", "md:grid-cols-3", "items-end");
+		});
+		document.querySelectorAll(".field").forEach((element) => {
+			addClasses(element, "field");
+		});
+		document
+			.querySelectorAll(
+				".examples, .samples, .comment-actions, .panel-actions, .composer-actions, .header-actions",
+			)
+			.forEach((element) =>
+				addClasses(element, "flex", "flex-wrap", "items-center", "gap-2"),
+			);
+		document
+			.querySelectorAll("#results-content, #comments, .connector-list, .messages")
+			.forEach((element) => addClasses(element, "grid", "gap-3"));
+		document
+			.querySelectorAll(".metrics, .grid, .columns, .result-head, .workspace, .app-workspace")
+			.forEach((element) => addClasses(element, "grid", "gap-4"));
+		document.querySelectorAll("input").forEach((element) => {
+			addClasses(element, "input", "w-full");
+		});
+		document.querySelectorAll("textarea").forEach((element) => {
+			addClasses(element, "textarea", "w-full", "min-h-24");
+		});
+		document.querySelectorAll("select").forEach((element) => {
+			addClasses(element, "select", "w-full");
+		});
+		document.querySelectorAll("label").forEach((element) => {
+			addClasses(element, "label");
+		});
+		document.querySelectorAll("button").forEach((button) => {
+			if (button.classList.contains("theme-toggle")) {
+				addClasses(button, "btn-icon-outline");
+				return;
+			}
+			if (button.classList.contains("sign-in-link")) {
+				addClasses(button, "btn");
+				return;
+			}
+			if (button.hasAttribute("data-example") || button.hasAttribute("data-sample")) {
+				addClasses(button, "btn-secondary");
+				return;
+			}
+			addClasses(button, "btn");
+		});
+		document.querySelectorAll("a.sign-in-link").forEach((element) => {
+			addClasses(element, "btn");
+		});
+	}
+
+	/**
+	 * @param {Element} element
+	 * @param {...string} classes
+	 * @returns {void}
+	 */
+	function addClasses(element, ...classes) {
+		element.classList.add(...classes.filter(Boolean));
 	}
 
 	/**
@@ -434,7 +543,7 @@
 			}
 
 			const hopElement = document.createElement("div");
-			hopElement.className = "hop";
+			hopElement.className = "hop card";
 			const label = document.createElement("strong");
 			label.textContent = hop.label;
 			const detail = document.createElement("small");
@@ -471,7 +580,7 @@
 	 * @returns {string}
 	 */
 	function renderKeyValueTable(rows) {
-		return `<table><tbody>${rows.map(([key, value]) => `<tr><th scope="row">${escapeHTML(key)}</th><td>${escapeHTML(String(value ?? ""))}</td></tr>`).join("")}</tbody></table>`;
+		return `<table class="table"><tbody>${rows.map(([key, value]) => `<tr><th scope="row">${escapeHTML(key)}</th><td>${escapeHTML(String(value ?? ""))}</td></tr>`).join("")}</tbody></table>`;
 	}
 
 	/**
@@ -480,6 +589,7 @@
 	 */
 	function keyValueTableElement(rows) {
 		const table = document.createElement("table");
+		table.className = "table";
 		const tbody = document.createElement("tbody");
 		for (const [key, value] of rows) {
 			const tr = document.createElement("tr");
@@ -512,7 +622,9 @@
 	 */
 	function keyValueArticleElement(title, rows, ...children) {
 		const article = document.createElement("article");
+		article.className = "card";
 		const heading = document.createElement("h3");
+		heading.className = "card-title";
 		heading.textContent = title == null ? "" : String(title);
 		article.append(heading, keyValueTableElement(rows), ...children);
 		return article;

@@ -161,7 +161,7 @@ resource "null_resource" "ensure_kind_kubeconfig" {
     cluster_id         = var.provision_kind_cluster ? kind_cluster.local[0].id : "external:${local.kubeconfig_path_expanded}:${length(trimspace(var.kubeconfig_context)) > 0 ? trimspace(var.kubeconfig_context) : "default"}"
     kubeconfig_path    = local.kubeconfig_path_expanded
     ensure_script_sha  = filesha256("${local.repo_root}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh")
-    rewrite_script_sha = filesha256("${local.repo_root}/kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.py")
+    rewrite_script_sha = filesha256("${local.repo_root}/kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.sh")
   }
 
   provisioner "local-exec" {

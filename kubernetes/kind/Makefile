@@ -105,7 +105,7 @@ VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-ss
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -848,7 +848,7 @@ idp-mcp:
 	@if [ "$(DRY_RUN)" = "1" ]; then \
 		echo "INFO dry-run: would start IDP MCP server for kind against $(IDP_API_PUBLIC_URL)"; \
 	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) uv run python -m idp_mcp.server"; \
+		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) go run ./cmd/idp-mcp"; \
 	fi
 
 .PHONY: gitea-repo-lifecycle-demo
@@ -1376,9 +1376,22 @@ test-shell:
 		"$(STACK_DIR)/scripts/check-cluster-health.sh" \
 		"$(STACK_DIR)/scripts/check-component-version.sh"
 
-.PHONY: test-bats
+BATS ?= bats
+BATS_FLAGS ?= --timing
+BATS_SHARDS ?= 7
+
+.PHONY: test-bats test-bats-plan test-bats-serial test-bats-all
 test-bats:
-	@bats "$(MAKEFILE_DIR)tests"
+	@"$(MAKEFILE_DIR)scripts/run-bats-shards.sh" --tests-dir "$(MAKEFILE_DIR)tests" --shards "$(BATS_SHARDS)"
+
+test-bats-plan:
+	@"$(MAKEFILE_DIR)scripts/run-bats-shards.sh" --tests-dir "$(MAKEFILE_DIR)tests" --shards "$(BATS_SHARDS)" --plan
+
+test-bats-serial:
+	@$(BATS) --abort --timing "$(MAKEFILE_DIR)tests"
+
+test-bats-all:
+	@$(BATS) "$(MAKEFILE_DIR)tests"
 
 .PHONY: check-version
 check-version:

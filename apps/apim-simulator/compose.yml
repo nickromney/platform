@@ -96,7 +96,7 @@ services:
       - --auth-logging=true
       - --request-logging=true
       - --upstream-timeout=180s
-      - --skip-auth-regex=^/(style\.css|app-shell\.css|favicon\.svg|favicon\.ico)$
+      - --skip-auth-regex=^/(app-shell\.css|favicon\.svg|favicon\.ico)$
       - --reverse-proxy=true
       - --skip-provider-button=true
     depends_on:

@@ -49,6 +49,7 @@ func TestShellHealthAndFrontendReportSharedDependencyFootprint(t *testing.T) {
 		t.Fatalf("frontend title missing: %s", rec.Body.String())
 	}
 	for _, text := range []string{
+		`@social-5h3ll/5h3ll-ui`,
 		`/app-shell.css`,
 		`/app-shell.js`,
 		`data-theme="system"`,
@@ -63,6 +64,9 @@ func TestShellHealthAndFrontendReportSharedDependencyFootprint(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Contains(rec.Body.String(), `href="/style.css"`) {
+		t.Fatalf("frontend should not load app-local CSS: %s", rec.Body.String())
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("frontend Cache-Control=%q", got)
@@ -106,6 +110,7 @@ func TestShellHealthAndFrontendReportSharedDependencyFootprint(t *testing.T) {
 	}
 	for _, text := range []string{
 		"ChatGPT Sim",
+		`@social-5h3ll/5h3ll-ui`,
 		`/app-shell.css`,
 		`/app-shell.js`,
 		"Signed out",
@@ -120,6 +125,9 @@ func TestShellHealthAndFrontendReportSharedDependencyFootprint(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Contains(rec.Body.String(), `href="/style.css"`) {
+		t.Fatalf("signed-out page should not load app-local CSS: %s", rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), "logged-out.html") {
 		t.Fatalf("signed-out page must not retain the old logged-out route name: %s", rec.Body.String())
@@ -158,6 +166,7 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 		`class="skip-link" href="#main"`,
 		`<main id="main" tabindex="-1">`,
 		`<header>`,
+		`@social-5h3ll/5h3ll-ui`,
 		`/app-shell.css`,
 		`/idpauth.js`,
 		`class="header-actions"`,
@@ -174,6 +183,9 @@ func TestFrontendUsesSharedLightweightAppShellContract(t *testing.T) {
 		if !strings.Contains(html, text) {
 			t.Fatalf("frontend shell missing %q: %s", text, html)
 		}
+	}
+	if strings.Contains(html, `href="/style.css"`) {
+		t.Fatalf("frontend shell should not load app-local CSS: %s", html)
 	}
 
 	if strings.Contains(html, `<main class="shell">`) {
@@ -366,50 +378,13 @@ func TestServerUsesSharedOIDCIssuerNormalization(t *testing.T) {
 	}
 }
 
-func TestFrontendComposerStaysCompact(t *testing.T) {
-	styleCSS, err := web.ReadFile("web/style.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := string(styleCSS)
-
-	for _, text := range []string{
-		`.conversation {`,
-		`grid-template-rows: auto auto;`,
-		`max-height: min(680px, calc(100vh - 152px));`,
-		`.messages {`,
-		`max-height: min(440px, calc(100vh - 308px));`,
-		`.messages:empty {`,
-		`padding-block: 0;`,
-		`.inspector {`,
-		`max-height: min(680px, calc(100vh - 152px));`,
-		`@media (max-width: 840px)`,
-		`min-height: 0;`,
-		`.composer {`,
-		`padding: 10px;`,
-		`min-height: 58px;`,
-	} {
-		if !strings.Contains(css, text) {
-			t.Fatalf("compact composer CSS missing %q: %s", text, css)
-		}
-	}
-
-	for _, text := range []string{
-		`grid-template-rows: auto 1fr auto;`,
-		`grid-template-rows: minmax(0, 1fr) auto;`,
-		`min-height: calc(100vh - 32px);`,
-		`min-height: min(680px, calc(100vh - 152px));`,
-		`min-height: 72vh;`,
-		`min-height: 92px;`,
-	} {
-		if strings.Contains(css, text) {
-			t.Fatalf("composer CSS still contains oversized rule %q: %s", text, css)
-		}
-	}
-
+func TestFrontendDoesNotLoadAppLocalCSS(t *testing.T) {
 	indexHTML, err := web.ReadFile("web/index.html")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if strings.Contains(string(indexHTML), `href="/style.css"`) {
+		t.Fatalf("frontend must rely on shared shell CSS only: %s", string(indexHTML))
 	}
 	if strings.Contains(string(indexHTML), `id="message" rows="3"`) {
 		t.Fatalf("composer textarea must not force a three-row minimum: %s", string(indexHTML))
