@@ -96,7 +96,10 @@ if [ -n "$configured_url" ] && [ "$configured_url" != "$system_socket" ]; then
 fi
 
 started_local_system_daemon=0
-if [ ! -S "$system_socket" ]; then
+if [ -e "$system_socket" ] && [ ! -S "$system_socket" ]; then
+  restart_local_system_daemon_for_stale_socket "$system_socket"
+  started_local_system_daemon=1
+elif [ ! -S "$system_socket" ]; then
   start_local_system_daemon
   started_local_system_daemon=1
 fi

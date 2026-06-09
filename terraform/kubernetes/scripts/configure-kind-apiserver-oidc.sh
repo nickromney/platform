@@ -6,7 +6,7 @@ if [[ -z "${REPO_ROOT:-}" ]]; then
   REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 fi
 
-RENDER_KIND_APISERVER_OIDC_MANIFEST="${SCRIPT_DIR}/render-kind-apiserver-oidc-manifest.py"
+RENDER_KIND_APISERVER_OIDC_MANIFEST="${SCRIPT_DIR}/render-kind-apiserver-oidc-manifest.sh"
 
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"

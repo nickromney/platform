@@ -99,7 +99,7 @@ EOF
     [ "${status}" -eq 0 ]
   done
 
-  run grep -Fn 'version     = "3.1.0"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
+  run grep -Fn 'version     = "3.2.0"' "${REPO_ROOT}/terraform/kubernetes/.terraform.lock.hcl"
 
   [ "${status}" -eq 0 ]
 

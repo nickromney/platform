@@ -275,7 +275,7 @@ async function deleteConnector(event) {
  */
 function connectorElement(item) {
 	const article = document.createElement("article");
-	article.className = "connector";
+	article.className = "connector card";
 
 	const header = document.createElement("div");
 	header.className = "connector-header";
@@ -285,7 +285,7 @@ function connectorElement(item) {
 	if (item.id !== "default") {
 		const button = document.createElement("button");
 		button.type = "button";
-		button.className = "danger";
+		button.className = "danger btn-destructive";
 		button.dataset.deleteConnector = item.id;
 		button.textContent = "Delete";
 		header.append(button);
@@ -306,7 +306,7 @@ function connectorElement(item) {
 
 	if (item.login_url) {
 		const link = document.createElement("a");
-		link.className = "login-link";
+		link.className = "login-link btn-secondary";
 		link.href = item.login_url;
 		link.target = "_blank";
 		link.rel = "noopener";
@@ -363,7 +363,7 @@ function appendMessage(kind, label, text, meta) {
 	const item = document.createElement("li");
 	item.className = kind;
 	const article = document.createElement("article");
-	article.className = `message ${kind}`;
+	article.className = `message ${kind} card`;
 	const strong = document.createElement("strong");
 	strong.textContent = label;
 	article.append(strong);

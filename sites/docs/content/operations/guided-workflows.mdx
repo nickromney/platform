@@ -13,7 +13,7 @@ remembering every flag.
 The command flow is the same whether you start in the terminal or the browser:
 
 ```text
-Bubble Tea TUI or FastAPI/HTMX browser UI
+Bubble Tea TUI or Go/HTMX browser UI
   -> scripts/platform-workflow.sh
   -> make -C kubernetes/<target> <stage> <action>
 ```
@@ -182,8 +182,8 @@ scripts/platform-workflow.sh preview --execute \
 ## Browser UI
 
 The browser UI is a polished local web operator path over the same workflow
-core. It uses FastAPI + HTMX to provide a lightweight web console without a
-JavaScript build pipeline.
+core. It uses Go + HTMX to provide a lightweight web console without a
+JavaScript or Python web framework build pipeline.
 
 ```bash
 make workflow-ui
@@ -217,9 +217,9 @@ The browser walkthrough mirrors the TUI:
 7. Use the success actions to preview the next stage, return to preview, or
    inspect reset/state-reset commands.
 
-The UI is a small FastAPI + HTMX app under `tools/platform-workflow-ui`. It is
-served through `uv` by `scripts/platform-workflow-ui.sh`, vendors HTMX locally,
-and does not use Node, Vite, React, or `node_modules`.
+The UI is a small Go + HTMX app under `tools/platform-workflow-ui`. It is served
+by `scripts/platform-workflow-ui.sh`, vendors HTMX locally, and does not use
+Python, Node, Vite, React, or `node_modules`.
 
 The browser UI supports command preview, dry-run, execution, polling command
 output, output preservation, stage-aware app toggles, command provenance, and
@@ -228,15 +228,14 @@ small:
 
 ```text
 scripts/platform-workflow-ui.sh
-  -> uv run --project tools/platform-workflow-ui
-  -> hypercorn platform_workflow_ui.main:app
+  -> go run ./cmd/platform-workflow-ui
   -> scripts/platform-workflow.sh
 ```
 
-HTTPS over HTTP/2 is the default. It uses Hypercorn and a local mkcert
-certificate under `.run/workflow-ui` unless you pass explicit certificate paths
-to `scripts/platform-workflow-ui.sh`. Plain HTTP is still available as an
-opt-in fallback:
+HTTPS is the default. The launcher uses a local mkcert certificate under
+`.run/workflow-ui` unless you pass explicit certificate paths to
+`scripts/platform-workflow-ui.sh`. Plain HTTP is still available as an opt-in
+fallback:
 
 ```bash
 make workflow-ui WORKFLOW_UI_HTTP=http1 WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=8765

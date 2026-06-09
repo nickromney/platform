@@ -159,9 +159,6 @@ func SignedOutPage(config SignedOutPageConfig) http.HandlerFunc {
 	if config.SessionName == "" {
 		config.SessionName = config.AppName
 	}
-	if config.Stylesheet == "" {
-		config.Stylesheet = "/style.css"
-	}
 	if config.LoginPath == "" {
 		config.LoginPath = "/.auth/login/sso"
 	}
@@ -289,8 +286,10 @@ var signedOutTemplate = template.Must(template.New("signed-out").Parse(`<!doctyp
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Signed out - {{.AppName}}</title>
     {{if .Favicon}}<link rel="icon" href="{{.Favicon}}">{{end}}
-    <link rel="stylesheet" href="{{.Stylesheet}}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@0.1.4/dist/5h3ll_ui.cdn.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@0.1.4/dist/js/all.min.js" defer></script>
     <link rel="stylesheet" href="/app-shell.css">
+    {{if .Stylesheet}}<link rel="stylesheet" href="{{.Stylesheet}}">{{end}}
   </head>
   <body>
     <main>

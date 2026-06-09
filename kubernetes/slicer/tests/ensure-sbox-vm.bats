@@ -63,7 +63,7 @@ EOF
     SLICER_USE_LOCAL_MAC=1 \
     SLICER_CONFIG="${BATS_TEST_TMPDIR}/slicer-mac.yaml" \
     SLICER_VM_ROOT_BYTES="$((15 * 1073741824))" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"slicer-1 has a 15GiB root disk"* ]]
@@ -82,7 +82,7 @@ EOF
     SLICER_USE_LOCAL_MAC=1 \
     SLICER_CONFIG="${BATS_TEST_TMPDIR}/slicer-mac.yaml" \
     SLICER_VM_ROOT_BYTES="$((25 * 1073741824))" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"slicer-1 is missing from the active local slicer-mac daemon"* ]]
@@ -93,7 +93,7 @@ EOF
   run env \
     SLICER_URL="${BATS_TEST_TMPDIR}/slicer.sock" \
     SLICER_VM_ROOT_BYTES="$((25 * 1073741824))" \
-    "${SCRIPT}"
+    "${SCRIPT}" --execute
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   slicer-1 root disk 25GiB (minimum 25GiB)"* ]]

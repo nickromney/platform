@@ -37,7 +37,7 @@ setup() {
 }
 
 @test "catalog validates against the local IDP catalog schema" {
-  run python3 "${REPO_ROOT}/scripts/validate-json-schema.py" \
+  run "${REPO_ROOT}/scripts/validate-json-schema.sh" \
     "${REPO_ROOT}/schemas/idp/catalog.schema.json" \
     "${REPO_ROOT}/catalog/platform-apps.json"
 
@@ -103,8 +103,7 @@ setup() {
   run jq -e '.packageManager == "npm@11.12.1"' "${REPO_ROOT}/apps/idp-sdk/package.json"
   [ "${status}" -eq 0 ]
 
-  run rg -n 'exclude-newer = "7 days"' \
-    "${REPO_ROOT}/apps/idp-mcp/pyproject.toml"
+  run rg -n '^go 1\.26$' "${REPO_ROOT}/apps/idp-mcp/go.mod"
   [ "${status}" -eq 0 ]
 
   run rg -n '^go 1\.26$' "${REPO_ROOT}/apps/idp-core/app/go.mod"

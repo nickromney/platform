@@ -52,10 +52,13 @@ func TestHealthMetricsAndFrontendAreLightweight(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	for _, text := range []string{"Langfuse Trace Chat", "/api/run", "traceId", "score-list", "/app-shell.css", "/app-shell.js"} {
+	for _, text := range []string{"Langfuse Trace Chat", "/api/run", "traceId", "score-list", "@social-5h3ll/5h3ll-ui", "/app-shell.css", "/app-shell.js", `data-theme="system"`} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("frontend missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Contains(rec.Body.String(), `href="/style.css"`) {
+		t.Fatalf("frontend should not load app-local CSS: %s", rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
@@ -149,7 +152,7 @@ func TestFrontendStaticAssetsUseSharedMethodContract(t *testing.T) {
 		t.Fatalf("HEAD frontend Content-Type=%q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/style.css", nil)
+	req = httptest.NewRequest(http.MethodPost, "/app.js", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -170,10 +173,13 @@ func TestFrontendUsesSharedAuthShellControls(t *testing.T) {
 		t.Fatalf("frontend returned %d: %s", rec.Code, rec.Body.String())
 	}
 	html := rec.Body.String()
-	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `class="header-actions"`, `id="auth-state"`, `class="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="theme-switcher"`, `class="theme-toggle"`, `/oauth2/sign_out?rd=/signed-out.html`, `/idpauth.js`, `/app-shell.css`, `/app-shell.js`, `class="app-panel results" aria-live="polite" aria-labelledby="results-heading"`, `<h2 id="results-heading">Run Results</h2>`} {
+	for _, text := range []string{`class="skip-link" href="#main"`, `<main id="main" tabindex="-1">`, `data-theme="system"`, `@social-5h3ll/5h3ll-ui`, `class="header-actions"`, `id="auth-state"`, `class="auth-state"`, `id="logout-btn"`, `>Sign Out<`, `id="theme-switcher"`, `class="theme-toggle"`, `/oauth2/sign_out?rd=/signed-out.html`, `/idpauth.js`, `/app-shell.css`, `/app-shell.js`, `class="app-panel results" aria-live="polite" aria-labelledby="results-heading"`, `<h2 id="results-heading">Run Results</h2>`} {
 		if !strings.Contains(html, text) {
 			t.Fatalf("frontend missing auth shell control %q: %s", text, html)
 		}
+	}
+	if strings.Contains(html, `href="/style.css"`) {
+		t.Fatalf("frontend should not load app-local CSS: %s", html)
 	}
 }
 

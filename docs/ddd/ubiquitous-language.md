@@ -68,9 +68,9 @@ domain language.
 | workflow core | non-interactive command builder for guided workflows | Implemented by `scripts/platform-workflow.sh`; it previews or runs Makefile commands and writes generated tfvars only when toggles require them. |
 | command preview | reviewable command produced before execution | The safety handoff for TUI and GUI flows; mutating actions should be visible as Make commands before they run. |
 | generated operator tfvars | temporary app-toggle override file under `.run/operator/` | Created by the workflow core for app selections such as `sentiment=off`; safe to delete and not source of long-term platform intent. |
-| guided surface | interactive wrapper over the workflow core | Current guided surfaces are the Bubble Tea TUI and the FastAPI/HTMX browser workflow UI. |
+| guided surface | interactive wrapper over the workflow core | Current guided surfaces are the Bubble Tea TUI and the Go/HTMX browser workflow UI. |
 | terminal TUI | Bubble Tea guided surface for local operators | Implemented by `tools/platform-tui`; it streams command output and offers next-stage shortcuts while keeping Makefiles authoritative. |
-| browser workflow UI | local FastAPI/HTMX guided surface for local operators | Implemented by `tools/platform-workflow-ui`; useful for browser-based command preview, run output, and command history. |
+| browser workflow UI | local Go/HTMX guided surface for local operators | Implemented by `tools/platform-workflow-ui`; useful for browser-based command preview, run output, and command history. |
 | portal surface | browser-facing navigation or admin UI for platform operators | Current examples: Grafana Launchpad, Argo CD, Headlamp, Gitea, Keycloak, Hubble, and Policy Reporter. |
 | developer portal | the Backstage/Port-like browser UI over the local IDP | Public host: `portal.127.0.0.1.sslip.io`; this is a surface, not the whole platform. |
 | portal API | the small Go product API consumed by the developer portal, SDK, MCP, and TUI | Public host: `portal-api.127.0.0.1.sslip.io`; it exposes IDP contracts and dry-run workflows, not Terraform internals. |

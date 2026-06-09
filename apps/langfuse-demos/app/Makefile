@@ -44,7 +44,7 @@ test:
 	go test ./...
 
 js-check:
-	biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html internal/app/web/style.css
+	biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html
 	deno check --check-js internal/app/web/app.js
 
 build:

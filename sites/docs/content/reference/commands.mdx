@@ -42,12 +42,13 @@ scripts/platform-workflow-ui.sh --execute --host 127.0.0.1 --port 8765
 serves the local browser chooser. `scripts/platform-workflow.sh` is the shared
 non-interactive core used by both wrappers.
 
-`make tui` requires Go because the TUI is source-built with `go run`. Go is not
-required for the platform Make workflows themselves. Use `make build-tui` to
-build a local binary under `tools/platform-tui/bin/`; release builds can attach
-that binary as an artifact rather than committing compiled output.
+`make tui` and `make workflow-ui` require Go because the guided interfaces are
+source-built with `go run`. Go is not required for the platform Make workflows
+themselves. Use `make build-tui` to build a local TUI binary under
+`tools/platform-tui/bin/`; release builds can attach that binary as an artifact
+rather than committing compiled output.
 
-`make workflow-ui` requires `uv`. It serves the FastAPI + HTMX browser UI from
+`make workflow-ui` serves the Go + HTMX browser UI from
 `tools/platform-workflow-ui` at `https://console.127.0.0.1.sslip.io:8443` by
 default:
 
@@ -57,10 +58,10 @@ make workflow-ui WORKFLOW_UI_PORT=9876
 make workflow-ui WORKFLOW_UI_HTTP=http1 WORKFLOW_UI_HOST=127.0.0.1 WORKFLOW_UI_PORT=8765
 ```
 
-The web UI vendors HTMX locally and does not require Node, Vite, React, or a
-`node_modules` install.
+The web UI vendors HTMX locally and does not require Python, Node, Vite, React,
+or a `node_modules` install.
 
-HTTPS over HTTP/2 is the default and is served by Hypercorn. It uses mkcert to
+HTTPS is the default and is served by the Go workflow UI. The launcher uses mkcert to
 create `.run/workflow-ui/workflow-ui.pem` and
 `.run/workflow-ui/workflow-ui-key.pem` if you do not provide certificate paths
 directly to `scripts/platform-workflow-ui.sh`. `WORKFLOW_UI_HTTP=http1` is the

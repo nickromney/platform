@@ -6,55 +6,54 @@ setup() {
 }
 
 @test "tracked host-side code avoids bare python references outside approved exceptions" {
-  run uv run --isolated python - <<'PY'
-from __future__ import annotations
-
-import os
-import subprocess
-from pathlib import Path
-
-repo_root = Path(os.environ["REPO_ROOT"])
-needle = "python" "3"
-allowed = {
-    ".devcontainer/Dockerfile",
-    ".devcontainer/check-toolchain-surface.sh",
-    "kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.py",
-    "kubernetes/kind/tests/check-version.bats",
-    "scripts/audit-shell-scripts.sh",
-    "scripts/validate-json-schema.py",
-    "terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.py",
-    "tests/audit-shell-scripts.bats",
-}
-
-result = subprocess.run(
-    ["git", "-C", str(repo_root), "grep", "-n", needle, "--", "."],
-    check=False,
-    capture_output=True,
-    text=True,
-)
-
-unexpected: list[str] = []
-for raw_line in result.stdout.splitlines():
-    relative_path = raw_line.split(":", 1)[0]
-    if relative_path in allowed:
-        continue
-    if relative_path.startswith((
-        "apps/apim-simulator/",
-        "apps/backstage/",
-        "docs/",
-        "kubernetes/workflow/",
-        "tests/local-idp-contracts.bats",
-        "tests/sso-e2e-app-toggles.bats",
-        "tests/validate-kyverno-policies.bats",
-        "tools/platform-workflow-ui/",
-    )):
-        continue
-    unexpected.append(raw_line)
-
-assert not unexpected, "\n".join(unexpected)
-print(f"validated {len(allowed)} approved bare-python reference file(s)")
-PY
+  run bash -c '
+    set -euo pipefail
+    allowed_files=(
+      ".devcontainer/Dockerfile"
+      ".devcontainer/check-toolchain-surface.sh"
+      "kubernetes/kind/tests/check-version.bats"
+      "scripts/audit-shell-scripts.sh"
+      "tests/audit-shell-scripts.bats"
+    )
+    allowed_prefixes=(
+      "apps/apim-simulator/"
+      "apps/backstage/"
+      "docs/"
+      "kubernetes/workflow/"
+      "tests/local-idp-contracts.bats"
+      "tests/sso-e2e-app-toggles.bats"
+      "tests/validate-kyverno-policies.bats"
+      "tools/platform-workflow-ui/"
+    )
+    unexpected=()
+    while IFS= read -r raw_line; do
+      relative_path="${raw_line%%:*}"
+      allowed=0
+      for file in "${allowed_files[@]}"; do
+        if [[ "${relative_path}" == "${file}" ]]; then
+          allowed=1
+          break
+        fi
+      done
+      if [[ "${allowed}" == "0" ]]; then
+        for prefix in "${allowed_prefixes[@]}"; do
+          if [[ "${relative_path}" == "${prefix}"* ]]; then
+            allowed=1
+            break
+          fi
+        done
+      fi
+      if [[ "${allowed}" == "0" ]]; then
+        unexpected+=("${raw_line}")
+      fi
+    done < <(git -C "${REPO_ROOT}" grep -n "python3" -- . || true)
+    if [[ "${#unexpected[@]}" -gt 0 ]]; then
+      printf "%s\n" "${unexpected[@]}" >&2
+      exit 1
+    fi
+    printf "validated %s approved bare-python reference file(s)\n" "${#allowed_files[@]}"
+  '
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 8 approved bare-python reference file(s)"* ]]
+  [[ "${output}" == *"validated 5 approved bare-python reference file(s)"* ]]
 }

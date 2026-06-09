@@ -164,28 +164,28 @@ By the "one adapter = hypothetical seam" rule: defer until a second implementati
 
 ---
 
-### F. `apps/idp-mcp/idp_mcp/server.py` — tool registry consolidation
+### F. `apps/idp-mcp/cmd/idp-mcp/main.go` — tool registry consolidation
 
-Tool names appear **twice**: once in `tool_definitions()` schema (lines 51-76) and once in the
-`handle_tool_call()` dispatch switch (lines 79-87). A new tool requires editing both places.
+Tool names appeared **twice** in the old adapter: once in the tool schema list and once in
+the dispatch switch. A new tool required editing both places.
 
 **Proposed shape:**
 
-```python
-TOOLS = {
+```go
+var tools = map[string]mcpTool{
     "platform_status": {
-        "description": "...",
-        "inputSchema": {"type": "object", "properties": {}},
-        "handler": lambda client, args: client.platform_status(),
+        Description: "...",
+        InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+        Handler: func(ctx context.Context, c *client, args map[string]any) (any, error) {
+            return c.platformStatus(ctx)
+        },
     },
-    # ...
 }
 ```
 
-Generate `tool_definitions()` from `TOOLS.values()` and dispatch from `TOOLS[name]["handler"]`.
+Generate tool definitions from the registry values and dispatch from the matching handler.
 
-Also: zero test coverage for `_request()`, `platform_status()`, `catalog_list()`, `create_environment()`.
-Only `from_env()` is tested.
+Also: expand coverage for HTTP request construction and per-tool calls.
 
 **Strength:** Resolved
 
@@ -241,11 +241,11 @@ sites longer without a depth improvement. Kept as-is.
 
 ### F. `idp-mcp` tool registry consolidation — implemented
 
-`apps/idp-mcp/idp_mcp/server.py`: consolidated `tool_definitions()` and
-`handle_tool_call()` into a single `TOOLS` dict. Adding a tool now requires editing
+`apps/idp-mcp/cmd/idp-mcp/main.go`: consolidated tool definitions and
+tool-call dispatch into a single registry. Adding a tool now requires editing
 exactly one place. Added 7 new tests covering: registry/definition alignment,
 per-tool dispatch, unknown-tool error, handler callability.
-Added `pytest` as dev dependency; `uv run pytest` now covers dispatch logic.
+The current Go adapter covers dispatch logic with `go test`.
 
 ---
 
@@ -262,9 +262,9 @@ Added `pytest` as dev dependency; `uv run pytest` now covers dispatch logic.
 | `apps/sentiment/app/internal/app/server.go` | Same |
 | `apps/chatgpt-sim/app/internal/app/server.go` | Delete dead `requireAuth` |
 | `docs/adr/0009-idpauth-is-auth-http-integration-layer.md` | New ADR |
-| `apps/idp-mcp/idp_mcp/server.py` | Consolidate `TOOLS` dict |
-| `apps/idp-mcp/tests/test_server.py` | Add 7 dispatch/registry tests |
-| `apps/idp-mcp/pyproject.toml` | Add `pytest` dev dependency |
+| `apps/idp-mcp/cmd/idp-mcp/main.go` | Consolidate `TOOLS` dict |
+| `apps/idp-mcp/cmd/idp-mcp/main_test.go` | Add dispatch/registry tests |
+| `apps/idp-mcp/go.mod` | Go module for the MCP adapter |
 | `tools/platform-tui/internal/tui/model.go` | Fix `stageDisplay` (no-op → label lookup) |
 
 ---

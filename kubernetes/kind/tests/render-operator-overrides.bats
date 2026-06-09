@@ -50,8 +50,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run uv run --isolated python \
-    "${REPO_ROOT}/kubernetes/workflow/validate-image-catalog-target-refs.py" \
+  run "${REPO_ROOT}/kubernetes/workflow/validate-image-catalog-target-refs.sh" \
     --catalog "${REPO_ROOT}/kubernetes/workflow/image-catalog.json" \
     --target kind \
     --tfvars "${OUTPUT_FILE}" \

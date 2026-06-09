@@ -23,9 +23,14 @@ func TestStylesheetServesSharedAppShellRules(t *testing.T) {
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache, no-store, must-revalidate, max-age=0" {
 		t.Fatalf("Cache-Control=%q", got)
 	}
-	for _, text := range []string{`body > header`, `body > main`, `--app-shell-width`, `padding-top: 32px`, `padding-bottom: 32px`, `.skip-link`, `.skip-link:focus`, `.sr-only`, `:focus-visible`, `[hidden]`, `display: none !important`, `align-items: center`, `header h1`, `font-size: 2.25rem`, `line-height: 1.15`, `header p`, `.header-actions`, `.header-actions a`, `.auth-state`, `.theme-toggle`, `.sign-in-link`, `min-height: 42px`, `.app-panel`} {
+	for _, text := range []string{`body > header`, `body > main`, `--app-shell-width`, `padding-top: 32px`, `padding-bottom: 32px`, `.skip-link`, `.skip-link:focus`, `.sr-only`, `:focus-visible`, `[hidden]`, `display: none !important`, `align-items: center`, `header h1`, `font-size: var(--desktop-heading-03`, `line-height: var(--lh-desktop-heading-03`, `header p`, `.header-actions`, `.header-actions a`, `.auth-state`, `.theme-toggle`, `.sign-in-link`, `min-height: 42px`, `.app-panel`} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("stylesheet missing %q: %s", text, rec.Body.String())
+		}
+	}
+	for _, text := range []string{`--background`, `--card`, `--foreground`, `--muted-foreground`, `--primary`, `--destructive`, `--app-shell-panel-shadow`, `--app-shell-control-shadow`} {
+		if !strings.Contains(rec.Body.String(), text) {
+			t.Fatalf("stylesheet missing 5H3LL token integration %q: %s", text, rec.Body.String())
 		}
 	}
 	for _, text := range []string{`--focus-ring`, `outline: 3px solid var(--focus-ring`, `box-shadow: 0 0 0 2px var(--surface`, `scroll-margin-top: 24px`} {
@@ -149,6 +154,13 @@ func TestScriptServesSharedThemeHelpers(t *testing.T) {
 		`themeIconElement("light")`,
 		`themeIconElement("dark")`,
 		"themePreference",
+		"resolvedThemeIsDark",
+		"classList.toggle(\"dark\"",
+		"enhanceVendoredClasses",
+		"btn-icon-outline",
+		"btn-secondary",
+		"select",
+		"field",
 		"requireElement",
 		"optionalElement",
 		"requireSelector",
@@ -495,10 +507,13 @@ func TestSignedOutPageServesSharedGatewayLogoutScreen(t *testing.T) {
 		t.Fatalf("Cache-Control=%q", got)
 	}
 	for _, text := range []string{
+		`<html lang="en" data-theme="system">`,
 		`<title>Signed out - Demo Console</title>`,
 		`<link rel="icon" href="/favicon.ico">`,
-		`<link rel="stylesheet" href="/style.css">`,
+		`https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@0.1.4/dist/5h3ll_ui.cdn.min.css`,
+		`https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@0.1.4/dist/js/all.min.js`,
 		`<link rel="stylesheet" href="/app-shell.css">`,
+		`<link rel="stylesheet" href="/style.css">`,
 		`<h1>Demo Console</h1>`,
 		`A small Go app.`,
 		`id="login-link"`,
@@ -512,6 +527,9 @@ func TestSignedOutPageServesSharedGatewayLogoutScreen(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("signed-out page missing %q: %s", text, rec.Body.String())
 		}
+	}
+	if strings.Index(rec.Body.String(), `/app-shell.css`) > strings.Index(rec.Body.String(), `/style.css`) {
+		t.Fatalf("signed-out page should load shared app shell before app stylesheet: %s", rec.Body.String())
 	}
 }
 

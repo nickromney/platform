@@ -67,7 +67,6 @@ func NewServer(cfg Config, verifier idpauth.TokenVerifier) http.Handler {
 		AppName:     "APIM Simulator",
 		Tagline:     "Go gateway, vanilla console, APIM-shaped routing and tracing.",
 		SessionName: "APIM simulator",
-		Stylesheet:  "/style.css",
 	}))
 	mux.HandleFunc("/", s.dispatch)
 	return apphttp.RequestLogger("apim", nil, corsMiddleware(cfg, mux))
