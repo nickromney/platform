@@ -188,7 +188,7 @@ Stage 100 also reserves the host ports that later stages will use. The Kind port
 | `127.0.0.1:30022` | `gitea_ssh_node_port` | Gitea SSH at stage `500+` |
 | `127.0.0.1:3302` | `grafana_ui_host_port` -> `grafana_ui_node_port=30302` | Grafana UI at stage `800+` |
 
-If any of those host ports are already taken on your machine, override them in a local tfvars file and pass that via `PLATFORM_TFVARS=...`. The preflight check in `make kind apply ...` uses [`check-kind-host-ports.sh`](scripts/check-kind-host-ports.sh) to catch conflicts before apply.
+If any of those host ports are already taken on your machine, override them in a local tfvars file and pass that via `PLATFORM_TFVARS=...`. The preflight check in `make kind apply ...` uses the shared [`check-target-host-ports.sh`](../scripts/check-target-host-ports.sh) adapter to catch conflicts before apply.
 
 Running Lima or Slicer VMs by themselves are not conflicts for kind. Kind only
 needs the shared localhost ports to be free, so `check-lima-stopped` fails when

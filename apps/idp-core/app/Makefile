@@ -1,6 +1,9 @@
-.PHONY: help build build-linux test run clean
+.PHONY: help run
 
 IDP_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+GO_APP_BINARY := idp-core
+GO_APP_CMD := ./cmd/idp-core
+GO_APP_GOARCH := $(IDP_GOARCH)
 
 help:
 	@echo "IDP Core app:"
@@ -10,19 +13,7 @@ help:
 	@echo "  run          Run the API on port 8080"
 	@echo "  clean        Remove generated .run artifacts"
 
-build:
-	@mkdir -p .run
-	go build -trimpath -ldflags="-s -w" -o .run/idp-core ./cmd/idp-core
-
-build-linux:
-	@mkdir -p .run
-	CGO_ENABLED=0 GOOS=linux GOARCH=$${GOARCH:-$(IDP_GOARCH)} go build -trimpath -ldflags="-s -w" -o .run/idp-core ./cmd/idp-core
-
-test:
-	go test ./...
-
 run:
 	PORT=8080 go run ./cmd/idp-core
 
-clean:
-	rm -rf .run
+include ../../../mk/go-app-core.mk

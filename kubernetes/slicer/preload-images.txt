@@ -17,18 +17,18 @@ ghcr.io/nginx/nginx-gateway-fabric:2.5.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1
 
 # --- ArgoCD (chart 9.5.19) ---
-dhi.io/argocd:3.4.3-debian13
+quay.io/argoproj/argocd:v3.4.3
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine
 
 # --- Gitea (chart 12.6.0) ---
 docker.gitea.com/gitea:1.26.1-rootless
 
 # --- Kyverno (chart 3.8.1) ---
-dhi.io/kyverno:1.18.1-debian13
-dhi.io/kyverno-init:1.18.1-debian13
-dhi.io/kyverno-background-controller:1.18.1-debian13
-dhi.io/kyverno-cleanup-controller:1.18.1-debian13
-dhi.io/kyverno-reports-controller:1.18.1-debian13
+ghcr.io/kyverno/kyverno:v1.18.1
+ghcr.io/kyverno/kyvernopre:v1.18.1
+ghcr.io/kyverno/background-controller:v1.18.1
+ghcr.io/kyverno/cleanup-controller:v1.18.1
+ghcr.io/kyverno/reports-controller:v1.18.1
 ghcr.io/kyverno/readiness-checker:v0.1.0
 
 # --- cert-manager (chart v1.20.2) ---
@@ -49,7 +49,6 @@ docker.io/groundnuty/k8s-wait-for:v2.0
 
 # --- Prometheus (chart 29.10.0) ---
 quay.io/prometheus/prometheus:v3.12.0
-dhi.io/prometheus:3.12.0-debian13
 dhi.io/prometheus-config-reloader:0.89.0-debian13
 dhi.io/alertmanager:0.31.1-debian13
 dhi.io/kube-state-metrics:2.18.0-debian13

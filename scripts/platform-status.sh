@@ -8,6 +8,8 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 PLATFORM_STATUS_VARIANTS_DIR="${PLATFORM_STATUS_VARIANTS_DIR:-${REPO_ROOT}/kubernetes/variants}"
 CHECK_DOCKER_REGISTRY_AUTH_SCRIPT="${PLATFORM_STATUS_CHECK_DOCKER_REGISTRY_AUTH_SCRIPT:-${REPO_ROOT}/kubernetes/kind/scripts/check-docker-registry-auth.sh}"
+ACTION_CATALOG="${PLATFORM_STATUS_ACTION_CATALOG:-${REPO_ROOT}/scripts/platform-status-action-catalog.sh}"
+IDP_PREVIEW_ACTION_CATALOG="${PLATFORM_STATUS_IDP_PREVIEW_ACTION_CATALOG:-${REPO_ROOT}/kubernetes/scripts/idp-preview-action-catalog.sh}"
 variant_contract_value() {
   local variant="$1"
   local jq_filter="$2"
@@ -702,6 +704,37 @@ build_action_json() {
     }'
 }
 
+build_shared_idp_preview_actions_json() {
+  local variant="$1"
+  local variant_path="$2"
+  local target=""
+  local label=""
+
+  while IFS=$'\t' read -r target label; do
+    [ -n "${target}" ] || continue
+    build_action_json "${variant}-${target}" "${label}" "${variant}" "${variant_path}" 1 '' "make -C ${variant_path} ${target}" 0
+  done < <("${IDP_PREVIEW_ACTION_CATALOG}" --records)
+}
+
+build_variant_status_actions_json() {
+  local variant="$1"
+  local variant_path="$2"
+  local runtime_present="$3"
+  local apply_100_enabled="$4"
+  local apply_100_reason="$5"
+  local apply_900_enabled="$6"
+  local apply_900_reason="$7"
+
+  "${ACTION_CATALOG}" --records \
+    --variant "${variant}" \
+    --variant-path "${variant_path}" \
+    --runtime-present "${runtime_present}" \
+    --apply-100-enabled "${apply_100_enabled}" \
+    --apply-100-reason "${apply_100_reason}" \
+    --apply-900-enabled "${apply_900_enabled}" \
+    --apply-900-reason "${apply_900_reason}"
+}
+
 render_human_output() {
   local json_payload="$1"
   local table_output=""
@@ -1337,41 +1370,14 @@ slicer_apply_900_reason="${slicer_apply_100_reason}"
 
 actions_json="$(
   {
-    build_action_json kind-status 'Kind status' kind kubernetes/kind 1 '' 'make -C kubernetes/kind status' 0
-    build_action_json kind-prereqs 'Kind prereqs' kind kubernetes/kind 1 '' 'make -C kubernetes/kind prereqs' 0
-    build_action_json kind-check-health 'Kind health' kind kubernetes/kind "$( [ "${kind_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${kind_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/kind is not running' )" 'make -C kubernetes/kind check-health' 0
-    build_action_json kind-show-urls 'Kind URLs' kind kubernetes/kind "$( [ "${kind_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${kind_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/kind is not running' )" 'make -C kubernetes/kind show-urls' 0
-    build_action_json kind-stop 'Stop kind' kind kubernetes/kind "$( [ "${kind_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${kind_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/kind is not present' )" 'make -C kubernetes/kind stop-kind' 0
-    build_action_json kind-reset 'Reset kind' kind kubernetes/kind "$( [ "${kind_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${kind_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/kind is not present' )" 'make -C kubernetes/kind reset AUTO_APPROVE=1' 1
-    build_action_json kind-apply-100 'Kind stage 100 apply' kind kubernetes/kind "${kind_apply_100_enabled}" "${kind_apply_100_reason}" 'make -C kubernetes/kind 100 apply AUTO_APPROVE=1' 1
-    build_action_json kind-apply-900 'Kind stage 900 apply' kind kubernetes/kind "${kind_apply_900_enabled}" "${kind_apply_900_reason}" 'make -C kubernetes/kind 900 apply AUTO_APPROVE=1' 1
-    build_action_json kind-switch 'Switch to kind' kind kubernetes/kind "${kind_apply_900_enabled}" "$( [ "${kind_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${kind_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/kind reset && make -C kubernetes/kind 100 apply && make -C kubernetes/kind 900 apply' 1
-    build_action_json kind-idp-catalog 'IDP catalog' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-catalog' 0
-    build_action_json kind-idp-env-create 'IDP environment request' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-env ACTION=create APP=chatgpt-sim ENV=preview-nr' 0
-    build_action_json kind-idp-deployments 'IDP deployments' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-deployments' 0
-    build_action_json kind-idp-secrets 'IDP secrets' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-secrets' 0
-    build_action_json kind-idp-scorecards 'IDP scorecards' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-scorecards' 0
-    build_action_json kind-gitea-repo-lifecycle-demo 'Gitea repo lifecycle demo' kind kubernetes/kind 1 '' 'make -C kubernetes/kind gitea-repo-lifecycle-demo REPO_NAME=chatgpt-sim' 0
+    build_variant_status_actions_json kind kubernetes/kind "${kind_runtime_present}" "${kind_apply_100_enabled}" "${kind_apply_100_reason}" "${kind_apply_900_enabled}" "${kind_apply_900_reason}"
+    build_shared_idp_preview_actions_json kind kubernetes/kind
 
-    build_action_json lima-status 'Kubernetes Lima status' lima kubernetes/lima 1 '' 'make -C kubernetes/lima status' 0
-    build_action_json lima-prereqs 'Kubernetes Lima prereqs' lima kubernetes/lima 1 '' 'make -C kubernetes/lima prereqs' 0
-    build_action_json lima-check-health 'Kubernetes Lima health' lima kubernetes/lima "$( [ "${lima_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${lima_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/lima is not running' )" 'make -C kubernetes/lima check-health' 0
-    build_action_json lima-show-urls 'Kubernetes Lima URLs' lima kubernetes/lima "$( [ "${lima_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${lima_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/lima is not running' )" 'make -C kubernetes/lima show-urls' 0
-    build_action_json lima-stop 'Stop Kubernetes Lima' lima kubernetes/lima "$( [ "${lima_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${lima_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/lima is not present' )" 'make -C kubernetes/lima stop-lima' 0
-    build_action_json lima-reset 'Reset Kubernetes Lima' lima kubernetes/lima "$( [ "${lima_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${lima_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/lima is not present' )" 'make -C kubernetes/lima reset AUTO_APPROVE=1' 1
-    build_action_json lima-apply-100 'Kubernetes Lima stage 100 apply' lima kubernetes/lima "${lima_apply_100_enabled}" "${lima_apply_100_reason}" 'make -C kubernetes/lima 100 apply AUTO_APPROVE=1' 1
-    build_action_json lima-apply-900 'Kubernetes Lima stage 900 apply' lima kubernetes/lima "${lima_apply_900_enabled}" "${lima_apply_900_reason}" 'make -C kubernetes/lima 900 apply AUTO_APPROVE=1' 1
-    build_action_json lima-switch 'Switch to Kubernetes Lima' lima kubernetes/lima "${lima_apply_900_enabled}" "$( [ "${lima_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${lima_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/lima reset && make -C kubernetes/lima 100 apply && make -C kubernetes/lima 900 apply' 1
+    build_variant_status_actions_json lima kubernetes/lima "${lima_runtime_present}" "${lima_apply_100_enabled}" "${lima_apply_100_reason}" "${lima_apply_900_enabled}" "${lima_apply_900_reason}"
+    build_shared_idp_preview_actions_json lima kubernetes/lima
 
-    build_action_json slicer-status 'Slicer status' slicer kubernetes/slicer 1 '' 'make -C kubernetes/slicer status' 0
-    build_action_json slicer-prereqs 'Slicer prereqs' slicer kubernetes/slicer 1 '' 'make -C kubernetes/slicer prereqs' 0
-    build_action_json slicer-check-health 'Slicer health' slicer kubernetes/slicer "$( [ "${slicer_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${slicer_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/slicer is not running' )" 'make -C kubernetes/slicer check-health' 0
-    build_action_json slicer-show-urls 'Slicer URLs' slicer kubernetes/slicer "$( [ "${slicer_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${slicer_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/slicer is not running' )" 'make -C kubernetes/slicer show-urls' 0
-    build_action_json slicer-stop 'Stop Slicer' slicer kubernetes/slicer "$( [ "${slicer_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${slicer_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/slicer is not present' )" 'make -C kubernetes/slicer stop-slicer' 0
-    build_action_json slicer-reset 'Reset Slicer' slicer kubernetes/slicer "$( [ "${slicer_runtime_present}" -eq 1 ] && printf 1 || printf 0 )" "$( [ "${slicer_runtime_present}" -eq 1 ] && printf '' || printf 'kubernetes/slicer is not present' )" 'make -C kubernetes/slicer reset AUTO_APPROVE=1' 1
-    build_action_json slicer-apply-100 'Slicer stage 100 apply' slicer kubernetes/slicer "${slicer_apply_100_enabled}" "${slicer_apply_100_reason}" 'make -C kubernetes/slicer 100 apply AUTO_APPROVE=1' 1
-    build_action_json slicer-apply-900 'Slicer stage 900 apply' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "${slicer_apply_900_reason}" 'make -C kubernetes/slicer 900 apply AUTO_APPROVE=1' 1
-    build_action_json slicer-switch 'Switch to Slicer' slicer kubernetes/slicer "${slicer_apply_900_enabled}" "$( [ "${slicer_apply_900_enabled}" -eq 1 ] && printf '' || printf '%s' "${slicer_apply_900_reason}" )" 'AUTO_APPROVE=1 make -C kubernetes/slicer reset && make -C kubernetes/slicer 100 apply && make -C kubernetes/slicer 900 apply' 1
+    build_variant_status_actions_json slicer kubernetes/slicer "${slicer_runtime_present}" "${slicer_apply_100_enabled}" "${slicer_apply_100_reason}" "${slicer_apply_900_enabled}" "${slicer_apply_900_reason}"
+    build_shared_idp_preview_actions_json slicer kubernetes/slicer
   } | jq -s '.'
 )"
 

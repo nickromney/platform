@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/host-port-listeners.sh"
 
 slicer_socket="${SLICER_SOCKET:-${SLICER_URL:-${SLICER_SYSTEM_SOCKET:-${HOME}/slicer-mac/slicer.sock}}}"
 slicer_vm_name="${SLICER_VM_NAME:-slicer-1}"
@@ -26,41 +28,6 @@ EOF
 }
 
 shell_cli_handle_standard_no_args usage "would check whether Slicer VMs or proxy processes are still running" "$@"
-
-have_cmd() {
-  command -v "$1" >/dev/null 2>&1
-}
-
-shared_port_listening() {
-  local port="$1"
-
-  if have_cmd lsof; then
-    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
-    return
-  fi
-
-  if have_cmd ss; then
-    ss -H -ltn "sport = :${port}" 2>/dev/null | grep -q .
-    return
-  fi
-
-  return 1
-}
-
-shared_ports_in_use() {
-  local port
-  local ports=""
-
-  for port in ${SLICER_SHARED_PORT_NUMBERS}; do
-    if shared_port_listening "${port}"; then
-      ports+="${port}"$'\n'
-    fi
-  done
-
-  if [[ -n "${ports}" ]]; then
-    printf '%s' "${ports}" | LC_ALL=C sort -n -u
-  fi
-}
 
 if command -v slicer >/dev/null 2>&1; then
   if command -v jq >/dev/null 2>&1; then
@@ -92,7 +59,7 @@ if [[ -z "${running_slicer_forwards}" && -z "${running_slicer_proxies}" ]]; then
   exit 0
 fi
 
-active_shared_ports="$(shared_ports_in_use)"
+active_shared_ports="$(host_port_listener_addresses_for_ports "${SLICER_SHARED_PORT_NUMBERS}" || true)"
 
 echo "Slicer host bindings are still active." >&2
 echo "Stop them before assuming the shared localhost ports are free:" >&2
@@ -101,9 +68,9 @@ echo "" >&2
 
 if [[ -n "${active_shared_ports}" ]]; then
   echo "Shared host ports currently in use while Slicer is active:" >&2
-  while IFS= read -r port; do
-    [[ -z "${port}" ]] && continue
-    printf '  127.0.0.1:%s\n' "${port}" >&2
+  while IFS= read -r address; do
+    [[ -z "${address}" ]] && continue
+    printf '  %s\n' "${address}" >&2
   done <<< "${active_shared_ports}"
   echo "" >&2
 fi

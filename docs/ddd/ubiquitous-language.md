@@ -44,6 +44,8 @@ domain language.
 | variant adapter | the implementation behind a variant that satisfies platform contracts | May be Terraform/OpenTofu, Terragrunt, scripts, provider APIs, or a mix of them. |
 | variant family | broad runtime class for a variant | Current value is `local`; future values may include `existing`, `hosted`, and `bare-metal`. |
 | target | a Makefile and workflow noun | Implementation-facing term for `make` goals. |
+| app wrapper | the `apps/<name>/Makefile` entrypoint that wraps an app core with local compose workflows | Declares its goal surface in `MAKE_KNOWN_GOALS`; invariant behaviour comes from `mk/app-common.mk`. |
+| app core | the `apps/<name>/app` Go module and Makefile that own an app's build, test, and run logic | App wrappers delegate to it via `app-*` targets. |
 | context | a deployable or state boundary inside a variant workflow | Current local contexts are `local-substrate` and `platform-stack`; future hosted variants may split network, identity, and cluster contexts. |
 | contract | facts a context provides or consumes | Examples: kubeconfig, ingress, DNS, registry, CNI, identity, resource sizing, lifecycle, and state behavior. |
 | lifecycle mode | whether a variant creates, attaches to, or delegates a runtime | Current local variants use `create`; future modes include `attach` and `external`. |

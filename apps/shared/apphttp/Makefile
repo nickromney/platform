@@ -1,8 +1,3 @@
-.PHONY: help test
+SHARED_GO_MODULE_LABEL := Shared app HTTP module
 
-help:
-	@echo "Shared app HTTP module:"
-	@echo "  test  Run Go unit tests"
-
-test:
-	go test ./...
+include ../../../mk/shared-go-module.mk

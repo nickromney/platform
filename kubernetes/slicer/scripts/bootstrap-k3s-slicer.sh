@@ -6,6 +6,10 @@ repo_root="$(cd "${script_dir}/../../.." && pwd)"
 run_dir="${RUN_DIR:-$(cd "${script_dir}/.." && pwd)/.run}"
 # shellcheck source=/dev/null
 source "${repo_root}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${repo_root}/kubernetes/scripts/k3s-bootstrap-lib.sh"
+# shellcheck source=/dev/null
+source "${repo_root}/kubernetes/scripts/k3s-registries-lib.sh"
 
 usage() {
   cat <<EOF
@@ -24,6 +28,7 @@ slicer_socket="${SLICER_URL:-${SLICER_SOCKET:-}}"
 [ -n "${slicer_socket}" ] || { echo "ERROR: SLICER_URL or SLICER_SOCKET must be set" >&2; exit 1; }
 
 kubeconfig_helper="${KUBECONFIG_HELPER:-${repo_root}/terraform/kubernetes/scripts/manage-kubeconfig.sh}"
+reconcile_kubeconfig="${RECONCILE_KUBECONFIG:-${repo_root}/kubernetes/scripts/reconcile-kubeconfig.sh}"
 server_vm="${SLICER_VM_NAME:-slicer-1}"
 slicer_vm_user="${SLICER_VM_USER:-ubuntu}"
 k3sup_context="${K3SUP_CONTEXT:-slicer-k3s}"
@@ -43,24 +48,6 @@ bootstrap_pub="${bootstrap_key}.pub"
 
 [[ "${allow_existing_k3s}" =~ ^(0|1)$ ]] || { echo "ERROR: SLICER_ALLOW_EXISTING_K3S must be 0 or 1" >&2; exit 1; }
 
-find_bootstrap_client() {
-  local candidate
-
-  for candidate in \
-    "${K3SUP_PRO_BIN:-}" \
-    "$(command -v k3sup-pro 2>/dev/null || true)" \
-    "${K3SUP_BIN:-}" \
-    "$(command -v k3sup 2>/dev/null || true)" \
-    "$HOME/.arkade/bin/k3sup"; do
-    [ -n "$candidate" ] || continue
-    [ -x "$candidate" ] || continue
-    echo "$candidate"
-    return 0
-  done
-
-  return 1
-}
-
 desired_network_profile() {
   if [[ "${server_extra_args}" == *"--flannel-backend=none"* ]]; then
     echo "cilium"
@@ -72,42 +59,6 @@ desired_network_profile() {
 vm_exec() {
   local vm="$1"; shift
   SLICER_URL="$slicer_socket" slicer vm exec "$vm" -- "$@"
-}
-
-run_with_timeout() {
-  local seconds="$1"
-  shift
-  local pid=""
-  local start=""
-  local elapsed=""
-  local rc=0
-
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${seconds}" "$@"
-    return $?
-  fi
-
-  if command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "${seconds}" "$@"
-    return $?
-  fi
-
-  "$@" &
-  pid=$!
-  start="$(date +%s)"
-
-  while kill -0 "${pid}" >/dev/null 2>&1; do
-    elapsed=$(( $(date +%s) - start ))
-    if [ "${elapsed}" -ge "${seconds}" ]; then
-      kill "${pid}" >/dev/null 2>&1 || true
-      wait "${pid}" >/dev/null 2>&1 || true
-      return 124
-    fi
-    sleep 1
-  done
-
-  wait "${pid}" || rc=$?
-  return "${rc}"
 }
 
 vm_exec_retry() {
@@ -212,20 +163,6 @@ fix_vm_dns() {
   fi
 }
 
-remove_context_from_default_kubeconfig() {
-  [ -e "${default_kubeconfig_path}" ] || return 0
-  [ -x "${kubeconfig_helper}" ] || return 0
-
-  "${kubeconfig_helper}" --execute --action ensure-valid --kubeconfig "${default_kubeconfig_path}"
-  "${kubeconfig_helper}" \
-    --execute \
-    --action delete-context \
-    --kubeconfig "${default_kubeconfig_path}" \
-    --context "${k3sup_context}" \
-    --cluster "${k3sup_context}" \
-    --user "${k3sup_context}"
-}
-
 refresh_kubeconfig() {
   local vm_ip="$1"
   local tmp_path="${kubeconfig_path}.tmp"
@@ -244,108 +181,32 @@ refresh_kubeconfig() {
       KUBECONFIG="$kubeconfig_path" kubectl config rename-context "$current_ctx" "$k3sup_context" >/dev/null 2>&1 || true
     fi
     KUBECONFIG="$kubeconfig_path" kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
+    if [ -x "$reconcile_kubeconfig" ]; then
+      "$reconcile_kubeconfig" \
+        --execute \
+        --source-kubeconfig "$kubeconfig_path" \
+        --target-kubeconfig "$default_kubeconfig_path" \
+        --context "$k3sup_context" \
+        --merge "$merge_kubeconfig_to_default" \
+        --helper "$kubeconfig_helper" \
+        --fallback-merge
+    fi
     if [ "$merge_kubeconfig_to_default" = "1" ]; then
-      mkdir -p "$(dirname "$default_kubeconfig_path")"
-      if [ -x "$kubeconfig_helper" ]; then
-        if ! "$kubeconfig_helper" \
-          --execute \
-          --action merge \
-          --source-kubeconfig "$kubeconfig_path" \
-          --target-kubeconfig "$default_kubeconfig_path" \
-          --context "$k3sup_context"; then
-          echo "WARN: failed to merge ${kubeconfig_path} into ${default_kubeconfig_path}" >&2
-        fi
-      else
-        local merged_kubeconfig
-        merged_kubeconfig="${default_kubeconfig_path}.merged.$$"
-        if [ -s "$default_kubeconfig_path" ]; then
-          if KUBECONFIG="${default_kubeconfig_path}:${kubeconfig_path}" kubectl config view --flatten > "$merged_kubeconfig"; then
-            chmod 600 "$merged_kubeconfig" || true
-            mv "$merged_kubeconfig" "$default_kubeconfig_path"
-          else
-            rm -f "$merged_kubeconfig"
-            echo "WARN: failed to merge ${kubeconfig_path} into ${default_kubeconfig_path}" >&2
-          fi
-        else
-          cp "$kubeconfig_path" "$default_kubeconfig_path"
-        fi
-      fi
       kubectl config use-context "$k3sup_context" >/dev/null 2>&1 || true
-    else
-      remove_context_from_default_kubeconfig
     fi
   fi
-}
-
-registry_for_image_ref() {
-  local ref="${1%%@*}"
-  local first
-
-  if [[ "${ref}" != */* ]]; then
-    echo "docker.io"
-    return 0
-  fi
-
-  first="${ref%%/*}"
-  if [[ "${first}" == *.* || "${first}" == *:* || "${first}" == "localhost" ]]; then
-    echo "${first}"
-  else
-    echo "docker.io"
-  fi
-}
-
-default_endpoint_for_registry() {
-  case "$1" in
-    docker.io)
-      echo "https://registry-1.docker.io"
-      ;;
-    *)
-      echo "https://$1"
-      ;;
-  esac
-}
-
-platform_mirror_registries() {
-  [ -n "${image_list_file}" ] || return 0
-  [ -f "${image_list_file}" ] || return 0
-
-  while IFS= read -r image; do
-    [[ -z "${image}" || "${image}" =~ ^# ]] && continue
-    registry_for_image_ref "${image}"
-  done < "${image_list_file}" | awk 'NF { print }' | sort -u
 }
 
 configure_k3s_registries() {
   local payload=""
-  local registry=""
   local tmp_file
 
-  [ -n "${local_image_cache_host}" ] || return 0
+  payload="$(k3s_registries_render \
+    --image-list "${image_list_file}" \
+    --cache-host "${local_image_cache_host}" \
+    --cache-scheme "${local_image_cache_scheme}")"
 
-  append_mirror_entry() {
-    local mirror_name="$1"
-    shift
-
-    if [[ "${payload}" != mirrors:* ]]; then
-      payload+="mirrors:\n"
-    fi
-
-    payload+="  \"${mirror_name}\":\n"
-    payload+="    endpoint:\n"
-    while [[ $# -gt 0 ]]; do
-      payload+="      - \"$1\"\n"
-      shift
-    done
-  }
-
-  append_mirror_entry "${local_image_cache_host}" "${local_image_cache_scheme}://${local_image_cache_host}"
-  while IFS= read -r registry; do
-    [[ -n "${registry}" ]] || continue
-    append_mirror_entry \
-      "${registry}" \
-      "${local_image_cache_scheme}://${local_image_cache_host}" \
-      "$(default_endpoint_for_registry "${registry}")"
-  done < <(platform_mirror_registries)
+  [ -n "${payload}" ] || return 0
 
   tmp_file="$(mktemp)"
   printf '%b' "${payload}" > "${tmp_file}"
@@ -384,10 +245,7 @@ install_k3s_via_k3sup() {
   local channel_args=()
   local install_cmd=()
 
-  channel_args=(--k3s-channel "${k3s_channel}")
-  if [ -n "${k3s_version}" ]; then
-    channel_args=(--k3s-version "${k3s_version}")
-  fi
+  read -r -a channel_args <<<"$(k3s_bootstrap_channel_args "${k3s_channel}" "${k3s_version}")"
 
   mkdir -p "$(dirname "${kubeconfig_path}")"
 
@@ -407,7 +265,7 @@ install_k3s_via_k3sup() {
   fi
 
   for _ in 1 2 3; do
-    if run_with_timeout 300 "${install_cmd[@]}"; then
+    if k3s_bootstrap_run_with_timeout 300 "${install_cmd[@]}"; then
       return 0
     fi
     sleep 5
@@ -450,7 +308,7 @@ echo "==> Checking for ext4 filesystem errors"
 vm_exec_retry "$server_vm" "dmesg | grep -i 'ext4.*error' && echo 'WARNING: ext4 errors detected in dmesg' || true" 2 2 || true
 
 command -v ssh-keygen >/dev/null 2>&1 || { echo "ERROR: ssh-keygen is required for host-side k3sup bootstrap" >&2; exit 1; }
-k3sup_bin="$(find_bootstrap_client || true)"
+k3sup_bin="$(k3s_bootstrap_find_client || true)"
 if [ -z "${k3sup_bin}" ]; then
   echo "ERROR: neither k3sup-pro nor k3sup was found. Install one with brew or arkade." >&2
   exit 1

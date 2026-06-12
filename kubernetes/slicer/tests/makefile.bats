@@ -54,16 +54,68 @@ setup() {
   [[ "${output}" == *"check-security.sh"* ]]
 }
 
+@test "slicer build-local-platform-images delegates to the shared Kubernetes build script" {
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" build-local-platform-images
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'CACHE_PUSH_HOST="127.0.0.1:5002"'* ]]
+  [[ "${output}" == *'kubernetes/scripts/build-local-platform-images.sh" --execute'* ]]
+}
+
+@test "slicer ensure-image-cache delegates to the shared Kubernetes adapter with Slicer locality" {
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" ensure-image-cache
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'CACHE_PUSH_HOST="127.0.0.1:5002"'* ]]
+  [[ "${output}" == *'CACHE_CONTAINER_NAME="slicer-image-cache"'* ]]
+  [[ "${output}" == *'kubernetes/scripts/ensure-local-image-cache.sh" --execute'* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" ensure-image-cache DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'CACHE_PUSH_HOST="127.0.0.1:5002"'* ]]
+  [[ "${output}" == *'CACHE_CONTAINER_NAME="slicer-image-cache"'* ]]
+  [[ "${output}" == *'kubernetes/scripts/ensure-local-image-cache.sh" --dry-run'* ]]
+}
+
+@test "slicer apply delegates local image helper planning to the shared planner" {
+  run grep -Fn '$(PLAN_LOCAL_IMAGE_HELPERS)" --execute' "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "slicer check-health forwards explicit read-only mode flags" {
   run make -n -C "${REPO_ROOT}/kubernetes/slicer" check-health STAGE=900
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'check-cluster-health.sh" --execute '* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --execute '* ]]
 
   run make -n -C "${REPO_ROOT}/kubernetes/slicer" check-health STAGE=900 DRY_RUN=1
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --dry-run '* ]]
+}
+
+@test "slicer check-gateway-urls honors host forwards off mode" {
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" check-gateway-urls STAGE=900 SLICER_HOST_FORWARDS_MODE=off
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-gateway-urls.sh" --execute'* ]]
+  [[ "${output}" != *"ensure-host-forwards"* ]]
+}
+
+@test "slicer browser-facing read-only checks share host access mode gating" {
+  for target in check-gateway-stack check-cluster check-app check-sso show-urls; do
+    run make -n -C "${REPO_ROOT}/kubernetes/slicer" "${target}" STAGE=900 SLICER_HOST_FORWARDS_MODE=off APP=grafana
+
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"prepare-host-access"* ]]
+    [[ "${output}" != *"ensure-host-forwards"* ]]
+  done
+
+  run grep -Fn '$(MAKE) prepare-host-access >/dev/null;' "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "slicer test-idempotence supports dry-run without touching the cluster" {
@@ -114,13 +166,18 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "slicer check-sso-e2e uses the split kubeconfig and rendered Backstage gate" {
-  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars"' \
+@test "slicer check-sso-e2e delegates SSO env projection and forwards it to Playwright" {
+  run grep -Fn 'BUILD_SSO_E2E_ENV := $(K8S_SCRIPTS_DIR)/build-sso-e2e-env.sh' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn 'BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh' \
+  run grep -Fn '"$(BUILD_SSO_E2E_ENV)" --execute' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}"' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -155,6 +212,19 @@ setup() {
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"configure-k3s-apiserver-oidc"* ]]
+}
+
+@test "slicer exercise-k3s-oidc-recovery runs the shared k3s recovery harness with format and force knobs" {
+  run make -n -C "${REPO_ROOT}/kubernetes/slicer" exercise-k3s-oidc-recovery \
+    OIDC_RECOVERY_FORMAT=json \
+    OIDC_RECOVERY_FORCE_MODE=k3s-restart
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'check-kubeconfig >/dev/null'* ]]
+  [[ "${output}" == *'assert-slicer-active >/dev/null'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORMAT="json"'* ]]
+  [[ "${output}" == *'OIDC_RECOVERY_FORCE_MODE="k3s-restart"'* ]]
+  [[ "${output}" == *'exercise-k3s-oidc-recovery.sh" --execute'* ]]
 }
 
 @test "slicer stage 100 plan explains the daemon requirement" {
@@ -301,10 +371,23 @@ EOF
 }
 
 @test "slicer prereqs keeps kyverno in the optional host tool inventory" {
-  run grep -Fn 'optional=(bats bun cilium helm kubectx kubie kyverno mkcert node npm npx shellcheck yamllint); \' \
+  run grep -Fn -- '--optional kyverno' \
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "slicer prereqs delegates common tool inventory to the shared stack prereqs adapter" {
+  run grep -Fn '"$(CHECK_STACK_PREREQS)" --execute --stage "$(STAGE)"' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  prereqs_block="$(sed -n '/^prereqs:/,/^\.PHONY:/p' "${REPO_ROOT}/kubernetes/slicer/Makefile")"
+  [[ "${prereqs_block}" == *'--required slicer'* ]]
+  [[ "${prereqs_block}" == *'--optional kyverno'* ]]
+  [[ "${prereqs_block}" != *'check_bin()'* ]]
+  [[ "${prereqs_block}" != *'missing_required=()'* ]]
 }
 
 @test "slicer uses the shared terragrunt make helpers for init plan and apply" {
@@ -327,4 +410,69 @@ EOF
     "${REPO_ROOT}/kubernetes/slicer/Makefile"
 
   [ "${status}" -eq 0 ]
+}
+
+@test "slicer plan delegates ordered optional tfvars to the shared adapter" {
+  run grep -Fzo 'plan_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
+		--optional-file "$(stage_var_file)" \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+	)"' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'if [ -n "$${PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}" ]; then plan_args="$$plan_args -var-file=$${PLATFORM_BASE_TFVARS}"; fi;' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -ne 0 ]
+}
+
+@test "slicer apply delegates ordered optional tfvars to the shared adapter" {
+  run grep -Fzo 'tfvar_files=(); \
+	while IFS= read -r tfvar_file; do \
+		[ -n "$$tfvar_file" ] || continue; \
+		tfvar_files+=("$$tfvar_file"); \
+	done < <( \
+		"$(BUILD_TFVAR_ARGS)" --execute \
+			--optional-file "$(stage_var_file)" \
+			--optional-file "$(target_var_file)" \
+			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+			--optional-file "$${PLATFORM_TFVARS:-}" \
+	)' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fzo 'apply_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
+		--optional-file "$(stage_var_file)" \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+	)"' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'if [ -n "$${PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}" ]; then apply_args="$$apply_args -var-file=$${PLATFORM_TFVARS}"; fi;' \
+    "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+  [ "${status}" -ne 0 ]
+}
+
+@test "slicer read-only check targets delegate ordered optional tfvars to the shared adapter" {
+  for target in check-health check-security check-gateway-urls check-app check-sso show-urls; do
+    run sed -n "/^${target}:/,/^\\.PHONY:/p" "${REPO_ROOT}/kubernetes/slicer/Makefile"
+
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *'"$(BUILD_TFVAR_ARGS)" --execute --format repeated --flag --var-file'* ]]
+    [[ "${output}" == *'$(if $(filter 1,$(STAGE_SPECIFIED)),--optional-file "$(stage_var_file)")'* ]]
+    [[ "${output}" == *'--optional-file "$(target_var_file)"'* ]]
+    [[ "${output}" == *'--optional-file "$${PLATFORM_BASE_TFVARS:-}"'* ]]
+    [[ "${output}" == *'--optional-file "$${PLATFORM_TFVARS:-}"'* ]]
+    [[ "${output}" != *'vf="";'* ]]
+    [[ "${output}" != *'PLATFORM_BASE_TFVARS:-}" ] && [ -f "$${PLATFORM_BASE_TFVARS}"'* ]]
+    [[ "${output}" != *'PLATFORM_TFVARS:-}" ] && [ -f "$${PLATFORM_TFVARS}"'* ]]
+  done
 }

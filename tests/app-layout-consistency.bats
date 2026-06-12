@@ -577,12 +577,10 @@ PY
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}/app"
   cat >"${temp_app}/Makefile" <<'EOF'
-USE_COMMON_HELP := 1
-MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
+MAKE_KNOWN_GOALS := help
+MAKE_KNOWN_GOALS += app-prereqs
 
-include ../../mk/common.mk
-
-.PHONY: app-prereqs
+include ../../mk/app-common.mk
 
 app-prereqs:
 	@echo ok
@@ -606,4 +604,179 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"zz-test-common-wrapper"* ]]
+}
+
+@test "common app wrapper exposes only declared non-compose targets" {
+  temp_app="${REPO_ROOT}/apps/zz-test-common-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/Makefile" <<'EOF'
+MAKE_KNOWN_GOALS := help app-prereqs
+
+include ../../mk/app-common.mk
+
+app-prereqs: ## Check local app prerequisites
+	@echo ok
+EOF
+  touch "${temp_app}/app/go.mod"
+
+  run make -C "${temp_app}" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"app-prereqs"* ]]
+  [[ "${output}" != *"update"* ]]
+
+  run make -C "${temp_app}" update
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown make goal 'update'."* ]]
+}
+
+@test "common app wrapper delegates declared app core targets" {
+  temp_app="${REPO_ROOT}/apps/zz-test-common-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/Makefile" <<'EOF'
+MAKE_KNOWN_GOALS := help app-help app-test app-js-check app-build
+
+include ../../mk/app-common.mk
+EOF
+  cat >"${temp_app}/app/Makefile" <<'EOF'
+.PHONY: help test js-check build
+help:
+	@echo app-help-delegated
+test:
+	@echo app-test-delegated
+js-check:
+	@echo app-js-check-delegated
+build:
+	@echo app-build-delegated
+EOF
+
+  run make -C "${temp_app}" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"app-help"* ]]
+  [[ "${output}" == *"app-test"* ]]
+  [[ "${output}" == *"app-js-check"* ]]
+  [[ "${output}" == *"app-build"* ]]
+
+  run make -C "${temp_app}" app-help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"app-help-delegated"* ]]
+
+  run make -C "${temp_app}" app-test
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"app-test-delegated"* ]]
+
+  run make -C "${temp_app}" app-js-check
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"app-js-check-delegated"* ]]
+
+  run make -C "${temp_app}" app-build
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"app-build-delegated"* ]]
+}
+
+@test "common app wrapper exposes only declared compose lifecycle targets" {
+  temp_app="${REPO_ROOT}/apps/zz-test-common-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/compose.yml" <<'EOF'
+services: {}
+EOF
+  cat >"${temp_app}/Makefile" <<'EOF'
+MAKE_KNOWN_GOALS := help prereqs
+
+include ../../mk/app-common.mk
+EOF
+  touch "${temp_app}/app/go.mod"
+
+  run make -C "${temp_app}" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"prereqs"* ]]
+  [[ "${output}" != *"compose-smoke"* ]]
+  [[ "${output}" != *"down"* ]]
+  [[ "${output}" != *"logs"* ]]
+  [[ "${output}" != *"ps"* ]]
+
+  run make -C "${temp_app}" down
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown make goal 'down'."* ]]
+}
+
+@test "common app compose lifecycle targets use private prerequisites when prereqs is undeclared" {
+  temp_app="${REPO_ROOT}/apps/zz-test-common-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/compose.yml" <<'EOF'
+services: {}
+EOF
+  cat >"${temp_app}/Makefile" <<'EOF'
+MAKE_KNOWN_GOALS := help down
+
+include ../../mk/app-common.mk
+EOF
+  touch "${temp_app}/app/go.mod"
+
+  run make -C "${temp_app}" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"down"* ]]
+  [[ "${output}" != *"prereqs"* ]]
+
+  run make -n -C "${temp_app}" down COMPOSE_CMD=true PLATFORM_ENV_FILE="${REPO_ROOT}/.env.example" PLATFORM_ENV_TEMPLATE="${REPO_ROOT}/.env.example"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"Unknown make goal 'prereqs'."* ]]
+  [[ "${output}" == *"check-platform-env"* ]]
+  [[ "${output}" == *"true  down --remove-orphans"* ]]
+}
+
+@test "common app wrapper does not turn declared missing goals into empty successes" {
+  temp_app="${REPO_ROOT}/apps/zz-test-common-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/Makefile" <<'EOF'
+MAKE_KNOWN_GOALS := help missing-real-target
+
+include ../../mk/app-common.mk
+EOF
+  touch "${temp_app}/app/go.mod"
+
+  run make -C "${temp_app}" missing-real-target
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown make goal 'missing-real-target'."* ]]
+}
+
+@test "common app wrapper rejects public rules that are not declared goals" {
+  temp_app="${REPO_ROOT}/apps/zz-test-common-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}/app"
+  cat >"${temp_app}/Makefile" <<'EOF'
+MAKE_KNOWN_GOALS := help
+
+include ../../mk/app-common.mk
+
+leaked-target: ## Leaked target
+	@echo leaked
+EOF
+  touch "${temp_app}/app/go.mod"
+
+  run make -C "${temp_app}" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"leaked-target"* ]]
+
+  run make -C "${temp_app}" leaked-target
+
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"Unknown make goal 'leaked-target'."* ]]
 }

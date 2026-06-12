@@ -4,6 +4,7 @@ setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
   export SCRIPT="${REPO_ROOT}/kubernetes/slicer/scripts/configure-k3s-apiserver-oidc.sh"
+  export SHARED_SCRIPT="${REPO_ROOT}/kubernetes/scripts/configure-k3s-apiserver-oidc.sh"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   export HOME="${BATS_TEST_TMPDIR}/home"
   export MKCERT_CAROOT="${BATS_TEST_TMPDIR}/mkcert"
@@ -24,6 +25,40 @@ set -euo pipefail
 exit 0
 EOF
   chmod +x "${TEST_BIN}/curl"
+}
+
+@test "slicer wrapper delegates shared OIDC workflow with Slicer transport config" {
+  run grep -Fn 'K3S_OIDC_RUNTIME="slicer"' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"${SHARED_SCRIPT}" "$@"' "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'gateway_data_plane_ready' "${SCRIPT}"
+  [ "${status}" -eq 1 ]
+
+  run grep -Fn 'oidc-issuer-url=' "${SCRIPT}"
+  [ "${status}" -eq 1 ]
+}
+
+@test "shared OIDC workflow owns gateway readiness and config behavior" {
+  run grep -Fn 'NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}"' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC"' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'request_gateway_reconcile' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'oidc-issuer-url=${OIDC_ISSUER_URL}' "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn "kubectl get --raw='/readyz'" "${SHARED_SCRIPT}"
+  [ "${status}" -eq 0 ]
 }
 
 @test "skips cleanly when mkcert is unavailable" {
@@ -65,21 +100,4 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"Could not determine clusterIP"* ]]
-}
-
-@test "waits for the platform-gateway deployment and service endpoints" {
-  run grep -Fn 'NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"' "${SCRIPT}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}"' "${SCRIPT}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC"' "${SCRIPT}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'request_gateway_reconcile' "${SCRIPT}"
-  [ "${status}" -eq 0 ]
-
-  run grep -Fn 'annotate gateway "$PLATFORM_GATEWAY_NAME"' "${SCRIPT}"
-  [ "${status}" -eq 0 ]
 }

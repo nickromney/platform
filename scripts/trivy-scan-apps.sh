@@ -43,7 +43,7 @@ SOURCE_TARGETS=(
   "apps/subnetcalc"
 )
 
-# Keep this list aligned with kubernetes/lima/scripts/build-local-workload-images.sh.
+# Keep this list aligned with kubernetes/scripts/build-local-workload-images.sh.
 IMAGE_SPECS=(
   "platform-security-scan/chatgpt-sim:scan|apps/chatgpt-sim/app|apps/chatgpt-sim/app/Dockerfile|"
   "platform-security-scan/idp-core:scan|.|apps/idp-core/app/Dockerfile|"

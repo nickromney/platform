@@ -6,13 +6,26 @@ SHELL ?= /bin/bash
 
 MAKE_HELP_WIDTH ?= 24
 MAKE_KNOWN_GOALS ?=
+MAKE_INTERNAL_GOALS ?= check-platform-env-file check-platform-env variant-contract-print __platform_noop __platform_make_surface_noop
+MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS ?=
 MAKE_SUGGEST_SCRIPT ?=
+
+ifneq ($(strip $(MAKE_KNOWN_GOALS)),)
+UNKNOWN_MAKE_GOALS := $(filter-out $(MAKE_KNOWN_GOALS) $(MAKE_INTERNAL_GOALS),$(MAKECMDGOALS))
+UNKNOWN_MAKE_GOAL_GUARD_DEFER_ACTIVE := $(filter $(MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS),$(MAKECMDGOALS))
+ifneq ($(strip $(UNKNOWN_MAKE_GOALS)),)
+ifeq ($(strip $(UNKNOWN_MAKE_GOAL_GUARD_DEFER_ACTIVE)),)
+$(error Unknown make goal '$(firstword $(UNKNOWN_MAKE_GOALS))'. Run 'make help' for valid targets.)
+endif
+endif
+endif
 
 ifeq ($(USE_COMMON_HELP),1)
 .PHONY: help
 help:
 	@tab=$$(printf '\t'); \
-	awk 'BEGIN { FS = ":.*## "; section = "Targets"; count = 0; } \
+	known_goals="$(strip $(MAKE_KNOWN_GOALS))"; \
+	awk -v known_goals="$$known_goals" 'BEGIN { FS = ":.*## "; section = "Targets"; count = 0; split(known_goals, known, /[[:space:]]+/); for (i in known) allowed[known[i]] = 1; } \
 	function remember_section(name) { \
 		if (!(name in seen_section)) { \
 			seen_section[name] = ++count; \
@@ -23,7 +36,10 @@ help:
 		remember_section(section); \
 		next; \
 	} \
-	/^[A-Za-z0-9][A-Za-z0-9_.-]*:.*## / { \
+	/^[%A-Za-z0-9][%A-Za-z0-9_.-]*:.*## / { \
+		target = $$1; \
+		sub(/:.*/, "", target); \
+		if (known_goals != "" && !(target in allowed)) { next; } \
 		remember_section(section); \
 		printf "%s\t%s\t%s\t%s\n", seen_section[section], section, $$1, $$2; \
 	}' $(MAKEFILE_LIST) \

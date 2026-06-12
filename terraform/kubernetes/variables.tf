@@ -444,9 +444,9 @@ variable "prometheus_chart_version" {
 }
 
 variable "prometheus_image_tag" {
-  description = "Prometheus hardened container image tag."
+  description = "Prometheus container image tag."
   type        = string
-  default     = "3.12.0-debian13"
+  default     = "v3.12.0"
 }
 
 variable "grafana_chart_version" {

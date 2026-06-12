@@ -3,7 +3,7 @@
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
-  export SCRIPT="${REPO_ROOT}/kubernetes/lima/scripts/check-kind-stopped.sh"
+  export SCRIPT="${REPO_ROOT}/kubernetes/scripts/check-kind-stopped.sh"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${TEST_BIN}"
   export PATH="${TEST_BIN}:${PATH}"

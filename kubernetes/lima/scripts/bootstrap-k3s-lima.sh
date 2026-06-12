@@ -5,6 +5,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${repo_root}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${repo_root}/kubernetes/scripts/k3s-bootstrap-lib.sh"
+# shellcheck source=/dev/null
+source "${repo_root}/kubernetes/scripts/k3s-registries-lib.sh"
 
 usage() {
   cat <<EOF
@@ -23,6 +27,7 @@ shell_cli_handle_standard_no_args usage "would bootstrap or reconcile the Lima k
 : "${DESIRED_NODES:?DESIRED_NODES is required}"
 
 kubeconfig_helper="${KUBECONFIG_HELPER:-${repo_root}/terraform/kubernetes/scripts/manage-kubeconfig.sh}"
+reconcile_kubeconfig="${RECONCILE_KUBECONFIG:-${repo_root}/kubernetes/scripts/reconcile-kubeconfig.sh}"
 k3sup_context="${K3SUP_CONTEXT:-limavm-k3s}"
 kubeconfig_path="${KUBECONFIG_PATH:-$HOME/.kube/${k3sup_context}.yaml}"
 default_kubeconfig_path="${DEFAULT_KUBECONFIG_PATH:-$HOME/.kube/config}"
@@ -39,25 +44,7 @@ gitea_registry_host="${GITEA_REGISTRY_HOST:-localhost:30090}"
 gitea_registry_scheme="${GITEA_REGISTRY_SCHEME:-http}"
 k3s_api_host_port="${LIMA_K3S_API_TUNNEL_PORT:-16443}"
 
-find_bootstrap_client() {
-  local candidate
-
-  for candidate in \
-    "${K3SUP_PRO_BIN:-}" \
-    "$(command -v k3sup-pro 2>/dev/null || true)" \
-    "${K3SUP_BIN:-}" \
-    "$(command -v k3sup 2>/dev/null || true)" \
-    "$HOME/.arkade/bin/k3sup"; do
-    [ -n "$candidate" ] || continue
-    [ -x "$candidate" ] || continue
-    echo "$candidate"
-    return 0
-  done
-
-  return 1
-}
-
-k3sup_bin="$(find_bootstrap_client || true)"
+k3sup_bin="$(k3s_bootstrap_find_client || true)"
 if [ -z "$k3sup_bin" ]; then
   echo "Neither k3sup-pro nor k3sup was found. Install one with brew or arkade."
   exit 1
@@ -89,116 +76,17 @@ lima_exec() {
   limactl_no_agent shell "$name" -- "$@"
 }
 
-run_with_timeout() {
-  local seconds="$1"
-  shift
-  local pid=""
-  local start=""
-  local elapsed=""
-  local rc=0
-
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${seconds}" "$@"
-    return $?
-  fi
-
-  if command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "${seconds}" "$@"
-    return $?
-  fi
-
-  "$@" &
-  pid=$!
-  start="$(date +%s)"
-
-  while kill -0 "${pid}" >/dev/null 2>&1; do
-    elapsed=$(( $(date +%s) - start ))
-    if [ "${elapsed}" -ge "${seconds}" ]; then
-      kill "${pid}" >/dev/null 2>&1 || true
-      wait "${pid}" >/dev/null 2>&1 || true
-      return 124
-    fi
-    sleep 1
-  done
-
-  wait "${pid}" || rc=$?
-  return "${rc}"
-}
-
-registry_for_image_ref() {
-  local ref="${1%%@*}"
-  local first
-
-  if [[ "${ref}" != */* ]]; then
-    echo "docker.io"
-    return 0
-  fi
-
-  first="${ref%%/*}"
-  if [[ "${first}" == *.* || "${first}" == *:* || "${first}" == "localhost" ]]; then
-    echo "${first}"
-  else
-    echo "docker.io"
-  fi
-}
-
-default_endpoint_for_registry() {
-  case "$1" in
-    docker.io)
-      echo "https://registry-1.docker.io"
-      ;;
-    *)
-      echo "https://$1"
-      ;;
-  esac
-}
-
-platform_mirror_registries() {
-  [ -n "${image_list_file}" ] || return 0
-  [ -f "${image_list_file}" ] || return 0
-
-  while IFS= read -r image; do
-    [[ -z "${image}" || "${image}" =~ ^# ]] && continue
-    registry_for_image_ref "${image}"
-  done < "${image_list_file}" | awk 'NF { print }' | sort -u
-}
-
 configure_k3s_registries() {
   local name="$1"
   local service_name="$2"
   local payload=""
-  local registry=""
 
-  append_mirror_entry() {
-    local mirror_name="$1"
-    shift
-
-    if [[ "${payload}" != mirrors:* ]]; then
-      payload+="mirrors:\n"
-    fi
-
-    payload+="  \"${mirror_name}\":\n"
-    payload+="    endpoint:\n"
-    while [[ $# -gt 0 ]]; do
-      payload+="      - \"$1\"\n"
-      shift
-    done
-  }
-
-  if [[ -n "${local_image_cache_host}" ]]; then
-    append_mirror_entry "${local_image_cache_host}" "${local_image_cache_scheme}://${local_image_cache_host}"
-    while IFS= read -r registry; do
-      [[ -n "${registry}" ]] || continue
-      append_mirror_entry \
-        "${registry}" \
-        "${local_image_cache_scheme}://${local_image_cache_host}" \
-        "$(default_endpoint_for_registry "${registry}")"
-    done < <(platform_mirror_registries)
-  fi
-
-  if [[ -n "${gitea_registry_host}" ]]; then
-    append_mirror_entry "${gitea_registry_host}" "${gitea_registry_scheme}://${gitea_registry_host}"
-  fi
+  payload="$(k3s_registries_render \
+    --image-list "${image_list_file}" \
+    --cache-host "${local_image_cache_host}" \
+    --cache-scheme "${local_image_cache_scheme}" \
+    --gitea-host "${gitea_registry_host}" \
+    --gitea-scheme "${gitea_registry_scheme}")"
 
   [ -n "${payload}" ] || return 0
 
@@ -260,63 +148,19 @@ get_node_count() {
   fi
 }
 
-merge_kubeconfig_into_default() {
-  local source_kubeconfig="$1"
-  local target_kubeconfig="$2"
-
-  [ -f "$source_kubeconfig" ] || return 0
-  [ "$source_kubeconfig" != "$target_kubeconfig" ] || return 0
-
-  if [ -x "$kubeconfig_helper" ]; then
-    "$kubeconfig_helper" \
-      --execute \
-      --action merge \
-      --source-kubeconfig "$source_kubeconfig" \
-      --target-kubeconfig "$target_kubeconfig" \
-      --context "$k3sup_context"
-    return 0
-  fi
-
-  local tmp_file
-  mkdir -p "$(dirname "$target_kubeconfig")"
-  if [ ! -f "$target_kubeconfig" ]; then
-    cp "$source_kubeconfig" "$target_kubeconfig"
-    kubectl config use-context "$k3sup_context" --kubeconfig "$target_kubeconfig" >/dev/null 2>&1 || true
-    return 0
-  fi
-  tmp_file="$(mktemp)"
-  KUBECONFIG="${target_kubeconfig}:${source_kubeconfig}" kubectl config view --flatten >"$tmp_file"
-  mv "$tmp_file" "$target_kubeconfig"
-  chmod 600 "$target_kubeconfig"
-  kubectl config use-context "$k3sup_context" --kubeconfig "$target_kubeconfig" >/dev/null 2>&1 || true
-}
-
-remove_kubeconfig_from_default() {
-  local target_kubeconfig="$1"
-
-  [ -e "$target_kubeconfig" ] || return 0
-  [ -x "$kubeconfig_helper" ] || return 0
-
-  "$kubeconfig_helper" --execute --action ensure-valid --kubeconfig "$target_kubeconfig"
-  "$kubeconfig_helper" \
-    --execute \
-    --action delete-context \
-    --kubeconfig "$target_kubeconfig" \
-    --context "$k3sup_context" \
-    --cluster "$k3sup_context" \
-    --user "$k3sup_context"
-}
-
 reconcile_default_kubeconfig() {
   local source_kubeconfig="$1"
   local target_kubeconfig="$2"
 
-  if [ "$merge_kubeconfig_to_default" = "1" ]; then
-    merge_kubeconfig_into_default "$source_kubeconfig" "$target_kubeconfig"
-    return 0
-  fi
-
-  remove_kubeconfig_from_default "$target_kubeconfig"
+  [ -x "$reconcile_kubeconfig" ] || return 0
+  "$reconcile_kubeconfig" \
+    --execute \
+    --source-kubeconfig "$source_kubeconfig" \
+    --target-kubeconfig "$target_kubeconfig" \
+    --context "$k3sup_context" \
+    --merge "$merge_kubeconfig_to_default" \
+    --helper "$kubeconfig_helper" \
+    --fallback-merge
 }
 
 write_kubeconfig_from_server() {
@@ -377,10 +221,7 @@ if [[ "$server_extra_args" != *"--tls-san ${server_tls_san}"* ]] && [[ "$server_
   server_extra_args="${server_extra_args} --tls-san ${server_tls_san}"
 fi
 
-channel_args=(--k3s-channel "$k3s_channel")
-if [ -n "$k3s_version" ]; then
-  channel_args=(--k3s-version "$k3s_version")
-fi
+read -r -a channel_args <<<"$(k3s_bootstrap_channel_args "$k3s_channel" "$k3s_version")"
 
 mkdir -p "$(dirname "$kubeconfig_path")"
 
@@ -450,7 +291,7 @@ for i in "${!nodes[@]}"; do
   if [ -n "$agent_extra_args" ]; then
     join_cmd+=(--k3s-extra-args "$agent_extra_args")
   fi
-  run_with_timeout 180 k3sup_no_agent "${join_cmd[@]}"
+  k3s_bootstrap_run_with_timeout 180 k3sup_no_agent "${join_cmd[@]}"
 done
 
 nodes_ready=0

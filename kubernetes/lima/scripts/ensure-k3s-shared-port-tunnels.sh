@@ -2,9 +2,11 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "${script_dir}/../../.." && pwd)"
+REPO_ROOT="$(cd "${script_dir}/../../.." && pwd)"
 # shellcheck source=/dev/null
-source "${repo_root}/scripts/lib/shell-cli.sh"
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/scripts/ssh-tunnel-lib.sh"
 
 usage() {
   cat <<EOF
@@ -21,7 +23,7 @@ shell_cli_handle_standard_no_args usage "would ensure Lima shared port tunnels" 
 lima_instance="${LIMA_SHARED_PORT_TUNNEL_INSTANCE:-${LIMA_INSTANCE_PREFIX:-k3s-node}-1}"
 ports="${LIMA_SHARED_PORT_TUNNEL_PORTS:-30070 30080 30090 31235 30022 30302 30443}"
 host="${LIMA_SHARED_PORT_TUNNEL_HOST:-127.0.0.1}"
-state_dir="${LIMA_SHARED_PORT_TUNNEL_STATE_DIR:-${repo_root}/.run/lima}"
+state_dir="${LIMA_SHARED_PORT_TUNNEL_STATE_DIR:-${REPO_ROOT}/.run/lima}"
 pid_file="${state_dir}/shared-port-tunnels-${lima_instance}.pid"
 ssh_config="${HOME}/.lima/${lima_instance}/ssh.config"
 ssh_host="lima-${lima_instance}"
@@ -43,19 +45,8 @@ if all_ports_ready; then
   exit 0
 fi
 
-if [[ -f "${pid_file}" ]]; then
-  pid="$(cat "${pid_file}" 2>/dev/null || true)"
-  if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
-    kill "${pid}" >/dev/null 2>&1 || true
-    wait "${pid}" >/dev/null 2>&1 || true
-  fi
-  rm -f "${pid_file}"
-fi
-
-[[ -f "${ssh_config}" ]] || {
-  echo "Lima SSH config not found at ${ssh_config}; start ${lima_instance} first." >&2
-  exit 1
-}
+ssh_tunnel_clear_pid_file "${pid_file}"
+ssh_tunnel_require_config "${ssh_config}" "${lima_instance}"
 
 mkdir -p "${state_dir}"
 forward_args=()
@@ -63,30 +54,15 @@ for port in ${ports}; do
   forward_args+=(-L "${host}:${port}:127.0.0.1:${port}")
 done
 
-ssh -F "${ssh_config}" \
-  -o ExitOnForwardFailure=yes \
-  -o ServerAliveInterval=15 \
-  -o ServerAliveCountMax=2 \
-  -N \
-  "${forward_args[@]}" \
-  "${ssh_host}" &
-pid=$!
-printf '%s\n' "${pid}" >"${pid_file}"
+ssh_tunnel_start \
+  "${pid_file}" \
+  "${ssh_config}" \
+  "${ssh_host}" \
+  "${forward_args[@]}"
 
-for _ in $(seq 1 30); do
-  if all_ports_ready; then
-    echo "OK   Lima shared port tunnels: ${ports}"
-    exit 0
-  fi
-  if ! kill -0 "${pid}" >/dev/null 2>&1; then
-    rm -f "${pid_file}"
-    echo "Lima shared port tunnel exited before becoming ready." >&2
-    exit 1
-  fi
-  sleep 1
-done
-
-kill "${pid}" >/dev/null 2>&1 || true
-rm -f "${pid_file}"
-echo "Timed out waiting for Lima shared port tunnels: ${ports}" >&2
-exit 1
+ssh_tunnel_wait_until_ready \
+  "${pid_file}" \
+  all_ports_ready \
+  "OK   Lima shared port tunnels: ${ports}" \
+  "Lima shared port tunnel exited before becoming ready." \
+  "Timed out waiting for Lima shared port tunnels: ${ports}"

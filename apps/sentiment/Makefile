@@ -1,15 +1,7 @@
-USE_COMMON_HELP := 1
 MAKE_KNOWN_GOALS := help prereqs build test update check-prerequisites app-test app-js-check up up-tls down logs ps smoke compose-smoke urls
-MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh
 
-include ../../mk/common.mk
-include ../../mk/compose.mk
+include ../../mk/app-common.mk
 
-REPO_ROOT := $(abspath $(CURDIR)/../..)
-PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
-PLATFORM_ENV_TEMPLATE ?= $(REPO_ROOT)/.env.example
-PLATFORM_DEMO_PASSWORD ?= local-dev-password
-OAUTH2_PROXY_COOKIE_SECRET ?= 0123456789abcdef0123456789abcdef
 PLATFORM_REQUIRED_ENV_VARS :=
 ifneq ($(strip $(wildcard $(PLATFORM_ENV_FILE))),)
 include $(PLATFORM_ENV_FILE)
@@ -24,36 +16,15 @@ KEYCLOAK_URL := http://localhost:8300
 COMPOSE = $(COMPOSE_CMD) -f compose.yml
 COMPOSE_TLS = $(COMPOSE_CMD) -f compose.yml -f compose.tls.yml
 
-.PHONY: help prereqs test update check-prerequisites app-test app-js-check build up up-tls down logs ps smoke compose-smoke urls
-
-export PLATFORM_ENV_FILE
-export PLATFORM_ENV_TEMPLATE
-export PLATFORM_DEMO_PASSWORD
-export OAUTH2_PROXY_COOKIE_SECRET
-
 ##@ Setup
-prereqs: ## Check local prerequisites
-	@$(MAKE) --no-print-directory check-prerequisites
+check-prerequisites: prereqs ## Compatibility alias for prereqs
 
-check-prerequisites: ## Check that a supported compose backend is installed and running
-	@$(MAKE) --no-print-directory check-platform-env
-	@if [ -z "$(COMPOSE_CMD)" ]; then \
-		echo "A supported compose backend is required but was not found." >&2; \
-		exit 1; \
-	fi
-
-build: check-prerequisites ## Build the local compose images
+build: prereqs ## Build the local compose images
 	@$(MAKE) --no-print-directory -C app build-linux
 	@$(COMPOSE) build
 
-app-test: ## Run Go unit tests
-	@$(MAKE) --no-print-directory -C app test
-
-app-js-check: ## Check vanilla JavaScript source contracts
-	@$(MAKE) --no-print-directory -C app js-check
-
 ##@ Run
-up: check-prerequisites ## Start the authenticated compose stack and print the local URL
+up: prereqs ## Start the authenticated compose stack and print the local URL
 	@$(MAKE) --no-print-directory -C app build-linux
 	@$(SSO_COMPOSE_ENV) $(COMPOSE) up -d --build
 	@echo "Sentiment URL: $(APP_URL)"
@@ -61,7 +32,7 @@ up: check-prerequisites ## Start the authenticated compose stack and print the l
 	@echo "Keycloak URL:  $(KEYCLOAK_URL)"
 	@echo "Keycloak can take a couple of minutes to become ready on cold start."
 
-up-tls: check-prerequisites ## Start the TLS compose stack and print the HTTPS URL
+up-tls: prereqs ## Start the TLS compose stack and print the HTTPS URL
 	@$(MAKE) --no-print-directory -C app build-linux
 	@$(SSO_COMPOSE_ENV) $(COMPOSE_TLS) up -d --build
 	@echo "Sentiment URL: $(APP_TLS_URL)"
@@ -75,24 +46,8 @@ urls: ## Print the local URLs for the app and Keycloak
 	@echo "Base URL:      $(APP_BASE_URL)"
 	@echo "Keycloak URL:  $(KEYCLOAK_URL)"
 
-logs: check-prerequisites ## Tail compose logs
-	@$(COMPOSE) logs -f --tail=200
-
-ps: check-prerequisites ## Show compose container status
-	@$(COMPOSE) ps
-
 smoke: compose-smoke ## Alias for compose-smoke
-
-compose-smoke: check-prerequisites ## Run the local compose smoke test
-	@./tests/compose-smoke.sh --execute
 
 ##@ Test
 test: app-test app-js-check ## Run Go tests, JS contract checks, and the local compose smoke test
 	@$(MAKE) --no-print-directory compose-smoke
-
-update: ## Update Bun dependency locks for each sentiment dependency root
-	@echo "No dependency update required for the default Go sentiment runtime."
-
-##@ Cleanup
-down: check-prerequisites ## Stop the compose stack
-	@$(COMPOSE) down --remove-orphans

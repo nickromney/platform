@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/host-port-listeners.sh"
 
 fail() {
   echo "FAIL $*" >&2
@@ -66,87 +68,12 @@ COMPOSE_EDGE_HTTPS_PORT="${COMPOSE_EDGE_HTTPS_PORT:-8443}"
 COMPOSE_DEX_DEBUG_PORT="${COMPOSE_DEX_DEBUG_PORT:-8300}"
 COMPOSE_APIM_HEALTH_PORT="${COMPOSE_APIM_HEALTH_PORT:-8302}"
 
-have_cmd() {
-  command -v "$1" >/dev/null 2>&1
-}
-
-listeners_for_port_lsof() {
-  local bind_ip="$1"
-  local port="$2"
-  local raw
-  local header
-  local body
-
-  raw="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
-  [[ -n "${raw}" ]] || return 1
-
-  if [[ "${bind_ip}" == "0.0.0.0" ]]; then
-    printf '%s\n' "${raw}"
-    return 0
-  fi
-
-  header="$(printf '%s\n' "${raw}" | sed -n '1p')"
-  body="$(
-    printf '%s\n' "${raw}" | tail -n +2 | \
-      grep -E "(^|[[:space:]])(\\*:${port}|127\\.0\\.0\\.1:${port}|localhost:${port}|\\[::1\\]:${port}|::1:${port})([[:space:]]|$)" || true
-  )"
-  [[ -n "${body}" ]] || return 1
-  printf '%s\n%s\n' "${header}" "${body}"
-}
-
-listeners_for_port_ss() {
-  local bind_ip="$1"
-  local port="$2"
-  local body
-
-  body="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
-  [[ -n "${body}" ]] || return 1
-
-  if [[ "${bind_ip}" == "127.0.0.1" ]]; then
-    body="$(
-      printf '%s\n' "${body}" | awk -v port="${port}" '
-        {
-          local_addr = $4
-          if (
-            local_addr == "*:" port ||
-            local_addr == "127.0.0.1:" port ||
-            local_addr == "[::1]:" port ||
-            local_addr == "::1:" port
-          ) {
-            print
-          }
-        }
-      '
-    )"
-    [[ -n "${body}" ]] || return 1
-  fi
-
-  printf 'State Recv-Q Send-Q Local Address:Port Peer Address:Port\n%s\n' "${body}"
-}
-
-listeners_for_port() {
-  local bind_ip="$1"
-  local port="$2"
-
-  if have_cmd lsof; then
-    listeners_for_port_lsof "${bind_ip}" "${port}"
-    return $?
-  fi
-
-  if have_cmd ss; then
-    listeners_for_port_ss "${bind_ip}" "${port}"
-    return $?
-  fi
-
-  fail "neither lsof nor ss found in PATH; cannot verify host port availability"
-}
-
 docker_publishers_for_port() {
   local bind_ip="$1"
   local port="$2"
   local label_filter="${3:-}"
 
-  have_cmd docker || return 0
+  host_port_have_cmd docker || return 0
 
   local docker_args=(ps --format '{{.Names}}	{{.Ports}}')
   if [[ -n "${label_filter}" ]]; then
@@ -231,7 +158,13 @@ success_ports=()
 
 for check in "${checks[@]}"; do
   IFS='|' read -r name bind_ip host_port container_port <<<"${check}"
-  listeners="$(listeners_for_port "${bind_ip}" "${host_port}" || true)"
+  if listeners="$(host_port_listeners_for_port "${bind_ip}" "${host_port}")"; then
+    :
+  else
+    listener_status=$?
+    [[ "${listener_status}" -eq 127 ]] && fail "neither lsof nor ss found in PATH; cannot verify host port availability"
+    listeners=""
+  fi
 
   if [[ -z "${listeners}" ]]; then
     success_ports+=("${bind_ip}:${host_port}")
