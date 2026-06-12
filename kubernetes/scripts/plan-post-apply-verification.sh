@@ -36,7 +36,8 @@ fail() {
 resolve_tfvar() {
   local key="$1"
   local default_value="$2"
-  "${REPO_ROOT}/kubernetes/scripts/resolve-tfvar-value.sh" --execute "${key}" "${default_value}" "${var_files[@]}"
+  # ${var_files[@]+...} keeps bash 3.2 happy when no --var-file was given.
+  "${REPO_ROOT}/kubernetes/scripts/resolve-tfvar-value.sh" --execute "${key}" "${default_value}" ${var_files[@]+"${var_files[@]}"}
 }
 
 script_name="$(shell_cli_script_name)"

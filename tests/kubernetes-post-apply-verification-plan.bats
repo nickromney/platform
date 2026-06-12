@@ -107,3 +107,12 @@ write_tfvars() {
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
 }
+
+@test "post-apply verification plan accepts zero var-files on bash 3.2" {
+  run /bin/bash "${SCRIPT}" --execute \
+    --variant-json "${REPO_ROOT}/kubernetes/variants/kind/variant.json" \
+    --stage 900
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}

@@ -36,7 +36,9 @@ fail() {
 run_make_step() {
   local step="$1"
   shift
-  make -C "${make_dir}" "${step}" "$@"
+  # Keep the planned-step stream on stdin away from make recipes (ssh,
+  # limactl, etc. would otherwise consume the remaining plan lines).
+  make -C "${make_dir}" "${step}" "$@" </dev/null
 }
 
 script_name="$(shell_cli_script_name)"
