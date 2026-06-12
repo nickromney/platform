@@ -1,0 +1,407 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+fail() { echo "FAIL $*" >&2; exit 1; }
+ok() { echo "OK   $*"; }
+warn() { echo "WARN $*"; }
+print_install_hint() {
+  local tool="$1"
+  if [ -x "${INSTALL_HINTS}" ]; then
+    echo "Install hint:" >&2
+    "${INSTALL_HINTS}" --execute --plain "${tool}" >&2 || true
+  fi
+}
+
+require_cmd() {
+  local tool="$1"
+  if command -v "${tool}" >/dev/null 2>&1; then
+    return 0
+  fi
+  print_install_hint "${tool}"
+  fail "${tool} not found in PATH"
+}
+
+K3S_OIDC_RUNTIME="${K3S_OIDC_RUNTIME:-}"
+K3S_OIDC_RUNTIME_VALID=1
+case "${K3S_OIDC_RUNTIME}" in
+  lima)
+    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima}"
+    K3S_OIDC_NODE_NAME="${LIMA_NODE_NAME:-k3s-node-1}"
+    ;;
+  slicer)
+    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Slicer}"
+    K3S_OIDC_NODE_NAME="${SLICER_VM_NAME:-slicer-1}"
+    SLICER_URL="${SLICER_URL:-${SLICER_SOCKET:-}}"
+    GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
+    ;;
+  "")
+    K3S_OIDC_RUNTIME_VALID=0
+    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima/Slicer}"
+    K3S_OIDC_NODE_NAME="${K3S_OIDC_NODE_NAME:-k3s-node}"
+    ;;
+  *)
+    K3S_OIDC_RUNTIME_VALID=0
+    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima/Slicer}"
+    K3S_OIDC_NODE_NAME="${K3S_OIDC_NODE_NAME:-k3s-node}"
+    ;;
+esac
+
+PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
+PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
+DEX_PORT_SUFFIX=""
+if [[ "${K3S_OIDC_RUNTIME}" == "slicer" && "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
+  DEX_PORT_SUFFIX=":${GATEWAY_HTTPS_HOST_PORT}"
+fi
+SSO_PROVIDER="${SSO_PROVIDER:-keycloak}"
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-platform}"
+case "${SSO_PROVIDER}" in
+  keycloak)
+    OIDC_HOST="${OIDC_HOST:-keycloak.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+    OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}${DEX_PORT_SUFFIX}/realms/${KEYCLOAK_REALM}}"
+    OIDC_DEPLOYMENT="${OIDC_DEPLOYMENT:-keycloak}"
+    ;;
+  dex)
+    OIDC_HOST="${OIDC_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
+    OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}${DEX_PORT_SUFFIX}/dex}"
+    OIDC_DEPLOYMENT="${OIDC_DEPLOYMENT:-dex}"
+    ;;
+  *)
+    fail "unsupported SSO_PROVIDER: ${SSO_PROVIDER}"
+    ;;
+esac
+DEX_HOST="${DEX_HOST:-${OIDC_HOST}}"
+DEX_NAMESPACE="${DEX_NAMESPACE:-sso}"
+OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-headlamp}"
+MKCERT_CA_DEST="${MKCERT_CA_DEST:-/etc/rancher/k3s/mkcert-rootCA.pem}"
+K3S_CONFIG_FRAGMENT="${K3S_CONFIG_FRAGMENT:-/etc/rancher/k3s/config.yaml.d/90-headlamp-oidc.yaml}"
+PLATFORM_GATEWAY_NAMESPACE="${PLATFORM_GATEWAY_NAMESPACE:-platform-gateway}"
+PLATFORM_GATEWAY_INTERNAL_SVC="${PLATFORM_GATEWAY_INTERNAL_SVC:-platform-gateway-nginx-internal}"
+GATEWAY_DEPLOY_NAME="${GATEWAY_DEPLOY_NAME:-platform-gateway-nginx}"
+NGINX_GATEWAY_NAMESPACE="${NGINX_GATEWAY_NAMESPACE:-nginx-gateway}"
+NGINX_GATEWAY_DEPLOY_NAME="${NGINX_GATEWAY_DEPLOY_NAME:-nginx-gateway}"
+GATEWAY_RECONCILE_ANNOTATION="${GATEWAY_RECONCILE_ANNOTATION:-platform.publiccloudexperiments.net/oidc-reconcile-at}"
+PLATFORM_GATEWAY_NAME="${PLATFORM_GATEWAY_NAME:-platform-gateway}"
+PLATFORM_GATEWAY_TLS_SECRET="${PLATFORM_GATEWAY_TLS_SECRET:-platform-gateway-tls}"
+GATEWAY_DEPLOY_WAIT_SECONDS="${GATEWAY_DEPLOY_WAIT_SECONDS:-900}"
+OIDC_DISCOVERY_WAIT_SECONDS="${OIDC_DISCOVERY_WAIT_SECONDS:-900}"
+
+lima_exec() {
+  local name="$1"
+  shift
+  limactl shell "$name" -- "$@"
+}
+
+slicer_exec() {
+  local name="$1"
+  shift
+  SLICER_URL="${SLICER_URL}" slicer vm exec "$name" -- "$@"
+}
+
+remote_read_file() {
+  local path="$1"
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "cat '$path' 2>/dev/null || true"
+      ;;
+    slicer)
+      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo sh -c \"cat '$path' 2>/dev/null || true\""
+      ;;
+  esac
+}
+
+remote_write_file() {
+  local path="$1"
+  local content="$2"
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo mkdir -p "$(dirname "$path")"
+      printf '%s\n' "$content" | lima_exec "$K3S_OIDC_NODE_NAME" sudo tee "$path" >/dev/null
+      ;;
+    slicer)
+      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo mkdir -p \"$(dirname "$path")\""
+      printf '%s\n' "$content" | slicer_exec "$K3S_OIDC_NODE_NAME" "sudo tee \"$path\" >/dev/null"
+      ;;
+  esac
+}
+
+ensure_remote_file_equals() {
+  local path="$1"
+  local desired="$2"
+  local current
+
+  current="$(remote_read_file "$path")"
+  if [[ "$current" == "$desired" ]]; then
+    return 1
+  fi
+
+  remote_write_file "$path" "$desired"
+  return 0
+}
+
+ensure_remote_host_alias() {
+  local desired_ip="$1"
+
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo env DEX_HOST="$DEX_HOST" GATEWAY_IP="$desired_ip" bash -s <<'EOF'
+set -euo pipefail
+
+tmp="$(mktemp)"
+grep -vE "[[:space:]]${DEX_HOST//./\\.}([[:space:]]|$)" /etc/hosts >"$tmp"
+printf '%s %s\n' "$GATEWAY_IP" "$DEX_HOST" >>"$tmp"
+
+if ! cmp -s "$tmp" /etc/hosts; then
+  cat "$tmp" >/etc/hosts
+  echo changed
+fi
+
+rm -f "$tmp"
+EOF
+      ;;
+    slicer)
+      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo env DEX_HOST='${DEX_HOST}' GATEWAY_IP='${desired_ip}' bash -s" <<'EOF'
+set -euo pipefail
+
+tmp="$(mktemp)"
+grep -vE "[[:space:]]${DEX_HOST//./\\.}([[:space:]]|$)" /etc/hosts >"$tmp"
+printf '%s %s\n' "$GATEWAY_IP" "$DEX_HOST" >>"$tmp"
+
+if ! cmp -s "$tmp" /etc/hosts; then
+  cat "$tmp" >/etc/hosts
+  echo changed
+fi
+
+rm -f "$tmp"
+EOF
+      ;;
+  esac
+}
+
+ensure_remote_ca() {
+  local source_ca="$1"
+  local dest_path="$2"
+  local local_sha remote_sha
+
+  local_sha="$(shasum -a 256 "$source_ca" | awk '{print $1}')"
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      remote_sha="$(lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "sha256sum '$dest_path' 2>/dev/null | cut -d' ' -f1" || true)"
+      ;;
+    slicer)
+      remote_sha="$(slicer_exec "$K3S_OIDC_NODE_NAME" "sudo sh -c \"sha256sum '$dest_path' 2>/dev/null | cut -d' ' -f1\"" || true)"
+      ;;
+  esac
+
+  if [[ "$local_sha" == "$remote_sha" ]]; then
+    return 1
+  fi
+
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo mkdir -p "$(dirname "$dest_path")"
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo tee "$dest_path" >/dev/null <"$source_ca"
+      ;;
+    slicer)
+      SLICER_URL="${SLICER_URL}" slicer vm cp "$source_ca" "${K3S_OIDC_NODE_NAME}:/tmp/mkcert-rootCA.pem" >/dev/null
+      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo mkdir -p \"$(dirname "$dest_path")\" && sudo mv /tmp/mkcert-rootCA.pem '$dest_path'"
+      ;;
+  esac
+  return 0
+}
+
+restart_k3s() {
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo systemctl restart k3s
+      ;;
+    slicer)
+      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo systemctl restart k3s"
+      ;;
+  esac
+}
+
+oidc_discovery_ready_from_vm() {
+  case "${K3S_OIDC_RUNTIME}" in
+    lima)
+      lima_exec "$K3S_OIDC_NODE_NAME" sudo curl -fsS --max-time 5 --cacert "$MKCERT_CA_DEST" "${OIDC_ISSUER_URL}/.well-known/openid-configuration" >/dev/null
+      ;;
+    slicer)
+      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo curl -fsS --max-time 5 --cacert '${MKCERT_CA_DEST}' '${OIDC_ISSUER_URL}/.well-known/openid-configuration'" >/dev/null
+      ;;
+  esac
+}
+
+usage() {
+  cat <<EOF
+Usage: ${0##*/} [--dry-run] [--execute]
+
+Configures the ${K3S_OIDC_RUNTIME_LABEL}-backed k3s server so OIDC-issued
+Headlamp tokens are accepted by the Kubernetes API. This mutates the guest VM.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage "would configure the ${K3S_OIDC_RUNTIME_LABEL} k3s API server for OIDC-issued tokens" "$@"
+
+if [[ "${K3S_OIDC_RUNTIME_VALID}" -ne 1 ]]; then
+  fail "K3S_OIDC_RUNTIME must be set to lima or slicer"
+fi
+
+case "${K3S_OIDC_RUNTIME}" in
+  lima)
+    require_cmd limactl
+    ;;
+  slicer)
+    [ -n "${SLICER_URL}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
+    require_cmd slicer
+    ;;
+esac
+require_cmd kubectl
+require_cmd curl
+require_cmd shasum
+
+if ! command -v mkcert >/dev/null 2>&1; then
+  warn "mkcert not found; skipping ${K3S_OIDC_RUNTIME_LABEL} apiserver OIDC configuration"
+  print_install_hint "mkcert"
+  exit 0
+fi
+
+CAROOT="$(mkcert -CAROOT)"
+CA_CERT="${CAROOT}/rootCA.pem"
+if [[ ! -f "$CA_CERT" ]]; then
+  warn "mkcert CA cert not found at ${CA_CERT}; skipping ${K3S_OIDC_RUNTIME_LABEL} apiserver OIDC configuration"
+  exit 0
+fi
+
+GATEWAY_IP="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get svc "$PLATFORM_GATEWAY_INTERNAL_SVC" -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)"
+if [[ -z "$GATEWAY_IP" ]]; then
+  fail "Could not determine clusterIP for svc ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_INTERNAL_SVC}"
+fi
+
+ok "${K3S_OIDC_RUNTIME_LABEL} node: ${K3S_OIDC_NODE_NAME}"
+ok "gateway internal clusterIP: ${GATEWAY_IP}"
+
+gateway_data_plane_ready() {
+  kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" rollout status "deploy/${GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1 || return 1
+
+  local endpoint_count
+  endpoint_count="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get endpoints "$PLATFORM_GATEWAY_INTERNAL_SVC" -o jsonpath='{range .subsets[*].addresses[*]}x{end}' 2>/dev/null | wc -c | tr -d ' ')"
+  [[ "${endpoint_count:-0}" -gt 0 ]]
+}
+
+request_gateway_reconcile() {
+  if kubectl -n "$NGINX_GATEWAY_NAMESPACE" rollout status "deploy/${NGINX_GATEWAY_DEPLOY_NAME}" --timeout=10s >/dev/null 2>&1; then
+    kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" annotate gateway "$PLATFORM_GATEWAY_NAME" "${GATEWAY_RECONCILE_ANNOTATION}=$(date +%s)" --overwrite >/dev/null 2>&1 || true
+  fi
+}
+
+ok "waiting for gateway data plane (${PLATFORM_GATEWAY_NAMESPACE}/${GATEWAY_DEPLOY_NAME})"
+gw_end=$((SECONDS + GATEWAY_DEPLOY_WAIT_SECONDS))
+while (( SECONDS < gw_end )); do
+  if gateway_data_plane_ready; then
+    ok "gateway data plane ready"
+    break
+  fi
+  request_gateway_reconcile
+  sleep 5
+done
+if (( SECONDS >= gw_end )); then
+  warn "gateway data plane not ready after ${GATEWAY_DEPLOY_WAIT_SECONDS}s"
+  kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get pods -l "gateway.networking.k8s.io/gateway-name=${PLATFORM_GATEWAY_NAME}" -o wide 2>/dev/null || true
+  fail "gateway data plane never became ready; aborting OIDC apiserver configuration"
+fi
+
+ok "waiting for TLS secret ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_TLS_SECRET}"
+tls_end=$((SECONDS + GATEWAY_DEPLOY_WAIT_SECONDS))
+while (( SECONDS < tls_end )); do
+  if kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get secret "$PLATFORM_GATEWAY_TLS_SECRET" >/dev/null 2>&1; then
+    ok "gateway TLS secret present"
+    break
+  fi
+  sleep 2
+done
+if (( SECONDS >= tls_end )); then
+  fail "gateway TLS secret ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_TLS_SECRET} was never created"
+fi
+
+ok "waiting for Gateway ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME} to be programmed"
+gw_prog_end=$((SECONDS + GATEWAY_DEPLOY_WAIT_SECONDS))
+while (( SECONDS < gw_prog_end )); do
+  gateway_programmed="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get gateway "$PLATFORM_GATEWAY_NAME" -o jsonpath='{range .status.conditions[?(@.type=="Programmed")]}{.status}{end}' 2>/dev/null || true)"
+  gateway_accepted="$(kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get gateway "$PLATFORM_GATEWAY_NAME" -o jsonpath='{range .status.conditions[?(@.type=="Accepted")]}{.status}{end}' 2>/dev/null || true)"
+  if [[ "$gateway_programmed" == "True" && "$gateway_accepted" == "True" ]]; then
+    ok "gateway listener programmed"
+    break
+  fi
+  sleep 2
+done
+if (( SECONDS >= gw_prog_end )); then
+  kubectl -n "$PLATFORM_GATEWAY_NAMESPACE" get gateway "$PLATFORM_GATEWAY_NAME" -o yaml || true
+  fail "gateway ${PLATFORM_GATEWAY_NAMESPACE}/${PLATFORM_GATEWAY_NAME} never became programmed"
+fi
+
+ok "waiting for OIDC deployment (${DEX_NAMESPACE}/${OIDC_DEPLOYMENT})"
+kubectl -n "$DEX_NAMESPACE" rollout status "deploy/${OIDC_DEPLOYMENT}" --timeout=10m >/dev/null 2>&1 || true
+
+ok "ensuring ${OIDC_HOST} resolves inside ${K3S_OIDC_RUNTIME_LABEL} VM"
+hosts_changed="$(ensure_remote_host_alias "$GATEWAY_IP" || true)"
+
+ok "copying mkcert root CA into ${K3S_OIDC_RUNTIME_LABEL} VM: ${MKCERT_CA_DEST}"
+ca_changed=0
+if ensure_remote_ca "$CA_CERT" "$MKCERT_CA_DEST"; then
+  ca_changed=1
+fi
+
+desired_fragment="$(cat <<EOF
+kube-apiserver-arg:
+  - oidc-issuer-url=${OIDC_ISSUER_URL}
+  - oidc-client-id=${OIDC_CLIENT_ID}
+  - oidc-username-claim=email
+  - oidc-groups-claim=groups
+  - oidc-ca-file=${MKCERT_CA_DEST}
+EOF
+)"
+
+ok "writing k3s config fragment: ${K3S_CONFIG_FRAGMENT}"
+config_changed=0
+if ensure_remote_file_equals "$K3S_CONFIG_FRAGMENT" "$desired_fragment"; then
+  config_changed=1
+fi
+
+if [[ -n "$hosts_changed" || "$ca_changed" == "1" || "$config_changed" == "1" ]]; then
+  ok "restarting k3s to apply OIDC settings"
+  restart_k3s
+else
+  ok "k3s OIDC settings already current"
+fi
+
+ok "waiting for OIDC issuer discovery endpoint from ${K3S_OIDC_RUNTIME_LABEL} VM"
+end=$((SECONDS + OIDC_DISCOVERY_WAIT_SECONDS))
+while (( SECONDS < end )); do
+  if oidc_discovery_ready_from_vm; then
+    ok "OIDC issuer reachable from ${K3S_OIDC_RUNTIME_LABEL} VM: ${OIDC_ISSUER_URL}"
+    break
+  fi
+  sleep 2
+done
+if (( SECONDS >= end )); then
+  fail "timed out waiting for ${OIDC_ISSUER_URL}/.well-known/openid-configuration (from ${K3S_OIDC_RUNTIME_LABEL} VM)"
+fi
+
+ok "waiting for kube-apiserver readiness"
+for _ in $(seq 1 60); do
+  if kubectl get --raw='/readyz' >/dev/null 2>&1; then
+    ok "kube-apiserver ready"
+    exit 0
+  fi
+  sleep 2
+done
+
+fail "timed out waiting for kube-apiserver readiness"

@@ -156,10 +156,9 @@ trap 'rm -f "${ORIGINAL_MANIFEST_LOCAL}" "${RENDERED_MANIFEST_LOCAL}"; docker ex
 docker cp "${CONTROL_PLANE_NODE}:${MANIFEST}" "${ORIGINAL_MANIFEST_LOCAL}"
 
 [[ -f "${RENDER_KIND_APISERVER_OIDC_MANIFEST}" ]] || fail "render helper not found at ${RENDER_KIND_APISERVER_OIDC_MANIFEST}"
-require_cmd uv
+require_cmd go
 
-uv run --isolated python \
-  "${RENDER_KIND_APISERVER_OIDC_MANIFEST}" \
+"${RENDER_KIND_APISERVER_OIDC_MANIFEST}" \
   "${ORIGINAL_MANIFEST_LOCAL}" \
   "${RENDERED_MANIFEST_LOCAL}" \
   "${OIDC_ISSUER_URL}" \

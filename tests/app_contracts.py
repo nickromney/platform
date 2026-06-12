@@ -267,17 +267,57 @@ def non_go_app_exception_contract_violations(repo_root: Path) -> tuple[str, ...]
 
 
 def app_wrapper_names_with_target(repo_root: Path, target: str) -> tuple[str, ...]:
-    marker = f"{target}:"
     return tuple(
         sorted(
             makefile.parent.name
             for makefile in (repo_root / "apps").glob("*/Makefile")
-            if any(
-                line == marker or line.startswith(f"{marker} ")
-                for line in makefile.read_text(encoding="utf-8").splitlines()
-            )
+            if target in _evaluated_make_known_goals(makefile.parent)
         )
     )
+
+
+def _evaluated_make_known_goals(makefile_dir: Path) -> tuple[str, ...]:
+    script = next(
+        (
+            parent / "scripts" / "make-known-goals.sh"
+            for parent in (makefile_dir, *makefile_dir.parents)
+            if (parent / "scripts" / "make-known-goals.sh").exists()
+        ),
+        makefile_dir.parents[1] / "scripts" / "make-known-goals.sh",
+    )
+    result = subprocess.run(
+        [
+            str(script),
+            "--dir",
+            str(makefile_dir),
+            "--execute",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode > 1:
+        return ()
+
+    return tuple(result.stdout.split())
+
+
+def _evaluated_make_targets(makefile_dir: Path) -> tuple[str, ...]:
+    result = subprocess.run(
+        ["make", "-pRrq", "-C", str(makefile_dir), "Makefile"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode > 1:
+        return ()
+
+    targets: set[str] = set()
+    for line in result.stdout.splitlines():
+        if re.match(r"^[A-Za-z0-9_.%][A-Za-z0-9_.% -]*:([^=]|$)", line):
+            targets.add(line.split(":", 1)[0])
+
+    return tuple(sorted(targets))
 
 
 def apps_makefile_delegation_contract_violations(
@@ -292,8 +332,13 @@ def apps_makefile_delegation_contract_violations(
     names = app_names or app_wrapper_names_with_target(repo_root, wrapper_target)
 
     for app_name in names:
-        expected = f"make --no-print-directory -C ./{app_name} {delegated_target}"
-        if expected not in make_output:
+        expanded = f"-C ./{app_name} {delegated_target}"
+        pattern_rule = (
+            f'app="{app_name}"' in make_output
+            and '-C "./$app"' in make_output
+            and f" {delegated_target}" in make_output
+        )
+        if expanded not in make_output and not pattern_rule:
             violations.append(f"apps Makefile should delegate {delegated_target} to {app_name}")
 
     return tuple(violations)
@@ -304,6 +349,8 @@ def apps_makefile_help_contract_violations(make_output: str) -> tuple[str, ...]:
         "prereqs",
         "test",
         "update",
+        "%-test",
+        "compose-smoke-%",
         "trivy-prereqs",
         "trivy-scan",
         "trivy-scan-images",
@@ -331,7 +378,8 @@ def apps_makefile_wrapper_dir_function_contract_violations(repo_root: Path) -> t
     content = (repo_root / "apps" / "Makefile").read_text(encoding="utf-8")
     required_fragments = (
         "define app_wrapper_dirs_with_target",
-        "$(shell for makefile in ./*/Makefile; do grep -q '^$(1):' \"$$makefile\" || continue; dirname \"$$makefile\" | cut -c3-; done | LC_ALL=C sort)",
+        "MAKE_KNOWN_GOALS_SCRIPT := $(MAKEFILE_DIR)../scripts/make-known-goals.sh",
+        "\"$(MAKE_KNOWN_GOALS_SCRIPT)\" --dir \"$$dir\" --execute",
         "APP_COMPOSE_SMOKE_DIRS = $(call app_wrapper_dirs_with_target,compose-smoke)",
         "APP_JS_CHECK_DIRS = $(call app_wrapper_dirs_with_target,app-js-check)",
         "APP_TEST_DIRS = $(call app_wrapper_dirs_with_target,test)",
@@ -343,13 +391,10 @@ def apps_makefile_wrapper_dir_function_contract_violations(repo_root: Path) -> t
         if fragment not in content
     ]
 
-    discovery_lines = [
-        line
-        for line in content.splitlines()
-        if "$(shell for makefile in ./*/Makefile" in line
-    ]
-    if len(discovery_lines) != 1:
+    if content.count("define app_wrapper_dirs_with_target") != 1:
         violations.append("apps Makefile should define wrapper target discovery once")
+    if "make -pRrq" in content:
+        violations.append("apps Makefile should delegate evaluated goal discovery to scripts/make-known-goals.sh")
 
     return tuple(violations)
 
@@ -404,8 +449,20 @@ def _makefile_assignment(content: str, name: str) -> str:
         return match.group(1) if match else ""
 
     pattern = rf"^{re.escape(name)}\s*(?::=|=)\s*(.*)$"
-    match = re.search(pattern, content, re.MULTILINE)
-    return match.group(1) if match else ""
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(pattern, line)
+        if not match:
+            continue
+
+        parts = [match.group(1).rstrip()]
+        while parts[-1].endswith("\\") and index + 1 < len(lines):
+            parts[-1] = parts[-1][:-1].rstrip()
+            index += 1
+            parts.append(lines[index].strip())
+        return " ".join(part for part in parts if part)
+
+    return ""
 
 
 def _makefile_target_prerequisites(content: str, target: str) -> tuple[str, ...]:
@@ -434,7 +491,7 @@ def langfuse_demo_rollout_surface_contract_violations(repo_root: Path) -> tuple[
         "prometheus": repo_root / "terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml",
         "grafana": repo_root / "terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml",
         "image_catalog": repo_root / "kubernetes/workflow/image-catalog.json",
-        "image_builder": repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh",
+        "image_builder": repo_root / "kubernetes/scripts/build-local-platform-images.sh",
         "sync_script": repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh",
         "launchpad": repo_root / "terraform/kubernetes/config/platform-launchpad.apps.json",
         "catalog": repo_root / "catalog/platform-apps.json",
@@ -1195,7 +1252,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     dockerfile = (repo_root / "apps" / "keycloak" / "Dockerfile").read_text(encoding="utf-8")
     sso_tf = (repo_root / "terraform" / "kubernetes" / "sso.tf").read_text(encoding="utf-8")
     build_script = (
-        repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh"
+        repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
     ).read_text(encoding="utf-8")
     image_catalog = json.loads(
         (repo_root / "kubernetes" / "workflow" / "image-catalog.json").read_text(encoding="utf-8")
@@ -1357,7 +1414,16 @@ def browser_app_js_check_command_contract_violations(repo_root: Path) -> tuple[s
             violations.append(f"{app_name} missing app Makefile")
             continue
 
-        content = makefile.read_text(encoding="utf-8")
+        dry_run = subprocess.run(
+            ["make", "-n", "-C", str(makefile.parent), "js-check"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        content = dry_run.stdout
+        if dry_run.returncode != 0:
+            violations.append(f"{app_name} Makefile js-check dry-run failed: {dry_run.stderr.strip()}")
+            continue
         for fragment in required_fragments:
             if fragment not in content:
                 violations.append(f"{app_name} Makefile js-check missing {fragment}")
@@ -3122,6 +3188,11 @@ def go_app_auth_env_contract_violations(repo_root: Path) -> tuple[str, ...]:
 
 def shared_app_module_makefile_contract_violations(repo_root: Path) -> tuple[str, ...]:
     browser_modules = {"appshell", "idpauth"}
+    help_headings = {
+        "apphttp": "Shared app HTTP module:",
+        "appshell": "Shared app shell module:",
+        "idpauth": "Shared IDP auth module:",
+    }
     violations: list[str] = []
 
     for module_name in canonical_shared_app_module_names():
@@ -3132,13 +3203,70 @@ def shared_app_module_makefile_contract_violations(repo_root: Path) -> tuple[str
             continue
 
         content = makefile.read_text(encoding="utf-8")
-        if not re.search(r"^\.PHONY:.*\bhelp\b", content, re.MULTILINE):
-            violations.append(f"apps/shared/{module_name}/Makefile should declare help phony")
-        if not re.search(r"^help:", content, re.MULTILINE):
+        available_targets = _evaluated_make_targets(makefile.parent)
+        if "help" not in available_targets:
             violations.append(f"apps/shared/{module_name}/Makefile should expose help target")
+        help_output = subprocess.run(
+            ["make", "-C", str(makefile.parent), "help"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if help_output.returncode != 0:
+            violations.append(f"apps/shared/{module_name}/Makefile help failed: {help_output.stderr.strip()}")
+            continue
+        if help_headings[module_name] not in help_output.stdout:
+            violations.append(f"apps/shared/{module_name}/Makefile help should include {help_headings[module_name]}")
         for target in targets:
-            if f"  {target}" not in content:
+            if target not in available_targets:
+                violations.append(f"apps/shared/{module_name}/Makefile should expose {target} target")
+            if f"  {target}" not in help_output.stdout:
                 violations.append(f"apps/shared/{module_name}/Makefile help should list {target}")
+        if "js-check" in available_targets and module_name not in browser_modules:
+            violations.append(f"apps/shared/{module_name}/Makefile should not expose js-check target")
+
+    return tuple(violations)
+
+
+def shared_app_module_makefile_module_contract_violations(repo_root: Path) -> tuple[str, ...]:
+    shared_include = "include ../../../mk/shared-go-module.mk"
+    browser_modules = {"appshell", "idpauth"}
+    js_sources = {
+        "appshell": "app-shell.js",
+        "idpauth": "web/idpauth.js",
+    }
+    violations: list[str] = []
+
+    shared_module = repo_root / "mk" / "shared-go-module.mk"
+    if not shared_module.exists():
+        violations.append("mk/shared-go-module.mk missing")
+
+    for module_name in canonical_shared_app_module_names():
+        makefile = repo_root / "apps" / "shared" / module_name / "Makefile"
+        if not makefile.exists():
+            violations.append(f"apps/shared/{module_name}/Makefile missing")
+            continue
+
+        content = makefile.read_text(encoding="utf-8")
+        relative_path = makefile.relative_to(repo_root)
+        if shared_include not in content:
+            violations.append(f"{relative_path} should include mk/shared-go-module.mk")
+        if "SHARED_GO_MODULE_LABEL :=" not in content:
+            violations.append(f"{relative_path} should set SHARED_GO_MODULE_LABEL")
+
+        expected_js_source = js_sources.get(module_name)
+        if expected_js_source is None:
+            if "SHARED_GO_MODULE_JS_CHECK_SOURCES" in content:
+                violations.append(f"{relative_path} should not configure js-check sources")
+        elif f"SHARED_GO_MODULE_JS_CHECK_SOURCES := {expected_js_source}" not in content:
+            violations.append(f"{relative_path} should configure js-check source {expected_js_source}")
+
+        shared_targets = ["help", "test"]
+        if module_name in browser_modules:
+            shared_targets.append("js-check")
+        for target in shared_targets:
+            if _makefile_target_body(content, target).strip():
+                violations.append(f"{relative_path} should not duplicate shared {target} recipe")
 
     return tuple(violations)
 
@@ -3225,26 +3353,19 @@ def app_wrapper_contract_violations(app_root: Path) -> tuple[str, ...]:
     name = app_root.name
     violations: list[str] = []
 
-    required_lines = {
-        "USE_COMMON_HELP := 1": "use shared help",
-        "include ../../mk/common.mk": "include common.mk",
-        "MAKE_SUGGEST_SCRIPT := ../../scripts/suggest-make-goal.sh": "suggest close goals",
-    }
-    for line, description in required_lines.items():
-        if line not in content:
-            violations.append(f"{name} wrapper should {description}")
+    if "include ../../mk/app-common.mk" not in content:
+        violations.append(f"{name} wrapper should include mk/app-common.mk")
+
+    goals = _evaluated_make_known_goals(app_root)
+    if not goals:
+        violations.append(f"{name} wrapper should declare MAKE_KNOWN_GOALS")
 
     if (app_root / "compose.yml").exists():
-        compose_required_lines = {
-            "include ../../mk/compose.mk": "include compose.mk",
-            "prereqs:": "expose prereqs",
-            "compose-smoke:": "expose compose-smoke",
-        }
-        for line, description in compose_required_lines.items():
-            if line not in content:
-                violations.append(f"{name} wrapper should {description}")
-    elif "app-prereqs:" not in content:
-        violations.append(f"{name} wrapper should expose app-prereqs")
+        for goal in ("prereqs", "compose-smoke"):
+            if goal not in goals:
+                violations.append(f"{name} wrapper should declare {goal}")
+    elif "app-prereqs" not in goals:
+        violations.append(f"{name} wrapper should declare app-prereqs")
 
     return tuple(violations)
 
@@ -3454,7 +3575,7 @@ def local_go_workload_source_fingerprint_contract_violations(repo_root: Path) ->
 
 def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str, ...]:
     paths = {
-        "build script": repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh",
+        "build script": repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh",
         "image catalog": repo_root / "kubernetes" / "workflow" / "image-catalog.json",
         "sync script": repo_root / "terraform" / "kubernetes" / "scripts" / "sync-gitea.sh",
         "policies sync script": repo_root / "terraform" / "kubernetes" / "scripts" / "sync-gitea-policies.sh",
@@ -3543,7 +3664,7 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
 
 def local_platform_source_fingerprint_cache_contract_violations(repo_root: Path) -> tuple[str, ...]:
     paths = {
-        "build script": repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh",
+        "build script": repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh",
         "render script": repo_root / "kubernetes" / "kind" / "scripts" / "render-operator-overrides.sh",
         "image catalog": repo_root / "kubernetes" / "workflow" / "image-catalog.json",
         "catalog lib": repo_root / "kubernetes" / "workflow" / "image-catalog-lib.sh",
@@ -3649,7 +3770,7 @@ def image_catalog_version_check_policy_contract_violations(repo_root: Path) -> t
 
 def grafana_plugin_catalog_build_input_contract_violations(repo_root: Path) -> tuple[str, ...]:
     catalog_path = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
-    build_script_path = repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh"
+    build_script_path = repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
     violations: list[str] = []
 
     for path in (catalog_path, build_script_path):
@@ -3784,10 +3905,6 @@ def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) 
     if violations:
         return tuple(violations)
 
-    script_text = validator.read_text(encoding="utf-8")
-    if "--print-expected" not in script_text:
-        violations.append("validate-image-catalog-target-refs.sh should expose --print-expected")
-
     for target, host in expected_hosts.items():
         result = subprocess.run(
             [
@@ -3820,7 +3937,7 @@ def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) 
 
 
 def local_platform_cache_hit_contract_violations(repo_root: Path) -> tuple[str, ...]:
-    build_script_path = repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh"
+    build_script_path = repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
     image_build_lib_path = repo_root / "kubernetes" / "workflow" / "image-build-lib.sh"
     violations: list[str] = []
 
@@ -3859,17 +3976,12 @@ def local_platform_cache_hit_contract_violations(repo_root: Path) -> tuple[str, 
 def image_builder_adapter_contract_violations(repo_root: Path) -> tuple[str, ...]:
     shared_path = repo_root / "kubernetes" / "workflow" / "image-build-lib.sh"
     scripts = (
-        repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh",
-        repo_root / "kubernetes" / "kind" / "scripts" / "build-local-workload-images.sh",
+        repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh",
         repo_root / "kubernetes" / "scripts" / "build-local-workload-images.sh",
-    )
-    variant_wrappers = (
-        repo_root / "kubernetes" / "lima" / "scripts" / "build-local-workload-images.sh",
-        repo_root / "kubernetes" / "slicer" / "scripts" / "build-local-workload-images.sh",
     )
     violations: list[str] = []
 
-    for path in (shared_path, *scripts, *variant_wrappers):
+    for path in (shared_path, *scripts):
         if not path.exists():
             violations.append(f"{path.relative_to(repo_root).as_posix()} missing")
     if violations:
@@ -3897,12 +4009,6 @@ def image_builder_adapter_contract_violations(repo_root: Path) -> tuple[str, ...
         if "image_build_catalog_build_loop" not in content and "image_build_catalog_build_and_push" not in content:
             violations.append(f"{relative_path} should call the shared image builder adapter")
 
-    for script in variant_wrappers:
-        relative_path = script.relative_to(repo_root).as_posix()
-        content = script.read_text(encoding="utf-8")
-        if "kubernetes/scripts/build-local-workload-images.sh" not in content:
-            violations.append(f"{relative_path} should delegate to shared workload image builder")
-
     duplicated_functions = (
         "build_and_push()",
         "catalog_build_context()",
@@ -3910,7 +4016,7 @@ def image_builder_adapter_contract_violations(repo_root: Path) -> tuple[str, ...
         "catalog_prepare_build_args()",
         "catalog_build_and_push()",
     )
-    for script in (*scripts[1:], *variant_wrappers):
+    for script in scripts[1:]:
         relative_path = script.relative_to(repo_root).as_posix()
         content = script.read_text(encoding="utf-8")
         for function_name in duplicated_functions:
@@ -3923,7 +4029,7 @@ def image_builder_adapter_contract_violations(repo_root: Path) -> tuple[str, ...
 def image_catalog_context_adapter_contract_violations(repo_root: Path) -> tuple[str, ...]:
     context_lib_path = repo_root / "kubernetes" / "workflow" / "image-catalog-context-lib.sh"
     image_build_lib_path = repo_root / "kubernetes" / "workflow" / "image-build-lib.sh"
-    platform_builder_path = repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh"
+    platform_builder_path = repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
     violations: list[str] = []
 
     for path in (context_lib_path, image_build_lib_path, platform_builder_path):
@@ -3969,7 +4075,7 @@ def local_platform_image_build_spec_contract_violations(repo_root: Path) -> tupl
     catalog_path = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     build_script = (
-        repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh"
+        repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
     ).read_text(encoding="utf-8")
     image_build_lib = (
         repo_root / "kubernetes" / "workflow" / "image-build-lib.sh"
@@ -4126,12 +4232,7 @@ def local_workload_image_build_spec_contract_violations(repo_root: Path) -> tupl
             violations.append(f"{image_id} catalog build spec drifted: {actual_build!r}")
 
     script_paths = (
-        repo_root / "kubernetes" / "kind" / "scripts" / "build-local-workload-images.sh",
         repo_root / "kubernetes" / "scripts" / "build-local-workload-images.sh",
-    )
-    variant_wrapper_paths = (
-        repo_root / "kubernetes" / "lima" / "scripts" / "build-local-workload-images.sh",
-        repo_root / "kubernetes" / "slicer" / "scripts" / "build-local-workload-images.sh",
     )
     hard_coded_paths = (
         "apps/sentiment/app/Dockerfile",
@@ -4145,15 +4246,6 @@ def local_workload_image_build_spec_contract_violations(repo_root: Path) -> tupl
             violations.append(f"{relative_path} should use the workload catalog build loop")
         if "kubernetes/workflow/image-build-lib.sh" not in content:
             violations.append(f"{relative_path} should source image-build-lib.sh")
-        for hard_coded_path in hard_coded_paths:
-            if hard_coded_path in content:
-                violations.append(f"{relative_path} should not hard-code {hard_coded_path}")
-
-    for script in variant_wrapper_paths:
-        content = script.read_text(encoding="utf-8")
-        relative_path = script.relative_to(repo_root).as_posix()
-        if "kubernetes/scripts/build-local-workload-images.sh" not in content:
-            violations.append(f"{relative_path} should delegate to the shared workload build script")
         for hard_coded_path in hard_coded_paths:
             if hard_coded_path in content:
                 violations.append(f"{relative_path} should not hard-code {hard_coded_path}")
@@ -4347,7 +4439,7 @@ def docker_build_audit_tooling_contract_violations(repo_root: Path) -> tuple[str
 
 def grafana_plugin_archive_mirroring_contract_violations(repo_root: Path) -> tuple[str, ...]:
     dockerfile_path = repo_root / "kubernetes" / "kind" / "images" / "grafana-victorialogs" / "Dockerfile"
-    build_script_path = repo_root / "kubernetes" / "kind" / "scripts" / "build-local-platform-images.sh"
+    build_script_path = repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
     image_catalog_path = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     variables_path = repo_root / "terraform" / "kubernetes" / "variables.tf"
     violations: list[str] = []
@@ -4377,7 +4469,7 @@ def grafana_plugin_archive_mirroring_contract_violations(repo_root: Path) -> tup
             '"terraform_version_variable": "grafana_victoria_logs_plugin_version"',
             '"terraform_sha256_variable": "grafana_victoria_logs_plugin_sha256"',
         ),
-        "kubernetes/kind/scripts/build-local-platform-images.sh": (
+        "kubernetes/scripts/build-local-platform-images.sh": (
             'tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_VERSION_VAR}"',
             'tf_default_from_variables "${VICTORIA_LOGS_PLUGIN_SHA256_VAR}"',
             "shasum -a 256",
@@ -4387,7 +4479,7 @@ def grafana_plugin_archive_mirroring_contract_violations(repo_root: Path) -> tup
         "terraform/kubernetes/variables.tf": variables_tf,
         "kubernetes/kind/images/grafana-victorialogs/Dockerfile": dockerfile,
         "kubernetes/workflow/image-catalog.json": image_catalog,
-        "kubernetes/kind/scripts/build-local-platform-images.sh": build_script,
+        "kubernetes/scripts/build-local-platform-images.sh": build_script,
     }
 
     for relative_path, fragments in required_fragments.items():
@@ -5136,16 +5228,12 @@ def oauth2_proxy_token_refresh_validated_names() -> tuple[str, ...]:
 
 def _image_prebuild_direct_scripts() -> tuple[str, ...]:
     return (
-        "kubernetes/kind/scripts/build-local-workload-images.sh",
         "kubernetes/scripts/build-local-workload-images.sh",
     )
 
 
 def _image_prebuild_wrapper_scripts() -> tuple[str, ...]:
-    return (
-        "kubernetes/lima/scripts/build-local-workload-images.sh",
-        "kubernetes/slicer/scripts/build-local-workload-images.sh",
-    )
+    return ()
 
 
 def image_prebuild_hook_contract_violations(repo_root: Path) -> tuple[str, ...]:
@@ -5948,17 +6036,58 @@ def go_app_makefile_build_linux_contract_violations(repo_root: Path) -> tuple[st
         app_name = app_root.name
         binary_name = "apim-simulator" if app_name == "apim-simulator" else app_name
         content = makefile.read_text(encoding="utf-8")
-        if "build-linux:" not in content:
+        targets = _evaluated_make_targets(app_root / "app")
+        if "build-linux" not in targets:
             violations.append(f"{app_name} Makefile missing build-linux target")
             continue
-        target_body = content.split("build-linux:", 1)[1].split("\n\n", 1)[0]
-        if "CGO_ENABLED=0 GOOS=linux GOARCH=$${GOARCH:-$(" not in target_body:
+        dry_run = subprocess.run(
+            ["make", "-n", "-C", str(app_root / "app"), "build-linux"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        target_body = dry_run.stdout
+        if dry_run.returncode != 0:
+            violations.append(f"{app_name} build-linux dry-run failed: {dry_run.stderr.strip()}")
+            continue
+        if "CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH:-" not in target_body:
             violations.append(f"{app_name} build-linux should use the common Linux Go environment prefix")
         expected_output = f"-o .run/{binary_name} ./cmd/{binary_name}"
         if expected_output not in target_body:
             violations.append(f"{app_name} build-linux should write {expected_output}")
         if "$(BINARY)" in target_body:
             violations.append(f"{app_name} build-linux should not hide the runtime binary path behind BINARY")
+
+    return tuple(violations)
+
+
+def go_app_core_makefile_module_contract_violations(repo_root: Path) -> tuple[str, ...]:
+    shared_include = "include ../../../mk/go-app-core.mk"
+    browser_apps = set(canonical_browser_app_names())
+    static_dist_apps = {"sentiment", "subnetcalc"}
+    violations: list[str] = []
+
+    for app_root in iter_go_app_roots(repo_root):
+        app_name = app_root.name
+        makefile = app_root / "app" / "Makefile"
+        if not makefile.exists():
+            violations.append(f"{app_name} missing app Makefile")
+            continue
+
+        content = makefile.read_text(encoding="utf-8")
+        relative_path = makefile.relative_to(repo_root)
+        if shared_include not in content:
+            violations.append(f"{relative_path} should include mk/go-app-core.mk")
+
+        shared_targets = ["test", "build", "build-linux", "clean"]
+        if app_name in browser_apps:
+            shared_targets.append("js-check")
+        if app_name in static_dist_apps:
+            shared_targets.append("static-dist")
+
+        for target in shared_targets:
+            if _makefile_target_body(content, target).strip():
+                violations.append(f"{relative_path} should not duplicate shared {target} recipe")
 
     return tuple(violations)
 
@@ -5983,15 +6112,22 @@ def go_app_makefile_workflow_contract_violations(repo_root: Path) -> tuple[str, 
             continue
         content = makefile.read_text(encoding="utf-8")
         relative_path = makefile.relative_to(repo_root)
+        targets = _evaluated_make_targets(app_root / "app")
 
         for target in ("help", "test", "build", "build-linux", "clean"):
-            if not re.search(rf"(^|[ \t]){re.escape(target)}([ \t]|$)", content.splitlines()[0]):
-                violations.append(f"{relative_path} .PHONY missing {target}")
-            if f"\n{target}:" not in f"\n{content}":
+            if target not in targets:
                 violations.append(f"{relative_path} missing {target} target")
 
-        build_body = content.split("build:", 1)[1].split("\n\n", 1)[0] if "build:" in content else ""
-        if "\n\t@mkdir -p .run" not in f"\n{build_body}":
+        build_dry_run = subprocess.run(
+            ["make", "-n", "-C", str(app_root / "app"), "build"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        build_body = build_dry_run.stdout
+        if build_dry_run.returncode != 0:
+            violations.append(f"{relative_path} build dry-run failed: {build_dry_run.stderr.strip()}")
+        if "mkdir -p .run" not in build_body:
             violations.append(f"{relative_path} build target should create .run")
         if "go build" not in build_body:
             violations.append(f"{relative_path} build target should run go build")
@@ -6010,7 +6146,15 @@ def go_app_makefile_workflow_contract_violations(repo_root: Path) -> tuple[str, 
             if f"  {target}" not in content:
                 violations.append(f"{relative_path} help should list {target}")
 
-        clean_body = content.split("clean:", 1)[1].split("\n\n", 1)[0] if "clean:" in content else ""
+        clean_dry_run = subprocess.run(
+            ["make", "-n", "-C", str(app_root / "app"), "clean"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        clean_body = clean_dry_run.stdout
+        if clean_dry_run.returncode != 0:
+            violations.append(f"{relative_path} clean dry-run failed: {clean_dry_run.stderr.strip()}")
         if "rm -rf .run" not in clean_body:
             violations.append(f"{relative_path} clean target should remove .run")
 

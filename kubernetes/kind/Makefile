@@ -15,18 +15,25 @@ STAGE_LADDER_MK := $(MAKEFILE_DIR)../stage-ladder.mk
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 PROFILE_LIB := $(STACK_DIR)/scripts/profile-lib.sh
+HELPER_MODE_LIB := $(abspath $(K8S_SCRIPTS_DIR)/helper-mode-lib.sh)
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
-CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
+CHECK_STAGE_MONOTONICITY := $(abspath $(K8S_SCRIPTS_DIR)/check-stage-monotonicity.sh)
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
+BUILD_SSO_E2E_ENV := $(K8S_SCRIPTS_DIR)/build-sso-e2e-env.sh
+RENDER_LAUNCHPAD := $(abspath $(K8S_SCRIPTS_DIR)/render-launchpad.sh)
+RUN_DIAGNOSTIC_CHECK := $(abspath $(K8S_SCRIPTS_DIR)/run-diagnostic-check.sh)
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
 RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
-CHECK_KIND_HOST_PORTS := $(SCRIPTS_DIR)/check-kind-host-ports.sh
+CHECK_TARGET_HOST_PORTS := $(abspath $(K8S_SCRIPTS_DIR)/check-target-host-ports.sh)
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
+PLAN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/plan-post-apply-verification.sh)
+RUN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/run-post-apply-verification.sh)
+VARIANT_JSON := $(REPO_ROOT)/kubernetes/variants/kind/variant.json
 ASSERT_VARIANT_ACTIVE := $(K8S_SCRIPTS_DIR)/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
-BUILD_LOCAL_PLATFORM_IMAGES := $(SCRIPTS_DIR)/build-local-platform-images.sh
-BUILD_LOCAL_WORKLOAD_IMAGES := $(SCRIPTS_DIR)/build-local-workload-images.sh
+BUILD_LOCAL_PLATFORM_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-platform-images.sh)
+BUILD_LOCAL_WORKLOAD_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-workload-images.sh)
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
 DOCKER_SAFE_CLEAN := $(SCRIPTS_DIR)/docker-safe-clean.sh
@@ -48,6 +55,7 @@ OIDC_RECOVERY_FORCE_MODE ?= nginx-rollout
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 IDP_PUBLIC_URL ?= https://portal.127.0.0.1.sslip.io
 IDP_API_PUBLIC_URL ?= https://portal-api.127.0.0.1.sslip.io
+K8S_IDP_RUNTIME := kind
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
@@ -101,11 +109,12 @@ include $(STAGE_LADDER_MK)
 VALID_TARGETS := kind
 TARGET_FROM_GOALS := $(firstword $(filter $(VALID_TARGETS),$(MAKECMDGOALS)))
 VALID_ACTIONS := plan apply
-VALID_STAGE_HELPERS := check-health check-security check-rbac check-sso check-sso-e2e
+VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
 MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
 
@@ -114,6 +123,7 @@ KIND_DISPATCH_TARGET := $(if $(filter apply,$(ACTION_FROM_GOALS)),apply,plan)
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk
+include ../../mk/k8s-idp-preview.mk
 
 KUBECONFIG_PATH ?= $(KIND_KUBECONFIG_PATH)
 KUBECONFIG_CONTEXT ?= $(KIND_KUBECONFIG_CONTEXT)
@@ -269,7 +279,9 @@ help:
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
-	@"$(CHECK_STAGE_MONOTONICITY)" $(READONLY_MODE_FLAG)
+	@"$(CHECK_STAGE_MONOTONICITY)" $(READONLY_MODE_FLAG) \
+		--stack-dir "$(abspath $(MAKEFILE_DIR))" \
+		--label "kind"
 
 .PHONY: build-local-platform-images
 build-local-platform-images:
@@ -281,6 +293,7 @@ build-local-workload-images:
 	@CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
+	VARIANT_LABEL="Kind" \
 	"$(BUILD_LOCAL_WORKLOAD_IMAGES)" $(READONLY_MODE_FLAG)
 
 .PHONY: render-operator-overrides
@@ -444,10 +457,10 @@ check-kind-host-ports: WORKFLOW_REQUIRE_STAGE_FILE=1
 check-kind-host-ports: workflow-validate-stage
 	@$(MAKE) render-operator-overrides >/dev/null
 	@set -euo pipefail; \
-	args=(); \
+	tfvar_args=(); \
 	while IFS= read -r tfvar_file; do \
 		[ -n "$$tfvar_file" ] || continue; \
-		args+=(--var-file "$$tfvar_file"); \
+		tfvar_args+=(--var-file "$$tfvar_file"); \
 	done < <( \
 		"$(BUILD_TFVAR_ARGS)" --execute \
 			--optional-file "$(stage_var_file)" \
@@ -457,7 +470,8 @@ check-kind-host-ports: workflow-validate-stage
 			--optional-file "$${PLATFORM_TFVARS:-}" \
 			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	); \
-	"$(CHECK_KIND_HOST_PORTS)" $(READONLY_MODE_FLAG) "$${args[@]}"
+	TARGET_LABEL="kind" \
+	"$(CHECK_TARGET_HOST_PORTS)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" "$${tfvar_args[@]}"
 
 .PHONY: check-lima-stopped
 check-lima-stopped:
@@ -598,16 +612,8 @@ apply: workflow-validate-stage
 	@$(MAKE) ensure-kind-running
 	@$(MAKE) check-kubeconfig >/dev/null
 	@set -euo pipefail; \
-	mode_enabled() { \
-		local mode="$$1"; local auto_threshold="$$2"; local stage_num_local="$$3"; \
-		case "$$mode" in \
-			on) return 0 ;; \
-			off) return 1 ;; \
-			auto) [ "$$stage_num_local" -ge "$$auto_threshold" ] ;; \
-			*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
-		esac; \
-	}; \
 	. "$(PROFILE_LIB)"; \
+	. "$(HELPER_MODE_LIB)"; \
 	profile_setup_session "kind" "$(STAGE)" "apply" "$(KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
 	profile_enabled=0; \
 	if profile_is_enabled; then \
@@ -654,8 +660,6 @@ apply: workflow-validate-stage
 			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	); \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
-	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
-	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
 	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
 	if [ "$$enable_sso" != "true" ]; then enable_backstage=false; fi; \
@@ -675,9 +679,9 @@ apply: workflow-validate-stage
 	if { [ "$$kind_image_distribution_mode" = "registry" ] || [ "$$kind_image_distribution_mode" = "hybrid" ]; } && [ "$$stage_num" -ge 700 ]; then \
 		run_step "build-local-workload-images" $(MAKE) build-local-workload-images; \
 	fi; \
-	if [ "$$kind_image_distribution_mode" = "load" ] && mode_enabled "$(KIND_PRELOAD_IMAGES_MODE)" 200 "$$stage_num"; then \
+	if [ "$$kind_image_distribution_mode" = "load" ] && helper_mode_enabled "$(KIND_PRELOAD_IMAGES_MODE)" 200 "$$stage_num"; then \
 		run_step "preload-images" $(MAKE) preload-images STAGE="$(STAGE)"; \
-	elif [ "$$kind_image_distribution_mode" != "load" ] && mode_enabled "$(KIND_PRELOAD_IMAGES_MODE)" 200 "$$stage_num"; then \
+	elif [ "$$kind_image_distribution_mode" != "load" ] && helper_mode_enabled "$(KIND_PRELOAD_IMAGES_MODE)" 200 "$$stage_num"; then \
 		echo "Skipping KIND_PRELOAD_IMAGES_MODE because KIND_IMAGE_DISTRIBUTION_MODE=$$kind_image_distribution_mode"; \
 	fi; \
 	apply_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
@@ -737,13 +741,10 @@ apply: workflow-validate-stage
 			run_step "rollout-restart-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout restart deployment/backstage; \
 			run_step "rollout-status-backstage" env KUBECONFIG="$(KUBECONFIG_PATH)" kubectl --context "$(KUBECONFIG_CONTEXT)" -n idp rollout status deployment/backstage --timeout=600s; \
 		fi; \
-		if [ "$$stage_num" -ge 800 ] && [ "$$enable_gateway_tls" = "true" ]; then \
-			run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-			run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
-			if [ "$$stage_num" -ge 900 ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-				run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
-			fi; \
-		fi; \
+		post_apply_args=(); \
+		for tfvar_file in "$${tfvar_files[@]}"; do post_apply_args+=(--var-file "$$tfvar_file"); done; \
+		post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"; \
+		run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"; \
 	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
 		rm -f "$$tmp_log"; \
@@ -770,7 +771,7 @@ check-health: workflow-validate-stage
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	)"; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(RUN_DIAGNOSTIC_CHECK)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" --action check-health --stage "$(STAGE)" --stack-dir "$(abspath $(STACK_DIR))" $$vf
 
 .PHONY: check-security
 check-security: workflow-validate-stage
@@ -818,38 +819,6 @@ idp-secrets:
 .PHONY: idp-scorecards
 idp-scorecards:
 	@"$(STACK_DIR)/scripts/idp-scorecards.sh" $(READONLY_MODE_FLAG)
-
-.PHONY: idp-api
-idp-api:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose Go IDP core for kind at $(IDP_API_PUBLIC_URL)"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-core/app && IDP_RUNTIME=kind IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) IDP_CATALOG_PATH=$(REPO_ROOT)/catalog/platform-apps.json go run ./cmd/idp-core"; \
-	fi
-
-.PHONY: backstage
-backstage:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose Backstage developer portal for kind at $(IDP_PUBLIC_URL)"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/backstage && docker build -t platform/backstage:dev -f Dockerfile . && docker run --rm -p 7007:7007 -e BACKSTAGE_BASE_URL=http://127.0.0.1:7007 platform/backstage:dev"; \
-	fi
-
-.PHONY: idp-sdk
-idp-sdk:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would generate IDP SDK from FastAPI OpenAPI for kind"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-sdk && npm test"; \
-	fi
-
-.PHONY: idp-mcp
-idp-mcp:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would start IDP MCP server for kind against $(IDP_API_PUBLIC_URL)"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) go run ./cmd/idp-mcp"; \
-	fi
 
 .PHONY: gitea-repo-lifecycle-demo
 gitea-repo-lifecycle-demo:
@@ -932,22 +901,16 @@ check-sso-e2e: workflow-validate-stage
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
-	tfvar_files=(); \
-	while IFS= read -r tfvar_file; do \
-		[ -n "$$tfvar_file" ] || continue; \
-		tfvar_files+=("$$tfvar_file"); \
-	done < <( \
-		"$(BUILD_TFVAR_ARGS)" --execute \
-			--optional-file "$$stage_tfvars" \
-			--optional-file "$(target_var_file)" \
-			$(kind_profile_tfvar_arg) \
-			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-			--optional-file "$${PLATFORM_TFVARS:-}" \
-			--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
-	); \
-	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
-	tfvar_files_joined="$$(IFS=:; printf '%s' "$${tfvar_files[*]}")"; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars" STAGE_TFVARS_FILES="$$tfvar_files_joined" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+	sso_env="$$( "$(BUILD_SSO_E2E_ENV)" --execute \
+		--stage-tfvars "$$stage_tfvars" \
+		--optional-file "$(target_var_file)" \
+		$(kind_profile_tfvar_arg) \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
+	)"; \
+	eval "$$sso_env"; \
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: exercise-oidc-recovery
 exercise-oidc-recovery:
@@ -987,11 +950,7 @@ gitea-sync: workflow-validate-stage
 
 .PHONY: launchpad-render
 launchpad-render:
-	@set -euo pipefail; \
-	stack_path="$(abspath $(STACK_DIR))"; \
-	script="$$stack_path/scripts/render-platform-launchpad.sh"; \
-	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	STACK_DIR="$$stack_path" "$$script" $(READONLY_MODE_FLAG)
+	@"$(RENDER_LAUNCHPAD)" $(READONLY_MODE_FLAG) --stack-dir "$(abspath $(STACK_DIR))"
 
 .PHONY: show-urls
 show-urls: workflow-validate-stage
@@ -1006,7 +965,7 @@ show-urls: workflow-validate-stage
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 		--optional-file "$(KIND_OPERATOR_OVERRIDES_FILE)" \
 	)"; \
-	"$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) --show-urls $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(RUN_DIAGNOSTIC_CHECK)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" --action show-urls --stage "$(STAGE)" --stack-dir "$(abspath $(STACK_DIR))" $$vf
 
 .PHONY: docker-health
 docker-health:
@@ -1177,7 +1136,10 @@ prereqs:
 	echo "OK   Docker context: $$(docker context show)"; \
 	echo ""; \
 	echo "Docker registry auth:"; \
-	"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)" || true; \
+	if ! "$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)"; then \
+		echo "FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)" >&2; \
+		exit 1; \
+	fi; \
 	"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \
 	echo ""; \
 	$(MAKE) check-conflicting-clusters-stopped; \

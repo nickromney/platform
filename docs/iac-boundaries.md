@@ -88,7 +88,7 @@ that most clearly define the ownership seam for the local Kubernetes stacks.
 | Shell entrypoint | Label | Why it belongs there |
 | --- | --- | --- |
 | `kubernetes/kind/scripts/ensure-kind-kubeconfig.sh` | `terraform-bootstrap` | Keeps the split kubeconfig aligned with the active kind cluster so provider-backed resources can target the right context. |
-| `kubernetes/kind/scripts/check-kind-host-ports.sh` | `operator-bootstrap` | Performs host preflight on bound localhost ports before kind lifecycle work starts. |
+| `kubernetes/scripts/check-target-host-ports.sh` | `operator-bootstrap` | Performs runtime-configured host preflight on bound localhost ports before lifecycle work starts. |
 | `kubernetes/lima/scripts/bootstrap-k3s-lima.sh` | `operator-bootstrap` | Starts the Lima VM path and bootstraps k3s before Terraform is allowed to manage in-cluster state. |
 | `kubernetes/slicer/scripts/bootstrap-k3s-slicer.sh` | `operator-bootstrap` | Starts the Slicer VM path and bootstraps k3s before Terraform is allowed to manage in-cluster state. |
 | `kubernetes/slicer/scripts/ensure-host-forwards.sh` | `operator-bootstrap` | Manages host forwards and proxy setup for the VM-backed path; this is runtime plumbing, not Terraform state. |

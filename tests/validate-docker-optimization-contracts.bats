@@ -260,6 +260,23 @@ PY
   [[ "${output}" == *"validated local Go app Makefile clean contract"* ]]
 }
 
+@test "local Go app Makefiles share common Go app core module" {
+  run python3 - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import go_app_core_makefile_module_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = go_app_core_makefile_module_contract_violations(repo_root)
+assert not violations, violations
+print("validated local Go app Makefile shared core module contract")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated local Go app Makefile shared core module contract"* ]]
+}
+
 @test "docker optimization tests share local Go app Makefile workflow helpers" {
   run python3 - <<'PY'
 from pathlib import Path
@@ -315,6 +332,24 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated shared app module Makefile focused help"* ]]
+}
+
+@test "shared app module Makefiles share common Go module workflow" {
+  run python3 - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import shared_app_module_makefile_module_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = shared_app_module_makefile_module_contract_violations(repo_root)
+assert not violations, violations
+
+print("validated shared app module Makefile common Go module workflow")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated shared app module Makefile common Go module workflow"* ]]
 }
 
 @test "docker optimization tests share shared app module Makefile helpers" {

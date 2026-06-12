@@ -104,6 +104,7 @@ PY
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
+    'MAKE_KNOWN_GOALS := test' \
     '.PHONY: test' \
     'test:' \
     '	@echo test wrapper' \
@@ -141,6 +142,7 @@ PY
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
+    'MAKE_KNOWN_GOALS := app-js-check' \
     '.PHONY: app-js-check' \
     'app-js-check:' \
     '	@echo js wrapper' \
@@ -276,6 +278,7 @@ PY
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
+    'MAKE_KNOWN_GOALS := compose-smoke' \
     '.PHONY: compose-smoke' \
     'compose-smoke:' \
     '	@echo compose wrapper' \
@@ -305,6 +308,24 @@ PY
   [[ "${output}" == *"validated apps compose-smoke wrapper delegation"* ]]
   [[ "${make_output}" != *"./chatgpt-sim/tests/compose-smoke.sh"* ]]
   [[ "${make_output}" != *"./sentiment/tests/compose-smoke.sh"* ]]
+  rm -rf "${temp_app}"
+}
+
+@test "apps dynamic compose-smoke app target delegates to matching wrapper" {
+  temp_app="${REPO_ROOT}/apps/zz-test-compose-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}"
+  printf '%s\n' \
+    'MAKE_KNOWN_GOALS := compose-smoke' \
+    '.PHONY: compose-smoke' \
+    'compose-smoke:' \
+    '	@echo compose wrapper' \
+    >"${temp_app}/Makefile"
+
+  run make -C "${REPO_ROOT}/apps" compose-smoke-zz-test-compose-wrapper
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"compose wrapper"* ]]
   rm -rf "${temp_app}"
 }
 
@@ -350,6 +371,7 @@ PY
   rm -rf "${temp_app}"
   mkdir -p "${temp_app}"
   printf '%s\n' \
+    'MAKE_KNOWN_GOALS := update' \
     '.PHONY: update' \
     'update:' \
     '	@echo update test wrapper' \
@@ -377,5 +399,70 @@ PY
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"validated apps update wrapper delegation"* ]]
+  rm -rf "${temp_app}"
+}
+
+@test "apps wrapper target discovery supports continued MAKE_KNOWN_GOALS declarations" {
+  temp_app="${REPO_ROOT}/apps/zz-test-update-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}"
+  printf '%s\n' \
+    'MAKE_KNOWN_GOALS := help \' \
+    '  update' \
+    '.PHONY: update' \
+    'update:' \
+    '	@echo update test wrapper' \
+    >"${temp_app}/Makefile"
+
+  run make -n -C "${REPO_ROOT}/apps" update
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"make --no-print-directory -C ./zz-test-update-wrapper update"* ]]
+  rm -rf "${temp_app}"
+}
+
+@test "apps wrapper target discovery uses evaluated MAKE_KNOWN_GOALS additions" {
+  temp_app="${REPO_ROOT}/apps/zz-test-update-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}"
+  printf '%s\n' \
+    'MAKE_KNOWN_GOALS := help' \
+    'MAKE_KNOWN_GOALS += update' \
+    '.PHONY: update' \
+    'update:' \
+    '	@echo update test wrapper' \
+    >"${temp_app}/Makefile"
+
+  run make -n -C "${REPO_ROOT}/apps" update
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"make --no-print-directory -C ./zz-test-update-wrapper update"* ]]
+  rm -rf "${temp_app}"
+}
+
+@test "apps Makefile contract helpers use evaluated MAKE_KNOWN_GOALS additions" {
+  temp_app="${REPO_ROOT}/apps/zz-test-app-wrapper"
+  rm -rf "${temp_app}"
+  mkdir -p "${temp_app}"
+  printf '%s\n' \
+    'MAKE_KNOWN_GOALS := help' \
+    'MAKE_KNOWN_GOALS += app-test' \
+    '.PHONY: app-test' \
+    'app-test:' \
+    '	@echo app test wrapper' \
+    >"${temp_app}/Makefile"
+
+  run python3 - <<PY
+from pathlib import Path
+
+from tests.app_contracts import app_wrapper_names_with_target
+
+names = app_wrapper_names_with_target(Path("${REPO_ROOT}"), "app-test")
+assert "zz-test-app-wrapper" in names, names
+print("validated evaluated app wrapper target helper")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated evaluated app wrapper target helper"* ]]
   rm -rf "${temp_app}"
 }

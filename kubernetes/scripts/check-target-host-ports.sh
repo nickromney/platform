@@ -4,32 +4,35 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/../../scripts/lib/shell-cli.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../scripts/lib/host-port-listeners.sh"
 
 fail() { echo "FAIL $*" >&2; exit 1; }
 ok() { echo "OK   $*"; }
 
 TARGET_LABEL="${TARGET_LABEL:-target}"
 PORT_CHECKS="${PORT_CHECKS:-}"
+VARIANT_JSON=""
 
 usage() {
-  shell_cli_usage_line " [--var-file PATH]... [--dry-run] [--execute]"
+  shell_cli_usage_line " [--variant-json PATH] [--var-file PATH]... [--dry-run] [--execute]"
   cat <<EOF
 Checks whether the host ports required for a target are free.
 
-Set TARGET_LABEL and PORT_CHECKS in the environment. PORT_CHECKS must be a
-newline-separated list of:
+Pass --variant-json to derive the preflight rows from the variant manifest.
+For compatibility, callers may still set TARGET_LABEL and PORT_CHECKS in the
+environment. PORT_CHECKS must be a newline-separated list of:
 
   name|bind_ip|host_var|host_default|target_var|target_default
 
 Use an empty host_var or target_var to treat the corresponding default as a
 literal, non-tfvars-backed port.
 
+Options:
+  --variant-json PATH  Kubernetes variant.json file to read for host-access facts
+
 $(shell_cli_standard_options)
 EOF
-}
-
-have_cmd() {
-  command -v "$1" >/dev/null 2>&1
 }
 
 tfvar_value_and_source() {
@@ -82,92 +85,96 @@ tfvar_or_default() {
   printf '%s\n' "${value}"
 }
 
-listeners_for_port_lsof() {
-  local bind_ip="$1"
-  local port="$2"
-  local raw
-  local header
-  local body
+variant_json_value() {
+  local query="$1"
 
-  raw="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
-  [[ -n "${raw}" ]] || return 1
+  jq -r "${query} // empty" "${VARIANT_JSON}"
+}
 
-  if [[ "${bind_ip}" == "0.0.0.0" ]]; then
-    printf '%s\n' "${raw}"
+variant_shared_host_ports_contains() {
+  local port="$1"
+
+  jq -e --argjson port "${port}" '(.host_access_path.shared_host_ports // []) | index($port)' "${VARIANT_JSON}" >/dev/null
+}
+
+append_port_check() {
+  local row="$1"
+
+  if [[ -z "${PORT_CHECKS}" ]]; then
+    PORT_CHECKS="${row}"
     return 0
   fi
 
-  header="$(printf '%s\n' "${raw}" | sed -n '1p')"
-  body="$(
-    printf '%s\n' "${raw}" | tail -n +2 | \
-      grep -E "(^|[[:space:]])(\\*:${port}|127\\.0\\.0\\.1:${port}|localhost:${port}|\\[::1\\]:${port}|::1:${port})([[:space:]]|$)" || true
-  )"
-  [[ -n "${body}" ]] || return 1
-  printf '%s\n%s\n' "${header}" "${body}"
+  PORT_CHECKS+=$'\n'"${row}"
 }
 
-listeners_for_port_ss() {
-  local bind_ip="$1"
-  local port="$2"
-  local body
+append_admin_port_check_if_shared() {
+  local name="$1"
+  local bind_ip="$2"
+  local host_var="$3"
+  local host_default="$4"
+  local target_var="$5"
+  local target_default="$6"
 
-  body="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
-  [[ -n "${body}" ]] || return 1
-
-  if [[ "${bind_ip}" == "127.0.0.1" ]]; then
-    body="$(
-      printf '%s\n' "${body}" | awk -v port="${port}" '
-        {
-          local_addr = $4
-          if (
-            local_addr == "*:" port ||
-            local_addr == "127.0.0.1:" port ||
-            local_addr == "[::1]:" port ||
-            local_addr == "::1:" port
-          ) {
-            print
-          }
-        }
-      '
-    )"
-    [[ -n "${body}" ]] || return 1
-  fi
-
-  printf 'State Recv-Q Send-Q Local Address:Port Peer Address:Port\n%s\n' "${body}"
+  variant_shared_host_ports_contains "${host_default}" || return 0
+  append_port_check "${name}|${bind_ip}|${host_var}|${host_default}|${target_var}|${target_default}"
 }
 
-listeners_for_port() {
-  local bind_ip="$1"
-  local port="$2"
+populate_port_checks_from_variant_json() {
+  [[ -f "${VARIANT_JSON}" ]] || fail "Missing variant manifest: ${VARIANT_JSON}"
+  command -v jq >/dev/null 2>&1 || fail "Missing required tool: jq"
 
-  if have_cmd lsof; then
-    listeners_for_port_lsof "${bind_ip}" "${port}"
-    return $?
+  local variant_id
+  local variant_label
+  local mode
+  local gateway_bind_ip="127.0.0.1"
+  local gateway_host_port
+  local gateway_target_port
+  local expose_admin_nodeports
+
+  variant_id="$(variant_json_value '.id')"
+  variant_label="$(variant_json_value '.label')"
+  mode="$(variant_json_value '.host_access_path.mode')"
+  gateway_host_port="$(variant_json_value '.host_access_path.gateway_host_port')"
+  gateway_target_port="$(variant_json_value '.host_access_path.gateway_target_port')"
+
+  [[ -n "${variant_id}" ]] || fail "Missing variant id in ${VARIANT_JSON}"
+  [[ -n "${mode}" ]] || fail "Missing host_access_path.mode in ${VARIANT_JSON}"
+  [[ -n "${gateway_host_port}" ]] || fail "Missing host_access_path.gateway_host_port in ${VARIANT_JSON}"
+  [[ -n "${gateway_target_port}" ]] || gateway_target_port="${gateway_host_port}"
+
+  if [[ "${TARGET_LABEL}" == "target" ]]; then
+    TARGET_LABEL="${variant_label:-${variant_id}}"
   fi
 
-  if have_cmd ss; then
-    listeners_for_port_ss "${bind_ip}" "${port}"
-    return $?
+  if [[ "${mode}" == "kind-nodeports" ]]; then
+    gateway_bind_ip="$(tfvar_or_default "gateway_https_listen_address" "127.0.0.1")"
   fi
 
-  fail "neither lsof nor ss found in PATH; cannot verify host port availability"
-}
+  append_port_check "gateway-https|${gateway_bind_ip}|gateway_https_host_port|${gateway_host_port}|gateway_https_node_port|${gateway_target_port}"
 
-binds_overlap() {
-  local left_ip="$1"
-  local left_port="$2"
-  local right_ip="$3"
-  local right_port="$4"
+  if [[ "${variant_id}" == "kind" ]]; then
+    append_port_check "api-server|127.0.0.1|kind_api_server_port|6443|kind_api_server_port|6443"
+  fi
 
-  [[ "${left_port}" == "${right_port}" ]] || return 1
-  [[ "${left_ip}" == "${right_ip}" || "${left_ip}" == "0.0.0.0" || "${right_ip}" == "0.0.0.0" ]]
+  expose_admin_nodeports="$(tfvar_or_default "expose_admin_nodeports" "true")"
+  [[ "${expose_admin_nodeports}" == "true" ]] || return 0
+
+  append_admin_port_check_if_shared "argocd" "127.0.0.1" "argocd_server_node_port" "30080" "argocd_server_node_port" "30080"
+  append_admin_port_check_if_shared "hubble-ui" "127.0.0.1" "hubble_ui_node_port" "31235" "hubble_ui_node_port" "31235"
+  append_admin_port_check_if_shared "gitea-http" "127.0.0.1" "gitea_http_node_port" "30090" "gitea_http_node_port" "30090"
+  append_admin_port_check_if_shared "gitea-ssh" "127.0.0.1" "gitea_ssh_node_port" "30022" "gitea_ssh_node_port" "30022"
+  if [[ "${variant_id}" != "kind" ]]; then
+    append_admin_port_check_if_shared "signoz-ui" "127.0.0.1" "signoz_ui_host_port" "3301" "signoz_ui_node_port" "30301"
+  fi
+  append_admin_port_check_if_shared "grafana-ui" "127.0.0.1" "grafana_ui_host_port" "3302" "grafana_ui_node_port" "30302"
 }
 
 docker_publishers_for_port() {
   local bind_ip="$1"
   local port="$2"
 
-  have_cmd docker || return 0
+  host_port_have_cmd docker || return 0
 
   docker ps --format '{{.Names}}	{{.Ports}}' 2>/dev/null | while IFS=$'\t' read -r name ports; do
     [[ -n "${ports}" ]] || continue
@@ -217,6 +224,14 @@ while [[ $# -gt 0 ]]; do
       TFVARS_FILES+=("$2")
       shift 2
       ;;
+    --variant-json)
+      [[ $# -ge 2 ]] || {
+        shell_cli_missing_value "$(shell_cli_script_name)" "--variant-json"
+        exit 1
+      }
+      VARIANT_JSON="$2"
+      shift 2
+      ;;
     --)
       shift
       break
@@ -234,6 +249,10 @@ done
 
 shell_cli_maybe_execute_or_preview_summary usage \
   "would check ${TARGET_LABEL} host ports using ${#TFVARS_FILES[@]} tfvars file(s)"
+
+if [[ -n "${VARIANT_JSON}" ]]; then
+  populate_port_checks_from_variant_json
+fi
 
 [[ -n "${PORT_CHECKS}" ]] || fail "PORT_CHECKS is required"
 
@@ -263,7 +282,7 @@ for ((i = 0; i < ${#checks[@]}; i += 1)); do
   IFS='|' read -r left_name left_ip left_port _left_host_var _left_host_source _left_target_port _left_target_var _left_target_source <<<"${checks[$i]}"
   for ((j = i + 1; j < ${#checks[@]}; j += 1)); do
     IFS='|' read -r right_name right_ip right_port _right_host_var _right_host_source _right_target_port _right_target_var _right_target_source <<<"${checks[$j]}"
-    if binds_overlap "${left_ip}" "${left_port}" "${right_ip}" "${right_port}"; then
+    if host_port_binds_overlap "${left_ip}" "${left_port}" "${right_ip}" "${right_port}"; then
       echo "FAIL planned ${TARGET_LABEL} host port overlap: ${left_name} (${left_ip}:${left_port}) conflicts with ${right_name} (${right_ip}:${right_port})" >&2
       conflicts=1
     fi
@@ -275,7 +294,13 @@ for check in "${checks[@]}"; do
   IFS='|' read -r name bind_ip port host_var host_source target_port target_var target_source <<<"${check}"
   host_label="${host_var:-literal_host_port}"
   target_label="${target_var:-literal_target_port}"
-  listeners="$(listeners_for_port "${bind_ip}" "${port}" || true)"
+  if listeners="$(host_port_listeners_for_port "${bind_ip}" "${port}")"; then
+    :
+  else
+    listener_status=$?
+    [[ "${listener_status}" -eq 127 ]] && fail "neither lsof nor ss found in PATH; cannot verify host port availability"
+    listeners=""
+  fi
   if [[ -n "${listeners}" ]]; then
     echo "FAIL ${name} host port ${bind_ip}:${port} is already in use" >&2
     echo "Planned mapping: ${host_label}=${port} (${host_source}) -> ${TARGET_LABEL} node port ${target_label}=${target_port} (${target_source})" >&2

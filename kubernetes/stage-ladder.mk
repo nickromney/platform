@@ -1,4 +1,5 @@
 VALID_STAGES := 100 200 300 400 500 600 700 800 900 920
+KUBERNETES_STAGE_READONLY_HELPERS := check-health check-security check-rbac check-gateway-urls show-urls check-sso check-sso-e2e
 
 STAGE_FILE_REL_100 := stages/100-cluster.tfvars
 STAGE_FILE_REL_200 := stages/200-cilium.tfvars

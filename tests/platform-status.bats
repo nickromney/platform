@@ -314,6 +314,30 @@ JSON
   [ "${output}" = 'true|true|true|true|true|true' ]
 }
 
+@test "platform status exposes shared IDP preview actions for every local Kubernetes variant" {
+  run "${SCRIPT}" --execute --output json
+
+  [ "${status}" -eq 0 ]
+
+  run jq -e '
+    . as $root
+    | all(["kind", "lima", "slicer"][]; . as $variant
+      | all(["idp-api", "backstage", "idp-sdk", "idp-mcp"][]; . as $target
+        | any($root.actions[];
+          .id == ($variant + "-" + $target)
+          and .variant == $variant
+          and .variant_path == ("kubernetes/" + $variant)
+          and .enabled == true
+          and .dangerous == false
+          and .command == ("make -C kubernetes/" + $variant + " " + $target)
+        )
+      )
+    )
+  ' <<<"${output}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "platform status falls back to docker ps when docker info is unavailable" {
   export MOCK_DOCKER_INFO_EXIT=1
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'

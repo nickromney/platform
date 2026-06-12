@@ -36,7 +36,7 @@ EOF
   run make -n -C "${REPO_ROOT}/apps/sentiment" update
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"No dependency update required for the default Go sentiment runtime."* ]]
+  [[ "${output}" == *"sentiment: Go-only app; no package-manager locks to update"* ]]
   [[ "${output}" != *"bun update"* ]]
 }
 

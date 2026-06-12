@@ -9,7 +9,7 @@ setup() {
   export PATH="${TEST_BIN}:${PATH}"
 }
 
-@test "fails when the slicer gateway proxy container is still running" {
+@test "fails when the slicer gateway proxy container is still running and reports actual listener addresses" {
   cat >"${TEST_BIN}/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -31,7 +31,24 @@ EOF
 set -euo pipefail
 case " $* " in
   *" -iTCP:443 "*)
-    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+    cat <<'OUT'
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+docker-pr 101 nick 12u IPv4 0x1 0t0 TCP *:443 (LISTEN)
+OUT
+    exit 0
+    ;;
+  *" -iTCP:30080 "*)
+    cat <<'OUT'
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+node 102 nick 13u IPv4 0x2 0t0 TCP 192.168.1.20:30080 (LISTEN)
+OUT
+    exit 0
+    ;;
+  *" -iTCP:3302 "*)
+    cat <<'OUT'
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+python 103 nick 14u IPv4 0x3 0t0 TCP localhost:3302 (LISTEN)
+OUT
     exit 0
     ;;
 esac
@@ -46,7 +63,11 @@ EOF
   [[ "${output}" == *"make -C kubernetes/slicer stop-host-forwards"* ]]
   [[ "${output}" == *"Shared host ports currently in use while Slicer is active:"* ]]
   [[ "${output}" != *"currently in use by Slicer"* ]]
-  [[ "${output}" == *"127.0.0.1:443"* ]]
+  [[ "${output}" == *"0.0.0.0:443"* ]]
+  [[ "${output}" == *"192.168.1.20:30080"* ]]
+  [[ "${output}" == *"127.0.0.1:3302"* ]]
+  [[ "${output}" != *"127.0.0.1:443"* ]]
+  [[ "${output}" != *"127.0.0.1:30080"* ]]
   [[ "${output}" == *"slicer-platform-gateway-443"* ]]
 }
 

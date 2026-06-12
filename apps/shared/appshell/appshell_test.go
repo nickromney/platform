@@ -78,7 +78,7 @@ func TestStylesheetServesSharedAppShellRules(t *testing.T) {
 			t.Fatalf("stylesheet missing enabled control affordance %q: %s", text, rec.Body.String())
 		}
 	}
-	for _, text := range []string{`:where(label)`, `margin-bottom: 8px`, `font-weight: 700`, `:where(textarea)`, `resize: vertical`, `line-height: 1.4`} {
+	for _, text := range []string{`:where(label)`, `margin-bottom: 8px`, `font-weight: 700`, `:where(summary)`, `min-height: 24px`, `padding-block: 2px`, `cursor: pointer`, `:where(textarea)`, `resize: vertical`, `line-height: 1.4`} {
 		if !strings.Contains(rec.Body.String(), text) {
 			t.Fatalf("stylesheet missing shared form rhythm %q: %s", text, rec.Body.String())
 		}

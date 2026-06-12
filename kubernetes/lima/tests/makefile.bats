@@ -61,16 +61,44 @@ setup() {
   [[ "${output}" == *"check-security.sh"* ]]
 }
 
+@test "lima build-local-platform-images delegates to the shared Kubernetes build script" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" build-local-platform-images
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'CACHE_PUSH_HOST="127.0.0.1:5002"'* ]]
+  [[ "${output}" == *'kubernetes/scripts/build-local-platform-images.sh" --execute'* ]]
+}
+
+@test "lima ensure-image-cache delegates to the shared Kubernetes adapter" {
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" ensure-image-cache
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'CACHE_PUSH_HOST="127.0.0.1:5002"'* ]]
+  [[ "${output}" == *'kubernetes/scripts/ensure-local-image-cache.sh" --execute'* ]]
+
+  run make -n -C "${REPO_ROOT}/kubernetes/lima" ensure-image-cache DRY_RUN=1
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'CACHE_PUSH_HOST="127.0.0.1:5002"'* ]]
+  [[ "${output}" == *'kubernetes/scripts/ensure-local-image-cache.sh" --dry-run'* ]]
+}
+
+@test "lima apply delegates local image helper planning to the shared planner" {
+  run grep -Fn '$(PLAN_LOCAL_IMAGE_HELPERS)" --execute' "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "lima check-health forwards explicit read-only mode flags" {
   run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'check-cluster-health.sh" --execute '* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --execute '* ]]
 
   run make -n -C "${REPO_ROOT}/kubernetes/lima" check-health STAGE=900 DRY_RUN=1
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --dry-run '* ]]
 }
 
 @test "lima test-idempotence supports dry-run without touching the cluster" {
@@ -137,8 +165,18 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "lima check-sso-e2e uses the split kubeconfig and rendered Backstage gate" {
-  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars"' \
+@test "lima check-sso-e2e delegates SSO env projection and forwards it to Playwright" {
+  run grep -Fn 'BUILD_SSO_E2E_ENV := $(K8S_SCRIPTS_DIR)/build-sso-e2e-env.sh' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(BUILD_SSO_E2E_ENV)" --execute' \
+    "${REPO_ROOT}/kubernetes/lima/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}"' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]

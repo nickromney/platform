@@ -122,7 +122,7 @@ cd apps/backstage && docker build -t platform/backstage:test -f Dockerfile .
 
 Ownership:
 
-- `kubernetes/kind/scripts/build-local-platform-images.sh`
+- `kubernetes/scripts/build-local-platform-images.sh`
 - `terraform/kubernetes/variables.tf`
 - `terraform/kubernetes/locals.tf`
 - `terraform/kubernetes/scripts/sync-gitea.sh`

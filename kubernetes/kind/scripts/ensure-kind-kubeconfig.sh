@@ -11,6 +11,7 @@ TARGET_CONTEXT="kind-${CLUSTER_NAME}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${KUBECONFIG:-$HOME/.kube/${TARGET_CONTEXT}.yaml}}"
 GLOBAL_KUBECONFIG_PATH="${GLOBAL_KUBECONFIG_PATH:-$HOME/.kube/config}"
 KUBECONFIG_HELPER="${KUBECONFIG_HELPER:-${REPO_ROOT}/terraform/kubernetes/scripts/manage-kubeconfig.sh}"
+RECONCILE_KUBECONFIG="${RECONCILE_KUBECONFIG:-${REPO_ROOT}/kubernetes/scripts/reconcile-kubeconfig.sh}"
 MERGE_KUBECONFIG_TO_DEFAULT="${MERGE_KUBECONFIG_TO_DEFAULT:-0}"
 WAIT_SECONDS="${KIND_KUBECONFIG_LOCK_WAIT_SECONDS:-15}"
 KIND_GET_CLUSTERS_TIMEOUT_SECONDS="${KIND_GET_CLUSTERS_TIMEOUT_SECONDS:-5}"
@@ -135,24 +136,16 @@ rewrite_for_devcontainer_host_socket "${KUBECONFIG_PATH}"
 
 if [[ -x "${KUBECONFIG_HELPER}" ]]; then
   "${KUBECONFIG_HELPER}" --execute --action ensure-valid --kubeconfig "${KUBECONFIG_PATH}"
-  if [[ "${MERGE_KUBECONFIG_TO_DEFAULT}" == "1" ]]; then
-    "${KUBECONFIG_HELPER}" --execute --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
-    "${KUBECONFIG_HELPER}" \
-      --execute \
-      --action merge \
-      --source-kubeconfig "${KUBECONFIG_PATH}" \
-      --target-kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
-      --context "${TARGET_CONTEXT}"
-  elif [[ -e "${GLOBAL_KUBECONFIG_PATH}" ]]; then
-    "${KUBECONFIG_HELPER}" --execute --action ensure-valid --kubeconfig "${GLOBAL_KUBECONFIG_PATH}"
-    "${KUBECONFIG_HELPER}" \
-      --execute \
-      --action delete-context \
-      --kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
-      --context "${TARGET_CONTEXT}" \
-      --cluster "${TARGET_CONTEXT}" \
-      --user "${TARGET_CONTEXT}"
-  fi
+fi
+
+if [[ -x "${RECONCILE_KUBECONFIG}" ]]; then
+  "${RECONCILE_KUBECONFIG}" \
+    --execute \
+    --source-kubeconfig "${KUBECONFIG_PATH}" \
+    --target-kubeconfig "${GLOBAL_KUBECONFIG_PATH}" \
+    --context "${TARGET_CONTEXT}" \
+    --merge "${MERGE_KUBECONFIG_TO_DEFAULT}" \
+    --helper "${KUBECONFIG_HELPER}"
 fi
 
 if [[ "${MERGE_KUBECONFIG_TO_DEFAULT}" == "1" ]] && kubectl --kubeconfig "${GLOBAL_KUBECONFIG_PATH}" config get-contexts "${TARGET_CONTEXT}" >/dev/null 2>&1; then

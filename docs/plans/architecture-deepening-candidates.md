@@ -112,9 +112,7 @@ the Interface instead of through several rendered surfaces.
 Files:
 
 - `kubernetes/scripts/check-target-host-ports.sh`
-- `kubernetes/kind/scripts/check-kind-host-ports.sh`
-- `kubernetes/slicer/scripts/check-slicer-host-ports.sh`
-- `kubernetes/lima/scripts/host-gateway-proxy.sh`
+- `kubernetes/scripts/host-gateway-proxy.sh`
 - `kubernetes/slicer/scripts/ensure-host-forwards.sh`
 - `terraform/kubernetes/locals.tf`
 
@@ -707,7 +705,7 @@ Files:
 
 - `scripts/platform-workflow.sh`
 - `kubernetes/kind/scripts/render-operator-overrides.sh`
-- `kubernetes/kind/scripts/build-local-platform-images.sh`
+- `kubernetes/scripts/build-local-platform-images.sh`
 - `kubernetes/lima/targets/lima.tfvars`
 - `kubernetes/slicer/targets/slicer.tfvars`
 
@@ -744,7 +742,7 @@ Implemented first pass:
 - Made `kubernetes/kind/scripts/render-operator-overrides.sh` derive
   source-fingerprint tags and generated external image ref maps from the image
   catalog.
-- Made `kubernetes/kind/scripts/build-local-platform-images.sh` derive
+- Made `kubernetes/scripts/build-local-platform-images.sh` derive
   source-fingerprint tags for `idp-core`, `platform-mcp`, `backstage`, and
   `keycloak` from the same catalog.
 - Updated Docker optimization contract tests so source fingerprint assertions

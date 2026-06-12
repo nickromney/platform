@@ -200,7 +200,7 @@ spec:
           enabled: false
         server:
           image:
-            repository: ${local.hardened_image_registry_effective}/prometheus
+            repository: quay.io/prometheus/prometheus
             tag: ${var.prometheus_image_tag}
           persistentVolume:
             enabled: false

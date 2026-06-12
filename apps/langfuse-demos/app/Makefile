@@ -1,7 +1,11 @@
-.PHONY: help prereqs test js-check build build-linux run-chat run-agent run-evals update clean
+.PHONY: help prereqs run-chat run-agent run-evals update
 
 LANGFUSE_DEMOS_LOCAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 LOCAL_OPENAI_BASE_URL ?= http://127.0.0.1:8000/v1
+GO_APP_BINARY := langfuse-demos
+GO_APP_CMD := ./cmd/langfuse-demos
+GO_APP_GOARCH := $(LANGFUSE_DEMOS_LOCAL_GOARCH)
+GO_APP_WEB_ASSETS := internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html
 
 help:
 	@echo "Langfuse demo apps:"
@@ -40,21 +44,6 @@ prereqs:
 		echo "WARN curl missing; skipped oMLX endpoint probe."; \
 	fi
 
-test:
-	go test ./...
-
-js-check:
-	biome check internal/app/web/app.js internal/app/web/api-types.d.ts internal/app/web/index.html
-	deno check --check-js internal/app/web/app.js
-
-build:
-	@mkdir -p .run
-	go build -trimpath -ldflags="-s -w" -o .run/langfuse-demos ./cmd/langfuse-demos
-
-build-linux:
-	@mkdir -p .run
-	CGO_ENABLED=0 GOOS=linux GOARCH=$${GOARCH:-$(LANGFUSE_DEMOS_LOCAL_GOARCH)} go build -trimpath -ldflags="-s -w" -o .run/langfuse-demos ./cmd/langfuse-demos
-
 run-chat:
 	DEMO_ROLE=trace-chat PORT=18091 go run ./cmd/langfuse-demos
 
@@ -67,5 +56,4 @@ run-evals:
 update:
 	@echo "langfuse-demos: Go-only app; no package-manager locks to update"
 
-clean:
-	rm -rf .run
+include ../../../mk/go-app-core.mk

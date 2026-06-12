@@ -214,19 +214,21 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'build-tfvar-args.sh" --execute --format repeated --flag --var-file '* ]]
   [[ "${output}" == *'--optional-file "${PLATFORM_TFVARS:-}"'* ]]
-  [[ "${output}" == *'check-cluster-health.sh" --execute $vf'* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --execute '* ]]
+  [[ "${output}" == *'--action check-health --stage "900"'* ]]
+  [[ "${output}" == *'$vf'* ]]
 }
 
 @test "kind check-health forwards explicit read-only mode flags" {
   run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'check-cluster-health.sh" --execute '* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --execute '* ]]
 
   run make -n -C "${REPO_ROOT}/kubernetes/kind" check-health STAGE=900 DRY_RUN=1
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *'check-cluster-health.sh" --dry-run '* ]]
+  [[ "${output}" == *'run-diagnostic-check.sh" --dry-run '* ]]
 }
 
 @test "kind test-idempotence supports dry-run without touching the cluster" {
@@ -341,8 +343,18 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
-@test "kind check-sso-e2e forwards the rendered Backstage gate to Playwright" {
-  run grep -Fn 'SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars"' \
+@test "kind check-sso-e2e delegates SSO env projection and forwards it to Playwright" {
+  run grep -Fn 'BUILD_SSO_E2E_ENV := $(K8S_SCRIPTS_DIR)/build-sso-e2e-env.sh' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(BUILD_SSO_E2E_ENV)" --execute' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}"' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -393,7 +405,7 @@ EOF
   sentiment_catalog="${REPO_ROOT}/apps/sentiment/catalog-info.yaml"
   dev_config="${REPO_ROOT}/apps/backstage/app-config.yaml"
   prod_config="${REPO_ROOT}/apps/backstage/app-config.production.yaml"
-  image_build="${REPO_ROOT}/kubernetes/kind/scripts/build-local-platform-images.sh"
+  image_build="${REPO_ROOT}/kubernetes/scripts/build-local-platform-images.sh"
 
   run grep -Fn 'backstage.io/techdocs-ref: dir:.' "${subnetcalc_catalog}"
   [ "${status}" -eq 0 ]
@@ -628,13 +640,18 @@ EOF
   [ "${status}" -ne 0 ]
 }
 
-@test "kind prereqs surfaces Docker registry auth status" {
+@test "kind prereqs hard-blocks missing Docker Hardened Images credentials" {
   run grep -Fn 'echo "Docker registry auth:"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn 'if ! "$(CHECK_DOCKER_REGISTRY_AUTH)" --execute dhi.io "Docker Hardened Images (dhi.io)"; then \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
 
+  run grep -Fn 'FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
   [ "${status}" -eq 0 ]
 }
 

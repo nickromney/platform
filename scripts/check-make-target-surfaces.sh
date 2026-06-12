@@ -21,18 +21,7 @@ tmp_dir="${TMPDIR:-/tmp}/platform-make-target-surfaces.$$"
 mkdir -p "${tmp_dir}"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
-env_file="${tmp_dir}/platform.env"
-cat >"${env_file}" <<'EOF'
-PLATFORM_ADMIN_PASSWORD=local-admin-password
-PLATFORM_DEMO_PASSWORD=local-dev-password
-OAUTH2_PROXY_COOKIE_SECRET=0123456789abcdef0123456789abcdef
-EOF
-
-noop_makefile="${tmp_dir}/noop.mk"
-cat >"${noop_makefile}" <<'EOF'
-.PHONY: __platform_make_surface_noop
-__platform_make_surface_noop:
-EOF
+make_known_goals_script="${repo_root}/scripts/make-known-goals.sh"
 
 makefiles="$(
   cd "${repo_root}"
@@ -52,13 +41,13 @@ while IFS= read -r makefile; do
   dir="${makefile%/Makefile}"
   db_file="${tmp_dir}/$(printf '%s' "${dir}" | tr '/.' '__').mkdb"
   err_file="${db_file}.err"
+  goals_file="${db_file}.goals"
 
   status=0
-  env \
-    PLATFORM_ENV_FILE="${env_file}" \
-    PLATFORM_ENV_TEMPLATE="${env_file}" \
-    COMPOSE_CMD=true \
-    make -pRrq -C "${repo_root}/${dir}" -f Makefile -f "${noop_makefile}" __platform_make_surface_noop >"${db_file}" 2>"${err_file}" || status=$?
+  "${make_known_goals_script}" \
+    --dir "${repo_root}/${dir}" \
+    --database-out "${db_file}" \
+    --execute >"${goals_file}" 2>"${err_file}" || status=$?
 
   if [ "${status}" -gt 1 ]; then
     failures=$((failures + 1))
@@ -69,6 +58,7 @@ while IFS= read -r makefile; do
 
   makefiles_checked=$((makefiles_checked + 1))
   targets="$(
+  {
     awk '
       /^\.PHONY:[[:space:]]/ {
         for (i = 2; i <= NF; i++) {
@@ -77,13 +67,21 @@ while IFS= read -r makefile; do
           }
         }
       }
-    ' "${repo_root}/${makefile}" | LC_ALL=C sort -u
+    ' "${db_file}"
+    awk '
+      {
+        for (i = 1; i <= NF; i++) {
+          print $i
+        }
+      }
+    ' "${goals_file}"
+  } | awk '$0 !~ /[$()]/ && $0 != "\\"' | LC_ALL=C sort -u
   )"
 
   while IFS= read -r target; do
     [ -n "${target}" ] || continue
     targets_checked=$((targets_checked + 1))
-    if ! grep -Eq "^${target}:" "${db_file}"; then
+    if ! awk -v target="${target}" 'index($0, target ":") == 1 { found = 1; exit } END { exit found ? 0 : 1 }' "${db_file}"; then
       failures=$((failures + 1))
       printf 'phony target missing from make database: %s %s\n' "${dir}" "${target}" >&2
     fi

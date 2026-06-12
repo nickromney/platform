@@ -1987,23 +1987,111 @@ EOF
   fi
 }
 
-ensure_deploy_key() {
-  local payload code
+deploy_keys_url() {
+  printf '%s/api/v1/repos/%s/%s/keys' "${GITEA_HTTP_BASE}" "${GITEA_REPO_OWNER}" "${GITEA_REPO_NAME}"
+}
+
+deploy_public_key_identity() {
+  local key_type key_body rest
+  read -r key_type key_body rest <<<"${DEPLOY_PUBLIC_KEY}"
+  [[ -n "${key_type}" && -n "${key_body}" ]] || return 1
+  printf '%s %s\n' "${key_type}" "${key_body}"
+}
+
+list_repo_deploy_keys() {
+  curl -fsS \
+    -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \
+    "$(deploy_keys_url)"
+}
+
+repo_has_current_deploy_key() {
+  local keys_json="$1"
+  local key_identity
+  key_identity="$(deploy_public_key_identity)" || fail "DEPLOY_PUBLIC_KEY is not a valid SSH public key"
+
+  jq -e --arg title "${DEPLOY_KEY_TITLE}" --arg key "${key_identity}" '
+    [.[] | select(
+      .title == $title
+      and ((.key // "" | split(" ")[0:2] | join(" ")) == $key)
+      and (.read_only == false)
+    )] | length > 0
+  ' <<<"${keys_json}" >/dev/null
+}
+
+repo_deploy_key_id_by_title() {
+  local keys_json="$1"
+  jq -er --arg title "${DEPLOY_KEY_TITLE}" '.[] | select(.title == $title) | .id' <<<"${keys_json}" | head -n 1
+}
+
+delete_repo_deploy_key() {
+  local key_id="$1"
+  local code
+  code=$(curl -sS -o /dev/null -w "%{http_code}" \
+    -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \
+    -X DELETE \
+    "$(deploy_keys_url)/${key_id}" || echo 000)
+
+  if [[ "${code}" != "204" && "${code}" != "404" ]]; then
+    fail "Delete stale deploy key returned HTTP ${code}"
+  fi
+}
+
+post_repo_deploy_key() {
+  local payload
   payload=$(cat <<EOF
 {"title":"${DEPLOY_KEY_TITLE}","key":"${DEPLOY_PUBLIC_KEY}","read_only":false}
 EOF
 )
 
-  code=$(curl -sS -o /dev/null -w "%{http_code}" \
+  curl -sS -o /dev/null -w "%{http_code}" \
     -u "${GITEA_ADMIN_USERNAME}:${GITEA_ADMIN_PWD}" \
     -H "Content-Type: application/json" \
     -d "${payload}" \
-    "${GITEA_HTTP_BASE}/api/v1/repos/${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}/keys" || echo 000)
+    "$(deploy_keys_url)" || echo 000
+}
 
-  # 201 created, 422 already exists (duplicate key/title), 409 conflict.
-  if [[ "$code" != "201" && "$code" != "422" && "$code" != "409" ]]; then
-    fail "Add deploy key returned HTTP $code"
-  fi
+ensure_deploy_key() {
+  command -v jq >/dev/null 2>&1 || fail "jq not found"
+
+  local code keys_json key_id attempt
+  for attempt in 1 2 3 4 5; do
+    code="$(post_repo_deploy_key)"
+
+    if [[ "${code}" == "201" ]]; then
+      return 0
+    fi
+
+    if [[ "${code}" != "422" && "${code}" != "409" ]]; then
+      fail "Add deploy key returned HTTP ${code}"
+    fi
+
+    keys_json="$(list_repo_deploy_keys)" || fail "Add deploy key returned HTTP ${code}; could not list deploy keys"
+    if repo_has_current_deploy_key "${keys_json}"; then
+      return 0
+    fi
+
+    key_id="$(repo_deploy_key_id_by_title "${keys_json}" || true)"
+    if [[ -n "${key_id}" ]]; then
+      echo "Replacing stale Gitea deploy key '${DEPLOY_KEY_TITLE}' for ${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}" >&2
+      delete_repo_deploy_key "${key_id}"
+
+      code="$(post_repo_deploy_key)"
+      if [[ "${code}" == "201" ]]; then
+        keys_json="$(list_repo_deploy_keys)" || fail "Could not list deploy keys after replacing stale key"
+        repo_has_current_deploy_key "${keys_json}" && return 0
+      fi
+      if [[ "${code}" != "422" && "${code}" != "409" ]]; then
+        fail "Add deploy key returned HTTP ${code} after replacing stale key"
+      fi
+    fi
+
+    if [[ "${attempt}" == "5" ]]; then
+      fail "Add deploy key returned HTTP ${code}, but the current key is not attached to ${GITEA_REPO_OWNER}/${GITEA_REPO_NAME}"
+    fi
+
+    echo "Gitea deploy key '${DEPLOY_KEY_TITLE}' was not attached after HTTP ${code}; retrying... (${attempt}/5)" >&2
+    sleep 2
+  done
 }
 
 render_policy_repo_tree() {

@@ -14,18 +14,29 @@ PROFILE_LIB := $(STACK_DIR)/scripts/profile-lib.sh
 MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 SCRIPTS_DIR := $(MAKEFILE_DIR)scripts
 K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
-CHECK_STAGE_MONOTONICITY := $(SCRIPTS_DIR)/check-stage-monotonicity.sh
-CHECK_KIND_STOPPED := $(MAKEFILE_DIR)../scripts/check-kind-stopped.sh
+HELPER_MODE_LIB := $(abspath $(K8S_SCRIPTS_DIR)/helper-mode-lib.sh)
+CHECK_STAGE_MONOTONICITY := $(abspath $(K8S_SCRIPTS_DIR)/check-stage-monotonicity.sh)
+CHECK_KIND_STOPPED := $(abspath $(K8S_SCRIPTS_DIR)/check-kind-stopped.sh)
 CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
+VARIANT_JSON := $(REPO_ROOT)/kubernetes/variants/lima/variant.json
 ASSERT_VARIANT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
 RESOLVE_TFVAR_VALUE := $(MAKEFILE_DIR)../scripts/resolve-tfvar-value.sh
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
+BUILD_SSO_E2E_ENV := $(K8S_SCRIPTS_DIR)/build-sso-e2e-env.sh
+RENDER_LAUNCHPAD := $(abspath $(K8S_SCRIPTS_DIR)/render-launchpad.sh)
+RUN_DIAGNOSTIC_CHECK := $(abspath $(K8S_SCRIPTS_DIR)/run-diagnostic-check.sh)
+SYNC_LOCAL_IMAGE_CACHE := $(abspath $(K8S_SCRIPTS_DIR)/sync-local-image-cache.sh)
+PLAN_LOCAL_IMAGE_HELPERS := $(abspath $(K8S_SCRIPTS_DIR)/plan-local-image-helpers.sh)
+PLAN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/plan-post-apply-verification.sh)
+RUN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/run-post-apply-verification.sh)
+BUILD_LOCAL_WORKLOAD_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-workload-images.sh)
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
 RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 TEST_IDEMPOTENCE := $(K8S_SCRIPTS_DIR)/test-idempotence.sh
-BUILD_LOCAL_PLATFORM_IMAGES := $(MAKEFILE_DIR)../kind/scripts/build-local-platform-images.sh
-HOST_GATEWAY_PROXY := $(SCRIPTS_DIR)/host-gateway-proxy.sh
+BUILD_LOCAL_PLATFORM_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-platform-images.sh)
+HOST_GATEWAY_PROXY := $(abspath $(K8S_SCRIPTS_DIR)/host-gateway-proxy.sh)
+ENSURE_LOCAL_IMAGE_CACHE := $(abspath $(K8S_SCRIPTS_DIR)/ensure-local-image-cache.sh)
 CONFIGURE_K3S_APISERVER_OIDC := $(SCRIPTS_DIR)/configure-k3s-apiserver-oidc.sh
 KUBECONFIG_HELPER := $(STACK_DIR)/scripts/manage-kubeconfig.sh
 AUTO_APPROVE ?= 0
@@ -35,6 +46,7 @@ OIDC_RECOVERY_FORCE_MODE ?= k3s-restart
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
 IDP_PUBLIC_URL ?= https://portal.127.0.0.1.sslip.io
 IDP_API_PUBLIC_URL ?= https://portal-api.127.0.0.1.sslip.io
+K8S_IDP_RUNTIME := lima
 STAGE ?= 100
 DEFAULT_KUBECONFIG_PATH ?= $(HOME)/.kube/config
 MERGE_KUBECONFIG_TO_DEFAULT ?= 0
@@ -96,13 +108,15 @@ endif
 include $(STAGE_LADDER_MK)
 
 VALID_ACTIONS := plan apply
-VALID_STAGE_HELPERS := check-health check-security check-rbac
+VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels sync-image-cache build-workload-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 
 include ../../mk/common.mk
 include ../../mk/k8s-terragrunt.mk
 include ../../mk/stage-workflow.mk
+include ../../mk/k8s-idp-preview.mk
 
 export KUBECONFIG_PATH
 export KUBECONFIG_CONTEXT
@@ -183,6 +197,7 @@ help:
 	@echo "  make configure-k3s-apiserver-oidc"
 	@echo "  make exercise-k3s-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=k3s-restart]"
 	@echo "  make ensure-host-gateway-proxy"
+	@echo "  make ensure-image-cache"
 	@echo "  make env"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
 	@echo "  make idp-api                                  Start or preview the Go IDP core"
@@ -243,7 +258,9 @@ help:
 
 .PHONY: check-stage-monotonicity
 check-stage-monotonicity:
-	@"$(CHECK_STAGE_MONOTONICITY)" $(READONLY_MODE_FLAG)
+	@"$(CHECK_STAGE_MONOTONICITY)" $(READONLY_MODE_FLAG) \
+		--stack-dir "$(abspath $(MAKEFILE_DIR))" \
+		--label "Lima"
 
 .PHONY: prepare-state
 prepare-state:
@@ -432,7 +449,8 @@ sync-image-cache: workflow-validate-stage
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
-	"$(SCRIPTS_DIR)/sync-local-image-cache.sh" $(READONLY_MODE_FLAG)
+	VARIANT_LABEL="Lima" \
+	"$(SYNC_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)
 
 .PHONY: check-docker-daemon
 check-docker-daemon:
@@ -443,12 +461,17 @@ check-docker-daemon:
 		exit 1; \
 	fi
 
+.PHONY: ensure-image-cache
+ensure-image-cache:
+	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" "$(ENSURE_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)
+
 .PHONY: build-workload-images
 build-workload-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	IMAGE_NAMESPACE="$(WORKLOAD_IMAGE_NAMESPACE)" \
 	TAG="$(WORKLOAD_IMAGE_TAG)" \
-	"$(SCRIPTS_DIR)/build-local-workload-images.sh" $(READONLY_MODE_FLAG)
+	VARIANT_LABEL="Lima" \
+	"$(BUILD_LOCAL_WORKLOAD_IMAGES)" $(READONLY_MODE_FLAG)
 
 .PHONY: build-local-platform-images
 build-local-platform-images:
@@ -472,7 +495,11 @@ status:
 	if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
 		echo ""; \
 		echo "=== Host gateway proxies ==="; \
-		"$(HOST_GATEWAY_PROXY)" status $(READONLY_MODE_FLAG) || true; \
+		VARIANT_LABEL="Lima" \
+		CONTAINER_NAME="limavm-platform-gateway-443" \
+		IMAGE_TAG="platform/lima-gateway-proxy:dev" \
+		UPSTREAM_PORT="30070" \
+		"$(HOST_GATEWAY_PROXY)" --action status $(READONLY_MODE_FLAG) || true; \
 	fi
 	@echo ""
 	@echo "=== Helper modes ==="
@@ -531,13 +558,25 @@ start:
 ensure-host-gateway-proxy:
 	@$(MAKE) check-conflicting-clusters-stopped
 	@$(MAKE) ensure-k3s-shared-port-tunnels >/dev/null
-	@"$(HOST_GATEWAY_PROXY)" ensure $(READONLY_MODE_FLAG)
+	@VARIANT_LABEL="Lima" \
+	CONTAINER_NAME="limavm-platform-gateway-443" \
+	IMAGE_TAG="platform/lima-gateway-proxy:dev" \
+	UPSTREAM_PORT="30070" \
+	"$(HOST_GATEWAY_PROXY)" --action ensure $(READONLY_MODE_FLAG)
 
 stop-host-gateway-proxy:
-	@"$(HOST_GATEWAY_PROXY)" stop $(READONLY_MODE_FLAG)
+	@VARIANT_LABEL="Lima" \
+	CONTAINER_NAME="limavm-platform-gateway-443" \
+	IMAGE_TAG="platform/lima-gateway-proxy:dev" \
+	UPSTREAM_PORT="30070" \
+	"$(HOST_GATEWAY_PROXY)" --action stop $(READONLY_MODE_FLAG)
 
 proxy-status:
-	@"$(HOST_GATEWAY_PROXY)" status $(READONLY_MODE_FLAG)
+	@VARIANT_LABEL="Lima" \
+	CONTAINER_NAME="limavm-platform-gateway-443" \
+	IMAGE_TAG="platform/lima-gateway-proxy:dev" \
+	UPSTREAM_PORT="30070" \
+	"$(HOST_GATEWAY_PROXY)" --action status $(READONLY_MODE_FLAG)
 
 .PHONY: configure-k3s-apiserver-oidc
 configure-k3s-apiserver-oidc: workflow-validate-stage
@@ -660,16 +699,8 @@ apply: workflow-validate-stage
 	@$(MAKE) check-stage-monotonicity
 	@$(MAKE) check-platform-env-file
 	@set -euo pipefail; \
-	mode_enabled() { \
-		local mode="$$1"; local auto_threshold="$$2"; local stage_num_local="$$3"; \
-		case "$$mode" in \
-			on) return 0 ;; \
-			off) return 1 ;; \
-			auto) [ "$$stage_num_local" -ge "$$auto_threshold" ] ;; \
-			*) echo "Invalid helper mode: $$mode" >&2; exit 1 ;; \
-		esac; \
-	}; \
 	. "$(PROFILE_LIB)"; \
+	. "$(HELPER_MODE_LIB)"; \
 	profile_setup_session "lima" "$(STAGE)" "apply" "$(KUBECONFIG_PATH)" "$(KUBECONFIG_CONTEXT)"; \
 	profile_enabled=0; \
 	if profile_is_enabled; then \
@@ -684,9 +715,6 @@ apply: workflow-validate-stage
 			"$$@"; \
 		fi; \
 	}; \
-	local_cache_available() { \
-		curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; \
-	}; \
 	tfvar_files=(); \
 	while IFS= read -r tfvar_file; do \
 		[ -n "$$tfvar_file" ] || continue; \
@@ -699,9 +727,6 @@ apply: workflow-validate-stage
 			--optional-file "$${PLATFORM_TFVARS:-}" \
 	); \
 	prefer_external_platform_images="$$( "$(RESOLVE_TFVAR_VALUE)" --execute prefer_external_platform_images false "$${tfvar_files[@]}" )"; \
-	enable_gateway_tls="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_gateway_tls false "$${tfvar_files[@]}" )"; \
-	enable_headlamp="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )"; \
-	enable_sso="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )"; \
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -ge 500 ]; then \
 		$(MAKE) check-docker-daemon; \
@@ -729,23 +754,33 @@ apply: workflow-validate-stage
 		off) ;; \
 		*) echo "Invalid helper mode: $(LIMA_HOST_GATEWAY_PROXY_MODE)" >&2; exit 1 ;; \
 	esac; \
-	if mode_enabled "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" 700 "$$stage_num"; then \
-		run_step "sync-image-cache" $(MAKE) sync-image-cache; \
-	elif [ "$$stage_num" -ge 700 ] && ! local_cache_available; then \
-		echo "Stage $(STAGE) expects workload images from $(LOCAL_IMAGE_CACHE_HOST), but PLATFORM_LOCAL_IMAGE_CACHE_MODE=off and no registry is reachable at http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/."; \
-		echo "Set PLATFORM_LOCAL_IMAGE_CACHE_MODE=on or start a compatible cache manually."; \
-		exit 1; \
-	fi; \
-	if [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)" 800 "$$stage_num"; then \
-		run_step "build-local-platform-images" $(MAKE) build-local-platform-images; \
-	elif [ "$$stage_num" -ge 800 ] && [ "$$prefer_external_platform_images" = "true" ]; then \
-		echo "Skipping platform image build (PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE))"; \
-	fi; \
-	if [ "$$stage_num" -ge 700 ] && mode_enabled "$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)" 700 "$$stage_num"; then \
-		run_step "build-workload-images" $(MAKE) build-workload-images; \
-	elif [ "$$stage_num" -ge 700 ]; then \
-		echo "Skipping workload image build (PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE))"; \
-	fi; \
+	cache_available=false; \
+	if curl -fsS "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" >/dev/null 2>&1; then cache_available=true; fi; \
+	set +e; \
+	image_helper_plan="$$( "$(PLAN_LOCAL_IMAGE_HELPERS)" --execute \
+		--stage "$(STAGE)" \
+		--cache-mode "$(PLATFORM_LOCAL_IMAGE_CACHE_MODE)" \
+		--platform-images-mode "$(PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE)" \
+		--workload-images-mode "$(PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE)" \
+		--prefer-external-platform-images "$$prefer_external_platform_images" \
+		--cache-available "$$cache_available" \
+		--runtime-image-cache-host "$(LOCAL_IMAGE_CACHE_HOST)" \
+		--push-image-cache-url "http://$(LOCAL_IMAGE_CACHE_PUSH_HOST)/v2/" \
+	)"; \
+	image_helper_plan_rc=$$?; \
+	set -e; \
+	if [ "$$image_helper_plan_rc" -ne 0 ]; then exit "$$image_helper_plan_rc"; fi; \
+	while IFS= read -r image_helper_action; do \
+		[ -n "$$image_helper_action" ] || continue; \
+		case "$$image_helper_action" in \
+			ensure-image-cache) run_step "ensure-image-cache" $(MAKE) ensure-image-cache ;; \
+			sync-image-cache) run_step "sync-image-cache" $(MAKE) sync-image-cache ;; \
+			build-local-platform-images) run_step "build-local-platform-images" $(MAKE) build-local-platform-images ;; \
+			build-workload-images) run_step "build-workload-images" $(MAKE) build-workload-images ;; \
+			message:*) echo "$${image_helper_action#message:}" ;; \
+			*) echo "Unknown local image helper action: $$image_helper_action" >&2; exit 1 ;; \
+		esac; \
+	done <<< "$$image_helper_plan"; \
 	apply_args="$$( "$(BUILD_TFVAR_ARGS)" --execute --format assignment --flag -var-file \
 		--optional-file "$(stage_var_file)" \
 		--optional-file "$(target_var_file)" \
@@ -766,12 +801,10 @@ apply: workflow-validate-stage
 	}; \
 	run_step "terragrunt-init" tg_init; \
 	run_step "terragrunt-apply" tg_apply; \
-	if [ "$$stage_num" -ge 900 ] && [ "$$enable_gateway_tls" = "true" ] && [ "$$enable_headlamp" = "true" ] && [ "$$enable_sso" = "true" ]; then \
-		run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc; \
-		run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)"; \
-		run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)"; \
-		run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)"; \
-	fi
+	post_apply_args=(); \
+	for tfvar_file in "$${tfvar_files[@]}"; do post_apply_args+=(--var-file "$$tfvar_file"); done; \
+	post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"; \
+	run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"
 
 .PHONY: readiness
 readiness: ## Check operator and variant readiness
@@ -795,7 +828,7 @@ check-health: workflow-validate-stage
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 	)"; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(RUN_DIAGNOSTIC_CHECK)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" --action check-health --stage "$(STAGE)" --stack-dir "$(abspath $(STACK_DIR))" $$vf
 
 .PHONY: check-security
 check-security: workflow-validate-stage
@@ -911,19 +944,14 @@ check-sso-e2e: workflow-validate-stage
 	if [ "$(STAGE_SPECIFIED)" = "1" ] && [ -n "$(stage_file)" ] && [ -f "$(stage_file)" ]; then \
 		stage_tfvars="$(stage_var_file)"; \
 	fi; \
-	tfvar_files=(); \
-	while IFS= read -r tfvar_file; do \
-		[ -n "$$tfvar_file" ] || continue; \
-		tfvar_files+=("$$tfvar_file"); \
-	done < <( \
-		"$(BUILD_TFVAR_ARGS)" --execute \
-			--optional-file "$$stage_tfvars" \
-			--optional-file "$(target_var_file)" \
-			--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
-			--optional-file "$${PLATFORM_TFVARS:-}" \
-	); \
-	enable_backstage="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_backstage true "$${tfvar_files[@]}" )"; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$$enable_backstage" STAGE_TFVARS="$$stage_tfvars" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
+	sso_env="$$( "$(BUILD_SSO_E2E_ENV)" --execute \
+		--stage-tfvars "$$stage_tfvars" \
+		--optional-file "$(target_var_file)" \
+		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
+		--optional-file "$${PLATFORM_TFVARS:-}" \
+	)"; \
+	eval "$$sso_env"; \
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" SSO_E2E_ENABLE_BACKSTAGE="$${SSO_E2E_ENABLE_BACKSTAGE}" STAGE_TFVARS="$${STAGE_TFVARS}" STAGE_TFVARS_FILES="$${STAGE_TFVARS_FILES}" "$(MAKEFILE_DIR)/../../tests/kubernetes/sso/run.sh" $(READONLY_MODE_FLAG)
 
 .PHONY: gitea-sync
 gitea-sync: workflow-validate-stage
@@ -951,11 +979,7 @@ gitea-sync: workflow-validate-stage
 
 .PHONY: launchpad-render
 launchpad-render:
-	@set -euo pipefail; \
-	stack_path="$(abspath $(STACK_DIR))"; \
-	script="$$stack_path/scripts/render-platform-launchpad.sh"; \
-	if [ ! -x "$$script" ]; then echo "Missing $$script"; exit 1; fi; \
-	STACK_DIR="$$stack_path" "$$script" $(READONLY_MODE_FLAG)
+	@"$(RENDER_LAUNCHPAD)" $(READONLY_MODE_FLAG) --stack-dir "$(abspath $(STACK_DIR))"
 
 .PHONY: show-urls
 show-urls: workflow-validate-stage
@@ -972,7 +996,7 @@ show-urls: workflow-validate-stage
 		--optional-file "$${PLATFORM_BASE_TFVARS:-}" \
 		--optional-file "$${PLATFORM_TFVARS:-}" \
 	)"; \
-	KUBECONFIG="$(KUBECONFIG_PATH)" "$(STACK_DIR)/scripts/check-cluster-health.sh" $(READONLY_MODE_FLAG) --show-urls $$vf
+	KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(RUN_DIAGNOSTIC_CHECK)" $(READONLY_MODE_FLAG) --variant-json "$(VARIANT_JSON)" --action show-urls --stage "$(STAGE)" --stack-dir "$(abspath $(STACK_DIR))" $$vf
 
 .PHONY: reset
 reset:
@@ -1063,38 +1087,6 @@ state-reset:
 .PHONY: env
 env:
 	@$(MAKE) prereqs
-
-.PHONY: idp-api
-idp-api:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose Go IDP core for lima at $(IDP_API_PUBLIC_URL)"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-core/app && IDP_RUNTIME=lima IDP_PUBLIC_URL=$(IDP_PUBLIC_URL) IDP_API_PUBLIC_URL=$(IDP_API_PUBLIC_URL) IDP_CATALOG_PATH=$(REPO_ROOT)/catalog/platform-apps.json go run ./cmd/idp-core"; \
-	fi
-
-.PHONY: backstage
-backstage:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would expose Backstage developer portal for lima at $(IDP_PUBLIC_URL)"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/backstage && docker build -t platform/backstage:dev -f Dockerfile . && docker run --rm -p 7007:7007 -e BACKSTAGE_BASE_URL=http://127.0.0.1:7007 platform/backstage:dev"; \
-	fi
-
-.PHONY: idp-sdk
-idp-sdk:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would generate IDP SDK from FastAPI OpenAPI for lima"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-sdk && npm test"; \
-	fi
-
-.PHONY: idp-mcp
-idp-mcp:
-	@if [ "$(DRY_RUN)" = "1" ]; then \
-		echo "INFO dry-run: would start IDP MCP server for lima against $(IDP_API_PUBLIC_URL)"; \
-	else \
-		echo "Run: cd $(REPO_ROOT)/apps/idp-mcp && IDP_API_BASE_URL=$(IDP_API_PUBLIC_URL) go run ./cmd/idp-mcp"; \
-	fi
 
 .PHONY: test
 test:

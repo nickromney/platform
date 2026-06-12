@@ -126,7 +126,7 @@ sync_script = (repo_root / "terraform/kubernetes/scripts/sync-gitea-policies.sh"
 kind_makefile = (repo_root / "kubernetes/kind/Makefile").read_text(encoding="utf-8")
 sso_run = (repo_root / "tests/kubernetes/sso/run.sh").read_text(encoding="utf-8")
 sso_spec = (repo_root / "tests/kubernetes/sso/tests/sso-smoke.spec.ts").read_text(encoding="utf-8")
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+build_script = (repo_root / "kubernetes/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
 
 assert 'variable "enable_backstage"' in variables_tf
 assert "enable_backstage_effective" in locals_tf
@@ -492,7 +492,7 @@ import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
-build_script = (repo_root / "kubernetes/kind/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
+build_script = (repo_root / "kubernetes/scripts/build-local-platform-images.sh").read_text(encoding="utf-8")
 image_catalog = (repo_root / "kubernetes/workflow/image-catalog.json").read_text(encoding="utf-8")
 locals_tf = (repo_root / "terraform/kubernetes/locals.tf").read_text(encoding="utf-8")
 variables_tf = (repo_root / "terraform/kubernetes/variables.tf").read_text(encoding="utf-8")

@@ -154,9 +154,9 @@ spec:
                 cpu: 100m
                 memory: 128Mi
             image:
-              registry: ${local.hardened_image_registry_effective}
-              repository: kyverno
-              tag: 1.18.1-debian13
+              registry: ghcr.io
+              repository: kyverno/kyverno
+              tag: v1.18.1
             securityContext:
               runAsNonRoot: true
               runAsUser: 65534
@@ -171,9 +171,9 @@ spec:
                 type: RuntimeDefault
           initContainer:
             image:
-              registry: ${local.hardened_image_registry_effective}
-              repository: kyverno-init
-              tag: 1.18.1-debian13
+              registry: ghcr.io
+              repository: kyverno/kyvernopre
+              tag: v1.18.1
             securityContext:
               runAsNonRoot: true
               runAsUser: 65534
@@ -191,9 +191,9 @@ spec:
               requests:
                 memory: 64Mi
           image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: kyverno-background-controller
-            tag: 1.18.1-debian13
+            registry: ghcr.io
+            repository: kyverno/background-controller
+            tag: v1.18.1
         cleanupController:
           replicas: 1
           securityContext:
@@ -207,9 +207,9 @@ spec:
               requests:
                 memory: 64Mi
           image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: kyverno-cleanup-controller
-            tag: 1.18.1-debian13
+            registry: ghcr.io
+            repository: kyverno/cleanup-controller
+            tag: v1.18.1
         reportsController:
           replicas: 1
           securityContext:
@@ -223,9 +223,9 @@ spec:
               requests:
                 memory: 64Mi
           image:
-            registry: ${local.hardened_image_registry_effective}
-            repository: kyverno-reports-controller
-            tag: 1.18.1-debian13
+            registry: ghcr.io
+            repository: kyverno/reports-controller
+            tag: v1.18.1
         cleanupJobs:
           admissionReports:
             enabled: false

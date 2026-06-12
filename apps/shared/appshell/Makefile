@@ -1,13 +1,4 @@
-.PHONY: help test js-check
+SHARED_GO_MODULE_LABEL := Shared app shell module
+SHARED_GO_MODULE_JS_CHECK_SOURCES := app-shell.js
 
-help:
-	@echo "Shared app shell module:"
-	@echo "  test      Run Go unit tests"
-	@echo "  js-check  Check vanilla JavaScript source contracts"
-
-test:
-	go test ./...
-
-js-check:
-	biome check app-shell.js
-	deno check --check-js app-shell.js
+include ../../../mk/shared-go-module.mk

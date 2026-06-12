@@ -44,50 +44,72 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
-@test "kind and lima expose Portal API Backstage SDK and MCP targets" {
-  run make -C "${REPO_ROOT}/kubernetes/kind" help
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"make idp-api"* ]]
-  [[ "${output}" == *"make backstage"* ]]
-  [[ "${output}" == *"make idp-sdk"* ]]
-  [[ "${output}" == *"make idp-mcp"* ]]
-
-  run make -C "${REPO_ROOT}/kubernetes/lima" help
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"make idp-api"* ]]
-  [[ "${output}" == *"make backstage"* ]]
-  [[ "${output}" == *"make idp-sdk"* ]]
-  [[ "${output}" == *"make idp-mcp"* ]]
+@test "local Kubernetes variants expose Portal API Backstage SDK and MCP targets" {
+  for variant in kind lima slicer; do
+    run make -C "${REPO_ROOT}/kubernetes/${variant}" help
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"make idp-api"* ]]
+    [[ "${output}" == *"make backstage"* ]]
+    [[ "${output}" == *"make idp-sdk"* ]]
+    [[ "${output}" == *"make idp-mcp"* ]]
+  done
 }
 
 @test "IDP Make targets are dry-run friendly and do not apply infrastructure" {
-  for target in idp-api backstage idp-sdk idp-mcp; do
-    run make -C "${REPO_ROOT}/kubernetes/kind" "${target}" DRY_RUN=1
-    [ "${status}" -eq 0 ]
-    [[ "${output}" == *"would"* ]]
-
-    run make -C "${REPO_ROOT}/kubernetes/lima" "${target}" DRY_RUN=1
-    [ "${status}" -eq 0 ]
-    [[ "${output}" == *"would"* ]]
+  for variant in kind lima slicer; do
+    for target in idp-api backstage idp-sdk idp-mcp; do
+      run make -C "${REPO_ROOT}/kubernetes/${variant}" "${target}" DRY_RUN=1
+      [ "${status}" -eq 0 ]
+      [[ "${output}" == *"would"* ]]
+      [[ "${output}" == *"${variant}"* ]]
+    done
   done
 }
 
 @test "IDP operator surfaces advertise HTTPS sslip.io endpoints" {
-  run make -C "${REPO_ROOT}/kubernetes/kind" idp-api DRY_RUN=1
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
+  for variant in kind lima slicer; do
+    run make -C "${REPO_ROOT}/kubernetes/${variant}" idp-api DRY_RUN=1
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
 
-  run make -C "${REPO_ROOT}/kubernetes/kind" backstage DRY_RUN=1
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"https://portal.127.0.0.1.sslip.io"* ]]
+    run make -C "${REPO_ROOT}/kubernetes/${variant}" backstage DRY_RUN=1
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"https://portal.127.0.0.1.sslip.io"* ]]
+  done
+}
 
-  run make -C "${REPO_ROOT}/kubernetes/lima" idp-api DRY_RUN=1
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
+@test "IDP preview status actions and Make dry-runs share the preview catalog" {
+  catalog="${REPO_ROOT}/kubernetes/scripts/idp-preview-action-catalog.sh"
 
-  run make -C "${REPO_ROOT}/kubernetes/lima" backstage DRY_RUN=1
+  run "${catalog}" --targets
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"https://portal.127.0.0.1.sslip.io"* ]]
+  [ "${output}" = $'idp-api\nbackstage\nidp-sdk\nidp-mcp' ]
+  targets="${output}"
+
+  run "${REPO_ROOT}/scripts/platform-status.sh" --execute --output json
+  [ "${status}" -eq 0 ]
+  status_json="${output}"
+
+  for variant in kind lima slicer; do
+    while IFS= read -r target; do
+      [ -n "${target}" ] || continue
+
+      run jq -e --arg variant "${variant}" --arg target "${target}" '
+        any(.actions[];
+          .id == ($variant + "-" + $target)
+          and .variant == $variant
+          and .variant_path == ("kubernetes/" + $variant)
+          and .command == ("make -C kubernetes/" + $variant + " " + $target)
+        )
+      ' <<<"${status_json}"
+      [ "${status}" -eq 0 ]
+
+      run make -C "${REPO_ROOT}/kubernetes/${variant}" "${target}" DRY_RUN=1
+      [ "${status}" -eq 0 ]
+      [[ "${output}" == *"would"* ]]
+      [[ "${output}" == *"${variant}"* ]]
+    done <<<"${targets}"
+  done
 }
 
 @test "new IDP packages follow dependency cooldown and pinning guardrails" {

@@ -1,13 +1,4 @@
-.PHONY: help test js-check
+SHARED_GO_MODULE_LABEL := Shared IDP auth module
+SHARED_GO_MODULE_JS_CHECK_SOURCES := web/idpauth.js
 
-help:
-	@echo "Shared IDP auth module:"
-	@echo "  test      Run Go unit tests"
-	@echo "  js-check  Check vanilla JavaScript source contracts"
-
-test:
-	go test ./...
-
-js-check:
-	biome check web/idpauth.js
-	deno check --check-js web/idpauth.js
+include ../../../mk/shared-go-module.mk

@@ -210,3 +210,20 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"-L 127.0.0.1:16443:127.0.0.1:6443 lima-k3s-node-1"* ]]
 }
+
+@test "Lima tunnel entrypoints delegate SSH tunnel lifecycle to the shared Kubernetes helper" {
+  local helper="${REPO_ROOT}/kubernetes/scripts/ssh-tunnel-lib.sh"
+  local api_script="${REPO_ROOT}/kubernetes/lima/scripts/ensure-k3s-api-tunnel.sh"
+  local shared_ports_script="${REPO_ROOT}/kubernetes/lima/scripts/ensure-k3s-shared-port-tunnels.sh"
+
+  [ -f "${helper}" ]
+
+  run grep -F 'source "${REPO_ROOT}/kubernetes/scripts/ssh-tunnel-lib.sh"' "${api_script}" "${shared_ports_script}"
+  [ "${status}" -eq 0 ]
+
+  run grep -F 'ssh -F "${ssh_config}"' "${api_script}" "${shared_ports_script}"
+  [ "${status}" -eq 1 ]
+
+  run grep -F 'ssh_tunnel_start' "${api_script}" "${shared_ports_script}"
+  [ "${status}" -eq 0 ]
+}
