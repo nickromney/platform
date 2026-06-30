@@ -1260,7 +1260,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     violations: list[str] = []
 
     for fragment in (
-        "FROM quay.io/keycloak/keycloak:26.6.3 AS builder",
+        "FROM quay.io/keycloak/keycloak:26.6.4 AS builder",
         "ENV KC_DB=postgres",
         "ENV KC_CACHE=local",
         "RUN /opt/keycloak/bin/kc.sh build",
@@ -1296,7 +1296,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     else:
         build = keycloak.get("build", {})
         expected_values = {
-            "default_tag": "26.6.3",
+            "default_tag": "26.6.4",
             "build.context": "apps/keycloak",
             "build.dockerfile": "Dockerfile",
         }
@@ -1317,7 +1317,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     for target, registry_host in target_registry_hosts.items():
         tfvars_path = repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars"
         tfvars = tfvars_path.read_text(encoding="utf-8")
-        expected_image = f"{registry_host}/platform/keycloak:26.6.3"
+        expected_image = f"{registry_host}/platform/keycloak:26.6.4"
         if not re.search(
             rf'(?m)^\s*keycloak_image\s*=\s*"{re.escape(expected_image)}"\s*$',
             tfvars,
@@ -5722,8 +5722,8 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
             "FROM dhi.io/node:22-debian13 AS runtime": 1,
         },
         "apps/sentiment/compose.yml": {
-            "image: quay.io/keycloak/keycloak:26.6.3": 1,
-            "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2@sha256:aa0bd8dd5ab0c78e4c91c92755ad573a5f92241f88138b4141b8ec803463b4fd": 1,
+            "image: quay.io/keycloak/keycloak:26.6.4": 1,
+            "image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3@sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561": 1,
         },
         "apps/subnetcalc/app/Dockerfile": {
             "FROM dhi.io/static:20260413-alpine3.23": 1,

@@ -392,13 +392,13 @@ variable "public_demo_allow_actions_runner_host_mounts" {
 variable "cilium_version" {
   description = "Cilium chart version."
   type        = string
-  default     = "1.19.4"
+  default     = "1.19.5"
 }
 
 variable "argocd_chart_version" {
   description = "Argo CD chart version."
   type        = string
-  default     = "9.5.19"
+  default     = "10.0.1"
 }
 
 variable "argocd_image_repository" {
@@ -410,7 +410,7 @@ variable "argocd_image_repository" {
 variable "argocd_image_tag" {
   description = "Argo CD container image tag used by the argo-cd Helm chart."
   type        = string
-  default     = "3.4.3-debian13"
+  default     = "3.4.4-debian13"
 }
 
 variable "provision_argocd" {
@@ -440,7 +440,7 @@ variable "gitea_chart_version" {
 variable "prometheus_chart_version" {
   description = "Prometheus chart version (prometheus-community/prometheus)."
   type        = string
-  default     = "29.10.0"
+  default     = "29.13.0"
 }
 
 variable "prometheus_image_tag" {
@@ -494,19 +494,19 @@ variable "grafana_sidecar_image_tag" {
 variable "grafana_victoria_logs_plugin_version" {
   description = "VictoriaLogs Grafana datasource plugin release version used for prebaked local Grafana images."
   type        = string
-  default     = "0.28.0"
+  default     = "0.29.0"
 }
 
 variable "grafana_victoria_logs_plugin_sha256" {
   description = "SHA-256 checksum for the VictoriaLogs Grafana datasource plugin archive used for prebaked local Grafana images."
   type        = string
-  default     = "0c309eeba1b20bb52e99c4204309f5a8a49fc8ac4ee394279b2bec23eab81d8d"
+  default     = "cd3651502586c09d36fe17b02443dc95f1169536105348d4503cb1b919324470"
 }
 
 variable "grafana_victoria_logs_plugin_url" {
   description = "VictoriaLogs Grafana datasource plugin bundle URL for chart-managed runtime installs. Leave empty when the plugin is already baked into the Grafana image."
   type        = string
-  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.28.0/victoriametrics-logs-datasource-v0.28.0.zip;victoriametrics-logs-datasource"
+  default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.29.0/victoriametrics-logs-datasource-v0.29.0.zip;victoriametrics-logs-datasource"
 }
 
 variable "grafana_liveness_initial_delay_seconds" {
@@ -530,7 +530,7 @@ variable "loki_image_tag" {
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
   type        = string
-  default     = "0.13.6"
+  default     = "0.13.8"
 }
 
 variable "tempo_chart_version" {
@@ -548,7 +548,7 @@ variable "signoz_chart_version" {
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
-  default     = "0.42.0"
+  default     = "0.43.0"
 }
 
 variable "kyverno_chart_version" {
@@ -566,7 +566,7 @@ variable "policy_reporter_chart_version" {
 variable "cert_manager_chart_version" {
   description = "cert-manager chart version (Jetstack)."
   type        = string
-  default     = "v1.20.2"
+  default     = "v1.20.3"
 }
 
 variable "hardened_image_registry" {
@@ -584,7 +584,7 @@ variable "dex_chart_version" {
 variable "keycloak_image" {
   description = "Keycloak image used for the Kubernetes stage-900 IdP."
   type        = string
-  default     = "quay.io/keycloak/keycloak:26.6.3"
+  default     = "quay.io/keycloak/keycloak:26.6.4"
 }
 
 variable "keycloak_postgres_image" {
@@ -602,7 +602,7 @@ variable "keycloak_realm" {
 variable "oauth2_proxy_chart_version" {
   description = "oauth2-proxy chart version (oauth2-proxy.github.io/manifests)."
   type        = string
-  default     = "10.6.0"
+  default     = "10.7.0"
 }
 
 variable "oauth2_proxy_session_store_image" {
@@ -614,7 +614,7 @@ variable "oauth2_proxy_session_store_image" {
 variable "opentelemetry_collector_chart_version" {
   description = "OpenTelemetry Collector chart version (open-telemetry/opentelemetry-collector)."
   type        = string
-  default     = "0.158.1"
+  default     = "0.159.2"
 }
 
 # -----------------------------------------------------------------------------
