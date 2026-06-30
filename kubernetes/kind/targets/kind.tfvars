@@ -10,7 +10,7 @@ hardened_image_registry         = "dhi.io"
 prefer_external_platform_images = true
 argocd_image_repository         = "quay.io/argoproj/argocd"
 argocd_image_tag                = "v3.4.3"
-keycloak_image                  = "host.docker.internal:5002/platform/keycloak:26.6.3"
+keycloak_image                  = "host.docker.internal:5002/platform/keycloak:26.6.4"
 
 external_platform_image_refs = {
   backstage      = "host.docker.internal:5002/platform/backstage:1.0.0"

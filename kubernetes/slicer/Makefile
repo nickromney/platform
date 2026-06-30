@@ -89,7 +89,7 @@ KUBECONFIG_PATH ?= $(HOME)/.kube/$(K3SUP_CONTEXT).yaml
 KUBECONFIG_CONTEXT ?= $(K3SUP_CONTEXT)
 KUBECTL_REACHABILITY_ATTEMPTS ?= 10
 KUBECTL_REACHABILITY_DELAY_SECONDS ?= 3
-K3S_VERSION ?= v1.36.1+k3s1
+K3S_VERSION ?= v1.36.2+k3s1
 K3S_CHANNEL ?= stable
 K3S_SERVER_EXTRA_ARGS_CILIUM := --flannel-backend=none --disable-network-policy --disable=traefik --disable=servicelb
 K3S_SERVER_EXTRA_ARGS_DEFAULT := --disable-network-policy --disable=traefik --disable=servicelb

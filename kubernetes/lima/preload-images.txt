@@ -5,10 +5,10 @@
 # or local host-side debug override flows.
 # Those are built separately and pushed only when that workflow is enabled.
 
-# --- Cilium (chart 1.19.4) ---
-quay.io/cilium/cilium:v1.19.4
-quay.io/cilium/operator-generic:v1.19.4
-quay.io/cilium/hubble-relay:v1.19.4
+# --- Cilium (chart 1.19.5) ---
+quay.io/cilium/cilium:v1.19.5
+quay.io/cilium/operator-generic:v1.19.5
+quay.io/cilium/hubble-relay:v1.19.5
 quay.io/cilium/hubble-ui-backend:v0.13.3
 quay.io/cilium/hubble-ui:v0.13.3
 
@@ -16,8 +16,8 @@ quay.io/cilium/hubble-ui:v0.13.3
 ghcr.io/nginx/nginx-gateway-fabric:2.5.1
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1
 
-# --- ArgoCD (chart 9.5.19) ---
-quay.io/argoproj/argocd:v3.4.3
+# --- ArgoCD (chart 10.0.1) ---
+quay.io/argoproj/argocd:v3.4.4
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine
 
 # --- Gitea (chart 12.6.0) ---
@@ -31,11 +31,11 @@ ghcr.io/kyverno/cleanup-controller:v1.18.1
 ghcr.io/kyverno/reports-controller:v1.18.1
 ghcr.io/kyverno/readiness-checker:v0.1.0
 
-# --- cert-manager (chart v1.20.2) ---
-quay.io/jetstack/cert-manager-controller:v1.20.2
-quay.io/jetstack/cert-manager-webhook:v1.20.2
-quay.io/jetstack/cert-manager-cainjector:v1.20.2
-quay.io/jetstack/cert-manager-startupapicheck:v1.20.2
+# --- cert-manager (chart v1.20.3) ---
+quay.io/jetstack/cert-manager-controller:v1.20.3
+quay.io/jetstack/cert-manager-webhook:v1.20.3
+quay.io/jetstack/cert-manager-cainjector:v1.20.3
+quay.io/jetstack/cert-manager-startupapicheck:v1.20.3
 
 # --- SigNoz (chart 0.120.0) ---
 docker.io/signoz/signoz:v0.120.0
@@ -47,7 +47,7 @@ docker.io/altinity/metrics-exporter:0.21.2
 signoz/zookeeper:3.7.1
 docker.io/groundnuty/k8s-wait-for:v2.0
 
-# --- Prometheus (chart 29.10.0) ---
+# --- Prometheus (chart 29.13.0) ---
 quay.io/prometheus/prometheus:v3.12.0
 dhi.io/prometheus-config-reloader:0.89.0-debian13
 dhi.io/alertmanager:0.31.1-debian13
@@ -58,8 +58,8 @@ dhi.io/node-exporter:1.10.2-debian13
 docker.io/grafana/loki:3.6.7
 dhi.io/loki:3.6.7-debian13
 
-# --- VictoriaLogs (chart 0.13.6) ---
-docker.io/victoriametrics/victoria-logs:v1.50.0
+# --- VictoriaLogs (chart 0.13.8) ---
+docker.io/victoriametrics/victoria-logs:v1.51.0
 
 # --- Tempo (chart 1.24.4) ---
 docker.io/grafana/tempo:2.9.0
@@ -70,16 +70,16 @@ docker.io/grafana/tempo-query:2.9.0
 quay.io/kiwigrid/k8s-sidecar:2.5.0
 docker.io/grafana/grafana:12.3.1
 
-# --- Headlamp (chart 0.42.0) ---
-ghcr.io/headlamp-k8s/headlamp:v0.42.0
+# --- Headlamp (chart 0.43.0) ---
+ghcr.io/headlamp-k8s/headlamp:v0.43.0
 node:lts-alpine
 
 # --- Dex (chart 0.24.1) ---
-quay.io/keycloak/keycloak:26.6.3
+quay.io/keycloak/keycloak:26.6.4
 docker.io/postgres:17.6
 
-# --- oauth2-proxy (chart 10.6.0) ---
-dhi.io/oauth2-proxy:7.15.2-debian13
+# --- oauth2-proxy (chart 10.7.0) ---
+dhi.io/oauth2-proxy:7.15.3-debian13
 
 # --- Langfuse (stage 920) ---
 docker.io/langfuse/langfuse:3
@@ -90,8 +90,8 @@ docker.io/clickhouse/clickhouse-server:25.5.11
 cgr.dev/chainguard/minio:latest
 cgr.dev/chainguard/busybox:latest
 
-# --- OpenTelemetry Collector (chart 0.158.1) ---
-otel/opentelemetry-collector-contrib:0.153.0
+# --- OpenTelemetry Collector (chart 0.159.2) ---
+otel/opentelemetry-collector-contrib:0.154.0
 
 # --- Gitea Actions Runner ---
 docker:29.4.3-cli

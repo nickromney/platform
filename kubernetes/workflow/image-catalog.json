@@ -113,7 +113,7 @@
       "id": "keycloak",
       "hcl_key": "keycloak",
       "image_name": "keycloak",
-      "default_tag": "26.6.3",
+      "default_tag": "26.6.4",
       "external_ref": false,
       "build": {
         "context": "apps/keycloak",

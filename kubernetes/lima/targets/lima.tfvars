@@ -16,7 +16,7 @@ prefer_external_platform_images = true
 prefer_external_workload_images = true
 argocd_image_repository         = "quay.io/argoproj/argocd"
 argocd_image_tag                = "v3.4.3"
-keycloak_image                  = "host.lima.internal:5002/platform/keycloak:26.6.3"
+keycloak_image                  = "host.lima.internal:5002/platform/keycloak:26.6.4"
 
 external_platform_image_refs = {
   backstage        = "host.lima.internal:5002/platform/backstage:1.0.0"
