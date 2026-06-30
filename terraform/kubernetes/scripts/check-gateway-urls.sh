@@ -347,6 +347,12 @@ probe_https_url() {
     return 0
   fi
 
+  if [[ "${url}" == https://llm.*"/v1/chat/completions" && "${code}" == "507" ]]; then
+    PROBE_OK=1
+    PROBE_DETAIL="${code} (agentgateway reached OpenAI-compatible backend; model unavailable or capacity-limited)"
+    return 0
+  fi
+
   if [[ -n "${code}" && "${code}" != "000" ]]; then
     PROBE_DETAIL="${code}"
     return 0

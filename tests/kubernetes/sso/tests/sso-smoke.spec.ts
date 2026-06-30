@@ -572,9 +572,13 @@ async function sentimentSamplePositiveAndAnalyze(page: Page) {
 
   const samplePositive = page.getByRole('button', { name: 'Positive sample' })
   const analyzeButton = page.getByRole('button', { name: 'Analyze' })
+  const commentText = page.locator('#comment-text')
+  const appStatus = page.locator('#status')
 
   await expect(samplePositive).toBeVisible({ timeout: 60_000 })
+  await expect(appStatus).toContainText(/^Ready\./, { timeout: 60_000 })
   await samplePositive.click()
+  await expect(commentText).toHaveValue(/I absolutely love this/i, { timeout: 10_000 })
 
   // Analyze and wait for backend response (handles slow models).
   // This stack can be intermittently slow/flaky during warmup; retry a few times on 5xx.
@@ -975,9 +979,9 @@ async function mcpInspectorD2RenderAndExport(page: Page) {
   expect(download.suggestedFilename()).toBe('platform-mcp-d2-e2e.svg')
 }
 
-async function chatgptAddMcpOauthConnector(page: Page) {
+async function chatgptAddMcpOauthConnector(page: Page, events?: PageRuntimeEvents) {
   await expect(page.locator('body')).toContainText(/ChatGPT Sim/i, { timeout: 120_000 })
-  await expect(page.locator('#mcp-url')).toContainText(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)
+  await waitForChatgptSimReady(page, events)
   await expect(page.locator('#connector-list')).toContainText('Platform MCP via APIM', { timeout: 30_000 })
 
   await page.locator('#connector-name').fill('Platform MCP OAuth')
@@ -990,6 +994,61 @@ async function chatgptAddMcpOauthConnector(page: Page) {
   await expect(page.locator('#connector-list')).toContainText(/OAuth:/)
   await expect(page.locator('#discovery-output')).toContainText(`https://mcpserver.dev.${BASE_DOMAIN}/mcp`)
   await expect(page.locator('#discovery-output')).toContainText(/authorization_servers|oauth_authorization_server/)
+}
+
+async function chatgptSimDiagnostics(page: Page, events?: PageRuntimeEvents) {
+  const pageState = await page.evaluate(() => {
+    const text = (selector: string) => document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+    const globalWindow = window as any
+    return {
+      url: window.location.href,
+      readyState: document.readyState,
+      bodyText: document.body?.innerText?.replace(/\s+/g, ' ').trim().slice(0, 2000) ?? '',
+      mcpUrlText: text('#mcp-url'),
+      statusText: text('#status'),
+      authStateText: text('#auth-state'),
+      connectorListText: text('#connector-list').slice(0, 1000),
+      discoveryOutputText: text('#discovery-output').slice(0, 1000),
+      hasAppShell: Boolean(globalWindow.PlatformAppShell),
+      hasIdpAuth: Boolean(globalWindow.PlatformIdpAuth),
+      config: globalWindow.PCE_CHATGPT_GO_CONFIG ?? null,
+      scripts: Array.from(document.scripts).map((script) => ({
+        async: script.async,
+        defer: script.defer,
+        src: script.src || '[inline]',
+        type: script.type || 'text/javascript',
+      })),
+    }
+  })
+
+  return {
+    ...pageState,
+    consoleMessages: events?.consoleMessages.slice(-25) ?? [],
+    pageErrors: events?.pageErrors.slice(-25) ?? [],
+  }
+}
+
+async function waitForChatgptSimReady(page: Page, events?: PageRuntimeEvents) {
+  const expectedMcpUrl = `https://mcpserver.dev.${BASE_DOMAIN}/mcp`
+  const maxAttempts = Number(process.env.SSO_E2E_CHATGPT_READY_ATTEMPTS || 3)
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await expect(page.locator('#mcp-url')).toContainText(expectedMcpUrl, { timeout: 30_000 })
+      await expect(page.locator('#status')).toContainText(/Ready/i, { timeout: 30_000 })
+      return
+    } catch (err) {
+      lastError = err
+      if (attempt === maxAttempts) break
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined)
+      await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined)
+    }
+  }
+
+  const diagnostics = await chatgptSimDiagnostics(page, events).catch((err) => ({ diagnosticError: String(err) }))
+  const errorMessage = lastError instanceof Error ? lastError.message : String(lastError)
+  throw new Error(`ChatGPT Sim did not initialize after login. diagnostics=${JSON.stringify(diagnostics, null, 2)} lastError=${errorMessage}`)
 }
 
 async function signozLogsExplorerHasContent(page: Page, baseUrl: string) {
@@ -1067,6 +1126,11 @@ type BrowserApiTraffic = {
   responses: Array<{ url: string; status: number }>
 }
 
+type PageRuntimeEvents = {
+  consoleMessages: string[]
+  pageErrors: string[]
+}
+
 function isBrowserApiUrl(value: string) {
   try {
     return new URL(value).pathname.startsWith('/api/')
@@ -1110,6 +1174,31 @@ function watchBrowserApiTraffic(page: Page): BrowserApiTraffic {
   })
 
   return traffic
+}
+
+function watchPageRuntimeEvents(page: Page): PageRuntimeEvents {
+  const events: PageRuntimeEvents = {
+    consoleMessages: [],
+    pageErrors: [],
+  }
+  const trim = (values: string[]) => {
+    if (values.length > 50) values.splice(0, values.length - 50)
+  }
+
+  page.on('console', (message) => {
+    const type = message.type()
+    if (type !== 'error' && type !== 'warning') return
+    const location = message.location()
+    const source = location.url ? ` ${location.url}:${location.lineNumber}:${location.columnNumber}` : ''
+    events.consoleMessages.push(`[${type}] ${message.text()}${source}`)
+    trim(events.consoleMessages)
+  })
+  page.on('pageerror', (error) => {
+    events.pageErrors.push(`${error.name}: ${error.message}`)
+    trim(events.pageErrors)
+  })
+
+  return events
 }
 
 async function bodyText(page: Page) {
@@ -1261,6 +1350,7 @@ test.describe(SUITE_NAME, () => {
     test(`${t.name}: load and login`, async ({ page }, testInfo) => {
       test.setTimeout(180_000)
       const browserApiTraffic = t.postLogin === 'developer-portal' ? watchBrowserApiTraffic(page) : undefined
+      const runtimeEvents = t.name === 'chatgpt-sim' ? watchPageRuntimeEvents(page) : undefined
 
       if (t.flow === 'headlamp-oidc') {
         await loginHeadlampPopupFlow(page, t)
@@ -1290,7 +1380,7 @@ test.describe(SUITE_NAME, () => {
           await portalApiJsonWorks(page)
         }
         if (t.postLogin === 'chatgpt-add-mcp-oauth') {
-          await chatgptAddMcpOauthConnector(page)
+          await chatgptAddMcpOauthConnector(page, runtimeEvents)
         }
         if (t.postLogin === 'hubble-namespace-argocd') {
           await hubbleChooseNamespaceArgocd(page, t.url)
@@ -1368,7 +1458,7 @@ test.describe(SUITE_NAME, () => {
           return true
         }
         return u.host === OIDC_HOST && (u.searchParams.get('state') || '').endsWith(':/signed-out.html')
-      }, { timeout: 60_000 }),
+      }, { timeout: 60_000, waitUntil: 'domcontentloaded' }),
       page.getByRole('button', { name: /^sign out$/i }).click(),
     ])
     if (new URL(page.url()).host === subnetcalcHost) {
@@ -1411,7 +1501,7 @@ test.describe(SUITE_NAME, () => {
           return true
         }
         return u.host === OIDC_HOST && (u.searchParams.get('state') || '').endsWith(':/signed-out.html')
-      }, { timeout: 60_000 }),
+      }, { timeout: 60_000, waitUntil: 'domcontentloaded' }),
       page.getByRole('button', { name: /^sign out$/i }).click(),
     ])
     if (new URL(page.url()).host === chatgptHost) {

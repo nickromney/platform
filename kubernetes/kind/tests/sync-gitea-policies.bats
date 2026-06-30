@@ -520,6 +520,34 @@ EOF
   [[ "${output}" == *"-o ConnectTimeout=5"* ]]
 }
 
+@test "post_repo_deploy_key sends normalized SSH public key identity" {
+  capture_file="${BATS_TEST_TMPDIR}/deploy-key-payload.json"
+
+  cat >"${TEST_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    -d)
+      printf '%s' "${2}" >"${CAPTURE_FILE:?}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+printf '201'
+EOF
+  chmod +x "${TEST_BIN}/curl"
+
+  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\" CAPTURE_FILE='${capture_file}' DEPLOY_PUBLIC_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey local-comment'; source '${SCRIPT}'; post_repo_deploy_key; printf '\n'; jq -r '.key' '${capture_file}'"
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "201" ]
+  [ "${lines[1]}" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey" ]
+}
+
 @test "render_policy_repo_tree is callable without Gitea push runtime env" {
   stack_dir="${BATS_TEST_TMPDIR}/stack-render-only"
   create_minimal_policy_stack "${stack_dir}"
@@ -625,9 +653,9 @@ EOF
   [ -f "${vendor_root}/dex/Chart.yaml" ]
   [ -f "${vendor_root}/headlamp/Chart.yaml" ]
   [ -f "${vendor_root}/oauth2-proxy/Chart.yaml" ]
-  grep -Fq '{{- with .Values.config.sessionTTL }}' "${vendor_root}/headlamp/templates/deployment.yaml"
-  grep -Fq -- '- "-session-ttl={{ . }}"' "${vendor_root}/headlamp/templates/deployment.yaml"
-  grep -Fq '"minimum": 0' "${vendor_root}/headlamp/values.schema.json"
+  grep -Fq '{{- if hasKey .Values.config "sessionTTL" }}' "${vendor_root}/headlamp/templates/deployment.yaml"
+  grep -Fq -- '- "-session-ttl={{ .Values.config.sessionTTL }}"' "${vendor_root}/headlamp/templates/deployment.yaml"
+  grep -Fq '"minimum": 1' "${vendor_root}/headlamp/values.schema.json"
 }
 
 @test "render_otel_gateway_manifest prefers VictoriaLogs when enabled and Loki is off" {
@@ -1183,6 +1211,10 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"name: headlamp"* ]]
   [[ "${output}" == *"path: apps/vendor/charts/headlamp"* ]]
+  [[ "${output}" != *"sessionTTL:"* ]]
+  [[ "${output}" == *"probes:"* ]]
+  [[ "${output}" == *"initialDelaySeconds: 20"* ]]
+  [[ "${output}" == *"initialDelaySeconds: 10"* ]]
   [[ "${output}" == *"CreateNamespace=false"* ]]
 }
 
