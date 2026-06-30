@@ -261,13 +261,22 @@ image_build_catalog_build_and_push() {
   context_dir="$(image_build_resolve_context "${category}" "${image_id}" "${context}")"
   dockerfile_path="$(image_build_resolve_dockerfile "${category}" "${image_id}" "${context_dir}" "${dockerfile}")"
   image_build_prepare_args "${category}" "${image_id}"
-  image_build_build_and_push_cached \
-    "${image_name}" \
-    "${context_dir}" \
-    "${dockerfile_path}" \
-    "${version_tag}" \
-    "${fingerprint_tag}" \
-    "${IMAGE_BUILD_ARGS[@]}"
+  if [[ "${#IMAGE_BUILD_ARGS[@]}" -gt 0 ]]; then
+    image_build_build_and_push_cached \
+      "${image_name}" \
+      "${context_dir}" \
+      "${dockerfile_path}" \
+      "${version_tag}" \
+      "${fingerprint_tag}" \
+      "${IMAGE_BUILD_ARGS[@]}"
+  else
+    image_build_build_and_push_cached \
+      "${image_name}" \
+      "${context_dir}" \
+      "${dockerfile_path}" \
+      "${version_tag}" \
+      "${fingerprint_tag}"
+  fi
 }
 
 image_build_catalog_build_loop() {

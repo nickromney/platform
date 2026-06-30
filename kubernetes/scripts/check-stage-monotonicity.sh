@@ -205,12 +205,14 @@ while IFS=: read -r stage stage_file; do
       echo "Monotonicity violation: ${key} regresses true -> false at stage ${stage} (${stage_file})" >&2
       failures=$((failures + 1))
     fi
-    for immutable_key in "${immutable_keys[@]}"; do
-      if [[ "${key}" == "${immutable_key}" && -n "${previous_value}" && "${previous_value}" != "${current_value}" ]]; then
-        echo "Monotonicity violation: ${key} changes ${previous_value} -> ${current_value} at stage ${stage} (${stage_file}); management-mode toggles must remain constant across the ladder" >&2
-        failures=$((failures + 1))
-      fi
-    done
+    if [[ "${#immutable_keys[@]}" -gt 0 ]]; then
+      for immutable_key in "${immutable_keys[@]}"; do
+        if [[ "${key}" == "${immutable_key}" && -n "${previous_value}" && "${previous_value}" != "${current_value}" ]]; then
+          echo "Monotonicity violation: ${key} changes ${previous_value} -> ${current_value} at stage ${stage} (${stage_file}); management-mode toggles must remain constant across the ladder" >&2
+          failures=$((failures + 1))
+        fi
+      done
+    fi
 
     printf '%s=%s\n' "${key}" "${current_value}" >>"${current_file}"
   done <"${keys_file}"
