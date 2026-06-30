@@ -196,6 +196,12 @@ body > main {
   box-shadow: var(--app-shell-control-shadow);
 }
 
+input.input,
+select.select {
+  height: auto;
+  min-height: 40px;
+}
+
 :where(label) {
   display: block;
   margin-bottom: 8px;

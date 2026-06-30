@@ -7,7 +7,7 @@ ghcr.io/nginx/nginx-gateway-fabric:2.5.1	ghcr.io/nginx/nginx-gateway-fabric@sha2
 ghcr.io/nginx/nginx-gateway-fabric/nginx:2.5.1	ghcr.io/nginx/nginx-gateway-fabric/nginx@sha256:908376c8bc6b99e48312a212116f3a548805a94619484640617d89ff79514989
 quay.io/argoproj/argocd:v3.4.4	quay.io/argoproj/argocd@sha256:2fb3efa9eaa42382acb39c9a1485eaac7a1ad7a09e8aa7da7143ca256fa6da09
 ecr-public.aws.com/docker/library/redis:8.2.7-alpine	-
-docker.gitea.com/gitea:1.26.1-rootless	docker.gitea.com/gitea@sha256:ca2bbe964c38be9a4d81d698e7cc3256039db6cda119978cd5a6e5cf31f91cec
+docker.gitea.com/gitea:1.26.4-rootless	docker.gitea.com/gitea@sha256:d739144f0bafcbb0e5b28b692637ba4b008809e61816cbd94477d9d32ed9c60b
 ghcr.io/kyverno/kyverno:v1.18.1	ghcr.io/kyverno/kyverno@sha256:90ca6e44900da3471732b6954039505fb7348862496fea3f51f7859bdf93e508
 ghcr.io/kyverno/kyvernopre:v1.18.1	ghcr.io/kyverno/kyvernopre@sha256:e4f0f36f8a8c18427394894274278a94dbef5afefed915e38cf74f5a04cf9d64
 ghcr.io/kyverno/background-controller:v1.18.1	ghcr.io/kyverno/background-controller@sha256:071724e5ed7901633e068aa928dc4e00ae486a500f6bfb38cdb48491d6e83bca

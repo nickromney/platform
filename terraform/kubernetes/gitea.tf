@@ -113,7 +113,7 @@ ${var.expose_admin_nodeports ? "            nodePort: ${var.gitea_ssh_node_port}
         ingress:
           enabled: false
         image:
-          tag: "1.26.1"
+          tag: "1.26.4"
         strategy:
           type: Recreate
         resources:

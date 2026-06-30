@@ -51,8 +51,8 @@ test.describe('compose Backstage portal', () => {
     expect(await isOauth2ProxyForbiddenPage(page), `Backstage compose login was rejected: ${page.url()}`).toBe(false)
     await expect(page.locator('#login')).toHaveCount(0)
 
-    await expect(page.getByRole('heading', { name: 'Catalog' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: 'Catalog', exact: true })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Developer Portal', { exact: true })).toBeVisible({ timeout: 60_000 })
-    await expect(page.getByText('Hello Platform', { exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Sentiment', exact: true })).toBeVisible()
   })
 })

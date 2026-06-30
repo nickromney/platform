@@ -39,7 +39,7 @@ spec:
       containers:
         - name: server
           image: localhost:30090/platform/chatgpt-sim:0.1.1
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: PORT
               value: "8080"

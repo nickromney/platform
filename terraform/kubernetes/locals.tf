@@ -1150,7 +1150,6 @@ locals {
   headlamp_config = merge(
     {
       watchPlugins = false
-      sessionTTL   = 0
     },
     var.enable_sso ? {
       oidc = {
@@ -1181,6 +1180,20 @@ locals {
     resources = {
       limits   = { cpu = "500m", memory = "256Mi" }
       requests = { cpu = "100m", memory = "128Mi" }
+    }
+    probes = {
+      livenessProbe = {
+        initialDelaySeconds = 20
+        periodSeconds       = 10
+        timeoutSeconds      = 5
+        failureThreshold    = 6
+      }
+      readinessProbe = {
+        initialDelaySeconds = 10
+        periodSeconds       = 10
+        timeoutSeconds      = 5
+        failureThreshold    = 6
+      }
     }
     env = var.enable_sso ? [
       {

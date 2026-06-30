@@ -919,6 +919,7 @@ __YAML__
   depends_on = [
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.keycloak_postgres,
+    null_resource.kind_storage,
   ]
 }
 

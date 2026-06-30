@@ -731,19 +731,7 @@ vendor_chart() {
 }
 
 patch_vendored_headlamp_chart() {
-  local vendor_root="$1"
-  local deployment_file="${vendor_root}/headlamp/templates/deployment.yaml"
-  local schema_file="${vendor_root}/headlamp/values.schema.json"
-
-  [[ -f "${deployment_file}" ]] || return 0
-
-  perl -0pi -e 's/\{\{- if hasKey \.Values\.config "sessionTTL" \}\}\n            - "-session-ttl=\{\{ \.Values\.config\.sessionTTL \}\}"\n            \{\{- end \}\}/{{- with .Values.config.sessionTTL }}\n            - "-session-ttl={{ . }}"\n            {{- end }}/g' "${deployment_file}"
-  perl -0pi -e 's{(          livenessProbe:\n            httpGet:\n              path: "\{\{ \.Values\.config\.baseURL \}\}/"\n              port: http\n)(?!            initialDelaySeconds:)}{$1            initialDelaySeconds: 20\n            periodSeconds: 10\n            timeoutSeconds: 5\n            failureThreshold: 6\n}g' "${deployment_file}"
-  perl -0pi -e 's{(          readinessProbe:\n            httpGet:\n              path: "\{\{ \.Values\.config\.baseURL \}\}/"\n              port: http\n)(?!            initialDelaySeconds:)}{$1            initialDelaySeconds: 10\n            periodSeconds: 10\n            timeoutSeconds: 5\n            failureThreshold: 6\n}g' "${deployment_file}"
-
-  if [[ -f "${schema_file}" ]]; then
-    perl -0pi -e 's/("sessionTTL":\s*\{\s*"type":\s*"integer",\s*"description":\s*"The time in seconds for the session to be valid",\s*"default":\s*86400,\s*"minimum":\s*)1,/${1}0,/s' "${schema_file}"
-  fi
+  return 0
 }
 
 rewrite_argocd_app_to_vendored_chart() {
@@ -1461,7 +1449,6 @@ spec:
           create: ${HEADLAMP_CLUSTER_ROLE_BINDING_CREATE:-true}
         config:
           watchPlugins: false
-          sessionTTL: 0
 EOF
 
   if is_true "${ENABLE_SSO}"; then
@@ -1490,6 +1477,17 @@ EOF
           requests:
             cpu: 100m
             memory: 128Mi
+        probes:
+          livenessProbe:
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
 EOF
 
   if is_true "${ENABLE_SSO}"; then
@@ -2037,9 +2035,10 @@ delete_repo_deploy_key() {
 }
 
 post_repo_deploy_key() {
-  local payload
+  local key_identity payload
+  key_identity="$(deploy_public_key_identity)" || fail "DEPLOY_PUBLIC_KEY is not a valid SSH public key"
   payload=$(cat <<EOF
-{"title":"${DEPLOY_KEY_TITLE}","key":"${DEPLOY_PUBLIC_KEY}","read_only":false}
+{"title":"${DEPLOY_KEY_TITLE}","key":"${key_identity}","read_only":false}
 EOF
 )
 

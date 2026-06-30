@@ -111,14 +111,14 @@ kind_argocd_app_synced_healthy() {
 }
 
 @test "check-version reports the Grafana VictoriaLogs plugin version from Terraform defaults" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.28.0' 'codebase' 'release tag'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\" \"\$(tf_default_from_variables grafana_victoria_logs_plugin_sha256)\"; CLUSTER_OK=1; print_observed_latest_row 'grafana victorialogs plugin' \"\$(normalize_semver_like_tag \"\$(tf_default_from_variables grafana_victoria_logs_plugin_version)\")\" 'v0.29.0' 'codebase' 'release tag'"
 
   [ "${status}" -eq 0 ]
   [ "${#lines[@]}" -eq 3 ]
-  [ "${lines[0]}" = "0.28.0" ]
+  [ "${lines[0]}" = "0.29.0" ]
   [[ "${lines[1]}" =~ ^[0-9a-f]{64}$ ]]
-  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.28.0\tv0.28.0\t'* ]]
-  [[ "${lines[2]}" == *"latest release tag (v0.28.0)"* ]]
+  [[ "${lines[2]}" == *$'grafana victorialogs plugin\tv0.29.0\tv0.29.0\t'* ]]
+  [[ "${lines[2]}" == *"latest release tag (v0.29.0)"* ]]
 }
 
 @test "check-version reports Gitea chart image override as the code tag" {
@@ -158,13 +158,13 @@ EOF
     LATEST_PREFERRED_ARGOCD_IMAGE_REF=''
     LATEST_PREFERRED_ARGOCD_IMAGE_STATUS=''
     tag=\"\$(terraform_argocd_application_image_tag '${stack_dir}/gitea.tf' gitea)\"
-    row=\"\$(print_row 'gitea chart' '12.6.0' '12.6.0' '12.6.0' '1.26.0' \"\${tag}\" '' '1.26.1' '0')\"
+    row=\"\$(print_row 'gitea chart' '12.6.0' '12.6.0' '12.6.0' '1.26.0' \"\${tag}\" '' '1.26.4' '0')\"
     emit_json_report \"\${row}\" '' '' '' '' | jq -r '.components[0] | [.code_tag, .latest_tag, .status_code, (.update_available | tostring), .status_text] | @tsv'
   "
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == $'1.26.0\t1.26.1\tupdate_available\ttrue\t'* ]]
-  [[ "${output}" == *"code tag != latest tag (1.26.0 vs 1.26.1)"* ]]
+  [[ "${output}" == $'1.26.0\t1.26.4\tupdate_available\ttrue\t'* ]]
+  [[ "${output}" == *"code tag != latest tag (1.26.0 vs 1.26.4)"* ]]
 }
 
 @test "check-version JSON reports deployed Gitea image tag drift separately from chart version" {

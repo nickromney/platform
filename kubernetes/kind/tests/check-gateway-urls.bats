@@ -44,11 +44,23 @@ fi
 url="${*: -1}"
 case "${MOCK_GATEWAY_FAILURE:-0}:${url}" in
   0:https://llm.127.0.0.1.sslip.io/v1/models)
+    if [[ "${MOCK_LLM_BACKEND_CAPACITY_LIMITED:-0}" == "1" ]]; then
+      printf '{"object":"list","data":[{"id":"big-local-model"}]}'
+      exit 0
+    fi
     if [[ "${MOCK_LLM_BACKEND_UNAVAILABLE:-0}" == "1" ]]; then
       printf 'upstream call failed: Connect: Connection refused (os error 111)'
       exit 0
     fi
     echo "unexpected llm model discovery without MOCK_LLM_BACKEND_UNAVAILABLE=1" >&2
+    exit 99
+    ;;
+  0:https://llm.127.0.0.1.sslip.io/v1/chat/completions)
+    if [[ "${MOCK_LLM_BACKEND_CAPACITY_LIMITED:-0}" == "1" ]]; then
+      printf '507'
+      exit 0
+    fi
+    echo "unexpected llm chat completion without MOCK_LLM_BACKEND_CAPACITY_LIMITED=1" >&2
     exit 99
     ;;
   0:https://headlamp.admin.127.0.0.1.sslip.io/)
@@ -184,7 +196,7 @@ if [[ "${args}" == *"-n gateway-routes get httproute -o jsonpath="* ]] && printf
   if [[ "${MOCK_NO_ROUTES:-0}" == "1" ]]; then
     exit 0
   fi
-  if [[ "${MOCK_LLM_BACKEND_UNAVAILABLE:-0}" == "1" ]]; then
+  if [[ "${MOCK_LLM_BACKEND_UNAVAILABLE:-0}" == "1" || "${MOCK_LLM_BACKEND_CAPACITY_LIMITED:-0}" == "1" ]]; then
     printf 'headlamp\nsubnetcalc-uat\nkeycloak\nagentgateway-ai-gateway\n'
     exit 0
   fi
@@ -305,4 +317,11 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"HTTPS https://llm.127.0.0.1.sslip.io/v1/chat/completions -> 503 (agentgateway reached; OpenAI-compatible backend unavailable)"* ]]
+}
+
+@test "check-gateway-urls accepts agentgateway route when local LLM model is capacity limited" {
+  run env MOCK_LLM_BACKEND_CAPACITY_LIMITED=1 "${SCRIPT}" --execute --wait-seconds 0
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"HTTPS https://llm.127.0.0.1.sslip.io/v1/chat/completions -> 507 (agentgateway reached OpenAI-compatible backend; model unavailable or capacity-limited)"* ]]
 }
