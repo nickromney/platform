@@ -184,7 +184,7 @@ build_action_json "${variant}-stop" "${stop_label}" "${variant}" "${variant_path
 build_action_json "${variant}-reset" "${reset_label}" "${variant}" "${variant_path}" "${runtime_enabled}" "${present_reason}" "make -C ${variant_path} reset AUTO_APPROVE=1" 1
 build_action_json "${variant}-apply-100" "${apply_100_label}" "${variant}" "${variant_path}" "${apply_100_enabled}" "${apply_100_reason}" "make -C ${variant_path} 100 apply AUTO_APPROVE=1" 1
 build_action_json "${variant}-apply-900" "${apply_900_label}" "${variant}" "${variant_path}" "${apply_900_enabled}" "${apply_900_reason}" "make -C ${variant_path} 900 apply AUTO_APPROVE=1" 1
-build_action_json "${variant}-switch" "${switch_label}" "${variant}" "${variant_path}" "${apply_900_enabled}" "${apply_900_reason}" "AUTO_APPROVE=1 make -C ${variant_path} reset && make -C ${variant_path} 100 apply && make -C ${variant_path} 900 apply" 1
+build_action_json "${variant}-switch" "${switch_label}" "${variant}" "${variant_path}" "${apply_900_enabled}" "${apply_900_reason}" "make -C ${variant_path} reset AUTO_APPROVE=1 && make -C ${variant_path} 100 apply AUTO_APPROVE=1 && make -C ${variant_path} 900 apply AUTO_APPROVE=1" 1
 
 if [ "${variant}" = "kind" ]; then
   build_action_json kind-idp-catalog 'IDP catalog' kind kubernetes/kind 1 '' 'make -C kubernetes/kind idp-catalog' 0
