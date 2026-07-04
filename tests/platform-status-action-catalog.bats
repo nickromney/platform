@@ -70,10 +70,11 @@ setup() {
     [
       (any(.[]; .id == "slicer-status" and .label == "Slicer status")),
       (any(.[]; .id == "slicer-stop" and .command == "make -C kubernetes/slicer stop-slicer" and .dangerous == false)),
-      (any(.[]; .id == "slicer-switch" and .enabled == false and .reason == "slicer blocked"))
+      (any(.[]; .id == "slicer-switch" and .enabled == false and .reason == "slicer blocked")),
+      (any(.[]; .id == "slicer-switch" and .command == "make -C kubernetes/slicer reset AUTO_APPROVE=1 && make -C kubernetes/slicer 100 apply AUTO_APPROVE=1 && make -C kubernetes/slicer 900 apply AUTO_APPROVE=1"))
     ] | map(tostring) | join("|")
   ' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "true|true|true" ]
+  [ "${output}" = "true|true|true|true" ]
 }

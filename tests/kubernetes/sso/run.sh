@@ -9,6 +9,9 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 DEFAULT_STAGE_TFVARS="${REPO_ROOT}/kubernetes/kind/stages/900-sso.tfvars"
 STAGE_TFVARS="${STAGE_TFVARS:-}"
 STAGE_TFVARS_FILES="${STAGE_TFVARS_FILES:-}"
+SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES:-18}"
+SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS:-10}"
+SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS="${SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS:-900}"
 
 usage() {
   cat <<EOF
@@ -98,6 +101,132 @@ warn_optional_tool() {
   fi
 }
 
+require_non_negative_integer() {
+  local name="$1"
+  local value="$2"
+
+  case "${value}" in
+    ""|*[!0-9]*)
+      echo "${name} must be a non-negative integer, got: ${value}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+require_positive_integer() {
+  local name="$1"
+  local value="$2"
+
+  require_non_negative_integer "${name}" "${value}"
+  if [ "${value}" -eq 0 ]; then
+    echo "${name} must be greater than 0" >&2
+    exit 1
+  fi
+}
+
+path_mtime_seconds() {
+  local path="$1"
+
+  stat -f '%m' "${path}" 2>/dev/null || stat -c '%Y' "${path}" 2>/dev/null
+}
+
+path_age_seconds() {
+  local path="$1"
+  local mtime=""
+
+  mtime="$(path_mtime_seconds "${path}")" || return 1
+  echo "$(($(date +%s) - mtime))"
+}
+
+extract_playwright_lock_dir() {
+  local output_file="$1"
+
+  awk '{
+    for (i = 1; i <= NF; i++) {
+      if ($i ~ /\/__dirlock$/) {
+        print $i
+        exit
+      }
+    }
+  }' "${output_file}"
+}
+
+remove_stale_playwright_lock_if_needed() {
+  local lock_dir="$1"
+  local stale_after_seconds="$2"
+  local age_seconds=""
+
+  case "${lock_dir}" in
+    */__dirlock) ;;
+    *) return 1 ;;
+  esac
+
+  [ -d "${lock_dir}" ] || return 1
+  age_seconds="$(path_age_seconds "${lock_dir}")" || return 1
+
+  if [ "${age_seconds}" -lt "${stale_after_seconds}" ]; then
+    return 1
+  fi
+
+  echo "WARN removing stale Playwright browser cache lock (${age_seconds}s old): ${lock_dir}" >&2
+  rm -rf "${lock_dir}"
+  return 0
+}
+
+install_playwright_chromium() {
+  local max_attempts="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES}"
+  local retry_seconds="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS}"
+  local stale_after_seconds="${SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS}"
+  local attempt=1
+  local status=0
+  local output_file=""
+  local lock_dir=""
+
+  require_positive_integer "SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES" "${max_attempts}"
+  require_non_negative_integer "SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS" "${retry_seconds}"
+  require_positive_integer "SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS" "${stale_after_seconds}"
+
+  while [ "${attempt}" -le "${max_attempts}" ]; do
+    output_file="$(mktemp "${TMPDIR:-/tmp}/platform-sso-playwright-install.XXXXXX")"
+    if bun x playwright install chromium >"${output_file}" 2>&1; then
+      cat "${output_file}"
+      rm -f "${output_file}"
+      return 0
+    fi
+    status=$?
+
+    if ! grep -q '__dirlock' "${output_file}"; then
+      cat "${output_file}" >&2
+      rm -f "${output_file}"
+      return "${status}"
+    fi
+
+    lock_dir="$(extract_playwright_lock_dir "${output_file}")"
+    if [ -n "${lock_dir}" ] && remove_stale_playwright_lock_if_needed "${lock_dir}" "${stale_after_seconds}"; then
+      rm -f "${output_file}"
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    if [ "${attempt}" -ge "${max_attempts}" ]; then
+      cat "${output_file}" >&2
+      rm -f "${output_file}"
+      return "${status}"
+    fi
+
+    if [ -n "${lock_dir}" ]; then
+      echo "WARN Playwright browser cache lock is active at ${lock_dir}; retrying in ${retry_seconds}s (${attempt}/${max_attempts})" >&2
+    else
+      echo "WARN Playwright browser cache lock is active; retrying in ${retry_seconds}s (${attempt}/${max_attempts})" >&2
+    fi
+    rm -f "${output_file}"
+    sleep "${retry_seconds}"
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
 require_tool node
 warn_optional_tool npx "useful for ad hoc Playwright CLI flows"
 require_tool bun
@@ -151,7 +280,7 @@ if [ -z "${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" ] \
 fi
 
 bun install --frozen-lockfile
-bun x playwright install chromium
+install_playwright_chromium
 
 test_args=()
 if [ -n "${SSO_E2E_TEST_GREP_VALUE}" ]; then
