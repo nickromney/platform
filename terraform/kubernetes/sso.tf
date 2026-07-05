@@ -2499,6 +2499,7 @@ resource "kubectl_manifest" "argocd_app_oauth2_proxy_idp" {
     local.sso_idp_proxy_apps,
     local.sso_apim_proxy_apps,
     local.enable_subnetcalc_workloads_effective ? local.sso_mcp_console_proxy_apps : {},
+    local.enable_mcp_effective ? local.sso_auth_chat_proxy_apps : {},
     local.enable_mcp_effective ? local.sso_chatgpt_sim_proxy_apps : {},
     local.sso_langfuse_proxy_apps,
     local.sso_langfuse_demo_proxy_apps,

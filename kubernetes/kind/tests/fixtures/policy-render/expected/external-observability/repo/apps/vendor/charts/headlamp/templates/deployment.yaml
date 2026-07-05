@@ -1,3 +1,3 @@
-{{- with .Values.config.sessionTTL }}
-            - "-session-ttl={{ . }}"
+{{- if hasKey .Values.config "sessionTTL" }}
+            - "-session-ttl={{ .Values.config.sessionTTL }}"
             {{- end }}

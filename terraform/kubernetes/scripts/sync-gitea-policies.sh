@@ -93,6 +93,7 @@ workload|EXTERNAL_IMAGE_SUBNETCALC_API|external_subnetcalc_api|subnetcalc-api|wo
 workload|EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR|external_subnetcalc_apim|subnetcalc-apim-simulator|workload
 workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend|workload
 platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp|mcp
+platform|EXTERNAL_PLATFORM_IMAGE_AUTH_CHAT|external_platform_auth_chat|auth-chat|auth-chat
 platform|EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM|external_platform_chatgpt_sim|chatgpt-sim|chatgpt
 platform|EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS|external_platform_langfuse_demos|langfuse-demos|langfuse-demos
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
@@ -467,6 +468,7 @@ rewrite_image_owner() {
     subnetcalc-api \
     subnetcalc-apim-simulator \
     platform-mcp \
+    auth-chat \
     chatgpt-sim \
     langfuse-demos \
     subnetcalc-frontend; do
@@ -842,6 +844,7 @@ apply_external_platform_images() {
   local root_dir="$1"
   local idp_manifest="${root_dir}/apps/idp/all.yaml"
   local mcp_manifest="${root_dir}/apps/mcp/all.yaml"
+  local auth_chat_manifest="${root_dir}/apps/auth-chat/all.yaml"
   local chatgpt_manifest="${root_dir}/apps/chatgpt-sim/all.yaml"
   local langfuse_demos_manifest="${root_dir}/apps/langfuse-demos/all.yaml"
   local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
@@ -876,6 +879,10 @@ apply_external_platform_images() {
         ;;
       mcp)
         manifest_file="${mcp_manifest}"
+        eval "image_ref=\"\${${env_name}:-}\""
+        ;;
+      auth-chat)
+        manifest_file="${auth_chat_manifest}"
         eval "image_ref=\"\${${env_name}:-}\""
         ;;
       chatgpt)
@@ -1591,6 +1598,7 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_SSO}" || { ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}" && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
     remove_if_present "${apps_dir}/79-mcp.application.yaml"
+    remove_if_present "${apps_dir}/80-auth-chat.application.yaml"
     remove_if_present "${apps_dir}/80-chatgpt-sim.application.yaml"
   fi
 
@@ -2115,6 +2123,7 @@ render_policy_repo_tree() {
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
+  rewrite_image_owner "${repo_dir}/apps/auth-chat/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/chatgpt-sim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/langfuse-demos/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/workloads/base/all.yaml"

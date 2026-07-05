@@ -10,6 +10,7 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 WORKSPACE_ROOT="${RESET_LOCAL_STATE_WORKSPACE_ROOT:-${REPO_ROOT}}"
 GIT_ROOT="${RESET_LOCAL_STATE_GIT_ROOT:-${WORKSPACE_ROOT}}"
 DOCKER_PRUNE_ESTIMATE_SCRIPT="${DOCKER_PRUNE_ESTIMATE_SCRIPT:-${REPO_ROOT}/kubernetes/kind/scripts/docker-prune-estimate.sh}"
+DOCKER_READY_TIMEOUT_SECONDS="${RESET_LOCAL_STATE_DOCKER_READY_TIMEOUT_SECONDS:-8}"
 CACHE_CONTAINER_NAME="${CACHE_CONTAINER_NAME:-platform-local-image-cache}"
 NPM_CACHE_DIR_OVERRIDE="${RESET_LOCAL_STATE_NPM_CACHE_DIR:-}"
 BUN_CACHE_DIR_OVERRIDE="${RESET_LOCAL_STATE_BUN_CACHE_DIR:-${HOME}/.bun/install/cache}"
@@ -258,8 +259,28 @@ print_skipped_paths() {
   done
 }
 
+docker_info_with_timeout() {
+  local pid=""
+  local waited=0
+
+  docker info >/dev/null 2>&1 &
+  pid="$!"
+
+  while kill -0 "${pid}" >/dev/null 2>&1; do
+    if [[ "${waited}" -ge "${DOCKER_READY_TIMEOUT_SECONDS}" ]]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  wait "${pid}"
+}
+
 docker_ready() {
-  command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
+  command -v docker >/dev/null 2>&1 && docker_info_with_timeout
 }
 
 print_docker_plan() {

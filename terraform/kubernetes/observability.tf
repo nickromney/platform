@@ -1468,7 +1468,7 @@ ${local.grafana_plugins_values_yaml}
                     },
                     {
                       "datasource": "Prometheus",
-                      "description": "https://chatgpt.dev.127.0.0.1.sslip.io",
+                      "description": "https://auth-chat.dev.127.0.0.1.sslip.io",
                       "fieldConfig": {
                         "defaults": {
                           "color": {
@@ -1512,6 +1512,72 @@ ${local.grafana_plugins_values_yaml}
                         "y": 18
                       },
                       "id": 17,
+                      "links": [
+                        {
+                          "targetBlank": true,
+                          "title": "Open Auth Chat DEV",
+                          "url": "https://auth-chat.dev.127.0.0.1.sslip.io"
+                        }
+                      ],
+                      "options": {
+                        "colorMode": "background",
+                        "graphMode": "none"
+                      },
+                      "targets": [
+                        {
+                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-auth-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"auth-chat\"}) > bool 0)) or vector(0))",
+                          "refId": "A"
+                        }
+                      ],
+                      "title": "Auth Chat DEV",
+                      "type": "stat"
+                    },
+                    {
+                      "datasource": "Prometheus",
+                      "description": "https://chatgpt.dev.127.0.0.1.sslip.io",
+                      "fieldConfig": {
+                        "defaults": {
+                          "color": {
+                            "mode": "thresholds"
+                          },
+                          "mappings": [
+                            {
+                              "options": {
+                                "0": {
+                                  "text": "Down"
+                                },
+                                "1": {
+                                  "text": "Healthy"
+                                }
+                              },
+                              "type": "value"
+                            }
+                          ],
+                          "max": 1,
+                          "min": 0,
+                          "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                              {
+                                "color": "red",
+                                "value": 0
+                              },
+                              {
+                                "color": "green",
+                                "value": 1
+                              }
+                            ]
+                          },
+                          "unit": "short"
+                        }
+                      },
+                      "gridPos": {
+                        "h": 5,
+                        "w": 6,
+                        "x": 0,
+                        "y": 23
+                      },
+                      "id": 18,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1574,10 +1640,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
+                        "x": 6,
                         "y": 23
                       },
-                      "id": 18,
+                      "id": 19,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1640,10 +1706,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 12,
                         "y": 23
                       },
-                      "id": 19,
+                      "id": 20,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1706,10 +1772,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 18,
                         "y": 23
                       },
-                      "id": 20,
+                      "id": 21,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1772,10 +1838,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 23
+                        "x": 0,
+                        "y": 28
                       },
-                      "id": 21,
+                      "id": 22,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1838,10 +1904,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 0,
+                        "x": 6,
                         "y": 28
                       },
-                      "id": 22,
+                      "id": 23,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1904,10 +1970,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 6,
+                        "x": 12,
                         "y": 28
                       },
-                      "id": 23,
+                      "id": 24,
                       "links": [
                         {
                           "targetBlank": true,
@@ -1970,10 +2036,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 12,
+                        "x": 18,
                         "y": 28
                       },
-                      "id": 24,
+                      "id": 25,
                       "links": [
                         {
                           "targetBlank": true,
@@ -2036,10 +2102,10 @@ ${local.grafana_plugins_values_yaml}
                       "gridPos": {
                         "h": 5,
                         "w": 6,
-                        "x": 18,
-                        "y": 28
+                        "x": 0,
+                        "y": 33
                       },
-                      "id": 25,
+                      "id": 26,
                       "links": [
                         {
                           "targetBlank": true,

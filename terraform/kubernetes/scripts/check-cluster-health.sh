@@ -104,7 +104,7 @@ expected_argocd_apps() {
   fi
 
   if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
-    apps+=(mcp chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-chatgpt-sim)
+    apps+=(mcp auth-chat chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-auth-chat oauth2-proxy-chatgpt-sim)
   fi
 
   printf '%s\n' "${apps[@]}" | awk 'NF' | sort -u
@@ -1586,7 +1586,7 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   fi
 
   if [[ "${EXPECT_MCP_EFFECTIVE}" == "true" ]]; then
-    for app in mcp chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-chatgpt-sim; do
+    for app in mcp auth-chat chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-auth-chat oauth2-proxy-chatgpt-sim; do
       if kubectl -n "${ARGOCD_NS}" get app "${app}" >/dev/null 2>&1; then
         ok "Argo CD app ${app} exists"
       else

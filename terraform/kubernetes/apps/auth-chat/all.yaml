@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-chat
+  namespace: dev
+  labels:
+    app: auth-chat
+    app.kubernetes.io/name: auth-chat
+    app.kubernetes.io/component: auth-chat
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-chat
+      app.kubernetes.io/component: auth-chat
+  template:
+    metadata:
+      labels:
+        app: auth-chat
+        app.kubernetes.io/name: auth-chat
+        app.kubernetes.io/component: auth-chat
+        project: kindlocal
+        team: platform
+        tier: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: gitea-registry-creds
+      containers:
+        - name: server
+          image: localhost:30090/platform/auth-chat:0.1.0
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "8080"
+            - name: PUBLIC_BASE_URL
+              value: https://auth-chat.dev.127.0.0.1.sslip.io
+            - name: AUTH_METHOD
+              value: gateway
+            - name: API_AUTH_METHOD
+              value: gateway
+            - name: AUTH_CHAT_LLM_URL
+              value: http://agentgateway-ai-gateway.agentgateway-system.svc.cluster.local/v1/chat/completions
+            - name: AUTH_CHAT_LLM_MODEL
+              value: Qwen3.5-9B-MLX-4bit
+            - name: AUTH_CHAT_LLM_TIMEOUT_SECONDS
+              value: "45"
+            - name: AUTH_CHAT_LLM_MAX_TOKENS
+              value: "24"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-chat
+  namespace: dev
+  labels:
+    app: auth-chat
+    app.kubernetes.io/name: auth-chat
+    app.kubernetes.io/component: auth-chat
+    project: kindlocal
+    team: platform
+    tier: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: auth-chat
+    app.kubernetes.io/component: auth-chat
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8080
+      targetPort: http

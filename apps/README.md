@@ -12,6 +12,9 @@ This directory contains the source applications that feed the local platform dem
   Test runbook: [`sentiment/docs/TEST-RUNBOOK.md`](sentiment/docs/TEST-RUNBOOK.md)
 - [`apim-simulator/`](apim-simulator/) contains the local Azure API Management simulator used by the Kubernetes APIM gateway demo and by app-local compose workflows.
   It is a small Go app with embedded HTML/CSS/JavaScript and direct/SSO local compose workflows.
+- [`auth-chat/`](auth-chat/) contains the Keycloak-authenticated chat demo,
+  implemented as a small Go service with embedded HTML/CSS/JavaScript and
+  `/auth` plus `/chat` endpoints for local model-route proof.
 - [`chatgpt-sim/`](chatgpt-sim/) contains the ChatGPT-style shell and MCP demo,
   implemented as a small Go service with embedded HTML/CSS/JavaScript and
   local compose workflows for direct and SSO-protected runs.

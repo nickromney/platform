@@ -258,6 +258,58 @@ __YAML__
   ]
 }
 
+resource "kubectl_manifest" "argocd_app_auth_chat" {
+  count = local.enable_mcp_effective && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
+
+  yaml_body = <<__YAML__
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: auth-chat
+  namespace: ${var.argocd_namespace}
+  annotations:
+    argocd.argoproj.io/sync-wave: "80"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    namespace: dev
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: ${local.policies_repo_url_cluster}
+    targetRevision: main
+    path: apps/auth-chat
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+__YAML__
+
+  wait              = true
+  validate_schema   = false
+  force_conflicts   = false
+  server_side_apply = false
+
+  depends_on = [
+    kubectl_manifest.argocd_app_mcp,
+    kubernetes_secret_v1.argocd_repo_policies,
+    null_resource.sync_gitea_policies_repo,
+    null_resource.argocd_repo_server_restart,
+    kubectl_manifest.argocd_app_cilium_policies,
+  ]
+}
+
 resource "kubectl_manifest" "argocd_app_langfuse" {
   count = var.enable_langfuse && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
 

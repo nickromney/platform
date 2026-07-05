@@ -50,6 +50,9 @@ spec:
       name: oauth2-proxy-mcp-console
     - group: ""
       kind: Service
+      name: oauth2-proxy-auth-chat
+    - group: ""
+      kind: Service
       name: oauth2-proxy-chatgpt-sim
     - group: ""
       kind: Service

@@ -113,6 +113,8 @@ locals {
   mcp_public_url                       = "https://${local.mcp_public_host}${local.gateway_https_host_port_suffix}"
   mcp_console_public_host              = "mcp-console.${local.platform_base_domain_effective}"
   mcp_console_public_url               = "https://${local.mcp_console_public_host}${local.gateway_https_host_port_suffix}"
+  auth_chat_public_host                = "auth-chat.dev.${local.platform_base_domain_effective}"
+  auth_chat_public_url                 = "https://${local.auth_chat_public_host}${local.gateway_https_host_port_suffix}"
   chatgpt_sim_public_host              = "chatgpt.dev.${local.platform_base_domain_effective}"
   chatgpt_sim_public_url               = "https://${local.chatgpt_sim_public_host}${local.gateway_https_host_port_suffix}"
   langfuse_trace_chat_public_host      = "lf-chat.dev.${local.platform_base_domain_effective}"
@@ -163,6 +165,19 @@ locals {
       cookie_name      = local.portal_sso_cookie_name
       cookie_domain    = local.portal_cookie_domain
       whitelist_domain = local.portal_whitelist_domains
+    }
+  }
+  sso_auth_chat_proxy_apps = {
+    auth_chat = {
+      name               = "oauth2-proxy-auth-chat"
+      public_url         = local.auth_chat_public_url
+      upstream           = "http://auth-chat.dev.svc.cluster.local:8080"
+      group              = local.sso_viewer_group
+      cookie_name        = local.dev_sso_cookie_name
+      cookie_domain      = local.dev_cookie_domain
+      whitelist_domain   = local.dev_whitelist_domains
+      backend_logout_arg = local.oauth2_proxy_backend_logout_arg_map
+      skip_auth_regex    = "^/(signed-out\\.html|style\\.css|app\\.js|runtime-config\\.js|idpauth\\.js|app-shell\\.css|app-shell\\.js|favicon\\.svg|favicon\\.ico)$"
     }
   }
   sso_chatgpt_sim_proxy_apps = {
@@ -253,6 +268,7 @@ locals {
     [for app in values(local.sso_idp_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_apim_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_mcp_console_proxy_apps) : "${app.public_url}/oauth2/callback"],
+    [for app in values(local.sso_auth_chat_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_chatgpt_sim_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_langfuse_proxy_apps) : "${app.public_url}/oauth2/callback"],
     [for app in values(local.sso_langfuse_demo_proxy_apps) : "${app.public_url}/oauth2/callback"],
@@ -559,7 +575,7 @@ locals {
     var.enable_langfuse_demos && var.enable_argocd ? ["langfuse-demos"] : [],
     (local.enable_sentiment_workloads_effective || local.enable_subnetcalc_workloads_effective) && var.enable_argocd ? ["dev", "uat"] : [],
     var.enable_sso && var.enable_argocd ? ["idp"] : [],
-    local.enable_mcp_effective && var.enable_argocd ? ["mcp", "chatgpt-sim"] : [],
+    local.enable_mcp_effective && var.enable_argocd ? ["mcp", "auth-chat", "chatgpt-sim"] : [],
     var.enable_headlamp && var.enable_argocd ? ["headlamp"] : [],
     var.enable_sso && var.enable_argocd ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
     var.enable_sso && var.enable_hubble && var.enable_argocd ? ["oauth2-proxy-hubble"] : [],
@@ -569,7 +585,7 @@ locals {
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
     var.enable_sso && local.enable_apim_simulator_effective && var.enable_argocd ? ["oauth2-proxy-apim"] : [],
     var.enable_sso && var.enable_argocd ? concat(local.enable_backstage_effective ? ["oauth2-proxy-backstage"] : [], ["oauth2-proxy-idp-core"]) : [],
-    local.enable_mcp_effective && var.enable_argocd ? ["oauth2-proxy-mcp-console", "oauth2-proxy-chatgpt-sim"] : [],
+    local.enable_mcp_effective && var.enable_argocd ? ["oauth2-proxy-mcp-console", "oauth2-proxy-auth-chat", "oauth2-proxy-chatgpt-sim"] : [],
     var.enable_sso && var.enable_langfuse && var.enable_argocd ? ["oauth2-proxy-langfuse"] : [],
     var.enable_sso && var.enable_langfuse_demos && var.enable_argocd ? ["oauth2-proxy-langfuse-trace-chat", "oauth2-proxy-langfuse-tool-agent", "oauth2-proxy-langfuse-eval-runner"] : [],
   ))
@@ -646,11 +662,13 @@ locals {
     external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api", "")
     external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
     external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
+    external_platform_auth_chat            = lookup(var.external_platform_image_refs, "auth-chat", "")
     external_platform_chatgpt_sim          = lookup(var.external_platform_image_refs, "chatgpt-sim", "")
     external_platform_langfuse_demos       = lookup(var.external_platform_image_refs, "langfuse-demos", "")
     external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host
+    auth_chat_public_host                  = local.auth_chat_public_host
     agentgateway_ai_gateway_public_host    = local.agentgateway_ai_gateway_public_host
     langfuse_public_host                   = local.langfuse_public_host
     langfuse_public_url                    = local.langfuse_public_url

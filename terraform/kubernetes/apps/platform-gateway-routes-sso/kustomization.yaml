@@ -16,6 +16,7 @@ resources:
   - httproute-subnetcalc-dev.yaml
   - httproute-subnetcalc-uat.yaml
   - httproute-agentgateway-ai-gateway.yaml
+  - httproute-auth-chat.yaml
   - httproute-chatgpt-sim.yaml
   - httproute-langfuse.yaml
   - httproute-langfuse-trace-chat.yaml

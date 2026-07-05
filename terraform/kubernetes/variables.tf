@@ -1260,15 +1260,15 @@ variable "enable_backstage" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp", "signoz-auth-proxy"], key)
+      contains(["auth-chat", "backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp", "signoz-auth-proxy"], key)
     ])
-    error_message = "external_platform_image_refs supports only: backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
+    error_message = "external_platform_image_refs supports only: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
   }
 }

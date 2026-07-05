@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Auth Chat</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/app-shell.css">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="topbar">
+      <div>
+        <h1>Auth Chat</h1>
+        <p id="route-summary">/auth -> /chat -> Qwen3.5-9B-MLX-4bit</p>
+      </div>
+      <div class="header-actions">
+        <p id="auth-state" class="auth-state">Signed out</p>
+        <button id="logout-btn" class="secondary-button" type="button" hidden>Sign Out</button>
+        <button id="theme-switcher" class="theme-toggle" type="button" aria-label="Theme: system. Switch to light theme." title="Theme: system. Switch to light theme." data-theme-choice="system"></button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      <div class="auth-chat-workspace">
+        <section class="conversation-shell" aria-labelledby="conversation-title">
+          <div class="conversation-head">
+            <div>
+              <h2 id="conversation-title">Conversation</h2>
+              <p id="conversation-status">Ready</p>
+            </div>
+            <div class="model-strip">
+              <label for="model">Model</label>
+              <input id="model" name="model" value="Qwen3.5-9B-MLX-4bit" autocomplete="off">
+            </div>
+          </div>
+          <ol id="messages" class="messages" aria-live="polite" aria-label="Conversation messages"></ol>
+          <form id="chat-form" class="composer">
+            <label class="sr-only" for="message">Message</label>
+            <textarea id="message" name="message" rows="3" placeholder="Ask the authenticated model route" required></textarea>
+            <div class="composer-actions">
+              <button id="validate-auth" class="secondary-button" type="button">Validate /auth</button>
+              <button id="send" type="submit">Send</button>
+            </div>
+          </form>
+        </section>
+        <aside class="evidence-column" aria-label="Route evidence">
+          <section class="evidence-panel" aria-labelledby="auth-title">
+            <div class="panel-heading">
+              <h2 id="auth-title">Auth Evidence</h2>
+              <span id="auth-badge">Checking</span>
+            </div>
+            <dl class="kv">
+              <dt>Endpoint</dt><dd>/auth</dd>
+              <dt>Provider</dt><dd>Keycloak</dd>
+              <dt>User</dt><dd id="auth-user">Loading</dd>
+              <dt>Token</dt><dd id="auth-token">Loading</dd>
+            </dl>
+          </section>
+          <section class="evidence-panel" aria-labelledby="route-title">
+            <h2 id="route-title">Route</h2>
+            <div id="network-path" class="route-path"></div>
+          </section>
+          <section class="evidence-panel" aria-labelledby="model-title">
+            <h2 id="model-title">Model</h2>
+            <dl class="kv">
+              <dt>Endpoint</dt><dd id="model-route">Loading</dd>
+              <dt>Status</dt><dd id="model-status">Ready</dd>
+              <dt>Latency</dt><dd id="model-latency">-</dd>
+            </dl>
+          </section>
+          <section class="evidence-panel" aria-labelledby="last-response-title">
+            <h2 id="last-response-title">Last Response</h2>
+            <pre id="last-response">{}</pre>
+          </section>
+        </aside>
+      </div>
+    </main>
+    <script src="/runtime-config.js"></script>
+    <script src="/idpauth.js"></script>
+    <script src="/app-shell.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
