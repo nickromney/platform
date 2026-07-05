@@ -167,6 +167,19 @@
       "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-apim\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"apim\",deployment=\"subnetcalc-apim-simulator\"}) > bool 0)) or vector(0))"
     },
     {
+      "title": "Auth Chat DEV",
+      "url": "https://auth-chat.dev.127.0.0.1.sslip.io",
+      "sort_key": "dev/auth-chat",
+      "service": "auth-chat",
+      "owner": "platform",
+      "environment": "dev",
+      "rbac_group": "platform-viewers",
+      "requires": [
+        "ENABLE_SSO"
+      ],
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-auth-chat\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"auth-chat\"}) > bool 0)) or vector(0))"
+    },
+    {
       "title": "ChatGPT Sim DEV",
       "url": "https://chatgpt.dev.127.0.0.1.sslip.io",
       "sort_key": "dev/chatgpt-sim",

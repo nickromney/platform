@@ -18,6 +18,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     launchOptions: {
       args: chromiumArgs,
+      executablePath: process.env.SSO_E2E_CHROMIUM_EXECUTABLE_PATH || undefined,
       slowMo: process.env.PW_SLOWMO ? Number(process.env.PW_SLOWMO) : undefined,
     },
   },

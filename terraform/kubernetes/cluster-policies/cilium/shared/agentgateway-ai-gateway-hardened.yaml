@@ -33,6 +33,9 @@ spec:
             "k8s:app.kubernetes.io/name": platform-mcp
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev
+            "k8s:app.kubernetes.io/name": auth-chat
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": dev
             "k8s:app.kubernetes.io/name": chatgpt-sim
         - matchLabels:
             "k8s:io.kubernetes.pod.namespace": dev

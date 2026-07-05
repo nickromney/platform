@@ -17,5 +17,6 @@ external_platform_image_refs = {
   grafana        = "host.docker.internal:5002/platform/grafana-victorialogs:12.3.1-v0.28.0"
   "idp-core"     = "host.docker.internal:5002/platform/idp-core:0.1.0"
   "platform-mcp" = "host.docker.internal:5002/platform/platform-mcp:0.1.0"
+  "auth-chat"    = "host.docker.internal:5002/platform/auth-chat:0.1.0"
   "chatgpt-sim"  = "host.docker.internal:5002/platform/chatgpt-sim:0.1.0"
 }

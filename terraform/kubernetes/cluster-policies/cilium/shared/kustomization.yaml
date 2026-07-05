@@ -13,6 +13,7 @@ resources:
   - application-backend-egress-via-fqdn.yaml
   - sentiment-api-dns-egress.yaml
   - apim-baseline.yaml
+  - auth-chat-hardened.yaml
   - chatgpt-sim-hardened.yaml
   - mcp-hardened.yaml
   - agentgateway-ai-gateway-hardened.yaml

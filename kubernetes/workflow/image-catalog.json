@@ -157,6 +157,38 @@
       }
     },
     {
+      "id": "auth-chat",
+      "hcl_key": "auth-chat",
+      "image_name": "auth-chat",
+      "default_tag": "0.1.0",
+      "build": {
+        "context": "apps/auth-chat/app",
+        "dockerfile": "Dockerfile",
+        "tag": "default",
+        "prebuild": "make -C apps/auth-chat/app build-linux"
+      },
+      "fingerprint_sources": [
+        "apps/auth-chat/app/.dockerignore",
+        "apps/auth-chat/app/Dockerfile",
+        "apps/auth-chat/app/Makefile",
+        "apps/auth-chat/app/go.mod",
+        "apps/auth-chat/app/go.sum",
+        "apps/shared/apphttp",
+        "apps/shared/appconfig",
+        "apps/shared/apphealth",
+        "apps/shared/appshell",
+        "apps/shared/idpauth",
+        "apps/shared/web",
+        "apps/auth-chat/app/cmd",
+        "apps/auth-chat/app/internal",
+        "apps/auth-chat/app/internal/app/web"
+      ],
+      "version_check": {
+        "mode": "local",
+        "reason": "local platform image built and distributed through variant-local registries; upstream latest lookup is not meaningful"
+      }
+    },
+    {
       "id": "chatgpt-sim",
       "hcl_key": "chatgpt-sim",
       "image_name": "chatgpt-sim",

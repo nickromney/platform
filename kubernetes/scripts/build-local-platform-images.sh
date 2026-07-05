@@ -172,6 +172,9 @@ idp_core_source_tag="$(
 platform_mcp_source_tag="$(
   image_catalog_source_tag platform platform-mcp
 )"
+auth_chat_source_tag="$(
+  image_catalog_source_tag platform auth-chat
+)"
 chatgpt_sim_source_tag="$(
   image_catalog_source_tag platform chatgpt-sim
 )"
@@ -190,6 +193,8 @@ keycloak_source_tag="$(
 image_build_catalog_build_and_push platform idp-core idp-core "${idp_core_source_tag}"
 
 image_build_catalog_build_and_push platform platform-mcp platform-mcp "${platform_mcp_source_tag}"
+
+image_build_catalog_build_and_push platform auth-chat auth-chat "${auth_chat_source_tag}"
 
 image_build_catalog_build_and_push platform chatgpt-sim chatgpt-sim "${chatgpt_sim_source_tag}"
 

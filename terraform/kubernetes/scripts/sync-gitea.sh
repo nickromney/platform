@@ -406,6 +406,7 @@ main() {
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_IDP_CORE idp-core
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_BACKSTAGE backstage
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP platform-mcp
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_AUTH_CHAT auth-chat
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM chatgpt-sim
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS langfuse-demos
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy

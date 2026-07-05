@@ -21,6 +21,7 @@ keycloak_image                  = "192.168.64.1:5002/platform/keycloak:26.6.4"
 
 external_platform_image_refs = {
   backstage        = "192.168.64.1:5002/platform/backstage:1.0.0"
+  "auth-chat"      = "192.168.64.1:5002/platform/auth-chat:0.1.0"
   "chatgpt-sim"    = "192.168.64.1:5002/platform/chatgpt-sim:0.1.0"
   grafana          = "192.168.64.1:5002/platform/grafana-victorialogs:12.3.1-v0.28.0"
   "idp-core"       = "192.168.64.1:5002/platform/idp-core:0.1.0"

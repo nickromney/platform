@@ -21,6 +21,7 @@ type Target = {
     | 'subnetcalc-rfc1918-lookup'
     | 'developer-portal'
     | 'developer-portal-api-json'
+    | 'auth-chat-model-reply'
     | 'chatgpt-add-mcp-oauth'
     | 'hubble-namespace-argocd'
     | 'mcp-inspector-d2-render-export'
@@ -41,6 +42,7 @@ const INCLUDE_MCP = isEnabled('SSO_E2E_ENABLE_MCP', true)
 const INCLUDE_SENTIMENT = isEnabled('SSO_E2E_ENABLE_SENTIMENT', true)
 const INCLUDE_SUBNETCALC = isEnabled('SSO_E2E_ENABLE_SUBNETCALC', true)
 const VERIFY_APP_ACTIONS = isEnabled('SSO_E2E_VERIFY_APP_ACTIONS', true)
+const VERIFY_AUTH_CHAT_MODEL = isEnabled('SSO_E2E_VERIFY_AUTH_CHAT_MODEL', false)
 const BASE_SCHEME = process.env.SSO_E2E_SCHEME || 'https'
 const BASE_DOMAIN = process.env.SSO_E2E_BASE_DOMAIN || '127.0.0.1.sslip.io'
 const BASE_PORT = process.env.SSO_E2E_BASE_PORT ? `:${process.env.SSO_E2E_BASE_PORT}` : ''
@@ -83,6 +85,7 @@ const GRAFANA_LAUNCHPAD_APPS = [
   { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
   { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
   { name: 'Kyverno Policy UI', url: platformUrl('kyverno.admin'), flow: 'none', segment: 'admin' },
+  { name: 'Auth Chat DEV', url: platformUrl('auth-chat.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'ChatGPT Sim DEV', url: platformUrl('chatgpt.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'Sentiment DEV', url: platformUrl('sentiment.dev'), flow: 'oauth2-proxy', segment: 'dev' },
   { name: 'SubnetCalc DEV', url: platformUrl('subnetcalc.dev'), flow: 'oauth2-proxy', segment: 'dev' },
@@ -154,7 +157,7 @@ function filterTargetByEnabledApps(target: Target) {
 }
 
 function isLightweightPlatformApp(target: Target) {
-  return target.name === 'chatgpt-sim' || target.name.startsWith('sentiment-') || target.name.startsWith('subnetcalc-')
+  return target.name === 'auth-chat' || target.name === 'chatgpt-sim' || target.name.startsWith('sentiment-') || target.name.startsWith('subnetcalc-')
 }
 
 const TARGETS: Target[] = BASE_TARGETS.filter(filterTargetByEnabledApps)
@@ -170,6 +173,13 @@ if (INCLUDE_BACKSTAGE) {
 }
 
 if (INCLUDE_MCP) {
+  TARGETS.push({
+    name: 'auth-chat',
+    url: platformUrl('auth-chat.dev'),
+    segment: 'dev',
+    flow: 'oauth2-proxy',
+    postLogin: VERIFY_AUTH_CHAT_MODEL ? 'auth-chat-model-reply' : undefined,
+  })
   TARGETS.push({
     name: 'chatgpt-sim',
     url: platformUrl('chatgpt.dev'),
@@ -979,6 +989,34 @@ async function mcpInspectorD2RenderAndExport(page: Page) {
   expect(download.suggestedFilename()).toBe('platform-mcp-d2-e2e.svg')
 }
 
+async function authChatModelReply(page: Page) {
+  const prompt = 'For an automated health check, answer with a short sentence that includes auth-chat-ok.'
+  const result = await page.evaluate(async ({ message }) => {
+    const response = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ message, model: 'Qwen3.5-9B-MLX-4bit' }),
+    })
+    const text = await response.text()
+    let body: any
+    try {
+      body = JSON.parse(text)
+    } catch {
+      body = { raw: text }
+    }
+    return { ok: response.ok, status: response.status, body }
+  }, { message: prompt })
+
+  expect(result.ok, JSON.stringify(result.body).slice(0, 1000)).toBe(true)
+  expect(result.status).toBe(200)
+  expect(result.body?.assistant?.trim().length ?? 0).toBeGreaterThan(0)
+  expect(result.body?.auth?.status).toBe('authenticated')
+  expect(result.body?.model?.status).toBe('ok')
+  expect(result.body?.model?.model).toBe('Qwen3.5-9B-MLX-4bit')
+  expect(result.body?.model?.latency_ms ?? 0).toBeGreaterThan(0)
+}
+
 async function chatgptAddMcpOauthConnector(page: Page, events?: PageRuntimeEvents) {
   await expect(page.locator('body')).toContainText(/ChatGPT Sim/i, { timeout: 120_000 })
   await waitForChatgptSimReady(page, events)
@@ -1378,6 +1416,9 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'developer-portal-api-json') {
           await portalApiJsonWorks(page)
+        }
+        if (t.postLogin === 'auth-chat-model-reply') {
+          await authChatModelReply(page)
         }
         if (t.postLogin === 'chatgpt-add-mcp-oauth') {
           await chatgptAddMcpOauthConnector(page, runtimeEvents)
