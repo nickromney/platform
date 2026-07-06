@@ -83,7 +83,7 @@ Existing tests and checks already know about the split:
 
 ### 1. Deepen Application Spec Publication Behind One GitOps Ownership Module
 
-**Files**
+#### Files
 
 - `terraform/kubernetes/app-of-apps.tf`
 - `terraform/kubernetes/locals.tf`
@@ -91,7 +91,7 @@ Existing tests and checks already know about the split:
 - `terraform/kubernetes/apps/argocd-apps/*.application.yaml`
 - `terraform/kubernetes/scripts/sync-gitea-policies.sh`
 
-**Problem**
+#### Problem
 
 The current interface is shallow. Callers must know whether an application spec
 is published by a direct Terraform `kubectl_manifest`, by a rendered child
@@ -104,14 +104,14 @@ enough depth for the later stages: deleting them would not delete the real
 complexity; it would reappear as child Application manifest ownership and
 migration/adoption rules.
 
-**Solution**
+#### Solution
 
 Make app-of-apps the normal application spec publication seam for `kind` once
 Gitea exists. Keep Terraform responsible for bootstrap modules that genuinely
 need to exist before GitOps can reconcile: Argo CD, Gitea, repo credentials,
 GitOps repo sync, bootstrap CRDs, and the root `app-of-apps` Application.
 
-**Benefits**
+#### Benefits
 
 This improves locality by putting child Application desired state in one GitOps
 tree. It improves leverage because tests and status checks can reason about
@@ -119,7 +119,7 @@ one publication interface instead of parallel Terraform and GitOps adapters.
 
 ### 2. Add A Migration Adapter For Existing Direct-Mode Clusters
 
-**Files**
+#### Files
 
 - `kubernetes/kind/Makefile`
 - `kubernetes/kind/scripts/*`
@@ -127,21 +127,21 @@ one publication interface instead of parallel Terraform and GitOps adapters.
 - `terraform/kubernetes/scripts/check-cluster-health.sh`
 - `terraform/kubernetes/scripts/check-gateway-stack.sh`
 
-**Problem**
+#### Problem
 
 Flipping `enable_app_of_apps` on an existing direct-mode cluster can make
 Terraform destroy state-owned child Applications while the root app is being
 created. Because those Applications have Argo CD finalizers, deletion can prune
 live resources before app-of-apps recreates the children.
 
-**Solution**
+#### Solution
 
 Provide a one-time migration adapter for existing clusters. It should create or
 verify the root app, remove Terraform ownership pressure from direct child
 Applications without pruning their live resources, then let app-of-apps adopt
 the same names from Git.
 
-**Benefits**
+#### Benefits
 
 This concentrates the dangerous adoption behavior in one module instead of
 spreading manual instructions across operators. Tests can target the migration
@@ -149,14 +149,14 @@ interface directly.
 
 ### 3. Finish Deepening The GitOps Render Contract
 
-**Files**
+#### Files
 
 - `terraform/kubernetes/locals.tf`
 - `terraform/kubernetes/gitops.tf`
 - `terraform/kubernetes/scripts/sync-gitea-policies.sh`
 - `kubernetes/kind/tests/sync-gitea-policies.bats`
 
-**Problem**
+#### Problem
 
 The GitOps renderer is already moving toward a render contract, but
 app-of-apps makes the contract more load-bearing. Any child manifest drift
@@ -164,14 +164,14 @@ becomes a first-class reconciliation failure. The visible example is
 `80-chatgpt-sim.application.yaml`, whose repo URL differs from the direct
 Terraform Application.
 
-**Solution**
+#### Solution
 
 Require child Application manifests to be generated or normalized from the same
 render contract used by Terraform. Add tests that compare direct-mode
 Application source facts against rendered app-of-apps child source facts for
 all supported application specs.
 
-**Benefits**
+#### Benefits
 
 This improves locality by making render drift detectable at the render seam.
 It improves leverage because one golden rendered-tree test can protect many
@@ -179,7 +179,7 @@ child Applications.
 
 ### 4. Align The Deployment Read Model With Parent/Child Application Ownership
 
-**Files**
+#### Files
 
 - `terraform/kubernetes/scripts/check-cluster-health.sh`
 - `terraform/kubernetes/scripts/check-gateway-stack.sh`
@@ -187,14 +187,14 @@ child Applications.
 - `terraform/kubernetes/scripts/check-component-version.sh`
 - Grafana Launchpad render inputs
 
-**Problem**
+#### Problem
 
 The deployment read model already has app-of-apps awareness, but the ownership
 model is mixed. Some checks treat `app-of-apps` as special while still listing
 individual child Applications. That is reasonable during migration, but it
 should become explicit.
 
-**Solution**
+#### Solution
 
 Define the read model in terms of mode:
 
@@ -202,7 +202,7 @@ Define the read model in terms of mode:
 - app-of-apps mode expects the parent plus child Applications created from Git
 - bootstrap-only Terraform-owned Applications are documented exceptions
 
-**Benefits**
+#### Benefits
 
 This keeps readiness checks useful for both modes and prevents status surfaces
 from accidentally hiding failed child Applications behind a healthy parent.
@@ -231,7 +231,7 @@ stage `900` rebuild and migration drill.
 
 **Goal:** remove the known app-of-apps-only correctness gap.
 
-**Tasks**
+#### Tasks
 
 1. Fix `terraform/kubernetes/apps/argocd-apps/80-chatgpt-sim.application.yaml`
    so it uses the same policies repo source shape as the direct Terraform
@@ -242,14 +242,14 @@ stage `900` rebuild and migration drill.
 4. Decide whether the audit is a one-time test fixture or a reusable
    comparison helper.
 
-**Acceptance**
+#### Acceptance
 
 - No child Application points at a stale or different policies repo URL.
 - Direct and app-of-apps source facts match for every duplicated application
   spec.
 - Existing render tests still pass.
 
-**Suggested verification**
+#### Suggested verification
 
 ```bash
 make -C kubernetes/kind test
@@ -262,7 +262,7 @@ TOFU_TEST_FILTER=tests/direct_workload_apps.tftest.hcl terraform/kubernetes/scri
 **Goal:** prove the default path on a clean `kind` cluster before supporting
 adoption from existing direct-mode state.
 
-**Tasks**
+#### Tasks
 
 1. Enable app-of-apps for `kubernetes/kind/stages/500-gitea.tfvars` and later
    stages, or introduce a narrowly named profile first if a softer rollout is
@@ -274,14 +274,14 @@ adoption from existing direct-mode state.
 5. Ensure the root app hard-refresh path and health checks wait for child app
    creation, not only parent existence.
 
-**Acceptance**
+#### Acceptance
 
 - Clean stage `500` creates Gitea, pushes the policies repo, creates
   `app-of-apps`, and reconciles child Applications relevant to the stage.
 - Clean stage `900` reaches the same end-user stack shape as direct mode.
 - Argo CD shows parent and child Application health clearly.
 
-**Suggested verification**
+#### Suggested verification
 
 ```bash
 make -C kubernetes/kind reset AUTO_APPROVE=1
@@ -297,7 +297,7 @@ make -C kubernetes/kind check-sso-e2e
 **Goal:** avoid finalizer-driven resource pruning when an already-applied
 direct-mode cluster moves to app-of-apps.
 
-**Tasks**
+#### Tasks
 
 1. Run a direct-mode stage `900` apply and capture the Terraform plan after
    flipping only `enable_app_of_apps=true`.
@@ -315,7 +315,7 @@ direct-mode cluster moves to app-of-apps.
 4. Make the adapter dry-run by default and require an explicit execute flag.
 5. Document whether the supported migration is adoption-in-place or reset-first.
 
-**Acceptance**
+#### Acceptance
 
 - Existing direct-mode clusters can migrate without losing gateway, policy,
   workload, observability, or SSO resources.
@@ -324,7 +324,7 @@ direct-mode cluster moves to app-of-apps.
 - The plan after migration no longer wants to delete live application-managed
   resources.
 
-**Suggested verification**
+#### Suggested verification
 
 ```bash
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
@@ -340,7 +340,7 @@ Then run the migration adapter in dry-run and execute modes once it exists.
 **Goal:** make remaining Terraform-owned Applications intentional rather than
 accidental.
 
-**Tasks**
+#### Tasks
 
 1. Decide whether Headlamp belongs under app-of-apps. It currently remains
    Terraform-owned in app-of-apps mode.
@@ -353,7 +353,7 @@ accidental.
 5. Update docs that currently claim Argo CD uses app-of-apps without explaining
    that kind stage `900` still defaults to direct mode.
 
-**Acceptance**
+#### Acceptance
 
 - Every Terraform-owned Argo CD Application has a documented bootstrap reason.
 - Every non-bootstrap platform or workload app is owned by the GitOps child
@@ -365,7 +365,7 @@ accidental.
 **Goal:** decide whether direct mode remains a compatibility adapter or is
 removed.
 
-**Tasks**
+#### Tasks
 
 1. Keep direct mode until app-of-apps passes:
    - clean stage `900`
@@ -378,7 +378,7 @@ removed.
    separate cleanup plan after migration support has existed for at least one
    local release cycle.
 
-**Acceptance**
+#### Acceptance
 
 - Operators have a clear default path.
 - Tests cover the supported path and any retained compatibility adapter.

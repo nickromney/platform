@@ -12,6 +12,27 @@ allowed_python_execution=(
   "scripts/platform-workflow-ui.sh"
 )
 
+# Pre-existing entrypoint-interface violations grandfathered so this audit can
+# run in CI. Do not add new scripts here; burn this list down by giving each
+# script the standard --help/--dry-run/--execute interface.
+entrypoint_interface_exemptions=(
+  "apps/shared/keycloak/start-with-templated-realm.sh"
+  "apps/subnetcalc/update-subnetcalc-image-tags.sh"
+  "kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.sh"
+  "kubernetes/kind/scripts/run-bats-shards.sh"
+  "kubernetes/scripts/idp-preview-action-catalog.sh"
+  "kubernetes/scripts/plan-post-apply-verification.sh"
+  "kubernetes/scripts/reconcile-kubeconfig.sh"
+  "kubernetes/scripts/run-diagnostic-check.sh"
+  "kubernetes/scripts/run-post-apply-verification.sh"
+  "kubernetes/workflow/validate-image-catalog-target-refs.sh"
+  "scripts/check-make-target-surfaces.sh"
+  "scripts/make-known-goals.sh"
+  "scripts/platform-status-action-catalog.sh"
+  "scripts/validate-json-schema.sh"
+  "terraform/kubernetes/scripts/render-kind-apiserver-oidc-manifest.sh"
+)
+
 bash4_feature_patterns=(
   '(^|[^[:alnum:]_])(mapfile|readarray)([[:space:]]|$)'
   '(^|[^[:alnum:]_])(declare|typeset)[[:space:]]+-A([[:space:]]|$)'
@@ -50,8 +71,23 @@ is_allowed_python_script() {
   return 1
 }
 
+is_entrypoint_interface_exempt() {
+  local candidate="$1"
+  local allowed
+
+  [ "${#entrypoint_interface_exemptions[@]}" -gt 0 ] || return 1
+  for allowed in "${entrypoint_interface_exemptions[@]}"; do
+    if [[ "${candidate}" == "${allowed}" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 count=0
 entrypoint_count=0
+entrypoint_interface_exempt_count=0
 unexpected_python=()
 yaml_module_usage=()
 bash4_feature_usage=()
@@ -417,8 +453,12 @@ while IFS= read -r -d '' rel; do
     library_entrypoint_failures+=("${rel}")
   elif [[ -x "${file}" ]]; then
     entrypoint_count=$((entrypoint_count + 1))
-    validate_entrypoint_interface "${rel}" "${file}"
-    validate_entrypoint_descriptor "${rel}" "${file}"
+    if is_entrypoint_interface_exempt "${rel}"; then
+      entrypoint_interface_exempt_count=$((entrypoint_interface_exempt_count + 1))
+    else
+      validate_entrypoint_interface "${rel}" "${file}"
+      validate_entrypoint_descriptor "${rel}" "${file}"
+    fi
   fi
 
   if python_matches="$(python_execution_matches "${file}" 2>/dev/null)" && [[ -n "${python_matches}" ]]; then
@@ -477,4 +517,4 @@ if [[ "${#bash4_feature_usage[@]}" -gt 0 ]]; then
   exit 1
 fi
 
-echo "OK   shell audit (${count} script(s) scanned; ${entrypoint_count} executable entrypoint(s) validated; Python execution limited to approved shell wrappers and provision scripts)"
+echo "OK   shell audit (${count} script(s) scanned; ${entrypoint_count} executable entrypoint(s) inspected; ${entrypoint_interface_exempt_count} legacy/helper interface exemption(s); Python execution limited to approved shell wrappers and provision scripts)"

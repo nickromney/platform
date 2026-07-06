@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -17,6 +17,7 @@ SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
 SONAR_SCAN_REPO ?= $(CURDIR)
 RELEASE_TAG_SCRIPT ?= scripts/release_tag.sh
 PLATFORM_STATUS_SCRIPT ?= scripts/platform-status.sh
+BATS_BIN ?= bats
 PLATFORM_TUI_GO_BIN ?= go
 PLATFORM_TUI_CMD ?= cd tools/platform-tui && $(PLATFORM_TUI_GO_BIN) run ./cmd/platform-tui --repo-root ../..
 PLATFORM_TUI_BUILD_CMD ?= $(MAKE) --no-print-directory -C tools/platform-tui build
@@ -26,12 +27,72 @@ STATUS_FORMAT ?= text
 WORKFLOW_UI_HOST ?= console.127.0.0.1.sslip.io
 WORKFLOW_UI_PORT ?= 8443
 WORKFLOW_UI_HTTP ?= h2
+CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
+CI_BATS_TESTS := \
+	tests/apps-makefile.bats \
+	tests/assert-variant-active.bats \
+	tests/audit-shell-scripts.bats \
+	tests/check-bash32-compat.bats \
+	tests/check-version.bats \
+	tests/ci-workflow.bats \
+	tests/ddd-consistency.bats \
+	tests/dependabot-config.bats \
+	tests/devcontainer-performance.bats \
+	tests/docs-prose-voice.bats \
+	tests/fmt-hcl.bats \
+	tests/fmt-markdown.bats \
+	tests/host-access-contracts.bats \
+	tests/host-port-listeners.bats \
+	tests/http-fetch.bats \
+	tests/iac-boundaries.bats \
+	tests/idp-backstage-sdk-mcp.bats \
+	tests/image-catalog-lib.bats \
+	tests/install-tool-hints.bats \
+	tests/kubernetes-diagnostic-dispatch.bats \
+	tests/kubernetes-helper-mode-lib.bats \
+	tests/kubernetes-host-gateway-proxy-adapter.bats \
+	tests/kubernetes-host-port-preflight-adapter.bats \
+	tests/kubernetes-kind-stopped-adapter.bats \
+	tests/kubernetes-kubeconfig-reconcile-adapter.bats \
+	tests/kubernetes-launchpad-render.bats \
+	tests/kubernetes-local-image-helper-plan.bats \
+	tests/kubernetes-platform-image-builder-adapter.bats \
+	tests/kubernetes-post-apply-verification-plan.bats \
+	tests/kubernetes-post-apply-verification-runner.bats \
+	tests/kubernetes-sso-runner.bats \
+	tests/kubernetes-stage-monotonicity-adapter.bats \
+	tests/kubernetes-sync-image-cache-adapter.bats \
+	tests/kubernetes-workload-image-builder-adapter.bats \
+	tests/lint-markdown.bats \
+	tests/lint-yaml.bats \
+	tests/local-idp-contracts.bats \
+	tests/local-registry-lib.bats \
+	tests/make-target-surfaces.bats \
+	tests/makefile.bats \
+	tests/observability-log-quality.bats \
+	tests/opentofu-test-runner.bats \
+	tests/operator-diagnostics.bats \
+	tests/platform-inventory.bats \
+	tests/platform-status-action-catalog.bats \
+	tests/platform-status-read-model.bats \
+	tests/platform-status.bats \
+	tests/platform-workflow-matrix.bats \
+	tests/sentiment-go-only.bats \
+	tests/sentiment-makefile.bats \
+	tests/sso-e2e-env.bats \
+	tests/subnetcalc-makefile.bats \
+	tests/subnetcalc-terraform-naming.bats \
+	tests/trivy-runner.bats \
+	tests/validate-gitea-app-repo-sync.bats \
+	tests/validate-kyverno-policies.bats \
+	tests/variant-contracts.bats \
+	tests/version-audit-workflow.bats
 
 .DEFAULT_GOAL := default
 
 include mk/common.mk
 
-.PHONY: default help prereqs test status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -68,6 +129,7 @@ help:
 		'make sonar-scan SONAR_SCAN_REPO=apps/apim-simulator\tRun SonarQube on any local repo' \
 		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer' \
 		'make test\tShow the focused test entrypoints' \
+		'make test-ci\tRun the PR-safe hermetic Bats subset' \
 		'make tui\tOpen the Bubble Tea local runtime chooser' \
 		'make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]\tServe the browser workflow chooser on local HTTPS' \
 	| while IFS=$$'\t' read -r command description; do \
@@ -130,6 +192,10 @@ test:
 	@echo "  make -C kubernetes/kind test"
 	@echo "  make -C kubernetes/lima test"
 	@echo "  make -C kubernetes/slicer test"
+
+test-ci:
+	@mkdir -p "$(CI_UV_CACHE_DIR)"
+	@UV_CACHE_DIR="$(CI_UV_CACHE_DIR)" "$(BATS_BIN)" $(CI_BATS_TESTS)
 
 status:
 	@"$(PLATFORM_STATUS_SCRIPT)" --execute --output "$(STATUS_FORMAT)"
