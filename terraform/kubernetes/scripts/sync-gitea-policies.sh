@@ -145,6 +145,7 @@ bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
 bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
 bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
 bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
+bool|ENABLE_SUBNETCALC_APIM_GATEWAY|enable_subnetcalc_apim_gateway|true
 bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
 bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
 bool|ENABLE_PROMETHEUS|enable_prometheus|false
@@ -303,6 +304,7 @@ ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
+ENABLE_SUBNETCALC_APIM_GATEWAY="${ENABLE_SUBNETCALC_APIM_GATEWAY:-true}"
 ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
 ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
 ENABLE_LANGFUSE="${ENABLE_LANGFUSE:-false}"
@@ -444,6 +446,10 @@ is_true() {
     true|TRUE|1|yes|YES|y|Y) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+apim_effective() {
+  is_true "${ENABLE_APIM_SIMULATOR}" || { is_true "${ENABLE_APP_REPO_SUBNETCALC}" && is_true "${ENABLE_SUBNETCALC_APIM_GATEWAY}"; }
 }
 
 IMAGE_REPO_OWNER="${GITEA_REPO_OWNER}"
@@ -1743,7 +1749,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/78-idp.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_SSO}" || { ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}" && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
+  if ! is_true "${ENABLE_SSO}" || { ! apim_effective && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
     remove_if_present "${apps_dir}/79-mcp.application.yaml"
     remove_if_present "${apps_dir}/80-auth-chat.application.yaml"
     remove_if_present "${apps_dir}/80-chatgpt-sim.application.yaml"
@@ -1754,7 +1760,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/76-uat.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+  if ! apim_effective; then
     remove_if_present "${apps_dir}/72-apim.application.yaml"
   fi
 
@@ -1901,10 +1907,12 @@ prune_gateway_routes_manifests() {
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-uat.yaml"
   fi
 
-  if ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+  if ! apim_effective; then
     remove_if_present "${routes_dir}/httproute-apim.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-apim.yaml"
     remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-apim"
+    remove_if_present "${routes_dir}/referencegrant-apim.yaml"
+    remove_kustomization_entry "${kustomization_file}" "referencegrant-apim.yaml"
   fi
 
   if ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; then
@@ -2027,6 +2035,31 @@ render_gateway_route_forwarded_headers() {
     ' "${route_file}" > "${tmp_file}"
     mv "${tmp_file}" "${route_file}"
   done < <(find "${routes_dir}" -maxdepth 1 -type f -name 'httproute-*.yaml' -print0)
+}
+
+configure_subnetcalc_direct_api() {
+  local repo_dir="$1"
+  local workloads_file="${repo_dir}/apps/workloads/base/all.yaml"
+  local policy_file="${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml"
+
+  is_true "${ENABLE_APP_REPO_SUBNETCALC}" || return 0
+  ! is_true "${ENABLE_SUBNETCALC_APIM_GATEWAY}" || return 0
+
+  if [[ -f "${workloads_file}" ]]; then
+    perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${workloads_file}"
+    perl -0pi -e 's|("Subnet router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},\{"label":")APIM simulator","detail":"apim/subnetcalc-apim-simulator","role":"Gateway auth, policy, tracing"|${1}Subnetcalc API","detail":"subnetcalc-api service","role":"Direct local IDP sample API"|g' "${workloads_file}"
+  fi
+
+  if [[ -f "${policy_file}" ]]; then
+    perl -0pi -e '
+      s/The router sends browser API traffic through the shared APIM simulator\./The router sends browser API traffic directly to the subnetcalc API./g;
+      s/The subnetcalc API receives browser traffic only from the shared APIM simulator\./The subnetcalc API receives browser traffic only from the subnetcalc router./g;
+      s/"k8s:io\.kubernetes\.pod\.namespace": apim\n//g;
+      s/"k8s:tier": gateway\n            "k8s:app\.kubernetes\.io\/name": subnetcalc-apim-simulator/"k8s:tier": backend\n            "k8s:app.kubernetes.io\/name": subnetcalc-api/;
+      s/"k8s:tier": gateway\n            "k8s:app\.kubernetes\.io\/name": subnetcalc-apim-simulator/"k8s:tier": gateway\n            "k8s:app.kubernetes.io\/name": subnetcalc-router/;
+      s/port: "8000"/port: "8080"/;
+    ' "${policy_file}"
+  fi
 }
 
 repo_exists_for_owner() {
@@ -2272,6 +2305,7 @@ render_policy_repo_tree() {
   if ! is_true "${ENABLE_BACKSTAGE}"; then
     remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
   fi
+  configure_subnetcalc_direct_api "${repo_dir}"
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   render_prometheus_application_manifest "${repo_dir}/apps/argocd-apps/90-prometheus.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"

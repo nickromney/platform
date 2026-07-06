@@ -386,6 +386,7 @@ main() {
   export_resolved_bool ENABLE_ACTIONS_RUNNER enable_actions_runner true
   export_resolved_bool ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment true
   export_resolved_bool ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnetcalc true
+  export_resolved_bool ENABLE_SUBNETCALC_APIM_GATEWAY enable_subnetcalc_apim_gateway true
   export_resolved_bool ENABLE_PROMETHEUS enable_prometheus true
   export_resolved_bool ENABLE_ALERTMANAGER enable_alertmanager false
   export_resolved_bool ENABLE_GRAFANA enable_grafana true

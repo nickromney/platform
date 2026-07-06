@@ -914,6 +914,12 @@ variable "enable_app_repo_subnetcalc" {
   default     = false
 }
 
+variable "enable_subnetcalc_apim_gateway" {
+  description = "Route subnetcalc API traffic through the APIM simulator. Disable only for resource-constrained local profiles that keep subnetcalc as a direct sample workload."
+  type        = bool
+  default     = true
+}
+
 variable "enable_apim_simulator" {
   description = "Deploy the shared APIM simulator gateway independently of subnetcalc app repo seeding."
   type        = bool

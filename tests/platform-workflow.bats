@@ -30,7 +30,7 @@ setup() {
   [[ "${output}" == *'"sentiment"'* ]]
   [[ "${output}" == *'"subnetcalc"'* ]]
   [[ "${output}" == *'"preset_groups"'* ]]
-  [[ "${output}" == *'"local-idp-12gb"'* ]]
+  [[ "${output}" == *'"local-idp-16gb"'* ]]
 
   run jq -r '.presets[] | select(.group == "network_profile" and .id == "cilium") | .variants | join(",")' <<<"${options_json}"
   [ "${status}" -eq 0 ]
@@ -205,7 +205,7 @@ EOF
     --variant kind \
     --stage 900 \
     --action plan \
-    --preset resource-profile=local-idp-12gb \
+    --preset resource-profile=local-idp-16gb \
     --preset image-distribution=local-cache \
     --preset app-set=no-reference-apps \
     --set worker_count=2 \
@@ -217,14 +217,15 @@ EOF
 
   run jq -r '.presets.resource_profile, .presets.image_distribution, .presets.app_set, .custom_overrides[0].id, .tfvars_file' <<<"${preview_json}"
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'local-idp-12gb\nlocal-cache\nno-reference-apps\nworker_count\n'"${tfvars_file}" ]
+  [ "${output}" = $'local-idp-16gb\nlocal-cache\nno-reference-apps\nworker_count\n'"${tfvars_file}" ]
 
   run jq -r '.command, .generated_tfvars, .warnings[0]' <<<"${preview_json}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"KIND_IMAGE_DISTRIBUTION_MODE=registry"* ]]
   [[ "${output}" == *"PLATFORM_TFVARS=${tfvars_file}"* ]]
-  [[ "${output}" == *"enable_backstage = true"* ]]
-  [[ "${output}" == *"enable_app_repo_subnetcalc = false"* ]]
+  [[ "${output}" == *"enable_backstage = false"* ]]
+  [[ "${output}" == *"enable_app_repo_subnetcalc = true"* ]]
+  [[ "${output}" == *"enable_subnetcalc_apim_gateway = false"* ]]
   [[ "${output}" == *"worker_count = 2"* ]]
   [[ "${output}" == *"Changing worker_count may recreate"* ]]
 }
@@ -263,10 +264,10 @@ EOF
 }
 
 @test "platform workflow rejects invalid preset combinations before command generation" {
-  run "${SCRIPT}" preview --execute --variant lima --stage 900 --preset resource-profile=local-idp-12gb
+  run "${SCRIPT}" preview --execute --variant lima --stage 900 --preset resource-profile=local-idp-16gb
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Preset resource-profile=local-idp-12gb is not available for variant lima"* ]]
+  [[ "${output}" == *"Preset resource-profile=local-idp-16gb is not available for variant lima"* ]]
 
   run "${SCRIPT}" preview --execute --variant kind --stage 700 --preset observability-stack=lgtm
 
@@ -281,11 +282,11 @@ EOF
   run "${SCRIPT}" preview --execute \
     --variant lima \
     --stage 700 \
-    --preset resource-profile=local-idp-12gb \
+    --preset resource-profile=local-idp-16gb \
     --preset observability-stack=lgtm
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Preset resource-profile=local-idp-12gb is not available for variant lima"* ]]
+  [[ "${output}" == *"Preset resource-profile=local-idp-16gb is not available for variant lima"* ]]
   [[ "${output}" != *"Preset observability-stack=lgtm requires stage 800 or later"* ]]
 }
 
@@ -298,7 +299,7 @@ EOF
     --output json
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb"* ]]
+  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-16gb"* ]]
 }
 
 @test "platform workflow can save generated app overrides as a named profile" {
@@ -437,5 +438,5 @@ EOF
   run "${SCRIPT}" preview --execute --variant lima --stage 950-local-idp
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb"* ]]
+  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-16gb"* ]]
 }

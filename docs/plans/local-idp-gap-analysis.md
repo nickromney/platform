@@ -15,5 +15,18 @@ deployment loop. FastAPI, the developer portal, SDK, TUI, and MCP expose
 validated requests and status over those existing boundaries.
 
 The launch-default path remains `kubernetes/kind` because it runs Kubernetes in
-Docker. A 16GB machine should use an `950-local-idp` profile before the full stage
-900 teaching stack.
+Docker. The 16GB local IDP shape is now implemented as a stage-900 workflow
+preset, not a new cumulative stage:
+
+```bash
+scripts/platform-workflow.sh apply --execute \
+  --variant kind \
+  --stage 900 \
+  --action apply \
+  --preset resource-profile=local-idp-16gb \
+  --preset image-distribution=local-cache \
+  --auto-approve
+```
+
+This mechanism keeps the stage ladder monotonic while letting operators layer a
+documented resource profile through generated operator tfvars.

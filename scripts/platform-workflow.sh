@@ -139,7 +139,7 @@ validate_stage() {
   local expected=""
 
   if [[ "$1" = "950-local-idp" ]]; then
-    die_usage "Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb"
+    die_usage "Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-16gb"
   fi
   if ! jq -e --arg id "$1" '.stages[] | select(.id == $id)' "${WORKFLOW_OPTIONS_FILE}" >/dev/null; then
     expected="$(jq -r '[.stages[].id] | join(", ")' "${WORKFLOW_OPTIONS_FILE}")"
@@ -982,7 +982,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --profile)
-      die_usage "--profile has been removed; use --preset resource-profile=local-idp-12gb when you need the local IDP resource profile"
+      die_usage "--profile has been removed; use --preset resource-profile=local-idp-16gb when you need the local IDP resource profile"
       ;;
     --profile-name)
       require_value "$1" "${2-}"

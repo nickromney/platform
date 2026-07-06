@@ -510,7 +510,7 @@ locals {
   # source of truth for when these workloads are introduced.
   enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment
   enable_subnetcalc_workloads_effective = var.enable_app_repo_subnetcalc
-  enable_apim_simulator_effective       = var.enable_apim_simulator || local.enable_subnetcalc_workloads_effective
+  enable_apim_simulator_effective       = var.enable_apim_simulator || (local.enable_subnetcalc_workloads_effective && var.enable_subnetcalc_apim_gateway)
   enable_mcp_effective                  = var.enable_sso && (local.enable_apim_simulator_effective || var.enable_agentgateway_ai_gateway)
 
   policies_repo_name        = "policies"

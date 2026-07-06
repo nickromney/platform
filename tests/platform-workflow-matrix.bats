@@ -148,5 +148,5 @@ assert_preview() {
   run "${SCRIPT}" preview --execute --variant slicer --stage 950-local-idp --action plan
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-12gb"* ]]
+  [[ "${output}" == *"Stage '950-local-idp' has been removed; use --stage 900 --preset resource-profile=local-idp-16gb"* ]]
 }
