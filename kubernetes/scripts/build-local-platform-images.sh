@@ -16,6 +16,8 @@ source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
 source "${REPO_ROOT}/kubernetes/workflow/image-catalog-context-lib.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/scripts/image-signing-lib.sh"
 
 GRAFANA_CATALOG_BUILD_JSON="$(image_catalog_build_json platform grafana-victorialogs)"
 
@@ -78,6 +80,7 @@ shell_cli_handle_standard_no_args usage "would build and push local platform ima
 
 require_local_cache_tools
 assert_local_cache_reachable "${CACHE_PUSH_HOST}"
+image_signing_ensure_keypair
 command -v shasum >/dev/null 2>&1 || { echo "${0##*/}: shasum not found" >&2; exit 1; }
 [ -n "${VICTORIA_LOGS_PLUGIN_VERSION}" ] || { echo "${0##*/}: grafana_victoria_logs_plugin_version is empty" >&2; exit 1; }
 [ -n "${VICTORIA_LOGS_PLUGIN_SHA256}" ] || { echo "${0##*/}: grafana_victoria_logs_plugin_sha256 is empty" >&2; exit 1; }

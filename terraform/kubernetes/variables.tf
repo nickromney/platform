@@ -158,6 +158,12 @@ variable "enable_prometheus" {
   default     = false
 }
 
+variable "enable_alertmanager" {
+  description = "Enable the Alertmanager subchart in the Prometheus Argo CD release."
+  type        = bool
+  default     = false
+}
+
 variable "enable_grafana" {
   description = "Deploy Grafana via Argo CD (Helm chart)."
   type        = bool
@@ -200,6 +206,18 @@ variable "enable_headlamp" {
   default     = false
 }
 
+variable "enable_metrics_server" {
+  description = "Deploy metrics-server via Argo CD. Kind profiles add kubelet insecure TLS for local node certificates."
+  type        = bool
+  default     = false
+}
+
+variable "enable_namespace_resource_bounds" {
+  description = "Apply default container requests/limits and aggregate ResourceQuota bounds to application namespaces."
+  type        = bool
+  default     = false
+}
+
 variable "enable_observability_agent" {
   description = "Deploy an OpenTelemetry Collector agent (DaemonSet) to scrape platform metrics and ship logs/metrics/traces to SigNoz."
   type        = bool
@@ -234,6 +252,12 @@ variable "enable_cilium_policies" {
   description = "Enable the GitOps-managed Cilium policy Application sourced from the in-cluster Gitea repo. This is a sub-toggle of enable_policies."
   type        = bool
   default     = true
+}
+
+variable "enable_image_signing" {
+  description = "Enable audit-mode Kyverno signature verification for local-registry workload images signed with the repo-local cosign keypair."
+  type        = bool
+  default     = false
 }
 
 variable "enable_cilium_policy_audit_mode" {
@@ -549,6 +573,18 @@ variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
   default     = "0.43.0"
+}
+
+variable "metrics_server_chart_version" {
+  description = "Metrics Server chart version (kubernetes-sigs/metrics-server)."
+  type        = string
+  default     = "3.13.1"
+}
+
+variable "metrics_server_image_tag" {
+  description = "Metrics Server container image tag."
+  type        = string
+  default     = "v0.8.1"
 }
 
 variable "kyverno_chart_version" {
@@ -878,6 +914,12 @@ variable "enable_app_repo_subnetcalc" {
   default     = false
 }
 
+variable "enable_subnetcalc_apim_gateway" {
+  description = "Route subnetcalc API traffic through the APIM simulator. Disable only for resource-constrained local profiles that keep subnetcalc as a direct sample workload."
+  type        = bool
+  default     = true
+}
+
 variable "enable_apim_simulator" {
   description = "Deploy the shared APIM simulator gateway independently of subnetcalc app repo seeding."
   type        = bool
@@ -962,6 +1004,13 @@ check "enable_prometheus_requires_enable_argocd" {
   }
 }
 
+check "enable_alertmanager_requires_prometheus" {
+  assert {
+    condition     = !var.enable_alertmanager || var.enable_prometheus
+    error_message = "enable_alertmanager requires enable_prometheus=true."
+  }
+}
+
 check "enable_otel_gateway_requires_enable_argocd" {
   assert {
     condition     = !var.enable_otel_gateway || var.enable_argocd
@@ -1004,6 +1053,13 @@ check "enable_headlamp_requires_enable_argocd" {
   }
 }
 
+check "enable_metrics_server_requires_enable_argocd" {
+  assert {
+    condition     = !var.enable_metrics_server || (var.enable_argocd && var.enable_gitea)
+    error_message = "enable_metrics_server requires enable_argocd=true and enable_gitea=true."
+  }
+}
+
 check "enable_observability_agent_requires_signoz_and_argocd" {
   assert {
     condition     = !var.enable_observability_agent || (var.enable_signoz && var.enable_argocd)
@@ -1015,6 +1071,13 @@ check "enable_policies_requires_argocd_gitea_cilium" {
   assert {
     condition     = !var.enable_policies || (var.enable_argocd && var.enable_gitea && lower(var.cni_provider) == "cilium")
     error_message = "enable_policies requires enable_argocd=true, enable_gitea=true, and cni_provider=cilium."
+  }
+}
+
+check "enable_image_signing_requires_policies" {
+  assert {
+    condition     = !var.enable_image_signing || var.enable_policies
+    error_message = "enable_image_signing requires enable_policies=true."
   }
 }
 

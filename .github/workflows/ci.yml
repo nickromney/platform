@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-hermetic-bats:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 22
+
+      - name: Install lint and Bats tools
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            git \
+            gzip \
+            make \
+            ripgrep \
+            tar
+          sudo rm -rf /var/lib/apt/lists/*
+
+          source .devcontainer/toolchain-versions.sh
+
+          tool_version() {
+            local requested="$1"
+            local entry
+            for entry in "${DEVCONTAINER_ARKADE_TOOLS[@]}"; do
+              if [[ "${entry%%=*}" == "${requested}" ]]; then
+                printf '%s\n' "${entry#*=}"
+                return 0
+              fi
+            done
+            printf 'missing devcontainer tool version: %s\n' "${requested}" >&2
+            exit 1
+          }
+
+          case "$(uname -m)" in
+            x86_64|amd64)
+              go_arch="amd64"
+              kyverno_arch="x86_64"
+              uv_arch="x86_64"
+              ;;
+            aarch64|arm64)
+              go_arch="arm64"
+              kyverno_arch="arm64"
+              uv_arch="aarch64"
+              ;;
+            *)
+              printf 'unsupported architecture: %s\n' "$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "${tmp_dir}"' EXIT
+
+          uv_version="$(
+            sed -nE 's#^COPY --from=ghcr.io/astral-sh/uv:([^ ]+).*#\1#p' \
+              .devcontainer/Dockerfile
+          )"
+          curl -fsSL \
+            "https://github.com/astral-sh/uv/releases/download/${uv_version}/uv-${uv_arch}-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "${tmp_dir}"
+          sudo install -m 0755 \
+            "${tmp_dir}/uv-${uv_arch}-unknown-linux-gnu/uv" \
+            /usr/local/bin/uv
+
+          bats_version="1.13.0"
+          curl -fsSL \
+            "https://github.com/bats-core/bats-core/archive/refs/tags/v${bats_version}.tar.gz" \
+            | tar -xz -C "${tmp_dir}"
+          sudo "${tmp_dir}/bats-core-${bats_version}/install.sh" /usr/local
+
+          kubectl_version="$(tool_version kubectl)"
+          curl -fsSL \
+            "https://dl.k8s.io/release/${kubectl_version}/bin/linux/${go_arch}/kubectl" \
+            -o "${tmp_dir}/kubectl"
+          sudo install -m 0755 "${tmp_dir}/kubectl" /usr/local/bin/kubectl
+
+          jq_version="$(tool_version jq)"
+          curl -fsSL \
+            "https://github.com/jqlang/jq/releases/download/${jq_version}/jq-linux-${go_arch}" \
+            -o "${tmp_dir}/jq"
+          sudo install -m 0755 "${tmp_dir}/jq" /usr/local/bin/jq
+
+          yq_version="$(tool_version yq)"
+          curl -fsSL \
+            "https://github.com/mikefarah/yq/releases/download/${yq_version}/yq_linux_${go_arch}.tar.gz" \
+            | tar -xz -C "${tmp_dir}" "yq_linux_${go_arch}"
+          sudo install -m 0755 \
+            "${tmp_dir}/yq_linux_${go_arch}" \
+            /usr/local/bin/yq
+
+          kyverno_archive="kyverno-cli_${KYVERNO_VERSION}_linux_${kyverno_arch}.tar.gz"
+          curl -fsSL \
+            "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/${kyverno_archive}" \
+            | tar -xz -C "${tmp_dir}" kyverno
+          sudo install -m 0755 "${tmp_dir}/kyverno" /usr/local/bin/kyverno
+
+          uv tool install yamllint==1.38.0
+          npm install --global markdownlint-cli2@0.22.1
+
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          export PATH="${HOME}/.local/bin:${PATH}"
+
+          bats --version
+          kubectl version --client=true
+          jq --version
+          yq --version
+          kyverno version
+          yamllint --version
+          markdownlint-cli2 --version
+
+      - name: Run repo lint
+        run: make lint
+
+      - name: Run hermetic Bats subset
+        run: make test-ci

@@ -69,6 +69,7 @@ PY
 }
 
 @test "VictoriaLogs has no recent non-allowlisted platform errors" {
+  [ "${PLATFORM_LIVE_CHECKS:-0}" = "1" ] || skip "set PLATFORM_LIVE_CHECKS=1 to run live VictoriaLogs log-quality check"
   command -v kubectl >/dev/null || skip "kubectl is required"
   command -v curl >/dev/null || skip "curl is required"
   kubectl --kubeconfig "${KUBECONFIG}" --context "${KUBECTX}" -n observability get pod victoria-logs-victoria-logs-single-server-0 >/dev/null 2>&1 || skip "VictoriaLogs is not running"

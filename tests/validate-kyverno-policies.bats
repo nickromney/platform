@@ -155,7 +155,7 @@ EOF
 }
 
 @test "default-deny protection allows namespace-controller cleanup" {
-  run python3 - <<'PY'
+  run uv run --isolated python - <<'PY'
 from pathlib import Path
 import os
 

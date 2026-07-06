@@ -510,7 +510,7 @@ locals {
   # source of truth for when these workloads are introduced.
   enable_sentiment_workloads_effective  = var.enable_app_repo_sentiment
   enable_subnetcalc_workloads_effective = var.enable_app_repo_subnetcalc
-  enable_apim_simulator_effective       = var.enable_apim_simulator || local.enable_subnetcalc_workloads_effective
+  enable_apim_simulator_effective       = var.enable_apim_simulator || (local.enable_subnetcalc_workloads_effective && var.enable_subnetcalc_apim_gateway)
   enable_mcp_effective                  = var.enable_sso && (local.enable_apim_simulator_effective || var.enable_agentgateway_ai_gateway)
 
   policies_repo_name        = "policies"
@@ -522,6 +522,7 @@ locals {
     headlamp                = "apps/vendor/charts/headlamp"
     kyverno                 = "apps/vendor/charts/kyverno"
     loki                    = "apps/vendor/charts/loki"
+    metrics_server          = "apps/vendor/charts/metrics-server"
     oauth2_proxy            = "apps/vendor/charts/oauth2-proxy"
     opentelemetry_collector = "apps/vendor/charts/opentelemetry-collector"
     policy_reporter         = "apps/vendor/charts/policy-reporter"
@@ -533,6 +534,7 @@ locals {
 
   policies_repo_private_key_path = "${local.run_dir}/policies-repo.id_ed25519"
   gitea_known_hosts_cluster_path = "${local.run_dir}/gitea_known_hosts_cluster"
+  image_signing_public_key_path  = "${local.repo_root}/.run/image-signing/local-platform-cosign.pub"
 
   enable_gitops_repo_requested = (
     var.enable_policies ||
@@ -549,6 +551,7 @@ locals {
     local.enable_victoria_logs_effective ||
     local.enable_tempo_effective ||
     var.enable_signoz ||
+    var.enable_metrics_server ||
     var.enable_headlamp ||
     var.enable_sso ||
     var.enable_langfuse ||
@@ -569,6 +572,7 @@ locals {
     local.enable_loki_effective && var.enable_argocd ? ["loki"] : [],
     local.enable_victoria_logs_effective && var.enable_argocd ? ["victoria-logs"] : [],
     local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
+    var.enable_metrics_server && var.enable_argocd ? ["metrics-server"] : [],
     local.enable_apim_simulator_effective && var.enable_argocd ? ["apim"] : [],
     var.enable_agentgateway_ai_gateway && var.enable_argocd ? ["agentgateway-ai-gateway"] : [],
     var.enable_langfuse && var.enable_argocd ? ["langfuse"] : [],
@@ -629,6 +633,8 @@ locals {
     keycloak_realm                         = local.keycloak_realm
     enable_hubble                          = var.enable_hubble
     enable_policies                        = var.enable_policies
+    enable_image_signing                   = var.enable_image_signing
+    image_signing_public_key               = fileexists(local.image_signing_public_key_path) ? file(local.image_signing_public_key_path) : ""
     enable_gateway_tls                     = var.enable_gateway_tls
     gateway_https_host_port                = var.gateway_https_host_port
     admin_route_allowlist_cidrs            = join(",", local.admin_route_allowlist_cidrs_effective)
@@ -643,12 +649,14 @@ locals {
     agentgateway_namespace                 = var.agentgateway_namespace
     agentgateway_ai_gateway_model          = var.agentgateway_ai_gateway_model
     enable_prometheus                      = var.enable_prometheus
+    enable_alertmanager                    = var.enable_alertmanager
     enable_grafana                         = var.enable_grafana
     enable_loki                            = var.enable_loki
     enable_victoria_logs                   = var.enable_victoria_logs
     enable_tempo                           = var.enable_tempo
     enable_signoz                          = var.enable_signoz
     enable_otel_gateway                    = var.enable_otel_gateway
+    enable_metrics_server                  = var.enable_metrics_server
     enable_headlamp                        = var.enable_headlamp
     enable_sso                             = var.enable_sso
     enable_backstage                       = var.enable_backstage
@@ -696,6 +704,7 @@ locals {
     grafana_victoria_logs_plugin_url       = local.grafana_victoria_logs_plugin_url_effective
     grafana_liveness_initial_delay_seconds = var.grafana_liveness_initial_delay_seconds
     headlamp_chart_version                 = var.headlamp_chart_version
+    metrics_server_chart_version           = var.metrics_server_chart_version
     kyverno_chart_version                  = var.kyverno_chart_version
     loki_chart_version                     = var.loki_chart_version
     oauth2_proxy_chart_version             = var.oauth2_proxy_chart_version

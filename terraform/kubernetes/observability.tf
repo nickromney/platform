@@ -164,7 +164,19 @@ spec:
       releaseName: prometheus
       values: |
         alertmanager:
-          enabled: false
+          enabled: ${var.enable_alertmanager}
+          image:
+            repository: ${local.hardened_image_registry_effective}/alertmanager
+            tag: 0.31.1-debian13
+          persistence:
+            enabled: false
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 40m
+              memory: 96Mi
         configmapReload:
           prometheus:
             image:
@@ -217,6 +229,56 @@ spec:
             - web.enable-lifecycle
             - web.enable-remote-write-receiver
           retention: 4h
+        serverFiles:
+          alerting_rules.yml:
+            groups:
+              - name: platform-starter.rules
+                rules:
+                  - alert: PlatformPodCrashLooping
+                    expr: sum by (namespace, pod, container) (rate(kube_pod_container_status_restarts_total{namespace!~"kube-system|local-path-storage",container!="POD"}[5m])) > 0
+                    for: 10m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Pod container is restarting repeatedly"
+                      description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} has a sustained restart rate."
+                      runbook_url: "https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpodcrashlooping"
+                  - alert: PlatformDeploymentReplicasUnavailable
+                    expr: kube_deployment_status_replicas_unavailable{namespace!~"kube-system|local-path-storage"} > 0
+                    for: 10m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Deployment has unavailable replicas"
+                      description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas for more than 10 minutes."
+                      runbook_url: "https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformdeploymentreplicasunavailable"
+                  - alert: PlatformPersistentVolumeClaimFilling
+                    expr: (1 - (kubelet_volume_stats_available_bytes{namespace!=""} / kubelet_volume_stats_capacity_bytes{namespace!=""})) > 0.85
+                    for: 10m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "PersistentVolumeClaim usage is above 85%"
+                      description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is more than 85% full."
+                      runbook_url: "https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpersistentvolumeclaimfilling"
+                  - alert: PlatformNodeMemoryPressure
+                    expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10
+                    for: 10m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Node memory availability is below 10%"
+                      description: "Node exporter reports less than 10% memory available on {{ $labels.instance }}."
+                      runbook_url: "https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformnodememorypressure"
+                  - alert: PlatformCertificateExpiringSoon
+                    expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 1209600
+                    for: 30m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "cert-manager certificate expires in less than 14 days"
+                      description: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 14 days."
+                      runbook_url: "https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformcertificateexpiringsoon"
         extraScrapeConfigs: |
           - job_name: argocd-metrics
             kubernetes_sd_configs:

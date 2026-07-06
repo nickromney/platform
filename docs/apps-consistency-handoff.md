@@ -299,5 +299,3 @@ bats tests/validate-app-runtime-surfaces.bats
 
 For compose or cluster behaviour, do not infer success from source tests.
 Exercise the actual relevant compose or Kubernetes check.
-
-

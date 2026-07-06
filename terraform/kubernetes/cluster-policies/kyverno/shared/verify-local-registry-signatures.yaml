@@ -1,0 +1,42 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-local-registry-signatures
+  annotations:
+    policies.kyverno.io/title: Verify local registry image signatures
+    policies.kyverno.io/description: >-
+      Audit cosign signatures for workload images pulled from the local
+      platform registry cache. The public key is rendered from the repo-local
+      runtime cosign keypair when enable_image_signing is set.
+spec:
+  admission: true
+  background: false
+  validationFailureAction: Audit
+  webhookTimeoutSeconds: 10
+  rules:
+    - name: verify-local-registry-cosign-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - dev
+                - sit
+                - uat
+      verifyImages:
+        - imageReferences:
+            - "127.0.0.1:5002/platform/*"
+            - "host.docker.internal:5002/platform/*"
+            - "host.lima.internal:5002/platform/*"
+            - "192.168.64.1:5002/platform/*"
+            - "192.168.65.254:5002/platform/*"
+          mutateDigest: false
+          required: true
+          verifyDigest: false
+          attestors:
+            - count: 1
+              entries:
+                - keys:
+                    publicKeys: |-
+                      ${COSIGN_PUBLIC_KEY}

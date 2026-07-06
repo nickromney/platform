@@ -23,7 +23,7 @@ from pathlib import Path
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 expected = {
-    "actions/checkout": ("de0fac2e4500dabe0009e67214ff5f5447ce83dd", "v6.0.2"),
+    "actions/checkout": ("9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0", "v7.0.0"),
     "actions/setup-node": ("48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e", "v6.4.0"),
 }
 
@@ -48,7 +48,11 @@ PY
 }
 
 @test "make release-tag is idempotent when the tag already exists" {
-  git -C "${REPO_ROOT}" -c tag.gpgSign=false tag -a "${TAG_TEST_NAME}" -m "Release ${TAG_TEST_NAME}"
+  git -C "${REPO_ROOT}" \
+    -c tag.gpgSign=false \
+    -c user.name="Platform CI" \
+    -c user.email="platform-ci@example.invalid" \
+    tag -a "${TAG_TEST_NAME}" -m "Release ${TAG_TEST_NAME}"
 
   run make -C "${REPO_ROOT}" release-tag VERSION="${TAG_TEST_VERSION}" VERSION_FILE="${TAG_TEST_VERSION_FILE}"
 

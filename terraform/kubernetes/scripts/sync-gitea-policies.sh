@@ -118,6 +118,8 @@ string|GITEA_REPO_OWNER|repo_owner|$GITEA_REPO_OWNER
 bool|GITEA_REPO_OWNER_IS_ORG|repo_is_org|false
 bool|ENABLE_HUBBLE|enable_hubble|true
 bool|ENABLE_POLICIES|enable_policies|true
+bool|ENABLE_IMAGE_SIGNING|enable_image_signing|false
+string|IMAGE_SIGNING_PUBLIC_KEY|image_signing_public_key|
 bool|ENABLE_GATEWAY_TLS|enable_gateway_tls|true
 string|GATEWAY_HTTPS_HOST_PORT|gateway_https_host_port|443
 string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io
@@ -143,9 +145,11 @@ bool|ENABLE_CERT_MANAGER|enable_cert_manager|true
 bool|ENABLE_ACTIONS_RUNNER|enable_actions_runner|true
 bool|ENABLE_APP_REPO_SENTIMENT|enable_app_repo_sentiment|false
 bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
+bool|ENABLE_SUBNETCALC_APIM_GATEWAY|enable_subnetcalc_apim_gateway|true
 bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
 bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
 bool|ENABLE_PROMETHEUS|enable_prometheus|false
+bool|ENABLE_ALERTMANAGER|enable_alertmanager|false
 bool|ENABLE_GRAFANA|enable_grafana|false
 bool|ENABLE_LOKI|enable_loki|false
 bool|ENABLE_VICTORIA_LOGS|enable_victoria_logs|false
@@ -153,6 +157,7 @@ bool|ENABLE_TEMPO|enable_tempo|false
 bool|ENABLE_SIGNOZ|enable_signoz|false
 bool|ENABLE_OTEL_GATEWAY|enable_otel_gateway|false
 bool|ENABLE_OBSERVABILITY_AGENT|enable_observability_agent|false
+bool|ENABLE_METRICS_SERVER|enable_metrics_server|false
 bool|ENABLE_HEADLAMP|enable_headlamp|false
 bool|ENABLE_SSO|enable_sso|false
 bool|ENABLE_BACKSTAGE|enable_backstage|true
@@ -177,6 +182,7 @@ chart|CERT_MANAGER_CHART_VERSION|cert_manager_chart_version|cert_manager_chart_v
 chart|DEX_CHART_VERSION|dex_chart_version|dex_chart_version
 chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version
 chart|HEADLAMP_CHART_VERSION|headlamp_chart_version|headlamp_chart_version
+chart|METRICS_SERVER_CHART_VERSION|metrics_server_chart_version|metrics_server_chart_version
 chart|KYVERNO_CHART_VERSION|kyverno_chart_version|kyverno_chart_version
 chart|LOKI_CHART_VERSION|loki_chart_version|loki_chart_version
 chart|OAUTH2_PROXY_CHART_VERSION|oauth2_proxy_chart_version|oauth2_proxy_chart_version
@@ -264,6 +270,8 @@ GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
 GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
 ENABLE_HUBBLE="${ENABLE_HUBBLE:-true}"
 ENABLE_POLICIES="${ENABLE_POLICIES:-true}"
+ENABLE_IMAGE_SIGNING="${ENABLE_IMAGE_SIGNING:-false}"
+IMAGE_SIGNING_PUBLIC_KEY="${IMAGE_SIGNING_PUBLIC_KEY:-}"
 ENABLE_GATEWAY_TLS="${ENABLE_GATEWAY_TLS:-true}"
 GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
@@ -296,11 +304,13 @@ ENABLE_CERT_MANAGER="${ENABLE_CERT_MANAGER:-true}"
 ENABLE_ACTIONS_RUNNER="${ENABLE_ACTIONS_RUNNER:-true}"
 ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-false}"
 ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-false}"
+ENABLE_SUBNETCALC_APIM_GATEWAY="${ENABLE_SUBNETCALC_APIM_GATEWAY:-true}"
 ENABLE_APIM_SIMULATOR="${ENABLE_APIM_SIMULATOR:-false}"
 ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
 ENABLE_LANGFUSE="${ENABLE_LANGFUSE:-false}"
 ENABLE_LANGFUSE_DEMOS="${ENABLE_LANGFUSE_DEMOS:-false}"
 ENABLE_PROMETHEUS="${ENABLE_PROMETHEUS:-false}"
+ENABLE_ALERTMANAGER="${ENABLE_ALERTMANAGER:-false}"
 ENABLE_GRAFANA="${ENABLE_GRAFANA:-false}"
 ENABLE_LOKI="${ENABLE_LOKI:-false}"
 ENABLE_VICTORIA_LOGS="${ENABLE_VICTORIA_LOGS:-false}"
@@ -308,6 +318,7 @@ ENABLE_TEMPO="${ENABLE_TEMPO:-false}"
 ENABLE_SIGNOZ="${ENABLE_SIGNOZ:-false}"
 ENABLE_OTEL_GATEWAY="${ENABLE_OTEL_GATEWAY:-false}"
 ENABLE_OBSERVABILITY_AGENT="${ENABLE_OBSERVABILITY_AGENT:-false}"
+ENABLE_METRICS_SERVER="${ENABLE_METRICS_SERVER:-false}"
 ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-false}"
 ENABLE_SSO="${ENABLE_SSO:-false}"
 ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
@@ -343,6 +354,7 @@ if [[ -z "${GRAFANA_VICTORIA_LOGS_PLUGIN_URL+x}" ]]; then
 fi
 GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS="${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS:-$(tf_default_from_variables grafana_liveness_initial_delay_seconds)}"
 HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-$(tf_default_from_variables headlamp_chart_version)}"
+METRICS_SERVER_CHART_VERSION="${METRICS_SERVER_CHART_VERSION:-$(tf_default_from_variables metrics_server_chart_version)}"
 KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-$(tf_default_from_variables kyverno_chart_version)}"
 LOKI_CHART_VERSION="${LOKI_CHART_VERSION:-$(tf_default_from_variables loki_chart_version)}"
 OAUTH2_PROXY_CHART_VERSION="${OAUTH2_PROXY_CHART_VERSION:-$(tf_default_from_variables oauth2_proxy_chart_version)}"
@@ -434,6 +446,10 @@ is_true() {
     true|TRUE|1|yes|YES|y|Y) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+apim_effective() {
+  is_true "${ENABLE_APIM_SIMULATOR}" || { is_true "${ENABLE_APP_REPO_SUBNETCALC}" && is_true "${ENABLE_SUBNETCALC_APIM_GATEWAY}"; }
 }
 
 IMAGE_REPO_OWNER="${GITEA_REPO_OWNER}"
@@ -679,6 +695,7 @@ chart_version_override_for_name() {
     dex) printf '%s\n' "${DEX_CHART_VERSION}" ;;
     grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
     headlamp) printf '%s\n' "${HEADLAMP_CHART_VERSION}" ;;
+    metrics-server) printf '%s\n' "${METRICS_SERVER_CHART_VERSION}" ;;
     kyverno) printf '%s\n' "${KYVERNO_CHART_VERSION}" ;;
     loki) printf '%s\n' "${LOKI_CHART_VERSION}" ;;
     oauth2-proxy) printf '%s\n' "${OAUTH2_PROXY_CHART_VERSION}" ;;
@@ -812,6 +829,7 @@ vendor_direct_tf_only_charts() {
   vendor_chart "https://charts.dexidp.io" "dex" "${DEX_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${OAUTH2_PROXY_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${HEADLAMP_CHART_VERSION}" "${vendor_root}"
+  vendor_chart "https://kubernetes-sigs.github.io/metrics-server/" "metrics-server" "${METRICS_SERVER_CHART_VERSION}" "${vendor_root}"
   patch_vendored_headlamp_chart "${vendor_root}"
 }
 
@@ -926,6 +944,115 @@ render_grafana_application_manifest() {
   ensure_grafana_dashboard_provider_paths "${app_file}"
 }
 
+render_prometheus_application_manifest() {
+  local app_file="$1"
+  local out
+
+  [[ -f "${app_file}" ]] || return 0
+  is_true "${ENABLE_ALERTMANAGER}" || return 0
+
+  out="$(mktemp)"
+  awk -v hardened_registry="${HARDENED_IMAGE_REGISTRY}" '
+    function print_alertmanager_block() {
+      print "        alertmanager:"
+      print "          enabled: true"
+      print "          image:"
+      print "            repository: " hardened_registry "/alertmanager"
+      print "            tag: 0.31.1-debian13"
+      print "          persistence:"
+      print "            enabled: false"
+      print "          resources:"
+      print "            requests:"
+      print "              cpu: 10m"
+      print "              memory: 32Mi"
+      print "            limits:"
+      print "              cpu: 40m"
+      print "              memory: 96Mi"
+    }
+
+    function print_alert_rules_block() {
+      print "        serverFiles:"
+      print "          alerting_rules.yml:"
+      print "            groups:"
+      print "              - name: platform-starter.rules"
+      print "                rules:"
+      print "                  - alert: PlatformPodCrashLooping"
+      print "                    expr: sum by (namespace, pod, container) (rate(kube_pod_container_status_restarts_total{namespace!~\"kube-system|local-path-storage\",container!=\"POD\"}[5m])) > 0"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"Pod container is restarting repeatedly\""
+      print "                      description: \"Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} has a sustained restart rate.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpodcrashlooping\""
+      print "                  - alert: PlatformDeploymentReplicasUnavailable"
+      print "                    expr: kube_deployment_status_replicas_unavailable{namespace!~\"kube-system|local-path-storage\"} > 0"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"Deployment has unavailable replicas\""
+      print "                      description: \"Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas for more than 10 minutes.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformdeploymentreplicasunavailable\""
+      print "                  - alert: PlatformPersistentVolumeClaimFilling"
+      print "                    expr: (1 - (kubelet_volume_stats_available_bytes{namespace!=\"\"} / kubelet_volume_stats_capacity_bytes{namespace!=\"\"})) > 0.85"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"PersistentVolumeClaim usage is above 85%\""
+      print "                      description: \"PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is more than 85% full.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpersistentvolumeclaimfilling\""
+      print "                  - alert: PlatformNodeMemoryPressure"
+      print "                    expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"Node memory availability is below 10%\""
+      print "                      description: \"Node exporter reports less than 10% memory available on {{ $labels.instance }}.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformnodememorypressure\""
+      print "                  - alert: PlatformCertificateExpiringSoon"
+      print "                    expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 1209600"
+      print "                    for: 30m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"cert-manager certificate expires in less than 14 days\""
+      print "                      description: \"Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 14 days.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformcertificateexpiringsoon\""
+    }
+
+    /^[[:space:]]*serverFiles:[[:space:]]*$/ {
+      has_server_files = 1
+    }
+
+    skip_alertmanager && /^[[:space:]]{8}[A-Za-z0-9_-]+:[[:space:]]*/ {
+      skip_alertmanager = 0
+    }
+
+    skip_alertmanager {
+      next
+    }
+
+    /^[[:space:]]{8}alertmanager:[[:space:]]*$/ {
+      print_alertmanager_block()
+      skip_alertmanager = 1
+      next
+    }
+
+    /^[[:space:]]{8}extraScrapeConfigs:[[:space:]]*\|[[:space:]]*$/ && !has_server_files {
+      print_alert_rules_block()
+      has_server_files = 1
+      print
+      next
+    }
+
+    { print }
+  ' "${app_file}" > "${out}"
+  mv "${out}" "${app_file}"
+}
+
 ensure_grafana_dashboard_provider_paths() {
   local app_file="$1"
 
@@ -1001,6 +1128,32 @@ add_kustomization_entry() {
   fi
 
   printf '  - %s\n' "${resource_file}" >> "${kustomization_file}"
+}
+
+render_image_signing_policy() {
+  local policy_dir="$1"
+  local policy_file="${policy_dir}/verify-local-registry-signatures.yaml"
+  local kustomization_file="${policy_dir}/kustomization.yaml"
+  local escaped_key=""
+
+  if ! is_true "${ENABLE_IMAGE_SIGNING}"; then
+    remove_if_present "${policy_file}"
+    remove_kustomization_entry "${kustomization_file}" "verify-local-registry-signatures.yaml"
+    return 0
+  fi
+
+  [[ -n "${IMAGE_SIGNING_PUBLIC_KEY}" ]] || fail "enable_image_signing=true but image_signing_public_key is empty; run a signing-enabled local image build first"
+  [[ -f "${policy_file}" ]] || fail "missing image signing policy: ${policy_file}"
+
+  escaped_key="$(printf '%s\n' "${IMAGE_SIGNING_PUBLIC_KEY}" | sed 's/^/                      /')"
+  awk -v key="${escaped_key}" '
+    $0 == "                      ${COSIGN_PUBLIC_KEY}" {
+      print key
+      next
+    }
+    { print }
+  ' "${policy_file}" > "${policy_file}.tmp"
+  mv "${policy_file}.tmp" "${policy_file}"
 }
 
 remove_referencegrant_service() {
@@ -1596,7 +1749,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/78-idp.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_SSO}" || { ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}" && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
+  if ! is_true "${ENABLE_SSO}" || { ! apim_effective && ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; }; then
     remove_if_present "${apps_dir}/79-mcp.application.yaml"
     remove_if_present "${apps_dir}/80-auth-chat.application.yaml"
     remove_if_present "${apps_dir}/80-chatgpt-sim.application.yaml"
@@ -1607,7 +1760,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/76-uat.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+  if ! apim_effective; then
     remove_if_present "${apps_dir}/72-apim.application.yaml"
   fi
 
@@ -1669,6 +1822,10 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_HEADLAMP}"; then
     remove_if_present "${apps_dir}/85-headlamp.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_METRICS_SERVER}"; then
+    remove_if_present "${apps_dir}/88-metrics-server.application.yaml"
   fi
 
   if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_LOKI}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_SIGNOZ}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
@@ -1750,10 +1907,12 @@ prune_gateway_routes_manifests() {
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-uat.yaml"
   fi
 
-  if ! is_true "${ENABLE_APIM_SIMULATOR}" && ! is_true "${ENABLE_APP_REPO_SUBNETCALC}"; then
+  if ! apim_effective; then
     remove_if_present "${routes_dir}/httproute-apim.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-apim.yaml"
     remove_referencegrant_service "${routes_dir}/referencegrant-sso.yaml" "oauth2-proxy-apim"
+    remove_if_present "${routes_dir}/referencegrant-apim.yaml"
+    remove_kustomization_entry "${kustomization_file}" "referencegrant-apim.yaml"
   fi
 
   if ! is_true "${ENABLE_AGENTGATEWAY_AI_GATEWAY}"; then
@@ -1876,6 +2035,31 @@ render_gateway_route_forwarded_headers() {
     ' "${route_file}" > "${tmp_file}"
     mv "${tmp_file}" "${route_file}"
   done < <(find "${routes_dir}" -maxdepth 1 -type f -name 'httproute-*.yaml' -print0)
+}
+
+configure_subnetcalc_direct_api() {
+  local repo_dir="$1"
+  local workloads_file="${repo_dir}/apps/workloads/base/all.yaml"
+  local policy_file="${repo_dir}/cluster-policies/cilium/projects/subnetcalc/subnetcalc-http-routes.yaml"
+
+  is_true "${ENABLE_APP_REPO_SUBNETCALC}" || return 0
+  ! is_true "${ENABLE_SUBNETCALC_APIM_GATEWAY}" || return 0
+
+  if [[ -f "${workloads_file}" ]]; then
+    perl -0pi -e 's|(name: subnetcalc-router-nginx.*?proxy_pass )http://subnetcalc-apim-simulator\.apim\.svc\.cluster\.local:8000;|${1}http://subnetcalc-api:8000;|s' "${workloads_file}"
+    perl -0pi -e 's|("Subnet router","detail":"dev/uat nginx router","role":"Routes UI and API traffic"},\{"label":")APIM simulator","detail":"apim/subnetcalc-apim-simulator","role":"Gateway auth, policy, tracing"|${1}Subnetcalc API","detail":"subnetcalc-api service","role":"Direct local IDP sample API"|g' "${workloads_file}"
+  fi
+
+  if [[ -f "${policy_file}" ]]; then
+    perl -0pi -e '
+      s/The router sends browser API traffic through the shared APIM simulator\./The router sends browser API traffic directly to the subnetcalc API./g;
+      s/The subnetcalc API receives browser traffic only from the shared APIM simulator\./The subnetcalc API receives browser traffic only from the subnetcalc router./g;
+      s/"k8s:io\.kubernetes\.pod\.namespace": apim\n//g;
+      s/"k8s:tier": gateway\n            "k8s:app\.kubernetes\.io\/name": subnetcalc-apim-simulator/"k8s:tier": backend\n            "k8s:app.kubernetes.io\/name": subnetcalc-api/;
+      s/"k8s:tier": gateway\n            "k8s:app\.kubernetes\.io\/name": subnetcalc-apim-simulator/"k8s:tier": gateway\n            "k8s:app.kubernetes.io\/name": subnetcalc-router/;
+      s/port: "8000"/port: "8080"/;
+    ' "${policy_file}"
+  fi
 }
 
 repo_exists_for_owner() {
@@ -2109,6 +2293,7 @@ render_policy_repo_tree() {
   mkdir -p "${repo_dir}"
   cp -R "${STACK_DIR}/apps" "${repo_dir}/apps"
   cp -R "${STACK_DIR}/cluster-policies" "${repo_dir}/cluster-policies"
+  render_image_signing_policy "${repo_dir}/cluster-policies/kyverno/shared"
   rewrite_public_hostnames "${repo_dir}"
   render_platform_gateway_proxy_config "${repo_dir}"
   apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"
@@ -2120,7 +2305,9 @@ render_policy_repo_tree() {
   if ! is_true "${ENABLE_BACKSTAGE}"; then
     remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
   fi
+  configure_subnetcalc_direct_api "${repo_dir}"
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
+  render_prometheus_application_manifest "${repo_dir}/apps/argocd-apps/90-prometheus.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/auth-chat/all.yaml"

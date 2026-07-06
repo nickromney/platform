@@ -110,7 +110,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs image-signing-prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 
 include ../../mk/common.mk
@@ -205,6 +205,7 @@ help:
 	@echo "  make idp-sdk                                  Generate or preview the IDP SDK"
 	@echo "  make idp-mcp                                  Start or preview the IDP MCP server"
 	@echo "  make init"
+	@echo "  make image-signing-prereqs                   Check optional cosign prerequisites for local image signing"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
 	@echo "  make lima-vms-up"
 	@echo "  make merge-default-kubeconfig"
@@ -477,6 +478,11 @@ build-workload-images:
 build-local-platform-images:
 	@CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	"$(BUILD_LOCAL_PLATFORM_IMAGES)" $(READONLY_MODE_FLAG)
+
+.PHONY: image-signing-prereqs
+image-signing-prereqs:
+	@command -v cosign >/dev/null 2>&1 || { echo "FAIL cosign not found; install cosign before ENABLE_IMAGE_SIGNING=true builds"; exit 1; }
+	@echo "OK   cosign available"
 
 .PHONY: status
 status:

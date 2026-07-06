@@ -49,13 +49,13 @@ setup() {
   run grep -E '^(enable_gateway_tls|enable_gitea|enable_argocd|enable_sso)[[:space:]]*=[[:space:]]*true$' "${profile}"
   [ "${status}" -eq 0 ]
 
-  run grep -E '^(enable_loki|enable_tempo|enable_signoz|enable_victoria_logs|enable_prometheus|enable_grafana|enable_actions_runner|enable_app_repo_subnetcalc)[[:space:]]*=[[:space:]]*false$' "${profile}"
+  run grep -E '^(enable_hubble|enable_loki|enable_tempo|enable_signoz|enable_victoria_logs|enable_prometheus|enable_grafana|enable_actions_runner|enable_app_repo_sentiment|enable_backstage|enable_apim_simulator|enable_agentgateway_ai_gateway|enable_subnetcalc_apim_gateway)[[:space:]]*=[[:space:]]*false$' "${profile}"
   [ "${status}" -eq 0 ]
 
-  run grep -E '^(enable_app_repo_sentiment|prefer_external_workload_images|prefer_external_platform_images)[[:space:]]*=[[:space:]]*true$' "${profile}"
+  run grep -E '^(enable_app_repo_subnetcalc|prefer_external_workload_images|prefer_external_platform_images)[[:space:]]*=[[:space:]]*true$' "${profile}"
   [ "${status}" -eq 0 ]
 
-  run grep -E '"idp-core"|backstage|sentiment-api|sentiment-auth-ui' "${profile}"
+  run grep -E '"idp-core"|"platform-mcp"|subnetcalc-api|subnetcalc-frontend' "${profile}"
   [ "${status}" -eq 0 ]
 }
 

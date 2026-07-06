@@ -59,6 +59,18 @@ run "headlamp_requires_argocd" {
   expect_failures = [check.enable_headlamp_requires_enable_argocd]
 }
 
+run "metrics_server_requires_argocd_and_gitea" {
+  command = plan
+
+  variables {
+    enable_argocd         = true
+    enable_gitea          = false
+    enable_metrics_server = true
+  }
+
+  expect_failures = [check.enable_metrics_server_requires_enable_argocd]
+}
+
 run "actions_runner_requires_gitea_and_argocd" {
   command = plan
 
@@ -114,6 +126,20 @@ run "observability_agent_requires_signoz_and_argocd" {
   }
 
   expect_failures = [check.enable_observability_agent_requires_signoz_and_argocd]
+}
+
+run "alertmanager_requires_prometheus" {
+  command = plan
+
+  variables {
+    cni_provider        = "none"
+    enable_hubble       = false
+    enable_argocd       = true
+    enable_prometheus   = false
+    enable_alertmanager = true
+  }
+
+  expect_failures = [check.enable_alertmanager_requires_prometheus]
 }
 
 run "victoria_logs_requires_argocd" {

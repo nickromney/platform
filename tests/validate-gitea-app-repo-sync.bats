@@ -5,6 +5,56 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 }
 
+@test "policies repo Prometheus seed leaves Alertmanager disabled when flag is off" {
+  local source_file app_file before_hash after_hash
+  source_file="${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml"
+  app_file="${BATS_TEST_TMPDIR}/90-prometheus.application.yaml"
+  cp "${source_file}" "${app_file}"
+
+  before_hash="$(cksum <"${app_file}")"
+
+  export STACK_DIR="${REPO_ROOT}/terraform/kubernetes"
+  export ENABLE_ALERTMANAGER=false
+  # shellcheck source=/dev/null
+  source "${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh"
+
+  render_prometheus_application_manifest "${app_file}"
+  after_hash="$(cksum <"${app_file}")"
+
+  [ "${after_hash}" = "${before_hash}" ]
+  run cmp "${source_file}" "${app_file}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "policies repo Prometheus seed enables Alertmanager and starter rules when flag is on" {
+  local app_file
+  app_file="${BATS_TEST_TMPDIR}/90-prometheus.application.yaml"
+  cp "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml" "${app_file}"
+
+  export STACK_DIR="${REPO_ROOT}/terraform/kubernetes"
+  export ENABLE_ALERTMANAGER=true
+  export HARDENED_IMAGE_REGISTRY=dhi.io
+  # shellcheck source=/dev/null
+  source "${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh"
+
+  render_prometheus_application_manifest "${app_file}"
+
+  run grep -F "enabled: true" "${app_file}"
+  [ "${status}" -eq 0 ]
+  run grep -F "repository: dhi.io/alertmanager" "${app_file}"
+  [ "${status}" -eq 0 ]
+  run grep -F "serverFiles:" "${app_file}"
+  [ "${status}" -eq 0 ]
+  run grep -F "alerting_rules.yml:" "${app_file}"
+  [ "${status}" -eq 0 ]
+  run grep -F "alert: PlatformPodCrashLooping" "${app_file}"
+  [ "${status}" -eq 0 ]
+  run grep -F "alert: PlatformCertificateExpiringSoon" "${app_file}"
+  [ "${status}" -eq 0 ]
+  run grep -F "runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpodcrashlooping\"" "${app_file}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "app repo source projection excludes generated working directories" {
   local source_dir target_dir
   source_dir="${BATS_TEST_TMPDIR}/source"

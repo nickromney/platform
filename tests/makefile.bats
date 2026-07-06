@@ -23,6 +23,7 @@ setup() {
   [[ "${output}" == *"make prereqs"* ]]
   [[ "${output}" == *"make status [STATUS_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make test"* ]]
+  [[ "${output}" == *"make test-ci"* ]]
   [[ "${output}" == *"make tui"* ]]
   [[ "${output}" == *"make build-tui"* ]]
   [[ "${output}" == *"make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]"* ]]
@@ -51,6 +52,8 @@ setup() {
   kubernetes_line="$(printf '%s\n' "${output}" | grep -n '^  make kubernetes' | cut -d: -f1)"
   lint_line="$(printf '%s\n' "${output}" | grep -n '^  make lint[[:space:]]' | cut -d: -f1)"
   status_line="$(printf '%s\n' "${output}" | grep -n '^  make status ' | cut -d: -f1)"
+  test_line="$(printf '%s\n' "${output}" | grep -n '^  make test[[:space:]]' | cut -d: -f1)"
+  test_ci_line="$(printf '%s\n' "${output}" | grep -n '^  make test-ci' | cut -d: -f1)"
   tui_line="$(printf '%s\n' "${output}" | grep -n '^  make tui' | cut -d: -f1)"
   workflow_ui_line="$(printf '%s\n' "${output}" | grep -n '^  make workflow-ui' | cut -d: -f1)"
 
@@ -62,7 +65,9 @@ setup() {
   [ "${fmt_line}" -lt "${kubernetes_line}" ]
   [ "${kubernetes_line}" -lt "${lint_line}" ]
   [ "${lint_line}" -lt "${status_line}" ]
-  [ "${status_line}" -lt "${tui_line}" ]
+  [ "${status_line}" -lt "${test_line}" ]
+  [ "${test_line}" -lt "${test_ci_line}" ]
+  [ "${test_ci_line}" -lt "${tui_line}" ]
   [ "${tui_line}" -lt "${workflow_ui_line}" ]
 }
 
@@ -307,11 +312,45 @@ EOF
   done <<<"${app_entrypoints}"
 }
 
+@test "root test-ci delegates to the explicit hermetic Bats subset" {
+  bats_stub="${BATS_TEST_TMPDIR}/bats"
+  log_file="${BATS_TEST_TMPDIR}/test-ci.log"
+
+  cat >"${bats_stub}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >"${log_file}"
+EOF
+  chmod +x "${bats_stub}"
+
+  run make -C "${REPO_ROOT}" test-ci BATS_BIN="${bats_stub}"
+
+  [ "${status}" -eq 0 ]
+
+  run cat "${log_file}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"tests/ci-workflow.bats"* ]]
+  [[ "${output}" == *"tests/makefile.bats"* ]]
+  [[ "${output}" == *"tests/version-audit-workflow.bats"* ]]
+  [[ "${output}" != *"tests/app-healthcheck-commands.bats"* ]]
+  [[ "${output}" != *"tests/platform-workflow-ui.bats"* ]]
+  [[ "${output}" != *"tests/release-script.bats"* ]]
+  [[ "${output}" != *"tests/release-workflow.bats"* ]]
+  [[ "${output}" != *"tests/smoke-sentiment-api-image.bats"* ]]
+
+  run bash -c 'tr " " "\n" <"$1" | LC_ALL=C sort -c' bash "${log_file}"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "docker compose test resolves the backend helper in execute mode" {
   compose_backend_stub="${BATS_TEST_TMPDIR}/compose-backend.sh"
   compose_cmd_stub="${BATS_TEST_TMPDIR}/compose-cmd.sh"
+  bats_stub_dir="${BATS_TEST_TMPDIR}/bin"
   log_file="${BATS_TEST_TMPDIR}/compose.log"
   env_file="${BATS_TEST_TMPDIR}/platform.env"
+  mkdir -p "${bats_stub_dir}"
 
   cat >"${env_file}" <<'EOF'
 OAUTH2_PROXY_COOKIE_SECRET=test-cookie-secret
@@ -337,7 +376,14 @@ printf 'compose %s\n' "\$*" >>"${log_file}"
 EOF
   chmod +x "${compose_cmd_stub}"
 
-  run make -C "${REPO_ROOT}/docker/compose" test \
+  cat >"${bats_stub_dir}/bats" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'bats %s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${bats_stub_dir}/bats"
+
+  run env PATH="${bats_stub_dir}:${PATH}" make -C "${REPO_ROOT}/docker/compose" test \
     COMPOSE_BACKEND_SCRIPT="${compose_backend_stub}" \
     PLATFORM_ENV_FILE="${env_file}"
 
@@ -346,7 +392,7 @@ EOF
   run cat "${log_file}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'backend --print --execute\nbackend --print --execute\ncompose -f compose.yml --profile dev --profile uat --profile portal config -q' ]
+  [ "${output}" = $'backend --print --execute\nbackend --print --execute\nbats ../../tests/backstage-compose.bats\ncompose -f compose.yml --profile dev --profile uat --profile portal config -q' ]
 }
 
 @test "docker compose help does not resolve the backend helper" {

@@ -483,6 +483,7 @@
         "default",
         "minimal",
         "local-12gb",
+        "local-idp-16gb",
         "local-idp-12gb",
         "airplane"
       ]
@@ -596,9 +597,9 @@
       }
     },
     {
-      "id": "local-idp-12gb",
+      "id": "local-idp-16gb",
       "group": "resource_profile",
-      "label": "Local IDP 12 GB",
+      "label": "Local IDP 16 GB",
       "variants": [
         "kind"
       ],
@@ -611,11 +612,16 @@
         "sso_provider": "keycloak",
         "enable_argocd_oidc": true,
         "enable_app_of_apps": false,
+        "enable_backstage": false,
         "argocd_applicationset_enabled": false,
         "argocd_notifications_enabled": false,
-        "enable_app_repo_sentiment": true,
-        "enable_app_repo_subnetcalc": false,
-        "enable_backstage": true,
+        "enable_app_repo_sentiment": false,
+        "enable_app_repo_subnetcalc": true,
+        "enable_subnetcalc_apim_gateway": false,
+        "enable_apim_simulator": false,
+        "enable_agentgateway_ai_gateway": false,
+        "enable_langfuse": false,
+        "enable_langfuse_demos": false,
         "enable_host_local_registry": true,
         "host_local_registry_host": "${local_registry_runtime_host}",
         "host_local_registry_scheme": "http",
@@ -625,13 +631,67 @@
         "enable_apps_dir_mount": false,
         "enable_docker_socket_mount": false,
         "external_platform_image_refs": {
-          "backstage": "${local_registry_runtime_host}/platform/backstage:1.0.0",
-          "idp-core": "${local_registry_runtime_host}/platform/idp-core:0.1.0"
+          "idp-core": "${local_registry_runtime_host}/platform/idp-core:0.1.0",
+          "platform-mcp": "${local_registry_runtime_host}/platform/platform-mcp:0.1.0"
         },
         "external_workload_image_refs": {
-          "sentiment-api": "${local_registry_runtime_host}/platform/sentiment-api:0.1.0",
-          "sentiment-auth-ui": "${local_registry_runtime_host}/platform/sentiment-auth-ui:0.1.0"
+          "subnetcalc-api": "${local_registry_runtime_host}/platform/subnetcalc-api:0.1.0",
+          "subnetcalc-frontend": "${local_registry_runtime_host}/platform/subnetcalc-frontend:0.1.0"
         },
+        "enable_hubble": false,
+        "enable_signoz": false,
+        "enable_prometheus": false,
+        "enable_grafana": false,
+        "enable_loki": false,
+        "enable_victoria_logs": false,
+        "enable_tempo": false,
+        "enable_observability_agent": false,
+        "enable_headlamp": false
+      }
+    },
+    {
+      "id": "local-idp-12gb",
+      "group": "resource_profile",
+      "label": "Local IDP 12 GB (deprecated)",
+      "variants": [
+        "kind"
+      ],
+      "overlay": {
+        "enable_argocd": true,
+        "enable_gitea": true,
+        "enable_gateway_tls": true,
+        "enable_cert_manager": true,
+        "enable_sso": true,
+        "sso_provider": "keycloak",
+        "enable_argocd_oidc": true,
+        "enable_app_of_apps": false,
+        "enable_backstage": false,
+        "argocd_applicationset_enabled": false,
+        "argocd_notifications_enabled": false,
+        "enable_app_repo_sentiment": false,
+        "enable_app_repo_subnetcalc": true,
+        "enable_subnetcalc_apim_gateway": false,
+        "enable_apim_simulator": false,
+        "enable_agentgateway_ai_gateway": false,
+        "enable_langfuse": false,
+        "enable_langfuse_demos": false,
+        "enable_host_local_registry": true,
+        "host_local_registry_host": "${local_registry_runtime_host}",
+        "host_local_registry_scheme": "http",
+        "prefer_external_platform_images": true,
+        "prefer_external_workload_images": true,
+        "enable_actions_runner": false,
+        "enable_apps_dir_mount": false,
+        "enable_docker_socket_mount": false,
+        "external_platform_image_refs": {
+          "idp-core": "${local_registry_runtime_host}/platform/idp-core:0.1.0",
+          "platform-mcp": "${local_registry_runtime_host}/platform/platform-mcp:0.1.0"
+        },
+        "external_workload_image_refs": {
+          "subnetcalc-api": "${local_registry_runtime_host}/platform/subnetcalc-api:0.1.0",
+          "subnetcalc-frontend": "${local_registry_runtime_host}/platform/subnetcalc-frontend:0.1.0"
+        },
+        "enable_hubble": false,
         "enable_signoz": false,
         "enable_prometheus": false,
         "enable_grafana": false,
@@ -1111,12 +1171,12 @@
     {
       "id": "idp-demo",
       "label": "IDP demo",
-      "description": "Kind stage 900 with the local IDP profile.",
+      "description": "Kind stage 900 with the 16GB local IDP profile.",
       "guided_surface_only": true,
       "variant": "kind",
       "stage": "900",
       "presets": {
-        "resource_profile": "local-idp-12gb",
+        "resource_profile": "local-idp-16gb",
         "image_distribution": "local-cache",
         "network_profile": "cilium"
       }
