@@ -23,6 +23,7 @@ const {
 	requireElement,
 	resolveNetworkHops,
 	setTextDefault,
+	textAreaElement,
 	withButtonBusy,
 	withSubmitterBusy,
 } = window.PlatformAppShell;
@@ -55,6 +56,11 @@ initialize();
 async function initialize() {
 	initializeThemeSwitcher();
 	modelInput.value = config.model || modelInput.value;
+	setTextDefault(
+		requireElement("route-summary"),
+		config.model && `/auth -> /chat -> ${config.model}`,
+		"/auth -> /chat",
+	);
 	setTextDefault(modelRoute, config.llmUrl, "not configured");
 	renderNetworkPathInto(
 		networkPathEl,
@@ -171,7 +177,7 @@ function renderAuthEvidence(evidence) {
  */
 async function submitChat(event) {
 	event.preventDefault();
-	const input = inputElement("message");
+	const input = textAreaElement("message");
 	const message = input.value.trim();
 	if (!message) return;
 	input.value = "";

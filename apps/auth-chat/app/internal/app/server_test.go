@@ -44,7 +44,7 @@ func TestStaticShellContainsAuthAndChatContracts(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("index returned %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, want := range []string{`<title>Auth Chat</title>`, `/auth`, `/chat`, `/idpauth.js`, `/app-shell.js`, `/style.css`, `/app.js`, `Qwen3.5-9B-MLX-4bit`} {
+	for _, want := range []string{`<title>Auth Chat</title>`, `/auth`, `/chat`, `/idpauth.js`, `/app-shell.js`, `@social-5h3ll/5h3ll-ui`, `/style.css`, `/app.js`, `Qwen3.5-9B-MLX-4bit`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("index missing %q", want)
 		}
