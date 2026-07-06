@@ -242,6 +242,12 @@ variable "enable_cilium_policies" {
   default     = true
 }
 
+variable "enable_image_signing" {
+  description = "Enable audit-mode Kyverno signature verification for local-registry workload images signed with the repo-local cosign keypair."
+  type        = bool
+  default     = false
+}
+
 variable "enable_cilium_policy_audit_mode" {
   description = "Enable Cilium Policy Audit Mode at the daemon level so loaded Cilium policies emit AUDITED verdicts instead of enforcing drops."
   type        = bool
@@ -1028,6 +1034,13 @@ check "enable_policies_requires_argocd_gitea_cilium" {
   assert {
     condition     = !var.enable_policies || (var.enable_argocd && var.enable_gitea && lower(var.cni_provider) == "cilium")
     error_message = "enable_policies requires enable_argocd=true, enable_gitea=true, and cni_provider=cilium."
+  }
+}
+
+check "enable_image_signing_requires_policies" {
+  assert {
+    condition     = !var.enable_image_signing || var.enable_policies
+    error_message = "enable_image_signing requires enable_policies=true."
   }
 }
 

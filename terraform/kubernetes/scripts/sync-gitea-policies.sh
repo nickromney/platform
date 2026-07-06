@@ -118,6 +118,8 @@ string|GITEA_REPO_OWNER|repo_owner|$GITEA_REPO_OWNER
 bool|GITEA_REPO_OWNER_IS_ORG|repo_is_org|false
 bool|ENABLE_HUBBLE|enable_hubble|true
 bool|ENABLE_POLICIES|enable_policies|true
+bool|ENABLE_IMAGE_SIGNING|enable_image_signing|false
+string|IMAGE_SIGNING_PUBLIC_KEY|image_signing_public_key|
 bool|ENABLE_GATEWAY_TLS|enable_gateway_tls|true
 string|GATEWAY_HTTPS_HOST_PORT|gateway_https_host_port|443
 string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io
@@ -265,6 +267,8 @@ GITEA_REPO_OWNER_IS_ORG="${GITEA_REPO_OWNER_IS_ORG:-false}"
 GITEA_REPO_OWNER_FALLBACK="${GITEA_REPO_OWNER_FALLBACK:-}"
 ENABLE_HUBBLE="${ENABLE_HUBBLE:-true}"
 ENABLE_POLICIES="${ENABLE_POLICIES:-true}"
+ENABLE_IMAGE_SIGNING="${ENABLE_IMAGE_SIGNING:-false}"
+IMAGE_SIGNING_PUBLIC_KEY="${IMAGE_SIGNING_PUBLIC_KEY:-}"
 ENABLE_GATEWAY_TLS="${ENABLE_GATEWAY_TLS:-true}"
 GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
@@ -1112,6 +1116,32 @@ add_kustomization_entry() {
   fi
 
   printf '  - %s\n' "${resource_file}" >> "${kustomization_file}"
+}
+
+render_image_signing_policy() {
+  local policy_dir="$1"
+  local policy_file="${policy_dir}/verify-local-registry-signatures.yaml"
+  local kustomization_file="${policy_dir}/kustomization.yaml"
+  local escaped_key=""
+
+  if ! is_true "${ENABLE_IMAGE_SIGNING}"; then
+    remove_if_present "${policy_file}"
+    remove_kustomization_entry "${kustomization_file}" "verify-local-registry-signatures.yaml"
+    return 0
+  fi
+
+  [[ -n "${IMAGE_SIGNING_PUBLIC_KEY}" ]] || fail "enable_image_signing=true but image_signing_public_key is empty; run a signing-enabled local image build first"
+  [[ -f "${policy_file}" ]] || fail "missing image signing policy: ${policy_file}"
+
+  escaped_key="$(printf '%s\n' "${IMAGE_SIGNING_PUBLIC_KEY}" | sed 's/^/                      /')"
+  awk -v key="${escaped_key}" '
+    $0 == "                      ${COSIGN_PUBLIC_KEY}" {
+      print key
+      next
+    }
+    { print }
+  ' "${policy_file}" > "${policy_file}.tmp"
+  mv "${policy_file}.tmp" "${policy_file}"
 }
 
 remove_referencegrant_service() {
@@ -2220,6 +2250,7 @@ render_policy_repo_tree() {
   mkdir -p "${repo_dir}"
   cp -R "${STACK_DIR}/apps" "${repo_dir}/apps"
   cp -R "${STACK_DIR}/cluster-policies" "${repo_dir}/cluster-policies"
+  render_image_signing_policy "${repo_dir}/cluster-policies/kyverno/shared"
   rewrite_public_hostnames "${repo_dir}"
   render_platform_gateway_proxy_config "${repo_dir}"
   apply_external_workload_images "${repo_dir}/apps/apim/all.yaml"

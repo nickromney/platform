@@ -533,6 +533,7 @@ locals {
 
   policies_repo_private_key_path = "${local.run_dir}/policies-repo.id_ed25519"
   gitea_known_hosts_cluster_path = "${local.run_dir}/gitea_known_hosts_cluster"
+  image_signing_public_key_path  = "${local.repo_root}/.run/image-signing/local-platform-cosign.pub"
 
   enable_gitops_repo_requested = (
     var.enable_policies ||
@@ -629,6 +630,8 @@ locals {
     keycloak_realm                         = local.keycloak_realm
     enable_hubble                          = var.enable_hubble
     enable_policies                        = var.enable_policies
+    enable_image_signing                   = var.enable_image_signing
+    image_signing_public_key               = fileexists(local.image_signing_public_key_path) ? file(local.image_signing_public_key_path) : ""
     enable_gateway_tls                     = var.enable_gateway_tls
     gateway_https_host_port                = var.gateway_https_host_port
     admin_route_allowlist_cidrs            = join(",", local.admin_route_allowlist_cidrs_effective)

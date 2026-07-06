@@ -172,6 +172,9 @@ image_build_tag_and_push() {
 
   docker tag "${build_ref}" "${target_ref}"
   image_build_push_ref "${target_ref}"
+  if declare -F image_signing_sign_ref >/dev/null 2>&1; then
+    image_signing_sign_ref "${target_ref}"
+  fi
 }
 
 image_build_push_optional_tag() {
@@ -218,6 +221,12 @@ image_build_build_and_push_cached() {
 
   if image_build_cache_hit "${repo}" "${version_tag}" "${latest_tag}" "${fingerprint_tag}" "${commit_tag}"; then
     echo "OK   cached ${version_ref}"
+    if declare -F image_signing_sign_ref >/dev/null 2>&1; then
+      image_signing_sign_ref "${version_ref}"
+      image_signing_sign_ref "${latest_ref}"
+      image_signing_sign_ref "${commit_ref}"
+      image_signing_sign_ref "${fingerprint_ref}"
+    fi
     return 0
   fi
 

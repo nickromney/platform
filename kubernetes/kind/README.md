@@ -116,6 +116,38 @@ Kind now also has an operator-facing image distribution knob. The default is the
 
 The registry path is intentionally the portable cache model. The same host-side registry can be reused by other targets; `kind` just consumes it through `host.docker.internal:5002`.
 
+### Local image signing
+
+Image signing is opt-in and disabled by default. To sign images built into the
+shared local registry, first check the optional tool:
+
+```bash
+make -C kubernetes/kind image-signing-prereqs
+```
+
+Then run the local image build helpers with signing enabled:
+
+```bash
+ENABLE_IMAGE_SIGNING=true make -C kubernetes/kind build-local-platform-images
+ENABLE_IMAGE_SIGNING=true make -C kubernetes/kind build-local-workload-images
+```
+
+The first signing-enabled build creates the cosign keypair under
+`.run/image-signing/local-platform-cosign.key` and
+`.run/image-signing/local-platform-cosign.pub`. The `.run/` tree is ignored by
+git; do not move the private key into source control.
+
+The matching Kyverno `verifyImages` policy is gated separately by Terraform:
+
+```hcl
+enable_image_signing = true
+```
+
+When enabled, the policy verifies local-registry workload images in `dev`,
+`sit`, and `uat` with the generated public key. It starts in `Audit` mode so
+reviewers can inspect signature coverage and image-reference edge cases before
+using signature failures as an admission blocker.
+
 Backstage is gated in the kind happy path by local Docker memory:
 
 - `KIND_ENABLE_BACKSTAGE=auto` is the default and enables Backstage only when `docker info` reports at least `10GiB` (`10737418240` bytes) of daemon memory.

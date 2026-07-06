@@ -11,6 +11,8 @@ source "${REPO_ROOT}/kubernetes/scripts/docker-local-registry-lib.sh"
 source "${REPO_ROOT}/kubernetes/workflow/image-catalog-lib.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
+# shellcheck source=/dev/null
+source "${REPO_ROOT}/kubernetes/scripts/image-signing-lib.sh"
 
 VARIANT_LABEL="${VARIANT_LABEL:-Kubernetes variant}"
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
@@ -34,6 +36,7 @@ shell_cli_handle_standard_no_args usage "would build and push ${VARIANT_LABEL} w
 command -v curl >/dev/null 2>&1 || { echo "build-local-workload-images: curl not found" >&2; exit 1; }
 registry_require_tools
 registry_assert_reachable "${CACHE_PUSH_HOST}"
+image_signing_ensure_keypair
 
 IMAGE_BUILD_REQUIRE_COMMIT_TAG=1
 IMAGE_BUILD_COMMIT_TAG="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"

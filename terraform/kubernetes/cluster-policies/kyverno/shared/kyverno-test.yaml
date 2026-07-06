@@ -9,6 +9,7 @@ policies:
   - protect-default-deny.yaml
   - require-app-labels-application-namespaces.yaml
   - restrict-image-registries.yaml
+  - verify-local-registry-signatures.yaml
 resources:
   - test-audit-platform-runtime-baseline-resources.yaml
   - test-audit-platform-workload-labels-resources.yaml
@@ -16,6 +17,7 @@ resources:
   - test-protect-default-deny-resources.yaml
   - test-require-app-labels-resources.yaml
   - test-restrict-image-registries-resources.yaml
+  - test-verify-local-registry-signatures-resources.yaml
 variables: test-values.yaml
 results:
   - policy: audit-platform-runtime-baseline
@@ -128,3 +130,9 @@ results:
       - blocked-image
     kind: Pod
     result: fail
+  - policy: verify-local-registry-signatures
+    rule: verify-local-registry-cosign-signature
+    resources:
+      - public-registry-image
+    kind: Pod
+    result: skip
