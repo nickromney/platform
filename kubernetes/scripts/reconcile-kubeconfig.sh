@@ -78,21 +78,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[ -n "${source_kubeconfig}" ] || { echo "ERROR: --source-kubeconfig is required" >&2; exit 2; }
-[ -n "${target_kubeconfig}" ] || { echo "ERROR: --target-kubeconfig is required" >&2; exit 2; }
-[ -n "${context_name}" ] || { echo "ERROR: --context is required" >&2; exit 2; }
-[[ "${merge_mode}" =~ ^(0|1)$ ]] || { echo "ERROR: --merge must be 0 or 1" >&2; exit 2; }
-
 if [[ "${dry_run}" -eq 1 ]]; then
-  shell_cli_print_dry_run_summary "would reconcile ${source_kubeconfig} with ${target_kubeconfig} for ${context_name}"
+  shell_cli_print_dry_run_summary "would reconcile ${source_kubeconfig:-source kubeconfig} with ${target_kubeconfig:-target kubeconfig} for ${context_name:-context}"
   exit 0
 fi
 
 if [[ "${execute}" -ne 1 ]]; then
   usage
-  shell_cli_print_dry_run_summary "would reconcile ${source_kubeconfig} with ${target_kubeconfig} for ${context_name}"
+  shell_cli_print_dry_run_summary "would reconcile ${source_kubeconfig:-source kubeconfig} with ${target_kubeconfig:-target kubeconfig} for ${context_name:-context}"
   exit 0
 fi
+
+[ -n "${source_kubeconfig}" ] || { echo "ERROR: --source-kubeconfig is required" >&2; exit 2; }
+[ -n "${target_kubeconfig}" ] || { echo "ERROR: --target-kubeconfig is required" >&2; exit 2; }
+[ -n "${context_name}" ] || { echo "ERROR: --context is required" >&2; exit 2; }
+[[ "${merge_mode}" =~ ^(0|1)$ ]] || { echo "ERROR: --merge must be 0 or 1" >&2; exit 2; }
 
 fallback_merge_with_kubectl() {
   local tmp_file

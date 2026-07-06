@@ -75,20 +75,21 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 || "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+  summary_stage="${stage:-selected stage}"
+  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would plan post-apply verification for stage ${summary_stage}"
+  else
+    usage
+    shell_cli_print_dry_run_summary "would plan post-apply verification for stage ${summary_stage}"
+  fi
+  exit 0
+fi
+
 [[ -n "${variant_json}" ]] || fail "missing --variant-json"
 [[ -f "${variant_json}" ]] || fail "variant contract not found: ${variant_json}"
 [[ -n "${stage}" ]] || fail "missing --stage"
 [[ "${stage}" =~ ^[0-9]+$ ]] || fail "stage must be numeric: ${stage}"
-
-if [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
-  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-    shell_cli_print_dry_run_summary "would plan post-apply verification for stage ${stage}"
-  else
-    usage
-    shell_cli_print_dry_run_summary "would plan post-apply verification for stage ${stage}"
-  fi
-  exit 0
-fi
 
 command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
 

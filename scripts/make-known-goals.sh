@@ -1,21 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${repo_root}/scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'USAGE'
-Usage: make-known-goals.sh --dir <dir> [--database-out <path>] --execute
+Usage: make-known-goals.sh --dir <dir> [--database-out <path>] [--dry-run] --execute
 
 Print evaluated MAKE_KNOWN_GOALS for a Makefile directory without running
 recipes. When --database-out is provided, also write the evaluated make
 database to that path.
 USAGE
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
 make_dir=""
 database_out=""
 execute=0
 
+shell_cli_init_standard_flags
 while [ "$#" -gt 0 ]; do
+  if shell_cli_handle_standard_flag usage "$1"; then
+    if [ "$1" = "--execute" ]; then
+      execute=1
+    fi
+    shift
+    continue
+  fi
+
   case "$1" in
     --dir)
       make_dir="${2:-}"
@@ -25,14 +40,6 @@ while [ "$#" -gt 0 ]; do
       database_out="${2:-}"
       shift 2
       ;;
-    --execute)
-      execute=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     *)
       usage >&2
       exit 64
@@ -40,7 +47,18 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ "${execute}" -ne 1 ] || [ -z "${make_dir}" ]; then
+if [ "${SHELL_CLI_DRY_RUN}" -eq 1 ]; then
+  shell_cli_print_dry_run_summary "would print evaluated MAKE_KNOWN_GOALS for ${make_dir:-a Makefile directory}"
+  exit 0
+fi
+
+if [ "${execute}" -ne 1 ]; then
+  usage
+  shell_cli_print_dry_run_summary "would print evaluated MAKE_KNOWN_GOALS for ${make_dir:-a Makefile directory}"
+  exit 0
+fi
+
+if [ -z "${make_dir}" ]; then
   usage >&2
   exit 64
 fi

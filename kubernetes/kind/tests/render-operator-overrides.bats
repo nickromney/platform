@@ -51,6 +51,7 @@ setup() {
   [ "${status}" -eq 0 ]
 
   run "${REPO_ROOT}/kubernetes/workflow/validate-image-catalog-target-refs.sh" \
+    --execute \
     --catalog "${REPO_ROOT}/kubernetes/workflow/image-catalog.json" \
     --target kind \
     --tfvars "${OUTPUT_FILE}" \

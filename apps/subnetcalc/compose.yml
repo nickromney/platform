@@ -2,7 +2,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.6.4
     profiles: ["sso"]
-    entrypoint: ["/bin/sh", "/opt/keycloak/local/start-with-templated-realm.sh"]
+    entrypoint: ["/bin/sh", "/opt/keycloak/local/start-with-templated-realm.sh", "--execute"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-demo@admin.test}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_DEMO_PASSWORD:-local-dev-password}

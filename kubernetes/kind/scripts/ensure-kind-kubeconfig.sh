@@ -113,6 +113,7 @@ rewrite_for_devcontainer_host_socket() {
   }
 
   "${DEVCONTAINER_KUBECONFIG_REWRITE_SCRIPT}" \
+    --execute \
     "${kubeconfig_path}" \
     "${DEVCONTAINER_HOST_ALIAS}" \
     "${DEVCONTAINER_TLS_SERVER_NAME}"

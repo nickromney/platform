@@ -76,6 +76,17 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
+if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 || "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
+  summary_stage="${stage:-selected stage}"
+  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
+    shell_cli_print_dry_run_summary "would run post-apply verification for stage ${summary_stage}"
+  else
+    usage
+    shell_cli_print_dry_run_summary "would run post-apply verification for stage ${summary_stage}"
+  fi
+  exit 0
+fi
+
 [[ -n "${variant_json}" ]] || fail "missing --variant-json"
 [[ -f "${variant_json}" ]] || fail "variant contract not found: ${variant_json}"
 [[ -n "${stage}" ]] || fail "missing --stage"
@@ -84,16 +95,6 @@ case "${stage}" in
 esac
 [[ -n "${make_dir}" ]] || fail "missing --make-dir"
 [[ -d "${make_dir}" ]] || fail "make directory not found: ${make_dir}"
-
-if [[ "${SHELL_CLI_EXECUTE}" -ne 1 ]]; then
-  if [[ "${SHELL_CLI_DRY_RUN}" -eq 1 ]]; then
-    shell_cli_print_dry_run_summary "would run post-apply verification for stage ${stage}"
-  else
-    usage
-    shell_cli_print_dry_run_summary "would run post-apply verification for stage ${stage}"
-  fi
-  exit 0
-fi
 
 command -v jq >/dev/null 2>&1 || fail "jq not found in PATH"
 

@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck source=/dev/null
+source "${repo_root}/scripts/lib/shell-cli.sh"
+
 usage() {
   cat <<'USAGE'
-Usage: check-make-target-surfaces.sh --execute
+Usage: check-make-target-surfaces.sh [--dry-run] --execute
 
 Load every repo-owned Makefile and inspect its make database without running
 recipes. This catches broken includes, invalid make syntax, and missing target
 definitions across the repository's documented make surfaces.
 USAGE
+  printf '\n%s\n' "$(shell_cli_standard_options)"
 }
 
-if [ "${1:-}" != "--execute" ]; then
-  usage
-  exit 64
-fi
+shell_cli_handle_standard_no_args usage "would inspect repo-owned Makefile target surfaces" "$@"
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp_dir="${TMPDIR:-/tmp}/platform-make-target-surfaces.$$"
 mkdir -p "${tmp_dir}"
 trap 'rm -rf "${tmp_dir}"' EXIT
