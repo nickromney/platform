@@ -146,6 +146,7 @@ bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false
 bool|ENABLE_APIM_SIMULATOR|enable_apim_simulator|false
 bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
 bool|ENABLE_PROMETHEUS|enable_prometheus|false
+bool|ENABLE_ALERTMANAGER|enable_alertmanager|false
 bool|ENABLE_GRAFANA|enable_grafana|false
 bool|ENABLE_LOKI|enable_loki|false
 bool|ENABLE_VICTORIA_LOGS|enable_victoria_logs|false
@@ -301,6 +302,7 @@ ENABLE_AGENTGATEWAY_AI_GATEWAY="${ENABLE_AGENTGATEWAY_AI_GATEWAY:-false}"
 ENABLE_LANGFUSE="${ENABLE_LANGFUSE:-false}"
 ENABLE_LANGFUSE_DEMOS="${ENABLE_LANGFUSE_DEMOS:-false}"
 ENABLE_PROMETHEUS="${ENABLE_PROMETHEUS:-false}"
+ENABLE_ALERTMANAGER="${ENABLE_ALERTMANAGER:-false}"
 ENABLE_GRAFANA="${ENABLE_GRAFANA:-false}"
 ENABLE_LOKI="${ENABLE_LOKI:-false}"
 ENABLE_VICTORIA_LOGS="${ENABLE_VICTORIA_LOGS:-false}"
@@ -924,6 +926,115 @@ render_grafana_application_manifest() {
   replace_literal_block "${app_file}" "__GRAFANA_PLUGINS_VALUES__" "${plugins_block}"
   replace_literal "${app_file}" "__GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__" "${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS}"
   ensure_grafana_dashboard_provider_paths "${app_file}"
+}
+
+render_prometheus_application_manifest() {
+  local app_file="$1"
+  local out
+
+  [[ -f "${app_file}" ]] || return 0
+  is_true "${ENABLE_ALERTMANAGER}" || return 0
+
+  out="$(mktemp)"
+  awk -v hardened_registry="${HARDENED_IMAGE_REGISTRY}" '
+    function print_alertmanager_block() {
+      print "        alertmanager:"
+      print "          enabled: true"
+      print "          image:"
+      print "            repository: " hardened_registry "/alertmanager"
+      print "            tag: 0.31.1-debian13"
+      print "          persistence:"
+      print "            enabled: false"
+      print "          resources:"
+      print "            requests:"
+      print "              cpu: 10m"
+      print "              memory: 32Mi"
+      print "            limits:"
+      print "              cpu: 40m"
+      print "              memory: 96Mi"
+    }
+
+    function print_alert_rules_block() {
+      print "        serverFiles:"
+      print "          alerting_rules.yml:"
+      print "            groups:"
+      print "              - name: platform-starter.rules"
+      print "                rules:"
+      print "                  - alert: PlatformPodCrashLooping"
+      print "                    expr: sum by (namespace, pod, container) (rate(kube_pod_container_status_restarts_total{namespace!~\"kube-system|local-path-storage\",container!=\"POD\"}[5m])) > 0"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"Pod container is restarting repeatedly\""
+      print "                      description: \"Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} has a sustained restart rate.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpodcrashlooping\""
+      print "                  - alert: PlatformDeploymentReplicasUnavailable"
+      print "                    expr: kube_deployment_status_replicas_unavailable{namespace!~\"kube-system|local-path-storage\"} > 0"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"Deployment has unavailable replicas\""
+      print "                      description: \"Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas for more than 10 minutes.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformdeploymentreplicasunavailable\""
+      print "                  - alert: PlatformPersistentVolumeClaimFilling"
+      print "                    expr: (1 - (kubelet_volume_stats_available_bytes{namespace!=\"\"} / kubelet_volume_stats_capacity_bytes{namespace!=\"\"})) > 0.85"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"PersistentVolumeClaim usage is above 85%\""
+      print "                      description: \"PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is more than 85% full.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpersistentvolumeclaimfilling\""
+      print "                  - alert: PlatformNodeMemoryPressure"
+      print "                    expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10"
+      print "                    for: 10m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"Node memory availability is below 10%\""
+      print "                      description: \"Node exporter reports less than 10% memory available on {{ $labels.instance }}.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformnodememorypressure\""
+      print "                  - alert: PlatformCertificateExpiringSoon"
+      print "                    expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 1209600"
+      print "                    for: 30m"
+      print "                    labels:"
+      print "                      severity: warning"
+      print "                    annotations:"
+      print "                      summary: \"cert-manager certificate expires in less than 14 days\""
+      print "                      description: \"Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 14 days.\""
+      print "                      runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformcertificateexpiringsoon\""
+    }
+
+    /^[[:space:]]*serverFiles:[[:space:]]*$/ {
+      has_server_files = 1
+    }
+
+    skip_alertmanager && /^[[:space:]]{8}[A-Za-z0-9_-]+:[[:space:]]*/ {
+      skip_alertmanager = 0
+    }
+
+    skip_alertmanager {
+      next
+    }
+
+    /^[[:space:]]{8}alertmanager:[[:space:]]*$/ {
+      print_alertmanager_block()
+      skip_alertmanager = 1
+      next
+    }
+
+    /^[[:space:]]{8}extraScrapeConfigs:[[:space:]]*\|[[:space:]]*$/ && !has_server_files {
+      print_alert_rules_block()
+      has_server_files = 1
+      print
+      next
+    }
+
+    { print }
+  ' "${app_file}" > "${out}"
+  mv "${out}" "${app_file}"
 }
 
 ensure_grafana_dashboard_provider_paths() {
@@ -2121,6 +2232,7 @@ render_policy_repo_tree() {
     remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
   fi
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
+  render_prometheus_application_manifest "${repo_dir}/apps/argocd-apps/90-prometheus.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/mcp/all.yaml"
   rewrite_image_owner "${repo_dir}/apps/auth-chat/all.yaml"

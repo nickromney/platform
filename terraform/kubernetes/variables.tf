@@ -158,6 +158,12 @@ variable "enable_prometheus" {
   default     = false
 }
 
+variable "enable_alertmanager" {
+  description = "Enable the Alertmanager subchart in the Prometheus Argo CD release."
+  type        = bool
+  default     = false
+}
+
 variable "enable_grafana" {
   description = "Deploy Grafana via Argo CD (Helm chart)."
   type        = bool
@@ -959,6 +965,13 @@ check "enable_prometheus_requires_enable_argocd" {
   assert {
     condition     = !var.enable_prometheus || var.enable_argocd
     error_message = "enable_prometheus requires enable_argocd to be true."
+  }
+}
+
+check "enable_alertmanager_requires_prometheus" {
+  assert {
+    condition     = !var.enable_alertmanager || var.enable_prometheus
+    error_message = "enable_alertmanager requires enable_prometheus=true."
   }
 }
 

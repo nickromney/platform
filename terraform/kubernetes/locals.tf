@@ -643,6 +643,7 @@ locals {
     agentgateway_namespace                 = var.agentgateway_namespace
     agentgateway_ai_gateway_model          = var.agentgateway_ai_gateway_model
     enable_prometheus                      = var.enable_prometheus
+    enable_alertmanager                    = var.enable_alertmanager
     enable_grafana                         = var.enable_grafana
     enable_loki                            = var.enable_loki
     enable_victoria_logs                   = var.enable_victoria_logs

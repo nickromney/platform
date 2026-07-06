@@ -342,6 +342,34 @@ run "prometheus_observability_enabled" {
   }
 
   assert {
+    condition     = length(regexall("alertmanager:\\n\\s+enabled: false", kubectl_manifest.argocd_app_prometheus[0].yaml_body)) > 0
+    error_message = "Expected Alertmanager to stay disabled by default when enable_alertmanager is not set"
+  }
+
+  assert {
+    condition     = length(regexall("serverFiles:\\n\\s+alerting_rules.yml:", kubectl_manifest.argocd_app_prometheus[0].yaml_body)) > 0
+    error_message = "Expected starter alert rules to be delivered through serverFiles.alerting_rules.yml"
+  }
+
+  assert {
+    condition = alltrue([
+      for alert_name in [
+        "PlatformPodCrashLooping",
+        "PlatformDeploymentReplicasUnavailable",
+        "PlatformPersistentVolumeClaimFilling",
+        "PlatformNodeMemoryPressure",
+        "PlatformCertificateExpiringSoon",
+      ] : strcontains(kubectl_manifest.argocd_app_prometheus[0].yaml_body, "alert: ${alert_name}")
+    ])
+    error_message = "Expected Prometheus starter alert rules to include the platform baseline alerts"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_prometheus[0].yaml_body, "runbook_url: \"https://github.com/nickromney/platform/blob/main/kubernetes/kind/docs/runbooks.md#platformpodcrashlooping\"")
+    error_message = "Expected starter alerts to point at the kind runbook"
+  }
+
+  assert {
     condition     = length(kubectl_manifest.argocd_app_grafana) == 1
     error_message = "Expected kubectl_manifest.argocd_app_grafana to exist when enable_grafana=true"
   }
@@ -375,6 +403,47 @@ run "prometheus_observability_enabled" {
   assert {
     condition     = strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_otel_collector_prometheus[0].yaml_body, "path: ${local.vendored_chart_paths.opentelemetry_collector}")
     error_message = "Expected Prometheus OTel collector ArgoCD Application YAML to track the vendored chart on main"
+  }
+}
+
+run "prometheus_alertmanager_enabled" {
+  command = plan
+
+  variables {
+    cni_provider        = "none"
+    enable_hubble       = false
+    enable_argocd       = true
+    enable_gitea        = false
+    enable_signoz       = false
+    enable_prometheus   = true
+    enable_alertmanager = true
+    enable_grafana      = false
+    enable_sso          = false
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_prometheus) == 1
+    error_message = "Expected kubectl_manifest.argocd_app_prometheus to exist when enable_prometheus=true"
+  }
+
+  assert {
+    condition     = length(regexall("alertmanager:\\n\\s+enabled: true", kubectl_manifest.argocd_app_prometheus[0].yaml_body)) > 0
+    error_message = "Expected Alertmanager to be enabled when enable_alertmanager=true"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_prometheus[0].yaml_body, "repository: ${local.hardened_image_registry_effective}/alertmanager")
+    error_message = "Expected Alertmanager to use the hardened image registry override"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_prometheus[0].yaml_body, "tag: 0.31.1-debian13")
+    error_message = "Expected Alertmanager to use the pinned hardened image tag"
+  }
+
+  assert {
+    condition     = length(regexall("alertmanager:[\\s\\S]*requests:\\n\\s+cpu: 10m\\n\\s+memory: 32Mi[\\s\\S]*limits:\\n\\s+cpu: 40m\\n\\s+memory: 96Mi", kubectl_manifest.argocd_app_prometheus[0].yaml_body)) > 0
+    error_message = "Expected Alertmanager to have tight local-kind resource requests and limits"
   }
 }
 

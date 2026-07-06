@@ -387,6 +387,7 @@ main() {
   export_resolved_bool ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment true
   export_resolved_bool ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnetcalc true
   export_resolved_bool ENABLE_PROMETHEUS enable_prometheus true
+  export_resolved_bool ENABLE_ALERTMANAGER enable_alertmanager false
   export_resolved_bool ENABLE_GRAFANA enable_grafana true
   export_resolved_bool ENABLE_VICTORIA_LOGS enable_victoria_logs true
   export_resolved_bool ENABLE_LOKI enable_loki false

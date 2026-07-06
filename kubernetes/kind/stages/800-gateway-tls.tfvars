@@ -18,6 +18,7 @@ enable_app_of_apps              = true
 enable_policies                 = true
 enable_cilium_policy_audit_mode = false
 enable_prometheus               = true
+enable_alertmanager             = true
 enable_grafana                  = true
 enable_loki                     = false
 enable_victoria_logs            = true

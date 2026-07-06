@@ -116,6 +116,20 @@ run "observability_agent_requires_signoz_and_argocd" {
   expect_failures = [check.enable_observability_agent_requires_signoz_and_argocd]
 }
 
+run "alertmanager_requires_prometheus" {
+  command = plan
+
+  variables {
+    cni_provider        = "none"
+    enable_hubble       = false
+    enable_argocd       = true
+    enable_prometheus   = false
+    enable_alertmanager = true
+  }
+
+  expect_failures = [check.enable_alertmanager_requires_prometheus]
+}
+
 run "victoria_logs_requires_argocd" {
   command = plan
 
