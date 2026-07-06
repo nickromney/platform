@@ -114,7 +114,7 @@ is_true() {
 has_toggle_env_overrides() {
   local env_key
 
-  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
     if [[ -n "${!env_key:-}" ]]; then
       return 0
     fi
@@ -266,6 +266,14 @@ is_headlamp_image() {
   esac
 }
 
+is_metrics_server_image() {
+  local img="$1"
+  case "${img}" in
+    registry.k8s.io/metrics-server/metrics-server:*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 is_sso_image() {
   local img="$1"
   case "${img}" in
@@ -298,9 +306,10 @@ filter_images_by_toggles() {
   local enable_victoria_logs="$5"
   local enable_tempo="$6"
   local enable_headlamp="$7"
-  local enable_sso="$8"
-  local enable_actions_runner="$9"
-  local enable_langfuse="${10}"
+  local enable_metrics_server="$8"
+  local enable_sso="$9"
+  local enable_actions_runner="${10}"
+  local enable_langfuse="${11}"
   local output=""
   local img
 
@@ -332,6 +341,10 @@ filter_images_by_toggles() {
     fi
 
     if ! is_true "${enable_headlamp}" && is_headlamp_image "${img}"; then
+      continue
+    fi
+
+    if ! is_true "${enable_metrics_server}" && is_metrics_server_image "${img}"; then
       continue
     fi
 
@@ -915,7 +928,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -930,6 +943,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   ENABLE_VICTORIA_LOGS="$(toggle_input_or_default "PRELOAD_ENABLE_VICTORIA_LOGS" "enable_victoria_logs" "false")"
   ENABLE_TEMPO="$(toggle_input_or_default "PRELOAD_ENABLE_TEMPO" "enable_tempo" "false")"
   ENABLE_HEADLAMP="$(toggle_input_or_default "PRELOAD_ENABLE_HEADLAMP" "enable_headlamp" "false")"
+  ENABLE_METRICS_SERVER="$(toggle_input_or_default "PRELOAD_ENABLE_METRICS_SERVER" "enable_metrics_server" "false")"
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
   ENABLE_ACTIONS_RUNNER="$(toggle_input_or_default "PRELOAD_ENABLE_ACTIONS_RUNNER" "enable_actions_runner" "false")"
   ENABLE_LANGFUSE="$(toggle_input_or_default "PRELOAD_ENABLE_LANGFUSE" "enable_langfuse" "false")"
@@ -948,6 +962,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
     "${ENABLE_VICTORIA_LOGS}" \
     "${ENABLE_TEMPO}" \
     "${ENABLE_HEADLAMP}" \
+    "${ENABLE_METRICS_SERVER}" \
     "${ENABLE_SSO}" \
     "${ENABLE_ACTIONS_RUNNER}" \
     "${ENABLE_LANGFUSE}")"

@@ -24,6 +24,7 @@ RENDER_LAUNCHPAD := $(abspath $(K8S_SCRIPTS_DIR)/render-launchpad.sh)
 RUN_DIAGNOSTIC_CHECK := $(abspath $(K8S_SCRIPTS_DIR)/run-diagnostic-check.sh)
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
 RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
+MEMORY_REPORT := $(abspath $(K8S_SCRIPTS_DIR)/memory-report.sh)
 CHECK_TARGET_HOST_PORTS := $(abspath $(K8S_SCRIPTS_DIR)/check-target-host-ports.sh)
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
@@ -113,7 +114,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean stop-kind stop start-kind start prereqs image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -210,6 +211,7 @@ help:
 	@echo "  make docker-prune-estimate                   Estimate reclaimable space for docker builder prune -af and docker system prune -af"
 	@echo "  make docker-safe-clean [AUTO_APPROVE=1]      Preview or run conservative Docker cleanup that preserves the current kind cluster"
 	@echo "  make env                                     Show local tool versions + Docker daemon status"
+	@echo "  make memory-report [DRY_RUN=1]               Report Docker memory budget, kind node usage, and kubectl pod metrics"
 	@echo "  make ensure-image-cache                      Start/verify the shared host-side OCI registry on 127.0.0.1:5002"
 	@echo "  make image-signing-prereqs                   Check optional cosign prerequisites for local image signing"
 	@echo "  make gitea-sync                               Sync apps/ + cluster-policies/ into the Gitea policies repo"
@@ -302,6 +304,10 @@ image-signing-prereqs:
 	@command -v cosign >/dev/null 2>&1 || { echo "FAIL cosign not found; install cosign before ENABLE_IMAGE_SIGNING=true builds"; exit 1; }
 	@echo "OK   cosign available"
 
+.PHONY: memory-report
+memory-report:
+	@"$(MEMORY_REPORT)" $(READONLY_MODE_FLAG)
+
 .PHONY: render-operator-overrides
 render-operator-overrides:
 	@KIND_OPERATOR_OVERRIDES_FILE="$(KIND_OPERATOR_OVERRIDES_FILE)" \
@@ -347,6 +353,7 @@ sync-image-cache: workflow-validate-stage
 	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_tempo false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_METRICS_SERVER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_metrics_server false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
 	"$(SYNC_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)

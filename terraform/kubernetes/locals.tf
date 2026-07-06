@@ -522,6 +522,7 @@ locals {
     headlamp                = "apps/vendor/charts/headlamp"
     kyverno                 = "apps/vendor/charts/kyverno"
     loki                    = "apps/vendor/charts/loki"
+    metrics_server          = "apps/vendor/charts/metrics-server"
     oauth2_proxy            = "apps/vendor/charts/oauth2-proxy"
     opentelemetry_collector = "apps/vendor/charts/opentelemetry-collector"
     policy_reporter         = "apps/vendor/charts/policy-reporter"
@@ -550,6 +551,7 @@ locals {
     local.enable_victoria_logs_effective ||
     local.enable_tempo_effective ||
     var.enable_signoz ||
+    var.enable_metrics_server ||
     var.enable_headlamp ||
     var.enable_sso ||
     var.enable_langfuse ||
@@ -570,6 +572,7 @@ locals {
     local.enable_loki_effective && var.enable_argocd ? ["loki"] : [],
     local.enable_victoria_logs_effective && var.enable_argocd ? ["victoria-logs"] : [],
     local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
+    var.enable_metrics_server && var.enable_argocd ? ["metrics-server"] : [],
     local.enable_apim_simulator_effective && var.enable_argocd ? ["apim"] : [],
     var.enable_agentgateway_ai_gateway && var.enable_argocd ? ["agentgateway-ai-gateway"] : [],
     var.enable_langfuse && var.enable_argocd ? ["langfuse"] : [],
@@ -653,6 +656,7 @@ locals {
     enable_tempo                           = var.enable_tempo
     enable_signoz                          = var.enable_signoz
     enable_otel_gateway                    = var.enable_otel_gateway
+    enable_metrics_server                  = var.enable_metrics_server
     enable_headlamp                        = var.enable_headlamp
     enable_sso                             = var.enable_sso
     enable_backstage                       = var.enable_backstage
@@ -700,6 +704,7 @@ locals {
     grafana_victoria_logs_plugin_url       = local.grafana_victoria_logs_plugin_url_effective
     grafana_liveness_initial_delay_seconds = var.grafana_liveness_initial_delay_seconds
     headlamp_chart_version                 = var.headlamp_chart_version
+    metrics_server_chart_version           = var.metrics_server_chart_version
     kyverno_chart_version                  = var.kyverno_chart_version
     loki_chart_version                     = var.loki_chart_version
     oauth2_proxy_chart_version             = var.oauth2_proxy_chart_version

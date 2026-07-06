@@ -59,6 +59,18 @@ run "headlamp_requires_argocd" {
   expect_failures = [check.enable_headlamp_requires_enable_argocd]
 }
 
+run "metrics_server_requires_argocd_and_gitea" {
+  command = plan
+
+  variables {
+    enable_argocd         = true
+    enable_gitea          = false
+    enable_metrics_server = true
+  }
+
+  expect_failures = [check.enable_metrics_server_requires_enable_argocd]
+}
+
 run "actions_runner_requires_gitea_and_argocd" {
   command = plan
 

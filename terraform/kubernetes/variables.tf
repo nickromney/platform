@@ -206,6 +206,18 @@ variable "enable_headlamp" {
   default     = false
 }
 
+variable "enable_metrics_server" {
+  description = "Deploy metrics-server via Argo CD. Kind profiles add kubelet insecure TLS for local node certificates."
+  type        = bool
+  default     = false
+}
+
+variable "enable_namespace_resource_bounds" {
+  description = "Apply default container requests/limits and aggregate ResourceQuota bounds to application namespaces."
+  type        = bool
+  default     = false
+}
+
 variable "enable_observability_agent" {
   description = "Deploy an OpenTelemetry Collector agent (DaemonSet) to scrape platform metrics and ship logs/metrics/traces to SigNoz."
   type        = bool
@@ -561,6 +573,18 @@ variable "headlamp_chart_version" {
   description = "Headlamp chart version."
   type        = string
   default     = "0.43.0"
+}
+
+variable "metrics_server_chart_version" {
+  description = "Metrics Server chart version (kubernetes-sigs/metrics-server)."
+  type        = string
+  default     = "3.13.1"
+}
+
+variable "metrics_server_image_tag" {
+  description = "Metrics Server container image tag."
+  type        = string
+  default     = "v0.8.1"
 }
 
 variable "kyverno_chart_version" {
@@ -1020,6 +1044,13 @@ check "enable_headlamp_requires_enable_argocd" {
   assert {
     condition     = !var.enable_headlamp || var.enable_argocd
     error_message = "enable_headlamp requires enable_argocd to be true."
+  }
+}
+
+check "enable_metrics_server_requires_enable_argocd" {
+  assert {
+    condition     = !var.enable_metrics_server || (var.enable_argocd && var.enable_gitea)
+    error_message = "enable_metrics_server requires enable_argocd=true and enable_gitea=true."
   }
 }
 
