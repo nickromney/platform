@@ -6,6 +6,7 @@ setup() {
   export SCRIPT="${REPO_ROOT}/scripts/check-repo-version.sh"
   export FIXTURE_ROOT="${BATS_TEST_TMPDIR}/repo"
   export GITHUB_FIXTURES="${BATS_TEST_TMPDIR}/github"
+  export NPM_FIXTURES="${BATS_TEST_TMPDIR}/npm"
   export FAKE_BIN="${BATS_TEST_TMPDIR}/bin"
 
   mkdir -p "${FIXTURE_ROOT}/.github/workflows"
@@ -316,5 +317,87 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"frontend-react: installed packages 240 exceed budget 200"* ]]
+  [[ "${output}" == *"version check(s) failed."* ]]
+}
+
+write_shell_ui_pin() {
+  local target="$1"
+  local version="$2"
+
+  mkdir -p "$(dirname "${target}")"
+  cat >"${target}" <<EOF
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@${version}/dist/5h3ll_ui.cdn.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@${version}/dist/js/all.min.js" defer></script>
+EOF
+}
+
+write_shell_ui_packument() {
+  local recent
+  recent="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  mkdir -p "${NPM_FIXTURES}/@social-5h3ll"
+  cat >"${NPM_FIXTURES}/@social-5h3ll/5h3ll-ui" <<EOF
+{
+  "dist-tags": {"latest": "0.2.0"},
+  "time": {
+    "created": "2026-06-06T00:00:00Z",
+    "modified": "${recent}",
+    "0.1.3": "2026-06-08T17:55:04Z",
+    "0.1.4": "2026-06-08T21:59:37Z",
+    "0.2.0": "${recent}"
+  }
+}
+EOF
+}
+
+@test "check-version passes when the 5h3ll-ui pin matches the newest mature release" {
+  write_shell_ui_pin "${FIXTURE_ROOT}/apps/demo/web/index.html" "0.1.4"
+  write_shell_ui_packument
+
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
+    CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
+    CHECK_VERSION_NPM_REGISTRY_BASE="file://${NPM_FIXTURES}" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"@social-5h3ll/5h3ll-ui@0.1.4 is pinned consistently across 1 file(s)"* ]]
+  [[ "${output}" == *"@social-5h3ll/5h3ll-ui@0.1.4 matches the newest release past the 7-day age gate"* ]]
+  [[ "${output}" == *"All version checks passed."* ]]
+}
+
+@test "check-version fails when the 5h3ll-ui pin is behind a mature release" {
+  write_shell_ui_pin "${FIXTURE_ROOT}/apps/demo/web/index.html" "0.1.3"
+  write_shell_ui_packument
+
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
+    CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
+    CHECK_VERSION_NPM_REGISTRY_BASE="file://${NPM_FIXTURES}" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"@social-5h3ll/5h3ll-ui@0.1.3 is behind 0.1.4, the newest release past the 7-day age gate"* ]]
+  [[ "${output}" == *"version check(s) failed."* ]]
+}
+
+@test "check-version fails when 5h3ll-ui pins drift across files" {
+  write_shell_ui_pin "${FIXTURE_ROOT}/apps/demo/web/index.html" "0.1.4"
+  write_shell_ui_pin "${FIXTURE_ROOT}/apps/sentiment/web/index.html" "0.1.3"
+
+  run env \
+    CHECK_VERSION_REPO_ROOT="${FIXTURE_ROOT}" \
+    CHECK_VERSION_WORKFLOW_FILE="${FIXTURE_ROOT}/.github/workflows/release.yml" \
+    CHECK_VERSION_FRONTEND_BUDGETS_FILE="${FIXTURE_ROOT}/apps/demo/frontend-budgets.json" \
+    CHECK_VERSION_GITHUB_API_BASE="file://${GITHUB_FIXTURES}" \
+    CHECK_VERSION_NPM_REGISTRY_BASE="file://${NPM_FIXTURES}" \
+    "${SCRIPT}" --execute
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"@social-5h3ll/5h3ll-ui CDN pins are not synchronized across the repo"* ]]
   [[ "${output}" == *"version check(s) failed."* ]]
 }

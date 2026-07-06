@@ -5,19 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Auth Chat</title>
     <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@0.1.4/dist/5h3ll_ui.cdn.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@social-5h3ll/5h3ll-ui@0.1.4/dist/js/all.min.js" defer></script>
     <link rel="stylesheet" href="/app-shell.css">
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
-    <header class="topbar">
+    <header>
       <div>
         <h1>Auth Chat</h1>
         <p id="route-summary">/auth -> /chat -> Qwen3.5-9B-MLX-4bit</p>
       </div>
       <div class="header-actions">
         <p id="auth-state" class="auth-state">Signed out</p>
-        <button id="logout-btn" class="secondary-button" type="button" hidden>Sign Out</button>
+        <button id="logout-btn" class="sign-in-link" type="button" hidden>Sign Out</button>
         <button id="theme-switcher" class="theme-toggle" type="button" aria-label="Theme: system. Switch to light theme." title="Theme: system. Switch to light theme." data-theme-choice="system"></button>
       </div>
     </header>

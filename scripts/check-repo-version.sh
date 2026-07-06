@@ -11,6 +11,7 @@ WORKFLOW_FILE="${CHECK_VERSION_WORKFLOW_FILE:-}"
 APIM_SIMULATOR_VENDOR_DIR="${CHECK_VERSION_APIM_SIMULATOR_VENDOR_DIR:-${REPO_ROOT}/apps/apim-simulator}"
 CHECK_VERSION_SKIP_UPSTREAM="${CHECK_VERSION_SKIP_UPSTREAM:-0}"
 CHECK_VERSION_GITHUB_API_BASE="${CHECK_VERSION_GITHUB_API_BASE:-https://api.github.com}"
+CHECK_VERSION_NPM_REGISTRY_BASE="${CHECK_VERSION_NPM_REGISTRY_BASE:-https://registry.npmjs.org}"
 CHECK_VERSION_TIMEOUT_SECONDS="${CHECK_VERSION_TIMEOUT_SECONDS:-15}"
 CHECK_VERSION_NPM_MIN_RELEASE_AGE="${CHECK_VERSION_NPM_MIN_RELEASE_AGE:-7}"
 CHECK_VERSION_BUN_MIN_RELEASE_AGE="${CHECK_VERSION_BUN_MIN_RELEASE_AGE:-604800}"
@@ -45,6 +46,8 @@ $(shell_cli_usage_line " [--dry-run] [--execute]")
 Checks:
   - repo GitHub/Gitea Actions pins remain SHA-pinned with selector comments
   - the integrated apim-simulator package has coherent project metadata
+  - the @social-5h3ll/5h3ll-ui CDN pins stay consistent across apps and track
+    the newest npm release that satisfies the repo release-age gate
   - repo-local dependency age gates stay aligned across .npmrc, bunfig.toml,
     and uv-managed pyproject.toml files
   - optional frontend package-count, initial-page, and shipped-asset budgets when configured
@@ -61,6 +64,7 @@ Environment:
                                         Override the integrated APIM simulator directory.
   CHECK_VERSION_SKIP_UPSTREAM=1         Skip network-backed upstream resolution.
   CHECK_VERSION_GITHUB_API_BASE=...     Override the GitHub API base URL.
+  CHECK_VERSION_NPM_REGISTRY_BASE=...   Override the npm registry base URL.
   CHECK_VERSION_TIMEOUT_SECONDS=...     HTTP timeout in seconds. Default: 15.
   CHECK_VERSION_FRONTEND_BUDGETS_FILE=...
                                         Override the frontend budget definition file.
@@ -283,6 +287,127 @@ PY
   }
 
   ok "apim-simulator is integrated under apps/apim-simulator as a ${output} app"
+}
+
+check_shell_ui_cdn_pin() {
+  section "5h3ll-ui CDN Pin"
+
+  local output status=0
+  if output="$(
+    run_inline_python \
+      "${REPO_ROOT}" \
+      "${CHECK_VERSION_SKIP_UPSTREAM}" \
+      "${CHECK_VERSION_NPM_REGISTRY_BASE}" \
+      "${CHECK_VERSION_NPM_MIN_RELEASE_AGE}" \
+      "${CHECK_VERSION_TIMEOUT_SECONDS}" <<'PY'
+import json
+import re
+import sys
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+skip_upstream = sys.argv[2] == "1"
+registry_base = sys.argv[3].rstrip("/")
+min_release_age_days = int(sys.argv[4])
+timeout = int(sys.argv[5])
+
+package = "@social-5h3ll/5h3ll-ui"
+pin_pattern = re.compile(re.escape(package) + r"@([0-9][0-9A-Za-z.+-]*)")
+excluded_parts = {".git", "node_modules", ".run", "dist", "build", ".venv", "venv", ".terragrunt-cache"}
+
+def included(path: Path) -> bool:
+    return not excluded_parts.intersection(path.parts)
+
+pins: dict[str, set[str]] = {}
+for suffix in ("*.html", "*.go"):
+    for path in sorted(repo_root.rglob(suffix)):
+        if not included(path.relative_to(repo_root)):
+            continue
+        for version in pin_pattern.findall(path.read_text(encoding="utf-8", errors="ignore")):
+            pins.setdefault(version, set()).add(str(path.relative_to(repo_root)))
+
+if not pins:
+    print(f"WARN\tNo {package} CDN pins found under {repo_root}")
+    raise SystemExit(0)
+
+if len(pins) > 1:
+    for version, files in sorted(pins.items()):
+        print(f"FAIL\t{package}@{version} pinned in: {', '.join(sorted(files))}")
+    print(f"FAIL\t{package} CDN pins are not synchronized across the repo")
+    raise SystemExit(1)
+
+pinned = next(iter(pins))
+file_count = len(pins[pinned])
+print(f"OK\t{package}@{pinned} is pinned consistently across {file_count} file(s)")
+
+if skip_upstream:
+    print(f"WARN\t{package} upstream resolution skipped")
+    raise SystemExit(0)
+
+request = urllib.request.Request(
+    f"{registry_base}/{package}",
+    headers={
+        # The abbreviated packument omits the per-version "time" map needed
+        # for the release-age gate, so request the full document.
+        "Accept": "application/json",
+        "User-Agent": "platform-check-version",
+    },
+)
+try:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        packument = json.load(response)
+except Exception as error:  # noqa: BLE001 - report and warn, matching action-pin behaviour
+    print(f"WARN\tcould not resolve {package} from {registry_base}: {error}")
+    raise SystemExit(0)
+
+def release_key(version: str) -> tuple[int, ...] | None:
+    if "-" in version:
+        return None
+    parts = version.split(".")
+    return tuple(int(part) for part in parts) if all(part.isdigit() for part in parts) else None
+
+release_times = packument.get("time", {})
+if not release_times:
+    print(f"WARN\t{package} packument from {registry_base} has no release timestamps")
+    raise SystemExit(0)
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=min_release_age_days)
+mature: list[tuple[tuple[int, ...], str]] = []
+for version, stamp in release_times.items():
+    key = release_key(version)
+    if key is None:
+        continue
+    released = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    if released <= cutoff:
+        mature.append((key, version))
+
+if not mature:
+    print(f"WARN\tno {package} release is older than the {min_release_age_days}-day age gate yet")
+    raise SystemExit(0)
+
+latest_key, latest = max(mature)
+pinned_key = release_key(pinned)
+
+if pinned == latest:
+    print(f"OK\t{package}@{pinned} matches the newest release past the {min_release_age_days}-day age gate")
+elif pinned_key is not None and pinned_key > latest_key:
+    print(f"WARN\t{package}@{pinned} is newer than {latest}, the newest release past the {min_release_age_days}-day age gate")
+else:
+    print(f"FAIL\t{package}@{pinned} is behind {latest}, the newest release past the {min_release_age_days}-day age gate")
+    raise SystemExit(1)
+PY
+  )"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  emit_frontend_budget_lines "${output}"
+  if [[ "${status}" -ne 0 ]]; then
+    return
+  fi
 }
 
 check_npm_age_gates() {
@@ -791,6 +916,7 @@ PY
 
 check_action_pins
 check_apim_simulator_vendor
+check_shell_ui_cdn_pin
 check_npm_age_gates
 check_bun_age_gates
 check_uv_age_gates
