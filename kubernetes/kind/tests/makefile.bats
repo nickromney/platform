@@ -30,6 +30,7 @@ setup() {
   [[ "${output}" != *"make 950-local-idp plan"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
   [[ "${output}" == *"make docker-safe-clean [AUTO_APPROVE=1]"* ]]
+  [[ "${output}" == *"make check-memory"* ]]
   [[ "${output}" == *"make check-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make check-provider-version [CHECK_VERSION_FORMAT=text|json]"* ]]
   [[ "${output}" == *"make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"* ]]
@@ -641,6 +642,13 @@ EOF
 }
 
 @test "kind prereqs hard-blocks missing Docker Hardened Images credentials" {
+  run grep -Fn 'echo "Memory preflight:"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(CHECK_MEMORY_PREFLIGHT)" $(READONLY_MODE_FLAG); \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
   run grep -Fn 'echo "Docker registry auth:"; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -652,6 +660,13 @@ EOF
   [ "${status}" -eq 0 ]
 
   run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind prereqs runs memory preflight before registry auth" {
+  run bash -c 'prereqs=$(sed -n "/^prereqs:/,/^preload-images:/p" "$1"); memory_line=$(printf "%s\n" "$prereqs" | grep -n "Memory preflight" | head -n1 | cut -d: -f1); registry_line=$(printf "%s\n" "$prereqs" | grep -n "Docker registry auth" | head -n1 | cut -d: -f1); test -n "$memory_line" && test -n "$registry_line" && test "$memory_line" -lt "$registry_line"' _ \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
   [ "${status}" -eq 0 ]
 }
 
