@@ -85,15 +85,6 @@ setup() {
       and .host_access_path.mode == \"host-gateway-proxy\"
       and .host_access_path.requires_proxy == true
     " "${VARIANTS_DIR}/lima/variant.json" >/dev/null
-
-    jq -e "
-      .state.state_file == \"terraform/.run/kubernetes-slicer/terraform.tfstate\"
-      and .cluster_access.kubeconfig_context == \"slicer-k3s\"
-      and .registry.runtime_host == \"192.168.64.1:5002\"
-      and .host_access_path.mode == \"host-forwards-plus-proxy\"
-      and .host_access_path.gateway_forward_port == 8443
-      and .network_profile.allowed == [\"cilium\", \"default\"]
-    " "${VARIANTS_DIR}/slicer/variant.json" >/dev/null
   '
 
   [ "${status}" -eq 0 ]
@@ -102,7 +93,7 @@ setup() {
 @test "variant contracts match current Makefile defaults" {
   run bash -c '
     set -euo pipefail
-    for id in kind lima slicer; do
+    for id in kind lima; do
       contract="${VARIANTS_DIR}/${id}/variant.json"
       make_json="$(make --no-print-directory -C "${REPO_ROOT}/kubernetes/${id}" variant-contract-print)"
       jq -e \

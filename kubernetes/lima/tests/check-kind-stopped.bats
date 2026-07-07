@@ -35,7 +35,7 @@ EOF
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"make -C kubernetes/kind stop-kind"* ]]
-  [[ "${output}" == *"Conflicting shared host ports for Lima/Slicer:"* ]]
+  [[ "${output}" == *"Conflicting shared host ports for Lima:"* ]]
   [[ "${output}" == *"127.0.0.1:443"* ]]
   [[ "${output}" == *"127.0.0.1:30080"* ]]
   [[ "${output}" == *"Other published kind host ports:"* ]]

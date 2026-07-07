@@ -44,11 +44,8 @@ expand_home_path() {
 
 KIND_KUBECONFIG_CONTEXT="${PLATFORM_STATUS_KIND_KUBECONFIG_CONTEXT:-$(variant_contract_value kind '.cluster_access.kubeconfig_context' 'kind-kind-local')}"
 LIMA_KUBECONFIG_CONTEXT="${PLATFORM_STATUS_LIMA_KUBECONFIG_CONTEXT:-$(variant_contract_value lima '.cluster_access.kubeconfig_context' 'limavm-k3s')}"
-SLICER_KUBECONFIG_CONTEXT="${PLATFORM_STATUS_SLICER_KUBECONFIG_CONTEXT:-$(variant_contract_value slicer '.cluster_access.kubeconfig_context' 'slicer-k3s')}"
 KIND_KUBECONFIG_PATH="${PLATFORM_STATUS_KIND_KUBECONFIG_PATH:-$(expand_home_path "$(variant_contract_value kind '.cluster_access.kubeconfig_path' "${HOME}/.kube/kind-kind-local.yaml")")}"
 LIMA_KUBECONFIG_PATH="${PLATFORM_STATUS_LIMA_KUBECONFIG_PATH:-$(expand_home_path "$(variant_contract_value lima '.cluster_access.kubeconfig_path' "${HOME}/.kube/limavm-k3s.yaml")")}"
-SLICER_KUBECONFIG_PATH="${PLATFORM_STATUS_SLICER_KUBECONFIG_PATH:-$(expand_home_path "$(variant_contract_value slicer '.cluster_access.kubeconfig_path' "${HOME}/.kube/slicer-k3s.yaml")")}"
-SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
 output_format="human"
 PLATFORM_SHARED_PORTS="${PLATFORM_STATUS_SHARED_PORTS:-443 30022 30080 30090 31235 3301 3302}"
 PLATFORM_VARIANT_PORTS="${PLATFORM_STATUS_VARIANT_PORTS:-${PLATFORM_STATUS_PROVIDER_PORTS:-6443 ${PLATFORM_SHARED_PORTS}}}"
@@ -63,7 +60,6 @@ Usage: @SCRIPT_NAME@ [--output human|text|json] [--dry-run] [--execute]
 Summarises local variant runtime status across:
   - kubernetes/kind
   - kubernetes/lima
-  - kubernetes/slicer
 EOF
   printf '\n%s\n' "$(shell_cli_standard_options)"
 }
@@ -905,18 +901,6 @@ if have_cmd limactl; then
   limactl_list_output="$(limactl list 2>/dev/null || true)"
 fi
 
-slicer_available=0
-slicer_endpoint_reachable=0
-slicer_vm_list_json='[]'
-if have_cmd slicer; then
-  slicer_available=1
-  if slicer_vm_list_json="$(slicer vm list --json 2>/dev/null)"; then
-    slicer_endpoint_reachable=1
-  else
-    slicer_vm_list_json='[]'
-  fi
-fi
-
 bootstrap_client_available=0
 bootstrap_client_name=""
 for candidate in "${K3SUP_PRO_BIN:-}" "$(command -v k3sup-pro 2>/dev/null || true)" "${K3SUP_BIN:-}" "$(command -v k3sup 2>/dev/null || true)" "${HOME}/.arkade/bin/k3sup"; do
@@ -947,51 +931,11 @@ if limactl_running_prefix "${limactl_list_output}" 'k3s-node-'; then
   lima_running=1
 fi
 
-slicer_runtime_present=0
-slicer_running=0
-slicer_paused=0
-slicer_vm_state=""
-if [ "${slicer_endpoint_reachable}" -eq 1 ]; then
-  slicer_vm_state="$(jq -r --arg vm "${SLICER_VM_NAME}" '.[] | select(.hostname == $vm) | .status // empty' <<<"${slicer_vm_list_json}" | head -n 1 || true)"
-  if [ -n "${slicer_vm_state}" ]; then
-    slicer_runtime_present=1
-  fi
-  if [ "${slicer_vm_state}" = "Running" ]; then
-    slicer_running=1
-  fi
-  if [ "${slicer_vm_state}" = "Paused" ]; then
-    slicer_paused=1
-  fi
-fi
-
-slicer_host_forwards_running=""
-slicer_proxy_running=""
-slicer_host_bindings_active=0
-if [ "${slicer_running}" -eq 1 ]; then
-  slicer_host_forwards_running="$(
-    ps -ax -o comm=,args= 2>/dev/null | \
-      awk 'index($0, "slicer vm forward") && $1 != "awk" && $1 != "bash" && $1 != "sh" { found=1 } END { if (found) print "true" }' || true
-  )"
-  slicer_proxy_running="$(
-    printf '%s\n' "${docker_ps_output}" | \
-      awk -F '|' '$1 == "slicer-platform-gateway-443" { found=1 } END { if (found) print "true" }' || true
-  )"
-  if [ -n "${slicer_host_forwards_running}" ] || [ -n "${slicer_proxy_running}" ]; then
-    slicer_host_bindings_active=1
-  fi
-fi
-
 lima_ports=""
 if [ "${lima_running}" -eq 1 ]; then
   lima_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
 fi
 lima_ports="$(unique_sorted_lines "${lima_ports}")"
-
-slicer_ports=""
-if [ "${slicer_running}" -eq 1 ] && [ "${slicer_host_bindings_active}" -eq 1 ]; then
-  slicer_ports="$(listener_addresses_for_ports "${PLATFORM_VARIANT_PORTS}" || true)"
-fi
-slicer_ports="$(unique_sorted_lines "${slicer_ports}")"
 
 kind_serving=0
 if ports_include_number "${kind_ports}" 443; then
@@ -1003,14 +947,8 @@ if ports_include_number "${lima_ports}" 443; then
   lima_serving=1
 fi
 
-slicer_serving=0
-if ports_include_number "${slicer_ports}" 443; then
-  slicer_serving=1
-fi
-
 kind_version="$(kube_version_for "${KIND_KUBECONFIG_PATH}" "${KIND_KUBECONFIG_CONTEXT}")"
 lima_version="$(kube_version_for "${LIMA_KUBECONFIG_PATH}" "${LIMA_KUBECONFIG_CONTEXT}")"
-slicer_version="$(kube_version_for "${SLICER_KUBECONFIG_PATH}" "${SLICER_KUBECONFIG_CONTEXT}")"
 
 kind_state="absent"
 if [ "${kind_runtime_present}" -eq 1 ]; then
@@ -1034,23 +972,9 @@ if [ "${lima_runtime_present}" -eq 1 ]; then
   fi
 fi
 
-slicer_state="absent"
-if [ "${slicer_runtime_present}" -eq 1 ]; then
-  if [ "${slicer_paused}" -eq 1 ]; then
-    slicer_state="paused"
-  elif [ "${slicer_running}" -eq 1 ] && [ "${slicer_serving}" -eq 1 ]; then
-    slicer_state="running"
-  elif [ "${slicer_running}" -eq 1 ]; then
-    slicer_state="degraded"
-  else
-    slicer_state="stopped"
-  fi
-fi
-
 all_project_ports=""
 append_lines all_project_ports "${kind_ports}"
 append_lines all_project_ports "${lima_ports}"
-append_lines all_project_ports "${slicer_ports}"
 all_project_ports="$(unique_sorted_lines "${all_project_ports}")"
 
 probe_listener_ports="$(listener_addresses_for_ports "${PLATFORM_PROBE_PORTS}" || true)"
@@ -1070,17 +994,6 @@ if [ "${limactl_available}" -eq 1 ]; then
   fi
 else
   lima_platform_detail="limactl not found"
-fi
-
-slicer_platform_detail=""
-if [ "${slicer_available}" -ne 1 ]; then
-  slicer_platform_detail="slicer not found"
-elif [ "${slicer_endpoint_reachable}" -ne 1 ]; then
-  slicer_platform_detail="endpoint unreachable"
-elif [ -n "${slicer_vm_state}" ]; then
-  slicer_platform_detail="vm=${SLICER_VM_NAME}:${slicer_vm_state}"
-else
-  slicer_platform_detail="endpoint reachable"
 fi
 
 kind_dhi_auth=0
@@ -1107,7 +1020,6 @@ kind_docker_hub_auth_detail="$(strip_status_prefix "$(first_non_empty_line "${do
 
 kind_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
 lima_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
-slicer_foreign_ports="$(filter_ports_by_numbers "${foreign_ports}" "${PLATFORM_VARIANT_PORTS}")"
 kind_blockers=""
 if [ "${docker_available}" -ne 1 ]; then
   append_line kind_blockers 'docker not found in PATH'
@@ -1126,9 +1038,6 @@ fi
 if [ "${lima_serving}" -eq 1 ]; then
   append_line kind_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
 fi
-if [ "${slicer_serving}" -eq 1 ]; then
-  append_line kind_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
-fi
 append_foreign_port_blockers kind_blockers "${kind_foreign_ports}"
 
 lima_blockers=""
@@ -1146,39 +1055,12 @@ fi
 if [ "${kind_serving}" -eq 1 ]; then
   append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/kind')"
 fi
-if [ "${slicer_serving}" -eq 1 ]; then
-  append_line lima_blockers "$(shared_host_ports_claimed_by 'kubernetes/slicer')"
-fi
 append_foreign_port_blockers lima_blockers "${lima_foreign_ports}"
-
-slicer_blockers=""
-if [ "${docker_available}" -ne 1 ]; then
-  append_line slicer_blockers 'docker not found in PATH'
-elif [ "${docker_daemon}" -ne 1 ]; then
-  append_line slicer_blockers 'Docker daemon not reachable'
-fi
-if [ "${slicer_available}" -ne 1 ]; then
-  append_line slicer_blockers 'slicer not found in PATH'
-fi
-if [ "${slicer_available}" -eq 1 ] && [ "${slicer_endpoint_reachable}" -ne 1 ]; then
-  append_line slicer_blockers 'Slicer endpoint is not reachable'
-fi
-if [ "${bootstrap_client_available}" -ne 1 ]; then
-  append_line slicer_blockers 'bootstrap client not found (k3sup-pro or k3sup)'
-fi
-if [ "${kind_serving}" -eq 1 ]; then
-  append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/kind')"
-fi
-if [ "${lima_serving}" -eq 1 ]; then
-  append_line slicer_blockers "$(shared_host_ports_claimed_by 'kubernetes/lima')"
-fi
-append_foreign_port_blockers slicer_blockers "${slicer_foreign_ports}"
 
 docker_runtime_json="$(build_runtime_json docker "${docker_available}" "${docker_daemon}" "${docker_runtime_detail}")"
 colima_runtime_json="$(build_runtime_json colima "${colima_available}" "${colima_running}" "${colima_runtime_detail}")"
 podman_runtime_json="$(build_runtime_json podman "${podman_available}" "${podman_running}" "${podman_runtime_detail}")"
 lima_platform_json="$(build_runtime_json lima "${limactl_available}" "${lima_platform_running}" "${lima_platform_detail}")"
-slicer_platform_json="$(build_runtime_json slicer "${slicer_available}" "${slicer_running}" "${slicer_platform_detail}")"
 
 dhi_registry_auth_json="$(build_registry_auth_json dhi.io "${kind_dhi_auth}" "${kind_dhi_auth_source}" "${kind_dhi_auth_detail}")"
 docker_io_registry_auth_json="$(build_registry_auth_json docker.io "${kind_docker_hub_auth}" "${kind_docker_hub_auth_source}" "${kind_docker_hub_auth_detail}")"
@@ -1215,37 +1097,17 @@ lima_readiness_json="$(jq -cn \
     bootstrap_client_name: (if $bootstrap_client_name == "" then null else $bootstrap_client_name end)
   }')"
 
-slicer_readiness_json="$(jq -cn \
-  --argjson docker_available "$(bool_json "${docker_available}")" \
-  --argjson docker_daemon "$(bool_json "${docker_daemon}")" \
-  --arg docker_context "${docker_context}" \
-  --argjson slicer_available "$(bool_json "${slicer_available}")" \
-  --argjson slicer_endpoint_reachable "$(bool_json "${slicer_endpoint_reachable}")" \
-  --argjson bootstrap_client "$(bool_json "${bootstrap_client_available}")" \
-  --arg bootstrap_client_name "${bootstrap_client_name}" \
-  '{
-    docker_available: $docker_available,
-    docker_daemon: $docker_daemon,
-    docker_context: (if $docker_context == "" then null else $docker_context end),
-    slicer_available: $slicer_available,
-    slicer_endpoint_reachable: $slicer_endpoint_reachable,
-    bootstrap_client: $bootstrap_client,
-    bootstrap_client_name: (if $bootstrap_client_name == "" then null else $bootstrap_client_name end)
-  }')"
-
 kind_project_json="$(build_project_json kind kubernetes/kind 'Kind local cluster' docker "${kind_state}" "${kind_serving}" "${kind_runtime_present}" "${KIND_KUBECONFIG_PATH}" "${KIND_KUBECONFIG_CONTEXT}" "${kind_version}" "${kind_ports}" "${kind_blockers}" "${kind_readiness_json}")"
 lima_project_json="$(build_project_json lima kubernetes/lima 'Kubernetes Lima cluster' lima "${lima_state}" "${lima_serving}" "${lima_runtime_present}" "${LIMA_KUBECONFIG_PATH}" "${LIMA_KUBECONFIG_CONTEXT}" "${lima_version}" "${lima_ports}" "${lima_blockers}" "${lima_readiness_json}")"
-slicer_project_json="$(build_project_json slicer kubernetes/slicer 'Slicer local cluster' slicer "${slicer_state}" "${slicer_serving}" "${slicer_runtime_present}" "${SLICER_KUBECONFIG_PATH}" "${SLICER_KUBECONFIG_CONTEXT}" "${slicer_version}" "${slicer_ports}" "${slicer_blockers}" "${slicer_readiness_json}")"
 
 active_cluster_variant=""
 active_cluster_variant_path=""
 serving_cluster_variant_count=0
-for cluster_variant_key in kind lima slicer; do
+for cluster_variant_key in kind lima; do
   cluster_variant_serving="$(jq -r --arg key "${cluster_variant_key}" '.[$key].serving' <<<"$(jq -cn \
     --argjson kind "${kind_project_json}" \
     --argjson lima "${lima_project_json}" \
-    --argjson slicer "${slicer_project_json}" \
-    '{kind: $kind, lima: $lima, slicer: $slicer}')")"
+    '{kind: $kind, lima: $lima}')")"
   if [ "${cluster_variant_serving}" = "true" ]; then
     serving_cluster_variant_count=$((serving_cluster_variant_count + 1))
     active_cluster_variant="${cluster_variant_key}"
@@ -1264,12 +1126,11 @@ if [ -n "${active_cluster_variant}" ]; then
   case "${active_cluster_variant}" in
     kind) active_cluster_variant_path="kubernetes/kind" ;;
     lima) active_cluster_variant_path="kubernetes/lima" ;;
-    slicer) active_cluster_variant_path="kubernetes/slicer" ;;
   esac
 fi
 
 if [ "${overall_state}" != "conflict" ] && [ "${overall_state}" != "running" ]; then
-  if [ "${kind_runtime_present}" -eq 1 ] || [ "${lima_runtime_present}" -eq 1 ] || [ "${slicer_runtime_present}" -eq 1 ]; then
+  if [ "${kind_runtime_present}" -eq 1 ] || [ "${lima_runtime_present}" -eq 1 ]; then
     overall_state="running"
   fi
 fi
@@ -1295,9 +1156,6 @@ elif [ "${kind_available}" -ne 1 ]; then
 elif [ "${lima_serving}" -eq 1 ]; then
   kind_apply_100_enabled=0
   kind_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/lima')"
-elif [ "${slicer_serving}" -eq 1 ]; then
-  kind_apply_100_enabled=0
-  kind_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 elif [ -n "${kind_foreign_ports}" ]; then
   kind_apply_100_enabled=0
   kind_apply_100_reason="$(first_non_empty_line "${kind_foreign_ports}") is already in use by another process"
@@ -1331,42 +1189,12 @@ elif [ "${bootstrap_client_available}" -ne 1 ]; then
 elif [ "${kind_serving}" -eq 1 ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/kind')"
-elif [ "${slicer_serving}" -eq 1 ]; then
-  lima_apply_100_enabled=0
-  lima_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/slicer')"
 elif [ -n "${lima_foreign_ports}" ]; then
   lima_apply_100_enabled=0
   lima_apply_100_reason="$(first_non_empty_line "${lima_foreign_ports}") is already in use by another process"
 fi
 lima_apply_900_enabled="${lima_apply_100_enabled}"
 lima_apply_900_reason="${lima_apply_100_reason}"
-
-slicer_apply_100_enabled=1
-slicer_apply_100_reason=""
-if [ "${docker_available}" -ne 1 ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason='docker not found in PATH'
-elif [ "${docker_daemon}" -ne 1 ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason='Docker daemon not reachable'
-elif [ "${slicer_available}" -ne 1 ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason='slicer not found in PATH'
-elif [ "${bootstrap_client_available}" -ne 1 ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason='bootstrap client not found (k3sup-pro or k3sup)'
-elif [ "${kind_serving}" -eq 1 ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/kind')"
-elif [ "${lima_serving}" -eq 1 ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason="$(shared_host_ports_claimed_by 'kubernetes/lima')"
-elif [ -n "${slicer_foreign_ports}" ]; then
-  slicer_apply_100_enabled=0
-  slicer_apply_100_reason="$(first_non_empty_line "${slicer_foreign_ports}") is already in use by another process"
-fi
-slicer_apply_900_enabled="${slicer_apply_100_enabled}"
-slicer_apply_900_reason="${slicer_apply_100_reason}"
 
 actions_json="$(
   {
@@ -1375,9 +1203,6 @@ actions_json="$(
 
     build_variant_status_actions_json lima kubernetes/lima "${lima_runtime_present}" "${lima_apply_100_enabled}" "${lima_apply_100_reason}" "${lima_apply_900_enabled}" "${lima_apply_900_reason}"
     build_shared_idp_preview_actions_json lima kubernetes/lima
-
-    build_variant_status_actions_json slicer kubernetes/slicer "${slicer_runtime_present}" "${slicer_apply_100_enabled}" "${slicer_apply_100_reason}" "${slicer_apply_900_enabled}" "${slicer_apply_900_reason}"
-    build_shared_idp_preview_actions_json slicer kubernetes/slicer
   } | jq -s '.'
 )"
 
@@ -1393,12 +1218,10 @@ status_json="$(jq -cn \
   --argjson colima_runtime "${colima_runtime_json}" \
   --argjson podman_runtime "${podman_runtime_json}" \
   --argjson lima_platform "${lima_platform_json}" \
-  --argjson slicer_platform "${slicer_platform_json}" \
   --argjson dhi_registry_auth "${dhi_registry_auth_json}" \
   --argjson docker_io_registry_auth "${docker_io_registry_auth_json}" \
   --argjson kind "${kind_project_json}" \
   --argjson lima "${lima_project_json}" \
-  --argjson slicer "${slicer_project_json}" \
   --argjson actions "${actions_json}" \
   '{
     generated_at: $generated_at,
@@ -1412,10 +1235,9 @@ status_json="$(jq -cn \
       docker: $docker_runtime,
       colima: $colima_runtime,
       podman: $podman_runtime,
-      lima: $lima_platform,
-      slicer: $slicer_platform
+      lima: $lima_platform
     },
-    platforms_order: ["docker", "colima", "podman", "lima", "slicer"],
+    platforms_order: ["docker", "colima", "podman", "lima"],
     host_runtimes: {
       docker: $docker_runtime,
       colima: $colima_runtime,
@@ -1429,16 +1251,14 @@ status_json="$(jq -cn \
     registry_auth_order: ["dhi_io", "docker_io"],
     cluster_variants: {
       kind: $kind,
-      lima: $lima,
-      slicer: $slicer
+      lima: $lima
     },
-    cluster_variants_order: ["kind", "lima", "slicer"],
+    cluster_variants_order: ["kind", "lima"],
     variants: {
       kind: $kind,
-      lima: $lima,
-      slicer: $slicer
+      lima: $lima
     },
-    variants_order: ["kind", "lima", "slicer"],
+    variants_order: ["kind", "lima"],
     actions: $actions
   }')"
 

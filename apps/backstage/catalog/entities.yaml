@@ -2,7 +2,7 @@ apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
   name: local-idp
-  description: Local internal developer platform running on kind, Lima, or Slicer.
+  description: Local internal developer platform running on kind or Lima.
 spec:
   owner: group:default/platform
 ---

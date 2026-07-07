@@ -3,7 +3,7 @@
 ## Summary
 
 The local Kubernetes workflow should stay focused on `kind`, `lima`, and
-`slicer`, but its core vocabulary must be capable of supporting future
+`lima`, but its core vocabulary must be capable of supporting future
 bare-metal, attached, or hosted Kubernetes variants.
 
 The AKS baseline in `~/Developer/personal/aks-course-development` is useful as
@@ -68,9 +68,9 @@ not being implemented here.
 
 ## Compatibility Rules
 
-- Existing `kubernetes/kind`, `kubernetes/lima`, and `kubernetes/slicer`
+- Existing `kubernetes/kind`, `kubernetes/lima`, and `kubernetes/lima`
   Makefiles remain the operational entrypoints.
-- Existing workflow commands using `--target kind|lima|slicer` continue to work.
+- Existing workflow commands using `--target kind|lima|lima` continue to work.
 - Existing preview JSON fields such as `target`, `stack_path`, `stage`,
   `action`, `command`, and `app_overrides` remain present.
 - Future unsupported variant classes are metadata only. They must not be

@@ -44,7 +44,7 @@ spec:
           Only images from registries listed in kubernetes/*/preload-images.txt,
           images built by Gitea CI/CD (localhost:30090/*), Lima local-build
           images (host.lima.internal:5002/*), Docker Desktop local-build
-          images (host.docker.internal:5002/*), Slicer local-build images
+          images (host.docker.internal:5002/*), Lima local-build images
           (192.168.64.1:5002/*), and explicit Docker Hub repos required by
           the current staged platform set are allowed.
         foreach:

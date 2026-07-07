@@ -17,16 +17,10 @@ K3S_OIDC_RUNTIME="${K3S_OIDC_RUNTIME:-lima}"
 K3S_OIDC_CONFIGURE_SCRIPT="${K3S_OIDC_CONFIGURE_SCRIPT:-${LIMA_OIDC_CONFIGURE_SCRIPT:-${SCRIPT_DIR}/configure-k3s-apiserver-oidc.sh}}"
 
 LIMA_NODE_NAME="${LIMA_NODE_NAME:-k3s-node-1}"
-SLICER_VM_NAME="${SLICER_VM_NAME:-slicer-1}"
-SLICER_URL="${SLICER_URL:-${SLICER_SOCKET:-}}"
 case "${K3S_OIDC_RUNTIME}" in
   lima)
     K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima}"
     K3S_OIDC_NODE_NAME="${LIMA_NODE_NAME}"
-    ;;
-  slicer)
-    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Slicer}"
-    K3S_OIDC_NODE_NAME="${SLICER_VM_NAME}"
     ;;
   *)
     printf 'exercise-k3s-oidc-recovery.sh: unsupported K3S_OIDC_RUNTIME: %s\n' "${K3S_OIDC_RUNTIME}" >&2
@@ -58,7 +52,7 @@ Environment:
     Output format. Json mode emits one machine-readable object on stdout.
   OIDC_RECOVERY_FORCE_MODE=k3s-restart
     Controlled perturbation mode used to force the Lima OIDC restart path.
-  K3S_OIDC_RUNTIME=lima|slicer
+  K3S_OIDC_RUNTIME=lima
     Runtime transport used for the in-VM restart and issuer checks.
   K3S_OIDC_CONFIGURE_SCRIPT=/abs/path/script.sh
     Override the delegated configure script.
@@ -146,14 +140,7 @@ require_cmd() {
 }
 
 require_cmd kubectl
-case "${K3S_OIDC_RUNTIME}" in
-  lima)
-    require_cmd limactl
-    ;;
-  slicer)
-    require_cmd slicer
-    ;;
-esac
+require_cmd limactl
 
 STEPS_FILE="$(mktemp)"
 EVENTS_FILE="$(mktemp)"
@@ -293,9 +280,6 @@ k3s_exec() {
   case "${K3S_OIDC_RUNTIME}" in
     lima)
       lima_exec "${node_name}" "$@"
-      ;;
-    slicer)
-      SLICER_URL="${SLICER_URL}" slicer vm exec "${node_name}" -- "$@"
       ;;
   esac
 }

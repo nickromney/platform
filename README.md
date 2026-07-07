@@ -69,11 +69,14 @@ The stage ladder is cumulative:
 
 | If you want... | Go here | First command |
 | --- | --- | --- |
-| The main local Kubernetes workflow | [`kubernetes/kind`](kubernetes/kind) | `make -C kubernetes/kind help` |
-| The same stack on Lima VMs | [`kubernetes/lima`](kubernetes/lima) | `make -C kubernetes/lima help` |
-| The same stack on Slicer microVMs | [`kubernetes/slicer`](kubernetes/slicer) | `make -C kubernetes/slicer help` |
+| The reference local Kubernetes workflow | [`kubernetes/kind`](kubernetes/kind) | `make -C kubernetes/kind help` |
+| Best-effort Lima VM workflow, validated on demand | [`kubernetes/lima`](kubernetes/lima) | `make -C kubernetes/lima help` |
 | App and frontend work | [`apps`](apps) | `make -C apps help` |
 | Docker Compose experiments | [`docker/compose`](docker/compose) | `make -C docker/compose help` |
+
+Kind is the reference substrate for this repository. Lima remains available as
+a best-effort path and is validated on demand rather than as the default local
+platform workflow.
 
 The most important secondary app path is
 [`apps/subnetcalc`](apps/subnetcalc), which supplies the sample

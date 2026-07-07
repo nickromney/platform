@@ -41,7 +41,7 @@ Use the ratified DDD vocabulary from
 | Term | Use in this plan |
 | --- | --- |
 | solution | The first-level grouping, currently `kubernetes`. |
-| variant | The concrete operable path beneath a solution, such as `kubernetes/kind`, `kubernetes/lima`, or `kubernetes/slicer`. |
+| variant | The concrete operable path beneath a solution, such as `kubernetes/kind`, `kubernetes/lima`, or `kubernetes/lima`. |
 | target | Makefile and workflow-core implementation noun. Keep it in CLI compatibility surfaces where it already exists. |
 | stage | The cumulative build ladder, `100` through `900`. |
 | preset | A named overlay of choices on top of a stage baseline and variant default. |
@@ -68,7 +68,7 @@ treat `targets` as a legacy alias.
    which option belongs to which stage, which dependency it has, whether it is
    variant-specific, or whether changing it could rebuild the cluster.
 5. The current folder shape asks users and agents to think about
-   `kubernetes/kind`, `kubernetes/lima`, and `kubernetes/slicer` before the UI
+   `kubernetes/kind`, `kubernetes/lima`, and `kubernetes/lima` before the UI
    can explain what those variants mean.
 6. There is no structured inventory command that answers "what did I deploy?"
    across Terraform state, Argo CD, and live Kubernetes resources.
@@ -86,7 +86,7 @@ treat `targets` as a legacy alias.
 5. Prefer inline risk explanations over modal warnings.
 6. Render web UI and TUI from the same workflow metadata.
 7. Preserve direct Makefile usage for experienced operators.
-8. Treat `kind` as the reference teaching variant and Lima/Slicer as adapter
+8. Treat `kind` as the reference teaching variant and Lima as adapter
    variants unless a later ADR changes that.
 9. Treat presets as overlays, not new stages.
 10. Treat generated tfvars as derived output that can be previewed and deleted.
@@ -116,7 +116,7 @@ readiness and variant preparation:
 
 - tool availability
 - Docker Desktop memory
-- Lima or Slicer daemon state
+- Lima daemon state
 - host-port ownership
 - local image cache availability
 - Terraform/OpenTofu binary choice
@@ -187,7 +187,7 @@ The UI should show an effective configuration summary:
 | Source | Example |
 | --- | --- |
 | Stage default | Stage `900` enables SSO. |
-| Variant default | Slicer may select a different host access path. |
+| Variant default | Lima may select a different host access path. |
 | Preset overlay | `local-idp-12gb` disables heavier observability defaults. |
 | Custom override | User sets `worker_count = 2`. |
 
@@ -273,7 +273,7 @@ Audit these inputs:
 - `kubernetes/*/stages/*.tfvars`
 - `kubernetes/*/targets/*.tfvars`
 - `kubernetes/*/profiles/*.tfvars`
-- `kubernetes/slicer/stages/default-cni/*.tfvars`
+- `kubernetes/lima/stages/default-cni/*.tfvars`
 - `kubernetes/kind/scripts/render-operator-overrides.sh`
 - variant Makefiles and exported `TF_VAR_*` values
 - Terraform variables and validation blocks
@@ -396,7 +396,7 @@ names:
 - host push path: usually `127.0.0.1:5002`
 - kind runtime pull path: usually `host.docker.internal:5002`
 - Lima runtime pull path: usually `host.lima.internal:5002`
-- Slicer runtime pull path: variant-derived gateway address or explicit cache
+- Lima runtime pull path: variant-derived gateway address or explicit cache
   host
 
 Model this as separate options rather than a single ambiguous string:
@@ -672,7 +672,7 @@ GitOps path.
 
 The current repo already has a shared Terraform module under
 `terraform/kubernetes` and variant-specific operator folders under
-`kubernetes/kind`, `kubernetes/lima`, and `kubernetes/slicer`.
+`kubernetes/kind`, `kubernetes/lima`, and `kubernetes/lima`.
 
 The question is whether the operator-facing folder layout should converge.
 
@@ -685,7 +685,7 @@ Keep:
 ```text
 kubernetes/kind
 kubernetes/lima
-kubernetes/slicer
+kubernetes/lima
 ```
 
 Add shared workflow intent:
@@ -739,7 +739,7 @@ kubernetes/
   variants/
     kind/
     lima/
-    slicer/
+    lima/
   stages/
   presets/
 ```
@@ -748,7 +748,7 @@ Operator command shape:
 
 ```sh
 make -C kubernetes VARIANT=kind STAGE=900 apply
-make -C kubernetes VARIANT=slicer STAGE=900 PRESET=airplane apply
+make -C kubernetes VARIANT=lima STAGE=900 PRESET=airplane apply
 ```
 
 The old folders become compatibility shims:
@@ -784,7 +784,7 @@ Possible shape:
 terraform/kubernetes-adapters/
   kind/
   lima/
-  slicer/
+  lima/
   existing/
 terraform/kubernetes-stack/
   stages/
@@ -835,7 +835,7 @@ Instead of asking users to choose a folder, ask for a variant:
 
 - `kind`: reference teaching variant
 - `lima`: adapter variant for Lima-backed k3s
-- `slicer`: adapter variant for Slicer-backed k3s
+- `lima`: adapter variant for Lima-backed k3s
 - future `existing`: adapter variant for an already reachable Kubernetes
   cluster
 
@@ -843,7 +843,7 @@ Use readiness data to recommend a variant:
 
 - Docker available and no conflicting ownership: recommend `kind`
 - Lima VM available and Docker Desktop unavailable: recommend `lima`
-- Slicer daemon healthy and selected by operator: recommend `slicer`
+- Lima daemon healthy and selected by operator: recommend `lima`
 - existing kubeconfig selected: recommend `existing`
 
 Do not silently switch variants for mutating actions. Show the recommendation
@@ -920,7 +920,7 @@ Done criteria:
 - `target` remains accepted by CLI compatibility paths
 - `950-local-idp` is exposed as a compatibility alias for
   `stage=900,preset_group.resource_profile=local-idp-12gb`
-- schema fixtures cover at least kind, Lima, Slicer, and Slicer default-CNI
+- schema fixtures cover at least kind, Lima, Lima, default-CNI
 
 ### Phase 2: Generic Override Rendering And Precedence
 

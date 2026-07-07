@@ -17,7 +17,6 @@ K8S_SCRIPTS_DIR := $(MAKEFILE_DIR)../scripts
 HELPER_MODE_LIB := $(abspath $(K8S_SCRIPTS_DIR)/helper-mode-lib.sh)
 CHECK_STAGE_MONOTONICITY := $(abspath $(K8S_SCRIPTS_DIR)/check-stage-monotonicity.sh)
 CHECK_KIND_STOPPED := $(abspath $(K8S_SCRIPTS_DIR)/check-kind-stopped.sh)
-CHECK_SLICER_STOPPED := $(MAKEFILE_DIR)../scripts/check-slicer-stopped.sh
 VARIANT_JSON := $(REPO_ROOT)/kubernetes/variants/lima/variant.json
 ASSERT_VARIANT_ACTIVE := $(MAKEFILE_DIR)../scripts/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(MAKEFILE_DIR)../scripts/stop-platform-runtimes.sh
@@ -82,8 +81,6 @@ PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE ?= auto
 PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE ?= auto
 GITEA_REGISTRY_HOST ?= localhost:30090
 GITEA_REGISTRY_SCHEME ?= http
-LIMA_CHECK_SLICER_VM_NAME ?= slicer-1
-LIMA_CHECK_SLICER_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
 PLATFORM_STATUS_SCRIPT ?= $(REPO_ROOT)/scripts/platform-status.sh
 WORKLOAD_IMAGE_NAMESPACE ?= platform
 WORKLOAD_IMAGE_TAG ?= latest
@@ -110,7 +107,7 @@ include $(STAGE_LADDER_MK)
 VALID_ACTIONS := plan apply
 VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
-MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs image-signing-prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help prepare-state check-stage-monotonicity check-docker-daemon check-kubeconfig check-kind-stopped check-conflicting-clusters-stopped assert-lima-active check-platform-env-file readiness prereqs image-signing-prereqs lima-vms-up start bootstrap-k3s merge-default-kubeconfig ensure-k3s-api-tunnel ensure-k3s-shared-port-tunnels ensure-image-cache sync-image-cache build-workload-images build-local-platform-images status stop-lima stop ensure-host-gateway-proxy stop-host-gateway-proxy proxy-status configure-k3s-apiserver-oidc exercise-k3s-oidc-recovery init plan apply check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e gitea-sync launchpad-render idp-api backstage idp-sdk idp-mcp show-urls reset state-reset env test test-shell test-bats test-unit test-idempotence check-version check-provider-version $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 
 include ../../mk/common.mk
@@ -186,7 +183,6 @@ help:
 	@echo "  make check-gateway-urls"
 	@echo "  make check-health"
 	@echo "  make check-kind-stopped"
-	@echo "  make check-slicer-stopped"
 	@echo "  make check-provider-version"
 	@echo "  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i"
 	@echo "  make check-security"
@@ -308,14 +304,9 @@ check-kubeconfig:
 check-kind-stopped:
 	@"$(CHECK_KIND_STOPPED)" $(READONLY_MODE_FLAG)
 
-.PHONY: check-slicer-stopped
-check-slicer-stopped:
-	@SLICER_URL="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(LIMA_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(LIMA_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)" $(READONLY_MODE_FLAG)
-
 .PHONY: check-conflicting-clusters-stopped
 check-conflicting-clusters-stopped:
 	@$(MAKE) check-kind-stopped
-	@$(MAKE) check-slicer-stopped
 
 .PHONY: assert-lima-active
 assert-lima-active:
@@ -663,7 +654,7 @@ plan: workflow-validate-stage
 	stage_num=$$((10#$(STAGE))); \
 	if [ "$$stage_num" -eq 100 ]; then \
 		echo "Stage 100 plan:"; \
-		echo "  - ensure Kind and Slicer are stopped"; \
+		echo "  - ensure Kind is stopped"; \
 		echo "  - ensure $(DESIRED_NODES) Lima VM(s) named $(LIMA_INSTANCE_PREFIX)-* are running"; \
 		echo "  - bootstrap or refresh the $(K3SUP_CONTEXT) kubeconfig at $(KUBECONFIG_PATH)"; \
 		echo ""; \

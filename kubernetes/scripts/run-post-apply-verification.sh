@@ -106,7 +106,6 @@ while IFS= read -r post_apply_step; do
     configure-k3s-apiserver-oidc)
       case "${variant_id}" in
         lima) run_make_step "${post_apply_step}" ;;
-        slicer) run_make_step "${post_apply_step}" "STAGE=${stage}" ;;
         *) fail "post-apply step ${post_apply_step} is not supported for ${variant_id}" ;;
       esac
       ;;

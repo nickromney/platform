@@ -20,14 +20,14 @@ script paths or raw Terragrunt commands.
 />
 
 The root Makefile is mostly a router. Mutating stack work belongs in focused
-subtrees such as `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`,
+subtrees such as `kubernetes/kind`, `kubernetes/lima`, `kubernetes/lima`,
 `docker/compose`, `apps/subnetcalc`, or `sd-wan/lima`.
 
 ## Shared Make Includes
 
 | File | Role |
 | --- | --- |
-| [`kubernetes/stage-ladder.mk`](https://github.com/nickromney/platform/blob/main/kubernetes/stage-ladder.mk) | Central stage numbers, stage file names, and stage descriptions for Kind/Lima/Slicer. |
+| [`kubernetes/stage-ladder.mk`](https://github.com/nickromney/platform/blob/main/kubernetes/stage-ladder.mk) | Central stage numbers, stage file names, and stage descriptions for Kind/Lima. |
 | [`mk/common.mk`](https://github.com/nickromney/platform/blob/main/mk/common.mk) | Disables builtin rules, sets shell defaults, renders common help, validates `.env`, and suggests likely targets on typo. |
 | [`mk/compose.mk`](https://github.com/nickromney/platform/blob/main/mk/compose.mk) | Selects the Compose backend through `scripts/compose-backend.sh`. |
 | [`mk/k8s-terragrunt.mk`](https://github.com/nickromney/platform/blob/main/mk/k8s-terragrunt.mk) | Defines reusable Terragrunt init/plan/apply command templates. |
@@ -43,7 +43,7 @@ subtrees such as `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`,
 | [`docker/compose/Makefile`](https://github.com/nickromney/platform/blob/main/docker/compose/Makefile) | Hardened shared compose platform slice with Dex, APIM, dev/uat Subnetcalc. |
 | [`kubernetes/kind/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/kind/Makefile) | Docker-backed reference Kubernetes platform target. |
 | [`kubernetes/lima/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/Makefile) | Lima VM + k3s platform target. |
-| [`kubernetes/slicer/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/Makefile) | Slicer microVM + k3s platform target. |
+| [`kubernetes/lima/Makefile`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/Makefile) | Lima microVM + k3s platform target. |
 | [`Makefile`](https://github.com/nickromney/platform/blob/main/Makefile) | Root router for status, lint, formatting, release, cleanup, and focused workflow discovery. |
 | [`sd-wan/lima/Makefile`](https://github.com/nickromney/platform/blob/main/sd-wan/lima/Makefile) | Separate three-VM SD-WAN teaching lab. |
 
@@ -55,7 +55,7 @@ The stage Makefiles accept several forms, but the preferred syntax is:
 make -C kubernetes/kind 100 plan
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/lima 900 check-health
-make -C kubernetes/slicer 900 check-security
+make -C kubernetes/lima 900 check-security
 ```
 
 `mk/stage-workflow.mk` extracts:
@@ -95,15 +95,15 @@ PLATFORM_LOCAL_IMAGE_CACHE_MODE=auto
 PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=auto
 ```
 
-### Slicer
+### Lima
 
-Slicer owns daemon startup, VM sizing, k3s bootstrap, host forwards, profile
-selection, and the Slicer-specific cache surface.
+Lima owns daemon startup, VM sizing, k3s bootstrap, host forwards, profile
+selection, and the Lima-specific cache surface.
 
 ```bash
-SLICER_NETWORK_PROFILE=cilium
-SLICER_HOST_FORWARDS_MODE=auto
-SLICER_VM_MIN_DISK_GB=25
+LIMA_NETWORK_PROFILE=cilium
+LIMA_HOST_FORWARDS_MODE=auto
+LIMA_VM_MIN_DISK_GB=25
 ```
 
 ### SD-WAN Lima

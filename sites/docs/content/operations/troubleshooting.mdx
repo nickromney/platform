@@ -38,7 +38,7 @@ you think it does before running raw `kubectl` commands.
 
 ```bash
 kubectl config current-context
-ls ~/.kube/*kind* ~/.kube/*lima* ~/.kube/*slicer* 2>/dev/null
+ls ~/.kube/*kind* ~/.kube/*lima* ~/.kube/*lima* 2>/dev/null
 ```
 
 ## SSO Does Not Recover
@@ -49,7 +49,7 @@ explicit recovery drills when you are testing that path.
 ```bash
 make -C kubernetes/kind exercise-oidc-recovery OIDC_RECOVERY_FORMAT=json
 make -C kubernetes/lima exercise-k3s-oidc-recovery OIDC_RECOVERY_FORMAT=json
-make -C kubernetes/slicer check-sso-e2e
+make -C kubernetes/lima check-sso-e2e
 ```
 
 <Callout type="warning">

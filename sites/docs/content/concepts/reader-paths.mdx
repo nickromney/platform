@@ -51,7 +51,7 @@ fewest moving host parts and the best validation coverage.
 5. Keep [Footguns](../operations/footguns) open while debugging.
 
 <Callout type="warning">
-  Do not start with Lima or Slicer unless you specifically need a VM-backed
+  Do not start with Lima unless you specifically need a VM-backed
   runtime. They are valid targets, but Kind is the default teaching path.
 </Callout>
 
@@ -61,7 +61,7 @@ You do not need to learn everything at once. Read the platform in layers:
 
 | Layer | Learn first | Why it matters |
 | --- | --- | --- |
-| Local runtime | [Local runtimes](./local-runtimes) | Explains Kind, Lima, Slicer, host ports, and kubeconfigs. |
+| Local runtime | [Local runtimes](./local-runtimes) | Explains Kind, Lima, Lima, host ports, and kubeconfigs. |
 | Kubernetes stages | [Stage ladder](./stage-ladder) | Shows why `900` means full shape, not only the last step. |
 | IaC | [Terraform, OpenTofu, and Terragrunt](./terraform-opentofu-terragrunt) | Explains tfvars layering and wrapper contracts. |
 | GitOps | [Learn GitOps with Argo CD](../journeys/argocd-gitops) | Explains why the live cluster follows Gitea, not your working tree directly. |

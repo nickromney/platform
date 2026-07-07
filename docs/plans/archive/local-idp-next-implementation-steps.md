@@ -8,7 +8,7 @@ This plan was reviewed against the current platform repo and the cloned
 The repo already has:
 
 - Go IDP core, Backstage developer portal, SDK, and MCP client code.
-- Runtime adapters for `generic_kubernetes`, `kind`, `lima`, and `slicer`.
+- Runtime adapters for `generic_kubernetes`, `kind`, `lima`, and `lima`.
 - Catalog, deployment, secret, scorecard, runtime, action, and audit schemas.
 - Kubernetes manifests for `idp-core` and `backstage`.
 - SSO HTTPRoutes for:
@@ -129,7 +129,7 @@ Ownership:
 - `terraform/kubernetes/scripts/sync-gitea-policies.sh`
 - `kubernetes/kind/targets/kind.tfvars`
 - `kubernetes/lima/targets/lima.tfvars`
-- `kubernetes/slicer/targets/slicer.tfvars`
+- `kubernetes/lima/targets/lima.tfvars`
 - Focused Bats/OpenTofu tests
 
 Accuracy note:
@@ -154,8 +154,8 @@ Expected rendered pull refs:
 - kind: `host.docker.internal:5002/platform/backstage:1.0.0`
 - Lima: `host.lima.internal:5002/platform/idp-core:0.1.0`
 - Lima: `host.lima.internal:5002/platform/backstage:1.0.0`
-- Slicer: `192.168.64.1:5002/platform/idp-core:0.1.0`
-- Slicer: `192.168.64.1:5002/platform/backstage:1.0.0`
+- Lima: `192.168.64.1:5002/platform/idp-core:0.1.0`
+- Lima: `192.168.64.1:5002/platform/backstage:1.0.0`
 
 Red tests:
 
@@ -173,7 +173,7 @@ Green implementation:
   - `platform/backstage:1.0.0`
 - Add `idp-core` and `backstage` to the supported
   `external_platform_image_refs` keys.
-- Add target-specific external platform image refs to kind, Lima, and Slicer.
+- Add target-specific external platform image refs to kind, Lima,.
 - Export those refs through `sync-gitea.sh`.
 - Rewrite `terraform/kubernetes/apps/idp/all.yaml` during
   `sync-gitea-policies.sh` when external platform images are preferred.

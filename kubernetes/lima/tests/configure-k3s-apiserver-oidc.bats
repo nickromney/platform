@@ -63,7 +63,7 @@ EOF
 @test "shared OIDC workflow exposes standard CLI without runtime env" {
   run "${SHARED_SCRIPT}" --dry-run
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"would configure the Lima/Slicer k3s API server for OIDC-issued tokens"* ]]
+  [[ "${output}" == *"would configure the Lima k3s API server for OIDC-issued tokens"* ]]
 
   run "${SHARED_SCRIPT}" --shell-entrypoint-descriptor
   [ "${status}" -eq 0 ]

@@ -29,7 +29,6 @@ RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 MEMORY_REPORT := $(abspath $(K8S_SCRIPTS_DIR)/memory-report.sh)
 CHECK_TARGET_HOST_PORTS := $(abspath $(K8S_SCRIPTS_DIR)/check-target-host-ports.sh)
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
-CHECK_SLICER_STOPPED := $(K8S_SCRIPTS_DIR)/check-slicer-stopped.sh
 PLAN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/plan-post-apply-verification.sh)
 RUN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/run-post-apply-verification.sh)
 VARIANT_JSON := $(REPO_ROOT)/kubernetes/variants/kind/variant.json
@@ -94,8 +93,6 @@ PLATFORM_STATUS_SCRIPT ?= $(REPO_ROOT)/scripts/platform-status.sh
 KIND_API_READY_ATTEMPTS ?= 30
 KIND_API_READY_DELAY_SECONDS ?= 2
 KIND_CHECK_LIMA_INSTANCE_PREFIX ?= k3s-node
-KIND_CHECK_SLICER_VM_NAME ?= slicer-1
-KIND_CHECK_SLICER_SOCKET ?= $(HOME)/slicer-mac/slicer.sock
 WORKLOAD_IMAGE_NAMESPACE ?= platform
 WORKLOAD_IMAGE_TAG ?= latest
 PLATFORM_ENV_FILE ?= $(REPO_ROOT)/.env
@@ -119,7 +116,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -206,7 +203,7 @@ help:
 	@echo "  make check-provider-version [CHECK_VERSION_FORMAT=text|json]"
 	@echo "  make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i"
 	@echo "  make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity"
-	@echo "  make check-slicer-stopped"
+	@echo "  make"
 	@echo "  make check-sso"
 	@echo "  make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)"
 	@echo "  make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]"
@@ -508,14 +505,9 @@ check-kind-host-ports: workflow-validate-stage
 check-lima-stopped:
 	@LIMA_INSTANCE_PREFIX="$(KIND_CHECK_LIMA_INSTANCE_PREFIX)" "$(CHECK_LIMA_STOPPED)" $(READONLY_MODE_FLAG)
 
-.PHONY: check-slicer-stopped
-check-slicer-stopped:
-	@SLICER_URL="$(KIND_CHECK_SLICER_SOCKET)" SLICER_SOCKET="$(KIND_CHECK_SLICER_SOCKET)" SLICER_VM_NAME="$(KIND_CHECK_SLICER_VM_NAME)" "$(CHECK_SLICER_STOPPED)" $(READONLY_MODE_FLAG)
-
 .PHONY: check-conflicting-clusters-stopped
 check-conflicting-clusters-stopped:
 	@$(MAKE) check-lima-stopped
-	@$(MAKE) check-slicer-stopped
 
 .PHONY: assert-kind-active
 assert-kind-active:

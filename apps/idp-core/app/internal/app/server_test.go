@@ -176,7 +176,6 @@ func TestHealthRuntimeAndCatalog(t *testing.T) {
 		{"name": "generic_kubernetes", "description": "Generic Kubernetes workflow adapter"},
 		{"name": "kind", "description": "Local kind workflow adapter"},
 		{"name": "lima", "description": "Local Lima workflow adapter"},
-		{"name": "slicer", "description": "Local Slicer workflow adapter"},
 	}
 	if len(runtimes["runtimes"].([]any)) != len(wantRuntimes) {
 		t.Fatalf("runtimes = %#v", runtimes["runtimes"])

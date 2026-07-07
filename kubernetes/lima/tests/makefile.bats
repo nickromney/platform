@@ -138,28 +138,28 @@ setup() {
 }
 
 @test "lima stage 900 apply wires k3s apiserver OIDC for Headlamp" {
-  run grep -Fn 'run_step "configure-k3s-apiserver-oidc" $(MAKE) -C "$(MAKEFILE_DIR)" configure-k3s-apiserver-oidc;' \
+  run grep -Fn 'run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
 }
 
 @test "lima stage 900 apply waits for cluster health after k3s apiserver OIDC" {
-  run grep -Fn 'run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)";' \
+  run grep -Fn 'PLAN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/plan-post-apply-verification.sh)' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
 }
 
 @test "lima stage 900 apply verifies gateway URLs before browser SSO E2E" {
-  run grep -Fn 'run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)";' \
+  run grep -Fn 'RUN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/run-post-apply-verification.sh)' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
 }
 
 @test "lima stage 900 apply runs browser SSO E2E verification inline" {
-  run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
+  run grep -Fn 'run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"' \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -270,7 +270,7 @@ setup() {
 }
 
 @test "lima reset does not stop other platform runtimes" {
-  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting kind/Slicer runtimes" || true' _ \
+  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting kind runtimes" || true' _ \
     "${REPO_ROOT}/kubernetes/lima/Makefile"
 
   [ "${status}" -eq 0 ]

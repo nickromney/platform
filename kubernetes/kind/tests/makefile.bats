@@ -108,57 +108,6 @@ setup() {
   [[ "${output}" == *'$(MAKE) $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"'* || "${output}" == *'make $(KIND_DISPATCH_TARGET) STAGE="$(STAGE)" AUTO_APPROVE="$(AUTO_APPROVE)"'* ]]
 }
 
-@test "kind conflict preflight allows a running slicer vm with no host bindings" {
-  cat >"${TEST_BIN}/limactl" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-EOF
-  chmod +x "${TEST_BIN}/limactl"
-
-  cat >"${TEST_BIN}/slicer" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" == "vm" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
-  printf '[{"hostname":"slicer-1","status":"Running"}]\n'
-fi
-EOF
-  chmod +x "${TEST_BIN}/slicer"
-
-  cat >"${TEST_BIN}/docker" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-EOF
-  chmod +x "${TEST_BIN}/docker"
-
-  cat >"${TEST_BIN}/ps" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-EOF
-  chmod +x "${TEST_BIN}/ps"
-
-  cat >"${TEST_BIN}/lsof" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-case " $* " in
-  *" -iTCP:443 "*|*" -iTCP:30080 "*)
-    printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
-    exit 0
-    ;;
-esac
-exit 1
-EOF
-  chmod +x "${TEST_BIN}/lsof"
-
-  run env KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/slicer.sock" \
-    make -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
-
-  [ "${status}" -eq 0 ]
-  [ -z "${output}" ]
-}
-
 @test "kind conflict preflight allows running Lima VMs with no host bindings" {
   cat >"${TEST_BIN}/limactl" <<'EOF'
 #!/usr/bin/env bash
@@ -176,13 +125,6 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/docker"
 
-  cat >"${TEST_BIN}/slicer" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-EOF
-  chmod +x "${TEST_BIN}/slicer"
-
   cat >"${TEST_BIN}/ps" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -203,8 +145,7 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/lsof"
 
-  run env KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/slicer.sock" \
-    make -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-conflicting-clusters-stopped
 
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
@@ -772,7 +713,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -830,7 +771,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -888,7 +829,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"conflict","active_variant_path":null,"variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"running"}}}'
+printf '%s\n' '{"overall_state":"conflict","active_variant_path":null,"variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -947,7 +888,7 @@ EOF
   cat >"${status_stub}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${status_stub}"
 
@@ -1145,7 +1086,6 @@ EOF
   chmod +x "${TEST_BIN}/limactl"
 
   run env \
-    KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" \
     KUBECONFIG_HELPER=/bin/true \
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
     DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
@@ -1433,7 +1373,6 @@ EOF
   chmod +x "${TEST_BIN}/limactl"
 
   run env \
-    KIND_CHECK_SLICER_SOCKET="${BATS_TEST_TMPDIR}/missing.sock" \
     KUBECONFIG_HELPER=/bin/true \
     KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/kind-kind-local.yaml" \
     DEFAULT_KUBECONFIG_PATH="${BATS_TEST_TMPDIR}/config" \
@@ -1579,7 +1518,7 @@ EOF
 }
 
 @test "kind reset does not stop other platform runtimes" {
-  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting Lima/Slicer runtimes" || true' _ \
+  run bash -c 'sed -n "/^reset:/,/^env:/p" "$1" | grep -E "STOP_PLATFORM_RUNTIMES|Stopping conflicting platform runtimes|Stop conflicting Lima runtimes" || true' _ \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]

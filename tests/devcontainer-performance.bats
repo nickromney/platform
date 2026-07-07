@@ -37,12 +37,12 @@ EOF
   [ "${status}" -eq 1 ]
 }
 
-@test "devcontainer disables pnpm and omits slicer from the pinned toolchain surface" {
+@test "devcontainer disables pnpm and omits lima from the pinned toolchain surface" {
   run grep -n '"pnpmVersion"[[:space:]]*:[[:space:]]*"none"' "${REPO_ROOT}/.devcontainer/devcontainer.json"
 
   [ "${status}" -eq 0 ]
 
-  run grep -n 'SLICER_IMAGE_REF\|arkade oci install .*slicer' \
+  run grep -n 'LIMA_IMAGE_REF\|arkade oci install .*lima' \
     "${REPO_ROOT}/.devcontainer/toolchain-versions.sh" \
     "${REPO_ROOT}/.devcontainer/install-toolchain.sh" \
     "${REPO_ROOT}/.devcontainer/check-devcontainer-version.sh" \

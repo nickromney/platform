@@ -183,7 +183,6 @@ prereqs:
 	@echo "  make -C sites/docs prereqs"
 	@echo "  make -C kubernetes/kind prereqs"
 	@echo "  make -C kubernetes/lima prereqs"
-	@echo "  make -C kubernetes/slicer prereqs"
 	@echo ""
 	@echo "Optional root tools:"
 	@echo "  go (only for make tui / make build-tui)"
@@ -197,7 +196,6 @@ test:
 	@echo "  make -C sites/docs test"
 	@echo "  make -C kubernetes/kind test"
 	@echo "  make -C kubernetes/lima test"
-	@echo "  make -C kubernetes/slicer test"
 
 test-ci:
 	@mkdir -p "$(CI_UV_CACHE_DIR)"

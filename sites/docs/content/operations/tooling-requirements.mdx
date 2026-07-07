@@ -52,14 +52,14 @@ compatibility, use Terragrunt's binary selector:
 TG_TF_PATH=terraform make -C kubernetes/kind 900 plan
 ```
 
-## Slicer Platform Target
+## Lima Platform Target
 
-Slicer requires the Slicer binary and local daemon/socket setup. The repo path
-expects a working `slicer-mac` setup unless you override `SLICER_URL` or
-`SLICER_SOCKET`.
+Lima requires the Lima binary and local daemon/socket setup. The repo path
+expects a working `lima-mac` setup unless you override `LIMA_URL` or
+`LIMA_SOCKET`.
 
 ```bash
-make -C kubernetes/slicer prereqs
+make -C kubernetes/lima prereqs
 ```
 
 Use Kind when you want the supported default path.

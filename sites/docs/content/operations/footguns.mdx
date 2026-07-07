@@ -18,8 +18,8 @@ Use this page as a pre-debug checklist.
 | --- | --- | --- |
 | Stage `100` looks unhealthy | This is expected before Cilium arrives. | Continue to stage `200` or read [Stage ladder](../concepts/stage-ladder). |
 | Stage `900` takes a long time | Gateway, TLS, GitOps, SSO, and browser checks converge slowly. | Keep the apply running and use `check-health` in another shell. |
-| Lima or Slicer refuses to start | Another local runtime owns conflicting ports or state. | Run the target-specific `check-*-stopped` preflight. |
-| Slicer bootstrap fails on storage | Host Slicer config may not match the validated disk shape. | Read [Slicer walkthrough](../tutorials/slicer-walkthrough). |
+| Lima refuses to start | Another local runtime owns conflicting ports or state. | Run the target-specific `check-*-stopped` preflight. |
+| Lima bootstrap fails on storage | Host Lima config may not match the validated disk shape. | Read [Lima walkthrough](../tutorials/lima-walkthrough). |
 
 ```bash
 make -C kubernetes/kind check-health
@@ -39,7 +39,7 @@ This repo prefers split kubeconfigs:
 ```text
 ~/.kube/kind-kind-local.yaml
 ~/.kube/limavm-k3s.yaml
-~/.kube/slicer-k3s.yaml
+~/.kube/lima-k3s.yaml
 ```
 
 If a helper cannot find the current context, pass both kubeconfig and context
@@ -75,13 +75,13 @@ Stable tags can leave Kubernetes running older code because the Deployment
 template did not change. For local platform workloads, prefer image references
 that change when rollout correctness depends on source changes.
 
-Kind, Lima, and Slicer do not distribute images the same way. Read the target
+Kind and Lima do not distribute images the same way. Read the target
 help before debugging an image pull:
 
 ```bash
 make -C kubernetes/kind help
 make -C kubernetes/lima help
-make -C kubernetes/slicer help
+make -C kubernetes/lima help
 ```
 
 ## Route And Auth Gotchas

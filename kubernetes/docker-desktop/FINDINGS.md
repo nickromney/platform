@@ -12,7 +12,7 @@ Repository note:
 ### Summary
 
 Docker Desktop managed Kubernetes is feasible as a fourth local target, but it
-has one material difference from `kind`, `lima`, and `slicer`:
+has one material difference from `kind`, `lima`, and `lima`:
 
 - the managed node containers ship with `/etc/containerd/certs.d/_default/hosts.toml`
   pointing every registry lookup at `http://registry-mirror:1273`

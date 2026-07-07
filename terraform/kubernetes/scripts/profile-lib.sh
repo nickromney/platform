@@ -164,9 +164,6 @@ profile_write_versions() {
       limactl --version 2>/dev/null || true
       printf '\n'
     fi
-    if command -v slicer >/dev/null 2>&1; then
-      slicer version 2>/dev/null || slicer --version 2>/dev/null || true
-    fi
   } >"${versions_file}"
 }
 

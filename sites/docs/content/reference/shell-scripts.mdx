@@ -126,7 +126,7 @@ Bash 3.2-compatible Bash.
 | [`scripts/install-tool-hints.sh`](https://github.com/nickromney/platform/blob/main/scripts/install-tool-hints.sh) | Prints install guidance for missing tools. |
 | [`scripts/lint-markdown.sh`](https://github.com/nickromney/platform/blob/main/scripts/lint-markdown.sh) | Markdown lint entrypoint. |
 | [`scripts/lint-yaml.sh`](https://github.com/nickromney/platform/blob/main/scripts/lint-yaml.sh) | YAML lint entrypoint. |
-| [`scripts/platform-status.sh`](https://github.com/nickromney/platform/blob/main/scripts/platform-status.sh) | Reports local runtime status across Kind, Lima, Slicer, and related stacks. |
+| [`scripts/platform-status.sh`](https://github.com/nickromney/platform/blob/main/scripts/platform-status.sh) | Reports local runtime status across Kind, Lima, Lima, and related stacks. |
 | [`scripts/release_tag.sh`](https://github.com/nickromney/platform/blob/main/scripts/release_tag.sh) | Annotated release tag workflow. |
 | [`scripts/release.sh`](https://github.com/nickromney/platform/blob/main/scripts/release.sh) | Release commit workflow. |
 | [`scripts/reset-local-state.sh`](https://github.com/nickromney/platform/blob/main/scripts/reset-local-state.sh) | Cleans repo-generated local state and optional host caches. |
@@ -141,18 +141,18 @@ Bash 3.2-compatible Bash.
 ## Kubernetes Shared Scripts
 
 These scripts sit under `kubernetes/scripts/` and are reused by Kind, Lima, and
-Slicer Makefiles.
+Lima Makefiles.
 
 | Script | Role |
 | --- | --- |
 | [`assert-variant-active.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/assert-variant-active.sh) | Proves the expected runtime variant is active before continuing. |
 | [`build-local-platform-images.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/build-local-platform-images.sh) | Builds host-side platform shortcut images into local Kubernetes runtime cache paths. |
 | [`build-local-workload-images.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/build-local-workload-images.sh) | Builds workload images for local Kubernetes runtime cache paths. |
-| [`configure-k3s-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/configure-k3s-apiserver-oidc.sh) | Configures Lima and Slicer k3s API server OIDC trust through runtime adapters. |
+| [`configure-k3s-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/configure-k3s-apiserver-oidc.sh) | Configures Lima k3s API server OIDC trust through runtime adapters. |
 | [`build-tfvar-args.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/build-tfvar-args.sh) | Builds Terragrunt/OpenTofu `-var-file` arguments for target and stage files. |
 | [`check-kind-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-kind-stopped.sh) | Ensures Kind is stopped before a conflicting target runs. |
 | [`check-lima-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-lima-stopped.sh) | Ensures Lima is stopped before a conflicting target runs. |
-| [`check-slicer-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-slicer-stopped.sh) | Ensures Slicer is stopped before a conflicting target runs. |
+| [`check-lima-stopped.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-lima-stopped.sh) | Ensures Lima is stopped before a conflicting target runs. |
 | [`check-stack-prereqs.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-stack-prereqs.sh) | Shared Kubernetes stack prerequisite checks. |
 | [`check-stage-monotonicity.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-stage-monotonicity.sh) | Verifies variant stage files are cumulative. |
 | [`check-target-host-ports.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/check-target-host-ports.sh) | Shared host port preflight logic. |
@@ -163,7 +163,7 @@ Slicer Makefiles.
 | [`k3s-bootstrap-lib.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/k3s-bootstrap-lib.sh) | Shared host-side k3sup bootstrap helper functions. |
 | [`k3s-registries-lib.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/k3s-registries-lib.sh) | Renders k3s registry mirror payloads for local runtime bootstrap scripts. |
 | [`local-cache-lib.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/local-cache-lib.sh) | Shared local registry cache helpers for image builders. |
-| [`plan-local-image-helpers.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/plan-local-image-helpers.sh) | Plans stage-gated local image cache and build helper actions for Lima and Slicer. |
+| [`plan-local-image-helpers.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/plan-local-image-helpers.sh) | Plans stage-gated local image cache and build helper actions for Lima. |
 | [`reconcile-kubeconfig.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/reconcile-kubeconfig.sh) | Reconciles runtime split kubeconfigs with default kubeconfig policy. |
 | [`reset-kubeconfig-context.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/reset-kubeconfig-context.sh) | Removes or refreshes repo-owned kubeconfig contexts. |
 | [`resolve-tfvar-value.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/scripts/resolve-tfvar-value.sh) | Reads a value from target/stage tfvars for scripts. |
@@ -194,19 +194,19 @@ Slicer Makefiles.
 | [`exercise-k3s-oidc-recovery.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/exercise-k3s-oidc-recovery.sh) | Forces and verifies the k3s OIDC recovery path. |
 | [`kubernetes/lima/scripts/bootstrap-k3s-lima.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/bootstrap-k3s-lima.sh) | Bootstraps k3s into Lima VM(s). |
 
-## Slicer Platform Scripts
+## Lima Platform Scripts
 
 | Script | Role |
 | --- | --- |
-| [`bootstrap-k3s-slicer.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/bootstrap-k3s-slicer.sh) | Installs k3s in the Slicer VM. |
-| [`check-vm-health.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/check-vm-health.sh) | Checks VM health, disk, and runtime assumptions. |
-| [`configure-k3s-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/configure-k3s-apiserver-oidc.sh) | Configures k3s API server OIDC trust. |
-| [`delete-vm-best-effort.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/delete-vm-best-effort.sh) | Best-effort VM cleanup during reset. |
-| [`ensure-host-forwards.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/ensure-host-forwards.sh) | Sets up host forwards for stable localhost URLs. |
-| [`ensure-sbox-vm.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/ensure-sbox-vm.sh) | Ensures the selected Slicer VM exists and matches sizing constraints. |
-| [`kubernetes/slicer/scripts/start-daemon.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/start-daemon.sh) | Starts the local Slicer daemon. |
-| [`stop-daemon.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/stop-daemon.sh) | Stops the local Slicer daemon. |
-| [`wait-for-kubectl.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/slicer/scripts/wait-for-kubectl.sh) | Waits for the Slicer kubeconfig/API path. |
+| [`bootstrap-k3s-lima.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/bootstrap-k3s-lima.sh) | Installs k3s in the Lima VM. |
+| [`check-vm-health.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/check-vm-health.sh) | Checks VM health, disk, and runtime assumptions. |
+| [`configure-k3s-apiserver-oidc.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/configure-k3s-apiserver-oidc.sh) | Configures k3s API server OIDC trust. |
+| [`delete-vm-best-effort.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/delete-vm-best-effort.sh) | Best-effort VM cleanup during reset. |
+| [`ensure-host-forwards.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/ensure-host-forwards.sh) | Sets up host forwards for stable localhost URLs. |
+| [`ensure-sbox-vm.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/ensure-sbox-vm.sh) | Ensures the selected Lima VM exists and matches sizing constraints. |
+| [`kubernetes/lima/scripts/start-daemon.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/start-daemon.sh) | Starts the local Lima daemon. |
+| [`stop-daemon.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/stop-daemon.sh) | Stops the local Lima daemon. |
+| [`wait-for-kubectl.sh`](https://github.com/nickromney/platform/blob/main/kubernetes/lima/scripts/wait-for-kubectl.sh) | Waits for the Lima kubeconfig/API path. |
 
 ## Terraform Platform Scripts
 

@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "kubernetes launchpad-render targets delegate through the shared adapter" {
-  for runtime in kind lima slicer; do
+  for runtime in kind lima; do
     run make -n -C "${REPO_ROOT}/kubernetes/${runtime}" launchpad-render
 
     [ "${status}" -eq 0 ]

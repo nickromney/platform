@@ -12,6 +12,8 @@ This README covers the Docker-backed teaching path for the repo.
 
 - Validated on macOS with Docker Desktop.
 - Validated on Linux with a local Docker daemon.
+- Kind is the reference substrate for this repository.
+- Lima remains a best-effort substrate, validated on demand.
 - On macOS, Docker Desktop must be running before you plan, apply, or reset.
 - On Linux, Docker Engine is enough; Docker Desktop is not required.
 - `kind` is still required on a bare Ubuntu host even if Docker is already installed.
@@ -258,12 +260,12 @@ Stage 100 also reserves the host ports that later stages will use. The Kind port
 
 If any of those host ports are already taken on your machine, override them in a local tfvars file and pass that via `PLATFORM_TFVARS=...`. The preflight check in `make kind apply ...` uses the shared [`check-target-host-ports.sh`](../scripts/check-target-host-ports.sh) adapter to catch conflicts before apply.
 
-Running Lima or Slicer VMs by themselves are not conflicts for kind. Kind only
+Running Lima VMs by themselves are not conflicts for kind. Kind only
 needs the shared localhost ports to be free, so `check-lima-stopped` fails when
-the Lima gateway proxy is active and `check-slicer-stopped` fails when Slicer
-host forwards or the Slicer gateway proxy are active. Use
+the Lima gateway proxy is active and `check-lima-stopped` fails when Lima
+host forwards or the Lima gateway proxy are active. Use
 `make -C kubernetes/lima stop-host-gateway-proxy` or
-`make -C kubernetes/slicer stop-host-forwards` to release those bindings without
+`make -C kubernetes/lima stop-host-forwards` to release those bindings without
 stopping the VM.
 
 Expected behavior: after stage 100, the cluster exists, but node and pod readiness will look wrong because there is no CNI yet.

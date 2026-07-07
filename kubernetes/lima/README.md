@@ -127,7 +127,7 @@ Then use:
 
 - The cross-target preflight is based on shared localhost bindings, not VM
   existence. Lima can coexist with a kind cluster that publishes no shared host
-  ports and with a `slicer-1` VM that has no active Slicer host forwards or
+  ports and with a `lima-1` VM that has no active Lima host forwards or
   gateway proxy. When only the Lima gateway proxy is in the way, release it
   with `make -C kubernetes/lima stop-host-gateway-proxy` instead of stopping
   the Lima VM.

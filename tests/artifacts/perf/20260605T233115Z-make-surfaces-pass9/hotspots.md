@@ -6,7 +6,7 @@
 - `make -C docker/compose help`
 - `make -C kubernetes/kind help`
 - `make -C kubernetes/lima help`
-- `make -C kubernetes/slicer help`
+- `make -C kubernetes/lima help`
 
 ## Baseline
 - Root help: 37.9ms +/- 3.8ms
@@ -14,7 +14,7 @@
 - Compose help: 319.2ms +/- 23.7ms
 - Kind help: 138.9ms +/- 10.0ms
 - Lima help: 118.7ms +/- 8.4ms
-- Slicer help: 118.0ms +/- 7.1ms
+- Lima help: 118.0ms +/- 7.1ms
 
 ## Hotspots
 - `apps/Makefile` eagerly scanned wrapper Makefiles with `grep` four times while parsing, even for static `help`.

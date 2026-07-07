@@ -10,7 +10,7 @@ can reach the gateway or node network.
 This document treats `kubernetes/kind` as the reference path, but the hardening
 touches described here were added in the shared
 [`terraform/kubernetes`](../terraform/kubernetes) layer so the same guardrails
-apply across `kind`, `lima`, and `slicer`.
+apply across `kind`, `lima`, and `lima`.
 
 ## Scope
 

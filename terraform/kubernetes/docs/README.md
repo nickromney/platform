@@ -56,7 +56,7 @@ The same Terraform root can now run without provisioning Kind by setting `provis
 - Default teaching path: [`../../../kubernetes/kind`](../../../kubernetes/kind/README.md), which provisions a Docker-backed kind cluster on macOS or Linux
 - Existing-cluster wrappers in this repo:
   - [`../../../kubernetes/lima`](../../../kubernetes/lima/Makefile)
-  - [`../../../kubernetes/slicer`](../../../kubernetes/slicer/README.md)
+  - [`../../../kubernetes/lima`](../../../kubernetes/lima/README.md)
 
 Example for an already-existing cluster:
 

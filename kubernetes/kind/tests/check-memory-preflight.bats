@@ -284,7 +284,7 @@ EOF
   run "${SCRIPT}" --execute
 
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"FAIL competing hypervisor VM detected: com.apple.Virtualization.VirtualMachine owner=Slicer pid=301 RSS=3.0GiB; threshold is 2GiB (2 via KIND_PREFLIGHT_COMPETING_VM_RSS_GB); remediation: make -C kubernetes/slicer stop"* ]]
+  [[ "${output}" == *"FAIL competing hypervisor VM detected: com.apple.Virtualization.VirtualMachine owner=Slicer pid=301 RSS=3.0GiB; threshold is 2GiB (2 via KIND_PREFLIGHT_COMPETING_VM_RSS_GB); remediation: stop the Slicer VM (Slicer is no longer a supported substrate)"* ]]
 }
 
 @test "fails loudly with unknown owner wording when lsof is unavailable" {

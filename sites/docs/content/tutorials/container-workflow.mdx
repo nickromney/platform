@@ -36,11 +36,11 @@ make -C kubernetes/kind build-local-workload-images
 make -C kubernetes/kind sync-image-cache
 ```
 
-Lima and Slicer have equivalent helpers:
+Lima have equivalent helpers:
 
 ```bash
 make -C kubernetes/lima build-workload-images
-make -C kubernetes/slicer build-workload-images
+make -C kubernetes/lima build-workload-images
 ```
 
 From stage `700+`, local workload images are part of the platform story because

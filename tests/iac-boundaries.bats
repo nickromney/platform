@@ -21,7 +21,7 @@ setup() {
 @test "iac boundaries doc records the accepted keep-out-of-terragrunt seams" {
   [ -f "${BOUNDARY_DOC}" ]
 
-  run grep -Fn 'Lima and Slicer stage `100` bootstrap stays outside Terraform and Terragrunt.' "${BOUNDARY_DOC}"
+  run grep -Fn 'Lima stage `100` bootstrap stays outside Terraform and Terragrunt.' "${BOUNDARY_DOC}"
 
   [ "${status}" -eq 0 ]
 
@@ -77,7 +77,7 @@ setup() {
 
   [ "${status}" -eq 0 ]
 
-  run grep -Fn '| `kubernetes/slicer/scripts/bootstrap-k3s-slicer.sh` | `operator-bootstrap` |' "${BOUNDARY_DOC}"
+  run grep -Fn '| `kubernetes/lima/scripts/bootstrap-k3s-lima.sh` | `operator-bootstrap` |' "${BOUNDARY_DOC}"
 
   [ "${status}" -eq 0 ]
 

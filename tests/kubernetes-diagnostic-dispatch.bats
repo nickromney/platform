@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "check-health delegates through the shared diagnostic dispatch module with variant contracts" {
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     run make -n -C "${REPO_ROOT}/kubernetes/${variant}" check-health STAGE=900
 
     [ "${status}" -eq 0 ]
@@ -18,7 +18,7 @@ setup() {
 }
 
 @test "show-urls delegates through the shared diagnostic dispatch module with variant contracts" {
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     run make -n -C "${REPO_ROOT}/kubernetes/${variant}" show-urls STAGE=900
 
     [ "${status}" -eq 0 ]

@@ -33,17 +33,17 @@ stage-900 shape", not "run only the stage-900 delta".
 
 ## Runtime Differences
 
-Kind, Lima, and Slicer share the stage language. Their stage `100` differs
+Kind and Lima share the stage language. Their stage `100` differs
 because the host runtime differs:
 
 - Kind creates a Docker-backed kind cluster.
 - Lima starts a VM and installs k3s.
-- Slicer starts a microVM and installs k3s, with stricter host caveats.
+- Lima starts a microVM and installs k3s, with stricter host caveats.
 
 Stages `200+` converge through the shared Terraform root.
 
 Stage `700` is intentionally runtime-specific. Kind enables the in-cluster
-Actions runner and local app directory mount by default. Lima and Slicer keep
+Actions runner and local app directory mount by default. Lima keep
 those host-sensitive shortcuts disabled and use externally built local workload
 images instead. The operator outcome is still app reconciliation, but the local
 trust boundary is different.
@@ -51,7 +51,7 @@ trust boundary is different.
 Stage `800` also has pathways. The default local path keeps memory pressure
 lower with Prometheus, Grafana, and VictoriaLogs. Loki and SigNoz are available
 through Terraform inputs and supporting scripts, but they are heavier and are
-not enabled in the default Kind/Lima/Slicer stage-900 tfvars.
+not enabled in the default Kind/Lima stage-900 tfvars.
 
 ## Good Commands
 
@@ -59,7 +59,7 @@ not enabled in the default Kind/Lima/Slicer stage-900 tfvars.
 make -C kubernetes/kind 100 apply AUTO_APPROVE=1
 make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/lima 900 plan
-make -C kubernetes/slicer 900 check-health
+make -C kubernetes/lima 900 check-health
 ```
 
 The guided workflow core accepts every stage in the ladder:

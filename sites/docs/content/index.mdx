@@ -55,7 +55,7 @@ has its own contribution guidance for people who need to inspect that project;
 this docs site is written as the product documentation surface.
 
 The default path is [Kind](./tutorials/first-kind-stack). [Lima](./tutorials/lima-walkthrough)
-and [Slicer](./tutorials/slicer-walkthrough) use the same staged platform shape
+and [Lima](./tutorials/lima-walkthrough) use the same staged platform shape
 but change the host runtime underneath it. The sample apps exist to prove the
 platform path rather than to be the main product.
 
@@ -100,10 +100,10 @@ main operating concerns map to this repo like this:
 - **Application configuration management:** Helm values, chart conventions, app
   repos, and templated manifests show how app intent becomes Kubernetes objects.
 - **Infrastructure orchestration:** Make, shell scripts, Terragrunt/OpenTofu,
-  Kind, Lima, Slicer, Cilium, Gateway API, and Argo CD assemble the platform in
+  Kind, Lima, Lima, Cilium, Gateway API, and Argo CD assemble the platform in
   explicit stages.
 - **Environment management:** The local stacks give repeatable environments for
-  learning and testing, with Kind as the default and Lima/Slicer as alternate
+  learning and testing, with Kind as the default and Lima as alternate
   host-runtime paths.
 - **Deployment management:** Gitea and Argo CD demonstrate GitOps delivery
   rather than ad hoc `kubectl apply` workflows.
@@ -124,7 +124,7 @@ are regenerated from that source when the platform model changes.
 - [Check the footguns](./operations/footguns) before debugging a failed apply or smoke check.
 - [Choose a learning journey](./journeys) if you want to learn one platform capability at a time.
 - [Use the full Kind walkthrough](./tutorials/kind-walkthrough) for the reference stack details.
-- [Use the Lima walkthrough](./tutorials/lima-walkthrough) or [Slicer walkthrough](./tutorials/slicer-walkthrough) when you are changing host runtimes.
+- [Use the Lima walkthrough](./tutorials/lima-walkthrough) or [Lima walkthrough](./tutorials/lima-walkthrough) when you are changing host runtimes.
 - [Use the SD-WAN Lima lab](./tutorials/sd-wan-lima-walkthrough) for the separate overlapping-address teaching lab.
 - [Build and use containers](./tutorials/container-workflow) when you are working on images or compose flows.
 - [Read the mental model](./concepts/mental-model) before changing the repo structure.

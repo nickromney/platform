@@ -44,11 +44,11 @@ EOF
   [[ "${output}" != *"Stopping kind runtime"* ]]
   [[ "${output}" == *"Stopping lima runtime"* ]]
   [[ "${output}" == *"WARN lima stop returned 17; continuing"* ]]
-  [[ "${output}" == *"Stopping slicer runtime"* ]]
+  [[ "${output}" == *"Stopping lima runtime"* ]]
 
   run cat "${MAKE_LOG}"
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"kubernetes/kind stop-kind"* ]]
   [[ "${output}" == *"kubernetes/lima stop-lima AUTO_APPROVE=1"* ]]
-  [[ "${output}" == *"kubernetes/slicer stop-slicer AUTO_APPROVE=1"* ]]
+  [[ "${output}" == *"kubernetes/lima stop-lima AUTO_APPROVE=1"* ]]
 }

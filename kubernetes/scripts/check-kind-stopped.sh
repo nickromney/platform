@@ -10,7 +10,7 @@ usage() {
 Usage: ${0##*/} [--dry-run] [--execute]
 
 Checks whether the local kind cluster publishes shared host ports and exits
-non-zero when those bindings would conflict with Lima or Slicer startup. A
+non-zero when those bindings would conflict with Lima startup. A
 running kind cluster without shared host bindings is allowed to coexist.
 
 $(shell_cli_standard_options)
@@ -67,7 +67,7 @@ echo "kind-local shared host bindings are still active." >&2
 echo "Stop kind before assuming the shared localhost ports are free:" >&2
 echo "  make -C kubernetes/kind stop-kind" >&2
 echo "" >&2
-echo "Conflicting shared host ports for Lima/Slicer:" >&2
+echo "Conflicting shared host ports for Lima:" >&2
 while IFS= read -r host_port; do
   [[ -z "${host_port}" ]] && continue
   printf '  %s\n' "${host_port}" >&2

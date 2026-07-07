@@ -51,7 +51,7 @@ Files:
 
 - `kubernetes/kind/Makefile`
 - `kubernetes/lima/Makefile`
-- `kubernetes/slicer/Makefile`
+- `kubernetes/lima/Makefile`
 - `kubernetes/workflow/options.json`
 - `mk/stage-workflow.mk`
 - `mk/k8s-terragrunt.mk`
@@ -76,7 +76,7 @@ redeclaring them independently.
 
 Expected benefits:
 Variant changes gain Locality. Shared stage/apply behaviour gets more Leverage
-because `kind`, `lima`, and `slicer` stop copying the same workflow Interface.
+because `kind`, `lima`, and `lima` stop copying the same workflow Interface.
 Tests can assert a variant contract matrix instead of treating each Makefile as
 a separate source of truth.
 
@@ -113,7 +113,7 @@ Files:
 
 - `kubernetes/scripts/check-target-host-ports.sh`
 - `kubernetes/scripts/host-gateway-proxy.sh`
-- `kubernetes/slicer/scripts/ensure-host-forwards.sh`
+- `kubernetes/lima/scripts/ensure-host-forwards.sh`
 - `terraform/kubernetes/locals.tf`
 
 Problem:
@@ -184,7 +184,7 @@ capabilities; Make commands should be one Adapter detail behind that seam.
 
 Expected benefits:
 Portal API changes gain Locality. SDK, MCP, Backstage, and tests get more
-Leverage from the same contract. Missing runtime support, such as Slicer in the
+Leverage from the same contract. Missing runtime support, such as Lima in the
 current IDP adapter path, becomes a visible Adapter gap.
 
 ## Deeper Exploration: Solution Variant Contract
@@ -202,7 +202,7 @@ The executable Interface still lives mostly in the variant Makefiles:
   runtime checks.
 - `kubernetes/lima/Makefile` owns Lima k3s bootstrap facts, host gateway proxy
   mode, image cache mode, state file, kubeconfig facts, and blocker checks.
-- `kubernetes/slicer/Makefile` owns Slicer daemon/socket facts, VM sizing,
+- `kubernetes/lima/Makefile` owns Lima daemon/socket facts, VM sizing,
   network profile, host forwards, image cache mode, state file, kubeconfig
   facts, and blocker checks.
 
@@ -223,7 +223,7 @@ the workflow valid.
 | Active-variant blockers | variant Makefiles, `kubernetes/scripts/assert-variant-active.sh`, status script |
 | Registry runtime and push host | variant Makefiles, workflow core preset rendering, image cache scripts |
 | Host access path | variant Makefiles, port/proxy/forward scripts, Terraform vars, docs |
-| CNI/network profile | Slicer Makefile, workflow preset compatibility, stage files |
+| CNI/network profile | Lima Makefile, workflow preset compatibility, stage files |
 
 This is the Locality failure. A change to the variant Interface currently
 requires a maintainer to inspect metadata, Make variables, shell scripts, docs,
@@ -241,7 +241,7 @@ contract is split: neither Module is deep enough to own the Interface alone.
 
 Concentrating variant facts behind a solution variant contract would not remove
 the adapter-specific Implementation. It would make the shared Interface stable
-and leave kind, Lima, and Slicer to supply concrete adapter facts.
+and leave kind, Lima, to supply concrete adapter facts.
 
 ### Proposed Module Shape
 
@@ -253,7 +253,7 @@ Candidate paths:
 ```text
 kubernetes/variants/kind/variant.json
 kubernetes/variants/lima/variant.json
-kubernetes/variants/slicer/variant.json
+kubernetes/variants/lima/variant.json
 ```
 
 or:
@@ -261,7 +261,7 @@ or:
 ```text
 kubernetes/workflow/variants/kind.json
 kubernetes/workflow/variants/lima.json
-kubernetes/workflow/variants/slicer.json
+kubernetes/workflow/variants/lima.json
 ```
 
 The first path makes `variant` a first-class Module. The second path keeps the
@@ -294,7 +294,7 @@ Keep these in variant-specific Implementation:
 
 - kind cluster creation and kubeconfig rewriting
 - Lima VM lifecycle and k3s bootstrap
-- Slicer daemon/socket/VM lifecycle
+- Lima daemon/socket/VM lifecycle
 - concrete proxy or host-forward process management
 - variant-specific reset and troubleshooting helpers
 
@@ -334,7 +334,7 @@ The first slice now exists:
 
 - `kubernetes/variants/kind/variant.json`
 - `kubernetes/variants/lima/variant.json`
-- `kubernetes/variants/slicer/variant.json`
+- `kubernetes/variants/lima/variant.json`
 - `kubernetes/workflow/render-options.sh`
 - `tests/variant-contracts.bats`
 
@@ -373,7 +373,7 @@ These decisions should be settled before implementation:
    Make remain hand-authored with contract tests guarding drift?
 4. Should `host_access_path` be a nested part of the variant contract now, or
    a separate Module after the variant contract lands?
-5. Should Slicer network profile facts live in the variant contract, or in a
+5. Should Lima network profile facts live in the variant contract, or in a
    later profile/preset Module?
 
 ## Implementation Progress
@@ -383,7 +383,7 @@ These decisions should be settled before implementation:
 Implemented:
 
 - `kubernetes/variants/*/variant.json` records the first-class variant
-  contract for kind, Lima, and Slicer.
+  contract for kind, Lima,.
 - `kubernetes/workflow/render-options.sh` renders workflow options with
   `.variants[].variant_contract` sourced from those files.
 - `scripts/platform-workflow.sh` reads state-lock, registry runtime host,
@@ -413,7 +413,7 @@ Implemented:
 
 - `kubernetes/host-access/render-contracts.sh` projects host access facts from
   `kubernetes/variants/*/variant.json`.
-- `tests/host-access-contracts.bats` validates kind, Lima, and Slicer modes,
+- `tests/host-access-contracts.bats` validates kind, Lima, modes,
   required proxy/forward processes, gateway ports, and shared host ports.
 
 This keeps host access execution in the existing variant scripts while creating
@@ -441,7 +441,7 @@ Implemented:
   projection and OpenAPI contract summary.
 - `apps/idp-core/tests/test_contracts.py` covers supported runtimes,
   Makefile-backed runtime adapter metadata, portal API operation coverage, and
-  the current Slicer runtime-adapter gap.
+  the current Lima runtime-adapter gap.
 
 This makes the portal API/runtime Adapter contract explicit without changing
 route behaviour.
@@ -707,7 +707,7 @@ Files:
 - `kubernetes/kind/scripts/render-operator-overrides.sh`
 - `kubernetes/scripts/build-local-platform-images.sh`
 - `kubernetes/lima/targets/lima.tfvars`
-- `kubernetes/slicer/targets/slicer.tfvars`
+- `kubernetes/lima/targets/lima.tfvars`
 
 Problem:
 Image intent is spread across workflow rendering, kind overrides, build
@@ -750,7 +750,7 @@ Implemented first pass:
   duplicated in each script.
 - Added a Docker optimization contract test requiring every catalog image to
   declare its version-check policy.
-- Added a catalog target-ref validator so Lima and Slicer external platform and
+- Added a catalog target-ref validator so Lima external platform and
   workload image refs are checked against the image catalog instead of silently
   duplicating catalog values.
 - Added catalog-owned `build` specs for `idp-core`, `platform-mcp`,
@@ -759,7 +759,7 @@ Implemented first pass:
   instead of hard-coding those procedural build calls.
 - Added catalog-owned workload build specs for `sentiment-api`,
   `sentiment-auth-ui`, subnetcalc frontends, subnetcalc API, APIM simulator,
-  and the platform MCP image. Kind, Lima, and Slicer workload image builders now
+  and the platform MCP image. Kind and Lima workload image builders now
   iterate the Image Catalog Module instead of carrying their own build list.
 - Moved Grafana VictoriaLogs plugin image build inputs into the catalog,
   including base image refs, cache repos, plugin fetch image refs, archive
@@ -771,13 +771,13 @@ Implemented first pass:
   explicit allowance for source-fingerprint tags where the catalog owns
   fingerprint inputs.
 - Corrected `platform-mcp` classification so the Image Catalog treats it as a
-  platform image for kind, Lima, and Slicer external refs. The real kind
+  platform image for kind, Lima, external refs. The real kind
   `reset / 100 apply / 900 apply` path now renders `platform-mcp` from the host
   local platform cache and converges `mcp` to Synced/Healthy instead of pulling
   a missing Gitea workload image.
 - Added `kubernetes/workflow/image-build-lib.sh` as the shared image-builder
   Adapter for Docker command assembly, build-arg resolution, cache-hit checks,
-  tag pushing, and catalog build loops. Kind, Lima, and Slicer workload image
+  tag pushing, and catalog build loops. Kind and Lima workload image
   builders now expose only variant runtime facts and consume that Adapter.
 - Moved catalog build default-tag resolution into the Image Catalog Module, so
   catalog build loops build the pinned catalog tag by default instead of
@@ -793,7 +793,7 @@ Implemented first pass:
   now drives those preload image checks from the catalog projection instead of
   hard-coding each image matcher in its preload loop.
 - Extended the target-ref validator into a generator with `--print-expected`,
-  so Lima and Slicer external platform/workload image maps can be rendered from
+  so Lima external platform/workload image maps can be rendered from
   the catalog Interface and compared against the checked-in target tfvars.
 
 Additional findings deliberately left out of this pass:
@@ -933,7 +933,7 @@ Additional findings deliberately left out of this pass:
    non-comparable policies are read from one Module. Implemented for local
    catalog image classification.
 4. Add generated kind operator override validation against
-   `kubernetes/workflow/image-catalog.json`, matching the existing Lima/Slicer
+   `kubernetes/workflow/image-catalog.json`, matching the existing Lima
    target-ref validator. Implemented.
 5. Promote GitOps external image env fallback mapping into a small render-input
    Module inside `sync-gitea-policies.sh`, so contract keys, env fallback names,
@@ -954,7 +954,7 @@ Additional findings deliberately left out of this pass:
 10. Add a review environment contract test that proves namespace, registry
     secret, wildcard certificate SAN, runner labels, and branch workflow
     dispatch stay aligned. Implemented.
-11. Correct `platform-mcp` as a platform image across kind, Lima, and Slicer
+11. Correct `platform-mcp` as a platform image across kind, Lima,
     external refs, and prove the fix with the real kind stage-900 apply path.
     Implemented.
 12. Promote GitOps enablement and host render inputs into a render-input table
@@ -963,7 +963,7 @@ Additional findings deliberately left out of this pass:
 13. Deepen the variant image builder Module further by moving Docker command
     assembly, cache-hit checks, and build-arg resolution behind one shared
     shell Adapter instead of keeping near-identical functions in kind, Lima,
-    and Slicer. Implemented.
+   . Implemented.
 14. Move generated Backstage build-context assembly into an Image Catalog
     context-preparation Adapter so catalog facts and context copy rules stay in
     one Module. Implemented.
@@ -973,7 +973,7 @@ Additional findings deliberately left out of this pass:
     alignment.
 16. Finish the generated catalog projection for target tfvars and kind operator
     overrides so HCL ref maps are rendered from one Module instead of corrected
-    by hand and tested after the fact. Implemented for Lima/Slicer target
+    by hand and tested after the fact. Implemented for Lima target
     tfvars and the existing kind operator override renderer.
 17. Split policy repo rendering into a pure rendered-tree Adapter that writes
     to a directory and a separate Gitea push Adapter, so golden tests can cover
@@ -992,7 +992,7 @@ Additional findings deliberately left out of this pass:
     Implemented with a timeout wrapper for `tests/gitops_features.tftest.hcl`.
 22. Replace local catalog `latest` defaults with version-pinned default tags
     and make catalog build loops resolve their default build tag from the Image
-    Catalog Module. Implemented for kind, Lima, Slicer, Docker Desktop, workflow
+    Catalog Module. Implemented for kind, Lima, Lima, Docker Desktop, workflow
     presets, and generated target projections.
 23. Add full rendered-tree golden fixtures for the policy repo after the pure
     renderer exists, covering the complete `apps/` and `cluster-policies/`
@@ -1173,13 +1173,13 @@ differences mean the fix would add more code than it removes at current scale.
 
 **Problem:**
 The Portal API runtime Adapter registry was constructed inline in `NewServer`,
-listed Adapters through map iteration order, and omitted the current Slicer
+listed Adapters through map iteration order, and omitted the current Lima
 local variant. That left runtime Adapter facts split between DDD docs, local
 variant contracts, and app server wiring.
 
 **Solution:**
 Added `workflow.NewPlatformRuntimeRegistry()` as the single registry module,
-registered `generic_kubernetes`, `kind`, `lima`, and `slicer`, and made
+registered `generic_kubernetes`, `kind`, `lima`, and `lima`, and made
 `Registry.List()` deterministic.
 
 **Expected benefits:**

@@ -10,7 +10,7 @@ const meta = {
       'first-kind-stack': 'Run the Kind stack',
       'kind-walkthrough': 'Kind full walkthrough',
       'lima-walkthrough': 'Lima full walkthrough',
-      'slicer-walkthrough': 'Slicer full walkthrough',
+      'lima-walkthrough': 'Lima full walkthrough',
       'sd-wan-lima-walkthrough': 'SD-WAN Lima lab',
       'container-workflow': 'Build and use containers',
       'first-app-loop': 'Run an app locally'

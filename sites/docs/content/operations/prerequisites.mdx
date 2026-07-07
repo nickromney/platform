@@ -27,10 +27,10 @@ Kind stack. On Linux, Docker Engine is enough for Kind.
 cd ~/Developer/personal/platform
 make -C kubernetes/kind prereqs
 make -C kubernetes/lima prereqs
-make -C kubernetes/slicer prereqs
+make -C kubernetes/lima prereqs
 ```
 
-Use only the target you plan to run. Lima and Slicer include VM-specific
+Use only the target you plan to run. Lima include VM-specific
 requirements that do not apply to the Kind path.
 
 ## Kubeconfig Model

@@ -28,7 +28,7 @@ Scope for this plan:
 - `terraform/kubernetes`
 - `kubernetes/kind`
 - `kubernetes/lima`
-- `kubernetes/slicer`
+- `kubernetes/lima`
 
 Out of scope for this plan:
 
@@ -91,7 +91,7 @@ By the end of this plan, the repository should have:
 1. Enumerate the shell entrypoint surface in:
    - `kubernetes/kind/scripts`
    - `kubernetes/lima/scripts`
-   - `kubernetes/slicer/scripts`
+   - `kubernetes/lima/scripts`
    - `terraform/kubernetes/scripts`
 1. Classify each item into one of the allowed labels from `Working Rules`.
 1. Record the trigger basis for each Terraform imperative step:
@@ -108,7 +108,7 @@ By the end of this plan, the repository should have:
 
 - every current Terraform imperative step is classified
 - every material shell entrypoint is classified
-- there is a written explanation for why Lima and Slicer stage `100` stay out of
+- there is a written explanation for why Lima stage `100` stay out of
   Terraform
 - there is a written explanation for why image-cache/build/forward/check flows
   stay out of Terragrunt
@@ -135,7 +135,7 @@ By the end of this plan, the repository should have:
 1. Add a stack-local runtime harness for:
    - `kubernetes/kind`
    - `kubernetes/lima`
-   - `kubernetes/slicer`
+   - `kubernetes/lima`
 1. The harness should run:
    - `apply`
    - same `apply` again
@@ -150,7 +150,7 @@ By the end of this plan, the repository should have:
 
 - `make -C kubernetes/kind test-idempotence STAGE=100`
 - `make -C kubernetes/kind test-idempotence STAGE=900`
-- same pattern for Lima and Slicer
+- same pattern for Lima
 
 **Acceptance:**
 
@@ -177,7 +177,7 @@ into Terragrunt.
 - less duplicated `init`, `plan`, and `apply` scaffolding across:
   - `kubernetes/kind/Makefile`
   - `kubernetes/lima/Makefile`
-  - `kubernetes/slicer/Makefile`
+  - `kubernetes/lima/Makefile`
 - optional live entrypoints only if they reduce duplication without obscuring
   behavior
 
@@ -310,7 +310,7 @@ changes it.
 
 ### Explicitly Not A Terragrunt Concern
 
-- Lima or Slicer stage `100` bootstrap
+- Lima stage `100` bootstrap
 - host gateway and host forward management
 - image cache ensure and sync
 - local image build paths
@@ -330,7 +330,7 @@ parallel once this plan is accepted.
 
 - `terraform/kubernetes/*.tf`
 - `terraform/kubernetes/scripts`
-- `kubernetes/{kind,lima,slicer}/scripts`
+- `kubernetes/{kind,lima}/scripts`
 
 **Deliverable:**
 
@@ -350,7 +350,7 @@ parallel once this plan is accepted.
 
 - `kubernetes/kind/Makefile`
 - `kubernetes/lima/Makefile`
-- `kubernetes/slicer/Makefile`
+- `kubernetes/lima/Makefile`
 - existing `check-*` and stack verification scripts
 
 **Deliverable:**
@@ -432,7 +432,7 @@ Use the smallest relevant verification surface at each step.
 
 - `make -C kubernetes/kind test`
 - `make -C kubernetes/lima test`
-- `make -C kubernetes/slicer test`
+- `make -C kubernetes/lima test`
 
 ### Runtime Proof Commands
 
@@ -443,7 +443,7 @@ Minimum confidence path per stack:
 
 - `kind`: stage `100` and `900`
 - `lima`: stage `100` and `900`
-- `slicer`: stage `100` and `900`
+- `lima`: stage `100` and `900`
 
 Each runtime change must finish with:
 
@@ -457,7 +457,7 @@ Each runtime change must finish with:
 Do **not** do any of the following under this plan:
 
 - "reduce shell in IaC" as a goal by itself
-- move Lima or Slicer bootstrap under Terragrunt hooks
+- move Lima bootstrap under Terragrunt hooks
 - hide complex stack behavior in opaque Terragrunt pre-hooks or post-hooks
 - replace working shell with provider code that is larger or harder to debug
 - treat validation-only scripts as evidence of architectural failure

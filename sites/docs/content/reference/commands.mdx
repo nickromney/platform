@@ -83,8 +83,8 @@ make -C kubernetes/kind check-version
 make -C kubernetes/kind check-provider-version
 make -C kubernetes/lima check-version
 make -C kubernetes/lima check-provider-version
-make -C kubernetes/slicer check-version
-make -C kubernetes/slicer check-provider-version
+make -C kubernetes/lima check-version
+make -C kubernetes/lima check-provider-version
 ```
 
 Use the root guard for repo-wide pins and the runtime-specific guards when you
@@ -113,15 +113,15 @@ make -C kubernetes/lima prereqs
 make -C kubernetes/lima reset AUTO_APPROVE=1
 ```
 
-## Slicer
+## Lima
 
 ```bash
-make -C kubernetes/slicer 100 apply
-make -C kubernetes/slicer 900 apply AUTO_APPROVE=1
-make -C kubernetes/slicer 900 check-health
-make -C kubernetes/slicer prereqs
-make -C kubernetes/slicer reset AUTO_APPROVE=1
-make -C kubernetes/slicer show-urls
+make -C kubernetes/lima 100 apply
+make -C kubernetes/lima 900 apply AUTO_APPROVE=1
+make -C kubernetes/lima 900 check-health
+make -C kubernetes/lima prereqs
+make -C kubernetes/lima reset AUTO_APPROVE=1
+make -C kubernetes/lima show-urls
 ```
 
 ## Apps

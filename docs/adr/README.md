@@ -10,7 +10,7 @@ They are retrospective on purpose:
 - by the time the `platform` repo was created in March 2026, its initial
   commit already contained both the app family and the staged local-cluster
   stack
-- later history added `kubernetes/lima`, `kubernetes/slicer`, status/TUI
+- later history added `kubernetes/lima`, `kubernetes/lima`, status/TUI
   workflows, and the current DDD glossary
 - `apim-simulator` remained a separate repo first, then became a vendored
   runtime subset inside `apps/subnetcalc`, and now lives as the integrated

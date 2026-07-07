@@ -3591,7 +3591,6 @@ main() {
   CODE_KIND_NODE_IMAGE="$(tfvar_get_any_stage_or_default "node_image" "$(tf_default_from_variables "node_image")")"
   CODE_KIND_NODE_TAG="$(image_tag_from_ref "${CODE_KIND_NODE_IMAGE}")"
   CODE_LIMA_K3S_VERSION="$(makefile_variable_value "${REPO_ROOT}/kubernetes/lima/Makefile" "K3S_VERSION")"
-  CODE_SLICER_K3S_VERSION="$(makefile_variable_value "${REPO_ROOT}/kubernetes/slicer/Makefile" "K3S_VERSION")"
   if [ -z "${CODE_ARGOCD_IMAGE_REPO}" ]; then
     CODE_ARGOCD_IMAGE_REPO="quay.io/argoproj/argocd"
   fi
@@ -3904,7 +3903,6 @@ main() {
     kind_rows+=("$(print_observed_latest_row "kind load minimum for node tag" "$(normalize_semver_like_tag "${INSTALLED_KIND}")" "${KIND_LOAD_MINIMUM_KIND_TAG}" "installed cli" "minimum for ${CODE_KIND_NODE_TAG} node image")")
   fi
   kind_rows+=("$(print_observed_latest_row "lima k3s release tag" "${CODE_LIMA_K3S_VERSION}" "${LATEST_K3S_RELEASE_TAG}" "codebase" "release tag")")
-  kind_rows+=("$(print_observed_latest_row "slicer k3s release tag" "${CODE_SLICER_K3S_VERSION}" "${LATEST_K3S_RELEASE_TAG}" "codebase" "release tag")")
   kind_rows_sorted="$(printf "%s\n" "${kind_rows[@]}" | sort -t $'\t' -k1,1)"
 
   check_consistent_tfvars "argocd_chart_version"

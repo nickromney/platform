@@ -38,7 +38,7 @@ automatically the same thing as the ubiquitous language.
 
 The term `platform` remains the repo/theme word. The sharp path taxonomy is
 `solution` first (currently `kubernetes`), then `variant` (e.g., `kind`,
-`lima`, `slicer`).
+`lima`, `lima`).
 
 ## Implementation Principles
 

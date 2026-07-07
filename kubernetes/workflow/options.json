@@ -54,33 +54,6 @@
       "readiness": {
         "command": "make -C kubernetes/lima prereqs"
       }
-    },
-    {
-      "id": "slicer",
-      "path": "kubernetes/slicer",
-      "label": "slicer",
-      "guided_label": "Slicer",
-      "guided_description": "K3s in Slicer",
-      "family": "local",
-      "class": "local-created-cluster",
-      "lifecycle_mode": "create",
-      "state_scope": "single-local",
-      "contexts": [
-        "local-substrate",
-        "platform-stack"
-      ],
-      "contract_outputs": [
-        "cluster-access",
-        "ingress",
-        "registry",
-        "cni",
-        "identity",
-        "resource-sizing",
-        "lifecycle"
-      ],
-      "readiness": {
-        "command": "make -C kubernetes/slicer prereqs"
-      }
     }
   ],
   "variant_classes": [
@@ -494,7 +467,6 @@
       "default": "default",
       "merge_order": 40,
       "presets": [
-        "default",
         "pull",
         "local-cache",
         "preload",
@@ -508,9 +480,7 @@
       "default": "default",
       "merge_order": 50,
       "presets": [
-        "default",
-        "cilium",
-        "default-cni"
+        "cilium"
       ]
     },
     {
@@ -520,7 +490,6 @@
       "merge_order": 60,
       "introduced_at_stage": "800",
       "presets": [
-        "default",
         "victoria",
         "lgtm",
         "minimal-observability",
@@ -534,7 +503,6 @@
       "merge_order": 70,
       "introduced_at_stage": "900",
       "presets": [
-        "default",
         "keycloak",
         "dex"
       ]
@@ -546,7 +514,6 @@
       "merge_order": 80,
       "introduced_at_stage": "700",
       "presets": [
-        "default",
         "reference-apps",
         "no-reference-apps",
         "sentiment-only"
@@ -560,8 +527,7 @@
       "label": "Stage defaults",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {}
     },
@@ -571,8 +537,7 @@
       "label": "Minimal",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {
         "enable_backstage": false,
@@ -589,8 +554,7 @@
       "label": "Local 12 GB",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {
         "enable_backstage": false
@@ -708,8 +672,7 @@
       "label": "Airplane",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {
         "enable_image_preload": true,
@@ -724,8 +687,7 @@
       "label": "Pull from upstream",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {
         "enable_host_local_registry": false,
@@ -738,8 +700,7 @@
       "label": "Local registry cache",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {
         "enable_host_local_registry": true,
@@ -773,8 +734,7 @@
       "label": "Airplane cache",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "overlay": {
         "enable_host_local_registry": true,
@@ -789,17 +749,7 @@
       "label": "Cilium",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
-      ],
-      "overlay": {}
-    },
-    {
-      "id": "default-cni",
-      "group": "network_profile",
-      "label": "Default CNI",
-      "variants": [
-        "slicer"
+        "lima"
       ],
       "overlay": {}
     },
@@ -809,8 +759,7 @@
       "label": "VictoriaLogs",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "800",
       "overlay": {
@@ -827,8 +776,7 @@
       "label": "LGTM",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "800",
       "overlay": {
@@ -845,8 +793,7 @@
       "label": "Minimal observability",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "800",
       "overlay": {
@@ -863,8 +810,7 @@
       "label": "No optional observability",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "800",
       "overlay": {
@@ -881,8 +827,7 @@
       "label": "Keycloak",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "900",
       "overlay": {
@@ -895,8 +840,7 @@
       "label": "Dex",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "900",
       "overlay": {
@@ -909,8 +853,7 @@
       "label": "Reference apps",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "700",
       "overlay": {
@@ -924,8 +867,7 @@
       "label": "No reference apps",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "700",
       "overlay": {
@@ -939,8 +881,7 @@
       "label": "Sentiment only",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "introduced_at_stage": "700",
       "overlay": {
@@ -957,8 +898,7 @@
       "contract": "resource-sizing",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "local-only",
       "rebuild_risk": "cluster-rebuild",
@@ -971,8 +911,7 @@
       "contract": "resource-sizing",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "variant-specific",
       "rebuild_risk": "cluster-rebuild",
@@ -985,8 +924,7 @@
       "contract": "registry",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "adapter-contract",
       "rebuild_risk": "workload-rollout",
@@ -999,8 +937,7 @@
       "contract": "apps",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "portable",
       "rebuild_risk": "workload-rollout",
@@ -1013,8 +950,7 @@
       "contract": "apps",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "portable",
       "rebuild_risk": "workload-rollout",
@@ -1027,8 +963,7 @@
       "contract": "observability",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "portable",
       "rebuild_risk": "workload-rollout",
@@ -1041,8 +976,7 @@
       "contract": "identity",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "adapter-contract",
       "rebuild_risk": "service-reconfigure",
@@ -1055,8 +989,7 @@
       "contract": "observability",
       "variants": [
         "kind",
-        "lima",
-        "slicer"
+        "lima"
       ],
       "portability": "portable",
       "rebuild_risk": "workload-rollout",
