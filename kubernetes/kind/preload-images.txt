@@ -47,6 +47,10 @@ dhi.io/node-exporter:1.10.2-debian13
 # --- VictoriaLogs (chart 0.13.8) ---
 docker.io/victoriametrics/victoria-logs:v1.51.0
 
+# --- Grafana (chart 10.5.15) ---
+quay.io/kiwigrid/k8s-sidecar:2.5.0
+docker.io/grafana/grafana:12.3.1
+
 # --- Headlamp (chart 0.43.0) ---
 ghcr.io/headlamp-k8s/headlamp:v0.43.0
 node:lts-alpine
