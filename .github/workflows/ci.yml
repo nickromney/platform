@@ -104,7 +104,7 @@ jobs:
           yq_version="$(tool_version yq)"
           curl -fsSL \
             "https://github.com/mikefarah/yq/releases/download/${yq_version}/yq_linux_${go_arch}.tar.gz" \
-            | tar -xz -C "${tmp_dir}" "yq_linux_${go_arch}"
+            | tar -xz -C "${tmp_dir}" "./yq_linux_${go_arch}"
           sudo install -m 0755 \
             "${tmp_dir}/yq_linux_${go_arch}" \
             /usr/local/bin/yq
