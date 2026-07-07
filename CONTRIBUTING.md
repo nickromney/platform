@@ -33,6 +33,10 @@ it.
    rollback considerations when they apply.
 6. Keep generated churn out of the diff unless it is required for the change.
 
+Local hooks plus `make lint` and `make test-ci` are the primary gate before a
+pull request. GitHub CI is manually triggered for on-demand Linux confirmation
+with `gh workflow run ci.yml` or from the Actions tab.
+
 ## Commit Messages and Releases
 
 This repository is set up for explicit release-prep commits plus `v`-prefixed

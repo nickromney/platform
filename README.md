@@ -87,6 +87,7 @@ From the repository root:
 make
 make hooks
 make lint
+make test-ci
 make fmt
 make check-version
 make release-dry-run VERSION=0.3.0
@@ -102,6 +103,10 @@ Notes:
 - `make prereqs` and `make test` at the root are also informational. They tell
   you which focused subtree command to run next.
 - `make lint` is the repo-wide reporting pass.
+- `make test-ci` runs the PR-safe hermetic Bats subset. Local hooks plus
+  `make lint` and `make test-ci` are the primary gate; GitHub CI is an
+  on-demand Linux confirmation surface, triggered with
+  `gh workflow run ci.yml` or from the Actions tab.
 - `make fmt` applies the tracked markdown formatting pass.
 - `make check-version` verifies the root workflow pins, the vendored
   `apim-simulator` tag/SHA metadata, and the repo-local dependency age gates
