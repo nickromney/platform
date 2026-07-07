@@ -27,6 +27,8 @@ setup() {
   [[ "${output}" == *"KIND_ENABLE_BACKSTAGE=auto|on|off"* ]]
   [[ "${output}" == *"image distribution mode (default: registry)"* ]]
   [[ "${output}" == *"make status"* ]]
+  [[ "${output}" == *"make state-snapshot [TFSTATE_SNAPSHOT_KEEP=5]"* ]]
+  [[ "${output}" == *"make state-restore  [AUTO_APPROVE=1]"* ]]
   [[ "${output}" != *"make 950-local-idp plan"* ]]
   [[ "${output}" == *"make docker-prune-estimate"* ]]
   [[ "${output}" == *"make docker-safe-clean [AUTO_APPROVE=1]"* ]]
@@ -310,14 +312,19 @@ EOF
 }
 
 @test "kind stage 900 apply waits for cluster health before browser SSO E2E verification" {
-  run grep -Fn 'run_step "check-health" $(MAKE) -C "$(MAKEFILE_DIR)" check-health STAGE="$(STAGE)";' \
+  run grep -Fn 'post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"; \' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'printf '"'"'%s\n'"'"' check-health check-gateway-urls' \
+    "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh"
 
   [ "${status}" -eq 0 ]
 }
 
 @test "kind gateway stages verify HTTPS entrypoints after cluster health" {
-  run grep -Fn 'run_step "check-gateway-urls" $(MAKE) -C "$(MAKEFILE_DIR)" check-gateway-urls STAGE="$(STAGE)";' \
+  run grep -Fn 'run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"; \' \
     "${REPO_ROOT}/kubernetes/kind/Makefile"
 
   [ "${status}" -eq 0 ]
@@ -338,8 +345,8 @@ EOF
 }
 
 @test "kind stage 900 apply runs browser SSO E2E verification after a successful apply" {
-  run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn 'printf '"'"'%s\n'"'"' check-sso-e2e' \
+    "${REPO_ROOT}/kubernetes/scripts/plan-post-apply-verification.sh"
 
   [ "${status}" -eq 0 ]
 }
@@ -532,8 +539,8 @@ EOF
 }
 
 @test "kind stage 900 apply runs browser SSO E2E inside the devcontainer" {
-  run grep -Fn 'run_step "check-sso-e2e" $(MAKE) -C "$(MAKEFILE_DIR)" check-sso-e2e STAGE="$(STAGE)";' \
-    "${REPO_ROOT}/kubernetes/kind/Makefile"
+  run grep -Fn 'run_make_step "${post_apply_step}" "STAGE=${stage}"' \
+    "${REPO_ROOT}/kubernetes/scripts/run-post-apply-verification.sh"
 
   [ "${status}" -eq 0 ]
 }
@@ -1231,6 +1238,80 @@ EOF
   [[ "${output}" == *"OK   Removed Terraform/OpenTofu state lock: ${lock_file}"* ]]
   [ -f "${state_file}" ]
   [ ! -e "${lock_file}" ]
+}
+
+@test "kind check-kind-state warns with restore command for zero-byte live state" {
+  state_dir="${BATS_TEST_TMPDIR}/state"
+  state_file="${state_dir}/terraform.tfstate"
+  snapshot_dir="${state_dir}/snapshots"
+  mkdir -p "${snapshot_dir}"
+  : >"${state_file}"
+  printf '{"version":4}\n' >"${snapshot_dir}/terraform.tfstate.20260101T000001Z.1.snapshot"
+
+  cat >"${TEST_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "info" ]]; then
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "${TEST_BIN}/docker"
+
+  cat >"${TEST_BIN}/kind" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "get" && "${2:-}" == "clusters" ]]; then
+  printf 'kind-local\n'
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/kind"
+
+  run make -C "${REPO_ROOT}/kubernetes/kind" check-kind-state STATE_FILE="${state_file}"
+
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"WARN live Terraform/OpenTofu state is zero bytes: ${state_file}"* ]]
+  [[ "${output}" == *"WARN restore explicitly with: make -C kubernetes/kind state-restore AUTO_APPROVE=1"* ]]
+  [[ "${output}" == *"Refusing to continue against a live cluster with zero-byte state."* ]]
+}
+
+@test "kind exposes state snapshot and guarded restore targets" {
+  run grep -Fn 'SNAPSHOT_TFSTATE := $(abspath $(K8S_SCRIPTS_DIR)/snapshot-tfstate.sh)' \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '.PHONY: state-snapshot' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(SNAPSHOT_TFSTATE)" --execute \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '.PHONY: state-restore' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(SNAPSHOT_TFSTATE)" --restore $(STATE_RESTORE_MODE_FLAG) \' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind apply snapshots local state before terragrunt apply" {
+  makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  run grep -Fn 'run_step "state-snapshot" "$(SNAPSHOT_TFSTATE)" --execute --state-file "$(TG_STATE_PATH)" --keep "$(TFSTATE_SNAPSHOT_KEEP)" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"; \' \
+    "${makefile}"
+
+  [ "${status}" -eq 0 ]
+
+  run bash -c 'state_line=$(grep -n "run_step \"state-snapshot\"" "$1" | head -n 1 | cut -d: -f1); apply_line=$(grep -n "profile_run_step \"terragrunt-apply\"" "$1" | head -n 1 | cut -d: -f1); test "${state_line}" -lt "${apply_line}"' _ \
+    "${makefile}"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "kind state-reset fails clearly without auto approval in non-interactive mode" {
