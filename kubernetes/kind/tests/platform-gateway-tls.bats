@@ -135,7 +135,6 @@ PY
   script="${REPO_ROOT}/terraform/kubernetes/scripts/kind-apiserver-oidc-lib.sh"
   health_script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
 
-  grep -Fq 'SSO_PROVIDER="${SSO_PROVIDER:-keycloak}"' "${script}"
   grep -Fq 'OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-https://${OIDC_HOST}/realms/${KEYCLOAK_REALM}}"' "${script}"
   grep -Fq '[[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"' "${health_script}"
   grep -Fq 'Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/' "${health_script}"
