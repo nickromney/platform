@@ -454,6 +454,7 @@ if inside_devcontainer || [[ "${WORKSPACE_CONTAINER_STATUS:-}" == "running" ]]; 
   check_pinned_tool_version "k3sup" "$(arkade_tool_version k3sup)" "k3sup version 2>&1 | tr -d '\\033' | sed -E 's/\\[[0-9;]*[[:alpha:]]//g' | sed -nE 's/^Version:[[:space:]]+([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
   check_pinned_tool_version "kubie" "$(strip_v_prefix "$(arkade_tool_version kubie)")" "kubie --version 2>/dev/null | sed -E 's/^kubie[[:space:]]+v?//' | head -n 1"
   check_pinned_tool_version "kyverno" "$(strip_v_prefix "${KYVERNO_VERSION}")" "kyverno version 2>/dev/null | awk '/Version:/ { sub(/^v/, \"\", \$2); print \$2; exit }'"
+  check_pinned_tool_version "lefthook" "$(strip_v_prefix "${LEFTHOOK_VERSION}")" "lefthook version 2>/dev/null | sed -nE 's/^lefthook version v?([0-9][^[:space:]]*).*/\\1/p' | head -n 1"
   check_pinned_tool_version "limactl" "$(strip_v_prefix "${LIMA_VERSION}")" "limactl --version 2>&1 | sed -E 's/^limactl version v?//' | head -n 1"
   check_pinned_tool_version "mkcert" "$(strip_v_prefix "${MKCERT_VERSION}")" "mkcert -version 2>/dev/null | sed 's/^v//'"
   check_tool_absent "slicer" "command -v slicer 2>/dev/null | head -n 1"

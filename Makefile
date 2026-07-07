@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -41,6 +41,7 @@ CI_BATS_TESTS := \
 	tests/docs-prose-voice.bats \
 	tests/fmt-hcl.bats \
 	tests/fmt-markdown.bats \
+	tests/git-hooks.bats \
 	tests/host-access-contracts.bats \
 	tests/host-port-listeners.bats \
 	tests/http-fetch.bats \
@@ -93,7 +94,7 @@ CI_BATS_TESTS := \
 
 include mk/common.mk
 
-.PHONY: default help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -116,6 +117,7 @@ help:
 		'make docker\tShow the Docker/Compose Makefiles' \
 		'make docker-safe-clean [AUTO_APPROVE=1]\tPreview or run conservative Docker cleanup that preserves the current kind cluster' \
 		'make fmt\tApply repo-level auto-formatters' \
+		'make hooks\tInstall lefthook-managed repo hooks' \
 		'make kubernetes\tShow the staged Kubernetes Makefiles' \
 		'make lint\tRun repo-level reporting checks' \
 		'make lint-bash32\tRun Bash 3.2 shell compatibility checks' \
@@ -225,6 +227,16 @@ clean-local-state:
 
 docker-safe-clean:
 	@$(MAKE) --no-print-directory -C kubernetes/kind docker-safe-clean
+
+hooks:
+	@if ! command -v lefthook >/dev/null 2>&1; then \
+		echo "lefthook not found in PATH." >&2; \
+		echo "Install the pinned toolchain with: .devcontainer/install-toolchain.sh --execute" >&2; \
+		exit 1; \
+	fi
+	@lefthook install
+	@echo "Installed lefthook hooks from lefthook.yml"
+	@echo "Skip one git command with: LEFTHOOK=0 git <command> or --no-verify"
 
 lint:
 	@$(MAKE) --no-print-directory lint-yaml
