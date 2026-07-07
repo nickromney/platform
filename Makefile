@@ -24,6 +24,7 @@ PLATFORM_TUI_CMD ?= cd tools/platform-tui && $(PLATFORM_TUI_GO_BIN) run ./cmd/pl
 PLATFORM_TUI_BUILD_CMD ?= $(MAKE) --no-print-directory -C tools/platform-tui build
 PLATFORM_WORKFLOW_UI_SCRIPT ?= scripts/platform-workflow-ui.sh
 RESET_LOCAL_STATE_SCRIPT ?= scripts/reset-local-state.sh
+INSTALL_GIT_HOOKS_SCRIPT ?= scripts/hooks/install-lefthook-hooks.sh
 STATUS_FORMAT ?= text
 WORKFLOW_UI_HOST ?= console.127.0.0.1.sslip.io
 WORKFLOW_UI_PORT ?= 8443
@@ -230,12 +231,7 @@ docker-safe-clean:
 	@$(MAKE) --no-print-directory -C kubernetes/kind docker-safe-clean
 
 hooks:
-	@if ! command -v lefthook >/dev/null 2>&1; then \
-		echo "lefthook not found in PATH." >&2; \
-		echo "Install the pinned toolchain with: .devcontainer/install-toolchain.sh --execute" >&2; \
-		exit 1; \
-	fi
-	@lefthook install
+	@"$(INSTALL_GIT_HOOKS_SCRIPT)" --execute
 	@echo "Installed lefthook hooks from lefthook.yml"
 	@echo "Skip one git command with: LEFTHOOK=0 git <command> or --no-verify"
 
