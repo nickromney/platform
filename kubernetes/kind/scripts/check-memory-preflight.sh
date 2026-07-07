@@ -10,7 +10,7 @@ KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB="${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB:-4}
 KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB="${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB:-2}"
 KIND_PREFLIGHT_MIN_DOCKER_MEM_GB="${KIND_PREFLIGHT_MIN_DOCKER_MEM_GB:-8}"
 KIND_PREFLIGHT_COMPETING_VM_RSS_GB="${KIND_PREFLIGHT_COMPETING_VM_RSS_GB:-2}"
-KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS="${KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS:-3}"
+KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS="${KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS:-10}"
 
 usage() {
   cat <<EOF >&2
@@ -208,7 +208,7 @@ lsof_for_pid() {
   fi
 
   output_file="$(mktemp "${TMPDIR:-/tmp}/kind-memory-preflight-lsof.XXXXXX")"
-  lsof -p "${pid}" >"${output_file}" 2>/dev/null &
+  lsof -b -n -P -p "${pid}" >"${output_file}" 2>/dev/null &
   lsof_pid="$!"
   waited=0
 
@@ -237,30 +237,43 @@ lsof_for_pid() {
 
 classify_vm_owner() {
   local pid="$1"
-  local lsof_output
+  local lsof_output lsof_status
 
-  lsof_output="$(lsof_for_pid "${pid}" || true)"
+  lsof_status=0
+  lsof_output="$(lsof_for_pid "${pid}")" || lsof_status=$?
+  if [[ "${lsof_status}" -eq 124 ]]; then
+    lsof_status=0
+    lsof_output="$(lsof_for_pid "${pid}")" || lsof_status=$?
+  fi
+  if [[ "${lsof_status}" -eq 124 ]]; then
+    printf '%s\n' "timeout|classification timed out|increase KIND_PREFLIGHT_LSOF_TIMEOUT_SECONDS or stop the owning VM application (inspect with: lsof -b -n -P -p ${pid})"
+    return 0
+  fi
   if [[ -z "${lsof_output}" ]]; then
-    printf '%s\n' "unknown|unknown VM owner|stop the owning VM application (inspect with: lsof -p ${pid})"
+    printf '%s\n' "unknown|unknown VM owner|stop the owning VM application (inspect with: lsof -b -n -P -p ${pid})"
     return 0
   fi
 
-  if printf '%s\n' "${lsof_output}" | grep -Eiq 'com[.]docker|Docker[.]app|docker[.]sock'; then
+  # Here-strings, not pipes: under set -o pipefail, `printf big | grep -q`
+  # reports failure when grep exits at the first match and printf takes
+  # SIGPIPE on the unread remainder (lsof output here exceeds the 64KB pipe
+  # buffer). This false-negatived Docker's own VM as "unknown owner".
+  if grep -Eiq 'com[.]docker|Docker[.]app|docker[.]sock' <<<"${lsof_output}"; then
     printf '%s\n' "docker|Docker|"
     return 0
   fi
 
-  if printf '%s\n' "${lsof_output}" | grep -Eiq 'slicer'; then
+  if grep -Eiq 'slicer' <<<"${lsof_output}"; then
     printf '%s\n' "slicer|Slicer|make -C kubernetes/slicer stop"
     return 0
   fi
 
-  if printf '%s\n' "${lsof_output}" | grep -Eiq 'lima'; then
+  if grep -Eiq 'lima' <<<"${lsof_output}"; then
     printf '%s\n' "lima|Lima|make -C kubernetes/lima stop"
     return 0
   fi
 
-  printf '%s\n' "unknown|unknown VM owner|stop the owning VM application (inspect with: lsof -p ${pid})"
+  printf '%s\n' "unknown|unknown VM owner|stop the owning VM application (inspect with: lsof -b -n -P -p ${pid})"
 }
 
 check_competing_vms() {

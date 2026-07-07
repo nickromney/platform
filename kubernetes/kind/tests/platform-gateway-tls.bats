@@ -252,6 +252,18 @@ PY
   grep -Fq 'argocd_refresh_app "${ns}" "${app}"' "${script}"
 }
 
+@test "cluster health script fails early when kubeconfig target is not answering" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'resolve_kubeconfig_target()' "${script}"
+  grep -Fq 'KUBECONFIG_PATH:-' "${script}"
+  grep -Fq 'export KUBECONFIG="${KUBECONFIG_TARGET}"' "${script}"
+  grep -Fq 'assert_kubeconfig_target_answering "${KUBECONFIG_TARGET}" "${ctx}"' "${script}"
+  grep -Fq 'kubectl --request-timeout=5s get ns kube-system -o name' "${script}"
+  grep -Fq 'kubeconfig target not answering (mid-reconfiguration?)' "${script}"
+  grep -Fq 'retry the health check after apiserver OIDC reconfiguration and kubeconfig regeneration settle' "${script}"
+}
+
 @test "cluster health script only tolerates stale aggregate degraded health when child resources are clean" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
 
