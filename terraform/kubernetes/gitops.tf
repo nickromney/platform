@@ -483,7 +483,7 @@ resource "null_resource" "argocd_repo_server_restart" {
       tls_private_key.policies_repo[0].private_key_openssh,
       local.gitea_known_hosts_cluster_content,
     ]))
-    restart_script_ver = "6"
+    restart_script_ver = "7"
   }
 
   provisioner "local-exec" {
@@ -628,9 +628,9 @@ if kubectl -n ${var.argocd_namespace} get deployment argocd-repo-server >/dev/nu
   wait_for_gitea_ssh
   patch_known_hosts
   retry_webhook_fail kubectl rollout restart deployment argocd-repo-server -n ${var.argocd_namespace}
-  if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s; then
+  if ! retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=300s; then
     if force_delete_stuck_repo_server_pods; then
-      retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=180s
+      retry_webhook_fail kubectl rollout status deployment argocd-repo-server -n ${var.argocd_namespace} --timeout=300s
     else
       exit 1
     fi

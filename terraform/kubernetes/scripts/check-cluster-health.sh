@@ -61,6 +61,7 @@ expected_argocd_apps() {
   fi
 
   if [[ "${EXPECT_PROMETHEUS}" == "true" ]]; then apps+=(prometheus); fi
+  if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then apps+=(metrics-server); fi
   if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(grafana); fi
   if [[ "${EXPECT_LOKI}" == "true" ]]; then apps+=(loki); fi
   if [[ "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then apps+=(victoria-logs); fi
@@ -873,6 +874,7 @@ EXPECT_SSO=$(expected_from_tfvars enable_sso)
 SSO_PROVIDER=$(tfvar_get sso_provider)
 [[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
+EXPECT_METRICS_SERVER=$(expected_from_tfvars enable_metrics_server)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APIM_SIMULATOR=$(expected_from_tfvars enable_apim_simulator)
@@ -1449,6 +1451,13 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   if kubectl -n "${ARGOCD_NS}" get app prometheus >/dev/null 2>&1; then
     ok "Argo CD app prometheus exists"
   fi
+  if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then
+    if kubectl -n "${ARGOCD_NS}" get app metrics-server >/dev/null 2>&1; then
+      ok "Argo CD app metrics-server exists"
+    else
+      fail_soft "Argo CD app metrics-server missing (enable_metrics_server=true${tfvars_hint})"
+    fi
+  fi
   if kubectl -n "${ARGOCD_NS}" get app loki >/dev/null 2>&1; then
     ok "Argo CD app loki exists"
   fi
@@ -1860,6 +1869,30 @@ else
     fail_soft "observability namespace not found (observability components enabled${tfvars_hint})"
   else
     ok "Observability namespace not detected"
+  fi
+fi
+
+echo ""
+echo "Metrics Server (if installed):"
+if ! section_active 800 "${EXPECT_METRICS_SERVER}"; then
+  ok "Skipped until stage 800"
+elif kubectl get ns metrics-server >/dev/null 2>&1; then
+  ok "Detected metrics-server namespace (enable_metrics_server=${EXPECT_METRICS_SERVER}${tfvars_hint})"
+  kubectl -n metrics-server get pods -o wide || true
+  if kubectl -n metrics-server get deploy metrics-server >/dev/null 2>&1; then
+    if kubectl -n metrics-server rollout status deploy/metrics-server --timeout=180s >/dev/null 2>&1; then
+      ok "metrics-server deployment Ready"
+    else
+      fail_soft "metrics-server deployment is not Ready"
+    fi
+  else
+    fail_soft "metrics-server deployment missing (enable_metrics_server=true${tfvars_hint})"
+  fi
+else
+  if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then
+    fail_soft "metrics-server namespace not found (enable_metrics_server=true${tfvars_hint})"
+  else
+    ok "metrics-server namespace not detected"
   fi
 fi
 

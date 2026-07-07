@@ -816,6 +816,31 @@ EOF
   [ "${output}" = "$(printf 'false\ntrue\ntrue\ntrue\ntrue\nhost.docker.internal:5002/platform/sentiment-api:contract\ntrue\nhost.docker.internal:5002/platform/backstage:contract\nplatform/grafana-victorialogs\n111')" ]
 }
 
+@test "render_prometheus_application_manifest injects alertmanager startup-safe resources" {
+  apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
+  mkdir -p "${apps_dir}"
+  cat >"${apps_dir}/90-prometheus.application.yaml" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+spec:
+  source:
+    helm:
+      values: |
+        alertmanager:
+          enabled: false
+        extraScrapeConfigs: |
+          - job_name: demo
+EOF
+
+  run bash -lc "export ENABLE_ALERTMANAGER=true HARDENED_IMAGE_REGISTRY='registry.example.test/dhi'; source '${SCRIPT}'; render_prometheus_application_manifest '${apps_dir}/90-prometheus.application.yaml'; cat '${apps_dir}/90-prometheus.application.yaml'"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"repository: registry.example.test/dhi/alertmanager"* ]]
+  [[ "${output}" == *$'resources:\n            requests:\n              cpu: 25m\n              memory: 64Mi\n            limits:\n              cpu: 200m\n              memory: 256Mi'* ]]
+  [[ "${output}" != *"cpu: 40m"* ]]
+  [[ "${output}" != *"memory: 96Mi"* ]]
+}
+
 @test "sync-gitea-policies contract renders external image tree changes" {
   repo_dir="${BATS_TEST_TMPDIR}/repo"
   workload_file="${repo_dir}/apps/sentiment/dev/all.yaml"

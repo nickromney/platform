@@ -172,11 +172,11 @@ spec:
             enabled: false
           resources:
             requests:
-              cpu: 10m
-              memory: 32Mi
+              cpu: 25m
+              memory: 64Mi
             limits:
-              cpu: 40m
-              memory: 96Mi
+              cpu: 200m
+              memory: 256Mi
         configmapReload:
           prometheus:
             image:
@@ -190,11 +190,11 @@ spec:
             tag: 2.18.0-debian13
           resources:
             requests:
-              cpu: 10m
-              memory: 48Mi
+              cpu: 25m
+              memory: 64Mi
             limits:
-              cpu: 40m
-              memory: 96Mi
+              cpu: 200m
+              memory: 256Mi
         prometheus-node-exporter:
           enabled: true
           image:
@@ -203,11 +203,11 @@ spec:
             tag: 1.10.2-debian13
           resources:
             requests:
-              cpu: 8m
-              memory: 16Mi
+              cpu: 10m
+              memory: 24Mi
             limits:
-              cpu: 32m
-              memory: 48Mi
+              cpu: 100m
+              memory: 64Mi
         prometheus-pushgateway:
           enabled: false
         server:
