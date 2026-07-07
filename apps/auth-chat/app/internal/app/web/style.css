@@ -94,7 +94,7 @@
 
 .message strong {
 	font-size: 0.82rem;
-	color: var(--muted);
+	color: var(--text);
 }
 
 .message p {
