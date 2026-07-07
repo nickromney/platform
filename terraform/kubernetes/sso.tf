@@ -4,9 +4,7 @@ resource "kubernetes_namespace_v1" "sso" {
   metadata {
     name = "sso"
     labels = {
-      "platform.publiccloudexperiments.net/namespace-role" = "shared"
-      "platform.publiccloudexperiments.net/sensitivity"    = "restricted"
-      "kyverno.io/isolate"                                 = "true"
+      "kyverno.io/isolate" = "true"
     }
   }
 
@@ -16,21 +14,21 @@ resource "kubernetes_namespace_v1" "sso" {
   ]
 }
 
-resource "random_password" "dex_oauth2_proxy_client_secret" {
+resource "random_password" "oidc_oauth2_proxy_client_secret" {
   count = var.enable_sso ? 1 : 0
 
   length  = 32
   special = false
 }
 
-resource "random_password" "dex_argocd_client_secret" {
+resource "random_password" "oidc_argocd_client_secret" {
   count = var.enable_sso ? 1 : 0
 
   length  = 32
   special = false
 }
 
-resource "random_password" "dex_headlamp_client_secret" {
+resource "random_password" "oidc_headlamp_client_secret" {
   count = var.enable_sso ? 1 : 0
 
   length  = 32
@@ -58,16 +56,6 @@ resource "random_password" "keycloak_postgres_password" {
   special = false
 }
 
-resource "terraform_data" "dex_demo_password_hash" {
-  count = var.enable_sso && local.sso_provider_is_dex ? 1 : 0
-
-  triggers_replace = sha256(var.gitea_member_user_pwd)
-  input            = bcrypt(var.gitea_member_user_pwd)
-
-  lifecycle {
-    ignore_changes = [input]
-  }
-}
 
 resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
   count = var.enable_sso ? 1 : 0
@@ -81,7 +69,7 @@ resource "kubernetes_secret_v1" "oauth2_proxy_oidc" {
 
   data = {
     "client-id"     = "oauth2-proxy"
-    "client-secret" = random_password.dex_oauth2_proxy_client_secret[0].result
+    "client-secret" = random_password.oidc_oauth2_proxy_client_secret[0].result
     "cookie-secret" = random_password.oauth2_proxy_cookie_secret[0].result
   }
 }
@@ -225,45 +213,7 @@ __YAML__
   ]
 }
 
-resource "kubernetes_secret_v1" "signoz_auth_proxy_credentials" {
-  count = var.enable_sso && var.enable_signoz ? 1 : 0
 
-  metadata {
-    name      = "signoz-auth-proxy-credentials"
-    namespace = "observability"
-  }
-
-  type = "Opaque"
-
-  data = {
-    SIGNOZ_URL      = "http://signoz:8080"
-    SIGNOZ_USER     = "demo@admin.test"
-    SIGNOZ_PASSWORD = var.gitea_member_user_pwd
-  }
-
-  depends_on = [
-    kubernetes_namespace_v1.observability,
-  ]
-}
-
-resource "kubernetes_secret_v1" "signoz_bootstrap_credentials" {
-  count = var.enable_sso && var.enable_signoz ? 1 : 0
-
-  metadata {
-    name      = "signoz-bootstrap-credentials"
-    namespace = "observability"
-  }
-
-  type = "Opaque"
-
-  data = {
-    SIGNOZ_BOOTSTRAP_PASSWORD = var.gitea_member_user_pwd
-  }
-
-  depends_on = [
-    kubernetes_namespace_v1.observability,
-  ]
-}
 
 data "external" "mkcert_ca_cert" {
   count = var.enable_sso && var.enable_headlamp ? 1 : 0
@@ -629,7 +579,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           enabled                   = true
           publicClient              = false
           protocol                  = "openid-connect"
-          secret                    = random_password.dex_oauth2_proxy_client_secret[0].result
+          secret                    = random_password.oidc_oauth2_proxy_client_secret[0].result
           fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
@@ -703,7 +653,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           enabled                   = true
           publicClient              = false
           protocol                  = "openid-connect"
-          secret                    = random_password.dex_argocd_client_secret[0].result
+          secret                    = random_password.oidc_argocd_client_secret[0].result
           fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
@@ -733,7 +683,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           enabled                   = true
           publicClient              = false
           protocol                  = "openid-connect"
-          secret                    = random_password.dex_headlamp_client_secret[0].result
+          secret                    = random_password.oidc_headlamp_client_secret[0].result
           fullScopeAllowed          = false
           standardFlowEnabled       = true
           directAccessGrantsEnabled = true
@@ -801,7 +751,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
-            temporary = false
+            transient = false
           }]
         },
         {
@@ -815,7 +765,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
-            temporary = false
+            transient = false
           }]
         },
         {
@@ -829,7 +779,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
-            temporary = false
+            transient = false
           }]
         },
       ]
@@ -1141,110 +1091,6 @@ resource "null_resource" "reconcile_keycloak_realm" {
   ]
 }
 
-resource "kubectl_manifest" "argocd_app_dex" {
-  count = var.enable_sso && local.sso_provider_is_dex && var.enable_argocd ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: dex
-  namespace: ${var.argocd_namespace}
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    namespace: sso
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: ${local.policies_repo_url_cluster}
-    targetRevision: main
-    path: ${local.vendored_chart_paths.dex}
-    helm:
-      releaseName: dex
-      values: |
-        # dex DHI image (2.44.0-debian13) is built with Go 1.25 which strictly
-        # validates RFC 3986 IP literals. Dex's Kubernetes storage backend
-        # unconditionally wraps KUBERNETES_SERVICE_HOST in brackets, which Go 1.25
-        # rejects for IPv4. Use the upstream image (older Go) until dex fixes the
-        # URL construction bug.
-        config:
-          issuer: ${local.sso_public_url}
-          storage:
-            type: kubernetes
-            config:
-              inCluster: true
-          web:
-            http: 0.0.0.0:5556
-
-          oauth2:
-            skipApprovalScreen: true
-
-          enablePasswordDB: true
-          staticPasswords:
-            - email: "demo@admin.test"
-              emailVerified: true
-              hash: "${terraform_data.dex_demo_password_hash[0].output}"
-              username: "demo-admin"
-              userID: "0a1f0e7f-75fa-40cc-90bc-9e876c0919dc"
-              groups:
-                - platform-admins
-            - email: "demo@dev.test"
-              emailVerified: true
-              hash: "${terraform_data.dex_demo_password_hash[0].output}"
-              username: "demo@dev.test"
-              userID: "cfe2f539-3972-4310-bc7e-8579af6c4b20"
-              groups:
-                - platform-viewers
-            - email: "demo@uat.test"
-              emailVerified: true
-              hash: "${terraform_data.dex_demo_password_hash[0].output}"
-              username: "demo@uat.test"
-              userID: "e3bbece5-a293-47d9-9d7d-3d8cb218fc23"
-              groups:
-                - platform-viewers
-
-          staticClients:
-            - id: oauth2-proxy
-              name: "oauth2-proxy"
-              secret: ${random_password.dex_oauth2_proxy_client_secret[0].result}
-              redirectURIs:
-${indent(16, join("\n", [for uri in local.sso_oauth2_proxy_redirect_uris : "- ${uri}"]))}
-            - id: argocd
-              name: "argocd"
-              secret: ${random_password.dex_argocd_client_secret[0].result}
-              redirectURIs:
-                - ${local.argocd_public_url}/auth/callback
-            - id: headlamp
-              name: "headlamp"
-              secret: ${random_password.dex_headlamp_client_secret[0].result}
-              redirectURIs:
-                - ${local.headlamp_public_url}/oidc-callback
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-      - SkipDryRunOnMissingResource=true
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_secret_v1.argocd_repo_policies,
-    null_resource.sync_gitea_policies_repo,
-    null_resource.argocd_repo_server_restart,
-    kubernetes_namespace_v1.sso,
-    kubernetes_secret_v1.oauth2_proxy_oidc,
-  ]
-}
 
 resource "null_resource" "wait_for_platform_gateway_tls" {
   count = var.enable_sso && var.enable_gateway_tls && var.provision_kind_cluster ? 1 : 0
@@ -1297,14 +1143,12 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     environment = {
       KUBECONFIG                  = local.kubeconfig_path_expanded
       CLUSTER_NAME                = var.cluster_name
-      SSO_PROVIDER                = local.sso_provider_effective
+      SSO_PROVIDER                = "keycloak"
       KEYCLOAK_REALM              = local.keycloak_realm
-      DEX_HOST                    = local.sso_public_host
-      DEX_NAMESPACE               = "sso"
       SSO_NAMESPACE               = "sso"
-      SSO_DEPLOYMENT_NAME         = local.sso_provider_is_keycloak ? "keycloak" : "dex"
-      SSO_SERVICE_NAME            = local.sso_provider_is_keycloak ? "keycloak" : "dex"
-      SSO_DESCRIPTION             = local.sso_provider_is_keycloak ? "Keycloak" : "Dex"
+      SSO_DEPLOYMENT_NAME         = local.sso_provider_is_keycloak ? "keycloak" : "oidc"
+      SSO_SERVICE_NAME            = local.sso_provider_is_keycloak ? "keycloak" : "oidc"
+      SSO_DESCRIPTION             = local.sso_provider_is_keycloak ? "Keycloak" : "Keycloak"
       OIDC_ISSUER_URL             = local.sso_public_url
       OIDC_CLIENT_ID              = "headlamp"
       MKCERT_CA_DEST              = "/etc/kubernetes/pki/mkcert-rootCA.pem"
@@ -1318,14 +1162,12 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
     null_resource.argocd_refresh_gitops_repo_apps,
     null_resource.wait_for_platform_gateway_tls,
     null_resource.reconcile_keycloak_realm,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     kubectl_manifest.argocd_app_oauth2_proxy_argocd,
     kubectl_manifest.argocd_app_oauth2_proxy_gitea,
     kubectl_manifest.argocd_app_oauth2_proxy_hubble,
     kubectl_manifest.argocd_app_oauth2_proxy_grafana,
-    kubectl_manifest.argocd_app_oauth2_proxy_signoz,
     kubectl_manifest.argocd_app_oauth2_proxy_sentiment,
     kubectl_manifest.argocd_app_oauth2_proxy_sentiment_uat,
     kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc,
@@ -1598,7 +1440,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
   ]
@@ -1706,7 +1547,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
   ]
@@ -1813,7 +1653,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
   ]
@@ -1919,126 +1758,11 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
   ]
 }
 
-resource "kubectl_manifest" "argocd_app_oauth2_proxy_signoz" {
-  count = var.enable_sso && var.enable_argocd && var.enable_signoz ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: oauth2-proxy-signoz
-  namespace: ${var.argocd_namespace}
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    namespace: sso
-    server: https://kubernetes.default.svc
-  source:
-    repoURL: ${local.policies_repo_url_cluster}
-    targetRevision: main
-    path: ${local.vendored_chart_paths.oauth2_proxy}
-    helm:
-      releaseName: oauth2-proxy-signoz
-      parameters:
-        # Guardrail: Helm parameters can override helm.values (including via manual ArgoCD edits).
-        # Keep SigNoz behind oauth2-proxy (SSO) and the SigNoz auth-bridge.
-        - name: extraArgs.upstream
-          value: http://signoz-auth-proxy.observability.svc.cluster.local:3000
-      values: |
-        image:
-          registry: ${local.hardened_image_registry_effective}
-          repository: oauth2-proxy
-          tag: 7.15.2-debian13
-        config:
-          existingSecret: oauth2-proxy-oidc
-          cookieName: ${local.admin_sso_cookie_name}
-          configFile: ""
-
-        service:
-          portNumber: 4180
-
-        # SigNoz is UI-heavy and is frequently hit by E2E; keep it resilient during rolling updates
-        # and transient probe slowness.
-        replicaCount: 2
-
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-
-        livenessProbe:
-          initialDelaySeconds: 10
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        readinessProbe:
-          initialDelaySeconds: 5
-          timeoutSeconds: 15
-          failureThreshold: 10
-
-        extraArgs:
-          provider: oidc
-          scope: "openid email profile groups"
-          oidc-issuer-url: ${local.sso_public_url}
-          profile-url: ${local.sso_userinfo_url}
-          oidc-email-claim: email
-          oidc-groups-claim: ${local.sso_groups_claim}
-          insecure-oidc-allow-unverified-email: "true"
-          user-id-claim: email
-          skip-oidc-discovery: "true"
-          ssl-insecure-skip-verify: "true"
-          login-url: ${local.sso_login_url}
-          redeem-url: ${local.sso_token_url}
-          oidc-jwks-url: ${local.sso_jwks_url}
-          redirect-url: ${local.signoz_public_url}/oauth2/callback
-          upstream: http://signoz-auth-proxy.observability.svc.cluster.local:3000
-          allowed-group: ${local.sso_admin_group}
-          cookie-domain: ${local.admin_cookie_domain}
-          whitelist-domain: ${local.admin_whitelist_domains}
-          cookie-secure: "true"
-          session-store-type: redis
-          redis-connection-url: ${local.oauth2_proxy_redis_url}
-          show-debug-on-error: "true"
-          pass-user-headers: "true"
-          set-xauthrequest: "true"
-          reverse-proxy: "true"
-          skip-provider-button: "true"
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
-      - SkipDryRunOnMissingResource=true
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = false
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_secret_v1.argocd_repo_policies,
-    null_resource.sync_gitea_policies_repo,
-    null_resource.argocd_repo_server_restart,
-    kubernetes_namespace_v1.sso,
-    kubernetes_secret_v1.oauth2_proxy_oidc,
-    kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
-    kubectl_manifest.keycloak,
-    kubectl_manifest.keycloak_service,
-  ]
-}
 
 resource "kubectl_manifest" "argocd_app_oauth2_proxy_sentiment" {
   count = var.enable_sso && var.enable_argocd && local.enable_sentiment_workloads_effective ? 1 : 0
@@ -2148,7 +1872,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     # When enable_app_of_apps=true, apps are managed via the GitOps tree.
@@ -2264,7 +1987,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     # When enable_app_of_apps=true, apps are managed via the GitOps tree.
@@ -2379,7 +2101,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     # When enable_app_of_apps=true, apps are managed via the GitOps tree.
@@ -2494,7 +2215,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     # When enable_app_of_apps=true, subnetcalc-uat is managed via the GitOps tree.
@@ -2615,7 +2335,6 @@ __YAML__
     kubernetes_namespace_v1.sso,
     kubernetes_secret_v1.oauth2_proxy_oidc,
     kubectl_manifest.oauth2_proxy_session_store_service,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.keycloak,
     kubectl_manifest.keycloak_service,
     kubectl_manifest.argocd_app_of_apps,

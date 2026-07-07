@@ -325,25 +325,21 @@ resources:
   - httproute-portal-api.yaml
   - httproute-hubble.yaml
   - httproute-grafana.yaml
-  - httproute-signoz.yaml
   - httproute-agentgateway-ai-gateway.yaml
   - httproute-sentiment-dev.yaml
   - httproute-subnetcalc-dev.yaml
   - referencegrant-sso.yaml
   - referencegrant-agentgateway-ai-gateway.yaml
   - referencegrant-hubble.yaml
-  - referencegrant-signoz-sso.yaml
 EOF
   touch \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-portal.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-portal-api.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-hubble.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-grafana.yaml" \
-    "${stack_dir}/apps/platform-gateway-routes-sso/httproute-signoz.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-sentiment-dev.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-subnetcalc-dev.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-hubble.yaml" \
-    "${stack_dir}/apps/platform-gateway-routes-sso/referencegrant-signoz-sso.yaml"
   cp "${stack_dir}/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml" \
     "${stack_dir}/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml"
   cp "${stack_dir}/apps/platform-gateway-routes/referencegrant-agentgateway-ai-gateway.yaml" \
@@ -552,7 +548,6 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render-only"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "unset GITEA_ADMIN_USERNAME GITEA_ADMIN_PWD GITEA_SSH_USERNAME GITEA_REPO_OWNER GITEA_REPO_NAME DEPLOY_KEY_TITLE DEPLOY_PUBLIC_KEY SSH_PRIVATE_KEY_PATH GITEA_HTTP_BASE GITEA_SSH_HOST GITEA_SSH_PORT; export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=true ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-only' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-only/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; declare -f render_policy_repo_tree"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"push_rendered_repo"* ]]
@@ -561,7 +556,6 @@ EOF
 }
 
 @test "render_policy_repo_tree exposes APIM console on admin host behind SSO when APIM is enabled" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-admin' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-apim-admin/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"apim.admin.127.0.0.1.sslip.io"* ]]
@@ -569,13 +563,11 @@ EOF
 }
 
 @test "render_policy_repo_tree prunes APIM console route and SSO grant when APIM is disabled" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-apim-disabled' >/dev/null; test ! -f '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/httproute-apim.yaml'; ! grep -Fq 'oauth2-proxy-apim' '${BATS_TEST_TMPDIR}/render-apim-disabled/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
 }
 
 @test "render_policy_repo_tree includes lightweight Langfuse without Bitnami legacy images when enabled" {
-  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_LANGFUSE=true ENABLE_PROMETHEUS=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-langfuse' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/argocd-apps/81-langfuse.application.yaml' '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/langfuse/all.yaml' '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/platform-gateway-routes-sso/httproute-langfuse.yaml' '${BATS_TEST_TMPDIR}/render-langfuse/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"path: apps/langfuse"* ]]
@@ -644,13 +636,11 @@ EOF
   [[ "${output}" == *"must use a pinned version"* ]]
 }
 
-@test "vendor_direct_tf_only_charts vendors dex headlamp and oauth2-proxy" {
   vendor_root="${BATS_TEST_TMPDIR}/vendor"
 
   run bash -lc "source '${SCRIPT}'; vendor_direct_tf_only_charts '${vendor_root}'"
 
   [ "${status}" -eq 0 ]
-  [ -f "${vendor_root}/dex/Chart.yaml" ]
   [ -f "${vendor_root}/headlamp/Chart.yaml" ]
   [ -f "${vendor_root}/oauth2-proxy/Chart.yaml" ]
   grep -Fq '{{- if hasKey .Values.config "sessionTTL" }}' "${vendor_root}/headlamp/templates/deployment.yaml"
@@ -658,16 +648,13 @@ EOF
   grep -Fq '"minimum": 1' "${vendor_root}/headlamp/values.schema.json"
 }
 
-@test "render_otel_gateway_manifest prefers VictoriaLogs when enabled and Loki is off" {
   apps_dir="${BATS_TEST_TMPDIR}/apps"
   mkdir -p "${apps_dir}"
 
-  run bash -lc "export ENABLE_PROMETHEUS=true ENABLE_GRAFANA=true ENABLE_VICTORIA_LOGS=true ENABLE_LOKI=false ENABLE_TEMPO=false ENABLE_SIGNOZ=false ENABLE_OTEL_GATEWAY=false OPENTELEMETRY_COLLECTOR_CHART_VERSION=0.158.1; source '${SCRIPT}'; render_otel_gateway_manifest '${apps_dir}'; cat '${apps_dir}/96-otel-collector-prometheus.application.yaml'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"otlphttp/victoria-logs"* ]]
   [[ "${output}" == *"/insert/opentelemetry/v1/logs"* ]]
-  [[ "${output}" != *"otlphttp/loki"* ]]
 }
 
 @test "prune_argocd_app_manifests keeps cert-manager when gateway TLS is disabled but cert-manager stays enabled" {
@@ -765,27 +752,20 @@ EOF
   grep -Fq "oauth2-proxy-idp-core" "${routes_dir}/referencegrant-sso.yaml"
 }
 
-@test "apply_external_platform_images rewrites signoz auth proxy when explicitly enabled" {
   repo_dir="${BATS_TEST_TMPDIR}/repo"
   mkdir -p "${repo_dir}/apps/platform-gateway-routes-sso"
 
-  cat >"${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml" <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: signoz-auth-proxy
 spec:
   template:
     spec:
       containers:
-        - name: signoz-auth-proxy
-          image: ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
 EOF
 
-  run bash -lc "export PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY='host.docker.internal:5002/platform/signoz-auth-proxy:dev'; source '${SCRIPT}'; apply_external_platform_images '${repo_dir}'"
 
   [ "${status}" -eq 0 ]
-  grep -Fq "image: host.docker.internal:5002/platform/signoz-auth-proxy:dev" "${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
 }
 
 @test "sync-gitea-policies can load render inputs from a GitOps render contract" {
@@ -847,9 +827,7 @@ EOF
   idp_manifest="${repo_dir}/apps/idp/all.yaml"
   mcp_manifest="${repo_dir}/apps/mcp/all.yaml"
   chatgpt_manifest="${repo_dir}/apps/chatgpt-sim/all.yaml"
-  signoz_manifest="${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
   contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
-  mkdir -p "$(dirname "${workload_file}")" "$(dirname "${idp_manifest}")" "$(dirname "${mcp_manifest}")" "$(dirname "${chatgpt_manifest}")" "$(dirname "${signoz_manifest}")"
 
   cat >"${workload_file}" <<'EOF'
 apiVersion: apps/v1
@@ -893,15 +871,12 @@ spec:
         - name: chatgpt-sim
           image: localhost:30090/platform/chatgpt-sim:latest
 EOF
-  cat >"${signoz_manifest}" <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 spec:
   template:
     spec:
       containers:
-        - name: signoz-auth-proxy
-          image: ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
 EOF
   cat >"${contract_file}" <<'EOF'
 {
@@ -912,11 +887,9 @@ EOF
   "prefer_external_platform": true,
   "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:golden",
   "external_platform_backstage": "host.docker.internal:5002/platform/backstage:golden",
-  "external_platform_signoz_auth": "host.docker.internal:5002/platform/signoz-auth-proxy:golden"
 }
 EOF
 
-  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}'; source '${SCRIPT}'; apply_external_workload_images '${workload_file}'; apply_external_platform_images '${repo_dir}'; cat '${workload_file}' '${idp_manifest}' '${mcp_manifest}' '${chatgpt_manifest}' '${signoz_manifest}'"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -960,8 +933,6 @@ spec:
   template:
     spec:
       containers:
-        - name: signoz-auth-proxy
-          image: host.docker.internal:5002/platform/signoz-auth-proxy:golden
 EOF
 )" ]
 }
@@ -1037,17 +1008,13 @@ EOF
   app_file="${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   mkdir -p "${repo_dir}/apps/argocd-apps" "${repo_dir}/apps/platform-gateway-routes-sso"
 
-  cat >"${repo_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml" <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: signoz-auth-proxy
 spec:
   template:
     spec:
       containers:
-        - name: signoz-auth-proxy
-          image: ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
 EOF
 
   cat >"${app_file}" <<'EOF'
@@ -1081,7 +1048,6 @@ EOF
   [[ "${output}" == *"workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core"* ]]
-  [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY|external_platform_signoz_auth|signoz-auth-proxy"* ]]
 }
 
 @test "GitOps render-input module maps enablement and host contract defaults" {
@@ -1116,14 +1082,12 @@ EOF
     PLATFORM_BASE_DOMAIN \
     PLATFORM_ADMIN_BASE_DOMAIN \
     ARGOCD_PUBLIC_HOST \
-    DEX_PUBLIC_HOST \
     SSO_PUBLIC_URL \
     GITEA_PUBLIC_HOST \
     GRAFANA_PUBLIC_HOST \
     HEADLAMP_PUBLIC_HOST \
     HUBBLE_PUBLIC_HOST \
     KYVERNO_PUBLIC_HOST \
-    SIGNOZ_PUBLIC_HOST \
     SENTIMENT_DEV_PUBLIC_HOST \
     SENTIMENT_UAT_PUBLIC_HOST \
     SUBNETCALC_DEV_PUBLIC_HOST \
@@ -1143,10 +1107,7 @@ EOF
     AGENTGATEWAY_CHART_VERSION \
     ENABLE_PROMETHEUS \
     ENABLE_GRAFANA \
-    ENABLE_LOKI \
     ENABLE_VICTORIA_LOGS \
-    ENABLE_TEMPO \
-    ENABLE_SIGNOZ \
     ENABLE_OTEL_GATEWAY \
     ENABLE_HEADLAMP \
     ENABLE_BACKSTAGE \
@@ -1154,7 +1115,6 @@ EOF
     HARDENED_IMAGE_REGISTRY \
     POLICIES_REPO_URL_CLUSTER \
     CERT_MANAGER_CHART_VERSION \
-    DEX_CHART_VERSION \
     GRAFANA_CHART_VERSION \
     GRAFANA_IMAGE_REGISTRY \
     GRAFANA_IMAGE_REPOSITORY \
@@ -1166,15 +1126,11 @@ EOF
     GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS \
     HEADLAMP_CHART_VERSION \
     KYVERNO_CHART_VERSION \
-    LOKI_CHART_VERSION \
     OAUTH2_PROXY_CHART_VERSION \
     OPENTELEMETRY_COLLECTOR_CHART_VERSION \
     POLICY_REPORTER_CHART_VERSION \
     PROMETHEUS_CHART_VERSION \
-    SIGNOZ_CHART_VERSION \
-    TEMPO_CHART_VERSION \
     VICTORIA_LOGS_CHART_VERSION \
-    SIGNOZ_AUTH_PROXY_IMAGE; do
     [[ "${sync_block}" != *"${env_name}"* ]]
   done
 }
@@ -1219,7 +1175,6 @@ EOF
     "${apps_dir}/79-mcp.application.yaml" \
     "${apps_dir}/80-chatgpt-sim.application.yaml"
 
-  run bash -lc "export ENABLE_SSO=false ENABLE_HEADLAMP=false ENABLE_POLICIES=false ENABLE_CERT_MANAGER=false ENABLE_GATEWAY_TLS=false ENABLE_ACTIONS_RUNNER=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_APIM_SIMULATOR=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_GRAFANA=false ENABLE_LOKI=false ENABLE_VICTORIA_LOGS=false ENABLE_TEMPO=false ENABLE_SIGNOZ=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false; source '${SCRIPT}'; prune_argocd_app_manifests '${apps_dir}'; find '${apps_dir}' -maxdepth 1 -type f -print"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" != *"78-idp.application.yaml"* ]]
@@ -1251,7 +1206,6 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"issuerURL: https://keycloak.127.0.0.1.sslip.io/realms/platform"* ]]
-  [[ "${output}" != *"issuerURL: https://dex.127.0.0.1.sslip.io"* ]]
 }
 
 @test "app-of-apps render uses direct gateway routes before SSO" {
@@ -1289,7 +1243,6 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' PLATFORM_BASE_DOMAIN='apps.example.test' PLATFORM_ADMIN_BASE_DOMAIN='admin.example.test' GATEWAY_HTTPS_HOST_PORT='8443' ADMIN_ROUTE_ALLOWLIST_CIDRS='10.0.0.0/8, 192.168.0.0/16' ENABLE_HUBBLE=true ENABLE_POLICIES=true ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=true ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_BACKSTAGE=true ENABLE_PROMETHEUS=true; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-gitea.yaml'; printf '%s\n' '---ALLOWLIST---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/snippetsfilter-admin-allowlist.yaml'"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -1343,7 +1296,6 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/idp/all.yaml'; printf '%s\n' '---KUSTOMIZATION---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; printf '%s\n' '---GRANT---'; cat '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/referencegrant-sso.yaml'"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "$(cat <<'EOF'
@@ -1371,7 +1323,6 @@ EOF
   stack_dir="${BATS_TEST_TMPDIR}/stack-render"
   create_minimal_policy_stack "${stack_dir}"
 
-  run bash -lc "export STACK_DIR='${stack_dir}' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_SIGNOZ=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=false ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false; source '${SCRIPT}'; render_repo '${BATS_TEST_TMPDIR}/render-out' >/dev/null; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/68-agentgateway-crds.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/69-agentgateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/argocd-apps/73-agentgateway-ai-gateway.application.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes/httproute-agentgateway-ai-gateway.yaml'; test ! -e '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso/httproute-agentgateway-ai-gateway.yaml'; ! grep -R 'agentgateway-ai-gateway' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes' '${BATS_TEST_TMPDIR}/render-out/repo/apps/platform-gateway-routes-sso'"
 
   [ "${status}" -eq 0 ]
 }

@@ -12,18 +12,14 @@ enable_hubble                 = true
 enable_argocd                 = true
 enable_gitea                  = true
 enable_policies               = true
-enable_signoz                 = false
 enable_prometheus             = true
 enable_grafana                = true
-enable_loki                   = false
 enable_victoria_logs          = true
-enable_tempo                  = false
 enable_observability_agent    = false
 enable_headlamp               = true
 enable_gateway_tls            = true
 enable_cert_manager           = true
 enable_sso                    = true
-sso_provider                  = "keycloak"
 enable_argocd_oidc            = true
 enable_app_of_apps            = false
 
@@ -51,8 +47,6 @@ argocd_server_node_port = 30080
 hubble_ui_node_port     = 31235
 gitea_http_node_port    = 30090
 gitea_ssh_node_port     = 30022
-signoz_ui_node_port     = 30301
-signoz_ui_host_port     = 3301
 gateway_https_node_port = 30070
 gateway_https_host_port = 443
 

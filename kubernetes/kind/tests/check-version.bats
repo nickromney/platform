@@ -386,19 +386,19 @@ EOF
 }
 
 @test "check-version reports not deployed current components as current" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; CLUSTER_OK=1; print_row 'signoz chart' '' '0.118.0' '0.118.0' '' 'v0.118.0' '' 'v0.118.0' '0'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; CLUSTER_OK=1; print_row 'grafana chart' '' '8.10.4' '8.10.4' '' 'v8.10.4' '' 'v8.10.4' '0'"
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" =~ not\ deployed\;\ codebase\ ==\ latest\ \(0\.118\.0\) ]]
-  [[ ! "${output}" =~ not\ deployed\;\ latest\ ==\ 0\.118\.0 ]]
+  [[ "${output}" =~ not\ deployed\;\ codebase\ ==\ latest\ \(8\.10\.4\) ]]
+  [[ ! "${output}" =~ not\ deployed\;\ latest\ ==\ 8\.10\.4 ]]
 }
 
 @test "check-version renders ci-skipped deployed status" {
-  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_DEPLOYED_REASON='ci mode skipped'; source '${SCRIPT}'; CLUSTER_OK=0; print_row 'signoz chart' 'Unavailable' '0.118.0' '0.118.0' 'Unavailable' 'v0.118.0' '' 'v0.118.0' '0'"
+  run bash -lc "export CHECK_VERSION_LIB_ONLY=1 CHECK_VERSION_DEPLOYED_REASON='ci mode skipped'; source '${SCRIPT}'; CLUSTER_OK=0; print_row 'grafana chart' 'Unavailable' '8.10.4' '8.10.4' 'Unavailable' 'v8.10.4' '' 'v8.10.4' '0'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" =~ deployed\ \?\ \(ci\ mode\ skipped\) ]]
-  [[ "${output}" =~ codebase\ ==\ latest\ \(0\.118\.0\) ]]
+  [[ "${output}" =~ codebase\ ==\ latest\ \(8\.10\.4\) ]]
 }
 
 @test "check-version JSON component records include stable status codes" {
@@ -674,7 +674,7 @@ EOF
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; rows=\$(cat <<'EOF'
 apps/demo/Dockerfile:10	mcr.microsoft.com/dotnet/aspnet:9.0	9.0	10.0.6	mcr.microsoft.com	update available
 terraform/kubernetes/apps/argocd-apps/95-grafana.application.yaml:46	__GRAFANA_IMAGE_REGISTRY__/__GRAFANA_IMAGE_REPOSITORY__:__GRAFANA_IMAGE_TAG__			docker.io	templated image reference
-docker/compose/compose.yml:35	dhi.io/dex:2.44.0-debian13			dhi.io	vendor-managed mirror
+terraform/kubernetes/apps/argocd-apps/97-keycloak.application.yaml:52	__KEYCLOAK_IMAGE_REGISTRY__/__KEYCLOAK_IMAGE_REPOSITORY__:__KEYCLOAK_IMAGE_TAG__			quay.io	templated image reference
 apps/sentiment/compose.yml:100	quay.io/oauth2-proxy/oauth2-proxy:v7.15.2	v7.15.2	v7.15.2	quay.io	current
 EOF
 ); render_external_image_audit_text \"\${rows}\""
@@ -781,7 +781,7 @@ EOF
 
 @test "check-version classifies non-comparable image tags for manual follow-up" {
   run bash -lc "export CHECK_VERSION_LIB_ONLY=1; source '${SCRIPT}'; printf '%s\n' \
-    \"\$(image_status_without_latest 'ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest' 'ghcr.io')\" \
+    \"\$(image_status_without_latest 'ghcr.io/example/floating:latest' 'ghcr.io')\" \
     \"\$(image_status_without_latest 'mcr.microsoft.com/dotnet/aspnet:9.0' 'mcr.microsoft.com')\" \
     \"\$(image_status_without_latest 'mcr.microsoft.com/azure-functions/python:4-python3.13' 'mcr.microsoft.com')\" \
     \"\$(image_status_without_latest 'ghcr.io/example/demo' 'ghcr.io')\""

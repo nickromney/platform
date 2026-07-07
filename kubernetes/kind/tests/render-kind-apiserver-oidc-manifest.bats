@@ -24,22 +24,18 @@ EOF
   run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
-    "https://dex.example.test/dex" \
     "headlamp" \
     "/etc/kubernetes/pki/mkcert-rootCA.pem" \
-    "dex.example.test" \
     "10.0.0.25"
 
   [ "${status}" -eq 0 ]
   run cat "${rendered_manifest}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"--oidc-issuer-url=https://dex.example.test/dex"* ]]
   [[ "${output}" == *"--oidc-client-id=headlamp"* ]]
   [[ "${output}" == *"--oidc-username-claim=email"* ]]
   [[ "${output}" == *"--oidc-groups-claim=groups"* ]]
   [[ "${output}" == *"--oidc-ca-file=/etc/kubernetes/pki/mkcert-rootCA.pem"* ]]
   [[ "${output}" == *'  - ip: "10.0.0.25"'* ]]
-  [[ "${output}" == *"    - dex.example.test"* ]]
 }
 
 @test "render-kind-apiserver-oidc-manifest accepts Keycloak issuer and host alias" {
@@ -74,7 +70,6 @@ EOF
   [[ "${output}" == *"    - keycloak.example.test"* ]]
 }
 
-@test "render-kind-apiserver-oidc-manifest replaces managed Dex host alias with Keycloak" {
   source_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.yaml"
   rendered_manifest="${BATS_TEST_TMPDIR}/kube-apiserver.rendered.yaml"
 
@@ -85,7 +80,6 @@ spec:
   hostAliases:
   - ip: "10.0.0.10"
     hostnames:
-    - dex.example.test
   containers:
   - command:
     - kube-apiserver
@@ -107,7 +101,6 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'  - ip: "10.0.0.25"'* ]]
   [[ "${output}" == *"    - keycloak.example.test"* ]]
-  [[ "${output}" != *"dex.example.test"* ]]
 }
 
 @test "render-kind-apiserver-oidc-manifest refuses unrelated existing host aliases" {
@@ -132,12 +125,9 @@ EOF
   run "${HELPER}" \
     "${source_manifest}" \
     "${rendered_manifest}" \
-    "https://dex.example.test/dex" \
     "headlamp" \
     "/etc/kubernetes/pki/mkcert-rootCA.pem" \
-    "dex.example.test" \
     "10.0.0.25"
 
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"unexpected existing kube-apiserver hostAliases block unrelated to dex.example.test"* ]]
 }

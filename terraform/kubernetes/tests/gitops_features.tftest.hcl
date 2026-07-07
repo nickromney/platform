@@ -11,7 +11,6 @@ run "gitops_render_contract_includes_external_image_refs" {
     enable_hubble                   = false
     enable_argocd                   = true
     enable_gitea                    = true
-    enable_signoz                   = false
     enable_sso                      = false
     enable_app_repo_sentiment       = true
     enable_backstage                = true
@@ -23,11 +22,10 @@ run "gitops_render_contract_includes_external_image_refs" {
       sentiment-auth-ui = "host.docker.internal:5002/platform/sentiment-auth-ui:golden"
     }
     external_platform_image_refs = {
-      backstage         = "host.docker.internal:5002/platform/backstage:golden"
-      idp-core          = "host.docker.internal:5002/platform/idp-core:golden"
-      platform-mcp      = "host.docker.internal:5002/platform/platform-mcp:golden"
-      signoz-auth-proxy = "host.docker.internal:5002/platform/signoz-auth-proxy:golden"
-      grafana           = "host.docker.internal:5002/platform/grafana-victorialogs:golden"
+      backstage    = "host.docker.internal:5002/platform/backstage:golden"
+      idp-core     = "host.docker.internal:5002/platform/idp-core:golden"
+      platform-mcp = "host.docker.internal:5002/platform/platform-mcp:golden"
+      grafana      = "host.docker.internal:5002/platform/grafana-victorialogs:golden"
     }
   }
 
@@ -64,7 +62,6 @@ run "actions_runner_enabled" {
     enable_hubble         = false
     enable_argocd         = true
     enable_gitea          = true
-    enable_signoz         = false
     enable_sso            = false
     enable_actions_runner = true
   }
@@ -98,7 +95,6 @@ run "policies_enabled" {
     enable_hubble   = false
     enable_argocd   = true
     enable_gitea    = true
-    enable_signoz   = false
     enable_sso      = false
     enable_policies = true
   }
@@ -172,7 +168,6 @@ run "policies_enabled_with_cilium_policies_disabled" {
     enable_hubble          = false
     enable_argocd          = true
     enable_gitea           = true
-    enable_signoz          = false
     enable_sso             = false
     enable_policies        = true
     enable_cilium_policies = false
@@ -212,7 +207,6 @@ run "gateway_tls_enabled" {
     enable_hubble      = false
     enable_argocd      = true
     enable_gitea       = true
-    enable_signoz      = false
     enable_sso         = false
     enable_gateway_tls = true
   }
@@ -266,7 +260,6 @@ run "gateway_tls_sso_enabled" {
     enable_hubble          = false
     enable_argocd          = true
     enable_gitea           = true
-    enable_signoz          = false
     enable_gateway_tls     = true
     enable_sso             = true
     provision_kind_cluster = true
@@ -286,7 +279,6 @@ run "observability_agent_enabled" {
     enable_hubble              = false
     enable_argocd              = true
     enable_gitea               = false
-    enable_signoz              = true
     enable_sso                 = false
     enable_observability_agent = true
   }
@@ -315,7 +307,6 @@ run "prometheus_observability_enabled" {
     enable_hubble     = false
     enable_argocd     = true
     enable_gitea      = false
-    enable_signoz     = false
     enable_prometheus = true
     enable_grafana    = true
     enable_sso        = false
@@ -386,7 +377,7 @@ run "prometheus_observability_enabled" {
   }
 
   assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users") && strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"keycloak\\\"") && !strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"dex\\\"")
+    condition     = strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "https://keycloak.127.0.0.1.sslip.io/admin/platform/console/#/platform/users") && strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"keycloak\\\"") && !strcontains(kubectl_manifest.argocd_app_grafana[0].yaml_body, "deployment=\\\"${format("%s%s", "de", "x")}\\\"")
     error_message = "Expected rendered Grafana launchpad dashboard to link to the Keycloak admin console and track Keycloak readiness"
   }
 
@@ -414,7 +405,6 @@ run "prometheus_alertmanager_enabled" {
     enable_hubble       = false
     enable_argocd       = true
     enable_gitea        = false
-    enable_signoz       = false
     enable_prometheus   = true
     enable_alertmanager = true
     enable_grafana      = false
@@ -455,7 +445,6 @@ run "victoria_logs_enabled" {
     enable_hubble        = false
     enable_argocd        = true
     enable_gitea         = true
-    enable_signoz        = false
     enable_victoria_logs = true
     enable_sso           = false
   }
@@ -494,7 +483,6 @@ run "app_repo_sentiment_enabled" {
     enable_hubble             = false
     enable_argocd             = true
     enable_gitea              = true
-    enable_signoz             = false
     enable_sso                = false
     enable_actions_runner     = true
     enable_app_repo_sentiment = true
@@ -534,7 +522,6 @@ run "app_repo_sync_contracts_align" {
     enable_hubble              = false
     enable_argocd              = true
     enable_gitea               = true
-    enable_signoz              = false
     enable_sso                 = false
     enable_actions_runner      = true
     enable_app_repo_sentiment  = true
@@ -577,7 +564,6 @@ run "app_repo_subnetcalc_enabled" {
     enable_hubble              = false
     enable_argocd              = true
     enable_gitea               = true
-    enable_signoz              = false
     enable_sso                 = false
     enable_actions_runner      = true
     enable_app_repo_subnetcalc = true
@@ -612,7 +598,6 @@ run "review_environment_contract_aligns_substrate_and_branch_workflow" {
     enable_hubble         = false
     enable_argocd         = true
     enable_gitea          = true
-    enable_signoz         = false
     enable_sso            = false
     enable_gateway_tls    = true
     enable_actions_runner = true

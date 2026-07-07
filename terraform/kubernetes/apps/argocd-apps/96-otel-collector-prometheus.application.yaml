@@ -111,8 +111,6 @@ spec:
               endpoint: 0.0.0.0:9464
               resource_to_telemetry_conversion:
                 enabled: true
-            otlp/tempo:
-              endpoint: tempo.observability.svc.cluster.local:4317
               tls:
                 insecure: true
             otlphttp/victoria-logs:
@@ -123,7 +121,6 @@ spec:
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, k8sattributes, batch]
-                exporters: [spanmetrics, otlp/tempo]
               metrics:
                 receivers: [otlp, spanmetrics]
                 processors: [memory_limiter, k8sattributes, batch]

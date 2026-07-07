@@ -39,9 +39,8 @@ locals {
   cni_provider_effective               = lower(var.cni_provider)
   enable_cilium_effective              = local.cni_provider_effective == "cilium"
   enable_review_environments           = var.enable_argocd && var.enable_gitea
-  sso_provider_effective               = lower(trimspace(var.sso_provider))
-  sso_provider_is_dex                  = local.sso_provider_effective == "dex"
-  sso_provider_is_keycloak             = local.sso_provider_effective == "keycloak"
+  sso_provider_effective               = "keycloak"
+  sso_provider_is_keycloak             = true
   platform_base_domain_effective       = lower(trimspace(var.platform_base_domain))
   platform_admin_base_domain_effective = trimspace(var.platform_admin_base_domain) != "" ? lower(trimspace(var.platform_admin_base_domain)) : local.platform_base_domain_effective
   separate_admin_domain_enabled        = trimspace(var.platform_admin_base_domain) != ""
@@ -65,21 +64,19 @@ locals {
   gateway_https_host_port_suffix       = var.gateway_https_host_port == 443 ? "" : ":${var.gateway_https_host_port}"
   argocd_public_host                   = local.separate_admin_domain_enabled ? "argocd.${local.platform_admin_base_domain_effective}" : "argocd.admin.${local.platform_base_domain_effective}"
   argocd_public_url                    = "https://${local.argocd_public_host}${local.gateway_https_host_port_suffix}"
-  dex_public_host                      = "dex.${local.platform_admin_base_domain_effective}"
-  dex_public_url                       = "https://${local.dex_public_host}${local.gateway_https_host_port_suffix}/dex"
   keycloak_public_host                 = "keycloak.${local.platform_admin_base_domain_effective}"
   keycloak_public_url                  = "https://${local.keycloak_public_host}${local.gateway_https_host_port_suffix}"
   keycloak_realm                       = trimspace(var.keycloak_realm)
   keycloak_realm_public_url            = "${local.keycloak_public_url}/realms/${local.keycloak_realm}"
   keycloak_realm_internal_url          = "http://keycloak.sso.svc.cluster.local:8080/realms/${local.keycloak_realm}"
-  sso_public_host                      = local.sso_provider_is_keycloak ? local.keycloak_public_host : local.dex_public_host
-  sso_public_url                       = local.sso_provider_is_keycloak ? local.keycloak_realm_public_url : local.dex_public_url
-  sso_internal_url                     = local.sso_provider_is_keycloak ? local.keycloak_realm_internal_url : "http://dex.sso.svc.cluster.local:5556/dex"
-  sso_auth_url                         = local.sso_provider_is_keycloak ? "${local.keycloak_realm_public_url}/protocol/openid-connect/auth" : "${local.dex_public_url}/auth"
-  sso_login_url                        = local.sso_provider_is_keycloak ? local.sso_auth_url : "${local.dex_public_url}/auth?prompt=login"
-  sso_token_url                        = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/token" : "http://dex.sso.svc.cluster.local:5556/dex/token"
-  sso_userinfo_url                     = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/userinfo" : "http://dex.sso.svc.cluster.local:5556/dex/userinfo"
-  sso_jwks_url                         = local.sso_provider_is_keycloak ? "${local.keycloak_realm_internal_url}/protocol/openid-connect/certs" : "http://dex.sso.svc.cluster.local:5556/dex/keys"
+  sso_public_host                      = local.keycloak_public_host
+  sso_public_url                       = local.keycloak_realm_public_url
+  sso_internal_url                     = local.keycloak_realm_internal_url
+  sso_auth_url                         = "${local.keycloak_realm_public_url}/protocol/openid-connect/auth"
+  sso_login_url                        = local.sso_auth_url
+  sso_token_url                        = "${local.keycloak_realm_internal_url}/protocol/openid-connect/token"
+  sso_userinfo_url                     = "${local.keycloak_realm_internal_url}/protocol/openid-connect/userinfo"
+  sso_jwks_url                         = "${local.keycloak_realm_internal_url}/protocol/openid-connect/certs"
   sso_groups_claim                     = "groups"
   sso_username_claim                   = "email"
   sso_admin_group                      = "platform-admins"
@@ -97,8 +94,6 @@ locals {
   hubble_public_url                    = "https://${local.hubble_public_host}${local.gateway_https_host_port_suffix}"
   kyverno_public_host                  = local.separate_admin_domain_enabled ? "kyverno.${local.platform_admin_base_domain_effective}" : "kyverno.admin.${local.platform_base_domain_effective}"
   kyverno_public_url                   = "https://${local.kyverno_public_host}${local.gateway_https_host_port_suffix}"
-  signoz_public_host                   = local.separate_admin_domain_enabled ? "signoz.${local.platform_admin_base_domain_effective}" : "signoz.admin.${local.platform_base_domain_effective}"
-  signoz_public_url                    = "https://${local.signoz_public_host}${local.gateway_https_host_port_suffix}"
   sentiment_dev_public_host            = "sentiment.dev.${local.platform_base_domain_effective}"
   sentiment_dev_public_url             = "https://${local.sentiment_dev_public_host}${local.gateway_https_host_port_suffix}"
   sentiment_uat_public_host            = "sentiment.uat.${local.platform_base_domain_effective}"
@@ -259,7 +254,6 @@ locals {
       "${local.gitea_public_url}/oauth2/callback",
       "${local.hubble_public_url}/oauth2/callback",
       "${local.grafana_public_url}/oauth2/callback",
-      "${local.signoz_public_url}/oauth2/callback",
       "${local.sentiment_dev_public_url}/oauth2/callback",
       "${local.sentiment_uat_public_url}/oauth2/callback",
       "${local.subnetcalc_dev_public_url}/oauth2/callback",
@@ -280,10 +274,8 @@ locals {
   kind_disable_default_cni              = var.kind_disable_default_cni != null ? var.kind_disable_default_cni : local.enable_cilium_effective
   enable_prometheus_effective           = var.enable_prometheus
   enable_grafana_effective              = var.enable_grafana
-  enable_loki_effective                 = var.enable_loki
   enable_victoria_logs_effective        = var.enable_victoria_logs
-  enable_tempo_effective                = var.enable_tempo
-  enable_otel_gateway_effective         = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_loki_effective || local.enable_victoria_logs_effective || local.enable_tempo_effective || var.enable_signoz
+  enable_otel_gateway_effective         = var.enable_otel_gateway || local.enable_prometheus_effective || local.enable_grafana_effective || local.enable_victoria_logs_effective
   enable_observability_effective        = local.enable_otel_gateway_effective || var.enable_observability_agent
   enable_backstage_effective            = var.enable_backstage && var.enable_sso && var.enable_argocd
   gitea_admin_promote_users_effective = var.enable_gitea ? distinct(compact(concat(
@@ -306,14 +298,12 @@ locals {
   external_platform_mcp                = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
   external_platform_chatgpt_sim        = trimspace(lookup(var.external_platform_image_refs, "chatgpt-sim", ""))
   external_platform_langfuse_demos     = trimspace(lookup(var.external_platform_image_refs, "langfuse-demos", ""))
-  external_platform_signoz_auth_proxy  = trimspace(lookup(var.external_platform_image_refs, "signoz-auth-proxy", ""))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
   external_platform_grafana_tag        = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[1] : ""
   external_platform_grafana_segments   = local.external_platform_grafana_repo != "" ? split("/", local.external_platform_grafana_repo) : []
   external_platform_grafana_registry   = length(local.external_platform_grafana_segments) > 1 ? local.external_platform_grafana_segments[0] : ""
   external_platform_grafana_repository = length(local.external_platform_grafana_segments) > 1 ? join("/", slice(local.external_platform_grafana_segments, 1, length(local.external_platform_grafana_segments))) : ""
-  default_signoz_auth_proxy_image      = "ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest"
   use_external_platform_grafana = (
     var.prefer_external_platform_images &&
     local.external_platform_grafana_registry != "" &&
@@ -329,8 +319,6 @@ locals {
     "        plugins:",
     "          - ${local.grafana_victoria_logs_plugin_url_effective}",
   ]) : "        plugins: []"
-  signoz_auth_proxy_image_effective = var.prefer_external_platform_images && local.external_platform_signoz_auth_proxy != "" ? local.external_platform_signoz_auth_proxy : local.default_signoz_auth_proxy_image
-
   containerd_certs_dir = "${local.run_dir}/containerd-certs.d"
   kind_node_kubectl_wrapper_mount = [
     {
@@ -517,18 +505,14 @@ locals {
   policies_repo_url_cluster = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/${local.gitea_repo_owner}/${local.policies_repo_name}.git"
   vendored_chart_paths = {
     cert_manager            = "apps/vendor/charts/cert-manager"
-    dex                     = "apps/vendor/charts/dex"
     grafana                 = "apps/vendor/charts/grafana"
     headlamp                = "apps/vendor/charts/headlamp"
     kyverno                 = "apps/vendor/charts/kyverno"
-    loki                    = "apps/vendor/charts/loki"
     metrics_server          = "apps/vendor/charts/metrics-server"
     oauth2_proxy            = "apps/vendor/charts/oauth2-proxy"
     opentelemetry_collector = "apps/vendor/charts/opentelemetry-collector"
     policy_reporter         = "apps/vendor/charts/policy-reporter"
     prometheus              = "apps/vendor/charts/prometheus"
-    signoz                  = "apps/vendor/charts/signoz"
-    tempo                   = "apps/vendor/charts/tempo"
     victoria_logs           = "apps/vendor/charts/victoria-logs-single"
   }
 
@@ -547,10 +531,7 @@ locals {
     var.enable_agentgateway_ai_gateway ||
     local.enable_prometheus_effective ||
     local.enable_grafana_effective ||
-    local.enable_loki_effective ||
     local.enable_victoria_logs_effective ||
-    local.enable_tempo_effective ||
-    var.enable_signoz ||
     var.enable_metrics_server ||
     var.enable_headlamp ||
     var.enable_sso ||
@@ -569,7 +550,6 @@ locals {
     var.enable_actions_runner && var.enable_gitea && var.enable_argocd ? ["gitea-actions-runner"] : [],
     local.enable_prometheus_effective && var.enable_argocd ? ["prometheus"] : [],
     local.enable_grafana_effective && var.enable_argocd ? ["grafana"] : [],
-    local.enable_loki_effective && var.enable_argocd ? ["loki"] : [],
     local.enable_victoria_logs_effective && var.enable_argocd ? ["victoria-logs"] : [],
     local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
     var.enable_metrics_server && var.enable_argocd ? ["metrics-server"] : [],
@@ -581,10 +561,9 @@ locals {
     var.enable_sso && var.enable_argocd ? ["idp"] : [],
     local.enable_mcp_effective && var.enable_argocd ? ["mcp", "auth-chat", "chatgpt-sim"] : [],
     var.enable_headlamp && var.enable_argocd ? ["headlamp"] : [],
-    var.enable_sso && var.enable_argocd ? concat(local.sso_provider_is_dex ? ["dex"] : [], ["oauth2-proxy-argocd", "oauth2-proxy-gitea"]) : [],
+    var.enable_sso && var.enable_argocd ? ["oauth2-proxy-argocd", "oauth2-proxy-gitea"] : [],
     var.enable_sso && var.enable_hubble && var.enable_argocd ? ["oauth2-proxy-hubble"] : [],
     var.enable_sso && var.enable_argocd && var.enable_grafana ? ["oauth2-proxy-grafana"] : [],
-    var.enable_sso && var.enable_argocd && var.enable_signoz ? ["oauth2-proxy-signoz"] : [],
     var.enable_sso && local.enable_sentiment_workloads_effective && var.enable_argocd ? ["oauth2-proxy-sentiment-dev", "oauth2-proxy-sentiment-uat"] : [],
     var.enable_sso && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? ["oauth2-proxy-subnetcalc-dev", "oauth2-proxy-subnetcalc-uat"] : [],
     var.enable_sso && local.enable_apim_simulator_effective && var.enable_argocd ? ["oauth2-proxy-apim"] : [],
@@ -617,14 +596,12 @@ locals {
     platform_base_domain                   = local.platform_base_domain_effective
     platform_admin_base_domain             = local.platform_admin_base_domain_effective
     argocd_public_host                     = local.argocd_public_host
-    dex_public_host                        = local.dex_public_host
     sso_public_url                         = local.sso_public_url
     gitea_public_host                      = local.gitea_public_host
     grafana_public_host                    = local.grafana_public_host
     headlamp_public_host                   = local.headlamp_public_host
     hubble_public_host                     = local.hubble_public_host
     kyverno_public_host                    = local.kyverno_public_host
-    signoz_public_host                     = local.signoz_public_host
     sentiment_dev_public_host              = local.sentiment_dev_public_host
     sentiment_uat_public_host              = local.sentiment_uat_public_host
     subnetcalc_dev_public_host             = local.subnetcalc_dev_public_host
@@ -651,10 +628,7 @@ locals {
     enable_prometheus                      = var.enable_prometheus
     enable_alertmanager                    = var.enable_alertmanager
     enable_grafana                         = var.enable_grafana
-    enable_loki                            = var.enable_loki
     enable_victoria_logs                   = var.enable_victoria_logs
-    enable_tempo                           = var.enable_tempo
-    enable_signoz                          = var.enable_signoz
     enable_otel_gateway                    = var.enable_otel_gateway
     enable_metrics_server                  = var.enable_metrics_server
     enable_headlamp                        = var.enable_headlamp
@@ -662,7 +636,7 @@ locals {
     enable_backstage                       = var.enable_backstage
     headlamp_cluster_role_binding_create   = var.headlamp_cluster_role_binding_create
     headlamp_oidc_skip_tls_verify          = var.headlamp_oidc_skip_tls_verify
-    headlamp_oidc_client_secret            = var.enable_sso && var.enable_headlamp ? random_password.dex_headlamp_client_secret[0].result : ""
+    headlamp_oidc_client_secret            = var.enable_sso && var.enable_headlamp ? random_password.oidc_headlamp_client_secret[0].result : ""
     enable_observability_agent             = var.enable_observability_agent
     prefer_external_images                 = var.prefer_external_workload_images
     external_sentiment_api                 = lookup(var.external_workload_image_refs, "sentiment-api", "")
@@ -691,9 +665,7 @@ locals {
     external_platform_backstage            = local.external_platform_backstage
     hardened_image_registry                = local.hardened_image_registry_effective
     external_platform_hardened             = local.external_platform_hardened_registry
-    external_platform_signoz_auth          = local.external_platform_signoz_auth_proxy
     cert_manager_chart_version             = var.cert_manager_chart_version
-    dex_chart_version                      = var.dex_chart_version
     grafana_chart_version                  = var.grafana_chart_version
     grafana_image_registry                 = local.grafana_image_registry_effective
     grafana_image_repository               = local.grafana_image_repository_effective
@@ -706,15 +678,11 @@ locals {
     headlamp_chart_version                 = var.headlamp_chart_version
     metrics_server_chart_version           = var.metrics_server_chart_version
     kyverno_chart_version                  = var.kyverno_chart_version
-    loki_chart_version                     = var.loki_chart_version
     oauth2_proxy_chart_version             = var.oauth2_proxy_chart_version
     otel_chart_version                     = var.opentelemetry_collector_chart_version
     policy_reporter_chart_version          = var.policy_reporter_chart_version
     prometheus_chart_version               = var.prometheus_chart_version
-    signoz_chart_version                   = var.signoz_chart_version
-    tempo_chart_version                    = var.tempo_chart_version
     victoria_logs_chart_version            = var.victoria_logs_chart_version
-    signoz_auth_proxy_image                = local.signoz_auth_proxy_image_effective
     enable_langfuse                        = var.enable_langfuse
     enable_langfuse_demos                  = var.enable_langfuse_demos
   }
@@ -885,7 +853,7 @@ locals {
       }
     }
 
-    dex = {
+    oidc = {
       enabled = false
     }
 
@@ -1066,7 +1034,7 @@ locals {
           url = local.argocd_public_url
           }, local.argocd_oidc_enabled ? {
           "oidc.config" = trimspace(<<-EOT
-            name: ${local.sso_provider_is_keycloak ? "Keycloak" : "Dex"}
+            name: ${local.sso_provider_is_keycloak ? "Keycloak" : "Keycloak"}
             issuer: ${local.sso_public_url}
             clientID: argocd
             clientSecret: $oidc.platform.clientSecret
@@ -1085,7 +1053,7 @@ locals {
 
       secret = {
         extra = local.argocd_oidc_enabled ? tomap({
-          "oidc.platform.clientSecret" = random_password.dex_argocd_client_secret[0].result
+          "oidc.platform.clientSecret" = random_password.oidc_argocd_client_secret[0].result
         }) : tomap({})
       }
     }
@@ -1181,13 +1149,13 @@ locals {
     var.enable_sso ? {
       oidc = {
         clientID     = "headlamp"
-        clientSecret = random_password.dex_headlamp_client_secret[0].result
+        clientSecret = random_password.oidc_headlamp_client_secret[0].result
         issuerURL    = local.sso_public_url
         scopes       = "openid profile email groups"
         callbackURL  = "${local.headlamp_public_url}/oidc-callback"
       }
     } : {},
-    # Pass -oidc-ca-file to trust the mkcert CA for OIDC connections to Dex.
+    # Pass -oidc-ca-file to trust the mkcert CA for OIDC connections to Keycloak.
     var.enable_sso ? {
       extraArgs = compact([
         "-oidc-ca-file=/headlamp-ca/ca.crt",

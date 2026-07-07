@@ -1,6 +1,6 @@
 flowchart LR
     Internet["External clients"] --> Gateway["platform-gateway"]
-    Gateway --> SSO["sso / oauth2-proxy + Dex"]
+    Gateway --> SSO["sso / oauth2-proxy + Keycloak"]
     SSO --> SentRouter["sentiment-router"]
     SSO --> SubnetRouter["subnetcalc-router"]
     SentRouter --> SentAPI["sentiment-api"]

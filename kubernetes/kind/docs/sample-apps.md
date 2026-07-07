@@ -21,7 +21,7 @@ flowchart LR
     sso --> router["subnetcalc-router"]
     router --> fe["subnetcalc-frontend"]
     router --> apim["subnetcalc-apim-simulator"]
-    apim -. "JWKS / issuer checks" .-> dex["Dex"]
+    apim -. "JWKS / issuer checks" .-> keycloak["Keycloak"]
     apim --> api["subnetcalc-api"]
 ```
 

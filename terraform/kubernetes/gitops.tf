@@ -504,7 +504,6 @@ trap 'rm -f "$KNOWN_HOSTS_FILE"' EXIT
 # the restart because the ConfigMap is already current can leave repo-server
 # serving stale SSH trust state for newly created repo secrets.
 #
-# During Kyverno install/upgrade, the apiserver can temporarily fail admission webhooks with failurePolicy=Fail
 # (e.g. "failed calling webhook ... connect: connection refused"). Retry the restart in that case.
 
 retry_webhook_fail() {
@@ -942,12 +941,10 @@ EOT
     kubectl_manifest.argocd_app_dev,
     kubectl_manifest.argocd_app_uat,
     kubectl_manifest.argocd_app_headlamp,
-    kubectl_manifest.argocd_app_dex,
     kubectl_manifest.argocd_app_oauth2_proxy_argocd,
     kubectl_manifest.argocd_app_oauth2_proxy_gitea,
     kubectl_manifest.argocd_app_oauth2_proxy_hubble,
     kubectl_manifest.argocd_app_oauth2_proxy_grafana,
-    kubectl_manifest.argocd_app_oauth2_proxy_signoz,
     kubectl_manifest.argocd_app_oauth2_proxy_sentiment,
     kubectl_manifest.argocd_app_oauth2_proxy_sentiment_uat,
     kubectl_manifest.argocd_app_oauth2_proxy_subnetcalc,

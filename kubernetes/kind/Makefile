@@ -358,12 +358,9 @@ sync-image-cache: workflow-validate-stage
 	CACHE_PUSH_HOST="$(KIND_LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(KIND_LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	PRELOAD_IMAGES_SCRIPT="$(STACK_DIR)/scripts/preload-images.sh" \
-	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_signoz false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_prometheus false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_grafana false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_loki false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_tempo false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_METRICS_SERVER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_metrics_server false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
@@ -1192,7 +1189,6 @@ prereqs:
 		echo "FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)" >&2; \
 		exit 1; \
 	fi; \
-	"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \
 	echo ""; \
 	echo "Playwright browser cache:"; \
 	"$(ENSURE_PLAYWRIGHT_BROWSERS)" --check --execute; \

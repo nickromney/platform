@@ -980,12 +980,9 @@ PY
   rm -rf "${PLATFORM_IDP_RUN_DIR}"
 }
 
-@test "active SSO route tracing follows Keycloak rather than the old Dex route" {
+@test "active SSO route tracing follows Keycloak only" {
   run rg -n 'name: keycloak' "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/observabilitypolicy-tracing.yaml"
   [ "${status}" -eq 0 ]
-
-  run rg -n 'name: dex' "${REPO_ROOT}/terraform/kubernetes/apps/platform-gateway-routes-sso/observabilitypolicy-tracing.yaml"
-  [ "${status}" -ne 0 ]
 }
 
 @test "source repo carries concrete closure artifacts claimed by platform-docs" {

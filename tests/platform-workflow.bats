@@ -258,10 +258,10 @@ EOF
   [ "${status}" -eq 2 ]
   [[ "${output}" == *"Preset resource-profile=local-idp-16gb is not available for variant lima"* ]]
 
-  run "${SCRIPT}" preview --execute --variant kind --stage 700 --preset observability-stack=lgtm
+  run "${SCRIPT}" preview --execute --variant kind --stage 700 --preset observability-stack=victoria
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Preset observability-stack=lgtm requires stage 800 or later"* ]]
+  [[ "${output}" == *"Preset observability-stack=victoria requires stage 800 or later"* ]]
 
   run "${SCRIPT}" preview --execute --variant kind --stage 100 --preset network-profile=default-cni
 
@@ -272,11 +272,11 @@ EOF
     --variant lima \
     --stage 700 \
     --preset resource-profile=local-idp-16gb \
-    --preset observability-stack=lgtm
+    --preset observability-stack=victoria
 
   [ "${status}" -eq 2 ]
   [[ "${output}" == *"Preset resource-profile=local-idp-16gb is not available for variant lima"* ]]
-  [[ "${output}" != *"Preset observability-stack=lgtm requires stage 800 or later"* ]]
+  [[ "${output}" != *"Preset observability-stack=victoria requires stage 800 or later"* ]]
 }
 
 @test "platform workflow rejects removed 950-local-idp stage" {

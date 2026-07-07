@@ -8,8 +8,6 @@ INVENTORY_FILE="${INVENTORY_FILE:-${STACK_DIR}/config/platform-launchpad.apps.js
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
-MARKER_START="codex:platform-launchpad:start"
-MARKER_END="codex:platform-launchpad:end"
 
 TARGETS=()
 
@@ -21,9 +19,7 @@ Renders the Platform Launchpad dashboard JSON from a small tile inventory and
 replaces the generated block in target files between marker comments.
 
 Markers required in each target:
-  # codex:platform-launchpad:start
   ...
-  # codex:platform-launchpad:end
 
 Environment variables:
   STACK_DIR         Stack root (default: inferred from script path)

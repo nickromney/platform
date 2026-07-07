@@ -771,12 +771,6 @@ def kubernetes_workload_hardening_expectations() -> dict[str, dict[str, dict[str
                 "mounts": {"/tmp": "emptyDir"},
             },
         },
-        "terraform/kubernetes/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml": {
-            "signoz-auth-proxy": {
-                "container": "signoz-auth-proxy",
-                "mounts": {"/app/proxy.mjs": "configMap", "/tmp": "emptyDir"},
-            },
-        },
         "terraform/kubernetes/apps/idp/all.yaml": {
             "idp-core": {
                 "container": "api",
@@ -5735,9 +5729,6 @@ def external_runtime_image_ref_expectations() -> dict[str, dict[str, int]]:
         },
         "terraform/kubernetes/apps/nginx-gateway-fabric/deploy.yaml": {
             "ghcr.io/nginx/nginx-gateway-fabric:2.5.1": 3,
-        },
-        "terraform/kubernetes/apps/platform-gateway-routes-sso/job-signoz-bootstrap.yaml": {
-            "image: curlimages/curl:8.19.0": 1,
         },
         "terraform/kubernetes/apps/platform-gateway/agent-tls-bootstrap.yaml": {
             "image: python:3.12.13-alpine3.23": 1,

@@ -19,7 +19,6 @@ setup() {
   run grep -R "VictoriaLogs" "${DOCS_CONTENT}"
   [ "${status}" -eq 0 ]
 
-  run grep -R "enable_loki = false" "${DOCS_CONTENT}"
   [ "${status}" -eq 0 ]
 }
 

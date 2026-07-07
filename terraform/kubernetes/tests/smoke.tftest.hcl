@@ -6,7 +6,6 @@ run "smoke_plan" {
     enable_hubble = false
     enable_argocd = false
     enable_gitea  = false
-    enable_signoz = false
   }
 
   assert {

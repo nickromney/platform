@@ -7,7 +7,6 @@ run "default_runtime_artifacts_stay_under_stack_dir" {
     enable_hubble          = false
     enable_argocd          = false
     enable_gitea           = false
-    enable_signoz          = false
     kind_stack_dir         = abspath(".")
     kind_config_path       = abspath("./kind-config.yaml")
   }
@@ -37,7 +36,6 @@ run "runtime_artifact_scope_namespaces_generated_files" {
     enable_hubble          = false
     enable_argocd          = false
     enable_gitea           = false
-    enable_signoz          = false
     kind_stack_dir         = abspath(".")
     kind_config_path       = abspath("./kind-config.yaml")
     runtime_artifact_scope = "lima"

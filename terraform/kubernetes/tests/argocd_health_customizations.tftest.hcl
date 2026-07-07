@@ -6,7 +6,6 @@ run "argocd_health_customizations_present" {
     enable_hubble = false
     enable_argocd = true
     enable_gitea  = false
-    enable_signoz = false
   }
 
   assert {

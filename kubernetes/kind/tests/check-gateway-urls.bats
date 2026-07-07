@@ -285,7 +285,6 @@ EOF
   [[ "${output}" == *"HTTPS https://headlamp.admin.127.0.0.1.sslip.io/ -> 302"* ]]
   [[ "${output}" == *"HTTPS https://subnetcalc.uat.127.0.0.1.sslip.io/ -> 200"* ]]
   [[ "${output}" == *"HTTPS https://keycloak.127.0.0.1.sslip.io/ -> 200"* ]]
-  [[ "${output}" != *"signoz.admin.127.0.0.1.sslip.io"* ]]
 }
 
 @test "check-gateway-urls fails when a discovered route stays down" {
@@ -294,7 +293,6 @@ EOF
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"HTTPS https://headlamp.admin.127.0.0.1.sslip.io/ -> 000"* ]]
   [[ "${output}" == *"curl exit 35"* ]]
-  [[ "${output}" != *"signoz.admin.127.0.0.1.sslip.io"* ]]
 }
 
 @test "check-gateway-urls uses host.docker.internal inside the devcontainer" {

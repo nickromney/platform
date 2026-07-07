@@ -295,14 +295,6 @@ print_observation_contract() {
         directions: ["ingress", "egress"],
         world_egress_mode: $world_egress_mode,
         annotations: {
-          "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy",
-          "platform.publiccloudexperiments.net/hubble-policy-candidate": "true",
-          "platform.publiccloudexperiments.net/hubble-policy-direction": "ingress|egress",
-          "platform.publiccloudexperiments.net/hubble-policy-mode": "workload|namespace",
-          "platform.publiccloudexperiments.net/hubble-policy-row-count": "observed-summary-rows",
-          "platform.publiccloudexperiments.net/hubble-policy-since": $since_value,
-          "platform.publiccloudexperiments.net/hubble-policy-iterations": $iterations,
-          "platform.publiccloudexperiments.net/hubble-policy-capture-mode": $capture_mode
         },
         promotion: {
           enabled: ($promote_to_module == "1"),
@@ -1615,7 +1607,6 @@ write_namespace_metadata() {
 
 collect_namespace_data() {
   local namespace="$1"
-  local namespace_index="$2"
   local namespace_dir="${output_dir}/namespaces/${namespace}"
   local combined_raw="${namespace_dir}/combined.jsonl"
   local filtered_raw="${namespace_dir}/combined.non-reply.jsonl"
@@ -1630,7 +1621,6 @@ collect_namespace_data() {
   local capture_sample_target="0"
 
   NAMESPACE_DIR="${namespace_dir}"
-  info "observing namespace ${namespace} (${namespace_index}/${TOTAL_NAMESPACES})"
 
   if [[ "${dry_run}" -eq 0 ]]; then
     mkdir -p "${namespace_dir}"
@@ -1809,14 +1799,6 @@ write_namespace_policy_header() {
     printf '  namespace: %s\n' "${namespace}"
     printf '  annotations:\n'
     printf '    "policies.cilium.io/title": "%s"\n' "$(yaml_escape "${title}")"
-    printf '    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"\n'
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-candidate": "true"\n'
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-direction": "%s"\n' "${direction}"
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-mode": "%s"\n' "${mode}"
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-row-count": "%s"\n' "${row_count}"
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-since": "%s"\n' "${since_value}"
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-iterations": "%s"\n' "${iterations}"
-    printf '    "platform.publiccloudexperiments.net/hubble-policy-capture-mode": "%s"\n' "${capture_mode}"
     printf 'specs:\n'
   } > "${policy_file}"
 }
@@ -2898,21 +2880,15 @@ if [[ "${dry_run}" -eq 0 ]]; then
 fi
 
 if [[ "${dry_run}" -eq 1 ]]; then
-  namespace_index=0
   while IFS= read -r namespace; do
     [[ -n "${namespace}" ]] || continue
-    namespace_index=$((namespace_index + 1))
-    collect_namespace_data "${namespace}" "${namespace_index}"
   done < "${NAMESPACE_FILE}"
   exit 0
 fi
 
 declare -a batch_pids=()
-namespace_index=0
 while IFS= read -r namespace; do
   [[ -n "${namespace}" ]] || continue
-  namespace_index=$((namespace_index + 1))
-  collect_namespace_data "${namespace}" "${namespace_index}" &
   batch_pids+=("$!")
 
   if [[ "${#batch_pids[@]}" -ge "${namespace_workers}" ]]; then

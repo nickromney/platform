@@ -99,7 +99,6 @@ platform|EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS|external_platform_langfuse_demos
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
 platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
 platform|EXTERNAL_PLATFORM_IMAGE_BACKSTAGE|external_platform_backstage|backstage|idp
-platform|EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY|external_platform_signoz_auth|signoz-auth-proxy|signoz
 EOF
 }
 
@@ -126,14 +125,12 @@ string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io
 string|PLATFORM_ADMIN_BASE_DOMAIN|platform_admin_base_domain|$PLATFORM_BASE_DOMAIN
 string|POLICIES_REPO_URL_CLUSTER|policies_repo_url_cluster|
 string|ARGOCD_PUBLIC_HOST|argocd_public_host|
-string|DEX_PUBLIC_HOST|dex_public_host|
 string|SSO_PUBLIC_URL|sso_public_url|
 string|GITEA_PUBLIC_HOST|gitea_public_host|
 string|GRAFANA_PUBLIC_HOST|grafana_public_host|
 string|HEADLAMP_PUBLIC_HOST|headlamp_public_host|
 string|HUBBLE_PUBLIC_HOST|hubble_public_host|
 string|KYVERNO_PUBLIC_HOST|kyverno_public_host|
-string|SIGNOZ_PUBLIC_HOST|signoz_public_host|
 string|SENTIMENT_DEV_PUBLIC_HOST|sentiment_dev_public_host|
 string|SENTIMENT_UAT_PUBLIC_HOST|sentiment_uat_public_host|
 string|SUBNETCALC_DEV_PUBLIC_HOST|subnetcalc_dev_public_host|
@@ -151,10 +148,7 @@ bool|ENABLE_AGENTGATEWAY_AI_GATEWAY|enable_agentgateway_ai_gateway|false
 bool|ENABLE_PROMETHEUS|enable_prometheus|false
 bool|ENABLE_ALERTMANAGER|enable_alertmanager|false
 bool|ENABLE_GRAFANA|enable_grafana|false
-bool|ENABLE_LOKI|enable_loki|false
 bool|ENABLE_VICTORIA_LOGS|enable_victoria_logs|false
-bool|ENABLE_TEMPO|enable_tempo|false
-bool|ENABLE_SIGNOZ|enable_signoz|false
 bool|ENABLE_OTEL_GATEWAY|enable_otel_gateway|false
 bool|ENABLE_OBSERVABILITY_AGENT|enable_observability_agent|false
 bool|ENABLE_METRICS_SERVER|enable_metrics_server|false
@@ -179,18 +173,14 @@ bool|PREFER_EXTERNAL_PLATFORM_IMAGES|prefer_external_platform|false
 string|HARDENED_IMAGE_REGISTRY|hardened_image_registry|dhi.io
 chart|AGENTGATEWAY_CHART_VERSION|agentgateway_chart_version|agentgateway_chart_version
 chart|CERT_MANAGER_CHART_VERSION|cert_manager_chart_version|cert_manager_chart_version
-chart|DEX_CHART_VERSION|dex_chart_version|dex_chart_version
 chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version
 chart|HEADLAMP_CHART_VERSION|headlamp_chart_version|headlamp_chart_version
 chart|METRICS_SERVER_CHART_VERSION|metrics_server_chart_version|metrics_server_chart_version
 chart|KYVERNO_CHART_VERSION|kyverno_chart_version|kyverno_chart_version
-chart|LOKI_CHART_VERSION|loki_chart_version|loki_chart_version
 chart|OAUTH2_PROXY_CHART_VERSION|oauth2_proxy_chart_version|oauth2_proxy_chart_version
 chart|OPENTELEMETRY_COLLECTOR_CHART_VERSION|otel_chart_version|opentelemetry_collector_chart_version
 chart|POLICY_REPORTER_CHART_VERSION|policy_reporter_chart_version|policy_reporter_chart_version
 chart|PROMETHEUS_CHART_VERSION|prometheus_chart_version|prometheus_chart_version
-chart|SIGNOZ_CHART_VERSION|signoz_chart_version|signoz_chart_version
-chart|TEMPO_CHART_VERSION|tempo_chart_version|tempo_chart_version
 chart|VICTORIA_LOGS_CHART_VERSION|victoria_logs_chart_version|victoria_logs_chart_version
 tfvar|GRAFANA_IMAGE_REGISTRY|grafana_image_registry|grafana_image_registry
 tfvar|GRAFANA_IMAGE_REPOSITORY|grafana_image_repository|grafana_image_repository
@@ -200,7 +190,6 @@ tfvar|GRAFANA_SIDECAR_IMAGE_REPOSITORY|grafana_sidecar_image_repository|grafana_
 tfvar|GRAFANA_SIDECAR_IMAGE_TAG|grafana_sidecar_image_tag|grafana_sidecar_image_tag
 tfvar|GRAFANA_VICTORIA_LOGS_PLUGIN_URL|grafana_victoria_logs_plugin_url|grafana_victoria_logs_plugin_url
 tfvar|GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS|grafana_liveness_initial_delay_seconds|grafana_liveness_initial_delay_seconds
-string|SIGNOZ_AUTH_PROXY_IMAGE|signoz_auth_proxy_image|ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest
 EOF
 }
 
@@ -279,14 +268,11 @@ GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
 PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
 ARGOCD_PUBLIC_HOST="${ARGOCD_PUBLIC_HOST:-argocd.admin.${PLATFORM_BASE_DOMAIN}}"
-DEX_PUBLIC_HOST="${DEX_PUBLIC_HOST:-dex.${PLATFORM_ADMIN_BASE_DOMAIN}}"
-SSO_PUBLIC_URL="${SSO_PUBLIC_URL:-https://${DEX_PUBLIC_HOST}}"
 GITEA_PUBLIC_HOST="${GITEA_PUBLIC_HOST:-gitea.admin.${PLATFORM_BASE_DOMAIN}}"
 GRAFANA_PUBLIC_HOST="${GRAFANA_PUBLIC_HOST:-grafana.admin.${PLATFORM_BASE_DOMAIN}}"
 HEADLAMP_PUBLIC_HOST="${HEADLAMP_PUBLIC_HOST:-headlamp.admin.${PLATFORM_BASE_DOMAIN}}"
 HUBBLE_PUBLIC_HOST="${HUBBLE_PUBLIC_HOST:-hubble.admin.${PLATFORM_BASE_DOMAIN}}"
 KYVERNO_PUBLIC_HOST="${KYVERNO_PUBLIC_HOST:-kyverno.admin.${PLATFORM_BASE_DOMAIN}}"
-SIGNOZ_PUBLIC_HOST="${SIGNOZ_PUBLIC_HOST:-signoz.admin.${PLATFORM_BASE_DOMAIN}}"
 SENTIMENT_DEV_PUBLIC_HOST="${SENTIMENT_DEV_PUBLIC_HOST:-sentiment.dev.${PLATFORM_BASE_DOMAIN}}"
 SENTIMENT_UAT_PUBLIC_HOST="${SENTIMENT_UAT_PUBLIC_HOST:-sentiment.uat.${PLATFORM_BASE_DOMAIN}}"
 SUBNETCALC_DEV_PUBLIC_HOST="${SUBNETCALC_DEV_PUBLIC_HOST:-subnetcalc.dev.${PLATFORM_BASE_DOMAIN}}"
@@ -314,10 +300,7 @@ ENABLE_LANGFUSE_DEMOS="${ENABLE_LANGFUSE_DEMOS:-false}"
 ENABLE_PROMETHEUS="${ENABLE_PROMETHEUS:-false}"
 ENABLE_ALERTMANAGER="${ENABLE_ALERTMANAGER:-false}"
 ENABLE_GRAFANA="${ENABLE_GRAFANA:-false}"
-ENABLE_LOKI="${ENABLE_LOKI:-false}"
 ENABLE_VICTORIA_LOGS="${ENABLE_VICTORIA_LOGS:-false}"
-ENABLE_TEMPO="${ENABLE_TEMPO:-false}"
-ENABLE_SIGNOZ="${ENABLE_SIGNOZ:-false}"
 ENABLE_OTEL_GATEWAY="${ENABLE_OTEL_GATEWAY:-false}"
 ENABLE_OBSERVABILITY_AGENT="${ENABLE_OBSERVABILITY_AGENT:-false}"
 ENABLE_METRICS_SERVER="${ENABLE_METRICS_SERVER:-false}"
@@ -338,12 +321,9 @@ EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
 EXTERNAL_PLATFORM_IMAGE_IDP_CORE="${EXTERNAL_PLATFORM_IMAGE_IDP_CORE:-}"
 EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE:-}"
 EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP="${EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP:-}"
-EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY:-}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
-SIGNOZ_AUTH_PROXY_IMAGE="${SIGNOZ_AUTH_PROXY_IMAGE:-ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:latest}"
 AGENTGATEWAY_CHART_VERSION="${AGENTGATEWAY_CHART_VERSION:-$(tf_default_from_variables agentgateway_chart_version)}"
 CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-$(tf_default_from_variables cert_manager_chart_version)}"
-DEX_CHART_VERSION="${DEX_CHART_VERSION:-$(tf_default_from_variables dex_chart_version)}"
 GRAFANA_CHART_VERSION="${GRAFANA_CHART_VERSION:-$(tf_default_from_variables grafana_chart_version)}"
 GRAFANA_IMAGE_REGISTRY="${GRAFANA_IMAGE_REGISTRY:-$(tf_default_from_variables grafana_image_registry)}"
 GRAFANA_IMAGE_REPOSITORY="${GRAFANA_IMAGE_REPOSITORY:-$(tf_default_from_variables grafana_image_repository)}"
@@ -358,13 +338,10 @@ GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS="${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS
 HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-$(tf_default_from_variables headlamp_chart_version)}"
 METRICS_SERVER_CHART_VERSION="${METRICS_SERVER_CHART_VERSION:-$(tf_default_from_variables metrics_server_chart_version)}"
 KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-$(tf_default_from_variables kyverno_chart_version)}"
-LOKI_CHART_VERSION="${LOKI_CHART_VERSION:-$(tf_default_from_variables loki_chart_version)}"
 OAUTH2_PROXY_CHART_VERSION="${OAUTH2_PROXY_CHART_VERSION:-$(tf_default_from_variables oauth2_proxy_chart_version)}"
 OPENTELEMETRY_COLLECTOR_CHART_VERSION="${OPENTELEMETRY_COLLECTOR_CHART_VERSION:-$(tf_default_from_variables opentelemetry_collector_chart_version)}"
 POLICY_REPORTER_CHART_VERSION="${POLICY_REPORTER_CHART_VERSION:-$(tf_default_from_variables policy_reporter_chart_version)}"
 PROMETHEUS_CHART_VERSION="${PROMETHEUS_CHART_VERSION:-$(tf_default_from_variables prometheus_chart_version)}"
-SIGNOZ_CHART_VERSION="${SIGNOZ_CHART_VERSION:-$(tf_default_from_variables signoz_chart_version)}"
-TEMPO_CHART_VERSION="${TEMPO_CHART_VERSION:-$(tf_default_from_variables tempo_chart_version)}"
 VICTORIA_LOGS_CHART_VERSION="${VICTORIA_LOGS_CHART_VERSION:-$(tf_default_from_variables victoria_logs_chart_version)}"
 
 command -v curl >/dev/null 2>&1 || fail "curl not found"
@@ -525,13 +502,11 @@ rewrite_public_hostnames() {
     tmp_file="$(mktemp)"
     sed \
       -e "s|argocd\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${ARGOCD_PUBLIC_HOST}|g" \
-      -e "s|dex\\.127\\.0\\.0\\.1\\.sslip\\.io|${DEX_PUBLIC_HOST}|g" \
       -e "s|gitea\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${GITEA_PUBLIC_HOST}|g" \
       -e "s|grafana\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${GRAFANA_PUBLIC_HOST}|g" \
       -e "s|headlamp\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${HEADLAMP_PUBLIC_HOST}|g" \
       -e "s|hubble\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${HUBBLE_PUBLIC_HOST}|g" \
       -e "s|kyverno\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${KYVERNO_PUBLIC_HOST}|g" \
-      -e "s|signoz\\.admin\\.127\\.0\\.0\\.1\\.sslip\\.io|${SIGNOZ_PUBLIC_HOST}|g" \
       -e "s|sentiment\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SENTIMENT_DEV_PUBLIC_HOST}|g" \
       -e "s|sentiment\\.uat\\.127\\.0\\.0\\.1\\.sslip\\.io|${SENTIMENT_UAT_PUBLIC_HOST}|g" \
       -e "s|subnetcalc\\.dev\\.127\\.0\\.0\\.1\\.sslip\\.io|${SUBNETCALC_DEV_PUBLIC_HOST}|g" \
@@ -694,18 +669,14 @@ chart_version_override_for_name() {
     agentgateway) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     agentgateway-crds) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     cert-manager) printf '%s\n' "${CERT_MANAGER_CHART_VERSION}" ;;
-    dex) printf '%s\n' "${DEX_CHART_VERSION}" ;;
     grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
     headlamp) printf '%s\n' "${HEADLAMP_CHART_VERSION}" ;;
     metrics-server) printf '%s\n' "${METRICS_SERVER_CHART_VERSION}" ;;
     kyverno) printf '%s\n' "${KYVERNO_CHART_VERSION}" ;;
-    loki) printf '%s\n' "${LOKI_CHART_VERSION}" ;;
     oauth2-proxy) printf '%s\n' "${OAUTH2_PROXY_CHART_VERSION}" ;;
     opentelemetry-collector) printf '%s\n' "${OPENTELEMETRY_COLLECTOR_CHART_VERSION}" ;;
     policy-reporter) printf '%s\n' "${POLICY_REPORTER_CHART_VERSION}" ;;
     prometheus) printf '%s\n' "${PROMETHEUS_CHART_VERSION}" ;;
-    signoz) printf '%s\n' "${SIGNOZ_CHART_VERSION}" ;;
-    tempo) printf '%s\n' "${TEMPO_CHART_VERSION}" ;;
     victoria-logs-single) printf '%s\n' "${VICTORIA_LOGS_CHART_VERSION}" ;;
     *) printf '%s\n' "" ;;
   esac
@@ -828,7 +799,6 @@ rewrite_external_argocd_apps_to_vendored_charts() {
 vendor_direct_tf_only_charts() {
   local vendor_root="$1"
 
-  vendor_chart "https://charts.dexidp.io" "dex" "${DEX_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${OAUTH2_PROXY_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${HEADLAMP_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://kubernetes-sigs.github.io/metrics-server/" "metrics-server" "${METRICS_SERVER_CHART_VERSION}" "${vendor_root}"
@@ -867,7 +837,6 @@ apply_external_platform_images() {
   local auth_chat_manifest="${root_dir}/apps/auth-chat/all.yaml"
   local chatgpt_manifest="${root_dir}/apps/chatgpt-sim/all.yaml"
   local langfuse_demos_manifest="${root_dir}/apps/langfuse-demos/all.yaml"
-  local signoz_manifest="${root_dir}/apps/platform-gateway-routes-sso/signoz-auth-proxy-deployment.yaml"
   local scope env_name contract_key image_name manifest_group image_ref manifest_file
 
   if ! is_true "${PREFER_EXTERNAL_PLATFORM_IMAGES}"; then
@@ -877,10 +846,6 @@ apply_external_platform_images() {
   if [[ -n "${EXTERNAL_PLATFORM_IMAGE_GRAFANA}" ]]; then
     parse_image_ref "${EXTERNAL_PLATFORM_IMAGE_GRAFANA}" GRAFANA_IMAGE_REGISTRY GRAFANA_IMAGE_REPOSITORY GRAFANA_IMAGE_TAG
     GRAFANA_VICTORIA_LOGS_PLUGIN_URL=""
-  fi
-
-  if [[ -n "${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY}" ]]; then
-    SIGNOZ_AUTH_PROXY_IMAGE="${EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY}"
   fi
 
   if [[ -z "${EXTERNAL_PLATFORM_IMAGE_IDP_CORE}" ]]; then
@@ -912,10 +877,6 @@ apply_external_platform_images() {
       langfuse-demos)
         manifest_file="${langfuse_demos_manifest}"
         eval "image_ref=\"\${${env_name}:-}\""
-        ;;
-      signoz)
-        manifest_file="${signoz_manifest}"
-        image_ref="${SIGNOZ_AUTH_PROXY_IMAGE}"
         ;;
       *)
         continue
@@ -1285,10 +1246,7 @@ render_otel_gateway_manifest() {
   local apps_dir="$1"
   local gateway_enabled="false"
   local prom_fanout="false"
-  local loki_fanout="false"
   local victoria_logs_fanout="false"
-  local tempo_fanout="false"
-  local signoz_fanout="false"
   local destination="${apps_dir}/96-otel-collector-prometheus.application.yaml"
   local traces_exporters=()
   local metrics_exporters=()
@@ -1297,7 +1255,7 @@ render_otel_gateway_manifest() {
   local metrics_exporters_csv=""
   local logs_exporters_csv=""
 
-  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_VICTORIA_LOGS}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
+  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_VICTORIA_LOGS}"; then
     gateway_enabled="true"
   fi
 
@@ -1305,20 +1263,8 @@ render_otel_gateway_manifest() {
     prom_fanout="true"
   fi
 
-  if is_true "${ENABLE_LOKI}"; then
-    loki_fanout="true"
-  fi
-
   if is_true "${ENABLE_VICTORIA_LOGS}"; then
     victoria_logs_fanout="true"
-  fi
-
-  if is_true "${ENABLE_TEMPO}"; then
-    tempo_fanout="true"
-  fi
-
-  if is_true "${ENABLE_SIGNOZ}"; then
-    signoz_fanout="true"
   fi
 
   if ! is_true "${gateway_enabled}"; then
@@ -1331,25 +1277,8 @@ render_otel_gateway_manifest() {
     metrics_exporters+=("prometheus")
   fi
 
-  if is_true "${signoz_fanout}"; then
-    traces_exporters+=("otlp/signoz")
-    metrics_exporters+=("otlp/signoz")
-  fi
-
-  if is_true "${tempo_fanout}"; then
-    traces_exporters+=("otlp/tempo")
-  fi
-
-  if is_true "${loki_fanout}"; then
-    logs_exporters+=("otlphttp/loki")
-  fi
-
   if is_true "${victoria_logs_fanout}"; then
     logs_exporters+=("otlphttp/victoria-logs")
-  fi
-
-  if [[ "${#logs_exporters[@]}" -eq 0 ]] && is_true "${signoz_fanout}"; then
-    logs_exporters+=("otlp/signoz")
   fi
 
   if [[ "${#traces_exporters[@]}" -eq 0 ]]; then
@@ -1505,35 +1434,10 @@ EOF
 EOF
   fi
 
-  if is_true "${signoz_fanout}"; then
-    cat >> "${destination}" <<'EOF'
-            otlp/signoz:
-              endpoint: signoz-otel-collector.observability.svc.cluster.local:4317
-              tls:
-                insecure: true
-EOF
-  fi
-
-  if is_true "${loki_fanout}"; then
-    cat >> "${destination}" <<'EOF'
-            otlphttp/loki:
-              endpoint: http://loki.observability.svc.cluster.local:3100/otlp
-EOF
-  fi
-
   if is_true "${victoria_logs_fanout}"; then
     cat >> "${destination}" <<'EOF'
             otlphttp/victoria-logs:
               logs_endpoint: http://victoria-logs-victoria-logs-single-server.observability.svc.cluster.local:9428/insert/opentelemetry/v1/logs
-EOF
-  fi
-
-  if is_true "${tempo_fanout}"; then
-    cat >> "${destination}" <<'EOF'
-            otlp/tempo:
-              endpoint: tempo.observability.svc.cluster.local:4317
-              tls:
-                insecure: true
 EOF
   fi
 
@@ -1713,11 +1617,11 @@ prune_argocd_app_manifests() {
   local otel_gateway_enabled="false"
   local observability_enabled="false"
 
-  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_VICTORIA_LOGS}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
+  if is_true "${ENABLE_OTEL_GATEWAY}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_VICTORIA_LOGS}"; then
     otel_gateway_enabled="true"
   fi
 
-  if is_true "${otel_gateway_enabled}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_LOKI}" || is_true "${ENABLE_VICTORIA_LOGS}" || is_true "${ENABLE_TEMPO}" || is_true "${ENABLE_SIGNOZ}"; then
+  if is_true "${otel_gateway_enabled}" || is_true "${ENABLE_PROMETHEUS}" || is_true "${ENABLE_GRAFANA}" || is_true "${ENABLE_VICTORIA_LOGS}"; then
     observability_enabled="true"
   fi
 
@@ -1780,18 +1684,10 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/82-langfuse-demos.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_SIGNOZ}"; then
-    remove_if_present "${apps_dir}/82-signoz-clickhouse.service.yaml"
-    remove_if_present "${apps_dir}/90-signoz.application.yaml"
-    remove_if_present "${apps_dir}/110-signoz-ui-nodeport.service.yaml"
-  fi
-
   if ! is_true "${observability_enabled}"; then
     remove_if_present "${apps_dir}/80-observability.namespace.yaml"
     remove_if_present "${apps_dir}/90-prometheus.application.yaml"
-    remove_if_present "${apps_dir}/91-loki.application.yaml"
     remove_if_present "${apps_dir}/92-victoria-logs.application.yaml"
-    remove_if_present "${apps_dir}/92-tempo.application.yaml"
     remove_if_present "${apps_dir}/95-grafana.application.yaml"
     remove_if_present "${apps_dir}/96-otel-collector-prometheus.application.yaml"
     remove_if_present "${apps_dir}/110-grafana-ui-nodeport.service.yaml"
@@ -1806,19 +1702,11 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/110-grafana-ui-nodeport.service.yaml"
   fi
 
-  if ! is_true "${ENABLE_LOKI}"; then
-    remove_if_present "${apps_dir}/91-loki.application.yaml"
-  fi
-
   if ! is_true "${ENABLE_VICTORIA_LOGS}"; then
     remove_if_present "${apps_dir}/92-victoria-logs.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_TEMPO}"; then
-    remove_if_present "${apps_dir}/92-tempo.application.yaml"
-  fi
-
-  if ! is_true "${ENABLE_OBSERVABILITY_AGENT}" || ! is_true "${ENABLE_SIGNOZ}"; then
+  if ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
     remove_if_present "${apps_dir}/100-otel-collector-agent.application.yaml"
   fi
 
@@ -1830,7 +1718,7 @@ prune_argocd_app_manifests() {
     remove_if_present "${apps_dir}/88-metrics-server.application.yaml"
   fi
 
-  if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_LOKI}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_SIGNOZ}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
+  if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
     remove_if_present "${apps_dir}/80-observability.namespace.yaml"
   fi
 }
@@ -1866,28 +1754,6 @@ prune_gateway_routes_manifests() {
     remove_if_present "${routes_dir}/referencegrant-headlamp.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-headlamp.yaml"
     remove_kustomization_entry "${kustomization_file}" "referencegrant-headlamp.yaml"
-  fi
-
-  if ! is_true "${ENABLE_SIGNOZ}"; then
-    remove_if_present "${routes_dir}/httproute-signoz.yaml"
-    remove_if_present "${routes_dir}/referencegrant-signoz.yaml"
-    remove_if_present "${routes_dir}/referencegrant-signoz-sso.yaml"
-    remove_if_present "${routes_dir}/observabilitypolicy-tracing-signoz.yaml"
-    remove_if_present "${routes_dir}/rbac-signoz-bootstrap.yaml"
-    remove_if_present "${routes_dir}/job-signoz-bootstrap.yaml"
-    remove_if_present "${routes_dir}/signoz-auth-proxy-configmap.yaml"
-    remove_if_present "${routes_dir}/signoz-auth-proxy-deployment.yaml"
-    remove_if_present "${routes_dir}/signoz-auth-proxy-service.yaml"
-
-    remove_kustomization_entry "${kustomization_file}" "httproute-signoz.yaml"
-    remove_kustomization_entry "${kustomization_file}" "referencegrant-signoz.yaml"
-    remove_kustomization_entry "${kustomization_file}" "referencegrant-signoz-sso.yaml"
-    remove_kustomization_entry "${kustomization_file}" "observabilitypolicy-tracing-signoz.yaml"
-    remove_kustomization_entry "${kustomization_file}" "rbac-signoz-bootstrap.yaml"
-    remove_kustomization_entry "${kustomization_file}" "job-signoz-bootstrap.yaml"
-    remove_kustomization_entry "${kustomization_file}" "signoz-auth-proxy-configmap.yaml"
-    remove_kustomization_entry "${kustomization_file}" "signoz-auth-proxy-deployment.yaml"
-    remove_kustomization_entry "${kustomization_file}" "signoz-auth-proxy-service.yaml"
   fi
 
   if ! is_true "${ENABLE_GRAFANA}"; then

@@ -7,7 +7,6 @@ run "wireguard_enabled" {
     enable_hubble           = false
     enable_argocd           = false
     enable_gitea            = false
-    enable_signoz           = false
   }
 
   assert {
@@ -34,7 +33,6 @@ run "wireguard_disabled_by_default" {
     enable_hubble = false
     enable_argocd = false
     enable_gitea  = false
-    enable_signoz = false
   }
 
   assert {
@@ -56,7 +54,6 @@ run "policy_audit_mode_enabled" {
     enable_hubble                   = false
     enable_argocd                   = false
     enable_gitea                    = false
-    enable_signoz                   = false
     enable_cilium_policy_audit_mode = true
   }
 
@@ -109,7 +106,6 @@ run "uat_namespace_has_isolate_label" {
     enable_policies           = true
     enable_actions_runner     = true
     enable_app_repo_sentiment = true
-    enable_signoz             = false
     gitea_admin_pwd           = "test-admin-password"
   }
 
@@ -150,7 +146,6 @@ run "dev_namespace_has_isolate_label" {
     enable_policies           = true
     enable_actions_runner     = true
     enable_app_repo_sentiment = true
-    enable_signoz             = false
     gitea_admin_pwd           = "test-admin-password"
   }
 
@@ -184,7 +179,6 @@ run "sit_namespace_has_application_defaults" {
     enable_argocd   = true
     enable_gitea    = true
     enable_policies = true
-    enable_signoz   = false
     gitea_admin_pwd = "test-admin-password"
   }
 
@@ -234,7 +228,6 @@ run "review_namespace_has_application_defaults" {
     enable_gitea          = true
     enable_policies       = true
     enable_actions_runner = false
-    enable_signoz         = false
     gitea_admin_pwd       = "test-admin-password"
   }
 
@@ -269,7 +262,6 @@ run "sso_namespace_has_sensitivity_labels" {
     enable_gitea       = true
     enable_gateway_tls = true
     enable_sso         = true
-    enable_signoz      = false
     gitea_admin_pwd    = "test-admin-password"
   }
 
@@ -304,7 +296,6 @@ run "platform_namespaces_have_platform_role" {
     enable_gateway_tls = true
     enable_policies    = true
     enable_gitea       = true
-    enable_signoz      = false
     gitea_admin_pwd    = "test-admin-password"
   }
 

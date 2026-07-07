@@ -7,7 +7,6 @@ run "kind_stack_dir_anchors_generated_files" {
     enable_hubble          = false
     enable_argocd          = false
     enable_gitea           = false
-    enable_signoz          = false
     kind_stack_dir         = "/tmp/platform-stack"
     kind_config_path       = "/tmp/platform-stack/kind-config.yaml"
   }
@@ -37,7 +36,6 @@ run "relative_preload_image_list_path_anchors_to_stack_dir" {
     enable_hubble           = false
     enable_argocd           = false
     enable_gitea            = false
-    enable_signoz           = false
     kind_stack_dir          = "/tmp/platform-stack/terraform/kubernetes"
     preload_image_list_path = "../../kubernetes/kind/preload-images.txt"
   }
@@ -112,20 +110,6 @@ run "cilium_policy_audit_mode_requires_cilium" {
   }
 
   expect_failures = [check.enable_cilium_policy_audit_mode_requires_cilium_provider]
-}
-
-run "observability_agent_requires_signoz_and_argocd" {
-  command = plan
-
-  variables {
-    cni_provider               = "none"
-    enable_hubble              = false
-    enable_argocd              = true
-    enable_signoz              = false
-    enable_observability_agent = true
-  }
-
-  expect_failures = [check.enable_observability_agent_requires_signoz_and_argocd]
 }
 
 run "alertmanager_requires_prometheus" {

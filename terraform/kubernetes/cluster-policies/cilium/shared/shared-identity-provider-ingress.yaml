@@ -17,7 +17,6 @@ spec:
       - key: "k8s:app.kubernetes.io/name"
         operator: In
         values:
-          - dex
           - keycloak
   ingress:
     - fromEndpoints:
@@ -25,8 +24,6 @@ spec:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": application
       toPorts:
         - ports:
-            - port: "5556"
-              protocol: TCP
             - port: "8080"
               protocol: TCP
     - fromEndpoints:
@@ -34,8 +31,6 @@ spec:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": shared
       toPorts:
         - ports:
-            - port: "5556"
-              protocol: TCP
             - port: "8080"
               protocol: TCP
     - fromEndpoints:
@@ -43,7 +38,5 @@ spec:
             "k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role": platform
       toPorts:
         - ports:
-            - port: "5556"
-              protocol: TCP
             - port: "8080"
               protocol: TCP

@@ -6,7 +6,6 @@ run "metrics_server_enabled" {
     enable_hubble         = false
     enable_argocd         = true
     enable_gitea          = true
-    enable_signoz         = false
     enable_sso            = false
     enable_metrics_server = true
   }
@@ -40,7 +39,6 @@ run "application_namespace_resource_bounds_enabled" {
     enable_hubble                    = false
     enable_argocd                    = true
     enable_gitea                     = false
-    enable_signoz                    = false
     enable_sso                       = false
     enable_app_repo_sentiment        = true
     enable_namespace_resource_bounds = true

@@ -222,7 +222,6 @@ The generated command layers `.run/operator/kind-stage900.tfvars` over stage
 `900` and `targets/kind.tfvars` through `PLATFORM_TFVARS`. It keeps kind,
 Cilium, Argo CD, Gitea, gateway TLS, Keycloak SSO, oauth2-proxy, the Portal API,
 and subnetcalc as the single sample workload. It disables Hubble UI,
-Prometheus, Grafana, VictoriaLogs, Loki, Tempo, SigNoz, Headlamp, Backstage,
 APIM, agentgateway, chatgpt-sim, auth-chat, Langfuse, and the in-cluster Actions
 runner.
 
@@ -259,7 +258,6 @@ flowchart LR
 | `500` | Add Gitea and re-enable the full Argo CD controller set. | `enable_gitea=true`, `argocd_applicationset_enabled=true`, `argocd_notifications_enabled=true` |
 | `600` | Add Kyverno and Cilium policy controls. | `enable_policies=true`, `enable_cert_manager=true`, `enable_cilium_wireguard=true` |
 | `700` | Make app repos available to GitOps. | `enable_actions_runner=true`, app repo flags enabled |
-| `800` | Add observability, including HTTPS routes and Headlamp. | `enable_gateway_tls=true`, `enable_headlamp=true`, `enable_prometheus=true`, `enable_grafana=true`, `enable_loki=true` |
 | `900` | Add SSO with Keycloak and `oauth2-proxy`. | `enable_sso=true` |
 
 ## Stage-by-stage control knobs
@@ -330,8 +328,6 @@ flowchart LR
 - `enable_hubble = false` keeps observability off for one stage so networking can settle first.
 
 ### Stage 300: add Hubble
-
-Stage 300 turns on [Hubble](https://docs.cilium.io/en/stable/observability/hubble/index.html), Cilium's network observability layer. Hubble sits on top of Cilium and uses [eBPF](https://ebpf.io/what-is-ebpf/) flow data to show who is talking to whom, which requests are allowed or denied, and, when available, L7 details such as HTTP method, path, and status.
 
 ```mermaid
 flowchart LR
@@ -430,21 +426,18 @@ The demo applications are explained in [docs/sample-apps.md](docs/sample-apps.md
 
 Stage 800 makes the platform feel more like a real environment: HTTPS routes
 are enabled, Headlamp is added for cluster UI access, and the
-Prometheus/Grafana/Loki stack comes online for metrics and logs.
 
 ```mermaid
 flowchart LR
     user["browser"] --> https["HTTPS gateway"]
     https --> apps["platform apps"]
     apps --> prom["Prometheus"]
-    apps --> loki["Loki"]
     prom --> graf["Grafana"]
     headlamp["Headlamp"] --> cluster["cluster API"]
 ```
 
 - `enable_gateway_tls = true` switches platform routes to HTTPS.
 - `enable_headlamp = true` adds a Kubernetes dashboard.
-- `enable_prometheus = true`, `enable_grafana = true`, and `enable_loki = true` add the core observability stack.
 
 ### Stage 900: SSO
 

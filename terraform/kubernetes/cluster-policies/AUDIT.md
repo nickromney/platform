@@ -49,14 +49,14 @@ SVG renders. Click any diagram to open its `.mmd` source.
 | `application-backend-egress-via-cidrgroup.yaml` | Allows selected app backends to the approved CIDR group on 443 plus DNS. | Narrower than before because frontends and gateways no longer inherit the shared outbound rule. |
 | `application-backend-egress-via-fqdn.yaml` | Allows those same app backends to GitHub API and GitHub content over 443. | Includes DNS L7 visibility so the FQDN pinning is actually enforceable. |
 | `sentiment-api-dns-egress.yaml` | Allows DNS for sentiment backend workloads in application namespaces. | Supports the shipped Go lexicon classifier path and any future backend DNS needs. |
-| `apim-baseline.yaml` | Restricts APIM ingress to subnetcalc routers and egress to Dex, subnetcalc API, DNS, and apiserver. | Now keys off `namespace-role=application` for inherited subnetcalc deployments. |
-| `argocd-hardened.yaml` | Restricts Argo CD ingress and baseline egress to Gitea, Dex, DNS, and the apiserver. | External chart fetches are now moved out of the namespace-wide policy. |
+| `apim-baseline.yaml` | Restricts APIM ingress to subnetcalc routers and egress to Keycloak, subnetcalc API, DNS, and apiserver. | Now keys off `namespace-role=application` for inherited subnetcalc deployments. |
+| `argocd-hardened.yaml` | Restricts Argo CD ingress and baseline egress to Gitea, Keycloak, DNS, and the apiserver. | External chart fetches are now moved out of the namespace-wide policy. |
 | `argocd-hardened.yaml` (`argocd-repo-server-helm-egress`) | Allows only `argocd-repo-server` to reach `dl.gitea.io:443`. | This is now a minimal bootstrap exception for the Gitea chart; other chart-based apps render from vendored charts in Gitea Git. The rule now includes DNS L7 visibility so the FQDN pin is active. |
 | `azure-auth-nginx-gateway-ingress.yaml` | Restricts the nginx-gateway control plane to host, platform-gateway, DNS, and apiserver traffic. | Good control-plane hardening. |
 | `observability-hardened.yaml` | Restricts ingest and scraping paths for observability workloads. | Now accepts OTEL traffic from any application namespace; host `10255` remains the main questionable allowance. |
-| `platform-baseline.yaml` | Hardens Headlamp ingress and its egress to apiserver, Dex, platform-gateway, DNS, and plugin registries. | Good overall structure; the plugin-registry FQDN allow now has DNS proxy visibility in the same policy. |
+| `platform-baseline.yaml` | Hardens Headlamp ingress and its egress to apiserver, Keycloak, platform-gateway, DNS, and plugin registries. | Good overall structure; the plugin-registry FQDN allow now has DNS proxy visibility in the same policy. |
 | `platform-gateway-hardened.yaml` | Defines the external ingress choke point and its internal egress targets. | Strong boundary placement. |
-| `sso-hardened.yaml` | Hardens Dex and oauth2-proxy workloads and limits oauth2-proxy upstreams. | Improved: app ingress and router upstreams now key off `namespace-role=application` instead of hardcoded `dev`/`uat`. |
+| `sso-hardened.yaml` | Hardens Keycloak and oauth2-proxy workloads and limits oauth2-proxy upstreams. | Improved: app ingress and router upstreams now key off `namespace-role=application` instead of hardcoded `dev`/`uat`. |
 | `gitea-hardened.yaml` | Restricts Gitea namespace ingress and egress. | Good namespace isolation. |
 | `gitea-runner-hardened.yaml` | Restricts runner ingress and egress to Gitea, apiserver, DNS, and host port `30090`. | Reasonable for this runner model. |
 

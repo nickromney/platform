@@ -37,8 +37,8 @@ notes live under [`docs/plans/archive`](plans/archive/).
 
 - ADR-era local stack model: cumulative stages and a reference `kind` variant
   are the accepted operator shape.
-- Identity provider completion: stage `900` defaults to Keycloak plus
-  `oauth2-proxy`; Dex remains a provider-switch compatibility path.
+- Identity provider completion: Kubernetes stage `900` uses Keycloak plus
+  `oauth2-proxy`; the Kubernetes Dex provider switch is retired.
 - Stage `900` SSO wiring: Argo CD, Headlamp, Kubernetes API trust, platform
   routes, and app routes consume provider-neutral OIDC locals.
 - IDP/portal API runtime adapters: `generic_kubernetes`, `kind`, and
@@ -75,6 +75,13 @@ notes live under [`docs/plans/archive`](plans/archive/).
   added. Newcomer wait is addressed via preload/registry cache plus a planned
   phase-progress indicator.
 - Slicer substrate removed; Lima demoted to best-effort (2026-07-07).
+- Duplicate observability variants retired from Kubernetes (2026-07-07):
+  Loki, SigNoz, and Tempo toggles, manifests, preload entries, workflow
+  presets, and tests were removed. VictoriaLogs is the log store story for the
+  local Kubernetes stack.
+- Kubernetes SSO is Keycloak-only (2026-07-07): `sso_provider` is validated as
+  `keycloak`, Kubernetes Dex manifests/routes/tests were removed, and Docker
+  Compose keeps its separate Dex substrate.
 
 ## Open Decisions And Backlog
 
@@ -95,8 +102,6 @@ notes live under [`docs/plans/archive`](plans/archive/).
   becomes an adapter/fallback path behind `kind`.
 - Alertmanager runbook portal surfacing: expose actionable alert/runbook links
   in the portal/status surfaces instead of leaving them only in raw docs.
-- Dex lifecycle: keep Dex indefinitely as the compact SSO provider, or retire
-  it after Keycloak has enough evidence across local variants.
 - App catalog source: keep deriving catalog data from several sources, or make
   one first-class application catalog file authoritative.
 - Guided workflow presets: finish the effective-config audit, schema-backed

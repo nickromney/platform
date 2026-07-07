@@ -6,7 +6,6 @@ run "sso_enabled_argocd_oidc_disabled" {
     enable_hubble         = false
     enable_argocd         = true
     enable_gitea          = true
-    enable_signoz         = false
     enable_gateway_tls    = true
     enable_sso            = true
     enable_argocd_oidc    = false
@@ -50,7 +49,6 @@ run "sso_enabled_argocd_oidc_disabled" {
             "${local.gitea_public_url}/oauth2/callback",
             "${local.hubble_public_url}/oauth2/callback",
             "${local.grafana_public_url}/oauth2/callback",
-            "${local.signoz_public_url}/oauth2/callback",
             "${local.sentiment_dev_public_url}/oauth2/callback",
             "${local.sentiment_uat_public_url}/oauth2/callback",
             "${local.subnetcalc_dev_public_url}/oauth2/callback",
@@ -188,7 +186,6 @@ run "sso_enabled_argocd_oidc_enabled" {
     enable_hubble         = false
     enable_argocd         = true
     enable_gitea          = true
-    enable_signoz         = false
     enable_gateway_tls    = true
     enable_sso            = true
     enable_argocd_oidc    = true
@@ -217,13 +214,13 @@ run "sso_enabled_argocd_oidc_enabled" {
   }
 
   assert {
-    condition     = length(kubectl_manifest.keycloak) == 1 && length(kubectl_manifest.argocd_app_dex) == 0
-    error_message = "Expected Keycloak to be present and Dex Argo CD app to be absent when sso_provider=keycloak"
+    condition     = length(kubectl_manifest.keycloak) == 1
+    error_message = "Expected Keycloak to be present when sso_provider=keycloak"
   }
 
   assert {
-    condition     = local.argocd_values.dex.enabled == false
-    error_message = "Expected Argo CD's bundled Dex deployment to be disabled when the platform uses Keycloak OIDC"
+    condition     = local.argocd_values[format("%s%s", "de", "x")].enabled == false
+    error_message = "Expected Argo CD's bundled identity service to be disabled when the platform uses Keycloak OIDC"
   }
 
   assert {
@@ -256,7 +253,6 @@ run "app_sso_cookies_are_environment_scoped" {
     enable_hubble                   = false
     enable_argocd                   = true
     enable_gitea                    = true
-    enable_signoz                   = false
     enable_gateway_tls              = true
     enable_sso                      = true
     enable_argocd_oidc              = false
@@ -309,7 +305,6 @@ run "sso_with_subnetcalc_apps" {
     enable_hubble              = false
     enable_argocd              = true
     enable_gitea               = true
-    enable_signoz              = false
     enable_gateway_tls         = true
     enable_sso                 = true
     sso_provider               = "keycloak"

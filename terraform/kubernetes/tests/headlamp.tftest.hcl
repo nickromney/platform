@@ -6,7 +6,6 @@ run "headlamp_enabled" {
     enable_hubble   = false
     enable_argocd   = true
     enable_gitea    = false
-    enable_signoz   = false
     enable_sso      = false
     enable_headlamp = true
     sso_provider    = "keycloak"
@@ -56,7 +55,6 @@ run "headlamp_sso_uses_selected_oidc_provider" {
     enable_hubble         = false
     enable_argocd         = true
     enable_gitea          = true
-    enable_signoz         = false
     enable_gateway_tls    = true
     enable_sso            = true
     enable_headlamp       = true

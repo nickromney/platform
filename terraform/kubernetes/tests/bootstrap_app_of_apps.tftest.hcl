@@ -8,7 +8,6 @@ run "app_of_apps_enabled_disables_direct_apps" {
     enable_gitea          = true
     gitea_admin_pwd       = "test-admin-password"
     gitea_member_user_pwd = "test-member-password"
-    enable_signoz         = false
     enable_policies       = true
     enable_gateway_tls    = true
     enable_actions_runner = true
@@ -64,7 +63,6 @@ run "image_preload_enabled_by_default" {
     enable_hubble = false
     enable_argocd = false
     enable_gitea  = false
-    enable_signoz = false
   }
 
   assert {
@@ -91,7 +89,6 @@ run "image_preload_can_be_disabled" {
     enable_hubble        = false
     enable_argocd        = false
     enable_gitea         = false
-    enable_signoz        = false
     enable_image_preload = false
   }
 
@@ -112,12 +109,9 @@ run "image_preload_triggers_follow_enabled_feature_set" {
     gitea_admin_pwd       = "test-admin-password"
     gitea_member_user_pwd = "test-member-password"
     enable_gateway_tls    = true
-    enable_signoz         = false
     enable_prometheus     = true
     enable_grafana        = true
-    enable_loki           = false
     enable_victoria_logs  = true
-    enable_tempo          = false
     enable_headlamp       = true
     enable_sso            = true
     enable_actions_runner = true
@@ -131,11 +125,6 @@ run "image_preload_triggers_follow_enabled_feature_set" {
   assert {
     condition     = null_resource.preload_images[0].triggers.enable_grafana == "true"
     error_message = "Expected preload triggers to record Grafana as enabled when later-stage observability is turned on"
-  }
-
-  assert {
-    condition     = null_resource.preload_images[0].triggers.enable_loki == "false"
-    error_message = "Expected preload triggers to record Loki as disabled when VictoriaLogs is the default later-stage logs backend"
   }
 
   assert {
@@ -169,7 +158,6 @@ run "gitea_admin_promotions_always_keep_bootstrap_admin" {
     enable_gitea              = true
     gitea_admin_pwd           = "test-admin-password"
     gitea_member_user_pwd     = "test-member-password"
-    enable_signoz             = false
     gitea_admin_username      = "gitea-admin"
     gitea_admin_promote_users = ["demo-admin"]
   }

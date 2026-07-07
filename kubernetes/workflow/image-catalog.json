@@ -462,42 +462,6 @@
       }
     },
     {
-      "id": "loki",
-      "component": "Loki",
-      "version_check": {
-        "mode": "external",
-        "latest_lookup_policy": "chart-app-version",
-        "preload_alignment_policy": "repo-tag",
-        "checked_elsewhere": "chart appVersion and preload alignment sections",
-        "reason": "Loki preload tags are expected to track the Helm chart appVersion"
-      },
-      "preload_alignment": {
-        "kind": "repo-tag",
-        "line_regex": "^[[:space:]]*(docker\\.io/)?grafana/loki:",
-        "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?grafana/loki:([^[:space:]]+).*|\\2|",
-        "expected_source": "loki_chart_app_version",
-        "enabled_by": "EXPECT_LOKI"
-      }
-    },
-    {
-      "id": "tempo",
-      "component": "Tempo",
-      "version_check": {
-        "mode": "external",
-        "latest_lookup_policy": "chart-app-version",
-        "preload_alignment_policy": "repo-tag",
-        "checked_elsewhere": "chart appVersion and preload alignment sections",
-        "reason": "Tempo preload tags are expected to track the Helm chart appVersion"
-      },
-      "preload_alignment": {
-        "kind": "repo-tag",
-        "line_regex": "^[[:space:]]*(docker\\.io/)?grafana/tempo:",
-        "tag_extract_sed": "s|^[[:space:]]*(docker\\.io/)?grafana/tempo:([^[:space:]]+).*|\\2|",
-        "expected_source": "tempo_chart_app_version",
-        "enabled_by": "EXPECT_TEMPO"
-      }
-    },
-    {
       "id": "victoria-logs",
       "component": "VictoriaLogs",
       "version_check": {

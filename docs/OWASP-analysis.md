@@ -60,7 +60,7 @@ The shared Terraform stack now supports a safer public-demo shape:
 - `platform_base_domain` replaces the hardcoded `127.0.0.1.sslip.io` suffix for
   public app URLs and default redirect targets.
 - `platform_admin_base_domain` can move Argo CD, Gitea, Dex, Hubble,
-  Headlamp, Grafana, Kyverno, and SigNoz onto a separate DNS zone instead of
+  Headlamp, Grafana, and Kyverno onto a separate DNS zone instead of
   keeping them under `*.admin.<platform_base_domain>`.
 - `gateway_https_listen_address` lets the HTTPS gateway bind somewhere other
   than loopback when that is intentional.

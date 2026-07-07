@@ -102,7 +102,6 @@ tfvar_map_string_or_default() {
         in_map = 0
         next
       }
-      equals = index(line, "=")
       if (equals == 0) {
         next
       }
@@ -391,9 +390,6 @@ main() {
   export_resolved_bool ENABLE_ALERTMANAGER enable_alertmanager false
   export_resolved_bool ENABLE_GRAFANA enable_grafana true
   export_resolved_bool ENABLE_VICTORIA_LOGS enable_victoria_logs true
-  export_resolved_bool ENABLE_LOKI enable_loki false
-  export_resolved_bool ENABLE_TEMPO enable_tempo false
-  export_resolved_bool ENABLE_SIGNOZ enable_signoz false
   export_resolved_bool ENABLE_OTEL_GATEWAY enable_otel_gateway false
   export_resolved_bool ENABLE_OBSERVABILITY_AGENT enable_observability_agent false
   export_resolved_bool ENABLE_HEADLAMP enable_headlamp true
@@ -411,13 +407,11 @@ main() {
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_AUTH_CHAT auth-chat
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM chatgpt-sim
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS langfuse-demos
-  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_SIGNOZ_AUTH_PROXY signoz-auth-proxy
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_API sentiment-api
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API subnetcalc-api
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_APIM_SIMULATOR subnetcalc-apim-simulator
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_FRONTEND subnetcalc-frontend
-  export_resolved_string SSO_PUBLIC_URL sso_public_url "https://dex.127.0.0.1.sslip.io"
   export_resolved_string APIM_PUBLIC_HOST apim_public_host "apim.admin.127.0.0.1.sslip.io"
   export_resolved_string HEADLAMP_PUBLIC_HOST headlamp_public_host "headlamp.admin.127.0.0.1.sslip.io"
   export_resolved_string HEADLAMP_OIDC_CLIENT_SECRET headlamp_oidc_client_secret ""
@@ -427,17 +421,13 @@ main() {
     export GITOPS_RENDER_CONTRACT_FILE="${GITOPS_RENDER_CONTRACT_FILE:-${STACK_DIR}/.run/kind/gitops-render-contract.json}"
   fi
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
-  export_resolved_string DEX_CHART_VERSION dex_chart_version "$(tf_default_from_variables dex_chart_version)"
   export_resolved_string GRAFANA_CHART_VERSION grafana_chart_version "$(tf_default_from_variables grafana_chart_version)"
   export_resolved_string HEADLAMP_CHART_VERSION headlamp_chart_version "$(tf_default_from_variables headlamp_chart_version)"
   export_resolved_string KYVERNO_CHART_VERSION kyverno_chart_version "$(tf_default_from_variables kyverno_chart_version)"
-  export_resolved_string LOKI_CHART_VERSION loki_chart_version "$(tf_default_from_variables loki_chart_version)"
   export_resolved_string OAUTH2_PROXY_CHART_VERSION oauth2_proxy_chart_version "$(tf_default_from_variables oauth2_proxy_chart_version)"
   export_resolved_string OPENTELEMETRY_COLLECTOR_CHART_VERSION opentelemetry_collector_chart_version "$(tf_default_from_variables opentelemetry_collector_chart_version)"
   export_resolved_string POLICY_REPORTER_CHART_VERSION policy_reporter_chart_version "$(tf_default_from_variables policy_reporter_chart_version)"
   export_resolved_string PROMETHEUS_CHART_VERSION prometheus_chart_version "$(tf_default_from_variables prometheus_chart_version)"
-  export_resolved_string SIGNOZ_CHART_VERSION signoz_chart_version "$(tf_default_from_variables signoz_chart_version)"
-  export_resolved_string TEMPO_CHART_VERSION tempo_chart_version "$(tf_default_from_variables tempo_chart_version)"
   export_resolved_string VICTORIA_LOGS_CHART_VERSION victoria_logs_chart_version "$(tf_default_from_variables victoria_logs_chart_version)"
   export_resolved_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version "$(tf_default_from_variables agentgateway_chart_version)"
   export_resolved_string AGENTGATEWAY_AI_GATEWAY_MODEL agentgateway_ai_gateway_model ""

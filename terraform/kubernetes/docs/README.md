@@ -13,7 +13,7 @@ This stack is a reproducible, local "platform-in-a-box" demo that shows:
 - **Argo CD** using the **app-of-apps** GitOps pattern
 - **NGINX Gateway Fabric** (Gateway API) for ingress
 - **TLS everywhere** via **cert-manager** + a locally bootstrapped **mkcert CA**
-- **Instrumentation/Monitoring** with **Prometheus, Grafana, VictoriaLogs, and Tempo** by default; SigNoz remains an optional heavier observability path
+- **Instrumentation/Monitoring** with **Prometheus, Grafana, and VictoriaLogs**
 
 ## GitOps Chart Sources
 
@@ -130,21 +130,14 @@ make kind apply 900 AUTO_APPROVE=1
 - **Platform metrics/logs/traces** are collected via OpenTelemetry.
 - **NGINX Gateway Fabric tracing** is enabled so edge requests produce spans (useful for "did the request reach the cluster" debugging).
 
-### SigNoz trace storage (important for debugging)
-
-SigNoz stores spans in ClickHouse using the **v3 trace schema** (e.g. `signoz_traces.signoz_index_v3`).
-If you query older tables like `signoz_traces.distributed_signoz_spans` you may see `0` even when traces are present.
-
-### Service Map / dependency graph
+### Service graph debugging
 
 The Service Map depends on **service-to-service relationships** (edges). A single "edge" service (only NGINX spans) will typically not produce a map.
-
-In this stack the dependency graph table (`signoz_traces.dependency_graph_minutes_v2`) is populated via a ClickHouse materialized view over `signoz_traces.signoz_index_v3` that looks for **parent/child spans across different `service.name` values**.
 
 Practically:
 
 - If you only have `service.name = ngf:platform-gateway:platform-gateway`, **Service Map can be empty**.
-- Once you have traces that include **multiple services in the same trace** (with context propagation), the dependency graph tables will start to fill and the Service Map should render.
+- Once you have traces that include **multiple services in the same trace** (with context propagation), the service graph can start to show useful edges.
 
 ### OpenTelemetry service graph connector (optional)
 

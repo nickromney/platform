@@ -5,10 +5,10 @@ metadata:
 spec:
   description: >-
     Hardened policy for observability namespace.
-    Contains Prometheus, Grafana, Loki, Tempo, SigNoz, OTEL collector.
+    Contains Prometheus, Grafana, VictoriaLogs, and the OTEL collector.
     Logs/metrics/traces are sensitive (OpSec risk).
     Ingress: OTEL data from app namespaces on collector ports only,
-    Grafana/SigNoz UI via shared auth proxies, scrape from Prometheus.
+    Grafana UI via shared auth proxies, scrape from Prometheus.
     Egress: DNS, kube-apiserver (service discovery), intra-namespace, and
     explicit metrics targets only.
   endpointSelector:
@@ -28,8 +28,6 @@ spec:
       toPorts:
         - ports:
             - port: "3000"
-              protocol: TCP
-            - port: "3301"
               protocol: TCP
             - port: "8080"
               protocol: TCP

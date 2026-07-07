@@ -406,14 +406,14 @@ func TestDetailedPresetAndCustomOverridesFoldBackFromBrowserUI(t *testing.T) {
 	m.stage = "900"
 	m.action = "plan"
 	m.presetNetworkProfile = "default-cni"
-	m.presetIdentityStack = "dex"
+	m.presetIdentityStack = "keycloak"
 	m.customWorkerCount = "2"
 	m.customNodeImage = "kindest/node:v1.34.0"
 
 	got := m.workflowArgs("preview")
 	for _, want := range []string{
 		"network-profile=default-cni",
-		"identity-stack=dex",
+		"identity-stack=keycloak",
 		"worker_count=2",
 		"node_image=kindest/node:v1.34.0",
 	} {

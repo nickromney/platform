@@ -127,7 +127,6 @@ setup() {
 }
 
 @test "lima check-app forwards ordered tfvars through the shared builder" {
-  run make -n -C "${REPO_ROOT}/kubernetes/lima" check-app STAGE=900 APP=signoz \
     PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
     PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 

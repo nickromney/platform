@@ -351,7 +351,7 @@ force_recovery_branch() {
           fi
           if ! wait_until_dependencies_degraded "${tertiary_wait_seconds}"; then
             scale_deployment_replicas "${NGINX_GATEWAY_NAMESPACE}" "${NGINX_GATEWAY_DEPLOY_NAME}" "${original_replicas}" || true
-            SUMMARY="forced nginx gateway restart, pod recycle, and temporary scale-to-zero did not make the post-restart dependencies unhealthy within ${OIDC_RECOVERY_FORCE_WAIT_SECONDS}s"
+            SUMMARY="forced nginx gateway restart, pod recycle, and transient scale-to-zero did not make the post-restart dependencies unhealthy within ${OIDC_RECOVERY_FORCE_WAIT_SECONDS}s"
             POST_STATE="$(current_health_state)"
             emit_result
             exit 1

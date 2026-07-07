@@ -79,11 +79,9 @@ spec:
                       - "docker.io/langfuse/*"
                       - "docker.io/postgres:*"
                       - "docker.io/redis:*"
-                      - "docker.io/signoz/*"
                       - "docker.io/victoriametrics/*"
                       # Some upstream Helm charts omit the explicit docker.io prefix.
                       - "victoriametrics/*"
-                      - "signoz/*"
                       - "otel/*"
                       - "docker:*"
                       - "gitea/*"

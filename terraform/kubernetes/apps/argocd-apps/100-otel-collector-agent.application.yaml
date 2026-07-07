@@ -88,7 +88,6 @@ spec:
                           - oauth2-proxy-argocd.sso.svc.cluster.local:44180
                           - oauth2-proxy-gitea.sso.svc.cluster.local:44180
                           - oauth2-proxy-hubble.sso.svc.cluster.local:44180
-                          - oauth2-proxy-signoz.sso.svc.cluster.local:44180
                   - job_name: nginx-gateway-fabric
                     metrics_path: /metrics
                     static_configs:
@@ -100,7 +99,6 @@ spec:
 
           exporters:
             otlp:
-              endpoint: signoz-otel-collector.observability.svc.cluster.local:4317
               tls:
                 insecure: true
 

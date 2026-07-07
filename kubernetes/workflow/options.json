@@ -491,7 +491,6 @@
       "introduced_at_stage": "800",
       "presets": [
         "victoria",
-        "lgtm",
         "minimal-observability",
         "none"
       ]
@@ -503,8 +502,7 @@
       "merge_order": 70,
       "introduced_at_stage": "900",
       "presets": [
-        "keycloak",
-        "dex"
+        "keycloak"
       ]
     },
     {
@@ -543,9 +541,7 @@
         "enable_backstage": false,
         "enable_prometheus": false,
         "enable_grafana": false,
-        "enable_loki": false,
-        "enable_victoria_logs": false,
-        "enable_tempo": false
+        "enable_victoria_logs": false
       }
     },
     {
@@ -603,12 +599,9 @@
           "subnetcalc-frontend": "${local_registry_runtime_host}/platform/subnetcalc-frontend:0.1.0"
         },
         "enable_hubble": false,
-        "enable_signoz": false,
         "enable_prometheus": false,
         "enable_grafana": false,
-        "enable_loki": false,
         "enable_victoria_logs": false,
-        "enable_tempo": false,
         "enable_observability_agent": false,
         "enable_headlamp": false
       }
@@ -656,12 +649,9 @@
           "subnetcalc-frontend": "${local_registry_runtime_host}/platform/subnetcalc-frontend:0.1.0"
         },
         "enable_hubble": false,
-        "enable_signoz": false,
         "enable_prometheus": false,
         "enable_grafana": false,
-        "enable_loki": false,
         "enable_victoria_logs": false,
-        "enable_tempo": false,
         "enable_observability_agent": false,
         "enable_headlamp": false
       }
@@ -765,26 +755,7 @@
       "overlay": {
         "enable_prometheus": true,
         "enable_grafana": true,
-        "enable_victoria_logs": true,
-        "enable_loki": false,
-        "enable_tempo": false
-      }
-    },
-    {
-      "id": "lgtm",
-      "group": "observability_stack",
-      "label": "LGTM",
-      "variants": [
-        "kind",
-        "lima"
-      ],
-      "introduced_at_stage": "800",
-      "overlay": {
-        "enable_prometheus": true,
-        "enable_grafana": true,
-        "enable_loki": true,
-        "enable_tempo": true,
-        "enable_victoria_logs": false
+        "enable_victoria_logs": true
       }
     },
     {
@@ -799,9 +770,7 @@
       "overlay": {
         "enable_prometheus": false,
         "enable_grafana": false,
-        "enable_loki": false,
-        "enable_victoria_logs": false,
-        "enable_tempo": false
+        "enable_victoria_logs": false
       }
     },
     {
@@ -816,9 +785,7 @@
       "overlay": {
         "enable_prometheus": false,
         "enable_grafana": false,
-        "enable_loki": false,
-        "enable_victoria_logs": false,
-        "enable_tempo": false
+        "enable_victoria_logs": false
       }
     },
     {
@@ -832,19 +799,6 @@
       "introduced_at_stage": "900",
       "overlay": {
         "sso_provider": "keycloak"
-      }
-    },
-    {
-      "id": "dex",
-      "group": "identity_stack",
-      "label": "Dex",
-      "variants": [
-        "kind",
-        "lima"
-      ],
-      "introduced_at_stage": "900",
-      "overlay": {
-        "sso_provider": "dex"
       }
     },
     {

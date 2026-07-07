@@ -351,7 +351,6 @@ metadata:
   namespace: ${dst_ns}
   annotations:
     "policies.cilium.io/title": "$(yaml_escape "${title}")"
-    "platform.publiccloudexperiments.net/source-kind": "CiliumNetworkPolicy"
 spec:
   description: >-
     $(yaml_escape "${description}")
