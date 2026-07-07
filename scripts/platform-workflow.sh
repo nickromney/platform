@@ -328,7 +328,7 @@ normalize_custom_override() {
         *) die_usage "Invalid --set '${spec}'. sso_provider must be keycloak" ;;
       esac
       ;;
-    enable_backstage|enable_host_local_registry|enable_image_preload|enable_prometheus|enable_grafana|enable_victoria_logs|enable_otel_gateway|enable_headlamp|enable_observability_agent|enable_app_repo_sentiment|enable_app_repo_subnetcalc|enable_actions_runner|enable_apps_dir_mount|enable_docker_socket_mount)
+    enable_backstage|enable_host_local_registry|enable_image_preload|enable_prometheus|enable_grafana|enable_victoria_logs|enable_otel_gateway|enable_headlamp|enable_observability_agent|enable_metrics_server|enable_progressive_delivery|enable_app_repo_sentiment|enable_app_repo_subnetcalc|enable_actions_runner|enable_apps_dir_mount|enable_docker_socket_mount)
       value="$(normalize_custom_bool "${raw_value}")" || die_usage "Invalid --set '${spec}'. Expected boolean value on|off"
       printf '%s=%s' "${key}" "${value}"
       ;;

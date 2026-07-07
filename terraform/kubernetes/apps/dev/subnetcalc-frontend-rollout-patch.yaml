@@ -1,0 +1,32 @@
+- op: replace
+  path: /apiVersion
+  value: argoproj.io/v1alpha1
+- op: replace
+  path: /kind
+  value: Rollout
+- op: add
+  path: /metadata/annotations
+  value:
+    rollouts.argoproj.io/teaching-rung: subnetcalc-frontend-gateway-api-canary
+- op: add
+  path: /spec/strategy
+  value:
+    canary:
+      stableService: subnetcalc-frontend
+      canaryService: subnetcalc-frontend-canary
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute:
+              name: subnetcalc-dev
+              namespace: gateway-routes
+      steps:
+        - setWeight: 25
+        - pause:
+            duration: 30s
+        - setWeight: 50
+        - pause:
+            duration: 30s
+        - setWeight: 100
+        - pause:
+            duration: 15s

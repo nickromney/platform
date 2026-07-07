@@ -203,6 +203,12 @@ variable "enable_external_secrets" {
   default     = false
 }
 
+variable "enable_progressive_delivery" {
+  description = "Deploy Argo Rollouts and render the dev subnetcalc-frontend canary teaching rung."
+  type        = bool
+  default     = false
+}
+
 variable "enable_namespace_resource_bounds" {
   description = "Apply default container requests/limits and aggregate ResourceQuota bounds to application namespaces."
   type        = bool
@@ -1014,6 +1020,13 @@ check "enable_external_secrets_requires_enable_argocd" {
   assert {
     condition     = !var.enable_external_secrets || (var.enable_argocd && var.enable_gitea)
     error_message = "enable_external_secrets requires enable_argocd=true and enable_gitea=true."
+  }
+}
+
+check "enable_progressive_delivery_requires_argocd_gitea_gateway" {
+  assert {
+    condition     = !var.enable_progressive_delivery || (var.enable_argocd && var.enable_gitea && var.enable_gateway_tls)
+    error_message = "enable_progressive_delivery requires enable_argocd=true, enable_gitea=true, and enable_gateway_tls=true."
   }
 }
 

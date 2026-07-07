@@ -1028,6 +1028,7 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"bool|ENABLE_HUBBLE|enable_hubble|true"* ]]
   [[ "${output}" == *"bool|ENABLE_APP_REPO_SUBNETCALC|enable_app_repo_subnetcalc|false"* ]]
+  [[ "${output}" == *"bool|ENABLE_PROGRESSIVE_DELIVERY|enable_progressive_delivery|false"* ]]
   [[ "${output}" == *"string|PLATFORM_BASE_DOMAIN|platform_base_domain|127.0.0.1.sslip.io"* ]]
   [[ "${output}" == *"string|ARGOCD_PUBLIC_HOST|argocd_public_host|"* ]]
   [[ "${output}" == *"string|SSO_PUBLIC_URL|sso_public_url|"* ]]
@@ -1039,6 +1040,23 @@ EOF
   [[ "${output}" == *"string|AGENTGATEWAY_AI_GATEWAY_MODEL|agentgateway_ai_gateway_model|"* ]]
   [[ "${output}" == *"chart|AGENTGATEWAY_CHART_VERSION|agentgateway_chart_version|agentgateway_chart_version"* ]]
   [[ "${output}" == *"chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version"* ]]
+}
+
+@test "progressive delivery render adds dev-only subnetcalc rollout overlay" {
+  repo_dir="${BATS_TEST_TMPDIR}/repo"
+  mkdir -p "${repo_dir}/apps/dev"
+  printf '%s\n' \
+    'namespace: dev' \
+    'resources:' \
+    '  - ../workloads/base' \
+    >"${repo_dir}/apps/dev/kustomization.yaml"
+
+  run bash -lc "export ENABLE_PROGRESSIVE_DELIVERY=true ENABLE_APP_REPO_SUBNETCALC=true; source '${SCRIPT}'; configure_progressive_delivery '${repo_dir}'"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq '  - subnetcalc-frontend-canary-service.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
+  grep -Fq 'path: subnetcalc-frontend-rollout-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
+  grep -Fq 'name: subnetcalc-frontend' "${repo_dir}/apps/dev/kustomization.yaml"
 }
 
 @test "Terraform policies sync leaves chart and observability render values in GitOps contract" {
