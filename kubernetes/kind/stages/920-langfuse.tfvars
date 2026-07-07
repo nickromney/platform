@@ -25,6 +25,7 @@ enable_grafana                   = true
 enable_victoria_logs             = true
 enable_observability_agent       = false
 enable_metrics_server            = true
+enable_external_secrets          = true
 enable_headlamp                  = true
 enable_gateway_tls               = true
 enable_cert_manager              = true

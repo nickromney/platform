@@ -122,3 +122,31 @@ EOF
   [[ "${output}" != *"kind should not be invoked"* ]]
   [[ "${output}" != *"kind load requires kind v0.32.0 or newer"* ]]
 }
+
+@test "preload-images filters external-secrets image when disabled" {
+  local image_list="${BATS_TEST_TMPDIR}/images.txt"
+  cat >"${image_list}" <<'EOF'
+ghcr.io/external-secrets/external-secrets:v2.7.0
+busybox:latest
+EOF
+
+  run env PRELOAD_ENABLE_EXTERNAL_SECRETS=false "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"ghcr.io/external-secrets/external-secrets:v2.7.0"* ]]
+  [[ "${output}" == *"busybox:latest"* ]]
+}
+
+@test "preload-images keeps external-secrets image when enabled" {
+  local image_list="${BATS_TEST_TMPDIR}/images.txt"
+  cat >"${image_list}" <<'EOF'
+ghcr.io/external-secrets/external-secrets:v2.7.0
+busybox:latest
+EOF
+
+  run env PRELOAD_ENABLE_EXTERNAL_SECRETS=true "${SCRIPT}" --execute --print-images --image-list "${image_list}"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ghcr.io/external-secrets/external-secrets:v2.7.0"* ]]
+  [[ "${output}" == *"busybox:latest"* ]]
+}

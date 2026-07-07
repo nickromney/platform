@@ -62,6 +62,7 @@ expected_argocd_apps() {
 
   if [[ "${EXPECT_PROMETHEUS}" == "true" ]]; then apps+=(prometheus); fi
   if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then apps+=(metrics-server); fi
+  if [[ "${EXPECT_EXTERNAL_SECRETS}" == "true" ]]; then apps+=(external-secrets eso-demo); fi
   if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(grafana); fi
   if [[ "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then apps+=(victoria-logs); fi
   if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then
@@ -938,6 +939,7 @@ SSO_PROVIDER=$(tfvar_get sso_provider)
 [[ -n "${SSO_PROVIDER}" ]] || SSO_PROVIDER="keycloak"
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_METRICS_SERVER=$(expected_from_tfvars enable_metrics_server)
+EXPECT_EXTERNAL_SECRETS=$(expected_from_tfvars enable_external_secrets)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APIM_SIMULATOR=$(expected_from_tfvars enable_apim_simulator)
@@ -1505,6 +1507,18 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
       fail_soft "Argo CD app metrics-server missing (enable_metrics_server=true${tfvars_hint})"
     fi
   fi
+  if [[ "${EXPECT_EXTERNAL_SECRETS}" == "true" ]]; then
+    if kubectl -n "${ARGOCD_NS}" get app external-secrets >/dev/null 2>&1; then
+      ok "Argo CD app external-secrets exists"
+    else
+      fail_soft "Argo CD app external-secrets missing (enable_external_secrets=true${tfvars_hint})"
+    fi
+    if kubectl -n "${ARGOCD_NS}" get app eso-demo >/dev/null 2>&1; then
+      ok "Argo CD app eso-demo exists"
+    else
+      fail_soft "Argo CD app eso-demo missing (enable_external_secrets=true${tfvars_hint})"
+    fi
+  fi
   if kubectl -n "${ARGOCD_NS}" get app victoria-logs >/dev/null 2>&1; then
     ok "Argo CD app victoria-logs exists"
   fi
@@ -1867,6 +1881,40 @@ else
     fail_soft "observability namespace not found (observability components enabled${tfvars_hint})"
   else
     ok "Observability namespace not detected"
+  fi
+fi
+
+echo ""
+echo "External Secrets Operator (if installed):"
+if ! section_active 900 "${EXPECT_EXTERNAL_SECRETS}"; then
+  ok "Skipped until stage 900"
+elif kubectl get ns external-secrets >/dev/null 2>&1; then
+  ok "Detected external-secrets namespace (enable_external_secrets=${EXPECT_EXTERNAL_SECRETS}${tfvars_hint})"
+  kubectl -n external-secrets get pods -o wide || true
+  if kubectl -n external-secrets get deploy external-secrets >/dev/null 2>&1; then
+    if kubectl -n external-secrets rollout status deploy/external-secrets --timeout=180s >/dev/null 2>&1; then
+      ok "external-secrets deployment Ready"
+    else
+      fail_soft "external-secrets deployment is not Ready"
+    fi
+  else
+    fail_soft "external-secrets deployment missing (enable_external_secrets=true${tfvars_hint})"
+  fi
+  if kubectl get ns eso-demo >/dev/null 2>&1 && kubectl -n eso-demo get externalsecret fake-provider-demo >/dev/null 2>&1; then
+    ok "eso-demo ExternalSecret exists"
+    if kubectl -n eso-demo get secret eso-demo-materialized >/dev/null 2>&1; then
+      ok "eso-demo materialized Secret exists"
+    else
+      fail_soft "eso-demo materialized Secret missing (enable_external_secrets=true${tfvars_hint})"
+    fi
+  else
+    fail_soft "eso-demo ExternalSecret missing (enable_external_secrets=true${tfvars_hint})"
+  fi
+else
+  if [[ "${EXPECT_EXTERNAL_SECRETS}" == "true" ]]; then
+    fail_soft "external-secrets namespace not found (enable_external_secrets=true${tfvars_hint})"
+  else
+    ok "external-secrets namespace not detected"
   fi
 fi
 

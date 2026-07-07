@@ -114,7 +114,7 @@ is_true() {
 has_toggle_env_overrides() {
   local env_key
 
-  for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+  for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_EXTERNAL_SECRETS PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
     if [[ -n "${!env_key:-}" ]]; then
       return 0
     fi
@@ -251,6 +251,14 @@ is_metrics_server_image() {
   esac
 }
 
+is_external_secrets_image() {
+  local img="$1"
+  case "${img}" in
+    ghcr.io/external-secrets/external-secrets:*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 is_sso_image() {
   local img="$1"
   case "${img}" in
@@ -280,9 +288,10 @@ filter_images_by_toggles() {
   local enable_victoria_logs="$3"
   local enable_headlamp="$4"
   local enable_metrics_server="$5"
-  local enable_sso="$6"
-  local enable_actions_runner="$7"
-  local enable_langfuse="$8"
+  local enable_external_secrets="$6"
+  local enable_sso="$7"
+  local enable_actions_runner="$8"
+  local enable_langfuse="$9"
   local output=""
   local img
 
@@ -306,6 +315,10 @@ filter_images_by_toggles() {
     fi
 
     if ! is_true "${enable_metrics_server}" && is_metrics_server_image "${img}"; then
+      continue
+    fi
+
+    if ! is_true "${enable_external_secrets}" && is_external_secrets_image "${img}"; then
       continue
     fi
 
@@ -889,7 +902,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_EXTERNAL_SECRETS PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -902,6 +915,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   ENABLE_VICTORIA_LOGS="$(toggle_input_or_default "PRELOAD_ENABLE_VICTORIA_LOGS" "enable_victoria_logs" "false")"
   ENABLE_HEADLAMP="$(toggle_input_or_default "PRELOAD_ENABLE_HEADLAMP" "enable_headlamp" "false")"
   ENABLE_METRICS_SERVER="$(toggle_input_or_default "PRELOAD_ENABLE_METRICS_SERVER" "enable_metrics_server" "false")"
+  ENABLE_EXTERNAL_SECRETS="$(toggle_input_or_default "PRELOAD_ENABLE_EXTERNAL_SECRETS" "enable_external_secrets" "false")"
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
   ENABLE_ACTIONS_RUNNER="$(toggle_input_or_default "PRELOAD_ENABLE_ACTIONS_RUNNER" "enable_actions_runner" "false")"
   ENABLE_LANGFUSE="$(toggle_input_or_default "PRELOAD_ENABLE_LANGFUSE" "enable_langfuse" "false")"
@@ -918,6 +932,7 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
     "${ENABLE_VICTORIA_LOGS}" \
     "${ENABLE_HEADLAMP}" \
     "${ENABLE_METRICS_SERVER}" \
+    "${ENABLE_EXTERNAL_SECRETS}" \
     "${ENABLE_SSO}" \
     "${ENABLE_ACTIONS_RUNNER}" \
     "${ENABLE_LANGFUSE}")"

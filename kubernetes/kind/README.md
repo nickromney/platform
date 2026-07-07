@@ -258,7 +258,7 @@ flowchart LR
 | `500` | Add Gitea and re-enable the full Argo CD controller set. | `enable_gitea=true`, `argocd_applicationset_enabled=true`, `argocd_notifications_enabled=true` |
 | `600` | Add Kyverno and Cilium policy controls. | `enable_policies=true`, `enable_cert_manager=true`, `enable_cilium_wireguard=true` |
 | `700` | Make app repos available to GitOps. | `enable_actions_runner=true`, app repo flags enabled |
-| `900` | Add SSO with Keycloak and `oauth2-proxy`. | `enable_sso=true` |
+| `900` | Add SSO with Keycloak, `oauth2-proxy`, and the secrets lifecycle teaching rung. | `enable_sso=true`, `enable_external_secrets=true` |
 
 ## Stage-by-stage control knobs
 
@@ -455,8 +455,32 @@ flowchart LR
 
 - `enable_sso = true` enables Keycloak and the `oauth2-proxy` layer.
 - `enable_argocd_oidc = true` lets Argo CD enforce the `platform-admins` and `platform-viewers` group mapping.
+- `enable_external_secrets = true` adds External Secrets Operator and the fake-provider `eso-demo` app.
 - `platform_gateway_routes_path = "apps/platform-gateway-routes-sso"` switches the ingress routes to the protected variant.
 - The earlier TLS and gateway work from stage 800 remains in place; stage 900 adds authentication on top.
+
+#### External Secrets teaching rung
+
+Stage 900 includes External Secrets Operator as an opt-in secrets-lifecycle
+example. The GitOps path installs the `external-secrets` controller, then
+applies `apps/eso-demo`:
+
+```mermaid
+flowchart LR
+    store["SecretStore<br/>fake provider"] --> ext["ExternalSecret<br/>fake-provider-demo"]
+    ext --> secret["Secret<br/>eso-demo-materialized"]
+```
+
+The fake provider keeps the demo self-contained: it stores `demo/api-key` in
+the `SecretStore`, the `ExternalSecret` maps that remote key to `api-key`, and
+ESO materializes a normal Kubernetes Secret named `eso-demo-materialized`.
+
+A real provider keeps the same application shape. Replace the `SecretStore`
+provider block with a provider such as AWS Secrets Manager, Azure Key Vault,
+Google Secret Manager, Vault, or Kubernetes, add the provider authentication
+Secret or workload identity binding required by that backend, and point each
+`ExternalSecret.spec.data[].remoteRef.key` at the real secret path. Workloads
+continue to consume only the materialized Kubernetes Secret.
 
 ## Reset
 

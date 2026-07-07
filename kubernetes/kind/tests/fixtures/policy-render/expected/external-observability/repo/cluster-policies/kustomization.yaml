@@ -1,3 +1,4 @@
 resources:
+  - shared/external-secrets-hardened.yaml
   - shared/metrics-server-hardened.yaml
   - shared/sample-policy.yaml

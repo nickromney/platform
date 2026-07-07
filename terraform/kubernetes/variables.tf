@@ -197,6 +197,12 @@ variable "enable_metrics_server" {
   default     = false
 }
 
+variable "enable_external_secrets" {
+  description = "Deploy External Secrets Operator via Argo CD and a fake-provider teaching example."
+  type        = bool
+  default     = false
+}
+
 variable "enable_namespace_resource_bounds" {
   description = "Apply default container requests/limits and aggregate ResourceQuota bounds to application namespaces."
   type        = bool
@@ -550,6 +556,18 @@ variable "metrics_server_image_tag" {
   description = "Metrics Server container image tag."
   type        = string
   default     = "v0.8.1"
+}
+
+variable "external_secrets_chart_version" {
+  description = "External Secrets Operator chart version (external-secrets/external-secrets). Assumed current stable; verify upstream before release."
+  type        = string
+  default     = "2.7.0"
+}
+
+variable "external_secrets_image_tag" {
+  description = "External Secrets Operator container image tag. Assumed current stable; verify upstream before release."
+  type        = string
+  default     = "v2.7.0"
 }
 
 variable "kyverno_chart_version" {
@@ -989,6 +1007,13 @@ check "enable_metrics_server_requires_enable_argocd" {
   assert {
     condition     = !var.enable_metrics_server || (var.enable_argocd && var.enable_gitea)
     error_message = "enable_metrics_server requires enable_argocd=true and enable_gitea=true."
+  }
+}
+
+check "enable_external_secrets_requires_enable_argocd" {
+  assert {
+    condition     = !var.enable_external_secrets || (var.enable_argocd && var.enable_gitea)
+    error_message = "enable_external_secrets requires enable_argocd=true and enable_gitea=true."
   }
 }
 

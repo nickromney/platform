@@ -190,6 +190,16 @@ PY
   grep -Fq 'metrics-server deployment Ready' "${script}"
 }
 
+@test "cluster health expected inventory includes external-secrets when enabled" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'EXPECT_EXTERNAL_SECRETS=$(expected_from_tfvars enable_external_secrets)' "${script}"
+  grep -Fq 'if [[ "${EXPECT_EXTERNAL_SECRETS}" == "true" ]]; then apps+=(external-secrets eso-demo); fi' "${script}"
+  grep -Fq 'Argo CD app external-secrets missing (enable_external_secrets=true${tfvars_hint})' "${script}"
+  grep -Fq 'external-secrets deployment Ready' "${script}"
+  grep -Fq 'eso-demo materialized Secret exists' "${script}"
+}
+
 @test "cluster health expected inventory includes APIM SSO proxy app when APIM is enabled" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
 

@@ -152,6 +152,7 @@ bool|ENABLE_VICTORIA_LOGS|enable_victoria_logs|false
 bool|ENABLE_OTEL_GATEWAY|enable_otel_gateway|false
 bool|ENABLE_OBSERVABILITY_AGENT|enable_observability_agent|false
 bool|ENABLE_METRICS_SERVER|enable_metrics_server|false
+bool|ENABLE_EXTERNAL_SECRETS|enable_external_secrets|false
 bool|ENABLE_HEADLAMP|enable_headlamp|false
 bool|ENABLE_SSO|enable_sso|false
 bool|ENABLE_BACKSTAGE|enable_backstage|true
@@ -176,6 +177,7 @@ chart|CERT_MANAGER_CHART_VERSION|cert_manager_chart_version|cert_manager_chart_v
 chart|GRAFANA_CHART_VERSION|grafana_chart_version|grafana_chart_version
 chart|HEADLAMP_CHART_VERSION|headlamp_chart_version|headlamp_chart_version
 chart|METRICS_SERVER_CHART_VERSION|metrics_server_chart_version|metrics_server_chart_version
+chart|EXTERNAL_SECRETS_CHART_VERSION|external_secrets_chart_version|external_secrets_chart_version
 chart|KYVERNO_CHART_VERSION|kyverno_chart_version|kyverno_chart_version
 chart|OAUTH2_PROXY_CHART_VERSION|oauth2_proxy_chart_version|oauth2_proxy_chart_version
 chart|OPENTELEMETRY_COLLECTOR_CHART_VERSION|otel_chart_version|opentelemetry_collector_chart_version
@@ -307,6 +309,7 @@ ENABLE_VICTORIA_LOGS="${ENABLE_VICTORIA_LOGS:-false}"
 ENABLE_OTEL_GATEWAY="${ENABLE_OTEL_GATEWAY:-false}"
 ENABLE_OBSERVABILITY_AGENT="${ENABLE_OBSERVABILITY_AGENT:-false}"
 ENABLE_METRICS_SERVER="${ENABLE_METRICS_SERVER:-false}"
+ENABLE_EXTERNAL_SECRETS="${ENABLE_EXTERNAL_SECRETS:-false}"
 ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-false}"
 ENABLE_SSO="${ENABLE_SSO:-false}"
 ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
@@ -340,6 +343,7 @@ fi
 GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS="${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS:-$(tf_default_from_variables grafana_liveness_initial_delay_seconds)}"
 HEADLAMP_CHART_VERSION="${HEADLAMP_CHART_VERSION:-$(tf_default_from_variables headlamp_chart_version)}"
 METRICS_SERVER_CHART_VERSION="${METRICS_SERVER_CHART_VERSION:-$(tf_default_from_variables metrics_server_chart_version)}"
+EXTERNAL_SECRETS_CHART_VERSION="${EXTERNAL_SECRETS_CHART_VERSION:-$(tf_default_from_variables external_secrets_chart_version)}"
 KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-$(tf_default_from_variables kyverno_chart_version)}"
 OAUTH2_PROXY_CHART_VERSION="${OAUTH2_PROXY_CHART_VERSION:-$(tf_default_from_variables oauth2_proxy_chart_version)}"
 OPENTELEMETRY_COLLECTOR_CHART_VERSION="${OPENTELEMETRY_COLLECTOR_CHART_VERSION:-$(tf_default_from_variables opentelemetry_collector_chart_version)}"
@@ -672,6 +676,7 @@ chart_version_override_for_name() {
     agentgateway) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     agentgateway-crds) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     cert-manager) printf '%s\n' "${CERT_MANAGER_CHART_VERSION}" ;;
+    external-secrets) printf '%s\n' "${EXTERNAL_SECRETS_CHART_VERSION}" ;;
     grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
     headlamp) printf '%s\n' "${HEADLAMP_CHART_VERSION}" ;;
     metrics-server) printf '%s\n' "${METRICS_SERVER_CHART_VERSION}" ;;
@@ -805,6 +810,9 @@ vendor_direct_tf_only_charts() {
   vendor_chart "https://oauth2-proxy.github.io/manifests" "oauth2-proxy" "${OAUTH2_PROXY_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://kubernetes-sigs.github.io/headlamp/" "headlamp" "${HEADLAMP_CHART_VERSION}" "${vendor_root}"
   vendor_chart "https://kubernetes-sigs.github.io/metrics-server/" "metrics-server" "${METRICS_SERVER_CHART_VERSION}" "${vendor_root}"
+  if is_true "${ENABLE_EXTERNAL_SECRETS}"; then
+    vendor_chart "https://charts.external-secrets.io" "external-secrets" "${EXTERNAL_SECRETS_CHART_VERSION}" "${vendor_root}"
+  fi
   patch_vendored_headlamp_chart "${vendor_root}"
 }
 
@@ -1719,6 +1727,12 @@ prune_argocd_app_manifests() {
 
   if ! is_true "${ENABLE_METRICS_SERVER}"; then
     remove_if_present "${apps_dir}/88-metrics-server.application.yaml"
+  fi
+
+  if ! is_true "${ENABLE_EXTERNAL_SECRETS}"; then
+    remove_if_present "${apps_dir}/86-external-secrets.application.yaml"
+    remove_if_present "${apps_dir}/87-eso-demo.application.yaml"
+    rm -rf "$(dirname "${apps_dir}")/eso-demo"
   fi
 
   if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
