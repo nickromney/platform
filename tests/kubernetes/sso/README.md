@@ -16,22 +16,30 @@ The repo uses project-local Playwright from `@playwright/test`; no global
 `playwright` install is expected.
 
 Full browser E2E now works in the devcontainer too. The image bakes Chromium
-runtime libraries, and `tests/kubernetes/sso/run.sh` still installs the browser
-binary on demand, so the same `check-sso-e2e` target runs from either the host
-or the container.
+runtime libraries, and `tests/kubernetes/sso/run.sh` verifies the pinned
+Playwright browser cache before tests start, so the same `check-sso-e2e` target
+runs from either the host or the container without mid-test browser downloads.
+The browser cache check probes the Playwright CDN before installing; set
+`PLAYWRIGHT_SKIP_CDN_PREFLIGHT=1` only when that preflight is known to be a
+false negative. On networks that cannot fetch Playwright browser archives,
+`PLATFORM_PLAYWRIGHT_MODE=docker` runs the tests in the matching
+`mcr.microsoft.com/playwright` image. `PLATFORM_PLAYWRIGHT_CHANNEL=chrome` is a
+host-native fallback that uses system Chrome with the usual browser-version
+drift tradeoff.
 
 ## Setup
 
 ```bash
 cd tests/kubernetes/sso
 bun install
-bun x playwright install chromium
+../../../kubernetes/scripts/ensure-playwright-browsers.sh --execute
 ```
 
 Required local tooling:
 
 - `bun`
-- `node` (which provides `npm` and `npx`)
+- `node`
+- `docker` when `PLATFORM_PLAYWRIGHT_MODE=docker`
 
 ## Run
 
@@ -50,6 +58,12 @@ From the repo root with kind:
 ```bash
 cd kubernetes/kind
 HEADED=1 make check-sso-e2e
+```
+
+Docker-backed browser mode:
+
+```bash
+PLATFORM_PLAYWRIGHT_MODE=docker make check-sso-e2e
 ```
 
 Run only the authenticated MCP Inspector and D2 render/export flow:
