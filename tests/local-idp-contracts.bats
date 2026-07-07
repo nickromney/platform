@@ -7,15 +7,15 @@ setup() {
 
 @test "local IDP launch plans document portal parity and runtime portability" {
   for path in \
-    docs/plans/local-idp-gap-analysis.md \
-    docs/plans/local-idp-implementation-roadmap.md \
-    docs/plans/local-idp-mcp-and-tui-plan.md \
-    docs/plans/local-idp-runtime-portability.md
+    docs/plans/archive/local-idp-gap-analysis.md \
+    docs/plans/archive/local-idp-implementation-roadmap.md \
+    docs/plans/archive/local-idp-mcp-and-tui-plan.md \
+    docs/plans/archive/local-idp-runtime-portability.md
   do
     [ -f "${REPO_ROOT}/${path}" ]
   done
 
-  run rg -n "FastAPI|Backstage|Port|MCP|SDK|runtime adapter|16GB|Terraform" "${REPO_ROOT}/docs/plans/local-idp-"*.md
+  run rg -n "FastAPI|Backstage|Port|MCP|SDK|runtime adapter|16GB|Terraform" "${REPO_ROOT}/docs/plans/archive/local-idp-"*.md
   [ "${status}" -eq 0 ]
 }
 

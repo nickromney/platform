@@ -10,7 +10,7 @@ setup() {
 
   run rg -n --pcre2 "${pattern}" \
     "${REPO_ROOT}/docs/ddd/subnetcalc-analysis.md" \
-    "${REPO_ROOT}/docs/plans/guided-workflow-variant-presets-plan.md" \
+    "${REPO_ROOT}/docs/plans/archive/guided-workflow-variant-presets-plan.md" \
     "${REPO_ROOT}/sites/docs/content/reference/contracts.mdx" \
     "${REPO_ROOT}/sites/docs/content/reference/makefiles.mdx" \
     "${REPO_ROOT}/sites/docs/content/reference/shell-scripts.mdx" \

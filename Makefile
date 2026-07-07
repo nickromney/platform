@@ -133,7 +133,7 @@ help:
 		'make release-dry-run VERSION=0.3.0\tPreview the release commit flow' \
 		'make release-tag VERSION=0.3.0\tCreate an annotated v-version tag from main' \
 		'make sonar-scan SONAR_SCAN_REPO=apps/apim-simulator\tRun SonarQube on any local repo' \
-		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima/Slicer' \
+		'make status [STATUS_FORMAT=text|json]\tShow root local-runtime status across kind/Lima' \
 		'make test\tShow the focused test entrypoints' \
 		'make test-ci\tRun the PR-safe hermetic Bats subset' \
 		'make tui\tOpen the Bubble Tea local runtime chooser' \
