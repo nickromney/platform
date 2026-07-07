@@ -16,6 +16,9 @@ allowed_python_execution=(
 # run in CI. Do not add new scripts here; burn this list down by giving each
 # script the standard --help/--dry-run/--execute interface.
 entrypoint_interface_exemptions=(
+  # Implements Docker's credential-helper protocol (get/store/erase/list on
+  # argv[1]); the interface is externally fixed and cannot adopt --dry-run.
+  "kubernetes/scripts/docker-credential-platform-file.sh"
   "apps/shared/keycloak/start-with-templated-realm.sh"
   "apps/subnetcalc/update-subnetcalc-image-tags.sh"
   "kubernetes/kind/scripts/rewrite-devcontainer-kubeconfig.sh"
