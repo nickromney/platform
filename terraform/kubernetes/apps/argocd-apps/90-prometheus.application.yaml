@@ -34,11 +34,11 @@ spec:
             tag: 2.18.0-debian13
           resources:
             requests:
-              cpu: 10m
+              cpu: 25m
               memory: 64Mi
             limits:
-              cpu: 50m
-              memory: 128Mi
+              cpu: 200m
+              memory: 256Mi
         prometheus-node-exporter:
           enabled: true
           image:
@@ -48,9 +48,9 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 16Mi
+              memory: 24Mi
             limits:
-              cpu: 50m
+              cpu: 100m
               memory: 64Mi
         prometheus-pushgateway:
           enabled: false

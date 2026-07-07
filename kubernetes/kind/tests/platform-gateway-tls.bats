@@ -183,6 +183,15 @@ PY
   grep -Fq 'EXPECT_CILIUM_POLICIES="${EXPECT_POLICIES}"' "${script}"
 }
 
+@test "cluster health expected inventory includes metrics-server when enabled" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'EXPECT_METRICS_SERVER=$(expected_from_tfvars enable_metrics_server)' "${script}"
+  grep -Fq 'if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then apps+=(metrics-server); fi' "${script}"
+  grep -Fq 'Argo CD app metrics-server missing (enable_metrics_server=true${tfvars_hint})' "${script}"
+  grep -Fq 'metrics-server deployment Ready' "${script}"
+}
+
 @test "cluster health expected inventory includes APIM SSO proxy app when APIM is enabled" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
 

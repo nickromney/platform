@@ -208,6 +208,8 @@ gitops_render_input_fallback() {
   local input_type="$1"
   local fallback="$2"
 
+  # The fallback values below are literal sentinels from render_input_spec.
+  # shellcheck disable=SC2016
   case "${fallback}" in
     '$GITEA_REPO_OWNER')
       printf '%s\n' "${GITEA_REPO_OWNER}"
@@ -963,11 +965,11 @@ render_prometheus_application_manifest() {
       print "            enabled: false"
       print "          resources:"
       print "            requests:"
-      print "              cpu: 10m"
-      print "              memory: 32Mi"
+      print "              cpu: 25m"
+      print "              memory: 64Mi"
       print "            limits:"
-      print "              cpu: 40m"
-      print "              memory: 96Mi"
+      print "              cpu: 200m"
+      print "              memory: 256Mi"
     }
 
     function print_alert_rules_block() {
