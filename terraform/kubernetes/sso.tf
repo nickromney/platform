@@ -751,7 +751,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
-            transient = false
+            temporary = false
           }]
         },
         {
@@ -765,7 +765,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
-            transient = false
+            temporary = false
           }]
         },
         {
@@ -779,7 +779,7 @@ resource "kubernetes_config_map_v1" "keycloak_realm" {
           credentials = [{
             type      = "password"
             value     = var.gitea_member_user_pwd
-            transient = false
+            temporary = false
           }]
         },
       ]
