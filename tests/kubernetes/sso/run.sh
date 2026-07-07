@@ -215,7 +215,8 @@ run_playwright_in_docker() {
   if [ "${HEADED:-0}" = "1" ]; then
     docker_args+=(--headed)
   fi
-  docker_args+=("${test_args[@]}")
+  # bash 3.2 + set -u treats empty-array expansion as unbound; guard it.
+  docker_args+=(${test_args[@]+"${test_args[@]}"})
 
   docker "${docker_args[@]}"
 }
@@ -270,7 +271,7 @@ case "${PLATFORM_PLAYWRIGHT_MODE}" in
     fi
     ;;
   docker)
-    run_playwright_in_docker "$(playwright_core_version)" "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" "${test_args[@]}"
+    run_playwright_in_docker "$(playwright_core_version)" "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" ${test_args[@]+"${test_args[@]}"}
     exit 0
     ;;
   *)
