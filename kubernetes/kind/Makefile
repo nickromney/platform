@@ -20,6 +20,7 @@ MAKE_SUGGEST_SCRIPT := $(MAKEFILE_DIR)../../scripts/suggest-make-goal.sh
 CHECK_STAGE_MONOTONICITY := $(abspath $(K8S_SCRIPTS_DIR)/check-stage-monotonicity.sh)
 BUILD_TFVAR_ARGS := $(K8S_SCRIPTS_DIR)/build-tfvar-args.sh
 BUILD_SSO_E2E_ENV := $(K8S_SCRIPTS_DIR)/build-sso-e2e-env.sh
+ENSURE_PLAYWRIGHT_BROWSERS := $(abspath $(K8S_SCRIPTS_DIR)/ensure-playwright-browsers.sh)
 RENDER_LAUNCHPAD := $(abspath $(K8S_SCRIPTS_DIR)/render-launchpad.sh)
 RUN_DIAGNOSTIC_CHECK := $(abspath $(K8S_SCRIPTS_DIR)/run-diagnostic-check.sh)
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
@@ -115,7 +116,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -231,6 +232,7 @@ help:
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
 	@echo "  make merge-default-kubeconfig"
 	@echo "  make plan         900"
+	@echo "  make playwright-install                       Install pinned Playwright browsers for native SSO E2E"
 	@echo "  make preload-images                           Pull + load images into kind"
 	@echo "  make preload-images-pull-only                 Warm Docker cache only"
 	@echo "  make prereqs"
@@ -1089,6 +1091,11 @@ merge-default-kubeconfig:
 	"$(KUBECONFIG_HELPER)" --execute --action merge --source-kubeconfig "$(KUBECONFIG_PATH)" --target-kubeconfig "$(DEFAULT_KUBECONFIG_PATH)" --context "$(KUBECONFIG_CONTEXT)"; \
 	echo "OK   merged $(KUBECONFIG_CONTEXT) into $(DEFAULT_KUBECONFIG_PATH)"
 
+.PHONY: playwright-install
+playwright-install:
+	@set -euo pipefail; \
+	"$(ENSURE_PLAYWRIGHT_BROWSERS)" --execute
+
 .PHONY: prereqs
 prereqs:
 	@set -euo pipefail; \
@@ -1163,6 +1170,9 @@ prereqs:
 		exit 1; \
 	fi; \
 	"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \
+	echo ""; \
+	echo "Playwright browser cache:"; \
+	"$(ENSURE_PLAYWRIGHT_BROWSERS)" --check --execute; \
 	echo ""; \
 	$(MAKE) check-conflicting-clusters-stopped; \
 	echo ""; \

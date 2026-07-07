@@ -7,12 +7,11 @@ INSTALL_HINTS="${REPO_ROOT}/scripts/install-tool-hints.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 DEFAULT_STAGE_TFVARS="${REPO_ROOT}/kubernetes/kind/stages/900-sso.tfvars"
+ENSURE_PLAYWRIGHT_BROWSERS="${ENSURE_PLAYWRIGHT_BROWSERS:-${REPO_ROOT}/kubernetes/scripts/ensure-playwright-browsers.sh}"
 STAGE_TFVARS="${STAGE_TFVARS:-}"
 STAGE_TFVARS_FILES="${STAGE_TFVARS_FILES:-}"
-SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES:-18}"
-SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS:-10}"
-SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS="${SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS:-900}"
 SSO_E2E_SKIP_PLAYWRIGHT_INSTALL="${SSO_E2E_SKIP_PLAYWRIGHT_INSTALL:-0}"
+PLATFORM_PLAYWRIGHT_MODE="${PLATFORM_PLAYWRIGHT_MODE:-native}"
 
 usage() {
   cat <<EOF
@@ -88,148 +87,7 @@ require_tool() {
   exit 1
 }
 
-warn_optional_tool() {
-  local tool="$1"
-  local reason="$2"
-
-  if command -v "${tool}" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  echo "WARN ${tool} not found in PATH (${reason})" >&2
-  if [ -x "${INSTALL_HINTS}" ]; then
-    "${INSTALL_HINTS}" --execute --plain "${tool}" | sed 's/^/  /' >&2
-  fi
-}
-
-require_non_negative_integer() {
-  local name="$1"
-  local value="$2"
-
-  case "${value}" in
-    ""|*[!0-9]*)
-      echo "${name} must be a non-negative integer, got: ${value}" >&2
-      exit 1
-      ;;
-  esac
-}
-
-require_positive_integer() {
-  local name="$1"
-  local value="$2"
-
-  require_non_negative_integer "${name}" "${value}"
-  if [ "${value}" -eq 0 ]; then
-    echo "${name} must be greater than 0" >&2
-    exit 1
-  fi
-}
-
-path_mtime_seconds() {
-  local path="$1"
-
-  stat -f '%m' "${path}" 2>/dev/null || stat -c '%Y' "${path}" 2>/dev/null
-}
-
-path_age_seconds() {
-  local path="$1"
-  local mtime=""
-
-  mtime="$(path_mtime_seconds "${path}")" || return 1
-  echo "$(($(date +%s) - mtime))"
-}
-
-extract_playwright_lock_dir() {
-  local output_file="$1"
-
-  awk '{
-    for (i = 1; i <= NF; i++) {
-      if ($i ~ /\/__dirlock$/) {
-        print $i
-        exit
-      }
-    }
-  }' "${output_file}"
-}
-
-remove_stale_playwright_lock_if_needed() {
-  local lock_dir="$1"
-  local stale_after_seconds="$2"
-  local age_seconds=""
-
-  case "${lock_dir}" in
-    */__dirlock) ;;
-    *) return 1 ;;
-  esac
-
-  [ -d "${lock_dir}" ] || return 1
-  age_seconds="$(path_age_seconds "${lock_dir}")" || return 1
-
-  if [ "${age_seconds}" -lt "${stale_after_seconds}" ]; then
-    return 1
-  fi
-
-  echo "WARN removing stale Playwright browser cache lock (${age_seconds}s old): ${lock_dir}" >&2
-  rm -rf "${lock_dir}"
-  return 0
-}
-
-install_playwright_chromium() {
-  local max_attempts="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES}"
-  local retry_seconds="${SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS}"
-  local stale_after_seconds="${SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS}"
-  local attempt=1
-  local status=0
-  local output_file=""
-  local lock_dir=""
-
-  require_positive_integer "SSO_E2E_PLAYWRIGHT_INSTALL_RETRIES" "${max_attempts}"
-  require_non_negative_integer "SSO_E2E_PLAYWRIGHT_INSTALL_RETRY_SECONDS" "${retry_seconds}"
-  require_positive_integer "SSO_E2E_PLAYWRIGHT_STALE_LOCK_SECONDS" "${stale_after_seconds}"
-
-  while [ "${attempt}" -le "${max_attempts}" ]; do
-    output_file="$(mktemp "${TMPDIR:-/tmp}/platform-sso-playwright-install.XXXXXX")"
-    if bun x playwright install chromium >"${output_file}" 2>&1; then
-      cat "${output_file}"
-      rm -f "${output_file}"
-      return 0
-    fi
-    status=$?
-
-    if ! grep -q '__dirlock' "${output_file}"; then
-      cat "${output_file}" >&2
-      rm -f "${output_file}"
-      return "${status}"
-    fi
-
-    lock_dir="$(extract_playwright_lock_dir "${output_file}")"
-    if [ -n "${lock_dir}" ] && remove_stale_playwright_lock_if_needed "${lock_dir}" "${stale_after_seconds}"; then
-      rm -f "${output_file}"
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    if [ "${attempt}" -ge "${max_attempts}" ]; then
-      cat "${output_file}" >&2
-      rm -f "${output_file}"
-      return "${status}"
-    fi
-
-    if [ -n "${lock_dir}" ]; then
-      echo "WARN Playwright browser cache lock is active at ${lock_dir}; retrying in ${retry_seconds}s (${attempt}/${max_attempts})" >&2
-    else
-      echo "WARN Playwright browser cache lock is active; retrying in ${retry_seconds}s (${attempt}/${max_attempts})" >&2
-    fi
-    rm -f "${output_file}"
-    sleep "${retry_seconds}"
-    attempt=$((attempt + 1))
-  done
-
-  return 1
-}
-
 require_tool node
-warn_optional_tool npx "useful for ad hoc Playwright CLI flows"
 require_tool bun
 
 cd "${SCRIPT_DIR}"
@@ -240,6 +98,126 @@ decode_base64() {
   else
     base64 -D
   fi
+}
+
+playwright_core_version() {
+  node -p "require('./node_modules/playwright-core/package.json').version"
+}
+
+docker_host_internal_ip() {
+  local image="$1"
+
+  # ahostsv4 forces the A record: with --add-host host-gateway Docker writes
+  # both families to /etc/hosts with IPv6 first, and Chromium resolver rules
+  # pointing at the IPv6 ULA do not route through the Desktop host gateway.
+  docker run --rm --add-host host.docker.internal:host-gateway "${image}" \
+    sh -lc "getent ahostsv4 host.docker.internal | awk 'NR==1 { print \$1 }'"
+}
+
+devcontainer_host_resolver_rules() {
+  local devcontainer_host_ip=""
+
+  devcontainer_host_ip="$(getent hosts host.docker.internal 2>/dev/null | awk 'NR==1 { print $1 }')"
+  if [ -n "${devcontainer_host_ip}" ]; then
+    printf 'MAP *.127.0.0.1.sslip.io %s,MAP 127.0.0.1.sslip.io %s\n' "${devcontainer_host_ip}" "${devcontainer_host_ip}"
+  fi
+}
+
+docker_host_resolver_rules() {
+  local image="$1"
+  local host_ip=""
+
+  host_ip="$(docker_host_internal_ip "${image}")"
+  if [ -z "${host_ip}" ]; then
+    echo "Failed to resolve host.docker.internal inside ${image}" >&2
+    exit 1
+  fi
+  printf 'MAP *.127.0.0.1.sslip.io %s,MAP 127.0.0.1.sslip.io %s\n' "${host_ip}" "${host_ip}"
+}
+
+mkcert_root_ca() {
+  local caroot=""
+
+  command -v mkcert >/dev/null 2>&1 || return 0
+  caroot="$(mkcert -CAROOT 2>/dev/null || true)"
+  if [ -n "${caroot}" ] && [ -f "${caroot}/rootCA.pem" ]; then
+    printf '%s\n' "${caroot}/rootCA.pem"
+  fi
+}
+
+ensure_playwright_docker_image() {
+  local image="$1"
+
+  require_tool docker
+  if docker image inspect "${image}" >/dev/null 2>&1; then
+    return 0
+  fi
+  docker pull "${image}"
+}
+
+run_playwright_in_docker() {
+  local playwright_version="$1"
+  local host_resolver_rules="$2"
+  shift 2
+  local test_args=("$@")
+  local image="mcr.microsoft.com/playwright:v${playwright_version}-noble"
+  local root_ca=""
+  local docker_args=()
+  local env_name=""
+
+  ensure_playwright_docker_image "${image}"
+  root_ca="$(mkcert_root_ca)"
+
+  if [ -z "${host_resolver_rules}" ]; then
+    host_resolver_rules="$(docker_host_resolver_rules "${image}")"
+  fi
+
+  docker_args=(
+    run --rm
+    --add-host host.docker.internal:host-gateway
+    -v "${REPO_ROOT}:/workspace"
+    -w /workspace/tests/kubernetes/sso
+  )
+
+  # The specs also read credential/config env families beyond SSO_E2E_*
+  # (see tests/*.spec.ts): pass each family through by prefix.
+  for env_prefix in SSO_E2E_ OIDC_ KEYCLOAK_ DEX_ PLATFORM_DEMO_ PW_SLOWMO; do
+    while IFS= read -r env_name; do
+      [ -n "${env_name}" ] || continue
+      docker_args+=(-e "${env_name}")
+    done < <(compgen -e "${env_prefix}" || true)
+  done
+
+  docker_args+=(
+    -e "SSO_E2E_ENABLE_SIGNOZ=${SSO_E2E_ENABLE_SIGNOZ}"
+    -e "SSO_E2E_ENABLE_HEADLAMP=${SSO_E2E_ENABLE_HEADLAMP}"
+    -e "SSO_E2E_ENABLE_VICTORIA_LOGS=${SSO_E2E_ENABLE_VICTORIA_LOGS}"
+    -e "SSO_E2E_ENABLE_BACKSTAGE=${SSO_E2E_ENABLE_BACKSTAGE}"
+    -e "SSO_E2E_ENABLE_MCP=${SSO_E2E_ENABLE_MCP}"
+    -e "SSO_E2E_ENABLE_SENTIMENT=${SSO_E2E_ENABLE_SENTIMENT}"
+    -e "SSO_E2E_ENABLE_SUBNETCALC=${SSO_E2E_ENABLE_SUBNETCALC}"
+    -e "SSO_E2E_PROVIDER=${SSO_E2E_PROVIDER_VALUE}"
+    -e "SSO_E2E_KEYCLOAK_REALM=${SSO_E2E_KEYCLOAK_REALM_VALUE}"
+    -e "SSO_E2E_BASE_PORT=${SSO_E2E_BASE_PORT_VALUE}"
+    -e "SSO_E2E_HOST_RESOLVER_RULES=${host_resolver_rules}"
+    -e "SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET=${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}"
+    -e "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1"
+  )
+
+  if [ -n "${root_ca}" ]; then
+    docker_args+=(
+      -v "${root_ca}:/certs/mkcert-rootCA.pem:ro"
+      -e "NODE_EXTRA_CA_CERTS=/certs/mkcert-rootCA.pem"
+    )
+  fi
+
+  docker_args+=("${image}" npx playwright test)
+  if [ "${HEADED:-0}" = "1" ]; then
+    docker_args+=(--headed)
+  fi
+  docker_args+=("${test_args[@]}")
+
+  docker "${docker_args[@]}"
 }
 
 SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ:-$(tfvar_bool enable_signoz false)}"
@@ -260,10 +238,7 @@ if [ "${SSO_E2E_BASE_PORT_VALUE}" = "443" ]; then
 fi
 
 if [ -z "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" ] && [ "${PLATFORM_DEVCONTAINER:-0}" = "1" ]; then
-  devcontainer_host_ip="$(getent hosts host.docker.internal 2>/dev/null | awk 'NR==1 { print $1 }')"
-  if [ -n "${devcontainer_host_ip}" ]; then
-    SSO_E2E_HOST_RESOLVER_RULES_VALUE="MAP *.127.0.0.1.sslip.io ${devcontainer_host_ip},MAP 127.0.0.1.sslip.io ${devcontainer_host_ip}"
-  fi
+  SSO_E2E_HOST_RESOLVER_RULES_VALUE="$(devcontainer_host_resolver_rules)"
 fi
 
 if [ -z "${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" ] \
@@ -281,16 +256,28 @@ if [ -z "${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" ] \
 fi
 
 bun install --frozen-lockfile
-if [ "${SSO_E2E_SKIP_PLAYWRIGHT_INSTALL}" = "1" ]; then
-  echo "Skipping Playwright browser install because SSO_E2E_SKIP_PLAYWRIGHT_INSTALL=1"
-else
-  install_playwright_chromium
-fi
-
 test_args=()
 if [ -n "${SSO_E2E_TEST_GREP_VALUE}" ]; then
   test_args+=(--grep "${SSO_E2E_TEST_GREP_VALUE}")
 fi
+
+case "${PLATFORM_PLAYWRIGHT_MODE}" in
+  native)
+    if [ "${SSO_E2E_SKIP_PLAYWRIGHT_INSTALL}" = "1" ]; then
+      echo "Skipping Playwright browser install because SSO_E2E_SKIP_PLAYWRIGHT_INSTALL=1"
+    else
+      "${ENSURE_PLAYWRIGHT_BROWSERS}" --execute
+    fi
+    ;;
+  docker)
+    run_playwright_in_docker "$(playwright_core_version)" "${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" "${test_args[@]}"
+    exit 0
+    ;;
+  *)
+    echo "PLATFORM_PLAYWRIGHT_MODE must be native or docker, got: ${PLATFORM_PLAYWRIGHT_MODE}" >&2
+    exit 1
+    ;;
+esac
 
 if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
@@ -305,6 +292,7 @@ if [ "${HEADED:-0}" = "1" ]; then
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
   bun run test:headed -- ${test_args[@]+"${test_args[@]}"}
 else
   SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
@@ -319,5 +307,6 @@ else
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
   SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET="${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" \
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
   bun run test -- ${test_args[@]+"${test_args[@]}"}
 fi

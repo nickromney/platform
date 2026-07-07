@@ -670,6 +670,25 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "kind prereqs checks Playwright browsers after registry auth without hard install" {
+  run bash -c 'prereqs=$(sed -n "/^prereqs:/,/^preload-images:/p" "$1"); registry_line=$(printf "%s\n" "$prereqs" | grep -n "Docker registry auth" | head -n1 | cut -d: -f1); playwright_line=$(printf "%s\n" "$prereqs" | grep -n "Playwright browser cache" | head -n1 | cut -d: -f1); check_line=$(printf "%s\n" "$prereqs" | grep -n "ENSURE_PLAYWRIGHT_BROWSERS.*--check --execute" | head -n1 | cut -d: -f1); test -n "$registry_line" && test -n "$playwright_line" && test -n "$check_line" && test "$registry_line" -lt "$playwright_line" && test "$playwright_line" -lt "$check_line"' _ \
+    "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind exposes a playwright-install target and help text" {
+  run grep -Fn 'make playwright-install' "${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '.PHONY: playwright-install' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn '"$(ENSURE_PLAYWRIGHT_BROWSERS)" --execute' "${REPO_ROOT}/kubernetes/kind/Makefile"
+  [ "${status}" -eq 0 ]
+}
+
 @test "kind prereqs groups tool checks and does not run shell audit" {
   run env PATH="/usr/bin:/bin" make -C "${REPO_ROOT}/kubernetes/kind" prereqs STAGE=100
 
