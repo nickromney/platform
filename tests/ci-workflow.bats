@@ -19,7 +19,9 @@ expected = {
     "actions/setup-node": ("48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e", "v6.4.0"),
 }
 
-assert re.search(r"^on:\n  pull_request:\n  push:\n    branches:\n      - main\n", text, re.MULTILINE)
+assert re.search(r"^on:\n  workflow_dispatch:\n\npermissions:\n", text, re.MULTILINE)
+assert "pull_request:" not in text
+assert "\n  push:" not in text
 assert re.search(r"^permissions:\n  contents: read\n", text, re.MULTILINE)
 assert "runs-on: ubuntu-latest" in text
 assert "run: make lint" in text
