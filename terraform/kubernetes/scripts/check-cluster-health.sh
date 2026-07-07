@@ -108,12 +108,22 @@ expected_argocd_apps() {
     apps+=(mcp auth-chat chatgpt-sim oauth2-proxy-mcp-console oauth2-proxy-auth-chat oauth2-proxy-chatgpt-sim)
   fi
 
-  printf '%s\n' "${apps[@]}" | awk 'NF' | sort -u
+  # bash 3.2 + set -u treats empty-array expansion as unbound; guard it
+  # (standalone check-health runs without stage context can have zero apps).
+  printf '%s\n' ${apps[@]+"${apps[@]}"} | awk 'NF' | sort -u
 }
 
 check_expected_argocd_app_inventory() {
   local ns="$1"
   local expected_file live_app unexpected=""
+
+  # Without stage tfvars context every EXPECT_* flag is false, so comparing
+  # the live inventory against an empty expectation reports every app as
+  # unexpected. Skip gracefully like the other tfvars-gated checks.
+  if [[ "${EXPECT_ARGOCD}" == "not reported" ]]; then
+    ok "Argo CD application inventory skipped (enable_argocd=not reported in .tfvars input; run 'make <stage> check-health' to assert inventory)"
+    return 0
+  fi
 
   expected_file="$(mktemp)"
   expected_argocd_apps >"${expected_file}"
@@ -767,11 +777,13 @@ require_cmd kubectl
 platform_load_env
 configure_kubeconfig_target
 
-for i in "${!TFVARS_FILES[@]}"; do
-  if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
-    TFVARS_FILES[i]="${STACK_DIR}/${TFVARS_FILES[i]}"
-  fi
-done
+if [[ "${#TFVARS_FILES[@]}" -gt 0 ]]; then
+  for i in "${!TFVARS_FILES[@]}"; do
+    if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
+      TFVARS_FILES[i]="${STACK_DIR}/${TFVARS_FILES[i]}"
+    fi
+  done
+fi
 
 tfvar_get_in_file() {
   local file="$1"
@@ -789,7 +801,7 @@ tfvar_get() {
   local value=""
   local file current
 
-  for file in "${TFVARS_FILES[@]}"; do
+  for file in ${TFVARS_FILES[@]+"${TFVARS_FILES[@]}"}; do
     current="$(tfvar_get_in_file "${file}" "${key}")"
     if [[ -n "${current}" ]]; then
       value="${current}"
@@ -828,7 +840,7 @@ tfvar_list_entries() {
   local entry=""
   local -a values=()
 
-  for file in "${TFVARS_FILES[@]}"; do
+  for file in ${TFVARS_FILES[@]+"${TFVARS_FILES[@]}"}; do
     [[ -n "${file}" && -f "${file}" ]] || continue
     raw="$(
       awk -v key="${key}" '
@@ -852,7 +864,7 @@ tfvar_list_entries() {
 
 detect_stage_from_tfvars() {
   local file base detected=""
-  for file in "${TFVARS_FILES[@]}"; do
+  for file in ${TFVARS_FILES[@]+"${TFVARS_FILES[@]}"}; do
     [[ -n "${file}" ]] || continue
     base=$(basename "${file}")
     if [[ "${base}" =~ ^([0-9]{3})-.*\.tfvars$ ]]; then
