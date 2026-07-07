@@ -63,6 +63,7 @@ CI_BATS_TESTS := \
 	tests/kubernetes-stage-monotonicity-adapter.bats \
 	tests/kubernetes-sync-image-cache-adapter.bats \
 	tests/kubernetes-workload-image-builder-adapter.bats \
+	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	tests/lint-markdown.bats \
 	tests/lint-yaml.bats \
 	tests/local-idp-contracts.bats \
