@@ -85,8 +85,10 @@ notes live under [`docs/plans/archive`](plans/archive/).
   belong in the local teaching stack or remain outside the default path.
 - CNPG optional stage: decide whether Postgres operators should be an opt-in
   stage/profile for workloads such as Keycloak, Backstage, and Langfuse.
-- Scorecard depth: decide whether catalog scorecards stay source-controlled
-  metadata or become richer live evidence from checks, policies, and metrics.
+- Scorecard depth: probes and requests/limits checks landed as catalog
+  fields (2026-07-07). Remaining candidates, each needing a new data join:
+  Backstage-entry presence, observability scrape-config evidence, signed-image
+  policy coverage, and per-app runbook links.
 - HPA example: add a minimal autoscaling example only if it improves the
   teaching path without increasing stage-900 fragility.
 - Lima demotion: decide whether Lima stays a first-class local variant or

@@ -162,6 +162,8 @@ scorecards_json() {
           runtime_profile: (.scorecard.runtime_profile // "not declared"),
           has_health_endpoint: (.scorecard.has_health_endpoint // false),
           has_network_policy: (.scorecard.has_network_policy // false),
+          has_runtime_probes: (.scorecard.has_runtime_probes // false),
+          has_resource_requests_limits: (.scorecard.has_resource_requests_limits // false),
           has_owner: ((.scorecard.has_owner // false) or ((.owner // "") != "")),
           has_model_card: (if .scorecard.has_model_card == true then true else null end),
           tier: .scorecard.tier
@@ -179,13 +181,15 @@ scorecards_text() {
         (.scorecard.runtime_profile // "not-declared"),
         ((.scorecard.has_health_endpoint // false) | tostring),
         ((.scorecard.has_network_policy // false) | tostring),
+        ((.scorecard.has_runtime_probes // false) | tostring),
+        ((.scorecard.has_resource_requests_limits // false) | tostring),
         (((.scorecard.has_owner // false) or ((.owner // "") != "")) | tostring),
         (.scorecard.tier // "not-declared")
       ]
     | @tsv
   ' "${CATALOG_FILE}" |
-    awk 'BEGIN { printf "%-18s %-18s %-10s %-14s %-10s %s\n", "APP", "RUNTIME_PROFILE", "HEALTH", "NETWORK_POLICY", "OWNER", "TIER" }
-         { printf "%-18s %-18s %-10s %-14s %-10s %s\n", $1, $2, $3, $4, $5, $6 }'
+    awk 'BEGIN { printf "%-18s %-18s %-10s %-14s %-8s %-18s %-10s %s\n", "APP", "RUNTIME_PROFILE", "HEALTH", "NETWORK_POLICY", "PROBES", "REQUESTS_LIMITS", "OWNER", "TIER" }
+         { printf "%-18s %-18s %-10s %-14s %-8s %-18s %-10s %s\n", $1, $2, $3, $4, $5, $6, $7, $8 }'
 }
 
 case "${PROJECTION}:${OUTPUT_FORMAT}" in

@@ -46,7 +46,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": false,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -87,7 +89,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": false,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": false
       }
     },
     {
@@ -128,7 +132,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -169,7 +175,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": false,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -210,7 +218,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -251,7 +261,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -297,7 +309,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -338,7 +352,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -379,7 +395,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -420,7 +438,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -461,7 +481,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true
       }
     },
     {
@@ -513,7 +535,9 @@
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
-        "has_owner": true
+        "has_owner": true,
+        "has_runtime_probes": false,
+        "has_resource_requests_limits": false
       }
     },
     {
@@ -566,7 +590,9 @@
         "has_health_endpoint": true,
         "has_network_policy": true,
         "has_owner": true,
-        "has_model_card": true
+        "has_model_card": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": false
       }
     }
   ]
