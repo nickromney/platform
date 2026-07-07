@@ -1251,6 +1251,33 @@ EOF
   [ "${status}" -eq 0 ]
 }
 
+@test "kind apply annotates non-profile terragrunt apply progress without changing wrapped exit status" {
+  makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
+
+  run grep -Fn 'tg_apply 2>&1 | "$(ANNOTATE_APPLY_PROGRESS)" --execute; \' \
+    "${makefile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'profile_run_step "terragrunt-apply" tg_apply_with_progress; \' \
+    "${makefile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'tg_apply_with_progress | tee "$$tmp_log"; \' \
+    "${makefile}"
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'rc=$${PIPESTATUS[0]}; \' \
+    "${makefile}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "kind help documents KIND_APPLY_PROGRESS toggle" {
+  run make -C "${REPO_ROOT}/kubernetes/kind" help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"KIND_APPLY_PROGRESS=0"* ]]
+}
+
 @test "kind state-reset fails clearly without auto approval in non-interactive mode" {
   state_dir="${BATS_TEST_TMPDIR}/state"
   mkdir -p "${state_dir}"

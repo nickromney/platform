@@ -31,6 +31,7 @@ CHECK_TARGET_HOST_PORTS := $(abspath $(K8S_SCRIPTS_DIR)/check-target-host-ports.
 CHECK_LIMA_STOPPED := $(K8S_SCRIPTS_DIR)/check-lima-stopped.sh
 PLAN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/plan-post-apply-verification.sh)
 RUN_POST_APPLY_VERIFICATION := $(abspath $(K8S_SCRIPTS_DIR)/run-post-apply-verification.sh)
+ANNOTATE_APPLY_PROGRESS := $(SCRIPTS_DIR)/annotate-apply-progress.sh
 VARIANT_JSON := $(REPO_ROOT)/kubernetes/variants/kind/variant.json
 ASSERT_VARIANT_ACTIVE := $(K8S_SCRIPTS_DIR)/assert-variant-active.sh
 STOP_PLATFORM_RUNTIMES := $(K8S_SCRIPTS_DIR)/stop-platform-runtimes.sh
@@ -278,6 +279,7 @@ help:
 	@echo ""
 	@echo "Local helper modes:"
 	@echo "  KIND_PRELOAD_IMAGES_MODE=auto|on|off                 -> preload images before apply (default: off, current behavior)"
+	@echo "  KIND_APPLY_PROGRESS=0                                -> disable phase progress labels during apply (default: on)"
 	@echo "  MERGE_KUBECONFIG_TO_DEFAULT=1                        -> also merge $(DISPLAY_KIND_KUBECONFIG_PATH) into $(DISPLAY_DEFAULT_KUBECONFIG_PATH) (default: 0)"
 	@echo "  KIND_WORKER_COUNT=1|2|...                            -> worker node count (default: 1, so 2 total nodes)"
 	@echo "  KIND_IMAGE_DISTRIBUTION_MODE=load|registry|hybrid|baked -> image distribution mode (default: registry)"
@@ -745,18 +747,26 @@ apply: workflow-validate-stage
 	tg_apply() { \
 		$(call tg_stack_apply,$$apply_args); \
 	}; \
+	tg_apply_with_progress() { \
+		local apply_rc=0; \
+		set +e; \
+		tg_apply 2>&1 | "$(ANNOTATE_APPLY_PROGRESS)" --execute; \
+		apply_rc=$${PIPESTATUS[0]}; \
+		set -e; \
+		return "$$apply_rc"; \
+	}; \
 	run_step "state-snapshot" "$(SNAPSHOT_TFSTATE)" --execute --state-file "$(TG_STATE_PATH)" --keep "$(TFSTATE_SNAPSHOT_KEEP)" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"; \
 	run_step "terragrunt-init" tg_init; \
 	if [ "$$profile_enabled" = "1" ]; then \
 		set +e; \
-		profile_run_step "terragrunt-apply" tg_apply; \
+		profile_run_step "terragrunt-apply" tg_apply_with_progress; \
 		rc=$$?; \
 		tg_apply_log="$$PROFILE_LAST_STEP_LOG_FILE"; \
 		set -e; \
 	else \
 		tmp_log=$$(mktemp); \
 		set +e; \
-		tg_apply 2>&1 | tee "$$tmp_log"; \
+		tg_apply_with_progress | tee "$$tmp_log"; \
 		rc=$${PIPESTATUS[0]}; \
 		tg_apply_log="$$tmp_log"; \
 		set -e; \
@@ -766,13 +776,13 @@ apply: workflow-validate-stage
 		run_step "refresh-kind-kubeconfig" "$(REFRESH_KIND_KUBECONFIG)" --execute; \
 		if [ "$$profile_enabled" = "1" ]; then \
 			set +e; \
-			profile_run_step "terragrunt-apply-retry" tg_apply; \
+			profile_run_step "terragrunt-apply-retry" tg_apply_with_progress; \
 			rc=$$?; \
 			tg_apply_log="$$PROFILE_LAST_STEP_LOG_FILE"; \
 			set -e; \
 		else \
 			set +e; \
-			tg_apply 2>&1 | tee "$$tmp_log"; \
+			tg_apply_with_progress | tee "$$tmp_log"; \
 			rc=$${PIPESTATUS[0]}; \
 			set -e; \
 		fi; \
@@ -786,6 +796,7 @@ apply: workflow-validate-stage
 		post_apply_args=(); \
 		for tfvar_file in "$${tfvar_files[@]}"; do post_apply_args+=(--var-file "$$tfvar_file"); done; \
 		post_apply_plan="$$( "$(PLAN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" "$${post_apply_args[@]}" )"; \
+		if [ "$${KIND_APPLY_PROGRESS:-1}" != "0" ]; then echo "PHASE 11/11: Post-apply verification and E2E (typically ~1m)"; fi; \
 		run_step "post-apply-verification" "$(RUN_POST_APPLY_VERIFICATION)" --execute --variant-json "$(VARIANT_JSON)" --stage "$(STAGE)" --make-dir "$(abspath $(MAKEFILE_DIR))" <<< "$$post_apply_plan"; \
 	fi; \
 	if [ "$$profile_enabled" != "1" ]; then \
