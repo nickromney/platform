@@ -38,6 +38,7 @@ BUILD_LOCAL_PLATFORM_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-platform
 BUILD_LOCAL_WORKLOAD_IMAGES := $(abspath $(K8S_SCRIPTS_DIR)/build-local-workload-images.sh)
 CHECK_DOCKER_REGISTRY_AUTH := $(SCRIPTS_DIR)/check-docker-registry-auth.sh
 CHECK_MEMORY_PREFLIGHT := $(SCRIPTS_DIR)/check-memory-preflight.sh
+DHI_CREDS_OFFLINE := $(SCRIPTS_DIR)/dhi-creds-offline.sh
 DOCKER_PRUNE_ESTIMATE := $(SCRIPTS_DIR)/docker-prune-estimate.sh
 DOCKER_SAFE_CLEAN := $(SCRIPTS_DIR)/docker-safe-clean.sh
 ENSURE_KIND_KUBECONFIG := $(SCRIPTS_DIR)/ensure-kind-kubeconfig.sh
@@ -116,7 +117,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status dhi-creds-offline docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -231,6 +232,7 @@ help:
 	@echo "  make init"
 	@echo "  make launchpad-render                         Regenerate Grafana launchpad dashboard from inventory"
 	@echo "  make merge-default-kubeconfig"
+	@echo "  make dhi-creds-offline [DRY_RUN=1]            Migrate dhi.io Docker creds to the file-backed platform helper"
 	@echo "  make plan         900"
 	@echo "  make playwright-install                       Install pinned Playwright browsers for native SSO E2E"
 	@echo "  make preload-images                           Pull + load images into kind"
@@ -309,6 +311,10 @@ build-local-workload-images:
 image-signing-prereqs:
 	@command -v cosign >/dev/null 2>&1 || { echo "FAIL cosign not found; install cosign before ENABLE_IMAGE_SIGNING=true builds"; exit 1; }
 	@echo "OK   cosign available"
+
+.PHONY: dhi-creds-offline
+dhi-creds-offline:
+	@"$(DHI_CREDS_OFFLINE)" $(READONLY_MODE_FLAG)
 
 .PHONY: memory-report
 memory-report:

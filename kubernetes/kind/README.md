@@ -74,6 +74,44 @@ context merged into `~/.kube/config`.
 
 Why these tools exist, what `make prereqs` checks, and the extra host-side LLM requirement for the sentiment demo are documented in [docs/prerequisites.md](docs/prerequisites.md).
 
+### Docker Hardened Images credentials
+
+Some platform images are pulled from the Docker Hardened Images mirror at
+`dhi.io`. On macOS, Docker Desktop commonly stores those credentials through
+`credsStore: "desktop"`, which routes helper reads through the user keychain.
+That is fine for interactive runs, but unattended kind runs can hang when the
+screen is locked and `docker-credential-desktop` waits on the keychain.
+
+For this repo, the `dhi.io` credentials are pull-only mirror credentials. It is
+acceptable to store only those credentials in a file-backed Docker credential
+helper so unattended platform runs do not depend on a human session:
+
+```bash
+make -C kubernetes/kind dhi-creds-offline DRY_RUN=1
+make -C kubernetes/kind dhi-creds-offline
+```
+
+The migration reads the current `dhi.io` credential once through
+`docker-credential-desktop`, so run it from an unlocked session. It writes the
+credential to
+`${PLATFORM_DOCKER_CREDS_FILE:-$HOME/.config/platform/docker-creds.json}` with
+mode `0600`, installs a `docker-credential-platform-file` symlink in
+`${PLATFORM_DOCKER_CREDENTIAL_HELPER_BIN_DIR:-$HOME/.local/bin}`, backs up
+`~/.docker/config.json`, and sets:
+
+```json
+{
+  "credHelpers": {
+    "dhi.io": "platform-file"
+  }
+}
+```
+
+Docker must be launched with the helper directory on `PATH`; otherwise it cannot
+resolve `docker-credential-platform-file`. Revert by restoring the printed
+backup of `~/.docker/config.json`, or by removing `credHelpers["dhi.io"]`, then
+delete the credentials file and symlink if they are no longer needed.
+
 ## Preferred command syntax
 
 Run from `platform/kubernetes/kind`:
