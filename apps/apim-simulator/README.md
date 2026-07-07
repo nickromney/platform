@@ -8,6 +8,26 @@ avoids npm and Python in the simulator path. Local compose can run it directly
 or behind oauth2-proxy and Keycloak, matching the app shape used by
 `subnetcalc` and `sentiment`.
 
+## Relationship To The Standalone apim-simulator
+
+This app shares a name and a config shape with the standalone
+[apim-simulator](https://github.com/nickromney/apim-simulator) repository, but
+not a codebase. It is a deliberately minimal Go reimplementation, folded into
+the platform in April 2026 (#81). The platform does not consume the standalone
+repository's images.
+
+Use this app for APIM-shaped demo traffic: config-routed proxying,
+subscription keys, tenant-key management CRUD, replay, MCP brokering, and the
+SSO sidecar shape shared with `subnetcalc` and `sentiment`.
+
+Use the standalone simulator when a scenario needs real APIM behaviour: the
+XML policy engine (`validate-jwt`, rate limits, caching, `send-request`),
+JWT/OIDC and mTLS auth modes, API revisions and version sets, product publish
+states and subscription approval flows, the consumer developer portal,
+Terraform/OpenAPI import with compatibility reporting, and OTEL-backed
+tracing. It publishes versioned images at `ghcr.io/nickromney/apim-simulator`
+and documents downstream adoption in its `docs/PORTAL-ADOPTION.md`.
+
 ## Run
 
 Direct simulator:
@@ -63,11 +83,11 @@ The local tenant key is `local-dev-tenant-key`.
 
 ## Shape
 
-- [app/](/Users/nickromney/Developer/personal/platform/apps/apim-simulator/app) contains the Go module.
-- [compose.yml](/Users/nickromney/Developer/personal/platform/apps/apim-simulator/compose.yml) contains both direct and SSO local stacks.
-- [examples/basic.json](/Users/nickromney/Developer/personal/platform/apps/apim-simulator/examples/basic.json) is the direct local APIM config.
-- [examples/sso.json](/Users/nickromney/Developer/personal/platform/apps/apim-simulator/examples/sso.json) is the local SSO APIM config.
-- [examples/mcp.json](/Users/nickromney/Developer/personal/platform/apps/apim-simulator/examples/mcp.json) shows an MCP broker config without carrying a local MCP server implementation.
+- [app/](app/) contains the Go module.
+- [compose.yml](compose.yml) contains both direct and SSO local stacks.
+- [examples/basic.json](examples/basic.json) is the direct local APIM config.
+- [examples/sso.json](examples/sso.json) is the local SSO APIM config.
+- [examples/mcp.json](examples/mcp.json) shows an MCP broker config without carrying a local MCP server implementation.
 
 Kubernetes still consumes this app as the `subnetcalc-apim-simulator` image for
 the shared APIM namespace.
