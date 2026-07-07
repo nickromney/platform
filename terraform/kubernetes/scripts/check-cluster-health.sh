@@ -63,11 +63,8 @@ expected_argocd_apps() {
   if [[ "${EXPECT_PROMETHEUS}" == "true" ]]; then apps+=(prometheus); fi
   if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then apps+=(metrics-server); fi
   if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(grafana); fi
-  if [[ "${EXPECT_LOKI}" == "true" ]]; then apps+=(loki); fi
   if [[ "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then apps+=(victoria-logs); fi
-  if [[ "${EXPECT_TEMPO}" == "true" ]]; then apps+=(tempo); fi
-  if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then apps+=(signoz); fi
-  if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_LOKI}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" || "${EXPECT_TEMPO}" == "true" || "${EXPECT_SIGNOZ}" == "true" ]]; then
+  if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then
     apps+=(otel-collector-prometheus)
   fi
 
@@ -92,10 +89,8 @@ expected_argocd_apps() {
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
     apps+=(idp oauth2-proxy-argocd oauth2-proxy-gitea oauth2-proxy-idp-core)
-    if [[ "${SSO_PROVIDER}" != "keycloak" ]]; then apps+=(dex); fi
     if [[ "${EXPECT_HUBBLE}" == "true" ]]; then apps+=(oauth2-proxy-hubble); fi
     if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(oauth2-proxy-grafana); fi
-    if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then apps+=(oauth2-proxy-signoz); fi
     if [[ "${EXPECT_APP_REPO_SENTIMENT}" == "true" ]]; then apps+=(oauth2-proxy-sentiment-dev oauth2-proxy-sentiment-uat); fi
     if [[ "${EXPECT_APP_REPO_SUBNET_CALC}" == "true" ]]; then apps+=(oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat); fi
     if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then apps+=(oauth2-proxy-apim); fi
@@ -935,10 +930,7 @@ EXPECT_POLICIES=$(expected_from_tfvars enable_policies)
 EXPECT_CILIUM_POLICIES=$(expected_from_tfvars enable_cilium_policies)
 EXPECT_APP_OF_APPS=$(expected_from_tfvars enable_app_of_apps)
 EXPECT_CILIUM_POLICY_AUDIT_MODE=$(expected_from_tfvars enable_cilium_policy_audit_mode)
-EXPECT_SIGNOZ=$(expected_from_tfvars enable_signoz)
-EXPECT_LOKI=$(expected_from_tfvars enable_loki)
 EXPECT_VICTORIA_LOGS=$(expected_from_tfvars enable_victoria_logs)
-EXPECT_TEMPO=$(expected_from_tfvars enable_tempo)
 EXPECT_HEADLAMP=$(expected_from_tfvars enable_headlamp)
 EXPECT_GATEWAY_TLS=$(expected_from_tfvars enable_gateway_tls)
 EXPECT_SSO=$(expected_from_tfvars enable_sso)
@@ -979,7 +971,6 @@ ARGOCD_SERVER_NODE_PORT=$(tfvar_or_default argocd_server_node_port 30080)
 HUBBLE_UI_NODE_PORT=$(tfvar_or_default hubble_ui_node_port 31235)
 GITEA_HTTP_NODE_PORT=$(tfvar_or_default gitea_http_node_port 30090)
 GITEA_SSH_NODE_PORT=$(tfvar_or_default gitea_ssh_node_port 30022)
-SIGNOZ_UI_HOST_PORT=$(tfvar_or_default signoz_ui_host_port 3301)
 GRAFANA_UI_HOST_PORT=$(tfvar_or_default grafana_ui_host_port 3302)
 GATEWAY_HTTPS_HOST_PORT=$(tfvar_or_default gateway_https_host_port 443)
 GITEA_SSH_USERNAME=$(tfvar_or_default gitea_ssh_username git)
@@ -1011,10 +1002,6 @@ admin_host() {
   else
     printf '%s.admin.%s\n' "${app}" "${PLATFORM_BASE_DOMAIN}"
   fi
-}
-
-dex_host() {
-  printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
 }
 
 keycloak_host() {
@@ -1066,9 +1053,6 @@ print_nodeport_urls() {
   if [[ "${EXPECT_HUBBLE}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Hubble:   http://127.0.0.1:${HUBBLE_UI_NODE_PORT}/"
   fi
-  if [[ "${EXPECT_SIGNOZ}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • SigNoz:   http://127.0.0.1:${SIGNOZ_UI_HOST_PORT}/"
-  fi
   if [[ "${EXPECT_GRAFANA}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Grafana:  http://127.0.0.1:${GRAFANA_UI_HOST_PORT}/"
   fi
@@ -1093,9 +1077,6 @@ print_gateway_urls() {
   if [[ "${EXPECT_HEADLAMP}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Headlamp: https://$(admin_host headlamp)${port_suffix}/"
   fi
-  if [[ "${EXPECT_SIGNOZ}" == "true" || "${show_all}" == "true" ]]; then
-    echo "  • SigNoz:   https://$(admin_host signoz)${port_suffix}/"
-  fi
   if [[ "${EXPECT_GRAFANA}" == "true" || "${show_all}" == "true" ]]; then
     echo "  • Grafana:  https://$(admin_host grafana)${port_suffix}/"
   fi
@@ -1108,15 +1089,11 @@ print_gateway_urls() {
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
     echo ""
-    echo "SSO (${SSO_PROVIDER} + oauth2-proxy):"
-    if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
-      echo "  • Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/platform/console/#/platform/users"
-      echo "  • Keycloak realm: https://$(keycloak_host)${port_suffix}/realms/platform"
-      echo "  • Console admin: demo@admin.test"
-      echo "  • Break-glass admin: keycloak-admin"
-    else
-      echo "  • Dex:      https://$(dex_host)${port_suffix}/dex"
-    fi
+    echo "SSO (keycloak + oauth2-proxy):"
+    echo "  • Keycloak admin: https://$(keycloak_host)${port_suffix}/admin/platform/console/#/platform/users"
+    echo "  • Keycloak realm: https://$(keycloak_host)${port_suffix}/realms/platform"
+    echo "  • Console admin: demo@admin.test"
+    echo "  • Break-glass admin: keycloak-admin"
     echo "  • Users:    demo@admin.test, demo@dev.test, demo@uat.test"
     echo "  • Password: set via PLATFORM_DEMO_PASSWORD in .env"
   fi
@@ -1518,9 +1495,6 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
   if kubectl -n "${ARGOCD_NS}" get app gitea >/dev/null 2>&1; then
     ok "Argo CD app gitea exists"
   fi
-  if kubectl -n "${ARGOCD_NS}" get app signoz >/dev/null 2>&1; then
-    ok "Argo CD app signoz exists"
-  fi
   if kubectl -n "${ARGOCD_NS}" get app prometheus >/dev/null 2>&1; then
     ok "Argo CD app prometheus exists"
   fi
@@ -1531,14 +1505,8 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
       fail_soft "Argo CD app metrics-server missing (enable_metrics_server=true${tfvars_hint})"
     fi
   fi
-  if kubectl -n "${ARGOCD_NS}" get app loki >/dev/null 2>&1; then
-    ok "Argo CD app loki exists"
-  fi
   if kubectl -n "${ARGOCD_NS}" get app victoria-logs >/dev/null 2>&1; then
     ok "Argo CD app victoria-logs exists"
-  fi
-  if kubectl -n "${ARGOCD_NS}" get app tempo >/dev/null 2>&1; then
-    ok "Argo CD app tempo exists"
   fi
   if kubectl -n "${ARGOCD_NS}" get app grafana >/dev/null 2>&1; then
     ok "Argo CD app grafana exists"
@@ -1609,24 +1577,17 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
 
   if [[ "${EXPECT_SSO}" == "true" ]]; then
     sso_apps=(oauth2-proxy-argocd oauth2-proxy-gitea)
-    if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
-      if ! kubectl -n sso get deploy keycloak >/dev/null 2>&1; then
-        fail_soft "Keycloak deployment missing (sso_provider=keycloak${tfvars_hint})"
-      fi
-      if ! kubectl -n sso get statefulset keycloak-postgres >/dev/null 2>&1; then
-        fail_soft "Keycloak Postgres statefulset missing (sso_provider=keycloak${tfvars_hint})"
-      fi
-    else
-      sso_apps+=(dex)
+    if ! kubectl -n sso get deploy keycloak >/dev/null 2>&1; then
+      fail_soft "Keycloak deployment missing (sso_provider=keycloak${tfvars_hint})"
+    fi
+    if ! kubectl -n sso get statefulset keycloak-postgres >/dev/null 2>&1; then
+      fail_soft "Keycloak Postgres statefulset missing (sso_provider=keycloak${tfvars_hint})"
     fi
     if [[ "${EXPECT_HUBBLE}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-hubble)
     fi
     if [[ "${EXPECT_GRAFANA}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-grafana)
-    fi
-    if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then
-      sso_apps+=(oauth2-proxy-signoz)
     fi
     if [[ "${EXPECT_APIM_EFFECTIVE}" == "true" ]]; then
       sso_apps+=(oauth2-proxy-apim)
@@ -1827,25 +1788,13 @@ else
 fi
 
 echo ""
-echo "Observability (SigNoz/Prometheus/Grafana/Loki/VictoriaLogs/Tempo):"
-if ! section_active 800 "${EXPECT_SIGNOZ}" && ! section_active 800 "${EXPECT_PROMETHEUS}" && ! section_active 800 "${EXPECT_GRAFANA}" && ! section_active 800 "${EXPECT_LOKI}" && ! section_active 800 "${EXPECT_VICTORIA_LOGS}" && ! section_active 800 "${EXPECT_TEMPO}"; then
+echo "Observability (Prometheus/Grafana/VictoriaLogs):"
+if ! section_active 800 "${EXPECT_PROMETHEUS}" && ! section_active 800 "${EXPECT_GRAFANA}" && ! section_active 800 "${EXPECT_VICTORIA_LOGS}"; then
   ok "Skipped until stage 800"
 elif kubectl get ns observability >/dev/null 2>&1; then
   ok "Detected observability namespace"
   kubectl -n observability get pods -o wide || true
   echo ""
-
-  # SigNoz
-  if kubectl -n observability get svc signoz-ui >/dev/null 2>&1; then
-    ok "SigNoz detected (enable_signoz=${EXPECT_SIGNOZ}${tfvars_hint})"
-    kubectl -n observability get svc signoz-ui || true
-  else
-    if [[ "${EXPECT_SIGNOZ}" == "true" ]]; then
-      fail_soft "SigNoz not detected (enable_signoz=true${tfvars_hint})"
-    else
-      ok "SigNoz not detected (enable_signoz=${EXPECT_SIGNOZ}${tfvars_hint})"
-    fi
-  fi
 
   # Prometheus
   if kubectl -n observability get svc prometheus-server >/dev/null 2>&1; then
@@ -1878,18 +1827,6 @@ elif kubectl get ns observability >/dev/null 2>&1; then
     fi
   fi
 
-  # Loki
-  if kubectl -n observability get svc loki >/dev/null 2>&1; then
-    ok "Loki detected (enable_loki=${EXPECT_LOKI}${tfvars_hint})"
-    kubectl -n observability get svc loki || true
-  else
-    if [[ "${EXPECT_LOKI}" == "true" ]]; then
-      fail_soft "Loki not detected (enable_loki=true${tfvars_hint})"
-    else
-      ok "Loki not detected (enable_loki=${EXPECT_LOKI}${tfvars_hint})"
-    fi
-  fi
-
   # VictoriaLogs
   if kubectl -n observability get svc victoria-logs-victoria-logs-single-server >/dev/null 2>&1; then
     ok "VictoriaLogs detected (enable_victoria_logs=${EXPECT_VICTORIA_LOGS}${tfvars_hint})"
@@ -1899,18 +1836,6 @@ elif kubectl get ns observability >/dev/null 2>&1; then
       fail_soft "VictoriaLogs not detected (enable_victoria_logs=true${tfvars_hint})"
     else
       ok "VictoriaLogs not detected (enable_victoria_logs=${EXPECT_VICTORIA_LOGS}${tfvars_hint})"
-    fi
-  fi
-
-  # Tempo
-  if kubectl -n observability get svc tempo >/dev/null 2>&1; then
-    ok "Tempo detected (enable_tempo=${EXPECT_TEMPO}${tfvars_hint})"
-    kubectl -n observability get svc tempo || true
-  else
-    if [[ "${EXPECT_TEMPO}" == "true" ]]; then
-      fail_soft "Tempo not detected (enable_tempo=true${tfvars_hint})"
-    else
-      ok "Tempo not detected (enable_tempo=${EXPECT_TEMPO}${tfvars_hint})"
     fi
   fi
 
@@ -1938,7 +1863,7 @@ elif kubectl get ns observability >/dev/null 2>&1; then
     fi
   fi
 else
-  if [[ "${EXPECT_SIGNOZ}" == "true" || "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_LOKI}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" || "${EXPECT_TEMPO}" == "true" ]]; then
+  if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then
     fail_soft "observability namespace not found (observability components enabled${tfvars_hint})"
   else
     ok "Observability namespace not detected"

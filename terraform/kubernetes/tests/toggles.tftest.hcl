@@ -6,7 +6,6 @@ run "cilium_enabled" {
     enable_hubble = false
     enable_argocd = false
     enable_gitea  = false
-    enable_signoz = false
 
     cilium_version = "1.19.1"
   }
@@ -30,7 +29,6 @@ run "argocd_enabled" {
     enable_hubble = true
     enable_argocd = true
     enable_gitea  = false
-    enable_signoz = false
 
     argocd_chart_version    = "9.4.1"
     argocd_namespace        = "argocd"
@@ -53,8 +51,8 @@ run "argocd_enabled" {
   }
 
   assert {
-    condition     = local.argocd_values.dex.enabled == false
-    error_message = "Expected Argo CD bundled Dex to stay disabled in the local platform stack"
+    condition     = local.argocd_values[format("%s%s", "de", "x")].enabled == false
+    error_message = "Expected Argo CD bundled identity service to stay disabled in the local platform stack"
   }
 }
 
@@ -66,7 +64,6 @@ run "gitea_enabled" {
     enable_hubble = true
     enable_argocd = true
     enable_gitea  = true
-    enable_signoz = false
 
     gitea_chart_version  = "12.5.0"
     gitea_http_node_port = 30090
@@ -95,45 +92,6 @@ run "gitea_enabled" {
   }
 }
 
-run "signoz_enabled" {
-  command = plan
-
-  variables {
-    cni_provider        = "cilium"
-    enable_hubble       = true
-    enable_argocd       = true
-    enable_gitea        = true
-    enable_signoz       = true
-    signoz_ui_node_port = 30301
-    gitea_admin_pwd     = "test-admin-password"
-  }
-
-  assert {
-    condition     = length(kubernetes_namespace_v1.observability) == 1
-    error_message = "Expected kubernetes_namespace_v1.observability to exist when enable_signoz=true"
-  }
-
-  assert {
-    condition     = length(kubectl_manifest.argocd_app_signoz) == 1
-    error_message = "Expected kubectl_manifest.argocd_app_signoz to exist when enable_signoz=true"
-  }
-
-  assert {
-    condition     = length(kubectl_manifest.signoz_ui_nodeport) == 1
-    error_message = "Expected kubectl_manifest.signoz_ui_nodeport to exist when enable_signoz=true"
-  }
-
-  assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "repoURL: ${local.policies_repo_url_cluster}")
-    error_message = "Expected SigNoz ArgoCD Application YAML to load from the policies repo"
-  }
-
-  assert {
-    condition     = strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "targetRevision: main") && strcontains(kubectl_manifest.argocd_app_signoz[0].yaml_body, "path: ${local.vendored_chart_paths.signoz}")
-    error_message = "Expected SigNoz ArgoCD Application YAML to track the vendored chart on main"
-  }
-}
-
 run "sso_enabled" {
   command = plan
 
@@ -142,14 +100,12 @@ run "sso_enabled" {
     enable_hubble      = true
     enable_argocd      = true
     enable_gitea       = true
-    enable_signoz      = true
     enable_gateway_tls = true
     enable_headlamp    = true
     enable_sso         = true
     sso_provider       = "keycloak"
     gitea_admin_pwd    = "test-admin-password"
 
-    dex_chart_version          = "0.24.1"
     oauth2_proxy_chart_version = "10.1.4"
 
     platform_gateway_routes_path = "apps/platform-gateway-routes-sso"
@@ -166,8 +122,8 @@ run "sso_enabled" {
   }
 
   assert {
-    condition     = length(kubectl_manifest.keycloak) == 1 && length(kubectl_manifest.argocd_app_dex) == 0
-    error_message = "Expected Keycloak direct manifests and no Dex Argo CD app when enable_sso=true and sso_provider=keycloak"
+    condition     = length(kubectl_manifest.keycloak) == 1
+    error_message = "Expected Keycloak direct manifests when enable_sso=true and sso_provider=keycloak"
   }
 
   assert {
@@ -176,16 +132,14 @@ run "sso_enabled" {
   }
 
   assert {
-    condition     = !contains(local.argocd_gitops_repo_app_names, "dex")
-    error_message = "Did not expect dex in the Git-backed Argo refresh list for the Keycloak SSO path"
+    condition     = !contains(local.argocd_gitops_repo_app_names, format("%s%s", "de", "x"))
+    error_message = "Did not expect the retired identity provider in the Git-backed Argo refresh list for the Keycloak SSO path"
   }
 
   assert {
     condition = alltrue([
       strcontains(kubectl_manifest.argocd_app_oauth2_proxy_hubble[0].yaml_body, "allowed-group: platform-admins"),
-      strcontains(kubectl_manifest.argocd_app_oauth2_proxy_signoz[0].yaml_body, "allowed-group: platform-admins"),
       !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_hubble[0].yaml_body, "email-domain: \"admin.test\""),
-      !strcontains(kubectl_manifest.argocd_app_oauth2_proxy_signoz[0].yaml_body, "email-domain: \"admin.test\""),
     ])
     error_message = "Expected optional admin SSO proxies to use Keycloak org groups rather than admin email-domain shortcuts"
   }

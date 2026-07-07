@@ -114,7 +114,7 @@ is_true() {
 has_toggle_env_overrides() {
   local env_key
 
-  for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+  for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
     if [[ -n "${!env_key:-}" ]]; then
       return 0
     fi
@@ -200,15 +200,6 @@ toggle_input_or_default() {
   toggle_or_default "${tfvar_key}" "${default}"
 }
 
-is_signoz_image() {
-  local img="$1"
-  case "${img}" in
-    docker.io/signoz/signoz:*|docker.io/signoz/signoz-otel-collector:*|docker.io/signoz/signoz-schema-migrator:*|docker.io/clickhouse/clickhouse-server:*|docker.io/altinity/clickhouse-operator:*|docker.io/altinity/metrics-exporter:*|signoz/zookeeper:*|docker.io/groundnuty/k8s-wait-for:*|ghcr.io/scolastico-dev/s.containers/signoz-auth-proxy:*)
-      return 0
-      ;;
-    *) return 1 ;;
-  esac
-}
 
 is_otel_collector_image() {
   local img="$1"
@@ -234,13 +225,6 @@ is_grafana_image() {
   esac
 }
 
-is_loki_image() {
-  local img="$1"
-  case "${img}" in
-    dhi.io/loki:*|grafana/loki:*|docker.io/grafana/loki:*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 
 is_victoria_logs_image() {
   local img="$1"
@@ -250,13 +234,6 @@ is_victoria_logs_image() {
   esac
 }
 
-is_tempo_image() {
-  local img="$1"
-  case "${img}" in
-    dhi.io/tempo:*|docker.io/grafana/tempo-query:*|grafana/tempo:*|docker.io/grafana/tempo:*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 
 is_headlamp_image() {
   local img="$1"
@@ -277,7 +254,6 @@ is_metrics_server_image() {
 is_sso_image() {
   local img="$1"
   case "${img}" in
-    dhi.io/dex:*|dhi.io/oauth2-proxy:*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -299,26 +275,19 @@ is_langfuse_image() {
 }
 
 filter_images_by_toggles() {
-  local enable_signoz="$1"
-  local enable_prometheus="$2"
-  local enable_grafana="$3"
-  local enable_loki="$4"
-  local enable_victoria_logs="$5"
-  local enable_tempo="$6"
-  local enable_headlamp="$7"
-  local enable_metrics_server="$8"
-  local enable_sso="$9"
-  local enable_actions_runner="${10}"
-  local enable_langfuse="${11}"
+  local enable_prometheus="$1"
+  local enable_grafana="$2"
+  local enable_victoria_logs="$3"
+  local enable_headlamp="$4"
+  local enable_metrics_server="$5"
+  local enable_sso="$6"
+  local enable_actions_runner="$7"
+  local enable_langfuse="$8"
   local output=""
   local img
 
   while IFS= read -r img; do
     [[ -z "${img}" ]] && continue
-
-    if ! is_true "${enable_signoz}" && is_signoz_image "${img}"; then
-      continue
-    fi
 
     if ! is_true "${enable_prometheus}" && is_prometheus_image "${img}"; then
       continue
@@ -328,15 +297,7 @@ filter_images_by_toggles() {
       continue
     fi
 
-    if ! is_true "${enable_loki}" && is_loki_image "${img}"; then
-      continue
-    fi
-
     if ! is_true "${enable_victoria_logs}" && is_victoria_logs_image "${img}"; then
-      continue
-    fi
-
-    if ! is_true "${enable_tempo}" && is_tempo_image "${img}"; then
       continue
     fi
 
@@ -360,7 +321,7 @@ filter_images_by_toggles() {
       continue
     fi
 
-    if ! is_true "${enable_signoz}" && ! is_true "${enable_prometheus}" && ! is_true "${enable_grafana}" && ! is_true "${enable_loki}" && ! is_true "${enable_victoria_logs}" && ! is_true "${enable_tempo}" && is_otel_collector_image "${img}"; then
+    if ! is_true "${enable_prometheus}" && ! is_true "${enable_grafana}" && ! is_true "${enable_victoria_logs}" && is_otel_collector_image "${img}"; then
       continue
     fi
 
@@ -928,7 +889,7 @@ HAS_TOGGLE_INPUTS="false"
 if [[ -n "${TFVARS_FILE}" && -f "${TFVARS_FILE}" ]]; then
   HAS_TOGGLE_INPUTS="true"
 fi
-for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_LOKI PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_TEMPO PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
+for env_key in PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GRAFANA PRELOAD_ENABLE_VICTORIA_LOGS PRELOAD_ENABLE_HEADLAMP PRELOAD_ENABLE_METRICS_SERVER PRELOAD_ENABLE_SSO PRELOAD_ENABLE_ACTIONS_RUNNER PRELOAD_ENABLE_LANGFUSE; do
   if [[ -n "${!env_key:-}" ]]; then
     HAS_TOGGLE_INPUTS="true"
     break
@@ -936,12 +897,9 @@ for env_key in PRELOAD_ENABLE_SIGNOZ PRELOAD_ENABLE_PROMETHEUS PRELOAD_ENABLE_GR
 done
 
 if is_true "${HAS_TOGGLE_INPUTS}"; then
-  ENABLE_SIGNOZ="$(toggle_input_or_default "PRELOAD_ENABLE_SIGNOZ" "enable_signoz" "false")"
   ENABLE_PROMETHEUS="$(toggle_input_or_default "PRELOAD_ENABLE_PROMETHEUS" "enable_prometheus" "false")"
   ENABLE_GRAFANA="$(toggle_input_or_default "PRELOAD_ENABLE_GRAFANA" "enable_grafana" "false")"
-  ENABLE_LOKI="$(toggle_input_or_default "PRELOAD_ENABLE_LOKI" "enable_loki" "false")"
   ENABLE_VICTORIA_LOGS="$(toggle_input_or_default "PRELOAD_ENABLE_VICTORIA_LOGS" "enable_victoria_logs" "false")"
-  ENABLE_TEMPO="$(toggle_input_or_default "PRELOAD_ENABLE_TEMPO" "enable_tempo" "false")"
   ENABLE_HEADLAMP="$(toggle_input_or_default "PRELOAD_ENABLE_HEADLAMP" "enable_headlamp" "false")"
   ENABLE_METRICS_SERVER="$(toggle_input_or_default "PRELOAD_ENABLE_METRICS_SERVER" "enable_metrics_server" "false")"
   ENABLE_SSO="$(toggle_input_or_default "PRELOAD_ENABLE_SSO" "enable_sso" "false")"
@@ -955,12 +913,9 @@ if is_true "${HAS_TOGGLE_INPUTS}"; then
   fi
 
   images="$(filter_images_by_toggles \
-    "${ENABLE_SIGNOZ}" \
     "${ENABLE_PROMETHEUS}" \
     "${ENABLE_GRAFANA}" \
-    "${ENABLE_LOKI}" \
     "${ENABLE_VICTORIA_LOGS}" \
-    "${ENABLE_TEMPO}" \
     "${ENABLE_HEADLAMP}" \
     "${ENABLE_METRICS_SERVER}" \
     "${ENABLE_SSO}" \
@@ -986,11 +941,6 @@ require_cmd docker
 
 total="$(echo "$images" | wc -l | tr -d ' ')"
 echo "Found $total image(s) in $IMAGE_LIST"
-
-INDEX_WIDTH=${#total}
-if [[ "$INDEX_WIDTH" -lt 2 ]]; then
-  INDEX_WIDTH=2
-fi
 
 TARGET_PLATFORM="$(detect_target_platform)"
 if [[ "$TARGET_PLATFORM" != */* ]]; then
@@ -1029,7 +979,6 @@ pull_image() {
   local prefix
   local result
 
-  prefix="$(printf "%0${INDEX_WIDTH}d/%d" "$idx" "$total")"
   [[ "$pinned_ref" == "-" ]] && pinned_ref=""
 
   if docker_image_exists "$img"; then
@@ -1068,7 +1017,6 @@ pull_image() {
 }
 export -f pull_image
 export TARGET_PLATFORM
-export INDEX_WIDTH
 export total
 export PULL_RESULTS_DIR
 
@@ -1087,7 +1035,6 @@ echo "Pull results (ordered):"
 pull_results_missing=0
 pull_cached=0
 while IFS=$'\t' read -r idx img pinned_ref; do
-  prefix="$(printf "%0${INDEX_WIDTH}d/%d" "$idx" "$total")"
   if [[ -f "${PULL_RESULTS_DIR}/${idx}.log" ]]; then
     result_line="$(cat "${PULL_RESULTS_DIR}/${idx}.log")"
     echo "$result_line"
@@ -1247,7 +1194,6 @@ load_image_with_fallback() {
 }
 
 while IFS=$'\t' read -r idx img pinned_ref; do
-  prefix="$(printf "%0${INDEX_WIDTH}d/%d" "$idx" "$total")"
   [[ "$pinned_ref" == "-" ]] && pinned_ref=""
 
   if cluster_has_image_on_all_nodes "$img" "$pinned_ref"; then

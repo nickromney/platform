@@ -98,7 +98,7 @@ setup() {
   [[ "${output}" == *"name: apim-baseline"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/component: authentication-proxy"* ]]
   [[ "${output}" == *"key: k8s:app.kubernetes.io/name"* ]]
-  [[ "${output}" == *"      - dex"* ]]
+  [[ "${output}" == *"      - keycloak"* ]]
   [[ "${output}" == *"k8s:io.cilium.k8s.namespace.labels.platform.publiccloudexperiments.net/namespace-role: shared"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-router"* ]]
   [[ "${output}" == *"k8s:app.kubernetes.io/name: subnetcalc-api"* ]]

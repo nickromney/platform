@@ -164,9 +164,6 @@ populate_port_checks_from_variant_json() {
   append_admin_port_check_if_shared "hubble-ui" "127.0.0.1" "hubble_ui_node_port" "31235" "hubble_ui_node_port" "31235"
   append_admin_port_check_if_shared "gitea-http" "127.0.0.1" "gitea_http_node_port" "30090" "gitea_http_node_port" "30090"
   append_admin_port_check_if_shared "gitea-ssh" "127.0.0.1" "gitea_ssh_node_port" "30022" "gitea_ssh_node_port" "30022"
-  if [[ "${variant_id}" != "kind" ]]; then
-    append_admin_port_check_if_shared "signoz-ui" "127.0.0.1" "signoz_ui_host_port" "3301" "signoz_ui_node_port" "30301"
-  fi
   append_admin_port_check_if_shared "grafana-ui" "127.0.0.1" "grafana_ui_host_port" "3302" "grafana_ui_node_port" "30302"
 }
 

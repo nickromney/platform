@@ -118,19 +118,6 @@ kubectl -n argocd get application -o name | grep -E 'application.argoproj.io/oau
   fi
 done
 
-section "Signoz auth-bridge smoke checks (avoid printing tokens)"
-if kubectl -n observability get deploy signoz-auth-proxy >/dev/null 2>&1; then
-  curl_in_cluster curlsignozprecheck default \
-    "set -euo pipefail; \
-     echo '-- signoz-auth-proxy /api/v1/loginPrecheck'; \
-     curl -sS --max-time 10 -o /dev/null -D - http://signoz-auth-proxy.observability.svc.cluster.local:3000/api/v1/loginPrecheck | sed -n '1,15p'; \
-     echo; \
-     echo '-- signoz-auth-proxy /api/v1/version'; \
-     curl -sS --max-time 10 -o /dev/null -D - http://signoz-auth-proxy.observability.svc.cluster.local:3000/api/v1/version | sed -n '1,15p'"
-else
-  echo "observability/signoz-auth-proxy deployment not found; optional SigNoz path is inactive."
-fi
-
 section "Sentiment LLM smoke checks (dev/uat) - latency + llama.cpp model readiness"
 # These checks bypass oauth2-proxy (auth) and measure pure upstream performance, which is useful when
 # oauth2-proxy returns a 502 due to upstream timeouts.
@@ -164,9 +151,6 @@ if have curl; then
     "$(admin_host kyverno)"
     "subnetcalc.uat.${PLATFORM_BASE_DOMAIN}"
   )
-  if kubectl -n observability get deploy signoz >/dev/null 2>&1 || kubectl -n observability get deploy signoz-auth-proxy >/dev/null 2>&1; then
-    hosts+=("$(admin_host signoz)")
-  fi
 
   for host in "${hosts[@]}"; do
     echo "-- ${host} / (expect 302 to ${SSO_PROVIDER} when unauthenticated)"

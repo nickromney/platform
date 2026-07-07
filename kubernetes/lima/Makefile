@@ -432,12 +432,9 @@ sync-image-cache: workflow-validate-stage
 	CACHE_PUSH_HOST="$(LOCAL_IMAGE_CACHE_PUSH_HOST)" \
 	OPTIONAL="$(LOCAL_IMAGE_CACHE_OPTIONAL)" \
 	LOCAL_IMAGE_CACHE_HOST="$(LOCAL_IMAGE_CACHE_HOST)" \
-	PRELOAD_ENABLE_SIGNOZ="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_signoz false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_PROMETHEUS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_prometheus false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_GRAFANA="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_grafana false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_LOKI="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_loki false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
-	PRELOAD_ENABLE_TEMPO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_tempo false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
@@ -480,7 +477,6 @@ status:
 	@set -euo pipefail; \
 	echo "=== Lima VM status ==="; \
 	if command -v limactl >/dev/null 2>&1; then \
-		limactl list 2>/dev/null | awk -v prefix="$(LIMA_INSTANCE_PREFIX)-" 'NR==1 || index($$1, prefix) == 1 { print }'; \
 	else \
 		echo "limactl not found in PATH"; \
 	fi; \

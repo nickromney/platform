@@ -146,47 +146,8 @@ __GRAFANA_PLUGINS_VALUES__
                 uid: victorialogs
                 jsonData:
                   maxLines: 1000
-              - name: Loki
-                type: loki
-                access: proxy
-                url: http://loki.observability.svc.cluster.local:3100
-                uid: loki
-                jsonData:
-                  maxLines: 1000
-                  derivedFields:
-                    - datasourceUid: tempo
-                      matcherRegex: '"traceId":"([a-f0-9]+)"'
-                      name: TraceID
-                      url: '$${__value.raw}'
-              - name: Tempo
-                type: tempo
-                access: proxy
-                url: http://tempo.observability.svc.cluster.local:3100
-                uid: tempo
-                jsonData:
-                  tracesToLogsV2:
-                    datasourceUid: loki
-                    spanStartTimeShift: '-1h'
-                    spanEndTimeShift: '1h'
-                    filterByTraceID: true
-                    filterBySpanID: false
-                  tracesToMetrics:
-                    datasourceUid: prometheus
-                    tags:
-                      - name: service.name
-                        value: service
-                    queries:
-                      - name: Request Rate
-                        query: 'sum(rate(traces_span_metrics_calls_total{service_name="$${service}"}[5m]))'
-                  serviceMap:
-                    datasourceUid: prometheus
-                  search:
-                    hide: false
-                  nodeGraph:
-                    enabled: true
         dashboards:
           default:
-            # codex:platform-launchpad:start
             platform-launchpad:
               json: |
                 {
@@ -1889,7 +1850,6 @@ __GRAFANA_PLUGINS_VALUES__
                   "title": "Platform Launchpad",
                   "uid": "platform-launchpad"
                 }
-            # codex:platform-launchpad:end
             platform-overview:
               json: |
                 {

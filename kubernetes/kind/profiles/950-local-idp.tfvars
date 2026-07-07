@@ -51,11 +51,8 @@ external_workload_image_refs = {
 
 # Disable heavyweight and optional observability surfaces.
 enable_hubble              = false
-enable_signoz              = false
 enable_prometheus          = false
 enable_grafana             = false
-enable_loki                = false
 enable_victoria_logs       = false
-enable_tempo               = false
 enable_observability_agent = false
 enable_headlamp            = false

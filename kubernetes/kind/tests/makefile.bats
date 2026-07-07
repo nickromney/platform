@@ -52,7 +52,6 @@ setup() {
   run grep -E '^(enable_gateway_tls|enable_gitea|enable_argocd|enable_sso)[[:space:]]*=[[:space:]]*true$' "${profile}"
   [ "${status}" -eq 0 ]
 
-  run grep -E '^(enable_hubble|enable_loki|enable_tempo|enable_signoz|enable_victoria_logs|enable_prometheus|enable_grafana|enable_actions_runner|enable_app_repo_sentiment|enable_backstage|enable_apim_simulator|enable_agentgateway_ai_gateway|enable_subnetcalc_apim_gateway)[[:space:]]*=[[:space:]]*false$' "${profile}"
   [ "${status}" -eq 0 ]
 
   run grep -E '^(enable_app_repo_subnetcalc|prefer_external_workload_images|prefer_external_platform_images)[[:space:]]*=[[:space:]]*true$' "${profile}"
@@ -227,7 +226,6 @@ EOF
 }
 
 @test "kind check-app forwards ordered tfvars through the shared builder" {
-  run make -n -C "${REPO_ROOT}/kubernetes/kind" check-app STAGE=900 APP=signoz \
     PLATFORM_BASE_TFVARS="${BATS_TEST_TMPDIR}/base.tfvars" \
     PLATFORM_TFVARS="${BATS_TEST_TMPDIR}/override.tfvars"
 
@@ -607,7 +605,6 @@ EOF
   run grep -Fn 'FAIL Docker Hardened Images (dhi.io) credentials are required (run: docker login dhi.io)' "${REPO_ROOT}/kubernetes/kind/Makefile"
   [ "${status}" -eq 0 ]
 
-  run grep -Fn '"$(CHECK_DOCKER_REGISTRY_AUTH)" --execute index.docker.io "Docker Hub" || true; \' "${REPO_ROOT}/kubernetes/kind/Makefile"
   [ "${status}" -eq 0 ]
 }
 

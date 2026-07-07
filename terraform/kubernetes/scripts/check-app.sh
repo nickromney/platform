@@ -24,7 +24,7 @@ Purpose:
   without relying on local DNS. Designed for the platform learning stack.
 
 Required:
-  --app NAME                     Base app name (e.g., signoz, gitea, argocd, hubble, headlamp)
+  --app NAME                     Base app name (e.g., gitea, argocd, hubble, headlamp)
 
 Common options:
   --host HOST                    FQDN to probe (default: "${app}${host_suffix}")
@@ -49,7 +49,6 @@ Naming convention overrides:
   --oauth2-proxy NAME            Default: "oauth2-proxy-${app}"
 
 Examples:
-  check-app.sh --app signoz --path /metrics-explorer/summary -x
   check-app.sh --app gitea --path / -x
   check-app.sh --app headlamp --host headlamp.admin.example.test --path /
 EOF
@@ -219,8 +218,6 @@ if [[ -z "${HOST}" ]]; then
     HOST="portal-api.${PLATFORM_BASE_DOMAIN}"
   elif [[ "${APP}" == "mcp-console" ]]; then
     HOST="mcp-console.${PLATFORM_BASE_DOMAIN}"
-  elif [[ "${APP}" == "dex" ]]; then
-    HOST="dex.${PLATFORM_ADMIN_BASE_DOMAIN}"
   elif [[ "${APP}" =~ -dev$ ]]; then
     base="${APP%-dev}"
     HOST="${base}.dev.${PLATFORM_BASE_DOMAIN}"
@@ -370,7 +367,6 @@ curl_local() {
     return 0
   fi
   echo "GET ${url}"
-  # Unauthenticated: expect 302 to dex (SSO) or 401/403 depending on app.
   probe_target="$(resolve_probe_target)"
   if [[ "${probe_target}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ || "${probe_target}" =~ ^\[[0-9A-Fa-f:]+\]$ ]]; then
     curl_args=(--resolve "${HOST}:${HOST_PORT}:${probe_target}")
@@ -463,21 +459,21 @@ if [[ -n "${APP_NS}" ]]; then
   if [[ "${EXTENDED}" -eq 1 ]]; then
     maybe kubectl -n "${APP_NS}" get deploy,sts,svc -o wide
   else
-    maybe kubectl -n "${APP_NS}" get deploy,sts -o wide | grep -E "${APP_SERVICE_PATTERN}|signoz|clickhouse|otel" || true
+    maybe kubectl -n "${APP_NS}" get deploy,sts -o wide | grep -E "${APP_SERVICE_PATTERN}|otel" || true
   fi
 else
   warn "Could not infer destination namespace from Argo CD for app=${APP}; skipping app namespace pod listing"
 fi
 
 section "Pods (SSO namespace: ${SSO_NS})"
-maybe kubectl -n "${SSO_NS}" get pods -o wide | grep -E "(^NAME|dex|${OAUTH2_PROXY_NAME}|oauth2-proxy-)" || true
+maybe kubectl -n "${SSO_NS}" get pods -o wide | grep -E "(^NAME|keycloak|${OAUTH2_PROXY_NAME}|oauth2-proxy-)" || true
 
 section "Services / EndpointSlices"
 maybe kubectl -n "${SSO_NS}" get svc "${OAUTH2_PROXY_NAME}" -o wide
 print_endpointslices_for_service "${SSO_NS}" "${OAUTH2_PROXY_NAME}"
 if [[ -n "${APP_NS}" ]]; then
   # Best-effort: show services that look relevant in the destination namespace.
-  maybe kubectl -n "${APP_NS}" get svc -o wide | grep -E "(^NAME|${APP_SERVICE_PATTERN}|signoz)" || true
+  maybe kubectl -n "${APP_NS}" get svc -o wide | grep -E "(^NAME|${APP_SERVICE_PATTERN})" || true
 fi
 
 section "HTTPRoute"
@@ -498,7 +494,7 @@ fi
 section "Gateway Logs (nginx) grep"
 # Include both the host and common failure patterns.
 PATTERN="$(printf '%s' "${HOST}" | sed -E 's/[.[\()*+?{|^$\\]/\\&/g')"
-print_gateway_nginx_logs "${PATTERN}|connect\\(\\) failed|upstream prematurely closed| 502 | 503 | 504 |signoz|oauth2-proxy" || true
+print_gateway_nginx_logs "${PATTERN}|connect\\(\\) failed|upstream prematurely closed| 502 | 503 | 504 |oauth2-proxy" || true
 
 tail_deploy_logs() {
   local ns="$1"
@@ -525,19 +521,11 @@ else
   warn "No oauth2-proxy deployment found: ${SSO_NS}/${OAUTH2_PROXY_NAME} (app may not be SSO protected)"
 fi
 
-if [[ -n "${APP_NS}" && ( "${EXTENDED}" -eq 1 || "${APP}" == "signoz" ) ]]; then
+if [[ -n "${APP_NS}" && "${EXTENDED}" -eq 1 ]]; then
   section "App Logs (best-effort)"
-  if [[ "${APP}" == "signoz" ]]; then
-    # Chart naming is fairly stable, but keep it best-effort.
-    tail_deploy_logs "${APP_NS}" "signoz-frontend"
-    tail_deploy_logs "${APP_NS}" "signoz-query-service"
-    tail_deploy_logs "${APP_NS}" "signoz-otel-collector"
-  else
-    # Generic heuristic: tail logs from deployments whose name matches the app string.
-    for d in $(kubectl -n "${APP_NS}" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E "${APP_SERVICE_PATTERN}" || true); do
-      tail_deploy_logs "${APP_NS}" "${d}"
-    done
-  fi
+  for d in $(kubectl -n "${APP_NS}" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E "${APP_SERVICE_PATTERN}" || true); do
+    tail_deploy_logs "${APP_NS}" "${d}"
+  done
 fi
 
 section "Events (SSO + Gateway)"

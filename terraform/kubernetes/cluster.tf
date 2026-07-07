@@ -184,12 +184,9 @@ resource "null_resource" "preload_images" {
     preload_script        = filesha256("${local.stack_dir}/scripts/preload-images.sh")
     preload_image_set     = filesha256(local.preload_image_list_path_effective)
     preload_image_list    = local.preload_image_list_path_effective
-    enable_signoz         = tostring(var.enable_signoz)
     enable_prometheus     = tostring(var.enable_prometheus)
     enable_grafana        = tostring(var.enable_grafana)
-    enable_loki           = tostring(var.enable_loki)
     enable_victoria_logs  = tostring(var.enable_victoria_logs)
-    enable_tempo          = tostring(var.enable_tempo)
     enable_headlamp       = tostring(var.enable_headlamp)
     enable_metrics_server = tostring(var.enable_metrics_server)
     enable_sso            = tostring(var.enable_sso)
@@ -202,12 +199,9 @@ resource "null_resource" "preload_images" {
     command = "${local.stack_dir}/scripts/preload-images.sh --execute --cluster ${var.cluster_name} --parallelism ${var.image_preload_parallelism} --image-list \"$PRELOAD_IMAGE_LIST\""
     environment = {
       PRELOAD_IMAGE_LIST            = local.preload_image_list_path_effective
-      PRELOAD_ENABLE_SIGNOZ         = tostring(var.enable_signoz)
       PRELOAD_ENABLE_PROMETHEUS     = tostring(var.enable_prometheus)
       PRELOAD_ENABLE_GRAFANA        = tostring(var.enable_grafana)
-      PRELOAD_ENABLE_LOKI           = tostring(var.enable_loki)
       PRELOAD_ENABLE_VICTORIA_LOGS  = tostring(var.enable_victoria_logs)
-      PRELOAD_ENABLE_TEMPO          = tostring(var.enable_tempo)
       PRELOAD_ENABLE_HEADLAMP       = tostring(var.enable_headlamp)
       PRELOAD_ENABLE_METRICS_SERVER = tostring(var.enable_metrics_server)
       PRELOAD_ENABLE_SSO            = tostring(var.enable_sso)

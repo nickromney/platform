@@ -13,12 +13,8 @@ setup() {
 
   before_hash="$(cksum <"${app_file}")"
 
-  export STACK_DIR="${REPO_ROOT}/terraform/kubernetes"
-  export ENABLE_ALERTMANAGER=false
-  # shellcheck source=/dev/null
-  source "${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh"
-
-  render_prometheus_application_manifest "${app_file}"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_ALERTMANAGER=false; source '${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh'; render_prometheus_application_manifest '${app_file}'"
+  [ "${status}" -eq 0 ]
   after_hash="$(cksum <"${app_file}")"
 
   [ "${after_hash}" = "${before_hash}" ]
@@ -31,13 +27,8 @@ setup() {
   app_file="${BATS_TEST_TMPDIR}/90-prometheus.application.yaml"
   cp "${REPO_ROOT}/terraform/kubernetes/apps/argocd-apps/90-prometheus.application.yaml" "${app_file}"
 
-  export STACK_DIR="${REPO_ROOT}/terraform/kubernetes"
-  export ENABLE_ALERTMANAGER=true
-  export HARDENED_IMAGE_REGISTRY=dhi.io
-  # shellcheck source=/dev/null
-  source "${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh"
-
-  render_prometheus_application_manifest "${app_file}"
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_ALERTMANAGER=true HARDENED_IMAGE_REGISTRY=dhi.io; source '${REPO_ROOT}/terraform/kubernetes/scripts/sync-gitea-policies.sh'; render_prometheus_application_manifest '${app_file}'"
+  [ "${status}" -eq 0 ]
 
   run grep -F "enabled: true" "${app_file}"
   [ "${status}" -eq 0 ]

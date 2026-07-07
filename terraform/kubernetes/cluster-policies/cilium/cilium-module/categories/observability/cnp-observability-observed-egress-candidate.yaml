@@ -21,14 +21,6 @@ specs:
       - toEndpoints:
           - matchLabels:
               k8s:io.kubernetes.pod.namespace: argocd
-              k8s:app.kubernetes.io/name: argocd-dex-server
-        toPorts:
-          - ports:
-              - port: "5558"
-                protocol: TCP
-      - toEndpoints:
-          - matchLabels:
-              k8s:io.kubernetes.pod.namespace: argocd
               k8s:app.kubernetes.io/name: argocd-applicationset-controller
           - matchLabels:
               k8s:io.kubernetes.pod.namespace: observability

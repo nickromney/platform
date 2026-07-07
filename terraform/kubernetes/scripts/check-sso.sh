@@ -105,11 +105,7 @@ admin_host() {
 }
 
 oidc_host() {
-  if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
-    printf 'keycloak.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
-  else
-    printf 'dex.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
-  fi
+  printf 'keycloak.%s\n' "${PLATFORM_ADMIN_BASE_DOMAIN}"
 }
 
 expect_deploy_arg() {
@@ -213,19 +209,11 @@ EXPECTED_VIEWER_GROUP="${PLATFORM_SSO_VIEWER_GROUP:-${PLATFORM_RBAC_VIEWER_GROUP
 EXPECTED_RBAC_ADMIN_USER="${PLATFORM_RBAC_ADMIN_USER:-demo@admin.test}"
 EXPECTED_RBAC_VIEWER_USER="${PLATFORM_RBAC_VIEWER_USER:-demo@dev.test}"
 EXPECTED_KUBERNETES_OIDC_CLIENT_ID="${PLATFORM_RBAC_KUBERNETES_OIDC_CLIENT_ID:-headlamp}"
-if [[ "${SSO_PROVIDER}" == "keycloak" ]]; then
-  OIDC_DEPLOYMENT="keycloak"
-  EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/realms/${KEYCLOAK_REALM}"
-  EXPECTED_PROFILE_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/userinfo"
-  EXPECTED_TOKEN_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
-  EXPECTED_JWKS_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
-else
-  OIDC_DEPLOYMENT="dex"
-  EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/dex"
-  EXPECTED_PROFILE_URL="http://dex.sso.svc.cluster.local:5556/dex/userinfo"
-  EXPECTED_TOKEN_URL="http://dex.sso.svc.cluster.local:5556/dex/token"
-  EXPECTED_JWKS_URL="http://dex.sso.svc.cluster.local:5556/dex/keys"
-fi
+OIDC_DEPLOYMENT="keycloak"
+EXPECTED_OIDC_ISSUER_URL="https://$(oidc_host)${port_suffix}/realms/${KEYCLOAK_REALM}"
+EXPECTED_PROFILE_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/userinfo"
+EXPECTED_TOKEN_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token"
+EXPECTED_JWKS_URL="http://keycloak.sso.svc.cluster.local:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs"
 
 print_identity_access_edge_contract() {
   require_cmd jq

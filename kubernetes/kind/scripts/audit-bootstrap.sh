@@ -66,7 +66,7 @@ echo ""
 echo "== Argo CD Apps =="
 if kubectl -n argocd get applications.argoproj.io >/dev/null 2>&1; then
   kubectl -n argocd get applications.argoproj.io
-  for app in cert-manager cert-manager-config nginx-gateway-fabric platform-gateway platform-gateway-routes kyverno kyverno-policies cilium-policies gitea gitea-actions-runner apim dev uat dex oauth2-proxy-argocd oauth2-proxy-gitea oauth2-proxy-grafana oauth2-proxy-hubble oauth2-proxy-sentiment-dev oauth2-proxy-sentiment-uat oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat prometheus grafana loki headlamp; do
+  for app in cert-manager cert-manager-config nginx-gateway-fabric platform-gateway platform-gateway-routes kyverno kyverno-policies cilium-policies gitea gitea-actions-runner apim dev uat oauth2-proxy-argocd oauth2-proxy-gitea oauth2-proxy-grafana oauth2-proxy-hubble oauth2-proxy-sentiment-dev oauth2-proxy-sentiment-uat oauth2-proxy-subnetcalc-dev oauth2-proxy-subnetcalc-uat prometheus grafana victoria-logs headlamp; do
     if ! kubectl -n argocd get app "${app}" >/dev/null 2>&1; then
       warn "Argo CD app missing: ${app}"
     fi

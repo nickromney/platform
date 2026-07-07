@@ -28,8 +28,8 @@ has one material difference from `kind`, `lima`, and `lima`:
 - `10/10` successful reset-and-migrate loops via
   `scripts/cilium-workload-loop.sh`
 - Terraform/OpenTofu stage `900` apply against the shared stack
-- Argo CD, Gitea, Dex, Headlamp, Hubble, NGINX Gateway Fabric, cert-manager,
-  Prometheus, Loki, policy-reporter, and APIM
+- Argo CD, Gitea, Keycloak, Headlamp, Hubble, NGINX Gateway Fabric,
+  cert-manager, Prometheus, VictoriaLogs, policy-reporter, and APIM
 
 ### Docker Desktop-Specific Workaround
 

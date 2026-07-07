@@ -7,18 +7,17 @@ High-level design:
 - **Keycloak** provides the Kubernetes stage `900` OIDC IdP, realm, users, groups, and clients
 - **oauth2-proxy** sits in front of browser UIs and app routes
 - **Argo CD** uses native OIDC integration against Keycloak for group RBAC
-- **Dex** remains the lightweight Docker Compose proof path and an explicit compatibility provider
+- Docker Compose keeps a separate lightweight identity proof path; Kubernetes SSO is Keycloak-only
 
 ## Decisions
 
 1. **Scope**: SSO is enabled for admin UIs and selected app routes (`argocd`, `gitea`, `grafana`, `headlamp`, `hubble`, `kyverno`, `sentiment`, `subnetcalc`, `chatgpt-sim`).
 2. **IdP**: **Keycloak** with reproducible local users and groups.
 3. **Authorization proof**: org groups (`platform-admins`, `platform-viewers`) and app/environment groups (`app-*-dev`, `app-*-uat`) are distinct checks.
-4. **SigNoz**: optional observability path only; it is not part of the active SSO/RBAC success story.
-5. **APIM audience**: the Kubernetes APIM simulator validates Keycloak tokens
+4. **APIM audience**: the Kubernetes APIM simulator validates Keycloak tokens
    as a resource server with the dedicated `apim-simulator` audience. It does
    not treat `oauth2-proxy` as the API audience.
-6. **Portability**: subnetcalc keeps its non-Keycloak auth modes for other
+5. **Portability**: subnetcalc keeps its non-Keycloak auth modes for other
    platforms. The Keycloak wiring lives in the Kubernetes stage path, not in
    the subnetcalc domain core or the integrated APIM simulator contract.
 

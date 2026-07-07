@@ -170,11 +170,6 @@ variable "enable_grafana" {
   default     = false
 }
 
-variable "enable_loki" {
-  description = "Deploy Grafana Loki for log aggregation via Argo CD (Helm chart)."
-  type        = bool
-  default     = false
-}
 
 variable "enable_victoria_logs" {
   description = "Deploy VictoriaLogs for log aggregation via Argo CD (Helm chart)."
@@ -182,20 +177,10 @@ variable "enable_victoria_logs" {
   default     = false
 }
 
-variable "enable_tempo" {
-  description = "Deploy Grafana Tempo for distributed tracing via Argo CD (Helm chart)."
-  type        = bool
-  default     = false
-}
 
-variable "enable_signoz" {
-  description = "Deploy SigNoz via Argo CD (Helm chart)."
-  type        = bool
-  default     = false
-}
 
 variable "enable_otel_gateway" {
-  description = "Deploy a stable OTLP gateway collector (otel-collector.observability.svc.cluster.local) that can fan out to Prometheus/Grafana and/or SigNoz."
+  description = "Deploy a stable OTLP gateway collector (otel-collector.observability.svc.cluster.local) that can fan out to Prometheus, Grafana, and VictoriaLogs."
   type        = bool
   default     = false
 }
@@ -219,7 +204,7 @@ variable "enable_namespace_resource_bounds" {
 }
 
 variable "enable_observability_agent" {
-  description = "Deploy an OpenTelemetry Collector agent (DaemonSet) to scrape platform metrics and ship logs/metrics/traces to SigNoz."
+  description = "Enable chart-level metrics surfaces for platform control-plane components."
   type        = bool
   default     = false
 }
@@ -285,13 +270,13 @@ variable "enable_sso" {
 }
 
 variable "sso_provider" {
-  description = "OIDC provider for Kubernetes SSO. Kubernetes stage 900 defaults to Keycloak; Dex is retained for lightweight/local compatibility paths."
+  description = "OIDC provider for Kubernetes SSO. Kubernetes stacks are Keycloak-only; this input is retained so older tfvars fail gracefully."
   type        = string
   default     = "keycloak"
 
   validation {
-    condition     = contains(["dex", "keycloak"], lower(trimspace(var.sso_provider)))
-    error_message = "sso_provider must be one of: dex, keycloak."
+    condition     = lower(trimspace(var.sso_provider)) == "keycloak"
+    error_message = "sso_provider must be keycloak for Kubernetes stacks."
   }
 }
 
@@ -334,7 +319,7 @@ variable "gateway_https_listen_address" {
 }
 
 variable "expose_admin_nodeports" {
-  description = "Expose direct admin NodePort surfaces (Argo CD, Hubble, Gitea, Grafana, SigNoz) in addition to the HTTPS gateway path."
+  description = "Expose direct admin NodePort surfaces (Argo CD, Hubble, Gitea, Grafana) in addition to the HTTPS gateway path."
   type        = bool
   default     = true
 }
@@ -539,17 +524,7 @@ variable "grafana_liveness_initial_delay_seconds" {
   default     = 120
 }
 
-variable "loki_chart_version" {
-  description = "Loki chart version (grafana/loki)."
-  type        = string
-  default     = "7.0.0"
-}
 
-variable "loki_image_tag" {
-  description = "Loki hardened container image tag."
-  type        = string
-  default     = "3.6.7-debian13"
-}
 
 variable "victoria_logs_chart_version" {
   description = "VictoriaLogs chart version (victoria-metrics/victoria-logs-single)."
@@ -557,17 +532,7 @@ variable "victoria_logs_chart_version" {
   default     = "0.13.8"
 }
 
-variable "tempo_chart_version" {
-  description = "Tempo chart version (grafana/tempo)."
-  type        = string
-  default     = "1.24.4"
-}
 
-variable "signoz_chart_version" {
-  description = "SigNoz chart version."
-  type        = string
-  default     = "0.120.0"
-}
 
 variable "headlamp_chart_version" {
   description = "Headlamp chart version."
@@ -611,11 +576,6 @@ variable "hardened_image_registry" {
   default     = "dhi.io"
 }
 
-variable "dex_chart_version" {
-  description = "Dex chart version (charts.dexidp.io)."
-  type        = string
-  default     = "0.24.1"
-}
 
 variable "keycloak_image" {
   description = "Keycloak image used for the Kubernetes stage-900 IdP."
@@ -682,7 +642,7 @@ variable "gitea_ssh_node_port" {
 }
 
 variable "gitea_local_access_mode" {
-  description = "How host-side automation reaches Gitea locally: direct localhost NodePorts or temporary kubectl port-forwards."
+  description = "How host-side automation reaches Gitea locally: direct localhost NodePorts or transient kubectl port-forwards."
   type        = string
   default     = "nodeport"
 
@@ -692,17 +652,7 @@ variable "gitea_local_access_mode" {
   }
 }
 
-variable "signoz_ui_node_port" {
-  description = "SigNoz UI NodePort."
-  type        = number
-  default     = 30301
-}
 
-variable "signoz_ui_host_port" {
-  description = "Host port mapped to SigNoz UI NodePort (via kind extraPortMappings)."
-  type        = number
-  default     = 3301
-}
 
 variable "grafana_ui_node_port" {
   description = "Grafana UI NodePort."
@@ -990,12 +940,6 @@ check "enable_gitea_requires_enable_argocd" {
   }
 }
 
-check "enable_signoz_requires_enable_argocd" {
-  assert {
-    condition     = !var.enable_signoz || var.enable_argocd
-    error_message = "enable_signoz requires enable_argocd to be true."
-  }
-}
 
 check "enable_prometheus_requires_enable_argocd" {
   assert {
@@ -1025,12 +969,6 @@ check "enable_grafana_requires_prometheus_and_argocd" {
   }
 }
 
-check "enable_loki_requires_argocd" {
-  assert {
-    condition     = !var.enable_loki || var.enable_argocd
-    error_message = "enable_loki requires enable_argocd=true."
-  }
-}
 
 check "enable_victoria_logs_requires_argocd" {
   assert {
@@ -1039,12 +977,6 @@ check "enable_victoria_logs_requires_argocd" {
   }
 }
 
-check "enable_tempo_requires_argocd" {
-  assert {
-    condition     = !var.enable_tempo || var.enable_argocd
-    error_message = "enable_tempo requires enable_argocd=true."
-  }
-}
 
 check "enable_headlamp_requires_enable_argocd" {
   assert {
@@ -1060,12 +992,6 @@ check "enable_metrics_server_requires_enable_argocd" {
   }
 }
 
-check "enable_observability_agent_requires_signoz_and_argocd" {
-  assert {
-    condition     = !var.enable_observability_agent || (var.enable_signoz && var.enable_argocd)
-    error_message = "enable_observability_agent requires enable_signoz=true and enable_argocd=true."
-  }
-}
 
 check "enable_policies_requires_argocd_gitea_cilium" {
   assert {
@@ -1323,15 +1249,15 @@ variable "enable_backstage" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["auth-chat", "backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp", "signoz-auth-proxy"], key)
+      contains(["auth-chat", "backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp"], key)
     ])
-    error_message = "external_platform_image_refs supports only: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp, signoz-auth-proxy."
+    error_message = "external_platform_image_refs supports only: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
   }
 }

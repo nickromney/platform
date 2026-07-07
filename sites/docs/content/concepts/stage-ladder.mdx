@@ -48,10 +48,9 @@ those host-sensitive shortcuts disabled and use externally built local workload
 images instead. The operator outcome is still app reconciliation, but the local
 trust boundary is different.
 
-Stage `800` also has pathways. The default local path keeps memory pressure
-lower with Prometheus, Grafana, and VictoriaLogs. Loki and SigNoz are available
-through Terraform inputs and supporting scripts, but they are heavier and are
-not enabled in the default Kind/Lima stage-900 tfvars.
+Stage `800` keeps memory pressure lower with Prometheus, Grafana, and
+VictoriaLogs. Retired variants are no longer exposed through Terraform inputs
+or supporting scripts.
 
 ## Good Commands
 

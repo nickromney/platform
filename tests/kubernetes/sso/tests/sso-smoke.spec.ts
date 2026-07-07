@@ -25,7 +25,6 @@ type Target = {
     | 'chatgpt-add-mcp-oauth'
     | 'hubble-namespace-argocd'
     | 'mcp-inspector-d2-render-export'
-    | 'signoz-logs-and-metrics'
 }
 
 function isEnabled(envName: string, defaultValue: boolean) {
@@ -34,7 +33,6 @@ function isEnabled(envName: string, defaultValue: boolean) {
   return /^(true|1|yes|y)$/i.test(raw)
 }
 
-const INCLUDE_SIGNOZ = isEnabled('SSO_E2E_ENABLE_SIGNOZ', false)
 const INCLUDE_HEADLAMP = isEnabled('SSO_E2E_ENABLE_HEADLAMP', false)
 const INCLUDE_VICTORIA_LOGS = isEnabled('SSO_E2E_ENABLE_VICTORIA_LOGS', false)
 const INCLUDE_BACKSTAGE = isEnabled('SSO_E2E_ENABLE_BACKSTAGE', true)
@@ -61,13 +59,8 @@ function absolutePlatformUrl(hostPrefix: string, path: string) {
 
 const MCP_ENDPOINT_URL = absolutePlatformUrl('mcp', '/mcp')
 
-const OIDC_PROVIDER = (process.env.SSO_E2E_PROVIDER || 'keycloak').toLowerCase()
 const KEYCLOAK_REALM = process.env.SSO_E2E_KEYCLOAK_REALM || 'platform'
-const OIDC_HOST = new URL(
-  OIDC_PROVIDER === 'keycloak'
-    ? absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/`)
-    : absolutePlatformUrl('dex', '/dex/'),
-).host
+const OIDC_HOST = new URL(absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/`)).host
 const KEYCLOAK_ADMIN_CONSOLE_URL = absolutePlatformUrl('keycloak', '/admin/platform/console/#/platform/users')
 
 function escapeRegExp(value: string) {
@@ -80,7 +73,7 @@ function normalizeUrl(value: string) {
 
 const GRAFANA_LAUNCHPAD_APPS = [
   { name: 'Argo CD', url: platformUrl('argocd.admin'), flow: 'oauth2-proxy', segment: 'admin' },
-  { name: OIDC_PROVIDER === 'keycloak' ? 'Keycloak' : 'Dex', url: OIDC_PROVIDER === 'keycloak' ? KEYCLOAK_ADMIN_CONSOLE_URL : absolutePlatformUrl('dex', '/dex/'), flow: 'none', segment: 'admin' },
+  { name: 'Keycloak', url: KEYCLOAK_ADMIN_CONSOLE_URL, flow: 'none', segment: 'admin' },
   { name: 'Gitea', url: platformUrl('gitea.admin'), flow: 'oauth2-proxy', segment: 'admin' },
   { name: 'Headlamp', url: platformUrl('headlamp.admin'), flow: 'headlamp-oidc', segment: 'admin' },
   { name: 'Hubble', url: platformUrl('hubble.admin'), flow: 'oauth2-proxy', segment: 'admin' },
@@ -124,11 +117,11 @@ const BASE_TARGETS: Target[] = [
   },
 
   {
-    name: OIDC_PROVIDER === 'keycloak' ? 'keycloak' : 'dex',
-    url: OIDC_PROVIDER === 'keycloak' ? KEYCLOAK_ADMIN_CONSOLE_URL : absolutePlatformUrl('dex', '/dex/'),
+    name: 'keycloak',
+    url: KEYCLOAK_ADMIN_CONSOLE_URL,
     segment: 'admin',
-    flow: OIDC_PROVIDER === 'keycloak' ? 'keycloak-admin' : 'none',
-    postLogin: OIDC_PROVIDER === 'keycloak' ? 'keycloak-admin-console' : undefined,
+    flow: 'keycloak-admin',
+    postLogin: 'keycloak-admin-console',
   },
   { name: 'gitea-admin', url: platformUrl('gitea.admin'), segment: 'admin', flow: 'oauth2-proxy' },
   {
@@ -223,13 +216,9 @@ if (INCLUDE_BACKSTAGE && INCLUDE_VICTORIA_LOGS) {
   })
 }
 
-if (INCLUDE_SIGNOZ) {
   TARGETS.push({
-    name: 'signoz-admin',
-    url: platformUrl('signoz.admin'),
     segment: 'admin',
     flow: 'oauth2-proxy',
-    postLogin: 'signoz-logs-and-metrics',
   })
 }
 
@@ -242,19 +231,19 @@ function creds(segment: Segment) {
   const sharedPassword = process.env.PLATFORM_DEMO_PASSWORD || ''
   if (segment === 'dev') {
     return {
-      login: process.env.OIDC_DEV_LOGIN || process.env.KEYCLOAK_DEV_LOGIN || process.env.DEX_DEV_LOGIN || 'demo@dev.test',
-      password: process.env.OIDC_DEV_PASSWORD || process.env.KEYCLOAK_DEV_PASSWORD || process.env.DEX_DEV_PASSWORD || sharedPassword,
+      login: process.env.OIDC_DEV_LOGIN || process.env.KEYCLOAK_DEV_LOGIN || 'demo@dev.test',
+      password: process.env.OIDC_DEV_PASSWORD || process.env.KEYCLOAK_DEV_PASSWORD || sharedPassword,
     }
   }
   if (segment === 'uat') {
     return {
-      login: process.env.OIDC_UAT_LOGIN || process.env.KEYCLOAK_UAT_LOGIN || process.env.DEX_UAT_LOGIN || 'demo@uat.test',
-      password: process.env.OIDC_UAT_PASSWORD || process.env.KEYCLOAK_UAT_PASSWORD || process.env.DEX_UAT_PASSWORD || sharedPassword,
+      login: process.env.OIDC_UAT_LOGIN || process.env.KEYCLOAK_UAT_LOGIN || 'demo@uat.test',
+      password: process.env.OIDC_UAT_PASSWORD || process.env.KEYCLOAK_UAT_PASSWORD || sharedPassword,
     }
   }
   return {
-    login: process.env.OIDC_ADMIN_LOGIN || process.env.KEYCLOAK_ADMIN_LOGIN || process.env.DEX_ADMIN_LOGIN || 'demo@admin.test',
-    password: process.env.OIDC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD || process.env.DEX_ADMIN_PASSWORD || sharedPassword,
+    login: process.env.OIDC_ADMIN_LOGIN || process.env.KEYCLOAK_ADMIN_LOGIN || 'demo@admin.test',
+    password: process.env.OIDC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD || sharedPassword,
   }
 }
 
@@ -266,12 +255,12 @@ function keycloakConsoleCreds() {
 }
 
 if (!creds('admin').password || !creds('dev').password || !creds('uat').password) {
-  throw new Error('Set PLATFORM_DEMO_PASSWORD, OIDC_*_PASSWORD, KEYCLOAK_*_PASSWORD, or DEX_*_PASSWORD before running the SSO smoke tests')
+  throw new Error('Set PLATFORM_DEMO_PASSWORD, OIDC_*_PASSWORD, or KEYCLOAK_*_PASSWORD before running the SSO smoke tests')
 }
-if (OIDC_PROVIDER === 'keycloak' && !keycloakConsoleCreds().password) {
+if (!keycloakConsoleCreds().password) {
   throw new Error('Set PLATFORM_DEMO_PASSWORD or KEYCLOAK_CONSOLE_ADMIN_PASSWORD before running the Keycloak admin console smoke test')
 }
-if (INCLUDE_MCP && OIDC_PROVIDER === 'keycloak' && VERIFY_APP_ACTIONS && !OAUTH2_PROXY_CLIENT_SECRET) {
+if (INCLUDE_MCP && VERIFY_APP_ACTIONS && !OAUTH2_PROXY_CLIENT_SECRET) {
   throw new Error('Set SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET, or run tests/kubernetes/sso/run.sh against a cluster that has sso/oauth2-proxy-oidc')
 }
 
@@ -285,14 +274,6 @@ async function maybeClickOauth2ProxyProvider(page: Page) {
   }
 }
 
-async function completeDexLocalLogin(page: Page, login: string, password: string) {
-  // Dex local login form.
-  await page.waitForSelector('#login', { timeout: 60_000 })
-  await page.fill('#login', login)
-  await page.fill('#password', password)
-  await page.click('#submit-login')
-}
-
 async function completeKeycloakLogin(page: Page, login: string, password: string) {
   await page.waitForSelector('#username', { timeout: 60_000 })
   await page.fill('#username', login)
@@ -301,21 +282,7 @@ async function completeKeycloakLogin(page: Page, login: string, password: string
 }
 
 async function completeOidcLogin(page: Page, login: string, password: string) {
-  if (OIDC_PROVIDER === 'keycloak') {
-    await completeKeycloakLogin(page, login, password)
-    return
-  }
-  await completeDexLocalLogin(page, login, password)
-  await maybeGrantDexAccess(page)
-}
-
-async function maybeGrantDexAccess(page: Page) {
-  // oauth2-proxy requests include `approval_prompt=force`, so Dex will show consent even if
-  // skipApprovalScreen=true. Click through if present.
-  const grant = page.getByRole('button', { name: /^grant access$/i })
-  if (await grant.isVisible().catch(() => false)) {
-    await grant.click()
-  }
+  await completeKeycloakLogin(page, login, password)
 }
 
 async function ensureOnTargetOrOidc(page: Page, targetUrl: string) {
@@ -389,14 +356,7 @@ async function loginViaOauth2ProxyRedirectOnce(page: Page, target: Target) {
   if (isTargetAppUrl(new URL(page.url()))) return
 
   await maybeClickOauth2ProxyProvider(page)
-  if (OIDC_PROVIDER === 'keycloak') {
-    await page.waitForURL(/protocol\/openid-connect\/auth/, { timeout: 60_000 })
-  } else {
-    await page.waitForURL(/dex\/auth/, { timeout: 60_000 })
-    if (!page.url().includes('/dex/auth/local/login')) {
-      await page.waitForURL(/dex\/auth\/local\/login/, { timeout: 60_000 })
-    }
-  }
+  await page.waitForURL(/protocol\/openid-connect\/auth/, { timeout: 60_000 })
 
   await completeOidcLogin(page, login, password)
 
@@ -570,7 +530,6 @@ async function loginKeycloakAdminConsole(page: Page, target: Target) {
 async function keycloakAdminConsoleWorks(page: Page) {
   await expect(page.locator('body')).not.toContainText(/Timeout when waiting for 3rd party check iframe message/i, { timeout: 10_000 })
   await expect(page.locator('body')).not.toContainText(/Something went wrong/i, { timeout: 10_000 })
-  await expect(page.locator('body')).not.toContainText(/temporary admin user/i, { timeout: 10_000 })
   await expect(page.locator('#username')).toHaveCount(0)
   await expect(page).toHaveURL(/\/admin\/platform\/console\/#\/platform\/users/)
   await expect(page.locator('body')).toContainText(/Realm|Users|Clients|Groups/i, { timeout: 120_000 })
@@ -855,10 +814,6 @@ async function grafanaBackstageObservabilityDashboardWorks(page: Page) {
 }
 
 async function keycloakAccessToken(page: Page, segment: Segment) {
-  if (OIDC_PROVIDER !== 'keycloak') {
-    throw new Error('MCP bearer-token E2E currently requires Keycloak because the APIM simulator validates Keycloak-issued JWTs')
-  }
-
   const tokenUrl = absolutePlatformUrl('keycloak', `/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`)
   const user = creds(segment)
   const response = await page.request.post(tokenUrl, {
@@ -1089,14 +1044,11 @@ async function waitForChatgptSimReady(page: Page, events?: PageRuntimeEvents) {
   throw new Error(`ChatGPT Sim did not initialize after login. diagnostics=${JSON.stringify(diagnostics, null, 2)} lastError=${errorMessage}`)
 }
 
-async function signozLogsExplorerHasContent(page: Page, baseUrl: string) {
   const u = new URL('/logs/logs-explorer', baseUrl)
   await gotoWithGatewayRetry(page, u.toString())
-  await assertNoGatewayErrorWithReloads(page, 'signoz-logs')
 
   await expect(page.locator('.logs-explorer-views-container')).toBeVisible({ timeout: 120_000 })
 
-  // SigNoz may show an onboarding modal that can block interactions.
   const quickFiltersOkay = page.getByRole('button', { name: /^okay$/i })
   if (await quickFiltersOkay.isVisible().catch(() => false)) {
     await quickFiltersOkay.click()
@@ -1141,22 +1093,15 @@ async function signozLogsExplorerHasContent(page: Page, baseUrl: string) {
     await page.waitForTimeout(2000)
   }
 
-  throw new Error(`SigNoz logs query returned 0 rows after retries (lastRowCount=${lastRowCount})`)
 }
 
-async function signozMetricsExplorerSummaryHasContent(page: Page, baseUrl: string) {
   const u = new URL('/metrics-explorer/summary', baseUrl)
   await gotoWithGatewayRetry(page, u.toString())
-  await assertNoGatewayErrorWithReloads(page, 'signoz-metrics')
 
-  // SigNoz metrics summary renders a table; ensure it has data rows.
   const rows = page.locator('table tbody tr')
   await expect.poll(async () => rows.count(), { timeout: 120_000 }).toBeGreaterThan(0)
 }
 
-async function signozVerifyLogsAndMetrics(page: Page, baseUrl: string) {
-  await signozLogsExplorerHasContent(page, baseUrl)
-  await signozMetricsExplorerSummaryHasContent(page, baseUrl)
 }
 
 type BrowserApiTraffic = {
@@ -1400,7 +1345,6 @@ test.describe(SUITE_NAME, () => {
         await loginViaOauth2ProxyRedirect(page, t)
       }
 
-      // If the upstream is broken, we want a hard failure (e.g. SigNoz 502 after login).
       await assertNoGatewayErrorWithReloads(page, t.name)
       expect(await isOauth2ProxyForbiddenPage(page), `OAuth2 proxy rejected post-login access for ${t.name}; url=${page.url()}`).toBe(false)
 
@@ -1447,8 +1391,6 @@ test.describe(SUITE_NAME, () => {
         if (t.postLogin === 'mcp-inspector-d2-render-export') {
           await mcpInspectorD2RenderAndExport(page)
         }
-        if (t.postLogin === 'signoz-logs-and-metrics') {
-          await signozVerifyLogsAndMetrics(page, t.url)
         }
       }
 
@@ -1462,7 +1404,7 @@ test.describe(SUITE_NAME, () => {
       await expect(page.locator('#login')).toHaveCount(0)
       await expect(page.locator('#username')).toHaveCount(0)
       const finalUrl = new URL(page.url())
-      if (t.name !== 'keycloak' && t.name !== 'dex') {
+      if (t.name !== 'keycloak') {
         expect(finalUrl.host === OIDC_HOST).toBe(false)
       }
     })
@@ -1470,7 +1412,6 @@ test.describe(SUITE_NAME, () => {
 
   test('subnetcalc-dev: sign out clears Keycloak SSO session used by chatgpt-dev', async ({ page }) => {
     test.setTimeout(180_000)
-    test.skip(OIDC_PROVIDER !== 'keycloak', 'Keycloak SSO backend logout verification is provider-specific')
     test.skip(!INCLUDE_SUBNETCALC || !INCLUDE_MCP, 'requires chatgpt-sim and subnetcalc dev apps')
 
     const chatgptTarget: Target = {
@@ -1513,7 +1454,6 @@ test.describe(SUITE_NAME, () => {
 
   test('chatgpt-dev: sign out clears Keycloak SSO session used by subnetcalc-dev', async ({ page }) => {
     test.setTimeout(180_000)
-    test.skip(OIDC_PROVIDER !== 'keycloak', 'Keycloak SSO backend logout verification is provider-specific')
     test.skip(!INCLUDE_SUBNETCALC || !INCLUDE_MCP, 'requires chatgpt-sim and subnetcalc dev apps')
 
     const chatgptTarget: Target = {

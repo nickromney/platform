@@ -172,9 +172,8 @@ and selected tool images. Those should remain visible exceptions rather than
 becoming invisible drift.
 
 The current default stage files enable Prometheus, Grafana, and VictoriaLogs for
-the stage-800/900 observability path. Loki and SigNoz are available pathways,
-but they are heavier and are not enabled by the default Kind/Lima
-stage-900 tfvars.
+the stage-800/900 observability path. Retired observability variants are not
+enabled by the Kind/Lima stage-900 tfvars.
 
 ## Multi-Stage Builds
 
@@ -324,9 +323,8 @@ The docs should be honest about remaining gaps:
 - Some external egress policy is still shared across multiple app backends.
 - Observability policy still allows selected host/remote-node access that
   should stay justified.
-- Source repo Markdown still contains older wording that blurs the default
-  observability path with heavier Loki and SigNoz alternatives; treat stage
-  tfvars as the stronger source until those docs are rewritten as pathways.
+- Source repo Markdown should treat the VictoriaLogs path as the current
+  observability source of truth.
 - Gitea bootstrap still needs a remaining public Helm exception.
 - Local demo credentials are not production identity.
 - A public deployment needs firewall, DNS, certificate, runner, and secret

@@ -116,8 +116,7 @@ protocolMappers:
 Headlamp points at the selected provider via Terraform locals. Kubernetes API
 authorization is group-based: `platform-admins` receives the local demo admin
 role, and `platform-viewers` receives read-only bindings for selected
-namespaces. Dex remains available only when the explicit compatibility provider
-is selected.
+namespaces. Kubernetes SSO is Keycloak-only.
 
 #### Option B: Service Account Token
 

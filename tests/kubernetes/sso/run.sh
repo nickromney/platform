@@ -191,7 +191,7 @@ run_playwright_in_docker() {
 
   # The specs also read credential/config env families beyond SSO_E2E_*
   # (see tests/*.spec.ts): pass each family through by prefix.
-  for env_prefix in SSO_E2E_ OIDC_ KEYCLOAK_ DEX_ PLATFORM_DEMO_ PW_SLOWMO; do
+  for env_prefix in SSO_E2E_ OIDC_ KEYCLOAK_ PLATFORM_DEMO_ PW_SLOWMO; do
     while IFS= read -r env_name; do
       [ -n "${env_name}" ] || continue
       docker_args+=(-e "${env_name}")
@@ -199,14 +199,12 @@ run_playwright_in_docker() {
   done
 
   docker_args+=(
-    -e "SSO_E2E_ENABLE_SIGNOZ=${SSO_E2E_ENABLE_SIGNOZ}"
     -e "SSO_E2E_ENABLE_HEADLAMP=${SSO_E2E_ENABLE_HEADLAMP}"
     -e "SSO_E2E_ENABLE_VICTORIA_LOGS=${SSO_E2E_ENABLE_VICTORIA_LOGS}"
     -e "SSO_E2E_ENABLE_BACKSTAGE=${SSO_E2E_ENABLE_BACKSTAGE}"
     -e "SSO_E2E_ENABLE_MCP=${SSO_E2E_ENABLE_MCP}"
     -e "SSO_E2E_ENABLE_SENTIMENT=${SSO_E2E_ENABLE_SENTIMENT}"
     -e "SSO_E2E_ENABLE_SUBNETCALC=${SSO_E2E_ENABLE_SUBNETCALC}"
-    -e "SSO_E2E_PROVIDER=${SSO_E2E_PROVIDER_VALUE}"
     -e "SSO_E2E_KEYCLOAK_REALM=${SSO_E2E_KEYCLOAK_REALM_VALUE}"
     -e "SSO_E2E_BASE_PORT=${SSO_E2E_BASE_PORT_VALUE}"
     -e "SSO_E2E_HOST_RESOLVER_RULES=${host_resolver_rules}"
@@ -231,14 +229,12 @@ run_playwright_in_docker() {
   docker "${docker_args[@]}"
 }
 
-SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ:-$(tfvar_bool enable_signoz false)}"
 SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP:-$(tfvar_bool enable_headlamp false)}"
 SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS:-$(tfvar_bool enable_victoria_logs false)}"
 SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE:-$(tfvar_bool enable_backstage true)}"
 SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP:-true}"
 SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT:-$(tfvar_bool enable_app_repo_sentiment true)}"
 SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC:-$(tfvar_bool enable_app_repo_subnetcalc true)}"
-SSO_E2E_PROVIDER_VALUE="${SSO_E2E_PROVIDER:-$(tfvar_value sso_provider keycloak)}"
 SSO_E2E_KEYCLOAK_REALM_VALUE="${SSO_E2E_KEYCLOAK_REALM:-$(tfvar_value keycloak_realm platform)}"
 SSO_E2E_BASE_PORT_VALUE="${SSO_E2E_BASE_PORT:-$(tfvar_value gateway_https_host_port 443)}"
 SSO_E2E_HOST_RESOLVER_RULES_VALUE="${SSO_E2E_HOST_RESOLVER_RULES:-}"
@@ -254,7 +250,6 @@ fi
 
 if [ -z "${SSO_E2E_OAUTH2_PROXY_CLIENT_SECRET_VALUE}" ] \
   && [ "${SSO_E2E_ENABLE_MCP}" = "true" ] \
-  && [ "${SSO_E2E_PROVIDER_VALUE}" = "keycloak" ] \
   && command -v kubectl >/dev/null 2>&1; then
   kubectl_args=()
   if [ -n "${KUBECONFIG_CONTEXT:-}" ]; then
@@ -291,14 +286,12 @@ case "${PLATFORM_PLAYWRIGHT_MODE}" in
 esac
 
 if [ "${HEADED:-0}" = "1" ]; then
-  SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE}" \
   SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP}" \
   SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT}" \
   SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC}" \
-  SSO_E2E_PROVIDER="${SSO_E2E_PROVIDER_VALUE}" \
   SSO_E2E_KEYCLOAK_REALM="${SSO_E2E_KEYCLOAK_REALM_VALUE}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \
@@ -306,14 +299,12 @@ if [ "${HEADED:-0}" = "1" ]; then
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
   bun run test:headed -- ${test_args[@]+"${test_args[@]}"}
 else
-  SSO_E2E_ENABLE_SIGNOZ="${SSO_E2E_ENABLE_SIGNOZ}" \
   SSO_E2E_ENABLE_HEADLAMP="${SSO_E2E_ENABLE_HEADLAMP}" \
   SSO_E2E_ENABLE_VICTORIA_LOGS="${SSO_E2E_ENABLE_VICTORIA_LOGS}" \
   SSO_E2E_ENABLE_BACKSTAGE="${SSO_E2E_ENABLE_BACKSTAGE}" \
   SSO_E2E_ENABLE_MCP="${SSO_E2E_ENABLE_MCP}" \
   SSO_E2E_ENABLE_SENTIMENT="${SSO_E2E_ENABLE_SENTIMENT}" \
   SSO_E2E_ENABLE_SUBNETCALC="${SSO_E2E_ENABLE_SUBNETCALC}" \
-  SSO_E2E_PROVIDER="${SSO_E2E_PROVIDER_VALUE}" \
   SSO_E2E_KEYCLOAK_REALM="${SSO_E2E_KEYCLOAK_REALM_VALUE}" \
   SSO_E2E_BASE_PORT="${SSO_E2E_BASE_PORT_VALUE}" \
   SSO_E2E_HOST_RESOLVER_RULES="${SSO_E2E_HOST_RESOLVER_RULES_VALUE}" \

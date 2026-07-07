@@ -390,16 +390,6 @@ EOF
   [[ "${output}" == *"INFO dry-run: would sync SOURCE_DIR into Gitea if needed"* ]]
 }
 
-@test "create signoz auth proxy secret supports standard no-op interface" {
-  run /bin/bash "${REPO_ROOT}/terraform/kubernetes/scripts/create-signoz-auth-proxy-secret.sh"
-
-  [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Usage: create-signoz-auth-proxy-secret.sh [--dry-run] [--execute]"* ]]
-  [[ "${output}" == *"--dry-run  Show a summary and exit before side effects"* ]]
-  [[ "${output}" == *"--execute  Execute the script body; without it the script prints help and/or preview output"* ]]
-  [[ "${output}" == *"INFO dry-run: would create or update the signoz-auth-proxy-credentials secret"* ]]
-}
-
 @test "promote gitea admin supports standard no-op interface" {
   run /bin/bash "${REPO_ROOT}/terraform/kubernetes/scripts/promote-gitea-admin.sh"
 

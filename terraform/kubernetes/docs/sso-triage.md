@@ -4,7 +4,7 @@ This doc captures a practical "debug loop" for when platform SSO was working and
 
 Scope: kind-local cluster with:
 
-- Keycloak as the stage `900` IdP, with Dex retained as an explicit compatibility provider
+- Keycloak as the stage `900` IdP
 - oauth2-proxy in front of UIs
 - Gateway API `HTTPRoute` objects routing hostnames to the oauth2-proxy services
 - Admin UIs: Gitea, ArgoCD, Grafana, Headlamp, Hubble, Kyverno
@@ -118,19 +118,7 @@ curl -skD - -o /dev/null 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_
 curl -skD - -o /dev/null -H 'Cookie: kind-v2-sso-subnetcalc-dev=foo' 'https://subnetcalc.dev.127.0.0.1.sslip.io/oauth2/sign_out?rd=/signed-out.html' | rg -n 'set-cookie|location'
 ```
 
-### 5) Optional SigNoz path: oauth2-proxy Authorization header + upstream choice
-
-SigNoz is not part of the active stage-900 RBAC proof. If you explicitly enable
-it, it is typically fronted by a small auth-bridge service (`signoz-auth-proxy`)
-that:
-
-- logs into SigNoz via `/api/v1/login`
-- injects `AUTH_TOKEN` (etc) into the frontend bundle response
-- proxies requests to SigNoz with SigNoz's own JWT
-
-Note: because SigNoz is authenticated via a service-user JWT, the email SigNoz shows in its UI can reflect that service user.
-
-### 6) Gitea-specific: forced "Change Password" after SSO
+### 5) Gitea-specific: forced "Change Password" after SSO
 
 Symptom: after authenticating via Keycloak, Gitea immediately lands on:
 
@@ -148,20 +136,6 @@ Bootstrap fix (this repo):
 
 - `terraform/kubernetes/scripts/ensure-gitea-org.sh` creates users with `must_change_password: false`
 - `terraform/kubernetes/scripts/unset-gitea-must-change-password.sh` clears the flag for all users (belt-and-suspenders for local dev)
-In the optional SigNoz path, this repo rewrites the `/api/v1/user` response in
-`signoz-auth-proxy` to prefer the upstream OIDC email forwarded by oauth2-proxy
-(`X-Auth-Request-Email` / `X-Forwarded-Email`) so the UI matches the IdP identity.
-
-Common failure modes:
-
-1) oauth2-proxy is pointing upstream directly to `signoz:8080` instead of `signoz-auth-proxy:3000`.
-   - Symptom: Keycloak login works, but SigNoz still shows its own login screen or "apps" UI is broken.
-
-2) oauth2-proxy is configured to set an `Authorization: Bearer <OIDC access token>` header.
-   - Symptom: Signoz auth proxy receives the wrong Authorization header and SigNoz API calls break.
-   - Fix: do not set Authorization at oauth2-proxy, and/or have signoz-auth-proxy strip inbound Authorization headers.
-
-Safety note: avoid dumping SigNoz JS bundles that include injected JWTs into logs.
 
 ### 6) ArgoCD gotcha: Helm `parameters` can override your Helm `values`
 
@@ -170,13 +144,13 @@ Even if `spec.source.helm.values` looks correct, `spec.source.helm.parameters` c
 Command:
 
 ```bash
-kubectl -n argocd get application oauth2-proxy-signoz -o jsonpath='{.spec.source.helm.parameters}{"\n"}'
+kubectl -n argocd get application platform-gateway-routes-sso -o jsonpath='{.spec.source.helm.parameters}{"\n"}'
 ```
 
 If you see something like:
 
 ```json
-[{"name":"extraArgs.upstream","value":"http://signoz.observability.svc.cluster.local:8080"}]
+[{"name":"extraArgs.upstream","value":"http://unexpected.example.invalid"}]
 ```
 
 ...then your `values` file upstream is being overridden.
@@ -242,4 +216,4 @@ Gotcha (UAT namespaces):
 Where to look for evidence:
 
 - `kubectl -n <ns> logs pod/<llama-pod> --tail=200`
-- SigNoz logs for `sentiment-api` / `llm` spans (if configured)
+- Application logs for `sentiment-api` / `llm` spans where configured

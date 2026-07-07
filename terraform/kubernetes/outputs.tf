@@ -37,8 +37,3 @@ output "gitea_ssh" {
   description = "Gitea SSH endpoint (NodePort)."
   value       = "ssh://${var.gitea_admin_username}@localhost:${var.gitea_ssh_node_port}"
 }
-
-output "signoz_url" {
-  description = "SigNoz UI URL when the optional SigNoz path is enabled."
-  value       = var.enable_signoz ? "http://localhost:${var.signoz_ui_host_port}" : null
-}

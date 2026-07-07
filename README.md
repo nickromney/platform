@@ -62,7 +62,7 @@ The stage ladder is cumulative:
 - `500`: Gitea plus the full Argo CD controller set
 - `600`: Kyverno, cert-manager, and Cilium policy controls
 - `700`: app repos and the in-cluster Actions runner
-- `800`: gateway TLS, Headlamp, Grafana, Prometheus, and Loki
+- `800`: gateway TLS, Headlamp, Grafana, Prometheus, and VictoriaLogs
 - `900`: Keycloak and `oauth2-proxy` single sign-on
 
 ## Choose A Path

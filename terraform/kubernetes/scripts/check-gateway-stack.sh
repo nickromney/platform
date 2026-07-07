@@ -261,18 +261,6 @@ if kubectl -n cert-manager get pods -l app=cainjector >/dev/null 2>&1; then
     ok "cert-manager cainjector Ready"
   fi
 fi
-
-section "SigNoz Bootstrap (platform-gateway-routes hook)"
-run kubectl -n observability get svc signoz -o wide
-run kubectl -n observability get svc signoz-clickhouse -o wide
-run kubectl -n observability get pods -o wide | grep -E '(^NAME|signoz|clickhouse|schema-migrator|bootstrap)' || true
-if kubectl -n observability get job signoz-bootstrap >/dev/null 2>&1; then
-  run kubectl -n observability get job signoz-bootstrap -o wide
-  echo
-  echo "signoz-bootstrap logs (tail):"
-  run kubectl -n observability logs job/signoz-bootstrap --tail=80
-fi
-
 section "Gateway API Objects"
 echo "Gateways:"
 run kubectl get gateway -A -o wide

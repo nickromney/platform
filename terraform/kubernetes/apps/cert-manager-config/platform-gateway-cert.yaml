@@ -17,7 +17,6 @@ spec:
     - argocd.admin.127.0.0.1.sslip.io
     - gitea.admin.127.0.0.1.sslip.io
     - hubble.admin.127.0.0.1.sslip.io
-    - signoz.admin.127.0.0.1.sslip.io
     - sentiment.dev.127.0.0.1.sslip.io
     - sentiment.uat.127.0.0.1.sslip.io
     - subnetcalc.dev.127.0.0.1.sslip.io

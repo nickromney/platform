@@ -1,12 +1,12 @@
 ---
 title: Platform Pathways
-description: Default and heavier alternative paths for observability and identity.
+description: Current observability and identity paths.
 ---
 
 # Platform Pathways
 
-The repo carries more than one valid platform composition. The docs should make
-the chosen default clear without pretending the alternatives do not exist.
+The Kubernetes stack keeps one current observability and identity path so the
+local test matrix stays small.
 
 ## Pathway Map
 
@@ -14,7 +14,7 @@ the chosen default clear without pretending the alternatives do not exist.
   className="platform-diagram platform-diagram--stage-rail"
   lightSrc="/diagrams/generated/concepts-platform-pathways-1-light.svg"
   darkSrc="/diagrams/generated/concepts-platform-pathways-1-dark.svg"
-  alt="Platform pathway map showing default observability and identity paths with heavier opt-ins"
+  alt="Platform pathway map showing current observability and identity paths"
   width={850}
   height={1418}
 />
@@ -23,9 +23,7 @@ the chosen default clear without pretending the alternatives do not exist.
 
 | Pathway | Status | Use when | Tradeoff |
 | --- | --- | --- | --- |
-| Prometheus + Grafana + VictoriaLogs | Default stage-800/900 path. | You want the local platform to expose metrics, dashboards, and logs while staying reasonable on a laptop. | Less all-in-one than SigNoz, but lighter. |
-| Loki | Available alternative. | You specifically want the Loki log-store model or are comparing log backends. | More memory and chart surface than the default path. |
-| SigNoz | Available heavier alternative. | You want the OpenTelemetry-oriented, product-style observability experience. | Highest memory pressure and more moving parts. |
+| Prometheus + Grafana + VictoriaLogs | Current stage-800/900 path. | You want the local platform to expose metrics, dashboards, and logs while staying reasonable on a laptop. | Focused local stack with one log store. |
 
 The current default Kind/Lima stage files set:
 
@@ -33,44 +31,21 @@ The current default Kind/Lima stage files set:
 enable_prometheus    = true
 enable_grafana       = true
 enable_victoria_logs = true
-enable_loki          = false
-enable_signoz        = false
 ```
 
-Enable the heavier paths through explicit tfvars rather than by editing the
-checked-in stage files in place.
-
-```hcl filename=".run/heavier-observability.tfvars"
-enable_signoz = true
-```
-
-Use `enable_loki = true` for the Loki path. Combining Loki and SigNoz is
-possible, but it should be treated as a memory-rich host profile rather than
-the default laptop path.
-
-Then pass that file through the standard Make wrapper:
-
-```bash
-PLATFORM_TFVARS=.run/heavier-observability.tfvars make -C kubernetes/kind 900 plan
-```
-
-<Callout type="warning">
-  Treat SigNoz and Loki as capacity decisions. They are valid alternatives, but
-  they change startup time, memory pressure, chart reconciliation, and
-  troubleshooting surface.
-</Callout>
+Retired observability variants are intentionally absent from the workflow and
+stage tfvars.
 
 ## Identity Pathways
 
 | Pathway | Status | Use when | Tradeoff |
 | --- | --- | --- | --- |
 | Keycloak + `oauth2-proxy` | Default Kubernetes stage-900 path. | You want org roles, app/environment groups, OIDC clients, and a real IdP administration surface. | More realistic IDP surface, more memory and slower cold starts. |
-| Dex + `oauth2-proxy` | Shared compose platform and explicit compatibility path. | You want a compact local SSO layer for browser-login proofing. | Small and explicit, but not a full enterprise IdP simulation. |
+| Compose identity proof | Docker Compose only. | You want a compact browser-login proof outside Kubernetes. | Separate substrate from the Kubernetes stack. |
 
 Stage `900` opts for Keycloak because the IDP journey now proves more than
 login: realm bootstrap, users, groups, OIDC clients, Argo CD group RBAC,
-Kubernetes API RBAC, and app/environment authorization. Compose keeps Dex as
-the smaller proof path.
+Kubernetes API RBAC, and app/environment authorization.
 
 ## Operator Rule
 

@@ -17,7 +17,7 @@ spec:
       - key: "k8s:app.kubernetes.io/name"
         operator: In
         values:
-          - dex
+          - keycloak
           - oauth2-proxy
   egress:
     - toEndpoints:
