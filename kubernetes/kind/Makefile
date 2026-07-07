@@ -24,6 +24,7 @@ ENSURE_PLAYWRIGHT_BROWSERS := $(abspath $(K8S_SCRIPTS_DIR)/ensure-playwright-bro
 RENDER_LAUNCHPAD := $(abspath $(K8S_SCRIPTS_DIR)/render-launchpad.sh)
 RUN_DIAGNOSTIC_CHECK := $(abspath $(K8S_SCRIPTS_DIR)/run-diagnostic-check.sh)
 CHECK_STACK_PREREQS := $(K8S_SCRIPTS_DIR)/check-stack-prereqs.sh
+SNAPSHOT_TFSTATE := $(abspath $(K8S_SCRIPTS_DIR)/snapshot-tfstate.sh)
 RESET_KUBECONFIG_CONTEXT := $(K8S_SCRIPTS_DIR)/reset-kubeconfig-context.sh
 MEMORY_REPORT := $(abspath $(K8S_SCRIPTS_DIR)/memory-report.sh)
 CHECK_TARGET_HOST_PORTS := $(abspath $(K8S_SCRIPTS_DIR)/check-target-host-ports.sh)
@@ -55,7 +56,9 @@ CHECK_VERSION_FORMAT ?= text
 TOFU_TEST_TIMEOUT_SECONDS ?= 600
 OIDC_RECOVERY_FORMAT ?= text
 OIDC_RECOVERY_FORCE_MODE ?= nginx-rollout
+TFSTATE_SNAPSHOT_KEEP ?= 5
 READONLY_MODE_FLAG := $(if $(filter 1,$(DRY_RUN)),--dry-run,--execute)
+STATE_RESTORE_MODE_FLAG := $(if $(filter 1,$(AUTO_APPROVE)),--execute,--dry-run)
 IDP_PUBLIC_URL ?= https://portal.127.0.0.1.sslip.io
 IDP_API_PUBLIC_URL ?= https://portal-api.127.0.0.1.sslip.io
 K8S_IDP_RUNTIME := kind
@@ -116,7 +119,7 @@ VALID_STAGE_HELPERS := $(KUBERNETES_STAGE_READONLY_HELPERS)
 VALID_HELPER_MODES := auto on off
 VALID_KIND_IMAGE_DISTRIBUTION_MODES := load registry hybrid baked
 HAS_PLATFORM_GOAL := $(if $(TARGET_FROM_GOALS),1,)
-MAKE_KNOWN_GOALS := help init prepare-state check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
+MAKE_KNOWN_GOALS := help init prepare-state state-snapshot state-restore check-stage-monotonicity check-docker-daemon check-memory check-kind-state ensure-kind-running check-kubeconfig check-kind-host-ports check-lima-stopped check-slicer-stopped check-conflicting-clusters-stopped assert-kind-active check-platform-env-file kind plan apply readiness check-health check-security check-rbac check-gateway-stack check-cluster check-gateway-urls check-app check-sso check-sso-e2e exercise-oidc-recovery gitea-sync gitea-repo-lifecycle-demo launchpad-render idp-catalog idp-env idp-deployments idp-secrets idp-scorecards idp-api backstage idp-sdk idp-mcp show-urls status docker-health docker-prune-estimate docker-safe-clean memory-report stop-kind stop start-kind start prereqs playwright-install image-signing-prereqs preload-images preload-images-pull-only discover-images ensure-image-cache sync-image-cache render-operator-overrides build-local-platform-images build-local-workload-images merge-default-kubeconfig reset state-reset env test test-shell test-bats test-bats-plan test-bats-serial test-bats-all test-idempotence check-version check-provider-version ensure-kind-kubeconfig audit-bootstrap $(VALID_TARGETS) $(VALID_ACTIONS) $(VALID_STAGES)
 MAKE_UNKNOWN_GOAL_GUARD_DEFER_GOALS := $(VALID_STAGES)
 STAGE_WORKFLOW_SUGGEST_GOALS := $(VALID_ACTIONS) $(VALID_TARGETS) $(VALID_STAGES)
 STAGE_WORKFLOW_USAGE := make [kind] <stage> <plan|apply> [AUTO_APPROVE=1]
@@ -237,6 +240,8 @@ help:
 	@echo "  make preload-images-pull-only                 Warm Docker cache only"
 	@echo "  make prereqs"
 	@echo "  make reset        [AUTO_APPROVE=1]"
+	@echo "  make state-snapshot [TFSTATE_SNAPSHOT_KEEP=5] Snapshot local Terraform/OpenTofu state"
+	@echo "  make state-restore  [AUTO_APPROVE=1]          Preview or restore zero-byte local state from the newest snapshot"
 	@echo "  make state-reset  [AUTO_APPROVE=1]              Remove stale Terraform/OpenTofu state lock only"
 	@echo "  make show-urls"
 	@echo "  make sync-image-cache                        Mirror the filtered preload image set into the shared host registry"
@@ -407,6 +412,11 @@ check-kind-state:
 		echo "Refusing to continue while the previous Terraform/OpenTofu operation may still be active."; \
 		exit 1; \
 	fi; \
+	if [ ! -s "$(STATE_FILE)" ]; then \
+		"$(SNAPSHOT_TFSTATE)" --execute --state-file "$(TG_STATE_PATH)" --keep "$(TFSTATE_SNAPSHOT_KEEP)" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"; \
+		echo "Refusing to continue against a live cluster with zero-byte state."; \
+		exit 1; \
+	fi; \
 	if ! jq -e '.resources[] | select(.type=="kind_cluster" and .name=="local" and (.instances | length) > 0)' "$(STATE_FILE)" >/dev/null 2>&1; then \
 		echo "kind-local exists, but $(STATE_FILE) does not contain kind_cluster.local[0]."; \
 		if [ -f "$(STATE_FILE).backup" ]; then \
@@ -547,6 +557,20 @@ prepare-state:
 	if [ -f "$(LEGACY_STATE_FILE).backup" ]; then \
 		mv "$(LEGACY_STATE_FILE).backup" "$(STATE_FILE).backup"; \
 	fi
+
+.PHONY: state-snapshot
+state-snapshot:
+	@"$(SNAPSHOT_TFSTATE)" --execute \
+		--state-file "$(TG_STATE_PATH)" \
+		--keep "$(TFSTATE_SNAPSHOT_KEEP)" \
+		--restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"
+
+.PHONY: state-restore
+state-restore:
+	@"$(SNAPSHOT_TFSTATE)" --restore $(STATE_RESTORE_MODE_FLAG) \
+		--state-file "$(TG_STATE_PATH)" \
+		--keep "$(TFSTATE_SNAPSHOT_KEEP)" \
+		--restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"
 
 .PHONY: plan
 ifeq ($(HAS_PLATFORM_GOAL),1)
@@ -725,6 +749,7 @@ apply: workflow-validate-stage
 	tg_apply() { \
 		$(call tg_stack_apply,$$apply_args); \
 	}; \
+	run_step "state-snapshot" "$(SNAPSHOT_TFSTATE)" --execute --state-file "$(TG_STATE_PATH)" --keep "$(TFSTATE_SNAPSHOT_KEEP)" --restore-command "make -C kubernetes/kind state-restore AUTO_APPROVE=1"; \
 	run_step "terragrunt-init" tg_init; \
 	if [ "$$profile_enabled" = "1" ]; then \
 		set +e; \
