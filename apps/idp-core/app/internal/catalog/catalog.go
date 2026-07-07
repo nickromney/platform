@@ -39,11 +39,11 @@ type Deployment struct {
 }
 
 type Environment struct {
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Namespace string `json:"namespace"`
-	Route     string `json:"route"`
-	RBAC      RBAC   `json:"rbac"`
+	Name       string      `json:"name"`
+	Type       string      `json:"type"`
+	Namespace  string      `json:"namespace"`
+	Route      string      `json:"route"`
+	RBAC       RBAC        `json:"rbac"`
 	Deployment *Deployment `json:"deployment,omitempty"`
 	Health     string      `json:"health,omitempty"`
 	Sync       string      `json:"sync,omitempty"`
@@ -63,12 +63,14 @@ type Secret struct {
 }
 
 type Scorecard struct {
-	RuntimeProfile    string `json:"runtime_profile"`
-	HasHealthEndpoint bool   `json:"has_health_endpoint"`
-	HasNetworkPolicy  bool   `json:"has_network_policy"`
-	HasOwner          bool   `json:"has_owner"`
-	HasModelCard      bool   `json:"has_model_card,omitempty"`
-	Tier              string `json:"tier,omitempty"`
+	RuntimeProfile            string `json:"runtime_profile"`
+	HasHealthEndpoint         bool   `json:"has_health_endpoint"`
+	HasNetworkPolicy          bool   `json:"has_network_policy"`
+	HasRuntimeProbes          bool   `json:"has_runtime_probes"`
+	HasResourceRequestsLimits bool   `json:"has_resource_requests_limits"`
+	HasOwner                  bool   `json:"has_owner"`
+	HasModelCard              bool   `json:"has_model_card,omitempty"`
+	Tier                      string `json:"tier,omitempty"`
 }
 
 func Load(path string) (*Catalog, error) {
@@ -173,13 +175,15 @@ func (c *Catalog) ListSecrets() []SecretRecord {
 }
 
 type ScorecardRecord struct {
-	App               string `json:"app"`
-	RuntimeProfile    string `json:"runtime_profile"`
-	HasHealthEndpoint bool   `json:"has_health_endpoint"`
-	HasNetworkPolicy  bool   `json:"has_network_policy"`
-	HasOwner          bool   `json:"has_owner"`
-	HasModelCard      *bool  `json:"has_model_card,omitempty"`
-	Tier              string `json:"tier,omitempty"`
+	App                       string `json:"app"`
+	RuntimeProfile            string `json:"runtime_profile"`
+	HasHealthEndpoint         bool   `json:"has_health_endpoint"`
+	HasNetworkPolicy          bool   `json:"has_network_policy"`
+	HasRuntimeProbes          bool   `json:"has_runtime_probes"`
+	HasResourceRequestsLimits bool   `json:"has_resource_requests_limits"`
+	HasOwner                  bool   `json:"has_owner"`
+	HasModelCard              *bool  `json:"has_model_card,omitempty"`
+	Tier                      string `json:"tier,omitempty"`
 }
 
 func (c *Catalog) ListScorecards() []ScorecardRecord {
@@ -189,21 +193,23 @@ func (c *Catalog) ListScorecards() []ScorecardRecord {
 		if profile == "" {
 			profile = "not declared"
 		}
-		
+
 		hasOwner := app.Scorecard.HasOwner
 		if app.Owner != "" {
 			hasOwner = true
 		}
 
 		record := ScorecardRecord{
-			App:               app.Name,
-			RuntimeProfile:    profile,
-			HasHealthEndpoint: app.Scorecard.HasHealthEndpoint,
-			HasNetworkPolicy:  app.Scorecard.HasNetworkPolicy,
-			HasOwner:          hasOwner,
-			Tier:              app.Scorecard.Tier,
+			App:                       app.Name,
+			RuntimeProfile:            profile,
+			HasHealthEndpoint:         app.Scorecard.HasHealthEndpoint,
+			HasNetworkPolicy:          app.Scorecard.HasNetworkPolicy,
+			HasRuntimeProbes:          app.Scorecard.HasRuntimeProbes,
+			HasResourceRequestsLimits: app.Scorecard.HasResourceRequestsLimits,
+			HasOwner:                  hasOwner,
+			Tier:                      app.Scorecard.Tier,
 		}
-		
+
 		// Optional field
 		if app.Scorecard.HasModelCard {
 			val := true

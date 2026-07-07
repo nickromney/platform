@@ -442,7 +442,7 @@ func TestCatalogDerivedReadModels(t *testing.T) {
       {"name": "uat", "route": "https://fixture.uat.example.test", "health": "/healthz", "sync": "manual"}
     ],
     "secrets": [{"name": "runtime-token", "scope": "runtime"}],
-    "scorecard": {"tier": "gold"}
+    "scorecard": {"has_runtime_probes": true, "has_resource_requests_limits": true, "tier": "gold"}
   }]
 }`), 0o644)
 	if err != nil {
@@ -469,7 +469,7 @@ func TestCatalogDerivedReadModels(t *testing.T) {
 
 	_, scorecards := request(t, server, http.MethodGet, "/api/v1/scorecards", nil)
 	firstScorecard := scorecards["scorecards"].([]any)[0].(map[string]any)
-	if firstScorecard["has_owner"] != true || firstScorecard["runtime_profile"] != "not declared" || firstScorecard["tier"] != "gold" {
+	if firstScorecard["has_owner"] != true || firstScorecard["runtime_profile"] != "not declared" || firstScorecard["has_runtime_probes"] != true || firstScorecard["has_resource_requests_limits"] != true || firstScorecard["tier"] != "gold" {
 		t.Fatalf("scorecard projection = %#v", firstScorecard)
 	}
 	assertSchemaShaped(t, firstScorecard, "scorecard.schema.json")

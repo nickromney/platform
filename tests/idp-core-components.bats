@@ -112,6 +112,8 @@ JSON
         "runtime_profile": "restricted",
         "has_health_endpoint": true,
         "has_network_policy": true,
+        "has_runtime_probes": true,
+        "has_resource_requests_limits": true,
         "has_owner": false,
         "tier": "gold"
       }
@@ -126,8 +128,8 @@ JSON
   [ "${status}" -eq 0 ]
   run jq -e '
     .schema_version == "platform.idp.scorecard-read-model/v1" and
-    all(.scorecards[]; has("app") and has("runtime_profile") and has("has_health_endpoint") and has("has_network_policy") and has("has_owner")) and
-    any(.scorecards[]; .app == "fixture-service" and .runtime_profile == "restricted" and .has_health_endpoint == true and .has_network_policy == true and .has_owner == true and .tier == "gold")
+    all(.scorecards[]; has("app") and has("runtime_profile") and has("has_health_endpoint") and has("has_network_policy") and has("has_runtime_probes") and has("has_resource_requests_limits") and has("has_owner")) and
+    any(.scorecards[]; .app == "fixture-service" and .runtime_profile == "restricted" and .has_health_endpoint == true and .has_network_policy == true and .has_runtime_probes == true and .has_resource_requests_limits == true and .has_owner == true and .tier == "gold")
   ' <<<"${output}"
 
   [ "${status}" -eq 0 ]
