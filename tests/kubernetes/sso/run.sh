@@ -164,6 +164,7 @@ run_playwright_in_docker() {
   local root_ca=""
   local docker_args=()
   local env_name=""
+  local keycloak_host_ip=""
 
   ensure_playwright_docker_image "${image}"
   root_ca="$(mkcert_root_ca)"
@@ -172,12 +173,21 @@ run_playwright_in_docker() {
     host_resolver_rules="$(docker_host_resolver_rules "${image}")"
   fi
 
+  # Chromium resolver rules only cover the browser. The spec's Keycloak token
+  # exchange runs node-side (page.request.post), where sslip.io DNS resolves
+  # to the container's own loopback — map that one hostname via /etc/hosts.
+  keycloak_host_ip="$(printf '%s\n' "${host_resolver_rules}" | sed -nE 's/.*MAP [^ ]+ ([^,]+).*/\1/p' | head -n 1)"
+
   docker_args=(
     run --rm
     --add-host host.docker.internal:host-gateway
     -v "${REPO_ROOT}:/workspace"
     -w /workspace/tests/kubernetes/sso
   )
+
+  if [ -n "${keycloak_host_ip}" ]; then
+    docker_args+=(--add-host "keycloak.${SSO_E2E_BASE_DOMAIN:-127.0.0.1.sslip.io}:${keycloak_host_ip}")
+  fi
 
   # The specs also read credential/config env families beyond SSO_E2E_*
   # (see tests/*.spec.ts): pass each family through by prefix.
