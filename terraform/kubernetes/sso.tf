@@ -1388,7 +1388,16 @@ fi
 if [[ -f "$${KIND_OPERATOR_OVERRIDES_FILE}" ]]; then
   check_args+=(--var-file "$${KIND_OPERATOR_OVERRIDES_FILE}")
 fi
-"${local.stack_dir}/scripts/check-cluster-health.sh" --execute "$${check_args[@]}"
+for attempt in 1 2; do
+  if "${local.stack_dir}/scripts/check-cluster-health.sh" --execute "$${check_args[@]}"; then
+    exit 0
+  fi
+  if [[ "$${attempt}" -lt 2 ]]; then
+    echo "Post-OIDC cluster health check failed; retrying once in 60s..." >&2
+    sleep 60
+  fi
+done
+exit 1
 __EOT__
     interpreter = ["/bin/bash", "-c"]
   }

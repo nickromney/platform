@@ -585,6 +585,64 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+resolve_kubeconfig_target() {
+  if [[ -n "${KUBECONFIG_PATH:-}" ]]; then
+    printf '%s\n' "${KUBECONFIG_PATH}"
+    return 0
+  fi
+
+  if [[ -n "${KUBECONFIG:-}" ]]; then
+    printf '%s\n' "${KUBECONFIG}"
+    return 0
+  fi
+
+  printf '%s\n' ""
+}
+
+configure_kubeconfig_target() {
+  KUBECONFIG_TARGET="$(resolve_kubeconfig_target)"
+  if [[ -z "${KUBECONFIG:-}" && -n "${KUBECONFIG_TARGET}" ]]; then
+    export KUBECONFIG="${KUBECONFIG_TARGET}"
+  fi
+}
+
+kubeconfig_target_label() {
+  local target="${1:-}"
+
+  if [[ -n "${target}" ]]; then
+    printf 'kubeconfig %s' "${target}"
+  else
+    printf 'default kubeconfig'
+  fi
+}
+
+assert_kubeconfig_target_answering() {
+  local target="$1"
+  local context="$2"
+  local attempt probe_output label context_label
+
+  label="$(kubeconfig_target_label "${target}")"
+  if [[ -n "${context}" ]]; then
+    context_label=" context ${context}"
+  else
+    context_label=""
+  fi
+
+  for attempt in 1 2 3; do
+    probe_output="$(kubectl --request-timeout=5s get ns kube-system -o name 2>/dev/null || true)"
+    if [[ "${probe_output}" == "namespace/kube-system" ]]; then
+      ok "kubeconfig target answering: ${label}${context_label}"
+      return 0
+    fi
+
+    if [[ "${attempt}" -lt 3 ]]; then
+      sleep 3
+    fi
+  done
+
+  fail "kubeconfig target not answering (mid-reconfiguration?): kube-system identity probe failed using ${label}${context_label}; retry the health check after apiserver OIDC reconfiguration and kubeconfig regeneration settle"
+}
+
 HTTP_STATUS_LAST_MODE="direct"
 KIND_GATEWAY_FALLBACK_WARNED=0
 
@@ -707,6 +765,7 @@ shell_cli_maybe_execute_or_preview_summary usage "would run stack-aware cluster 
 require_cmd kubectl
 
 platform_load_env
+configure_kubeconfig_target
 
 for i in "${!TFVARS_FILES[@]}"; do
   if [[ -n "${TFVARS_FILES[i]}" && ! -f "${TFVARS_FILES[i]}" && -f "${STACK_DIR}/${TFVARS_FILES[i]}" ]]; then
@@ -1276,6 +1335,8 @@ if [[ -z "${ctx}" ]]; then
 else
   ok "kubectl context: ${ctx}"
 fi
+
+assert_kubeconfig_target_answering "${KUBECONFIG_TARGET}" "${ctx}"
 
 kubectl get nodes >/dev/null 2>&1 || fail "kubectl cannot reach the cluster"
 ok "kubectl can reach the cluster"

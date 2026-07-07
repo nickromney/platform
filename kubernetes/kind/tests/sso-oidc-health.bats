@@ -73,3 +73,21 @@ setup() {
 
   [ "${status}" -eq 0 ]
 }
+
+@test "kind OIDC health provisioner retries once after a failed post-restart health check" {
+  run grep -Fn 'for attempt in 1 2; do' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'Post-OIDC cluster health check failed; retrying once in 60s...' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'sleep 60' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+
+  run grep -Fn 'exit 1' "${SSO_FILE}"
+
+  [ "${status}" -eq 0 ]
+}
