@@ -1,0 +1,22 @@
+# tool	source	pin
+arkade	github:alexellis/arkade	ARKADE_VERSION
+bun	github:oven-sh/bun	BUN_VERSION
+cilium	github:cilium/cilium-cli	ARKADE:cilium
+helm	github:helm/helm	ARKADE:helm
+hubble	github:cilium/hubble	ARKADE:hubble
+jq	github:jqlang/jq	ARKADE:jq
+k3sup	github:alexellis/k3sup	ARKADE:k3sup
+kind	github:kubernetes-sigs/kind	ARKADE:kind
+kubectl	github:kubernetes/kubernetes	ARKADE:kubectl
+kubectx	github:ahmetb/kubectx	ARKADE:kubectx
+kubie	github:sbstp/kubie	ARKADE:kubie
+kyverno	github:kyverno/kyverno	KYVERNO_VERSION
+lefthook	github:evilmartians/lefthook	LEFTHOOK_VERSION
+lima	github:lima-vm/lima	LIMA_VERSION
+mkcert	github:FiloSottile/mkcert	MKCERT_VERSION
+opentofu	github:opentofu/opentofu	OPENTOFU_VERSION
+starship	github:starship/starship	STARSHIP_VERSION
+step	github:smallstep/cli	STEP_VERSION
+terragrunt	github:gruntwork-io/terragrunt	ARKADE:terragrunt
+vim-sensible	audit-only	VIM_SENSIBLE_REF
+yq	github:mikefarah/yq	ARKADE:yq

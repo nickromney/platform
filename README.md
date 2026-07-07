@@ -115,8 +115,8 @@ Notes:
 - `make check-version` verifies the root workflow pins, the vendored
   `apim-simulator` tag/SHA metadata, and the repo-local dependency age gates
   for npm, Bun, and uv-managed Python roots.
-- `make update-versions` gives one read-only report for tool, chart, package,
-  provider, and image-lock updates; run
+- `make update-versions` gives one read-only report for tool, devcontainer,
+  chart, package, provider, and image-lock updates; run
   `scripts/update-versions.sh --execute --apply` to run configured appliers and
   rerun the existing version audits.
   Prerelease channels stay off by default; opt in with

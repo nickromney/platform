@@ -10,7 +10,16 @@ source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 MODE="report"
 APPLY=0
-ONLY="tools,charts,packages,providers,images"
+ONLY="tools,devcontainer,charts,packages,providers,images"
+
+TOOLCHAIN_VERSIONS_FILE="${TOOLCHAIN_VERSIONS_FILE:-${REPO_ROOT}/.devcontainer/toolchain-versions.sh}"
+TOOLCHAIN_SOURCES_FILE="${TOOLCHAIN_SOURCES_FILE:-${REPO_ROOT}/.devcontainer/toolchain-sources.tsv}"
+DEVCONTAINER_DOCKERFILE="${DEVCONTAINER_DOCKERFILE:-${REPO_ROOT}/.devcontainer/Dockerfile}"
+DEVCONTAINER_CONFIG="${DEVCONTAINER_CONFIG:-${REPO_ROOT}/.devcontainer/devcontainer.json}"
+UPDATE_VERSIONS_GITHUB_API_BASE="${UPDATE_VERSIONS_GITHUB_API_BASE:-https://api.github.com}"
+UPDATE_VERSIONS_MCR_API_BASE="${UPDATE_VERSIONS_MCR_API_BASE:-https://mcr.microsoft.com}"
+UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS="${UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS:-604800}"
+UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN="${UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN:-0}"
 
 COMPONENT_REPORT_FILE=""
 PROVIDER_REPORT_FILE=""
@@ -18,7 +27,7 @@ ERRORS=0
 
 usage() {
   cat <<EOF
-$(shell_cli_usage_line " [--dry-run] [--execute] [--apply] [--only tools,charts,packages,providers,images]")
+$(shell_cli_usage_line " [--dry-run] [--execute] [--apply] [--only tools,devcontainer,charts,packages,providers,images]")
 
 Reports and optionally applies eligible dependency updates across the platform
 version domains.
@@ -26,8 +35,8 @@ version domains.
 Options:
   --apply      With --execute, apply eligible updates per domain, then rerun
                the existing version audits.
-  --only LIST  Comma-separated domain filter. Domains: tools, charts, packages,
-               providers, images.
+  --only LIST  Comma-separated domain filter. Domains: tools, devcontainer,
+               charts, packages, providers, images.
 
 $(shell_cli_standard_options)
 EOF
@@ -104,7 +113,7 @@ validate_domains() {
       rest="${rest#*,}"
     fi
     case "${item}" in
-      tools|charts|packages|providers|images) ;;
+      tools|devcontainer|charts|packages|providers|images) ;;
       *)
         printf 'update-versions.sh: unknown domain in --only: %s\n' "${item}" >&2
         exit 1
@@ -174,43 +183,304 @@ print_section() {
   printf '\n== %s ==\n' "$1"
 }
 
+http_get() {
+  local url="$1"
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "User-Agent: platform-check-version" \
+    "${url}"
+}
+
+epoch_from_iso() {
+  local value="$1"
+  value="${value%%.*}Z"
+  date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "${value}" '+%s' 2>/dev/null ||
+    date -u -d "${value}" '+%s' 2>/dev/null ||
+    return 1
+}
+
+date_from_epoch() {
+  local epoch="$1"
+  date -u -r "${epoch}" '+%Y-%m-%d' 2>/dev/null ||
+    date -u -d "@${epoch}" '+%Y-%m-%d' 2>/dev/null ||
+    return 1
+}
+
+github_latest_release() {
+  local repo="$1"
+  http_get "${UPDATE_VERSIONS_GITHUB_API_BASE%/}/repos/${repo}/releases/latest" |
+    jq -r '[.tag_name // "", .published_at // ""] | @tsv'
+}
+
+status_for_latest() {
+  local current="$1"
+  local latest="$2"
+  local published_at="$3"
+  local published_epoch eligible_epoch eligible_date now_epoch
+
+  if [[ -z "${latest}" ]]; then
+    printf 'unknown\t\n'
+    return 0
+  fi
+
+  if [[ "${current}" == "${latest}" ]]; then
+    printf 'current\t\n'
+    return 0
+  fi
+
+  if [[ -z "${published_at}" ]]; then
+    printf 'cooldown_unknown\tunknown\n'
+    return 0
+  fi
+
+  published_epoch="$(epoch_from_iso "${published_at}" 2>/dev/null || true)"
+  if [[ -z "${published_epoch}" ]]; then
+    printf 'cooldown_unknown\tunknown\n'
+    return 0
+  fi
+
+  eligible_epoch="$((published_epoch + UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS))"
+  eligible_date="$(date_from_epoch "${eligible_epoch}" 2>/dev/null || printf 'unknown')"
+  now_epoch="$(date -u '+%s')"
+
+  if [[ "${eligible_epoch}" -gt "${now_epoch}" ]]; then
+    printf 'cooldown_active\t%s\n' "${eligible_date}"
+  else
+    printf 'update_available\t%s\n' "${eligible_date}"
+  fi
+}
+
+tool_current_pin() {
+  local pin="$1"
+  local tool_name
+
+  case "${pin}" in
+    ARKADE:*)
+      tool_name="${pin#ARKADE:}"
+      awk -v tool="${tool_name}" '
+        $0 ~ "^[[:space:]]+\"" tool "=" {
+          value=$0
+          gsub(/^[[:space:]]*"|"$/, "", value)
+          sub(/^[^=]+=/, "", value)
+          print value
+          exit
+        }
+      ' "${TOOLCHAIN_VERSIONS_FILE}"
+      ;;
+    *)
+      sed -nE "s/^${pin}=\"\\\$\\{${pin}:-([^\"]+)\\}\".*/\\1/p" "${TOOLCHAIN_VERSIONS_FILE}" | head -n 1
+      ;;
+  esac
+}
+
+tool_resolved_row() {
+  local tool="$1"
+  local source="$2"
+  local pin="$3"
+  local current latest published_at status eligible_date repo release_row
+
+  current="$(tool_current_pin "${pin}")"
+  if [[ -z "${current}" ]]; then
+    printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "unknown" "" "pin_not_found" ""
+    return 0
+  fi
+
+  case "${source}" in
+    github:*)
+      repo="${source#github:}"
+      release_row="$(github_latest_release "${repo}" 2>/dev/null || true)"
+      IFS=$'\t' read -r latest published_at <<< "${release_row}"
+      IFS=$'\t' read -r status eligible_date <<< "$(status_for_latest "${current}" "${latest}" "${published_at}")"
+      printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "${latest}" "${status}" "${eligible_date}"
+      ;;
+    audit-only)
+      printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "" "audit-only" ""
+      ;;
+    *)
+      printf '%s\t%s\t%s\t%s\t%s\n' "${tool}" "${current}" "" "unknown_source" ""
+      ;;
+  esac
+}
+
 tool_rows() {
   if [[ -n "${UPDATE_VERSIONS_TOOL_REPORT_TSV:-}" ]]; then
     printf '%s\n' "${UPDATE_VERSIONS_TOOL_REPORT_TSV}"
     return 0
   fi
 
+  require curl || return 1
+  require jq || return 1
   require awk || return 1
-  awk '
-    /^[A-Z0-9_]+_VERSION="\$\{[A-Z0-9_]+_VERSION:-/ {
-      name=$1
-      value=$0
-      sub(/=.*/, "", name)
-      sub(/.*:-/, "", value)
-      sub(/\}".*/, "", value)
-      printf "%s\t%s\t%s\t%s\t%s\n", name, value, "", "audit-only", ""
-    }
-    /^[[:space:]]*"[^"]+=[^"]+"/ {
-      value=$0
-      gsub(/^[[:space:]]*"|"$/, "", value)
-      split(value, parts, "=")
-      printf "ARKADE:%s\t%s\t%s\t%s\t%s\n", parts[1], parts[2], "", "audit-only", ""
-    }
-  ' "${REPO_ROOT}/.devcontainer/toolchain-versions.sh"
+
+  while IFS=$'\t' read -r tool source pin; do
+    [[ -n "${tool}" && "${tool}" != \#* ]] || continue
+    tool_resolved_row "${tool}" "${source}" "${pin}"
+  done < "${TOOLCHAIN_SOURCES_FILE}"
+}
+
+update_toolchain_pin() {
+  local pin="$1"
+  local latest="$2"
+  local tool_name
+
+  case "${pin}" in
+    ARKADE:*)
+      tool_name="${pin#ARKADE:}"
+      TOOL_NAME="${tool_name}" LATEST_VERSION="${latest}" perl -0pi -e \
+        's/^(\s*"\Q$ENV{TOOL_NAME}\E=)[^"]+(")/$1$ENV{LATEST_VERSION}$2/m' \
+        "${TOOLCHAIN_VERSIONS_FILE}"
+      ;;
+    *)
+      PIN_NAME="${pin}" LATEST_VERSION="${latest}" perl -0pi -e \
+        's/^(\Q$ENV{PIN_NAME}\E="\$\{\Q$ENV{PIN_NAME}\E:-)[^"]+(\}")/$1$ENV{LATEST_VERSION}$2/m' \
+        "${TOOLCHAIN_VERSIONS_FILE}"
+      ;;
+  esac
+}
+
+apply_tools() {
+  local tool source pin current latest status eligible_date applied=0 skipped=0
+
+  while IFS=$'\t' read -r tool source pin; do
+    [[ -n "${tool}" && "${tool}" != \#* ]] || continue
+    current="$(tool_current_pin "${pin}")"
+    [[ -n "${current}" ]] || continue
+    IFS=$'\t' read -r _ _ latest status eligible_date <<< "$(tool_resolved_row "${tool}" "${source}" "${pin}")"
+    case "${status}" in
+      update_available)
+        update_toolchain_pin "${pin}" "${latest}"
+        printf 'Updated tools: %s %s -> %s\n' "${tool}" "${current}" "${latest}"
+        applied=$((applied + 1))
+        ;;
+      cooldown_unknown)
+        if [[ "${UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN}" == "1" ]]; then
+          update_toolchain_pin "${pin}" "${latest}"
+          printf 'Updated tools: %s %s -> %s (cooldown unknown allowed)\n' "${tool}" "${current}" "${latest}"
+          applied=$((applied + 1))
+        else
+          printf 'Skipped tools: %s latest %s has unknown cooldown; set UPDATE_VERSIONS_ALLOW_UNKNOWN_COOLDOWN=1 to apply\n' "${tool}" "${latest:-unknown}"
+          skipped=$((skipped + 1))
+        fi
+        ;;
+      cooldown_active)
+        printf 'Skipped tools: %s latest %s is blocked by cooldown until %s\n' "${tool}" "${latest:-unknown}" "${eligible_date:-unknown}"
+        skipped=$((skipped + 1))
+        ;;
+    esac
+  done < "${TOOLCHAIN_SOURCES_FILE}"
+
+  if [[ "${applied}" -eq 0 ]]; then
+    printf 'No eligible toolchain pin updates applied.\n'
+  fi
+  if [[ "${skipped}" -gt 0 ]]; then
+    printf 'Skipped %s toolchain update(s) because of cooldown policy.\n' "${skipped}"
+  fi
 }
 
 report_tools() {
   print_section "tools"
-  printf 'source: .devcontainer/toolchain-versions.sh; audited by .devcontainer/check-devcontainer-version.sh\n'
-  printf 'Name\tCurrent\tLatest eligible\tStatus\tEligible date\n'
-  tool_rows | while IFS=$'\t' read -r name current latest status eligible_date; do
-    [[ -n "${name}" ]] || continue
-    printf '%s\t%s\t%s\t%s\t%s\n' "${name}" "${current:-unknown}" "${latest:-unknown}" "${status:-unknown}" "${eligible_date:-}"
-  done
+  printf 'source: .devcontainer/toolchain-versions.sh; sources: .devcontainer/toolchain-sources.tsv\n'
+  tool_rows | render_update_rows
   if [[ "${MODE}" == "apply" ]]; then
-    run_applier "tools" "${UPDATE_VERSIONS_TOOLS_APPLY_CMD:-}"
+    if [[ -n "${UPDATE_VERSIONS_TOOLS_APPLY_CMD:-}" ]]; then
+      run_applier "tools" "${UPDATE_VERSIONS_TOOLS_APPLY_CMD}"
+    else
+      apply_tools
+    fi
   else
-    printf 'Apply action: update toolchain pins when an eligible resolver reports newer versions.\n'
+    printf 'Apply action: update eligible pins in .devcontainer/toolchain-versions.sh.\n'
+  fi
+}
+
+parse_devcontainer_base_image() {
+  sed -nE 's/^FROM[[:space:]]+([^[:space:]]+).*/\1/p' "${DEVCONTAINER_DOCKERFILE}" | head -n 1
+}
+
+latest_mcr_devcontainer_base_tag() {
+  local current_tag="$1"
+  local family_prefix="${current_tag%%[0-9]*}"
+
+  http_get "${UPDATE_VERSIONS_MCR_API_BASE%/}/v2/devcontainers/base/tags/list" |
+    jq -r --arg prefix "${family_prefix}" '
+      .tags
+      | map(select(startswith($prefix)))
+      | map(capture("^(?<prefix>.*?)(?<major>[0-9]+)\\.(?<minor>[0-9]+)$")? as $m | select($m != null) | {tag: ., major: ($m.major | tonumber), minor: ($m.minor | tonumber)})
+      | sort_by(.major, .minor)
+      | last.tag // ""
+    '
+}
+
+devcontainer_digest_rows() {
+  if [[ ! -f "${DEVCONTAINER_CONFIG}" ]]; then
+    return 0
+  fi
+
+  jq -r '
+    (.features // {})
+    | keys[]
+    | select(contains("@sha256:"))
+    | [., "pinned digest", "", "audit-only", ""] | @tsv
+  ' "${DEVCONTAINER_CONFIG}" 2>/dev/null || true
+}
+
+devcontainer_rows() {
+  if [[ -n "${UPDATE_VERSIONS_DEVCONTAINER_REPORT_TSV:-}" ]]; then
+    printf '%s\n' "${UPDATE_VERSIONS_DEVCONTAINER_REPORT_TSV}"
+    return 0
+  fi
+
+  require curl || return 1
+  require jq || return 1
+
+  local image repo tag latest status
+  image="$(parse_devcontainer_base_image)"
+  repo="${image%:*}"
+  tag="${image##*:}"
+  latest="$(latest_mcr_devcontainer_base_tag "${tag}" 2>/dev/null || true)"
+
+  if [[ -z "${image}" ]]; then
+    printf 'devcontainer base\tunknown\t\tpin_not_found\t\n'
+  elif [[ -z "${latest}" ]]; then
+    printf 'devcontainer base\t%s\t\tunknown\t\n' "${image}"
+  elif [[ "${tag}" == "${latest}" ]]; then
+    printf 'devcontainer base\t%s\t%s:%s\tcurrent\t\n' "${image}" "${repo}" "${latest}"
+  else
+    printf 'devcontainer base\t%s\t%s:%s\tupdate_available\t\n' "${image}" "${repo}" "${latest}"
+  fi
+
+  devcontainer_digest_rows
+}
+
+apply_devcontainer() {
+  local image repo tag latest
+  image="$(parse_devcontainer_base_image)"
+  repo="${image%:*}"
+  tag="${image##*:}"
+  latest="$(latest_mcr_devcontainer_base_tag "${tag}" 2>/dev/null || true)"
+
+  if [[ -z "${image}" || -z "${latest}" || "${tag}" == "${latest}" ]]; then
+    printf 'No eligible devcontainer base image update applied.\n'
+    return 0
+  fi
+
+  CURRENT_IMAGE="${image}" LATEST_IMAGE="${repo}:${latest}" perl -0pi -e \
+    's/^FROM\s+\Q$ENV{CURRENT_IMAGE}\E(\s*)$/FROM $ENV{LATEST_IMAGE}$1/m' \
+    "${DEVCONTAINER_DOCKERFILE}"
+  printf 'Updated devcontainer base image: %s -> %s:%s\n' "${image}" "${repo}" "${latest}"
+}
+
+report_devcontainer() {
+  print_section "devcontainer"
+  printf 'source: .devcontainer/Dockerfile FROM and devcontainer.json digest pins\n'
+  devcontainer_rows | render_update_rows
+  if [[ "${MODE}" == "apply" ]]; then
+    if [[ -n "${UPDATE_VERSIONS_DEVCONTAINER_APPLY_CMD:-}" ]]; then
+      run_applier "devcontainer" "${UPDATE_VERSIONS_DEVCONTAINER_APPLY_CMD}"
+    else
+      apply_devcontainer
+    fi
+  else
+    printf 'Apply action: update the .devcontainer/Dockerfile base image tag when MCR reports a newer same-family tag.\n'
   fi
 }
 
@@ -314,6 +584,9 @@ render_update_rows() {
   while IFS=$'\t' read -r name current latest status eligible_date; do
     [[ -n "${name}" ]] || continue
     case "${status}" in
+      cooldown_unknown)
+        printf '%s\t%s\t%s\tBLOCKED by unknown cooldown\t%s\n' "${name}" "${current:-unknown}" "${latest:-unknown}" "${eligible_date:-unknown}"
+        ;;
       cooldown_active|cooldown*)
         printf '%s\t%s\t%s\tBLOCKED by cooldown\t%s\n' "${name}" "${current:-unknown}" "${latest:-unknown}" "${eligible_date:-unknown}"
         ;;
@@ -362,6 +635,7 @@ run_audits() {
     audit_commands=$(
       printf '%s\n' \
         "'${REPO_ROOT}/scripts/check-repo-version.sh' --execute" \
+        "'${REPO_ROOT}/.devcontainer/check-devcontainer-version.sh' --execute" \
         "CHECK_VERSION_FORMAT=json '${REPO_ROOT}/terraform/kubernetes/scripts/check-provider-version.sh' --execute >/dev/null" \
         "CHECK_VERSION_FORMAT=json CHECK_VERSION_CI_MODE=1 '${REPO_ROOT}/terraform/kubernetes/scripts/check-component-version.sh' --execute --ci >/dev/null"
     )
@@ -390,9 +664,9 @@ trap cleanup EXIT
 validate_domains
 printf 'update-versions mode: %s\n' "${MODE}"
 printf 'domains: %s\n' "${ONLY}"
-printf 'cooldown semantics: reused from terraform/kubernetes/scripts/check-component-version.sh js_dependency_cooldown_seconds\n'
+printf 'cooldown semantics: packages reuse js_dependency_cooldown_seconds; release resolvers use %s seconds\n' "${UPDATE_VERSIONS_MIN_RELEASE_AGE_SECONDS}"
 
-for domain in tools charts packages providers images; do
+for domain in tools devcontainer charts packages providers images; do
   if contains_domain "${domain}"; then
     run_domain "${domain}"
   fi
