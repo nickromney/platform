@@ -64,4 +64,4 @@ number of apps and the current seam depth.
 - [apps/shared/idpauth/idpauth.go](../../apps/shared/idpauth/idpauth.go)
 - [apps/shared/apphttp/](../../apps/shared/apphttp/)
 - Architecture review 2026-05-24: candidates B and C in
-  [docs/plans/architecture-review-20260524.md](../plans/architecture-review-20260524.md)
+  [docs/plans/archive/architecture-review-20260524.md](../plans/archive/architecture-review-20260524.md)
