@@ -4,9 +4,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
+# shellcheck disable=SC1091
+source "${HOOKS_REPO_ROOT}/scripts/lib/shell-cli.sh"
+
+usage() {
+  cat <<EOF
+Usage: ${0##*/} [--dry-run] [--execute]
+
+Runs the repo local CI gate used by the pre-push hook.
+
+$(shell_cli_standard_options)
+EOF
+}
+
+shell_cli_handle_standard_no_args usage \
+  "would run pre-push local CI gate: make lint && make test-ci" \
+  "$@"
 
 if hook_skip_requested; then
   hook_print_skip_and_exit
+fi
+
+if [[ "${PLATFORM_LOCAL_CI_IN_PROGRESS:-}" == "1" ]]; then
+  hook_warn "PLATFORM_LOCAL_CI_IN_PROGRESS=1; skipping run-local-ci.sh to avoid recursive local CI"
+  exit 0
 fi
 
 cd "${HOOKS_REPO_ROOT}"
@@ -24,6 +45,7 @@ Skip only when you have a reason:
   git push --no-verify
 EOF
 
+export PLATFORM_LOCAL_CI_IN_PROGRESS=1
 failed_gate=""
 
 if ! make lint; then
@@ -38,4 +60,3 @@ if [[ -n "${failed_gate}" ]]; then
 fi
 
 hook_ok "pre-push gate passed: make lint && make test-ci"
-

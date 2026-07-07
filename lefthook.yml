@@ -3,15 +3,15 @@ pre-commit:
   commands:
     shellcheck:
       glob: "*.sh"
-      run: scripts/hooks/check-staged-shell.sh {staged_files}
+      run: scripts/hooks/check-staged-shell.sh --execute {staged_files}
     yamllint:
       glob: "*.{yaml,yml}"
-      run: scripts/hooks/check-staged-yaml.sh {staged_files}
+      run: scripts/hooks/check-staged-yaml.sh --execute {staged_files}
     kind-tfvars-duplicates:
       glob: "kubernetes/kind/**/*.tfvars"
-      run: scripts/hooks/check-staged-tfvars.sh {staged_files}
+      run: scripts/hooks/check-staged-tfvars.sh --execute {staged_files}
 
 pre-push:
   commands:
     local-ci:
-      run: scripts/hooks/run-local-ci.sh
+      run: scripts/hooks/run-local-ci.sh --execute

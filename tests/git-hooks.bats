@@ -5,8 +5,9 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
   export TEST_REPO="${BATS_TEST_TMPDIR}/hook-repo"
   export TEST_BIN="${BATS_TEST_TMPDIR}/bin"
-  mkdir -p "${TEST_REPO}/scripts" "${TEST_BIN}"
+  mkdir -p "${TEST_REPO}/scripts/lib" "${TEST_BIN}"
   cp -R "${REPO_ROOT}/scripts/hooks" "${TEST_REPO}/scripts/hooks"
+  cp "${REPO_ROOT}/scripts/lib/shell-cli.sh" "${TEST_REPO}/scripts/lib/shell-cli.sh"
   cp "${REPO_ROOT}/.yamllint" "${TEST_REPO}/.yamllint"
 }
 
@@ -31,7 +32,7 @@ set -euo pipefail
 printf 'ok\n'
 EOF
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" "${TEST_REPO}/scripts/hooks/check-staged-shell.sh" "${file}"
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" "${TEST_REPO}/scripts/hooks/check-staged-shell.sh" --execute "${file}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"OK   shellcheck: 1 staged shell file(s)"* ]]
@@ -53,7 +54,7 @@ set -euo pipefail
 echo $name
 EOF
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" "${TEST_REPO}/scripts/hooks/check-staged-shell.sh" "${file}"
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" "${TEST_REPO}/scripts/hooks/check-staged-shell.sh" --execute "${file}"
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"SC2086"* ]]
@@ -67,7 +68,7 @@ enable_sso = true
 enable_sso = false
 EOF
 
-  run "${TEST_REPO}/scripts/hooks/check-staged-tfvars.sh" "${file}"
+  run "${TEST_REPO}/scripts/hooks/check-staged-tfvars.sh" --execute "${file}"
 
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"duplicate attribute enable_sso"* ]]
@@ -75,7 +76,7 @@ EOF
 }
 
 @test "PLATFORM_SKIP_HOOKS=1 bypasses check scripts with a WARN" {
-  run env PLATFORM_SKIP_HOOKS=1 "${TEST_REPO}/scripts/hooks/check-staged-shell.sh" "scripts/bad.sh"
+  run env PLATFORM_SKIP_HOOKS=1 "${TEST_REPO}/scripts/hooks/check-staged-shell.sh" --execute "scripts/bad.sh"
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "WARN PLATFORM_SKIP_HOOKS=1; skipping check-staged-shell.sh" ]
@@ -90,22 +91,22 @@ EOF
 
   run yq eval '.pre-commit.commands.shellcheck.run' "${REPO_ROOT}/lefthook.yml"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"scripts/hooks/check-staged-shell.sh"* ]]
+  [[ "${output}" == *"scripts/hooks/check-staged-shell.sh --execute"* ]]
   [[ "${output}" == *"{staged_files}"* ]]
 
   run yq eval '.pre-commit.commands.yamllint.run' "${REPO_ROOT}/lefthook.yml"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"scripts/hooks/check-staged-yaml.sh"* ]]
+  [[ "${output}" == *"scripts/hooks/check-staged-yaml.sh --execute"* ]]
   [[ "${output}" == *"{staged_files}"* ]]
 
   run yq eval '.pre-commit.commands.kind-tfvars-duplicates.run' "${REPO_ROOT}/lefthook.yml"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"scripts/hooks/check-staged-tfvars.sh"* ]]
+  [[ "${output}" == *"scripts/hooks/check-staged-tfvars.sh --execute"* ]]
   [[ "${output}" == *"{staged_files}"* ]]
 
   run yq eval '.pre-push.commands.local-ci.run' "${REPO_ROOT}/lefthook.yml"
   [ "${status}" -eq 0 ]
-  [ "${output}" = "scripts/hooks/run-local-ci.sh" ]
+  [ "${output}" = "scripts/hooks/run-local-ci.sh --execute" ]
 }
 
 @test "make hooks invokes lefthook install" {
@@ -143,8 +144,26 @@ exit 1
 EOF
   chmod +x "${TEST_BIN}/make"
 
-  run env PATH="${TEST_BIN}:/usr/bin:/bin" PLATFORM_SKIP_HOOKS=1 "${TEST_REPO}/scripts/hooks/run-local-ci.sh"
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" PLATFORM_SKIP_HOOKS=1 "${TEST_REPO}/scripts/hooks/run-local-ci.sh" --execute
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "WARN PLATFORM_SKIP_HOOKS=1; skipping run-local-ci.sh" ]
+}
+
+@test "pre-push local CI audit probe previews without running make" {
+  local log_file="${BATS_TEST_TMPDIR}/make.log"
+  cat >"${TEST_BIN}/make" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >>"${log_file}"
+EOF
+  chmod +x "${TEST_BIN}/make"
+
+  run env PATH="${TEST_BIN}:/usr/bin:/bin" "${TEST_REPO}/scripts/hooks/run-local-ci.sh" --dry-run --help
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"Usage: run-local-ci.sh"* ]]
+  [[ "${output}" == *"--dry-run"* ]]
+  [[ "${output}" == *"--execute"* ]]
+  [ ! -e "${log_file}" ]
 }
