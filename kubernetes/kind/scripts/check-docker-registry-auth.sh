@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
-DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS="${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS:-5}"
+DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS="${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS:-20}"
 registry=""
 display_name=""
 positional=()
@@ -120,15 +120,15 @@ helper_contains_registry() {
   pid="$!"
 
   while kill -0 "${pid}" 2>/dev/null; do
-    if [[ "${waited}" -ge "${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS}" ]]; then
+    sleep 1
+    waited=$((waited + 1))
+
+    if [[ "${waited}" -ge "${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS}" ]] && kill -0 "${pid}" 2>/dev/null; then
       kill "${pid}" 2>/dev/null || true
       wait "${pid}" 2>/dev/null || true
       rm -f "${listing_file}"
       return 2
     fi
-
-    sleep 1
-    waited=$((waited + 1))
   done
 
   wait "${pid}" || helper_status=$?
@@ -250,7 +250,17 @@ if [[ -n "${helper_name}" ]]; then
   fi
 
   if [[ "${helper_status}" -eq 2 ]]; then
-    warn "${display_name} credential helper ${helper_bin} timed out after ${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS}s (run: $(login_hint))"
+    helper_status=0
+    if helper_contains_registry "${helper_bin}"; then
+      ok "${display_name} credentials found via ${helper_bin}"
+      exit 0
+    else
+      helper_status=$?
+    fi
+  fi
+
+  if [[ "${helper_status}" -eq 2 ]]; then
+    warn "${display_name} credential helper ${helper_bin} timed out after ${DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS}s (twice); the helper may be slow or hung; rerun, or increase DOCKER_CREDENTIAL_HELPER_TIMEOUT_SECONDS"
     exit 1
   fi
 
