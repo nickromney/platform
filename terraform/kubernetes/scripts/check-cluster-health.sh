@@ -63,6 +63,7 @@ expected_argocd_apps() {
   if [[ "${EXPECT_PROMETHEUS}" == "true" ]]; then apps+=(prometheus); fi
   if [[ "${EXPECT_METRICS_SERVER}" == "true" ]]; then apps+=(metrics-server); fi
   if [[ "${EXPECT_EXTERNAL_SECRETS}" == "true" ]]; then apps+=(external-secrets eso-demo); fi
+  if [[ "${EXPECT_PROGRESSIVE_DELIVERY}" == "true" ]]; then apps+=(argo-rollouts); fi
   if [[ "${EXPECT_GRAFANA}" == "true" ]]; then apps+=(grafana); fi
   if [[ "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then apps+=(victoria-logs); fi
   if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then
@@ -940,6 +941,7 @@ SSO_PROVIDER=$(tfvar_get sso_provider)
 EXPECT_PROMETHEUS=$(expected_from_tfvars enable_prometheus)
 EXPECT_METRICS_SERVER=$(expected_from_tfvars enable_metrics_server)
 EXPECT_EXTERNAL_SECRETS=$(expected_from_tfvars enable_external_secrets)
+EXPECT_PROGRESSIVE_DELIVERY=$(expected_from_tfvars enable_progressive_delivery)
 EXPECT_GRAFANA=$(expected_from_tfvars enable_grafana)
 EXPECT_ACTIONS_RUNNER=$(expected_from_tfvars enable_actions_runner)
 EXPECT_APIM_SIMULATOR=$(expected_from_tfvars enable_apim_simulator)
@@ -1519,6 +1521,13 @@ elif kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1; then
       fail_soft "Argo CD app eso-demo missing (enable_external_secrets=true${tfvars_hint})"
     fi
   fi
+  if [[ "${EXPECT_PROGRESSIVE_DELIVERY}" == "true" ]]; then
+    if kubectl -n "${ARGOCD_NS}" get app argo-rollouts >/dev/null 2>&1; then
+      ok "Argo CD app argo-rollouts exists"
+    else
+      fail_soft "Argo CD app argo-rollouts missing (enable_progressive_delivery=true${tfvars_hint})"
+    fi
+  fi
   if kubectl -n "${ARGOCD_NS}" get app victoria-logs >/dev/null 2>&1; then
     ok "Argo CD app victoria-logs exists"
   fi
@@ -1939,6 +1948,30 @@ else
     fail_soft "metrics-server namespace not found (enable_metrics_server=true${tfvars_hint})"
   else
     ok "metrics-server namespace not detected"
+  fi
+fi
+
+echo ""
+echo "Argo Rollouts (if installed):"
+if ! section_active 800 "${EXPECT_PROGRESSIVE_DELIVERY}"; then
+  ok "Skipped until stage 800"
+elif kubectl get ns argo-rollouts >/dev/null 2>&1; then
+  ok "Detected argo-rollouts namespace (enable_progressive_delivery=${EXPECT_PROGRESSIVE_DELIVERY}${tfvars_hint})"
+  kubectl -n argo-rollouts get pods -o wide || true
+  if kubectl -n argo-rollouts get deploy argo-rollouts >/dev/null 2>&1; then
+    if kubectl -n argo-rollouts rollout status deploy/argo-rollouts --timeout=180s >/dev/null 2>&1; then
+      ok "argo-rollouts deployment Ready"
+    else
+      fail_soft "argo-rollouts deployment is not Ready"
+    fi
+  else
+    fail_soft "argo-rollouts deployment missing (enable_progressive_delivery=true${tfvars_hint})"
+  fi
+else
+  if [[ "${EXPECT_PROGRESSIVE_DELIVERY}" == "true" ]]; then
+    fail_soft "argo-rollouts namespace not found (enable_progressive_delivery=true${tfvars_hint})"
+  else
+    ok "argo-rollouts namespace not detected"
   fi
 fi
 

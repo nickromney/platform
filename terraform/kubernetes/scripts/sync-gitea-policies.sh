@@ -153,6 +153,7 @@ bool|ENABLE_OTEL_GATEWAY|enable_otel_gateway|false
 bool|ENABLE_OBSERVABILITY_AGENT|enable_observability_agent|false
 bool|ENABLE_METRICS_SERVER|enable_metrics_server|false
 bool|ENABLE_EXTERNAL_SECRETS|enable_external_secrets|false
+bool|ENABLE_PROGRESSIVE_DELIVERY|enable_progressive_delivery|false
 bool|ENABLE_HEADLAMP|enable_headlamp|false
 bool|ENABLE_SSO|enable_sso|false
 bool|ENABLE_BACKSTAGE|enable_backstage|true
@@ -310,6 +311,7 @@ ENABLE_OTEL_GATEWAY="${ENABLE_OTEL_GATEWAY:-false}"
 ENABLE_OBSERVABILITY_AGENT="${ENABLE_OBSERVABILITY_AGENT:-false}"
 ENABLE_METRICS_SERVER="${ENABLE_METRICS_SERVER:-false}"
 ENABLE_EXTERNAL_SECRETS="${ENABLE_EXTERNAL_SECRETS:-false}"
+ENABLE_PROGRESSIVE_DELIVERY="${ENABLE_PROGRESSIVE_DELIVERY:-false}"
 ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-false}"
 ENABLE_SSO="${ENABLE_SSO:-false}"
 ENABLE_BACKSTAGE="${ENABLE_BACKSTAGE:-true}"
@@ -675,6 +677,7 @@ chart_version_override_for_name() {
   case "${chart}" in
     agentgateway) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
     agentgateway-crds) printf '%s\n' "${AGENTGATEWAY_CHART_VERSION}" ;;
+    argo-rollouts) printf '%s\n' "2.40.5" ;;
     cert-manager) printf '%s\n' "${CERT_MANAGER_CHART_VERSION}" ;;
     external-secrets) printf '%s\n' "${EXTERNAL_SECRETS_CHART_VERSION}" ;;
     grafana) printf '%s\n' "${GRAFANA_CHART_VERSION}" ;;
@@ -1735,6 +1738,12 @@ prune_argocd_app_manifests() {
     rm -rf "$(dirname "${apps_dir}")/eso-demo"
   fi
 
+  if ! is_true "${ENABLE_PROGRESSIVE_DELIVERY}"; then
+    remove_if_present "${apps_dir}/86-argo-rollouts.namespace.yaml"
+    remove_if_present "${apps_dir}/87-argo-rollouts.application.yaml"
+    remove_if_present "${apps_dir}/87-argo-rollouts-plugin.configmap.yaml"
+  fi
+
   if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
     remove_if_present "${apps_dir}/80-observability.namespace.yaml"
   fi
@@ -1945,6 +1954,30 @@ configure_subnetcalc_direct_api() {
       s/port: "8000"/port: "8080"/;
     ' "${policy_file}"
   fi
+}
+
+configure_progressive_delivery() {
+  local repo_dir="$1"
+  local kustomization_file="${repo_dir}/apps/dev/kustomization.yaml"
+
+  is_true "${ENABLE_PROGRESSIVE_DELIVERY}" || return 0
+  is_true "${ENABLE_APP_REPO_SUBNETCALC}" || return 0
+  [[ -f "${kustomization_file}" ]] || return 0
+
+  if grep -Fq "subnetcalc-frontend-rollout-patch.yaml" "${kustomization_file}"; then
+    return 0
+  fi
+
+  cat >>"${kustomization_file}" <<'EOF'
+  - subnetcalc-frontend-canary-service.yaml
+patches:
+  - path: subnetcalc-frontend-rollout-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: subnetcalc-frontend
+EOF
 }
 
 repo_exists_for_owner() {
@@ -2191,6 +2224,7 @@ render_policy_repo_tree() {
     remove_backstage_idp_resources "${repo_dir}/apps/idp/all.yaml"
   fi
   configure_subnetcalc_direct_api "${repo_dir}"
+  configure_progressive_delivery "${repo_dir}"
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   render_prometheus_application_manifest "${repo_dir}/apps/argocd-apps/90-prometheus.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"

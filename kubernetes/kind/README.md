@@ -188,6 +188,48 @@ When enabled, the policy verifies local-registry workload images in `dev`,
 reviewers can inspect signature coverage and image-reference edge cases before
 using signature failures as an admission blocker.
 
+### Progressive delivery canary
+
+Stage `900` enables the opt-in progressive-delivery teaching rung:
+
+```hcl
+enable_progressive_delivery = true
+```
+
+It installs Argo Rollouts via the app-of-apps tree and converts only
+`dev/subnetcalc-frontend` from a Deployment into a Rollout. `uat` remains a
+plain Deployment. The demo canary uses Gateway API traffic routing against the
+`gateway-routes/subnetcalc-dev` HTTPRoute with these steps:
+
+```text
+25% -> pause 30s -> 50% -> pause 30s -> 100% -> pause 15s
+```
+
+Watch the rollout:
+
+```bash
+kubectl -n dev argo rollouts get rollout subnetcalc-frontend --watch
+kubectl -n argo-rollouts port-forward svc/argo-rollouts-dashboard 3100:3100
+```
+
+Trigger a canary by changing the `subnetcalc-frontend` image tag through the
+existing app build flow. In the stage-900 GitOps path, Argo CD reconciles the
+rendered policies repo from in-cluster Gitea, so after changing Terraform-owned
+manifests run:
+
+```bash
+make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
+```
+
+Then hard-refresh or wait for the `dev` Argo CD app. Argo CD applies the Rollout
+spec; Argo Rollouts owns the stepwise promotion and Gateway API weights.
+
+Reviewer notes: chart `argo-rollouts` is pinned at `2.40.5`, controller image
+`quay.io/argoproj/argo-rollouts:v1.8.3` is preloaded when the toggle is true,
+and the Gateway API traffic-router plugin URL is pinned to
+`v0.5.0`. The controller downloads that plugin binary at runtime, so fully
+offline demos may need that binary preloaded or mirrored separately.
+
 Backstage is gated in the kind happy path by local Docker memory:
 
 - `KIND_ENABLE_BACKSTAGE=auto` is the default and enables Backstage only when `docker info` reports at least `10GiB` (`10737418240` bytes) of daemon memory.

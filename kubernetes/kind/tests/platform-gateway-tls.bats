@@ -200,6 +200,15 @@ PY
   grep -Fq 'eso-demo materialized Secret exists' "${script}"
 }
 
+@test "cluster health expected inventory includes argo-rollouts when progressive delivery is enabled" {
+  script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
+
+  grep -Fq 'EXPECT_PROGRESSIVE_DELIVERY=$(expected_from_tfvars enable_progressive_delivery)' "${script}"
+  grep -Fq 'if [[ "${EXPECT_PROGRESSIVE_DELIVERY}" == "true" ]]; then apps+=(argo-rollouts); fi' "${script}"
+  grep -Fq 'Argo CD app argo-rollouts missing (enable_progressive_delivery=true${tfvars_hint})' "${script}"
+  grep -Fq 'argo-rollouts deployment Ready' "${script}"
+}
+
 @test "cluster health expected inventory includes APIM SSO proxy app when APIM is enabled" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-cluster-health.sh"
 

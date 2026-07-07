@@ -504,6 +504,7 @@ locals {
   policies_repo_name        = "policies"
   policies_repo_url_cluster = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/${local.gitea_repo_owner}/${local.policies_repo_name}.git"
   vendored_chart_paths = {
+    argo_rollouts           = "apps/vendor/charts/argo-rollouts"
     cert_manager            = "apps/vendor/charts/cert-manager"
     external_secrets        = "apps/vendor/charts/external-secrets"
     grafana                 = "apps/vendor/charts/grafana"
@@ -535,6 +536,7 @@ locals {
     local.enable_victoria_logs_effective ||
     var.enable_metrics_server ||
     var.enable_external_secrets ||
+    var.enable_progressive_delivery ||
     var.enable_headlamp ||
     var.enable_sso ||
     var.enable_langfuse ||
@@ -556,6 +558,7 @@ locals {
     local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
     var.enable_metrics_server && var.enable_argocd ? ["metrics-server"] : [],
     var.enable_external_secrets && var.enable_argocd ? ["external-secrets", "eso-demo"] : [],
+    var.enable_progressive_delivery && var.enable_argocd ? ["argo-rollouts"] : [],
     local.enable_apim_simulator_effective && var.enable_argocd ? ["apim"] : [],
     var.enable_agentgateway_ai_gateway && var.enable_argocd ? ["agentgateway-ai-gateway"] : [],
     var.enable_langfuse && var.enable_argocd ? ["langfuse"] : [],
@@ -635,6 +638,7 @@ locals {
     enable_otel_gateway                    = var.enable_otel_gateway
     enable_metrics_server                  = var.enable_metrics_server
     enable_external_secrets                = var.enable_external_secrets
+    enable_progressive_delivery            = var.enable_progressive_delivery
     enable_headlamp                        = var.enable_headlamp
     enable_sso                             = var.enable_sso
     enable_backstage                       = var.enable_backstage

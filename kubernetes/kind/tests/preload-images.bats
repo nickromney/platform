@@ -150,3 +150,18 @@ EOF
   [[ "${output}" == *"ghcr.io/external-secrets/external-secrets:v2.7.0"* ]]
   [[ "${output}" == *"busybox:latest"* ]]
 }
+
+@test "preload-images filters argo-rollouts controller by progressive delivery toggle" {
+  local image_list="${BATS_TEST_TMPDIR}/images.txt"
+
+  cat >"${image_list}" <<'EOF'
+quay.io/argoproj/argo-rollouts:v1.9.0
+busybox:latest
+EOF
+
+  run "${SCRIPT}" --execute --print-images --image-list "${image_list}" --tfvars "${REPO_ROOT}/kubernetes/kind/stages/100-cluster.tfvars"
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"quay.io/argoproj/argo-rollouts:v1.9.0"* ]]
+  [[ "${output}" == *"busybox:latest"* ]]
+}

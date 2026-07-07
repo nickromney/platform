@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: argo-rollouts-hardened
+spec:
+  description: >-
+    Hardened policy for the Argo Rollouts controller namespace. The controller
+    watches and updates Kubernetes resources through the API server and needs
+    DNS for the Gateway API traffic router plugin binary download. The Gateway
+    API plugin itself does not require additional in-cluster egress beyond the
+    controller API-server path.
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": argo-rollouts
+      "k8s:app.kubernetes.io/name": argo-rollouts
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+    - toServices:
+        - k8sService:
+            namespace: default
+            serviceName: kubernetes
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": argo-rollouts

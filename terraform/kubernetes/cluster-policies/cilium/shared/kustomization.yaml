@@ -21,6 +21,7 @@ resources:
   - argocd-hardened.yaml
   - external-secrets-hardened.yaml
   - metrics-server-hardened.yaml
+  - argo-rollouts-hardened.yaml
   - observability-hardened.yaml
   - idp-hardened.yaml
   - sso-hardened.yaml
