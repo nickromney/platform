@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# shellcheck shell=bash disable=SC2030,SC2031
 
 setup() {
   export REPO_ROOT
@@ -191,6 +192,18 @@ EOF
   chmod +x "${TEST_BIN}/podman"
 }
 
+install_isolated_command_links() {
+  isolated_bin="${BATS_TEST_TMPDIR}/isolated-bin"
+  mkdir -p "${isolated_bin}"
+
+  for tool in bash jq awk sed sort tr head basename dirname pwd cat grep; do
+    tool_path="$(command -v "${tool}")"
+    ln -sf "${tool_path}" "${isolated_bin}/${tool}"
+  done
+
+  export ISOLATED_PATH="${TEST_BIN}:${isolated_bin}"
+}
+
 @test "no variant owns the machine when no local stack is active" {
   run "${SCRIPT}" --execute --output json
 
@@ -236,6 +249,8 @@ JSON
   export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
   export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
   export MOCK_KIND_CLUSTERS='kind-local'
+  export MOCK_AUTH_DHI_OUTPUT='OK   Docker Hardened Images (dhi.io) credentials found via docker-credential-desktop'
+  export MOCK_AUTH_DOCKER_OUTPUT='OK   Docker Hub credentials found in config.json'
   touch "${HOME}/.kube/kind-kind-local.yaml"
 
   run "${SCRIPT}" --execute --output json
@@ -539,7 +554,9 @@ JSON
 }
 
 @test "platform status text shows only available platforms in alphabetical order" {
-  run "${SCRIPT}" --execute --output text
+  install_isolated_command_links
+
+  run env PATH="${ISOLATED_PATH}" "${SCRIPT}" --execute --output text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'Platforms:\nPLATFORM  AVAIL  RUNNING  DETAIL'* ]]

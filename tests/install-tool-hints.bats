@@ -15,6 +15,23 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/brew"
 
+  cat >"${TEST_BIN}/uname" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  -s)
+    printf '%s\n' Darwin
+    ;;
+  -m)
+    printf '%s\n' arm64
+    ;;
+  *)
+    printf '%s\n' Darwin
+    ;;
+esac
+EOF
+  chmod +x "${TEST_BIN}/uname"
+
   run env PATH="${TEST_BIN}:/usr/bin:/bin" /bin/bash "${REPO_ROOT}/scripts/install-tool-hints.sh" --execute --plain k3sup-pro docker jq kubie kyverno yamllint
 
   [ "${status}" -eq 0 ]
