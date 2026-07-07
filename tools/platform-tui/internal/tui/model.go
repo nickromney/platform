@@ -266,7 +266,6 @@ func fallbackWorkflowOptions() workflowOptions {
 		Variants: []variantOption{
 			{ID: "kind", Path: "kubernetes/kind", Label: "kind"},
 			{ID: "lima", Path: "kubernetes/lima", Label: "lima"},
-			{ID: "slicer", Path: "kubernetes/slicer", Label: "slicer"},
 		},
 		Stages: []stageOption{
 			{ID: "100", Label: "cluster", Shortcut: "1", GuidedHint: "1 selects 100 cluster: create or inspect the base local cluster."},

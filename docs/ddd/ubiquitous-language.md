@@ -40,7 +40,7 @@ domain language.
 | platform | the repo/theme word for patterns that platform engineers may reuse | Useful broad label, but not a sharp path taxonomy term. |
 | internal developer platform | the whole local platform product assembled by this repo | The developer portal is only one surface over the IDP, not the IDP itself. |
 | solution | the first-level grouping, currently `kubernetes` | The repo is grouped by what you want to run. |
-| variant | the concrete operable path beneath a solution | Examples: `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer`. |
+| variant | the concrete operable path beneath a solution | Examples: `kubernetes/kind`, `kubernetes/lima`, `kubernetes/lima`. |
 | variant adapter | the implementation behind a variant that satisfies platform contracts | May be Terraform/OpenTofu, Terragrunt, scripts, provider APIs, or a mix of them. |
 | variant family | broad runtime class for a variant | Current value is `local`; future values may include `existing`, `hosted`, and `bare-metal`. |
 | target | a Makefile and workflow noun | Implementation-facing term for `make` goals. |
@@ -54,7 +54,7 @@ domain language.
 | stage | the cumulative build ladder on a solution variant | Examples: `100` through `900`. |
 | preset | a named overlay of stage, variant, and context defaults | Presets are not hidden stages. |
 | override | an operator-supplied value that wins over defaults and presets | Guided surfaces render these into generated operator tfvars where needed. |
-| provider | reserved for Terraform provider discussions | Not used for `kind`, `lima`, or `slicer`. |
+| provider | reserved for Terraform provider discussions | Not used for `kind`, `lima`, or `lima`. |
 | environment | the app exposure or testing band | Examples: `dev`, `sit`, `uat`, `admin`. |
 | environment namespace | a Kubernetes namespace carrying an environment label | Current application environments are `dev`, `sit`, and `uat`; `admin` is a route band rather than an app namespace. |
 | namespace role | platform boundary label for policy inheritance | Current values are `application`, `shared`, and `platform`. |
@@ -76,7 +76,7 @@ domain language.
 | portal surface | browser-facing navigation or admin UI for platform operators | Current examples: Grafana Launchpad, Argo CD, Headlamp, Gitea, Keycloak, Hubble, and Policy Reporter. |
 | developer portal | the Backstage/Port-like browser UI over the local IDP | Public host: `portal.127.0.0.1.sslip.io`; this is a surface, not the whole platform. |
 | portal API | the small Go product API consumed by the developer portal, SDK, MCP, and TUI | Public host: `portal-api.127.0.0.1.sslip.io`; it exposes IDP contracts and dry-run workflows, not Terraform internals. |
-| runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `generic_kubernetes`, `kind`, `lima`, and `slicer`; future adapters may include AKS, EKS, and bare-metal Kubernetes. |
+| runtime adapter | the IDP core boundary that translates stable portal API actions to a concrete runtime | Current adapters are `generic_kubernetes`, `kind`, `lima`, and `lima`; future adapters may include AKS, EKS, and bare-metal Kubernetes. |
 | status surface | CLI or dashboard view that summarizes current state | Current examples: `platform status`, variant `status` targets, Argo CD Applications, and Grafana Launchpad health tiles. |
 
 ## Image Distribution Language
@@ -90,7 +90,7 @@ domain language.
 | source fingerprint tag | content-derived local image tag | Format is `src-<digest-prefix>`; used for platform images whose source inputs are fingerprinted before rendering operator overrides. |
 | external image ref | Terraform input for pulling a host-built image from a variant-reachable registry | Rendered in `external_platform_image_refs`, `external_workload_image_refs`, or dedicated inputs such as `keycloak_image`. |
 | local image cache | host-side registry used by local variants | Push host and runtime host can differ, for example `127.0.0.1:5002` for pushing and `host.docker.internal:5002` for kind pulls. |
-| runtime registry host | registry hostname visible from workloads or cluster nodes | Variant-specific: kind, Lima, and Slicer do not share the same pull hostname. |
+| runtime registry host | registry hostname visible from workloads or cluster nodes | Variant-specific: kind, Lima, do not share the same pull hostname. |
 | push registry host | registry hostname used by host-side build scripts | Usually `127.0.0.1:5002` for local cache pushes. |
 | base manifest image ref | source repo placeholder image before render-time rewrites | May still use the in-cluster Gitea shape such as `localhost:30090/...:latest`; it is not the checked-in external image ref contract. |
 

@@ -4,7 +4,7 @@ This is a DDD-oriented comparison of the three Kubernetes solution variants:
 
 - `kubernetes/kind`
 - `kubernetes/lima`
-- `kubernetes/slicer`
+- `kubernetes/lima`
 
 The goal is not to treat them as three business domains.
 The goal is to understand how much of their language is:
@@ -19,11 +19,11 @@ The strongest current read is:
 
 - `platform` is the repo/theme word, not the sharp path taxonomy term
 - `kubernetes` is the solution grouping
-- `kind`, `lima`, and `slicer` are variants beneath that solution
+- `kind`, `lima`, and `lima` are variants beneath that solution
 - the bounded context is still `Local Stack Operations`, not three separate
   domains
 - `kind` is the reference teaching variant
-- `lima` and `slicer` are closer to existing-cluster or substrate-adapter
+- `lima` and `lima` are closer to existing-cluster or substrate-adapter
   variants than to separate stack models
 
 That means the durable domain language should mostly sit above the specific
@@ -32,7 +32,7 @@ variant names.
 ## Shared Model Across All Three Variants
 
 These concepts are stable across `kubernetes/kind`, `kubernetes/lima`, and
-`kubernetes/slicer`:
+`kubernetes/lima`:
 
 - `solution` means the first path segment, such as `kubernetes`
 - `variant` means the concrete operable path under that solution
@@ -70,7 +70,7 @@ what people actually mean”.
 | --- | --- | --- | --- |
 | `kind` | reference teaching variant | full localhost-verified confidence path | Docker host, NodePorts, image distribution modes, split kubeconfig, host-port ownership |
 | `lima` | fallback or adapter variant | converge the shared stack onto a Lima-backed k3s cluster | VM lifecycle, k3s bootstrap, host-gateway proxy, local image cache, `port-forward` access |
-| `slicer` | optional personal adapter variant | converge the shared stack onto a Slicer-backed k3s cluster with localhost parity | daemon and socket health, VM sizing, host forwards, privileged-port proxying, network-profile variants |
+| `lima` | optional personal adapter variant | converge the shared stack onto a Lima-backed k3s cluster with localhost parity | daemon and socket health, VM sizing, host forwards, privileged-port proxying, network-profile variants |
 
 ## Important Differences
 
@@ -80,7 +80,7 @@ The outcome is similar across all three variants, but the mechanism is not:
 
 - `kind`: create the Docker-backed cluster, intentionally without the final CNI
 - `lima`: create or start Lima VMs, bootstrap k3s, write split kubeconfig
-- `slicer`: ensure daemon and VM health, bootstrap k3s, write split kubeconfig
+- `lima`: ensure daemon and VM health, bootstrap k3s, write split kubeconfig
 
 The stable concept looks more like `bootstrap boundary` or `cluster available`
 than any one variant's implementation steps.
@@ -93,7 +93,7 @@ than any one variant's implementation steps.
 - stage `900` as a confidence path
 - optional in-cluster build and repo-seeding story
 
-By contrast, `lima` and `slicer` disable kind-only plumbing and read more like
+By contrast, `lima` and `lima` disable kind-only plumbing and read more like
 adapters over the shared Terraform stack.
 
 ### 3. Stage `700` currently reads best as `app repos`
@@ -103,7 +103,7 @@ This is the strongest current collision.
 `kind` talks as if stage `700` means app repos plus the in-cluster runner.
 But the current default image-distribution path can disable the runner.
 
-`lima` and `slicer` are cleaner:
+`lima` and `lima` are cleaner:
 
 - stage `700` means app workloads from local or cached images
 - not “runner-based in-cluster supply chain”
@@ -118,7 +118,7 @@ specific repo orchestration pattern is enabled.
 ### 4. Stage `900` is still `SSO`, but not only `SSO`
 
 All three variants still present stage `900` as the identity-access stage.
-But `lima` and `slicer` also use that stage to configure Kubernetes API trust
+But `lima` and `lima` also use that stage to configure Kubernetes API trust
 for Headlamp-facing OIDC.
 
 So the right reading is:
@@ -171,12 +171,12 @@ These seem like the strongest terms so far:
 
 ## DDD Read
 
-The stack-operations domain is not “Kind” or “Lima” or “Slicer”.
+The stack-operations domain is not “Kind” or “Lima” or “Lima”.
 It is the operation of a staged local stack across more than one variant.
 
 That suggests:
 
-- keep `kind`, `lima`, and `slicer` as implementation-facing variant names
+- keep `kind`, `lima`, and `lima` as implementation-facing variant names
 - keep `target` in Makefiles and workflow syntax where it already means
   something concrete
 - move the ubiquitous language upward to capabilities and operator promises

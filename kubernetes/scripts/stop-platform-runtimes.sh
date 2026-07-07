@@ -8,13 +8,12 @@ source "${script_dir}/../../scripts/lib/shell-cli.sh"
 
 exclude_kind=0
 exclude_lima=0
-exclude_slicer=0
 
 usage() {
   cat <<EOF >&2
-Usage: ${0##*/} [--exclude kind|lima|slicer]... [--dry-run] [--execute]
+Usage: ${0##*/} [--exclude kind|lima]... [--dry-run] [--execute]
 
-Stops local kind, Lima, and Slicer runtimes best-effort, optionally excluding
+Stops local kind and Lima runtimes best-effort, optionally excluding
 selected runtimes.
 
 $(shell_cli_standard_options)
@@ -41,9 +40,6 @@ while [[ $# -gt 0 ]]; do
           ;;
         lima)
           exclude_lima=1
-          ;;
-        slicer)
-          exclude_slicer=1
           ;;
         *)
           echo "Unknown platform for --exclude: $1" >&2
@@ -91,4 +87,3 @@ run_stop() {
 
 run_stop kind stop-kind "${exclude_kind}"
 run_stop lima stop-lima "${exclude_lima}"
-run_stop slicer stop-slicer "${exclude_slicer}"

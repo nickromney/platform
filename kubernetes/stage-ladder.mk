@@ -33,14 +33,3 @@ STAGE_DESC_LIMA_700 := app repos
 STAGE_DESC_LIMA_800 := observability
 STAGE_DESC_LIMA_900 := sso
 STAGE_DESC_LIMA_920 := langfuse
-
-STAGE_DESC_SLICER_100 := cluster available
-STAGE_DESC_SLICER_200 := cilium
-STAGE_DESC_SLICER_300 := hubble
-STAGE_DESC_SLICER_400 := argocd core
-STAGE_DESC_SLICER_500 := gitea
-STAGE_DESC_SLICER_600 := policies
-STAGE_DESC_SLICER_700 := app repos
-STAGE_DESC_SLICER_800 := observability
-STAGE_DESC_SLICER_900 := sso
-STAGE_DESC_SLICER_920 := langfuse

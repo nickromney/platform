@@ -13,7 +13,7 @@ usage() {
 Usage: @SCRIPT_NAME@ --stage N --cache-mode MODE --platform-images-mode MODE --workload-images-mode MODE --prefer-external-platform-images true|false --cache-available true|false --runtime-image-cache-host HOST --push-image-cache-url URL
 
 Purpose:
-  Plan the local image helper actions needed by Lima and Slicer apply recipes.
+  Plan the local image helper actions needed by Lima apply recipes.
 
 Options:
   --stage N                         Numeric stage.

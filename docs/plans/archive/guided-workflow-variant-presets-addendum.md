@@ -20,7 +20,7 @@ this as an implementation hurdle: not all options are exposed atomically across
 the `100`–`900` stage tfvars files.
 
 Before Phase 1 begins, someone needs to walk every `*.tfvars` file across
-`kubernetes/kind`, `kubernetes/lima`, and `kubernetes/slicer` and answer:
+`kubernetes/kind`, `kubernetes/lima`, and `kubernetes/lima` and answer:
 
 - Which variables exist across all three variants, and which are
   variant-specific?
@@ -236,7 +236,7 @@ Add before the existing Phase 1:
 Deliverables:
 
 - flat inventory of all Terraform variables across `kubernetes/kind`,
-  `kubernetes/lima`, and `kubernetes/slicer` stage tfvars files
+  `kubernetes/lima`, and `kubernetes/lima` stage tfvars files
 - classification of each variable: which variants carry it, which stages
   introduce it, whether it is currently operator-controllable
 - list of variables that are hard-coded in the Terraform module and cannot yet

@@ -103,7 +103,7 @@ stage-900 path.
 - Current SSO feature flag: `terraform/kubernetes/variables.tf`
 - Current stage-900 selections: `kubernetes/kind/stages/900-sso.tfvars`,
   `kubernetes/lima/stages/900-sso.tfvars`,
-  `kubernetes/slicer/stages/900-sso.tfvars`
+  `kubernetes/lima/stages/900-sso.tfvars`
 - Current Launchpad inventory:
   `terraform/kubernetes/config/platform-launchpad.apps.json`
 - Existing Keycloak compose example: `apps/sentiment/compose.yml`

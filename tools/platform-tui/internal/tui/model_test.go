@@ -402,7 +402,7 @@ func appDefaultLabel(app string, enabled bool) string {
 
 func TestDetailedPresetAndCustomOverridesFoldBackFromBrowserUI(t *testing.T) {
 	m := New(Config{})
-	m.variant = "slicer"
+	m.variant = "lima"
 	m.stage = "900"
 	m.action = "plan"
 	m.presetNetworkProfile = "default-cni"

@@ -278,7 +278,7 @@ Sentiment path in the platform demo:
 - What does the platform operator actually promise to a user or team member,
   in domain terms rather than command names?
 - Which scenarios should be red tests because they matter to the operator,
-  regardless of whether the variant is `kind`, `lima`, or `slicer`?
+  regardless of whether the variant is `kind`, `lima`, or `lima`?
 - Which terms should remain technical implementation names, and which should be
   elevated into the ubiquitous language?
 - Should subnet "lookup" become a first-class domain concept, or stay an

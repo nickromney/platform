@@ -15,9 +15,9 @@ implementation, validation, and docs together.
 | Contract | Source of truth | Consumers |
 | --- | --- | --- |
 | Operator entrypoints | Root and subtree `Makefile`s | Humans, automation, docs, tests |
-| Stage shape | `kubernetes/{kind,lima,slicer}/stages/*.tfvars` | Make wrappers, Terragrunt/OpenTofu, docs |
+| Stage shape | `kubernetes/{kind,lima}/stages/*.tfvars` | Make wrappers, Terragrunt/OpenTofu, docs |
 | IaC variables | `terraform/kubernetes/variables.tf` | Stage files, target files, operator overrides |
-| Runtime targets | `kubernetes/kind`, `kubernetes/lima`, `kubernetes/slicer` | Operators choosing a host runtime |
+| Runtime targets | `kubernetes/kind`, `kubernetes/lima`, `kubernetes/lima` | Operators choosing a host runtime |
 | GitOps source | In-cluster Gitea policies repo | Argo CD applications |
 | App source | `apps/*` | Image builds, GitOps manifests, Backstage catalog |
 | Route surface | Gateway API `HTTPRoute`s and APIM config | Browser tests, smoke scripts, docs links |
@@ -35,7 +35,7 @@ make
 make -C apps help
 make -C kubernetes/kind help
 make -C kubernetes/lima help
-make -C kubernetes/slicer help
+make -C kubernetes/lima help
 ```
 
 Focused Makefiles own mutating workflows. If a docs page tells a reader to run

@@ -15,7 +15,7 @@ Purpose:
   logs plus any changed resource addresses under an ignored .run directory.
 
 Options:
-  --stack-name NAME             Logical stack name (for example: kind, lima, slicer)
+  --stack-name NAME             Logical stack name (for example: kind or lima)
   --stack-dir PATH              Directory that owns the stack Makefile
   --stage N                     Stage to exercise
   --allowlist-file PATH         Optional TSV allowlist of accepted changes

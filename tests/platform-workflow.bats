@@ -13,7 +13,7 @@ setup() {
   options_json="${output}"
   run jq -r '.variants | map(.id) | join(",")' <<<"${options_json}"
   [ "${status}" -eq 0 ]
-  [ "${output}" = "kind,lima,slicer" ]
+  [ "${output}" = "kind,lima" ]
 
   run jq -r '.variants[0].path, .variants[0].class, .contexts[0].id, (.source_precedence | join(">"))' <<<"${options_json}"
   [ "${status}" -eq 0 ]
@@ -34,7 +34,7 @@ setup() {
 
   run jq -r '.presets[] | select(.group == "network_profile" and .id == "cilium") | .variants | join(",")' <<<"${options_json}"
   [ "${status}" -eq 0 ]
-  [ "${output}" = "kind,lima,slicer" ]
+  [ "${output}" = "kind,lima" ]
 }
 
 @test "platform workflow options avoids preview command setup" {
@@ -123,10 +123,10 @@ EOF
 }
 
 @test "platform workflow json preview is machine-readable" {
-  tfvars_file="${BATS_TEST_TMPDIR}/operator/slicer-stage900.tfvars"
+  tfvars_file="${BATS_TEST_TMPDIR}/operator/lima-stage900.tfvars"
 
   run "${SCRIPT}" preview --execute \
-    --variant slicer \
+    --variant lima \
     --stage 900 \
     --action plan \
     --app sentiment=false \
@@ -138,11 +138,11 @@ EOF
   preview_json="${output}"
   run jq -r '.variant.id, .stage, .action, .app_overrides.sentiment, .tfvars_file' <<<"${preview_json}"
   [ "${status}" -eq 0 ]
-  [ "${output}" = $'slicer\n900\nplan\nfalse\n'"${tfvars_file}" ]
+  [ "${output}" = $'lima\n900\nplan\nfalse\n'"${tfvars_file}" ]
 
   run jq -r '.variant.path, .variant.lifecycle_mode, .stage_metadata.context, (.contract_requirements | map(.id) | join(",")), (.effective_config.source_precedence | join(">"))' <<<"${preview_json}"
   [ "${status}" -eq 0 ]
-  [ "${output}" = "kubernetes/slicer"$'\n'"create"$'\n'"platform-stack"$'\n'"cluster-access,ingress,identity"$'\n'"stage_baseline>variant_defaults>resource_profile>image_distribution>network_profile>observability_stack>identity_stack>app_set>custom_overrides" ]
+  [ "${output}" = "kubernetes/lima"$'\n'"create"$'\n'"platform-stack"$'\n'"cluster-access,ingress,identity"$'\n'"stage_baseline>variant_defaults>resource_profile>image_distribution>network_profile>observability_stack>identity_stack>app_set>custom_overrides" ]
 }
 
 @test "platform workflow json preview owns operator command previews" {
@@ -243,17 +243,6 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = $'cilium\nmake -C kubernetes/kind 200 plan' ]
 
-  run "${SCRIPT}" preview --execute \
-    --variant slicer \
-    --stage 200 \
-    --action plan \
-    --preset network-profile=cilium \
-    --output json
-
-  [ "${status}" -eq 0 ]
-  run jq -r '.presets.network_profile, .command' <<<"${output}"
-  [ "${status}" -eq 0 ]
-  [ "${output}" = $'cilium\nenv SLICER_NETWORK_PROFILE=cilium make -C kubernetes/slicer 200 plan' ]
 }
 
 @test "platform workflow rejects invalid app toggles" {
@@ -277,7 +266,7 @@ EOF
   run "${SCRIPT}" preview --execute --variant kind --stage 100 --preset network-profile=default-cni
 
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"Preset network-profile=default-cni is not available for variant kind"* ]]
+  [[ "${output}" == *"Invalid --preset 'network-profile=default-cni'. Unsupported value for network-profile"* ]]
 
   run "${SCRIPT}" preview --execute \
     --variant lima \
@@ -335,14 +324,6 @@ EOF
   [ "${status}" -eq 0 ]
   [ "${output}" = "make -C kubernetes/kind readiness" ]
 
-  run "${SCRIPT}" preview --execute --variant slicer --action status --output json
-
-  [ "${status}" -eq 0 ]
-
-  run jq -r '.command' <<<"${output}"
-  [ "${status}" -eq 0 ]
-  [ "${output}" = "make -C kubernetes/slicer status" ]
-
   run "${SCRIPT}" preview --execute --variant lima --stage 900 --action check-health --output json
   [ "${status}" -eq 0 ]
   run jq -r '.command' <<<"${output}"
@@ -355,7 +336,7 @@ EOF
   local preview_json
   local expected_command
 
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     expected_command="$(jq -r '.readiness.command' "${REPO_ROOT}/kubernetes/variants/${variant}/variant.json")"
 
     run "${SCRIPT}" preview --execute --variant "${variant}" --action readiness --output json

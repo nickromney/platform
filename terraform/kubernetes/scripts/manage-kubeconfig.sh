@@ -55,7 +55,7 @@ get_current_context() {
 
 is_repo_owned_context() {
   local context_name="$1"
-  local repo_contexts_csv="${KUBECONFIG_REPO_CONTEXTS:-kind-kind-local,limavm-k3s,slicer-k3s}"
+  local repo_contexts_csv="${KUBECONFIG_REPO_CONTEXTS:-kind-kind-local,limavm-k3s}"
   local repo_context
 
   IFS=',' read -r -a repo_contexts <<<"${repo_contexts_csv}"

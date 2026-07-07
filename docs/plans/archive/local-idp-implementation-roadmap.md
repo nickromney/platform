@@ -5,7 +5,7 @@ The implementation order is contract first, then API, then user surfaces.
 1. Add JSON schemas for catalog, runtime, status, actions, deployments, secret
    bindings, scorecards, environment requests, and audit events.
 2. Add a Go IDP core that reads existing catalog/status/script outputs.
-3. Add explicit runtime adapters for generic Kubernetes, kind, Lima, and Slicer.
+3. Add explicit runtime adapters for generic Kubernetes, kind, Lima,.
 4. Add dry-run workflow APIs for environment requests, promotion, rollback, and
    app scaffolding.
 5. Add audit events under `.run/idp/audit.jsonl`.

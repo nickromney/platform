@@ -514,7 +514,7 @@ assert 'replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"' in 
 for target, registry_host in {
     "kind": "host.docker.internal:5002",
     "lima": "host.lima.internal:5002",
-    "slicer": "192.168.64.1:5002",
+    "lima": "192.168.64.1:5002",
 }.items():
     tfvars = (repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars").read_text(encoding="utf-8")
     assert f'backstage' in tfvars and f'= "{registry_host}/platform/backstage:1.0.0"' in tfvars

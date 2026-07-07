@@ -323,7 +323,7 @@ make -C kubernetes/kind 900 apply AUTO_APPROVE=1
 make -C kubernetes/kind check-health
 ```
 
-If kind, Lima, or Slicer are already sharing host ports, clear the conflicting
+If kind, Lima, are already sharing host ports, clear the conflicting
 runtime or stop only the conflicting host-forward/proxy process before treating
 the app work as failed.
 

@@ -45,7 +45,7 @@ setup() {
 }
 
 @test "local Kubernetes variants expose Portal API Backstage SDK and MCP targets" {
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     run make -C "${REPO_ROOT}/kubernetes/${variant}" help
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"make idp-api"* ]]
@@ -56,7 +56,7 @@ setup() {
 }
 
 @test "IDP Make targets are dry-run friendly and do not apply infrastructure" {
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     for target in idp-api backstage idp-sdk idp-mcp; do
       run make -C "${REPO_ROOT}/kubernetes/${variant}" "${target}" DRY_RUN=1
       [ "${status}" -eq 0 ]
@@ -67,7 +67,7 @@ setup() {
 }
 
 @test "IDP operator surfaces advertise HTTPS sslip.io endpoints" {
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     run make -C "${REPO_ROOT}/kubernetes/${variant}" idp-api DRY_RUN=1
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"https://portal-api.127.0.0.1.sslip.io"* ]]
@@ -90,7 +90,7 @@ setup() {
   [ "${status}" -eq 0 ]
   status_json="${output}"
 
-  for variant in kind lima slicer; do
+  for variant in kind lima; do
     while IFS= read -r target; do
       [ -n "${target}" ] || continue
 

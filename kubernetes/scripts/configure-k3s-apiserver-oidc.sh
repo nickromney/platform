@@ -34,20 +34,14 @@ case "${K3S_OIDC_RUNTIME}" in
     K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima}"
     K3S_OIDC_NODE_NAME="${LIMA_NODE_NAME:-k3s-node-1}"
     ;;
-  slicer)
-    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Slicer}"
-    K3S_OIDC_NODE_NAME="${SLICER_VM_NAME:-slicer-1}"
-    SLICER_URL="${SLICER_URL:-${SLICER_SOCKET:-}}"
-    GATEWAY_HTTPS_HOST_PORT="${GATEWAY_HTTPS_HOST_PORT:-443}"
-    ;;
   "")
     K3S_OIDC_RUNTIME_VALID=0
-    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima/Slicer}"
+    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima}"
     K3S_OIDC_NODE_NAME="${K3S_OIDC_NODE_NAME:-k3s-node}"
     ;;
   *)
     K3S_OIDC_RUNTIME_VALID=0
-    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima/Slicer}"
+    K3S_OIDC_RUNTIME_LABEL="${K3S_OIDC_RUNTIME_LABEL:-Lima}"
     K3S_OIDC_NODE_NAME="${K3S_OIDC_NODE_NAME:-k3s-node}"
     ;;
 esac
@@ -55,9 +49,6 @@ esac
 PLATFORM_BASE_DOMAIN="${PLATFORM_BASE_DOMAIN:-127.0.0.1.sslip.io}"
 PLATFORM_ADMIN_BASE_DOMAIN="${PLATFORM_ADMIN_BASE_DOMAIN:-${PLATFORM_BASE_DOMAIN}}"
 DEX_PORT_SUFFIX=""
-if [[ "${K3S_OIDC_RUNTIME}" == "slicer" && "${GATEWAY_HTTPS_HOST_PORT}" != "443" ]]; then
-  DEX_PORT_SUFFIX=":${GATEWAY_HTTPS_HOST_PORT}"
-fi
 SSO_PROVIDER="${SSO_PROVIDER:-keycloak}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-platform}"
 case "${SSO_PROVIDER}" in
@@ -97,37 +88,16 @@ lima_exec() {
   limactl shell "$name" -- "$@"
 }
 
-slicer_exec() {
-  local name="$1"
-  shift
-  SLICER_URL="${SLICER_URL}" slicer vm exec "$name" -- "$@"
-}
-
 remote_read_file() {
   local path="$1"
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "cat '$path' 2>/dev/null || true"
-      ;;
-    slicer)
-      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo sh -c \"cat '$path' 2>/dev/null || true\""
-      ;;
-  esac
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "cat '$path' 2>/dev/null || true"
 }
 
 remote_write_file() {
   local path="$1"
   local content="$2"
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo mkdir -p "$(dirname "$path")"
-      printf '%s\n' "$content" | lima_exec "$K3S_OIDC_NODE_NAME" sudo tee "$path" >/dev/null
-      ;;
-    slicer)
-      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo mkdir -p \"$(dirname "$path")\""
-      printf '%s\n' "$content" | slicer_exec "$K3S_OIDC_NODE_NAME" "sudo tee \"$path\" >/dev/null"
-      ;;
-  esac
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo mkdir -p "$(dirname "$path")"
+  printf '%s\n' "$content" | lima_exec "$K3S_OIDC_NODE_NAME" sudo tee "$path" >/dev/null
 }
 
 ensure_remote_file_equals() {
@@ -147,9 +117,7 @@ ensure_remote_file_equals() {
 ensure_remote_host_alias() {
   local desired_ip="$1"
 
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo env DEX_HOST="$DEX_HOST" GATEWAY_IP="$desired_ip" bash -s <<'EOF'
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo env DEX_HOST="$DEX_HOST" GATEWAY_IP="$desired_ip" bash -s <<'EOF'
 set -euo pipefail
 
 tmp="$(mktemp)"
@@ -163,24 +131,6 @@ fi
 
 rm -f "$tmp"
 EOF
-      ;;
-    slicer)
-      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo env DEX_HOST='${DEX_HOST}' GATEWAY_IP='${desired_ip}' bash -s" <<'EOF'
-set -euo pipefail
-
-tmp="$(mktemp)"
-grep -vE "[[:space:]]${DEX_HOST//./\\.}([[:space:]]|$)" /etc/hosts >"$tmp"
-printf '%s %s\n' "$GATEWAY_IP" "$DEX_HOST" >>"$tmp"
-
-if ! cmp -s "$tmp" /etc/hosts; then
-  cat "$tmp" >/etc/hosts
-  echo changed
-fi
-
-rm -f "$tmp"
-EOF
-      ;;
-  esac
 }
 
 ensure_remote_ca() {
@@ -189,52 +139,23 @@ ensure_remote_ca() {
   local local_sha remote_sha
 
   local_sha="$(shasum -a 256 "$source_ca" | awk '{print $1}')"
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      remote_sha="$(lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "sha256sum '$dest_path' 2>/dev/null | cut -d' ' -f1" || true)"
-      ;;
-    slicer)
-      remote_sha="$(slicer_exec "$K3S_OIDC_NODE_NAME" "sudo sh -c \"sha256sum '$dest_path' 2>/dev/null | cut -d' ' -f1\"" || true)"
-      ;;
-  esac
+  remote_sha="$(lima_exec "$K3S_OIDC_NODE_NAME" sudo sh -c "sha256sum '$dest_path' 2>/dev/null | cut -d' ' -f1" || true)"
 
   if [[ "$local_sha" == "$remote_sha" ]]; then
     return 1
   fi
 
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo mkdir -p "$(dirname "$dest_path")"
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo tee "$dest_path" >/dev/null <"$source_ca"
-      ;;
-    slicer)
-      SLICER_URL="${SLICER_URL}" slicer vm cp "$source_ca" "${K3S_OIDC_NODE_NAME}:/tmp/mkcert-rootCA.pem" >/dev/null
-      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo mkdir -p \"$(dirname "$dest_path")\" && sudo mv /tmp/mkcert-rootCA.pem '$dest_path'"
-      ;;
-  esac
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo mkdir -p "$(dirname "$dest_path")"
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo tee "$dest_path" >/dev/null <"$source_ca"
   return 0
 }
 
 restart_k3s() {
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo systemctl restart k3s
-      ;;
-    slicer)
-      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo systemctl restart k3s"
-      ;;
-  esac
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo systemctl restart k3s
 }
 
 oidc_discovery_ready_from_vm() {
-  case "${K3S_OIDC_RUNTIME}" in
-    lima)
-      lima_exec "$K3S_OIDC_NODE_NAME" sudo curl -fsS --max-time 5 --cacert "$MKCERT_CA_DEST" "${OIDC_ISSUER_URL}/.well-known/openid-configuration" >/dev/null
-      ;;
-    slicer)
-      slicer_exec "$K3S_OIDC_NODE_NAME" "sudo curl -fsS --max-time 5 --cacert '${MKCERT_CA_DEST}' '${OIDC_ISSUER_URL}/.well-known/openid-configuration'" >/dev/null
-      ;;
-  esac
+  lima_exec "$K3S_OIDC_NODE_NAME" sudo curl -fsS --max-time 5 --cacert "$MKCERT_CA_DEST" "${OIDC_ISSUER_URL}/.well-known/openid-configuration" >/dev/null
 }
 
 usage() {
@@ -251,18 +172,10 @@ EOF
 shell_cli_handle_standard_no_args usage "would configure the ${K3S_OIDC_RUNTIME_LABEL} k3s API server for OIDC-issued tokens" "$@"
 
 if [[ "${K3S_OIDC_RUNTIME_VALID}" -ne 1 ]]; then
-  fail "K3S_OIDC_RUNTIME must be set to lima or slicer"
+  fail "K3S_OIDC_RUNTIME must be set to lima"
 fi
 
-case "${K3S_OIDC_RUNTIME}" in
-  lima)
-    require_cmd limactl
-    ;;
-  slicer)
-    [ -n "${SLICER_URL}" ] || fail "SLICER_URL or SLICER_SOCKET must be set"
-    require_cmd slicer
-    ;;
-esac
+require_cmd limactl
 require_cmd kubectl
 require_cmd curl
 require_cmd shasum

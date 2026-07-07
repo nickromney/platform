@@ -39,7 +39,7 @@ ok 37 image catalog owns Grafana VictoriaLogs plugin image build inputs
 ok 38 docker optimization tests share Grafana plugin catalog build input helpers
 ok 39 image catalog entries declare version-check policy
 ok 40 docker optimization tests share image catalog version-check helpers
-ok 41 Lima and Slicer external image refs match the image catalog
+ok 41 Lima and Lima external image refs match the image catalog
 ok 42 docker optimization tests share image catalog target ref helpers
 ok 43 image catalog renders target tfvars external image projection
 ok 44 docker optimization tests share image catalog target tfvars projection helpers

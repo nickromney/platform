@@ -22,7 +22,7 @@ The durable implementation contract is:
 - root `make` is informational
 - focused Makefiles own mutating workflows
 - Kind is the default Docker-backed reference path
-- Lima and Slicer reuse the shared Kubernetes stack after stage `100`
+- Lima reuse the shared Kubernetes stack after stage `100`
 - stage tfvars define the enabled platform shape
 - OpenTofu is the default Terraform-compatible engine through Terragrunt
 - app trees are sample workloads, not the platform product itself
@@ -76,7 +76,7 @@ The durable implementation contract is:
 
 ## Non-Goals
 
-Do not remove Kind, Lima, Slicer, SD-WAN Lima, DDD notes, ADRs, policy audit
+Do not remove Kind, Lima, Lima, SD-WAN Lima, DDD notes, ADRs, policy audit
 docs, or the app sample roots as part of the first pruning pass. Those are still
 part of the source repo's current explanatory model.
 

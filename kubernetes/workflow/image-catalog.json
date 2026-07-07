@@ -518,7 +518,6 @@
   ],
   "variant_registry_hosts": {
     "kind": "host.docker.internal:5002",
-    "lima": "host.lima.internal:5002",
-    "slicer": "192.168.64.1:5002"
+    "lima": "host.lima.internal:5002"
   }
 }

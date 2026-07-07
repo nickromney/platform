@@ -158,18 +158,6 @@ case "${variant}" in
     switch_label="Switch to Kubernetes Lima"
     stop_target="stop-lima"
     ;;
-  slicer)
-    status_label="Slicer status"
-    prereqs_label="Slicer prereqs"
-    health_label="Slicer health"
-    urls_label="Slicer URLs"
-    stop_label="Stop Slicer"
-    reset_label="Reset Slicer"
-    apply_100_label="Slicer stage 100 apply"
-    apply_900_label="Slicer stage 900 apply"
-    switch_label="Switch to Slicer"
-    stop_target="stop-slicer"
-    ;;
   *)
     printf 'Unknown variant: %s\n' "${variant}" >&2
     exit 1

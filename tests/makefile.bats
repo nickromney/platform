@@ -53,7 +53,7 @@ run_make_in_tty() {
   [ "${status}" -eq 0 ]
 
   printf '%s\n' "${output}" | grep -Eq '^  make apps[[:space:]]+Show the app/frontend Makefiles$'
-  printf '%s\n' "${output}" | grep -Eq '^  make status \[STATUS_FORMAT=text\|json\][[:space:]]+Show root local-runtime status across kind/Lima/Slicer$'
+  printf '%s\n' "${output}" | grep -Eq '^  make status \[STATUS_FORMAT=text\|json\][[:space:]]+Show root local-runtime status across kind/Lima$'
 
   apps_line="$(printf '%s\n' "${output}" | grep -n '^  make apps' | cut -d: -f1)"
   check_version_line="$(printf '%s\n' "${output}" | grep -n '^  make check-version' | cut -d: -f1)"
@@ -317,7 +317,6 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Root test is informational."* ]]
   [[ "${output}" == *"make -C docker/compose test"* ]]
-  [[ "${output}" == *"make -C kubernetes/slicer test"* ]]
 }
 
 @test "root prereqs and test list every top-level app Makefile entrypoint" {

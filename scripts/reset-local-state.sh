@@ -19,7 +19,6 @@ PLAYWRIGHT_CACHE_DIR_OVERRIDE="${RESET_LOCAL_STATE_PLAYWRIGHT_CACHE_DIR:-}"
 PIP_CACHE_DIR_OVERRIDE="${RESET_LOCAL_STATE_PIP_CACHE_DIR:-}"
 KIND_KUBECONFIG_PATH="${RESET_LOCAL_STATE_KIND_KUBECONFIG_PATH:-${HOME}/.kube/kind-kind-local.yaml}"
 LIMA_KUBECONFIG_PATH="${RESET_LOCAL_STATE_LIMA_KUBECONFIG_PATH:-${HOME}/.kube/limavm-k3s.yaml}"
-SLICER_KUBECONFIG_PATH="${RESET_LOCAL_STATE_SLICER_KUBECONFIG_PATH:-${HOME}/.kube/slicer-k3s.yaml}"
 
 INCLUDE_HOST_CACHES=0
 INCLUDE_KUBECONFIGS=0
@@ -203,9 +202,6 @@ collect_host_paths() {
     fi
     if [[ -e "${LIMA_KUBECONFIG_PATH}" ]]; then
       append_unique_path host_paths "${LIMA_KUBECONFIG_PATH}"
-    fi
-    if [[ -e "${SLICER_KUBECONFIG_PATH}" ]]; then
-      append_unique_path host_paths "${SLICER_KUBECONFIG_PATH}"
     fi
   fi
 }

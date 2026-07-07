@@ -25,7 +25,7 @@ Focused Makefiles:
   docker/compose/Makefile
   kubernetes/kind/Makefile
   kubernetes/lima/Makefile
-  kubernetes/slicer/Makefile
+  kubernetes/lima/Makefile
   sites/docs/Makefile
   tools/platform-tui/Makefile
 
@@ -49,7 +49,7 @@ Root shortcuts:
   make release-dry-run VERSION=0.3.0                           Preview the release commit flow
   make release-tag VERSION=0.3.0                               Create an annotated v-version tag from main
   make sonar-scan SONAR_SCAN_REPO=apps/apim-simulator          Run SonarQube on any local repo
-  make status [STATUS_FORMAT=text|json]                        Show root local-runtime status across kind/Lima/Slicer
+  make status [STATUS_FORMAT=text|json]                        Show root local-runtime status across kind/Lima/Lima
   make test                                                    Show the focused test entrypoints
   make tui                                                     Open the Bubble Tea local runtime chooser
   make workflow-ui [WORKFLOW_UI_HTTP=h2|http1]                 Serve the browser workflow chooser on local HTTPS

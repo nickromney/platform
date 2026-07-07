@@ -16,7 +16,7 @@ setup() {
   cat >"${STATUS_STUB}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${STATUS_STUB}"
 
@@ -47,7 +47,7 @@ EOF
   cat >"${STATUS_STUB}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"slicer":{"path":"kubernetes/slicer","state":"absent"}},"actions":[{"id":"lima-stop","variant":"lima","variant_path":"kubernetes/lima","enabled":true,"dangerous":false,"command":"make -C kubernetes/lima stop-from-status"}]}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/lima","variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"}},"actions":[{"id":"lima-stop","variant":"lima","variant_path":"kubernetes/lima","enabled":true,"dangerous":false,"command":"make -C kubernetes/lima stop-from-status"}]}'
 EOF
   chmod +x "${STATUS_STUB}"
 
@@ -77,7 +77,7 @@ EOF
   cat >"${STATUS_STUB}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"idle","active_variant_path":null,"variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"idle","active_variant_path":null,"variants":{"kind":{"path":"kubernetes/kind","state":"absent"},"lima":{"path":"kubernetes/lima","state":"absent"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${STATUS_STUB}"
 
@@ -107,7 +107,7 @@ EOF
   cat >"${STATUS_STUB}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind"},"lima":{"path":"kubernetes/lima","state":"absent"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${STATUS_STUB}"
 
@@ -140,7 +140,7 @@ EOF
   cat >"${STATUS_STUB}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${STATUS_STUB}"
 
@@ -171,7 +171,7 @@ EOF
   cat >"${STATUS_STUB}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"slicer":{"path":"kubernetes/slicer","state":"absent"}}}'
+printf '%s\n' '{"overall_state":"running","active_variant_path":"kubernetes/kind","variants":{"kind":{"path":"kubernetes/kind","state":"running"},"lima":{"path":"kubernetes/lima","state":"absent"},"lima":{"path":"kubernetes/lima","state":"absent"}}}'
 EOF
   chmod +x "${STATUS_STUB}"
 

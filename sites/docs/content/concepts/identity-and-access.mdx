@@ -71,7 +71,7 @@ smaller shared compose platform path.
 The current platform implementation has concrete source evidence:
 
 - `kubernetes/kind/stages/900-sso.tfvars`, `kubernetes/lima/stages/900-sso.tfvars`,
-  and `kubernetes/slicer/stages/900-sso.tfvars` select `sso_provider = "keycloak"`.
+  and `kubernetes/lima/stages/900-sso.tfvars` select `sso_provider = "keycloak"`.
 - `terraform/kubernetes/sso.tf` renders Keycloak, Postgres, users, groups,
   OIDC clients, app route proxies, and group-based Kubernetes RBAC bindings.
 - `terraform/kubernetes/locals.tf` centralizes provider-neutral issuer, token,
@@ -87,10 +87,10 @@ The current platform implementation has concrete source evidence:
 ```bash
 make -C kubernetes/kind check-sso-e2e
 make -C kubernetes/lima check-sso-e2e
-make -C kubernetes/slicer check-sso-e2e
+make -C kubernetes/lima check-sso-e2e
 ```
 
-Kind and Slicer run the SSO browser smoke as part of the stage-900 Make
+Kind run the SSO browser smoke as part of the stage-900 Make
 confidence path. Lima keeps it as an explicit post-apply validation step.
 
 <Callout type="warning">

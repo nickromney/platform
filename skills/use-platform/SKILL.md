@@ -18,7 +18,6 @@ Choose the focused Makefile before reading deeper docs:
 - App or frontend work: `make -C apps help` or the nearest app Makefile.
 - Local kind cluster work: `make -C kubernetes/kind help`.
 - Local Lima cluster work: `make -C kubernetes/lima help`.
-- Local Slicer cluster work: `make -C kubernetes/slicer help`.
 
 Read the nearest subtree `README.md` only after selecting the relevant path. Prefer the local `Makefile`, tests, and scripts over broad repo exploration.
 
@@ -55,6 +54,7 @@ Use these local cluster command paths when you need to prove a stack end to end 
   `make -C kubernetes/kind 900 apply AUTO_APPROVE=1`
   `make -C kubernetes/kind check-health`
 - The kind stage-900 browser path now runs inside the devcontainer too. The shared SSO harness maps `*.127.0.0.1.sslip.io` through `host.docker.internal` when `PLATFORM_DEVCONTAINER=1`, so the devcontainer can exercise the same `check-sso-e2e` step instead of skipping it.
+- Lima is best-effort and validated on demand; kind is the reference substrate.
 - Lima conflict preflight while kind is still active:
   `make -C kubernetes/lima 900 apply AUTO_APPROVE=1`
   Expect this to fail fast in `check-kind-stopped` while `kind-local` is running; that is the validated guard before Lima reaches shared host-port checks.
@@ -64,16 +64,9 @@ Use these local cluster command paths when you need to prove a stack end to end 
   `make -C kubernetes/lima 100 apply AUTO_APPROVE=1`
   `make -C kubernetes/lima 900 apply AUTO_APPROVE=1`
   `make -C kubernetes/lima check-health`
-- Slicer clean confidence path after clearing the other local targets:
-  `make -C kubernetes/lima reset AUTO_APPROVE=1`
-  `make -C kubernetes/slicer reset AUTO_APPROVE=1`
-  `make -C kubernetes/slicer 100 apply AUTO_APPROVE=1`
-  `make -C kubernetes/slicer 900 apply AUTO_APPROVE=1`
-  `make -C kubernetes/slicer check-health`
-
 Validated operator learnings from real teardown/rebuild runs:
 
-- Prefer the split kubeconfigs over `~/.kube/config` when debugging standalone helpers. The validated paths are `~/.kube/kind-kind-local.yaml`, `~/.kube/limavm-k3s.yaml`, and `~/.kube/slicer-k3s.yaml`. If the default kubeconfig has no current context, pass both `KUBECONFIG_PATH` and `KUBECONFIG_CONTEXT` instead of assuming `kubectl config current-context` will succeed.
+- Prefer the split kubeconfigs over `~/.kube/config` when debugging standalone helpers. The validated paths are `~/.kube/kind-kind-local.yaml` and `~/.kube/limavm-k3s.yaml`. If the default kubeconfig has no current context, pass both `KUBECONFIG_PATH` and `KUBECONFIG_CONTEXT` instead of assuming `kubectl config current-context` will succeed.
 - For kind stage-900 GitOps resources, remember that Argo CD normally reconciles from the in-cluster Gitea `platform/policies` repository, not directly from the working tree. Direct `kubectl apply` can be useful for diagnosis, but Argo self-heal may immediately restore the older rendered content. After changing Terraform-rendered GitOps manifests, run `make -C kubernetes/kind gitea-sync AUTO_APPROVE=1`, hard-refresh or wait for the relevant Argo app, then verify the live object. This matters especially for `cilium-policies`, `platform-gateway-routes`, APIM, SSO, and workload app manifests.
 - If a live object does not match your working tree after `gitea-sync`, inspect the Argo app source path and revision first:
   `kubectl --kubeconfig ~/.kube/kind-kind-local.yaml --context kind-kind-local -n argocd get app <app> -o yaml`
@@ -91,12 +84,6 @@ Validated operator learnings from real teardown/rebuild runs:
 - Terragrunt runs the Kubernetes Terraform module from its cache copy, so any `path.module` references that reach back into `kubernetes/kind/` or `.run/kind/` must be replaced with absolute paths exported from the kind Makefile. The validated exports are `TF_VAR_kind_stage_900_tfvars_file`, `TF_VAR_kind_target_tfvars_file`, `TF_VAR_kind_stack_dir`, `TF_VAR_kind_config_path`, and `TF_VAR_kind_operator_overrides_file`.
 - Terragrunt cache copies also break scripts that re-derive repo-root paths from `BASH_SOURCE[0]`. Terraform helper scripts under `terraform/kubernetes/` should honor an exported `REPO_ROOT` first, then fall back to their on-disk relative path only when the variable is unset.
 - Lima can emit `Failed to allocate directory watch: Too many open files` while reconfiguring k3s OIDC and still complete successfully. If the apply, health checks, Argo sync, and SSO smoke pass afterward, treat that message as a rough edge rather than an automatic failure.
-- Slicer currently assumes the local `~/slicer-mac/slicer-mac.yaml` host group matches the documented validated shape. In practice, `storage_size: 25G` for the `slicer` host group is required; smaller disks fail bootstrap because the root disk cannot be resized in place.
-- If Headlamp SSO fails on Slicer with `Headlamp did not establish an authenticated Kubernetes session`, inspect `/etc/rancher/k3s/config.yaml.d/90-headlamp-oidc.yaml` inside the VM and `journalctl -u k3s`. Repeated `invalid bearer token` errors there mean the apiserver OIDC config did not land or is wrong.
-- Slicer daemon startup can fail on a stale `~/slicer-mac/slicer.sock` even when the socket file still exists. The validated debugging path is `make -C kubernetes/slicer daemon-up`, `make -C kubernetes/slicer status`, and, if needed, `kubernetes/slicer/.run/slicer-mac.log`. Do not assume “socket file exists” means the daemon is healthy.
-- After a forced host stop or obviously corrupted Slicer restart, keep the default repo reset conservative and use the heavier image prune only as an explicit troubleshooting step. The validated recovery path was either `make -C kubernetes/slicer reset AUTO_APPROVE=1 SLICER_RESET_PRUNE_ALL_IMAGES=1` or the equivalent manual flow: `~/slicer-mac/slicer-mac service stop daemon`, delete `~/slicer-mac/*.img`, then `~/slicer-mac/slicer-mac service start daemon` before rerunning `make -C kubernetes/slicer 100 apply AUTO_APPROVE=1`. Deleting only `slicer-1*.img` was not sufficient in the validated forced-stop recovery because the corrupted base image also had to be pruned.
-- A fresh Slicer `900 apply` can decide `slicer-k3s not reachable; bootstrapping via STAGE=100` even right after a manual `100 apply`. That fallback is part of the wrapper behavior; let it continue unless it surfaces a concrete hard error.
-
 When adding a new internal platform workload:
 
 - Follow the existing hardened-container pattern before accepting new code. Prefer DHI runtime images where the repo already uses them, keep runtime dependencies minimal and pinned, honor the repository cooldown policy, drop Linux capabilities, run as non-root, disable service account token mounting unless needed, and use read-only root filesystems with explicit writable temp/cache volumes.
@@ -115,44 +102,34 @@ Use these state probes while an `apply` is in flight:
 - Broad cluster convergence:
   `make -C kubernetes/kind check-health`
   `make -C kubernetes/lima check-health`
-  `make -C kubernetes/slicer check-health`
 - Gateway/TLS-specific progress:
   `make -C kubernetes/kind check-gateway-stack`
   `make -C kubernetes/lima check-gateway-stack`
-  `make -C kubernetes/slicer check-gateway-stack`
   `make -C kubernetes/kind check-gateway-urls`
   `make -C kubernetes/lima check-gateway-urls`
-  `make -C kubernetes/slicer check-gateway-urls`
 - SSO-specific progress:
   `make -C kubernetes/kind check-sso`
   `make -C kubernetes/lima check-sso`
-  `make -C kubernetes/slicer check-sso`
   `make -C kubernetes/kind check-sso-e2e`
   `make -C kubernetes/lima check-sso-e2e`
-  `make -C kubernetes/slicer check-sso-e2e`
 - App-specific progress:
   `make -C kubernetes/kind check-app APP=<name>`
   `make -C kubernetes/lima check-app APP=<name>`
-  `make -C kubernetes/slicer check-app APP=<name>`
 - Runtime/preflight state:
   `make -C kubernetes/kind status`
   `make -C kubernetes/lima status`
-  `make -C kubernetes/slicer status`
   `make -C kubernetes/lima proxy-status`
   `make -C kubernetes/kind audit-bootstrap`
 
 Use the preflight checks to explain immediate failure modes instead of waiting on them:
 
 - `make -C kubernetes/lima check-kind-stopped` tells you Lima is blocked because kind has active shared localhost bindings.
-- `make -C kubernetes/kind check-lima-stopped` and `make -C kubernetes/kind check-slicer-stopped` tell you kind is blocked by another target's active shared localhost bindings.
-- `make -C kubernetes/slicer check-kind-stopped` and `make -C kubernetes/slicer check-lima-stopped` tell you Slicer is blocked by another target's active shared localhost bindings.
+- `make -C kubernetes/kind check-lima-stopped` tells you kind is blocked by another target's active shared localhost bindings.
 
 The blocker checks are binding-based, not VM-existence-based. A running Lima VM
-without `limavm-platform-gateway-443`, a running `slicer-1` VM without Slicer
-host forwards or `slicer-platform-gateway-443`, and a kind cluster without
-published shared host ports are allowed to coexist. Stop only the binding helper
-when that is enough: `make -C kubernetes/lima stop-host-gateway-proxy` or
-`make -C kubernetes/slicer stop-host-forwards`.
+without `limavm-platform-gateway-443`, and a kind cluster without published
+shared host ports are allowed to coexist. Stop only the binding helper when that
+is enough: `make -C kubernetes/lima stop-host-gateway-proxy`.
 
 Rule of thumb: keep the original `apply` running until it either exits successfully or surfaces a concrete hard error. Use the `check-*` and `status` targets to understand what it is waiting for.
 

@@ -25,7 +25,7 @@ Targets (workflow syntax above is preferred):
   make check-provider-version [CHECK_VERSION_FORMAT=text|json]
   make check-rbac                               Validate OIDC group-to-Kubernetes RBAC with kubectl auth can-i
   make check-security                           WireGuard, gateway TLS, policy enforcement, config integrity
-  make check-slicer-stopped
+  make check-lima-stopped
   make check-sso
   make check-sso-e2e                            Host-side browser SSO end-to-end app checks (Playwright)
   make exercise-oidc-recovery [OIDC_RECOVERY_FORMAT=text|json] [OIDC_RECOVERY_FORCE_MODE=nginx-rollout]

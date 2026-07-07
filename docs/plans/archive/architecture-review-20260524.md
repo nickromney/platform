@@ -276,7 +276,7 @@ The current Go adapter covers dispatch logic with `go test`.
 Second-pass review found that `apps/idp-core/app/internal/app/server.go`
 still constructed the runtime Adapter registry inline and exposed only
 `generic_kubernetes`, `kind`, and `lima`. That contradicted the current
-Local Stack Operations language where Slicer is a first-class local variant,
+Local Stack Operations language where Lima is a first-class local variant,
 and it left the registry as a shallow map wrapper with nondeterministic list
 order.
 
@@ -284,15 +284,15 @@ Implemented:
 
 - Added `workflow.NewPlatformRuntimeRegistry()` as the single Portal API
   runtime Adapter registry.
-- Added the Slicer Make-backed runtime Adapter.
+- Added the Lima Make-backed runtime Adapter.
 - Made `Registry.List()` deterministic by sorting Adapter names.
 - Updated Portal API, browser SSO, and DDD/runtime-portability docs to include
-  `slicer` in the current runtime Adapter set.
+  `lima` in the current runtime Adapter set.
 
 Tests added:
 
 - `apps/idp-core/app/internal/workflow/workflow_test.go` proves the registry
-  exposes `generic_kubernetes`, `kind`, `lima`, and `slicer` in deterministic
+  exposes `generic_kubernetes`, `kind`, `lima`, and `lima` in deterministic
   order.
 - The existing Portal API runtime test now asserts the same public runtime
   list.

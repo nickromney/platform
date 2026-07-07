@@ -118,7 +118,7 @@ function workbench(theme) {
   ${pill(1100, 48, 'Dex SSO', theme, theme.softBlue, theme.blue)}
 
   ${card({ x: 56, y: 176, w: 250, h: 150, title: 'Operator', body: ['Make targets', 'Shell preflight', 'Reset and health checks'], theme, fill: theme.surface, accent: theme.teal })}
-  ${card({ x: 342, y: 176, w: 245, h: 150, title: 'Runtime', body: ['Kind reference path', 'Lima and Slicer options', 'Kubeconfig and ports'], theme, fill: theme.softAmber, accent: theme.amber, icon: 'diamond' })}
+  ${card({ x: 342, y: 176, w: 245, h: 150, title: 'Runtime', body: ['Kind reference path', 'Lima and Lima options', 'Kubeconfig and ports'], theme, fill: theme.softAmber, accent: theme.amber, icon: 'diamond' })}
 
   <rect x="640" y="138" width="310" height="262" rx="18" fill="url(#rail)" stroke="${theme.border}" stroke-width="1.5"/>
   <text x="674" y="190" class="title" fill="${theme.text}" font-size="26" font-weight="780">Platform core</text>
@@ -159,7 +159,7 @@ function indexFlow(theme) {
   ${lines(48, 96, ['A staged route from host commands to reconciled workloads, with version and hardening checks around it.'], theme, { size: 18, fill: theme.muted })}
 
   ${card({ x: 56, y: 142, w: 260, h: 128, title: 'Host commands', body: ['make -C kubernetes/kind', 'preflight, plan, apply'], theme, fill: theme.surface, accent: theme.teal, titleSize: 22 })}
-  ${card({ x: 368, y: 142, w: 260, h: 128, title: 'Runtime', body: ['Kind first', 'Lima and Slicer paths'], theme, fill: theme.softAmber, accent: theme.amber, icon: 'diamond', titleSize: 22 })}
+  ${card({ x: 368, y: 142, w: 260, h: 128, title: 'Runtime', body: ['Kind first', 'Lima and Lima paths'], theme, fill: theme.softAmber, accent: theme.amber, icon: 'diamond', titleSize: 22 })}
   ${card({ x: 680, y: 142, w: 260, h: 128, title: 'IaC engine', body: ['Terragrunt wrapper', 'OpenTofu by default'], theme, fill: theme.softBlue, accent: theme.blue, titleSize: 22 })}
 
   ${card({ x: 92, y: 360, w: 292, h: 136, title: 'Platform core', body: ['Cilium, Hubble, Gateway API', 'TLS, policy, observability'], theme, fill: theme.softTeal, accent: theme.teal })}
@@ -269,7 +269,7 @@ function stageLadder(theme) {
   <rect x="56" y="126" width="1088" height="50" rx="16" fill="${theme.surface}" stroke="${theme.border}" stroke-width="1.4"/>
   <text x="84" y="155" fill="${theme.text}" font-size="17" font-weight="740">Apply stage 900 as desired state. It includes stages 100 through 800.</text>
   ${pill(822, 130, 'Kind default', theme, theme.softTeal, theme.teal)}
-  ${pill(958, 130, 'Lima / Slicer converge after 100', theme, theme.softBlue, theme.blue)}
+  ${pill(958, 130, 'Lima / Lima converge after 100', theme, theme.softBlue, theme.blue)}
   <path d="M${railX} ${startY + 16} V${startY + (stages.length - 1) * (cardH + gap) + cardH - 16}" stroke="${theme.line}" stroke-width="4" stroke-linecap="round" opacity="0.48"/>
 `
 

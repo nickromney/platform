@@ -304,11 +304,11 @@ PY
 @test "gateway stack make targets pass split kubeconfig env through to diagnostics" {
   kind_makefile="${REPO_ROOT}/kubernetes/kind/Makefile"
   lima_makefile="${REPO_ROOT}/kubernetes/lima/Makefile"
-  slicer_makefile="${REPO_ROOT}/kubernetes/slicer/Makefile"
+  lima_makefile="${REPO_ROOT}/kubernetes/lima/Makefile"
 
   grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${kind_makefile}"
   grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${lima_makefile}"
-  grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${slicer_makefile}"
+  grep -Fq 'KUBECONFIG="$(KUBECONFIG_PATH)" KUBECONFIG_CONTEXT="$(KUBECONFIG_CONTEXT)" "$(STACK_DIR)/scripts/check-gateway-stack.sh"' "${lima_makefile}"
 }
 
 @test "gateway bootstrap CRD waiter tolerates missing status conditions during early reconciliation" {

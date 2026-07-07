@@ -1031,7 +1031,7 @@ test_file = Path("tests/validate-docker-optimization-contracts.bats")
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
     content.index('\n@test "image catalog entries declare version-check policy"'):
-    content.index('\n@test "Lima and Slicer external image refs match the image catalog"')
+    content.index('\n@test "Lima external image refs match the image catalog"')
 ]
 contract_lines = [
     line
@@ -1054,7 +1054,7 @@ PY
   [[ "${output}" == *"validated shared image catalog version-check helper usage"* ]]
 }
 
-@test "Lima and Slicer external image refs match the image catalog" {
+@test "Lima external image refs match the image catalog" {
   run python3 - <<'PY'
 from pathlib import Path
 import os
@@ -1065,11 +1065,11 @@ repo_root = Path(os.environ["REPO_ROOT"])
 violations = image_catalog_target_ref_contract_violations(repo_root)
 assert not violations, violations
 
-print("validated Lima and Slicer external image refs against image catalog")
+print("validated Lima external image refs against image catalog")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated Lima and Slicer external image refs against image catalog"* ]]
+  [[ "${output}" == *"validated Lima external image refs against image catalog"* ]]
 }
 
 @test "docker optimization tests share image catalog target ref helpers" {
@@ -1081,7 +1081,7 @@ from tests.app_contracts import image_catalog_target_ref_contract_violations
 test_file = Path("tests/validate-docker-optimization-contracts.bats")
 content = test_file.read_text(encoding="utf-8")
 test_body = content[
-    content.index('\n@test "Lima and Slicer external image refs match the image catalog"'):
+    content.index('\n@test "Lima external image refs match the image catalog"'):
     content.index('\n@test "image catalog renders target tfvars external image projection"')
 ]
 contract_lines = [
@@ -1094,7 +1094,7 @@ assert callable(image_catalog_target_ref_contract_violations)
 assert "image_catalog_target_ref_contract_violations" in content
 assert not any("validate-image-catalog-target-refs.sh" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
 assert not any("lima.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
-assert not any("slicer.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
+assert not any("lima.tfvars" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
 assert not any("subprocess.run" in line for line in contract_lines), "image catalog target ref policy should move to tests/app_contracts.py"
 
 print("validated shared image catalog target ref helper usage")

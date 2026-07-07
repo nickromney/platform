@@ -226,15 +226,6 @@ curl_hint() {
         'VERSION=$(curl -fsSL https://api.github.com/repos/lima-vm/lima/releases/latest | sed -n '\''s/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p'\'' | head -n 1) && curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-${VERSION#v}-$(uname -s)-$(uname -m).tar.gz" | sudo tar Cxzv /usr/local && curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-additional-guestagents-${VERSION#v}-$(uname -s)-$(uname -m).tar.gz" | sudo tar Cxzv /usr/local'
       return 0
       ;;
-    slicer)
-      printf '%s\n' \
-        'curl -sLS https://get.arkade.dev | sudo -E sh && sudo -E arkade oci install ghcr.io/openfaasltd/slicer:latest --path /usr/local/bin'
-      return 0
-      ;;
-    slicer-mac)
-      printf 'Install slicer first, then run: slicer install slicer-mac ~/slicer-mac\n'
-      return 0
-      ;;
     step)
       # shellcheck disable=SC2016
       printf '%s\n' \

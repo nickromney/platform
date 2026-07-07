@@ -11,7 +11,7 @@ Developer portal / SDK / MCP / TUI
             |
     Runtime Adapter Interface
             |
-kind | lima | slicer | generic-k8s | aks | eks | bare-metal
+kind | lima | lima | generic-k8s | aks | eks | bare-metal
 ```
 
 Adapters own kubeconfig discovery, health checks, ingress and DNS strategy,
@@ -22,5 +22,5 @@ bare-metal identity integration.
 The first portable baseline is `generic_kubernetes`: given kubeconfig, Argo CD
 URL, registry config, gateway domain, and catalog path, it can expose the same
 Portal API contract without a developer portal rewrite. Kind remains the
-default local Docker-backed runtime, while Lima and Slicer prove the same
+default local Docker-backed runtime, while Lima prove the same
 portal can target VM-backed k3s runtimes.

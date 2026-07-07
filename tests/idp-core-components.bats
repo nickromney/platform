@@ -915,7 +915,7 @@ image = default_match.group(1)
 assert image == expected, image
 assert '"ecr-public.aws.com/*"' in policy, "Kyverno policy must approve the ECR Public preload source"
 
-for target in ("docker-desktop", "kind", "lima", "slicer"):
+for target in ("docker-desktop", "kind", "lima", "lima"):
     preload = (repo_root / "kubernetes" / target / "preload-images.txt").read_text(encoding="utf-8")
     assert expected in preload.splitlines(), target
 

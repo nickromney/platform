@@ -26,7 +26,7 @@ In practice, that means:
 
 ## Explicit Keep-Out Zones
 
-Lima and Slicer stage `100` bootstrap stays outside Terraform and Terragrunt.
+Lima stage `100` bootstrap stays outside Terraform and Terragrunt.
 
 That stage is where the host creates or starts the VM, installs k3s with host
 tools, writes the split kubeconfig, and enforces runtime-specific preflight
@@ -90,8 +90,8 @@ that most clearly define the ownership seam for the local Kubernetes stacks.
 | `kubernetes/kind/scripts/ensure-kind-kubeconfig.sh` | `terraform-bootstrap` | Keeps the split kubeconfig aligned with the active kind cluster so provider-backed resources can target the right context. |
 | `kubernetes/scripts/check-target-host-ports.sh` | `operator-bootstrap` | Performs runtime-configured host preflight on bound localhost ports before lifecycle work starts. |
 | `kubernetes/lima/scripts/bootstrap-k3s-lima.sh` | `operator-bootstrap` | Starts the Lima VM path and bootstraps k3s before Terraform is allowed to manage in-cluster state. |
-| `kubernetes/slicer/scripts/bootstrap-k3s-slicer.sh` | `operator-bootstrap` | Starts the Slicer VM path and bootstraps k3s before Terraform is allowed to manage in-cluster state. |
-| `kubernetes/slicer/scripts/ensure-host-forwards.sh` | `operator-bootstrap` | Manages host forwards and proxy setup for the VM-backed path; this is runtime plumbing, not Terraform state. |
+| `kubernetes/lima/scripts/bootstrap-k3s-lima.sh` | `operator-bootstrap` | Starts the Lima VM path and bootstraps k3s before Terraform is allowed to manage in-cluster state. |
+| `kubernetes/lima/scripts/ensure-host-forwards.sh` | `operator-bootstrap` | Manages host forwards and proxy setup for the VM-backed path; this is runtime plumbing, not Terraform state. |
 | `terraform/kubernetes/scripts/preload-images.sh` | `operator-bootstrap` | Prepares node image content ahead of reconciliation and depends on the host runtime rather than a durable cluster object. |
 | `terraform/kubernetes/scripts/bootstrap-mkcert-ca.sh` | `operator-bootstrap` | Bridges the host mkcert trust anchor into the cluster, which is an operator environment concern. |
 | `terraform/kubernetes/scripts/sync-gitea-policies.sh` | `terraform-bootstrap` | Seeds the GitOps repo content that Argo needs for first convergence. |
@@ -115,9 +115,9 @@ Observed proof matters more than taste arguments.
 - 2026-04-19: `make -C kubernetes/lima test-idempotence STAGE=900` then passed on the rebuilt Lima stack.
 - The recorded Lima harness result is now `second_apply=noop` and `final_plan=noop`.
 - The captured artifact lives under `.run/idempotence/lima/stage900/20260419-194930Z`.
-- 2026-04-19: `make -C kubernetes/slicer test-idempotence STAGE=900` passed on the live Slicer stack after a fresh `reset -> 100 apply -> 900 apply` run.
-- The recorded Slicer harness result was `second_apply=noop` and `final_plan=noop`.
-- The captured artifact lives under `.run/idempotence/slicer/stage900/20260419-192659Z`.
+- 2026-04-19: `make -C kubernetes/lima test-idempotence STAGE=900` passed on the live Lima stack after a fresh `reset -> 100 apply -> 900 apply` run.
+- The recorded Lima harness result was `second_apply=noop` and `final_plan=noop`.
+- The captured artifact lives under `.run/idempotence/lima/stage900/20260419-192659Z`.
 - Current conclusion: browser E2E validation is a validation-only concern and should not sit inside the Lima `900 apply` convergence path.
 
 ## Review Heuristic

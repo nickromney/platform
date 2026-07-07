@@ -46,7 +46,7 @@ Subcommands:
             Persist generated tfvars as a named variant profile
 
 Workflow options:
-  --variant kind|lima|slicer      Solution variant (default: kind)
+  --variant kind|lima             Solution variant (default: kind)
   --stage 100|200|...|900
                                   Cumulative stage or named stage-like target (default: 700)
   --action readiness|plan|apply|reset|state-reset|status|show-urls|check-health|check-security|check-rbac
@@ -568,7 +568,7 @@ append_image_distribution_env() {
           append_env_override "KIND_IMAGE_DISTRIBUTION_MODE=load"
           append_env_override "KIND_PRELOAD_IMAGES_MODE=off"
           ;;
-        lima|slicer)
+        lima)
           append_env_override "PLATFORM_LOCAL_IMAGE_CACHE_MODE=off"
           append_env_override "PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=off"
           append_env_override "PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=off"
@@ -582,7 +582,7 @@ append_image_distribution_env() {
           append_env_override "KIND_LOCAL_IMAGE_CACHE_HOST=$(local_registry_runtime_host)"
           append_env_override "KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
           ;;
-        lima|slicer)
+        lima)
           append_env_override "PLATFORM_LOCAL_IMAGE_CACHE_MODE=on"
           append_env_override "LOCAL_IMAGE_CACHE_HOST=$(local_registry_runtime_host)"
           append_env_override "LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
@@ -605,7 +605,7 @@ append_image_distribution_env() {
           append_env_override "KIND_LOCAL_IMAGE_CACHE_PUSH_HOST=$(local_registry_push_host)"
           append_env_override "KIND_LOCAL_IMAGE_CACHE_OPTIONAL=0"
           ;;
-        lima|slicer)
+        lima)
           append_env_override "PLATFORM_LOCAL_IMAGE_CACHE_MODE=on"
           append_env_override "PLATFORM_BUILD_LOCAL_PLATFORM_IMAGES_MODE=on"
           append_env_override "PLATFORM_BUILD_LOCAL_WORKLOAD_IMAGES_MODE=on"
@@ -621,14 +621,7 @@ append_image_distribution_env() {
 
 append_network_profile_env() {
   case "${PRESET_NETWORK_PROFILE}" in
-    cilium)
-      if [[ "${TARGET}" = "slicer" ]]; then
-        append_env_override "SLICER_NETWORK_PROFILE=cilium"
-      fi
-      ;;
-    default-cni)
-      append_env_override "SLICER_NETWORK_PROFILE=default"
-      ;;
+    cilium) ;;
     default) ;;
   esac
 }

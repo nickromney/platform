@@ -44,8 +44,8 @@
     "facets": ["operator_prereqs", "active_variant", "cluster_access", "host_access_path", "stage_contracts", "blockers"]
   },
   "blockers": {
-    "conflicting_variants": ["lima", "slicer"],
-    "checks": ["check-lima-stopped", "check-slicer-stopped"]
+    "conflicting_variants": ["lima"],
+    "checks": ["check-lima-stopped"]
   },
   "registry": {
     "runtime_host": "host.docker.internal:5002",

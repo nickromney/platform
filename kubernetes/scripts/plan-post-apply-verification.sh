@@ -109,7 +109,7 @@ case "${variant_id}" in
       fi
     fi
     ;;
-  lima|slicer)
+  lima)
     if [[ "${stage_num}" -ge 900 && "${enable_gateway_tls}" = "true" && "${enable_headlamp}" = "true" && "${enable_sso}" = "true" ]]; then
       printf '%s\n' configure-k3s-apiserver-oidc check-health check-gateway-urls check-sso-e2e
     fi

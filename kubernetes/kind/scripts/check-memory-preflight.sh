@@ -144,12 +144,12 @@ check_host_memory() {
   fail_threshold_bytes="$(gb_to_bytes "${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB}")"
 
   if bytes_less_than_threshold "${available_bytes}" "${fail_threshold_bytes}"; then
-    fail "host memory: $(bytes_to_gib "${available_bytes}") available out of $(bytes_to_gib "${total_bytes}") total; fail threshold is ${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB); warn threshold is ${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB); remediation: close memory-hungry applications or stop other local VMs (for example: make -C kubernetes/slicer stop)"
+    fail "host memory: $(bytes_to_gib "${available_bytes}") available out of $(bytes_to_gib "${total_bytes}") total; fail threshold is ${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB); warn threshold is ${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB); remediation: close memory-hungry applications or stop other local VMs"
     return 1
   fi
 
   if bytes_less_than_threshold "${available_bytes}" "${warn_threshold_bytes}"; then
-    warn "host memory: $(bytes_to_gib "${total_bytes}") total, $(bytes_to_gib "${available_bytes}") available; warn threshold is ${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB); fail threshold is ${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB); remediation: close memory-hungry applications or stop other local VMs (for example: make -C kubernetes/slicer stop)"
+    warn "host memory: $(bytes_to_gib "${total_bytes}") total, $(bytes_to_gib "${available_bytes}") available; warn threshold is ${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_MIN_HOST_AVAILABLE_GB); fail threshold is ${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB}GiB (${KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB} via KIND_PREFLIGHT_FAIL_HOST_AVAILABLE_GB); remediation: close memory-hungry applications or stop other local VMs"
     return 0
   fi
 
@@ -264,7 +264,7 @@ classify_vm_owner() {
   fi
 
   if grep -Eiq 'slicer' <<<"${lsof_output}"; then
-    printf '%s\n' "slicer|Slicer|make -C kubernetes/slicer stop"
+    printf '%s\n' "slicer|Slicer|stop the Slicer VM (Slicer is no longer a supported substrate)"
     return 0
   fi
 

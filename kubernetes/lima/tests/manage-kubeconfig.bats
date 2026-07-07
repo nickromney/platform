@@ -116,8 +116,8 @@ contexts:
 - context:
     cluster: default
     user: default
-  name: slicer-k3s
-current-context: slicer-k3s
+  name: lima-k3s
+current-context: lima-k3s
 users:
 - name: default
   user:
@@ -143,12 +143,12 @@ users:
     token: prod
 YAML
 
-  run "${HELPER}" merge "${source_kubeconfig}" "${target_kubeconfig}" "slicer-k3s"
+  run "${HELPER}" merge "${source_kubeconfig}" "${target_kubeconfig}" "lima-k3s"
 
   [ "${status}" -eq 0 ]
   run env KUBECONFIG="${target_kubeconfig}" kubectl config view --raw -o jsonpath='{range .contexts[*]}{.name}{"\t"}{.context.cluster}{"\t"}{.context.user}{"\n"}{end}'
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *$'slicer-k3s\tslicer-k3s-cluster\tslicer-k3s-user'* ]]
+  [[ "${output}" == *$'lima-k3s\tlima-k3s-cluster\tlima-k3s-user'* ]]
   [[ "${output}" == *$'prod\tprod\tprod'* ]]
 }
 

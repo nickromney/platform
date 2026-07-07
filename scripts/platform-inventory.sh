@@ -15,7 +15,7 @@ WORKFLOW_SCRIPT="${PLATFORM_INVENTORY_WORKFLOW_SCRIPT:-${REPO_ROOT}/scripts/plat
 
 usage() {
   cat <<'EOF' | sed "1s|@SCRIPT_NAME@|${0##*/}|"
-Usage: @SCRIPT_NAME@ [--variant kind|lima|slicer] [--stage STAGE] [--output json|text] [--dry-run] [--execute]
+Usage: @SCRIPT_NAME@ [--variant kind|lima] [--stage STAGE] [--output json|text] [--dry-run] [--execute]
 
 Builds a read-only deployment inventory view for the guided workflow UI/TUI.
 The inventory is observed live state plus workflow metadata; it is not
@@ -41,8 +41,8 @@ require_value() {
 
 validate_variant() {
   case "$1" in
-    kind|lima|slicer) ;;
-    *) die_usage "Invalid --variant '${1}'. Expected one of: kind, lima, slicer" ;;
+    kind|lima) ;;
+    *) die_usage "Invalid --variant '${1}'. Expected one of: kind, lima" ;;
   esac
 }
 

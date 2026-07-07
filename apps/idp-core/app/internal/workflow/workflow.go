@@ -54,7 +54,6 @@ func NewPlatformRuntimeRegistry() *Registry {
 	registry.Register(&GenericAdapter{})
 	registry.Register(NewMakeAdapter("kind", "Local kind workflow adapter", "kubernetes/kind", "kind"))
 	registry.Register(NewMakeAdapter("lima", "Local Lima workflow adapter", "kubernetes/lima", "lima"))
-	registry.Register(NewMakeAdapter("slicer", "Local Slicer workflow adapter", "kubernetes/slicer", "slicer"))
 	return registry
 }
 

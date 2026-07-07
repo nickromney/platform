@@ -15,7 +15,6 @@ setup() {
   install_docker_stub
   install_kind_stub
   install_limactl_stub
-  install_slicer_stub
   install_lsof_stub
   install_ps_stub
 }
@@ -112,22 +111,6 @@ EOF
   chmod +x "${TEST_BIN}/limactl"
 }
 
-install_slicer_stub() {
-  cat >"${TEST_BIN}/slicer" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" == "vm" && "${2:-}" == "list" && "${3:-}" == "--json" ]]; then
-  if [[ "${MOCK_SLICER_VM_LIST_EXIT:-0}" -ne 0 ]]; then
-    exit "${MOCK_SLICER_VM_LIST_EXIT:-0}"
-  fi
-  printf '%s\n' "${MOCK_SLICER_VM_LIST_JSON:-[]}"
-  exit 0
-fi
-exit 1
-EOF
-  chmod +x "${TEST_BIN}/slicer"
-}
-
 install_lsof_stub() {
   cat >"${TEST_BIN}/lsof" <<'EOF'
 #!/usr/bin/env bash
@@ -209,25 +192,21 @@ install_isolated_command_links() {
 
   [ "${status}" -eq 0 ]
 
-  run jq -r '.overall_state + "|" + (.active_variant // "null") + "|" + .variants.kind.state + "|" + .variants.lima.state + "|" + .variants.slicer.state + "|" + (.variants_order | join(","))' <<<"${output}"
+  run jq -r '.overall_state + "|" + (.active_variant // "null") + "|" + .variants.kind.state + "|" + .variants.lima.state + "|" + (.variants_order | join(","))' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'idle|null|absent|absent|absent|kind,lima,slicer' ]
+  [ "${output}" = 'idle|null|absent|absent|kind,lima' ]
 }
 
 @test "platform status sources kubeconfig facts from variant contracts" {
   variants_dir="${BATS_TEST_TMPDIR}/variants"
-  mkdir -p "${variants_dir}/kind" "${variants_dir}/lima" "${variants_dir}/slicer"
+  mkdir -p "${variants_dir}/kind" "${variants_dir}/lima"
   cat >"${variants_dir}/kind/variant.json" <<JSON
 {"id":"kind","path":"kubernetes/kind","cluster_access":{"kubeconfig_path":"${BATS_TEST_TMPDIR}/contract-kind.yaml","kubeconfig_context":"contract-kind"}}
 JSON
   cat >"${variants_dir}/lima/variant.json" <<JSON
 {"id":"lima","path":"kubernetes/lima","cluster_access":{"kubeconfig_path":"${BATS_TEST_TMPDIR}/contract-lima.yaml","kubeconfig_context":"contract-lima"}}
 JSON
-  cat >"${variants_dir}/slicer/variant.json" <<JSON
-{"id":"slicer","path":"kubernetes/slicer","cluster_access":{"kubeconfig_path":"${BATS_TEST_TMPDIR}/contract-slicer.yaml","kubeconfig_context":"contract-slicer"}}
-JSON
-
   run env PLATFORM_STATUS_VARIANTS_DIR="${variants_dir}" "${SCRIPT}" --execute --output json
 
   [ "${status}" -eq 0 ]
@@ -236,13 +215,11 @@ JSON
     .variants.kind.kubeconfig_path,
     .variants.kind.kubeconfig_context,
     .variants.lima.kubeconfig_path,
-    .variants.lima.kubeconfig_context,
-    .variants.slicer.kubeconfig_path,
-    .variants.slicer.kubeconfig_context
+    .variants.lima.kubeconfig_context
   ] | join("|")' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "${BATS_TEST_TMPDIR}/contract-kind.yaml|contract-kind|${BATS_TEST_TMPDIR}/contract-lima.yaml|contract-lima|${BATS_TEST_TMPDIR}/contract-slicer.yaml|contract-slicer" ]
+  [ "${output}" = "${BATS_TEST_TMPDIR}/contract-kind.yaml|contract-kind|${BATS_TEST_TMPDIR}/contract-lima.yaml|contract-lima" ]
 }
 
 @test "the reference variant owns the machine when kind is serving traffic" {
@@ -336,7 +313,7 @@ JSON
 
   run jq -e '
     . as $root
-    | all(["kind", "lima", "slicer"][]; . as $variant
+    | all(["kind", "lima"][]; . as $variant
       | all(["idp-api", "backstage", "idp-sdk", "idp-mcp"][]; . as $target
         | any($root.actions[];
           .id == ($variant + "-" + $target)
@@ -387,7 +364,7 @@ JSON
   run jq -r '.active_cluster_variant + "|" + .variants.lima.state + "|" + (.variants_order | join(","))' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'lima|running|kind,lima,slicer' ]
+  [ "${output}" = 'lima|running|kind,lima' ]
 
   run "${SCRIPT}" --execute --output text
 
@@ -421,39 +398,6 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${output}" = 'degraded|false' ]
-}
-
-@test "platform status reports slicer as paused when the vm exists but is not running" {
-  export MOCK_SLICER_VM_LIST_JSON='[{"hostname":"slicer-1","status":"Paused","ip":"192.168.64.2"}]'
-  touch "${HOME}/.kube/slicer-k3s.yaml"
-
-  run "${SCRIPT}" --execute --output json
-
-  [ "${status}" -eq 0 ]
-
-  run jq -r '.cluster_variants.slicer.state + "|" + (.cluster_variants.slicer.runtime_present|tostring)' <<<"${output}"
-
-  [ "${status}" -eq 0 ]
-  [ "${output}" = 'paused|true' ]
-}
-
-@test "platform status does not let a passive slicer vm claim kind localhost ports" {
-  export MOCK_DOCKER_PS=$'kind-local-control-plane|127.0.0.1:443->30070/tcp\nkind-local-worker|'
-  export MOCK_DOCKER_PS_A=$'kind-local-control-plane|Up 1 minute|127.0.0.1:443->30070/tcp\nkind-local-worker|Up 1 minute|'
-  export MOCK_KIND_CLUSTERS='kind-local'
-  export MOCK_SLICER_VM_LIST_JSON='[{"hostname":"slicer-1","status":"Running","ip":"192.168.64.2"}]'
-  export MOCK_LSOF_443=$'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\ncom.docker 123 nick 12u IPv4 0xdeadbeef 0t0 TCP 127.0.0.1:443 (LISTEN)'
-  touch "${HOME}/.kube/kind-kind-local.yaml"
-  touch "${HOME}/.kube/slicer-k3s.yaml"
-
-  run "${SCRIPT}" --execute --output json
-
-  [ "${status}" -eq 0 ]
-
-  run jq -r '.overall_state + "|" + .active_cluster_variant + "|" + .variants.slicer.state + "|" + (.variants.slicer.serving|tostring) + "|" + (.variants.slicer.shared_ports|length|tostring)' <<<"${output}"
-
-  [ "${status}" -eq 0 ]
-  [ "${output}" = 'running|kind|degraded|false|0' ]
 }
 
 @test "platform status reports a conflict when multiple cluster variants claim localhost https" {
@@ -534,20 +478,18 @@ JSON
     + "|" + (.host_runtimes.colima.running|tostring)
     + "|" + (.host_runtimes.podman.running|tostring)
     + "|" + (.platforms.lima.available|tostring)
-    + "|" + (.platforms.slicer.available|tostring)
     + "|" + (.registry_auth.dhi_io.authenticated|tostring)
     + "|" + (.registry_auth.dhi_io.source // "-")
     + "|" + (.registry_auth.docker_io.source // "-")' <<<"${output}"
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = 'true|true|true|true|true|true|true|docker-credential-desktop|config.json' ]
+  [ "${output}" = 'true|true|true|true|true|true|docker-credential-desktop|config.json' ]
 
   run "${SCRIPT}" --execute --output text
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Platforms:"* ]]
   [[ "${output}" == *"lima"* ]]
-  [[ "${output}" == *"slicer"* ]]
   [[ "${output}" == *"Registry auth (Docker config + credential helper probe):"* ]]
   [[ "${output}" == *"docker-credential-desktop"* ]]
   [[ "${output}" == *"config.json"* ]]
@@ -562,16 +504,12 @@ JSON
   [[ "${output}" == *$'Platforms:\nPLATFORM  AVAIL  RUNNING  DETAIL'* ]]
   [[ "${output}" == *$'\ndocker    Y      Y'* ]]
   [[ "${output}" == *$'\nlima      Y      N'* ]]
-  [[ "${output}" == *$'\nslicer    Y      N'* ]]
   [[ "${output}" != *$'\ncolima    '* ]]
   [[ "${output}" != *$'\npodman    '* ]]
 
   docker_line="$(printf '%s\n' "${output}" | awk '/^docker[[:space:]]/ { print NR; exit }')"
   lima_line="$(printf '%s\n' "${output}" | awk '/^lima[[:space:]]/ { print NR; exit }')"
-  slicer_line="$(printf '%s\n' "${output}" | awk '/^slicer[[:space:]]/ { print NR; exit }')"
   [ -n "${docker_line}" ]
   [ -n "${lima_line}" ]
-  [ -n "${slicer_line}" ]
   [ "${docker_line}" -lt "${lima_line}" ]
-  [ "${lima_line}" -lt "${slicer_line}" ]
 }

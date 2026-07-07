@@ -1312,7 +1312,7 @@ def keycloak_optimized_image_contract_violations(repo_root: Path) -> tuple[str, 
     target_registry_hosts = {
         "kind": "host.docker.internal:5002",
         "lima": "host.lima.internal:5002",
-        "slicer": "192.168.64.1:5002",
+        "lima": "192.168.64.1:5002",
     }
     for target, registry_host in target_registry_hosts.items():
         tfvars_path = repo_root / "kubernetes" / target / "targets" / f"{target}.tfvars"
@@ -3853,7 +3853,7 @@ def image_catalog_target_ref_contract_violations(repo_root: Path) -> tuple[str, 
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     expectations = {
         "lima": repo_root / "kubernetes" / "lima" / "targets" / "lima.tfvars",
-        "slicer": repo_root / "kubernetes" / "slicer" / "targets" / "slicer.tfvars",
+        "lima": repo_root / "kubernetes" / "lima" / "targets" / "lima.tfvars",
     }
     violations: list[str] = []
 
@@ -3890,7 +3890,7 @@ def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) 
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     expected_hosts = {
         "lima": "host.lima.internal:5002",
-        "slicer": "192.168.64.1:5002",
+        "lima": "192.168.64.1:5002",
     }
     required_image_tags = (
         ("platform-mcp", "platform"),
@@ -5771,7 +5771,7 @@ def preload_image_snapshot_files() -> tuple[str, ...]:
     return (
         "kubernetes/kind/preload-images.txt",
         "kubernetes/lima/preload-images.txt",
-        "kubernetes/slicer/preload-images.txt",
+        "kubernetes/lima/preload-images.txt",
         "kubernetes/docker-desktop/preload-images.txt",
     )
 

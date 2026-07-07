@@ -6,11 +6,11 @@ setup() {
   export SCRIPT="${REPO_ROOT}/kubernetes/scripts/reconcile-kubeconfig.sh"
 }
 
-@test "kind lima and slicer delegate default kubeconfig reconciliation to the shared helper" {
+@test "kind lima and lima delegate default kubeconfig reconciliation to the shared helper" {
   run grep -F 'kubernetes/scripts/reconcile-kubeconfig.sh' \
     "${REPO_ROOT}/kubernetes/kind/scripts/ensure-kind-kubeconfig.sh" \
     "${REPO_ROOT}/kubernetes/lima/scripts/bootstrap-k3s-lima.sh" \
-    "${REPO_ROOT}/kubernetes/slicer/scripts/bootstrap-k3s-slicer.sh"
+    "${REPO_ROOT}/kubernetes/lima/scripts/bootstrap-k3s-lima.sh"
 
   [ "${status}" -eq 0 ]
 }
@@ -54,13 +54,13 @@ EOF
     --execute \
     --source-kubeconfig "${BATS_TEST_TMPDIR}/source.yaml" \
     --target-kubeconfig "${target}" \
-    --context "slicer-k3s" \
+    --context "lima-k3s" \
     --merge "0" \
     --helper "${helper}"
 
   [ "${status}" -eq 0 ]
   run grep -F -- "--execute --action ensure-valid --kubeconfig ${target}" "${log}"
   [ "${status}" -eq 0 ]
-  run grep -F -- "--execute --action delete-context --kubeconfig ${target} --context slicer-k3s --cluster slicer-k3s --user slicer-k3s" "${log}"
+  run grep -F -- "--execute --action delete-context --kubeconfig ${target} --context lima-k3s --cluster lima-k3s --user lima-k3s" "${log}"
   [ "${status}" -eq 0 ]
 }

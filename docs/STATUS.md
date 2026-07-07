@@ -8,9 +8,10 @@ notes live under [`docs/plans/archive`](plans/archive/).
 - The main operator path is the staged local Kubernetes solution under
   [`kubernetes/kind`](../kubernetes/kind/). The root `Makefile` routes users to
   focused Makefiles rather than operating the whole repo directly.
-- `kind` is the reference variant. [`kubernetes/lima`](../kubernetes/lima/) and
-  [`kubernetes/slicer`](../kubernetes/slicer/) adapt the same shared stack onto
-  local VM substrates.
+- `kind` is the reference variant. [`kubernetes/lima`](../kubernetes/lima/)
+  adapts the same shared stack onto a local VM substrate on a best-effort,
+  validated-on-demand basis. Slicer support was removed (niche, chargeable
+  product; kind covers the reference path).
 - Stages are cumulative: `100` bootstrap, `200` Cilium, `300` Hubble, `400`
   Argo CD, `500` Gitea, `600` policy controls, `700` app repos, `800`
   gateway/observability, `900` SSO, and `920` Langfuse where enabled.
@@ -28,7 +29,7 @@ notes live under [`docs/plans/archive`](plans/archive/).
   behavior for lightweight apps.
 - The developer portal/API surface lives in `apps/idp-core`, `apps/idp-sdk`,
   `apps/platform-mcp`, and `apps/backstage`, with runtime adapters for
-  `generic_kubernetes`, `kind`, `lima`, and `slicer`.
+  `generic_kubernetes`, `kind`, and `lima`.
 - DDD vocabulary and contract boundaries remain in [`docs/ddd`](ddd/); ADRs
   remain in [`docs/adr`](adr/).
 
@@ -40,8 +41,8 @@ notes live under [`docs/plans/archive`](plans/archive/).
   `oauth2-proxy`; Dex remains a provider-switch compatibility path.
 - Stage `900` SSO wiring: Argo CD, Headlamp, Kubernetes API trust, platform
   routes, and app routes consume provider-neutral OIDC locals.
-- IDP/portal API runtime adapters: `generic_kubernetes`, `kind`, `lima`, and
-  `slicer` are exposed through a deterministic registry.
+- IDP/portal API runtime adapters: `generic_kubernetes`, `kind`, and
+  `lima` are exposed through a deterministic registry.
 - Application/catalog projection: app/environment surfaces feed Argo CD apps,
   route hostnames, SSO callbacks, Launchpad tiles, deployment records, secret
   bindings, and scorecards.
@@ -59,11 +60,21 @@ notes live under [`docs/plans/archive`](plans/archive/).
 - Apps Go architecture pass: `idpauth.BootstrapVerifier`,
   `idpauth.Authenticator.Middleware`, ADR 0009, TUI stage labels, idp-mcp tool
   registry consolidation, and the idp-core runtime adapter registry landed.
-- IaC boundary work: Lima/Slicer stage `100` bootstrap stays outside
+- IaC boundary work: Lima stage `100` bootstrap stays outside
   Terraform/Terragrunt, and browser E2E checks are validation concerns rather
   than apply convergence logic.
 - JavaScript dependency direction: sample app frontends avoid npm dependency
   sprawl; Backstage is the explicit portal exception.
+
+## Decided
+
+- Custom kind node image: evaluated and declined (2026-07-07). With a warm
+  image cache, images and local builds are ~1m26s of a ~10m stage-900 build;
+  convergence (Keycloak, Gitea, TLS, Argo, OIDC) dominates and cannot be
+  baked. The `hybrid`/`baked` consumer modes remain but no builder will be
+  added. Newcomer wait is addressed via preload/registry cache plus a planned
+  phase-progress indicator.
+- Slicer substrate removed; Lima demoted to best-effort (2026-07-07).
 
 ## Open Decisions And Backlog
 
@@ -80,8 +91,6 @@ notes live under [`docs/plans/archive`](plans/archive/).
   teaching path without increasing stage-900 fragility.
 - Lima demotion: decide whether Lima stays a first-class local variant or
   becomes an adapter/fallback path behind `kind`.
-- Slicer removal: decide whether Slicer remains worth maintaining as a local
-  variant, moves to experimental docs, or is removed.
 - Alertmanager runbook portal surfacing: expose actionable alert/runbook links
   in the portal/status surfaces instead of leaving them only in raw docs.
 - Dex lifecycle: keep Dex indefinitely as the compact SSO provider, or retire

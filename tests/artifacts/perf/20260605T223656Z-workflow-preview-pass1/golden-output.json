@@ -91,11 +91,11 @@
       "blockers": {
         "conflicting_variants": [
           "lima",
-          "slicer"
+          "lima"
         ],
         "checks": [
           "check-lima-stopped",
-          "check-slicer-stopped"
+          "check-lima-stopped"
         ]
       },
       "registry": {
