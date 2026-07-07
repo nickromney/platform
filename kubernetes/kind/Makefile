@@ -363,6 +363,7 @@ sync-image-cache: workflow-validate-stage
 	PRELOAD_ENABLE_VICTORIA_LOGS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_victoria_logs false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_HEADLAMP="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_headlamp false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_METRICS_SERVER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_metrics_server false "$${tfvar_files[@]}" )" \
+	PRELOAD_ENABLE_EXTERNAL_SECRETS="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_external_secrets false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_SSO="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_sso false "$${tfvar_files[@]}" )" \
 	PRELOAD_ENABLE_ACTIONS_RUNNER="$$( "$(RESOLVE_TFVAR_VALUE)" --execute enable_actions_runner false "$${tfvar_files[@]}" )" \
 	"$(SYNC_LOCAL_IMAGE_CACHE)" $(READONLY_MODE_FLAG)

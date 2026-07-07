@@ -348,6 +348,85 @@ PY
   [[ "${output}" == *"validated metrics-server hardened policy convergence flows"* ]]
 }
 
+@test "external-secrets Cilium policy allows webhook, apiserver, and DNS flows" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy_path = repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/external-secrets-hardened.yaml"
+kustomization_path = repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/kustomization.yaml"
+docs = [doc for doc in yaml.safe_load_all(policy_path.read_text(encoding="utf-8")) if doc]
+policy = next(doc for doc in docs if doc["metadata"]["name"] == "external-secrets-hardened")
+selector = policy["spec"]["endpointSelector"]["matchLabels"]
+
+assert selector["k8s:io.kubernetes.pod.namespace"] == "external-secrets"
+assert selector["k8s:app.kubernetes.io/instance"] == "external-secrets"
+assert "external-secrets-hardened.yaml" in yaml.safe_load(kustomization_path.read_text(encoding="utf-8"))["resources"]
+
+ingress = policy["spec"]["ingress"]
+egress = policy["spec"]["egress"]
+
+webhook_ingress = next(
+    rule for rule in ingress if "kube-apiserver" in rule.get("fromEntities", [])
+)
+assert any(
+    port.get("port") == "10250" and port.get("protocol") == "TCP"
+    for to_ports in webhook_ingress.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "external-secrets"
+    for rule in ingress
+    for endpoint in rule.get("fromEndpoints", [])
+)
+
+dns_egress = next(
+    rule
+    for rule in egress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "kube-system"
+        and endpoint.get("matchLabels", {}).get("k8s:k8s-app") == "kube-dns"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+dns_ports = {
+    (port.get("port"), port.get("protocol"))
+    for to_ports in dns_egress.get("toPorts", [])
+    for port in to_ports.get("ports", [])
+}
+assert ("53", "UDP") in dns_ports
+assert ("53", "TCP") in dns_ports
+
+assert any("kube-apiserver" in rule.get("toEntities", []) for rule in egress)
+assert any(
+    service.get("k8sService", {}).get("namespace") == "default"
+    and service.get("k8sService", {}).get("serviceName") == "kubernetes"
+    and any(
+        port.get("port") == "443" and port.get("protocol") == "TCP"
+        for to_ports in rule.get("toPorts", [])
+        for port in to_ports.get("ports", [])
+    )
+    for rule in egress
+    for service in rule.get("toServices", [])
+)
+assert any(
+    endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "external-secrets"
+    for rule in egress
+    for endpoint in rule.get("toEndpoints", [])
+)
+
+print("validated external-secrets hardened policy convergence flows")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated external-secrets hardened policy convergence flows"* ]]
+}
+
 @test "static validation renders policy manifests and kustomize overlays" {
   policy_root="${BATS_TEST_TMPDIR}/cilium"
   render_stub="${BATS_TEST_TMPDIR}/render.sh"

@@ -32,6 +32,7 @@ WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CI_BATS_TESTS := \
 	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
+	kubernetes/kind/tests/sync-gitea-policies.bats \
 	tests/apps-makefile.bats \
 	tests/assert-variant-active.bats \
 	tests/audit-shell-scripts.bats \

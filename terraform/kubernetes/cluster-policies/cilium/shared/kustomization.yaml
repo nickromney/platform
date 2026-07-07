@@ -19,6 +19,7 @@ resources:
   - agentgateway-ai-gateway-hardened.yaml
   - platform-baseline.yaml
   - argocd-hardened.yaml
+  - external-secrets-hardened.yaml
   - metrics-server-hardened.yaml
   - observability-hardened.yaml
   - idp-hardened.yaml

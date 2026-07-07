@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eso-demo
+  labels:
+    app.kubernetes.io/name: eso-demo
+    app.kubernetes.io/managed-by: argocd
+    platform.publiccloudexperiments.net/namespace-role: application
+    kyverno.io/isolate: "true"

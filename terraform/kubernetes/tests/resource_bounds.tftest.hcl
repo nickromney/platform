@@ -31,6 +31,44 @@ run "metrics_server_enabled" {
   }
 }
 
+run "external_secrets_enabled" {
+  command = plan
+
+  variables {
+    cni_provider            = "none"
+    enable_hubble           = false
+    enable_argocd           = true
+    enable_gitea            = true
+    enable_sso              = false
+    enable_external_secrets = true
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.external_secrets) == 1
+    error_message = "Expected external-secrets namespace when enable_external_secrets=true"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_external_secrets) == 1
+    error_message = "Expected external-secrets Argo CD app when enable_external_secrets=true"
+  }
+
+  assert {
+    condition     = length(kubectl_manifest.argocd_app_eso_demo) == 1
+    error_message = "Expected eso-demo Argo CD app when enable_external_secrets=true"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_external_secrets[0].yaml_body, "path: ${local.vendored_chart_paths.external_secrets}")
+    error_message = "Expected external-secrets Argo CD app to use the vendored chart path"
+  }
+
+  assert {
+    condition     = strcontains(kubectl_manifest.argocd_app_eso_demo[0].yaml_body, "path: apps/eso-demo")
+    error_message = "Expected eso-demo Argo CD app to use the fake-provider demo path"
+  }
+}
+
 run "application_namespace_resource_bounds_enabled" {
   command = plan
 

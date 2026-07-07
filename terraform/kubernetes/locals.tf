@@ -505,6 +505,7 @@ locals {
   policies_repo_url_cluster = "ssh://${var.gitea_ssh_username}@${local.gitea_ssh_host_cluster}:${local.gitea_ssh_port_cluster}/${local.gitea_repo_owner}/${local.policies_repo_name}.git"
   vendored_chart_paths = {
     cert_manager            = "apps/vendor/charts/cert-manager"
+    external_secrets        = "apps/vendor/charts/external-secrets"
     grafana                 = "apps/vendor/charts/grafana"
     headlamp                = "apps/vendor/charts/headlamp"
     kyverno                 = "apps/vendor/charts/kyverno"
@@ -533,6 +534,7 @@ locals {
     local.enable_grafana_effective ||
     local.enable_victoria_logs_effective ||
     var.enable_metrics_server ||
+    var.enable_external_secrets ||
     var.enable_headlamp ||
     var.enable_sso ||
     var.enable_langfuse ||
@@ -553,6 +555,7 @@ locals {
     local.enable_victoria_logs_effective && var.enable_argocd ? ["victoria-logs"] : [],
     local.enable_otel_gateway_effective && var.enable_argocd ? ["otel-collector-prometheus"] : [],
     var.enable_metrics_server && var.enable_argocd ? ["metrics-server"] : [],
+    var.enable_external_secrets && var.enable_argocd ? ["external-secrets", "eso-demo"] : [],
     local.enable_apim_simulator_effective && var.enable_argocd ? ["apim"] : [],
     var.enable_agentgateway_ai_gateway && var.enable_argocd ? ["agentgateway-ai-gateway"] : [],
     var.enable_langfuse && var.enable_argocd ? ["langfuse"] : [],
@@ -631,6 +634,7 @@ locals {
     enable_victoria_logs                   = var.enable_victoria_logs
     enable_otel_gateway                    = var.enable_otel_gateway
     enable_metrics_server                  = var.enable_metrics_server
+    enable_external_secrets                = var.enable_external_secrets
     enable_headlamp                        = var.enable_headlamp
     enable_sso                             = var.enable_sso
     enable_backstage                       = var.enable_backstage
@@ -677,6 +681,7 @@ locals {
     grafana_liveness_initial_delay_seconds = var.grafana_liveness_initial_delay_seconds
     headlamp_chart_version                 = var.headlamp_chart_version
     metrics_server_chart_version           = var.metrics_server_chart_version
+    external_secrets_chart_version         = var.external_secrets_chart_version
     kyverno_chart_version                  = var.kyverno_chart_version
     oauth2_proxy_chart_version             = var.oauth2_proxy_chart_version
     otel_chart_version                     = var.opentelemetry_collector_chart_version

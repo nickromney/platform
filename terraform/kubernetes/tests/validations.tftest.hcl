@@ -69,6 +69,18 @@ run "metrics_server_requires_argocd_and_gitea" {
   expect_failures = [check.enable_metrics_server_requires_enable_argocd]
 }
 
+run "external_secrets_requires_argocd_and_gitea" {
+  command = plan
+
+  variables {
+    enable_argocd           = true
+    enable_gitea            = false
+    enable_external_secrets = true
+  }
+
+  expect_failures = [check.enable_external_secrets_requires_enable_argocd]
+}
+
 run "actions_runner_requires_gitea_and_argocd" {
   command = plan
 
