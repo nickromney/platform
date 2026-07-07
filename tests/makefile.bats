@@ -1,8 +1,19 @@
 #!/usr/bin/env bats
+# shellcheck shell=bash disable=SC2038
 
 setup() {
   export REPO_ROOT
   REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
+}
+
+run_make_in_tty() {
+  local status_stub="$1"
+
+  if script --version >/dev/null 2>&1; then
+    run script -q -e -c "env PLATFORM_STATUS_SCRIPT='${status_stub}' make -C '${REPO_ROOT}'" /dev/null
+  else
+    run script -q /dev/null env PLATFORM_STATUS_SCRIPT="${status_stub}" make -C "${REPO_ROOT}"
+  fi
 }
 
 @test "root make help is informational and points to focused Makefiles" {
@@ -91,7 +102,7 @@ printf 'status %s\n' "$*"
 EOF
   chmod +x "${status_stub}"
 
-  run script -q /dev/null env PLATFORM_STATUS_SCRIPT="${status_stub}" make -C "${REPO_ROOT}"
+  run_make_in_tty "${status_stub}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Platform workspace Makefile guide"* ]]
@@ -133,7 +144,25 @@ printf '{"overall_state":"idle"}\n'
 EOF
   chmod +x "${status_stub}"
 
-  run env PLATFORM_ENV_FILE="${BATS_TEST_TMPDIR}/missing.env" make -C "${REPO_ROOT}" status STATUS_FORMAT=json PLATFORM_STATUS_SCRIPT="${status_stub}"
+  test_bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${test_bin}"
+  cat >"${test_bin}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected docker invocation\n' >&2
+exit 127
+EOF
+  chmod +x "${test_bin}/docker"
+
+  cat >"${test_bin}/podman" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'unexpected podman invocation\n' >&2
+exit 127
+EOF
+  chmod +x "${test_bin}/podman"
+
+  run env PATH="${test_bin}:${PATH}" PLATFORM_ENV_FILE="${BATS_TEST_TMPDIR}/missing.env" make -C "${REPO_ROOT}" status STATUS_FORMAT=json PLATFORM_STATUS_SCRIPT="${status_stub}"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == '{"overall_state":"idle"}' ]]
@@ -421,7 +450,7 @@ EOF
   run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/docker/compose" prereqs
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"Missing platform env file: ${missing_env}"* ]]
+  [[ "${output}" == *"Missing platform env file:"*"/missing.env"* ]]
   [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
 }
 

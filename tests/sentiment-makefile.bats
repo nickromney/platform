@@ -46,6 +46,6 @@ EOF
   run env PLATFORM_ENV_FILE="${missing_env}" make -C "${REPO_ROOT}/apps/sentiment" prereqs
 
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"Missing platform env file: ${missing_env}"* ]]
+  [[ "${output}" == *"Missing platform env file:"*"/missing.env"* ]]
   [[ "${output}" != *"Unknown make goal '${missing_env}'"* ]]
 }

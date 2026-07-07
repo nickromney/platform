@@ -13,6 +13,8 @@ setup() {
   export PLAYWRIGHT_LOCK_PRESERVED_FLAG="${BATS_TEST_TMPDIR}/lock-preserved"
 
   mkdir -p "${TEST_BIN}"
+  export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
+  mkdir -p "${TMPDIR}"
 
   cat >"${TEST_BIN}/node" <<'EOF'
 #!/usr/bin/env bash
@@ -41,7 +43,7 @@ case "$*" in
     if [ "${count}" -eq 1 ]; then
       mkdir -p "${PLAYWRIGHT_LOCK_DIR}"
       if [ "${PLAYWRIGHT_LOCK_MODE}" = "stale" ]; then
-        touch -t 202001010000 "${PLAYWRIGHT_LOCK_DIR}" 2>/dev/null || true
+        perl -e 'utime 1577836800, 1577836800, @ARGV or die $!' "${PLAYWRIGHT_LOCK_DIR}"
       fi
       printf 'Failed to install browsers\n' >&2
       printf 'Error:\n' >&2
