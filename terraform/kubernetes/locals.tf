@@ -862,7 +862,7 @@ locals {
       }
     }
 
-    oidc = {
+    dex = {
       enabled = false
     }
 
