@@ -60,7 +60,7 @@ case "$*" in
   "image inspect mcr.microsoft.com/playwright:v1.58.2-fixture-noble")
     exit 0
     ;;
-  *" sh -lc getent hosts host.docker.internal "*)
+  *" sh -lc "*getent*" host.docker.internal"*)
     printf '172.17.0.1\n'
     exit 0
     ;;
