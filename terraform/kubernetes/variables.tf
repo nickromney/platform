@@ -666,7 +666,7 @@ variable "gitea_ssh_node_port" {
 }
 
 variable "gitea_local_access_mode" {
-  description = "How host-side automation reaches Gitea locally: direct localhost NodePorts or transient kubectl port-forwards."
+  description = "How host-side automation reaches Gitea locally: direct localhost NodePorts or temporary kubectl port-forwards."
   type        = string
   default     = "nodeport"
 

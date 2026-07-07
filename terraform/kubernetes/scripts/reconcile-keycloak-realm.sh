@@ -414,7 +414,7 @@ ensure_client() {
 
 ensure_user() {
   local user_json="$1"
-  local username user_id user_payload password transient group_name group_id
+  local username user_id user_payload password temporary group_name group_id
 
   username="$(jq -r '.username' <<<"${user_json}")"
   user_id="$(user_id_for_username "${username}")"
@@ -430,10 +430,10 @@ ensure_user() {
   fi
 
   password="$(jq -r '.credentials[0].value // empty' <<<"${user_json}")"
-  transient="$(jq -r '.credentials[0].transient // false' <<<"${user_json}")"
+  temporary="$(jq -r '.credentials[0].temporary // false' <<<"${user_json}")"
   if [[ -n "${password}" ]]; then
-    if [[ "${transient}" == "true" ]]; then
-      kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" --transient >/dev/null
+    if [[ "${temporary}" == "true" ]]; then
+      kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" --temporary >/dev/null
     else
       kcadm set-password -r "${KEYCLOAK_REALM}" --userid "${user_id}" --new-password "${password}" >/dev/null
     fi
