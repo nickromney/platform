@@ -90,6 +90,7 @@ make lint
 make test-ci
 make fmt
 make check-version
+make update-versions
 make release-dry-run VERSION=0.3.0
 make release-tag VERSION=0.3.0
 ```
@@ -111,6 +112,10 @@ Notes:
 - `make check-version` verifies the root workflow pins, the vendored
   `apim-simulator` tag/SHA metadata, and the repo-local dependency age gates
   for npm, Bun, and uv-managed Python roots.
+- `make update-versions` gives one read-only report for tool, chart, package,
+  provider, and image-lock updates; run
+  `scripts/update-versions.sh --execute --apply` to run configured appliers and
+  rerun the existing version audits.
   Prerelease channels stay off by default; opt in with
   `CHECK_VERSION_INCLUDE_CANARY=1`, `CHECK_VERSION_INCLUDE_ALPHA=1`, or
   `CHECK_VERSION_INCLUDE_PRERELEASE=1` when you explicitly want canary, alpha,

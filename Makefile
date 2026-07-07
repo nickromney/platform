@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-MAKE_KNOWN_GOALS := help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+MAKE_KNOWN_GOALS := help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 MAKE_SUGGEST_SCRIPT := scripts/suggest-make-goal.sh
 MAKEFILE_PATHS_CMD := rg --files -g 'Makefile' | LC_ALL=C sort
 APP_ENTRYPOINT_DIRS_CMD := { printf '%s\n' apps; find apps -mindepth 2 -maxdepth 2 -name Makefile -print | xargs -n 1 dirname; } | LC_ALL=C sort
@@ -12,6 +12,7 @@ VALIDATE_KYVERNO_POLICIES_SCRIPT ?= scripts/validate-kyverno-policies.sh
 FMT_MARKDOWN_SCRIPT ?= scripts/fmt-markdown.sh
 FMT_HCL_SCRIPT ?= scripts/fmt-hcl.sh
 CHECK_VERSION_SCRIPT ?= scripts/check-repo-version.sh
+UPDATE_VERSIONS_SCRIPT ?= scripts/update-versions.sh
 RELEASE_SCRIPT ?= scripts/release.sh
 SONAR_SCAN_SCRIPT ?= scripts/sonar-scan.sh
 SONAR_SCAN_REPO ?= $(CURDIR)
@@ -29,6 +30,7 @@ WORKFLOW_UI_PORT ?= 8443
 WORKFLOW_UI_HTTP ?= h2
 CI_UV_CACHE_DIR ?= $(CURDIR)/.run/uv-cache
 CI_BATS_TESTS := \
+	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	tests/apps-makefile.bats \
 	tests/assert-variant-active.bats \
 	tests/audit-shell-scripts.bats \
@@ -64,7 +66,6 @@ CI_BATS_TESTS := \
 	tests/kubernetes-stage-monotonicity-adapter.bats \
 	tests/kubernetes-sync-image-cache-adapter.bats \
 	tests/kubernetes-workload-image-builder-adapter.bats \
-	kubernetes/kind/tests/stage-tfvars-no-duplicate-attributes.bats \
 	tests/lint-markdown.bats \
 	tests/lint-yaml.bats \
 	tests/local-idp-contracts.bats \
@@ -85,6 +86,7 @@ CI_BATS_TESTS := \
 	tests/subnetcalc-makefile.bats \
 	tests/subnetcalc-terraform-naming.bats \
 	tests/trivy-runner.bats \
+	tests/update-versions.bats \
 	tests/validate-gitea-app-repo-sync.bats \
 	tests/validate-kyverno-policies.bats \
 	tests/variant-contracts.bats \
@@ -94,7 +96,7 @@ CI_BATS_TESTS := \
 
 include mk/common.mk
 
-.PHONY: default help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
+.PHONY: default help prereqs test test-ci status tui build-tui workflow-ui clean-local-state docker-safe-clean hooks lint fmt lint-yaml lint-markdown lint-bash32 lint-shell lint-cilium lint-cilium-live lint-kyverno lint-kyverno-live fmt-markdown fmt-hcl check-version update-versions release release-dry-run release-preview release-tag release-tag-dry-run makefiles apps kubernetes docker sonar-scan
 
 default:
 	@$(MAKE) --no-print-directory help
@@ -113,6 +115,7 @@ help:
 		'make apps\tShow the app/frontend Makefiles' \
 		'make build-tui\tBuild the optional Bubble Tea platform TUI into tools/platform-tui/bin/' \
 		'make check-version\tVerify repo-level dependency/version guardrails' \
+		'make update-versions\tReport eligible version bumps across tools, charts, packages, providers, and image locks' \
 		'make clean-local-state [DRY_RUN=1] [INCLUDE_HOST_CACHES=1] [INCLUDE_KUBECONFIGS=1] [INCLUDE_DOCKER=1]\tPreview or clear repo-generated local state plus optional host caches' \
 		'make docker\tShow the Docker/Compose Makefiles' \
 		'make docker-safe-clean [AUTO_APPROVE=1]\tPreview or run conservative Docker cleanup that preserves the current kind cluster' \
@@ -283,6 +286,9 @@ fmt-hcl:
 
 check-version:
 	@"$(CHECK_VERSION_SCRIPT)" --execute
+
+update-versions:
+	@"$(UPDATE_VERSIONS_SCRIPT)" --execute
 
 sonar-scan:
 	@SONAR_SCAN_REPO="$(SONAR_SCAN_REPO)" "$(SONAR_SCAN_SCRIPT)" --execute
