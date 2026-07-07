@@ -14,6 +14,7 @@ setup() {
   [[ "${output}" == *"make lint-bash32"* ]]
   [[ "${output}" == *"make lint-shell"* ]]
   [[ "${output}" == *"make fmt"* ]]
+  [[ "${output}" == *"make hooks"* ]]
   [[ "${output}" == *"make check-version"* ]]
   [[ "${output}" == *"make release"* ]]
   [[ "${output}" == *"make release-dry-run"* ]]
@@ -49,6 +50,7 @@ setup() {
   docker_line="$(printf '%s\n' "${output}" | grep -n '^  make docker[[:space:]]' | cut -d: -f1)"
   docker_safe_clean_line="$(printf '%s\n' "${output}" | grep -n '^  make docker-safe-clean' | cut -d: -f1)"
   fmt_line="$(printf '%s\n' "${output}" | grep -n '^  make fmt' | cut -d: -f1)"
+  hooks_line="$(printf '%s\n' "${output}" | grep -n '^  make hooks' | cut -d: -f1)"
   kubernetes_line="$(printf '%s\n' "${output}" | grep -n '^  make kubernetes' | cut -d: -f1)"
   lint_line="$(printf '%s\n' "${output}" | grep -n '^  make lint[[:space:]]' | cut -d: -f1)"
   status_line="$(printf '%s\n' "${output}" | grep -n '^  make status ' | cut -d: -f1)"
@@ -62,7 +64,8 @@ setup() {
   [ "${check_version_line}" -lt "${docker_line}" ]
   [ "${docker_line}" -lt "${docker_safe_clean_line}" ]
   [ "${docker_safe_clean_line}" -lt "${fmt_line}" ]
-  [ "${fmt_line}" -lt "${kubernetes_line}" ]
+  [ "${fmt_line}" -lt "${hooks_line}" ]
+  [ "${hooks_line}" -lt "${kubernetes_line}" ]
   [ "${kubernetes_line}" -lt "${lint_line}" ]
   [ "${lint_line}" -lt "${status_line}" ]
   [ "${status_line}" -lt "${test_line}" ]
@@ -331,6 +334,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"tests/ci-workflow.bats"* ]]
+  [[ "${output}" == *"tests/git-hooks.bats"* ]]
   [[ "${output}" == *"tests/makefile.bats"* ]]
   [[ "${output}" == *"tests/version-audit-workflow.bats"* ]]
   [[ "${output}" != *"tests/app-healthcheck-commands.bats"* ]]

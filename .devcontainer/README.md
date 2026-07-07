@@ -185,8 +185,8 @@ The devcontainer now follows a Linux-first toolchain split:
   and Buildx `0.33.0`, plus Node.js `24.15.0` with `nvm 0.40.4` and
   `pnpm` explicitly disabled
 - pinned direct release assets: `arkade`, `bun`, `starship`, `step`,
-  `kyverno`, `lima`, `mkcert`, and the pinned OpenTofu `1.11.6` standalone
-  install
+  `kyverno`, `lefthook`, `lima`, `mkcert`, and the pinned OpenTofu `1.11.6`
+  standalone install
 - direct binary copy: `uv`
 - pinned `arkade` installs: Kubernetes-facing tools such as `kubectl`, `kind`,
   `helm`, `cilium`, `hubble`, `k3sup`, `kubie`, and `terragrunt`
@@ -205,8 +205,8 @@ the resolved feature payloads and the Node feature install surface without
 depending on a successful `devcontainer up`.
 
 The repo-level `make lint` entrypoint works inside the devcontainer too, and
-the image includes both `yamllint` and `kyverno` for the recursive YAML and
-local policy validation passes.
+the image includes `yamllint`, `kyverno`, and `lefthook` for local validation
+and hook installation.
 
 It also seeds shell startup for both `bash` and `zsh` so the container has:
 

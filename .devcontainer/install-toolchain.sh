@@ -252,6 +252,21 @@ linux_arch_for_mkcert() {
   esac
 }
 
+linux_arch_for_lefthook() {
+  case "$(uname -m)" in
+    x86_64|amd64)
+      printf 'x86_64\n'
+      ;;
+    aarch64|arm64)
+      printf 'arm64\n'
+      ;;
+    *)
+      echo "unsupported architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
 starship_release_asset() {
   case "$(uname -m)" in
     x86_64|amd64)
@@ -348,6 +363,18 @@ install_kyverno() {
   rm -rf "${tmp_dir}"
 }
 
+install_lefthook() {
+  local arch_name asset tmp_dir
+
+  arch_name="$(linux_arch_for_lefthook)"
+  asset="lefthook_${LEFTHOOK_VERSION#v}_Linux_${arch_name}.gz"
+  tmp_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/evilmartians/lefthook/releases/download/${LEFTHOOK_VERSION}/${asset}" -o "${tmp_dir}/lefthook.gz"
+  gunzip -c "${tmp_dir}/lefthook.gz" >"${tmp_dir}/lefthook"
+  install "${tmp_dir}/lefthook" /usr/local/bin/lefthook
+  rm -rf "${tmp_dir}"
+}
+
 install_mkcert() {
   local arch_name tmp_dir
 
@@ -411,6 +438,7 @@ install_bun
 install_starship
 install_step
 install_kyverno
+install_lefthook
 install_lima
 install_mkcert
 install_vim_sensible_source

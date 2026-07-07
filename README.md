@@ -85,6 +85,7 @@ From the repository root:
 
 ```shell
 make
+make hooks
 make lint
 make fmt
 make check-version
@@ -95,6 +96,9 @@ make release-tag VERSION=0.3.0
 Notes:
 
 - `make` is a guide, not a mutating entrypoint.
+- `make hooks` installs the lefthook-managed pre-commit and pre-push checks.
+  Skip a native lefthook run with `LEFTHOOK=0`; the underlying scripts also
+  honor `PLATFORM_SKIP_HOOKS=1`.
 - `make prereqs` and `make test` at the root are also informational. They tell
   you which focused subtree command to run next.
 - `make lint` is the repo-wide reporting pass.
