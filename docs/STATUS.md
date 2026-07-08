@@ -35,6 +35,17 @@ notes live under [`docs/plans/archive`](plans/archive/).
 
 ## Done
 
+- Grand final clean proof (2026-07-08): a full `kind` cycle — `reset`,
+  `100 apply`, `900 apply` with docker-mode Playwright E2E (21 passed),
+  and formal `900 check-health` — completed end to end from clean `main`
+  (`ccb16638`), with the ESO demo secret materialized, the dev
+  `subnetcalc-frontend` Rollout Healthy behind a weighted Gateway API
+  route (progressive delivery), the traffic-router plugin served from a
+  local mirror image (no GitHub dependency at build), and `dhi.io` auth
+  via the keychain-free file credential helper. The proof burned down
+  six latent #163 sweep casualties (PRs #169–#173, #184) and hardened
+  the reliability tail: chart-vendoring retries with a reset-surviving
+  cache (#182) and kcadm re-login on Keycloak restart (#183).
 - ADR-era local stack model: cumulative stages and a reference `kind` variant
   are the accepted operator shape.
 - Identity provider completion: Kubernetes stage `900` uses Keycloak plus
