@@ -16,6 +16,11 @@ spec:
     repoURL: ssh://git@gitea-ssh.gitea.svc.cluster.local:22/platform/policies.git
     targetRevision: main
     path: apps/dev
+  ignoreDifferences:
+    - group: ""
+      kind: Service
+      managedFieldsManagers:
+        - argo-rollouts
   syncPolicy:
     automated:
       prune: true
@@ -24,3 +29,4 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - SkipDryRunOnMissingResource=true
+      - RespectIgnoreDifferences=true
