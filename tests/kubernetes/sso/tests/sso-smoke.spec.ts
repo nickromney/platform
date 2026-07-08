@@ -216,12 +216,6 @@ if (INCLUDE_BACKSTAGE && INCLUDE_VICTORIA_LOGS) {
   })
 }
 
-  TARGETS.push({
-    segment: 'admin',
-    flow: 'oauth2-proxy',
-  })
-}
-
 if (INCLUDE_HEADLAMP) {
   // Headlamp uses its own OIDC client and typically opens the provider in a new tab/popup.
   TARGETS.push({ name: 'headlamp-admin', url: platformUrl('headlamp.admin'), segment: 'admin', flow: 'headlamp-oidc' })
@@ -530,6 +524,7 @@ async function loginKeycloakAdminConsole(page: Page, target: Target) {
 async function keycloakAdminConsoleWorks(page: Page) {
   await expect(page.locator('body')).not.toContainText(/Timeout when waiting for 3rd party check iframe message/i, { timeout: 10_000 })
   await expect(page.locator('body')).not.toContainText(/Something went wrong/i, { timeout: 10_000 })
+  await expect(page.locator('body')).not.toContainText(/temporary admin user/i, { timeout: 10_000 })
   await expect(page.locator('#username')).toHaveCount(0)
   await expect(page).toHaveURL(/\/admin\/platform\/console\/#\/platform\/users/)
   await expect(page.locator('body')).toContainText(/Realm|Users|Clients|Groups/i, { timeout: 120_000 })
@@ -1044,66 +1039,6 @@ async function waitForChatgptSimReady(page: Page, events?: PageRuntimeEvents) {
   throw new Error(`ChatGPT Sim did not initialize after login. diagnostics=${JSON.stringify(diagnostics, null, 2)} lastError=${errorMessage}`)
 }
 
-  const u = new URL('/logs/logs-explorer', baseUrl)
-  await gotoWithGatewayRetry(page, u.toString())
-
-  await expect(page.locator('.logs-explorer-views-container')).toBeVisible({ timeout: 120_000 })
-
-  const quickFiltersOkay = page.getByRole('button', { name: /^okay$/i })
-  if (await quickFiltersOkay.isVisible().catch(() => false)) {
-    await quickFiltersOkay.click()
-  }
-
-  // Logs explorer often needs an explicit query execution.
-  // DOM rendering is virt-scroller based and can be flaky; assert against the query API response.
-  const runQuery = page.getByRole('button', { name: /run query/i })
-  await runQuery.waitFor({ state: 'visible', timeout: 30_000 })
-
-  const deadline = Date.now() + 120_000
-  let lastRowCount = 0
-  while (Date.now() < deadline) {
-    const remainingMs = deadline - Date.now()
-
-    const respPromise = page.waitForResponse(
-      (resp) => resp.url().includes('/api/v5/query_range') && resp.request().method() === 'POST',
-      { timeout: Math.min(30_000, remainingMs) },
-    )
-
-    await runQuery.click()
-
-    let resp
-    try {
-      resp = await respPromise
-    } catch {
-      await page.waitForTimeout(1000)
-      continue
-    }
-
-    if (resp.status() !== 200) {
-      await page.waitForTimeout(1000)
-      continue
-    }
-
-    const body: any = await resp.json().catch(() => null)
-    const results = body?.data?.data?.results
-    const rows = Array.isArray(results) ? results.flatMap((r: any) => (Array.isArray(r?.rows) ? r.rows : [])) : []
-    lastRowCount = rows.length
-    if (lastRowCount > 0) return
-
-    await page.waitForTimeout(2000)
-  }
-
-}
-
-  const u = new URL('/metrics-explorer/summary', baseUrl)
-  await gotoWithGatewayRetry(page, u.toString())
-
-  const rows = page.locator('table tbody tr')
-  await expect.poll(async () => rows.count(), { timeout: 120_000 }).toBeGreaterThan(0)
-}
-
-}
-
 type BrowserApiTraffic = {
   requestUrls: string[]
   responses: Array<{ url: string; status: number }>
@@ -1345,6 +1280,7 @@ test.describe(SUITE_NAME, () => {
         await loginViaOauth2ProxyRedirect(page, t)
       }
 
+      // If the upstream is broken, we want a hard failure after login.
       await assertNoGatewayErrorWithReloads(page, t.name)
       expect(await isOauth2ProxyForbiddenPage(page), `OAuth2 proxy rejected post-login access for ${t.name}; url=${page.url()}`).toBe(false)
 
@@ -1390,7 +1326,6 @@ test.describe(SUITE_NAME, () => {
         }
         if (t.postLogin === 'mcp-inspector-d2-render-export') {
           await mcpInspectorD2RenderAndExport(page)
-        }
         }
       }
 
