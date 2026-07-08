@@ -56,6 +56,16 @@ spec:
                 - -c
               args:
                 - cp /plugins/gatewayapi-plugin /plugins-target/gatewayapi-plugin && chmod 0755 /plugins-target/gatewayapi-plugin
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65532
+                runAsGroup: 65532
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                seccompProfile:
+                  type: RuntimeDefault
               volumeMounts:
                 - name: trafficrouter-plugins
                   mountPath: /plugins-target
