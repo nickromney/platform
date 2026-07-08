@@ -966,11 +966,32 @@ PY
   [[ "${output}" == *"validated catalog-owned Grafana VictoriaLogs plugin build inputs"* ]]
 }
 
+@test "image catalog owns Argo Rollouts Gateway API plugin image build inputs" {
+  run python3 - <<'PY'
+from pathlib import Path
+import os
+
+from tests.app_contracts import argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations
+
+repo_root = Path(os.environ["REPO_ROOT"])
+violations = argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations(repo_root)
+assert not violations, violations
+
+print("validated catalog-owned Argo Rollouts Gateway API plugin build inputs")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated catalog-owned Argo Rollouts Gateway API plugin build inputs"* ]]
+}
+
 @test "docker optimization tests share Grafana plugin catalog build input helpers" {
   run python3 - <<'PY'
 from pathlib import Path
 
-from tests.app_contracts import grafana_plugin_catalog_build_input_contract_violations
+from tests.app_contracts import (
+    argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations,
+    grafana_plugin_catalog_build_input_contract_violations,
+)
 
 test_file = Path("tests/validate-docker-optimization-contracts.bats")
 content = test_file.read_text(encoding="utf-8")
@@ -985,7 +1006,9 @@ contract_lines = [
 ]
 
 assert callable(grafana_plugin_catalog_build_input_contract_violations)
+assert callable(argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations)
 assert "grafana_plugin_catalog_build_input_contract_violations" in content
+assert "argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations" in content
 assert not any("grafana_base_image" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
 assert not any("plugin_fetch_image" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
 assert not any("version_tag_strategy" in line for line in contract_lines), "Grafana plugin catalog build input policy should move to tests/app_contracts.py"
@@ -1018,7 +1041,7 @@ print(f"validated {validated} image catalog version-check policies")
 PY
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"validated 12 image catalog version-check policies"* ]]
+  [[ "${output}" == *"validated 14 image catalog version-check policies"* ]]
 }
 
 @test "docker optimization tests share image catalog version-check helpers" {

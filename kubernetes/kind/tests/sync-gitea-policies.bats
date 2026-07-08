@@ -1012,6 +1012,34 @@ EOF
   grep -Fq "plugins: []" "${app_file}"
 }
 
+@test "render_argo_rollouts_application_manifest injects local Gateway API plugin image" {
+  repo_dir="${BATS_TEST_TMPDIR}/repo"
+  app_file="${repo_dir}/apps/argocd-apps/87-argo-rollouts.application.yaml"
+  mkdir -p "${repo_dir}/apps/argocd-apps"
+
+  cat >"${app_file}" <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+spec:
+  source:
+    helm:
+      values: |
+        controller:
+          initContainers:
+            - name: install-gatewayapi-plugin
+              image: __ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE__
+          trafficRouterPlugins:
+            - name: argoproj-labs/gatewayAPI
+              location: file:///var/run/argo-rollouts/plugins/gatewayapi-plugin
+EOF
+
+  run bash -lc "export ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE='host.docker.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0'; source '${SCRIPT}'; render_argo_rollouts_application_manifest '${app_file}'"
+
+  [ "${status}" -eq 0 ]
+  grep -Fq "image: host.docker.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0" "${app_file}"
+  grep -Fq "location: file:///var/run/argo-rollouts/plugins/gatewayapi-plugin" "${app_file}"
+}
+
 @test "external image render-input module maps contract defaults and manifest replacements" {
   run bash -lc "source '${SCRIPT}'; render_external_image_inputs"
 
@@ -1020,6 +1048,7 @@ EOF
   [[ "${output}" == *"workload|EXTERNAL_IMAGE_SUBNETCALC_FRONTEND|external_subnetcalc_frontend|subnetcalc-frontend"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP|external_platform_mcp|platform-mcp"* ]]
   [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core"* ]]
+  [[ "${output}" == *"platform|EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN|external_platform_argo_rollouts_gatewayapi_plugin|argo-rollouts-gatewayapi-plugin"* ]]
 }
 
 @test "GitOps render-input module maps enablement and host contract defaults" {

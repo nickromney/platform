@@ -407,6 +407,7 @@ main() {
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_AUTH_CHAT auth-chat
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_CHATGPT_SIM chatgpt-sim
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS langfuse-demos
+  export_external_platform_image EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN argo-rollouts-gatewayapi-plugin
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_API sentiment-api
   export_external_workload_image EXTERNAL_IMAGE_SENTIMENT_AUTH_UI sentiment-auth-ui
   export_external_workload_image EXTERNAL_IMAGE_SUBNETCALC_API subnetcalc-api
@@ -422,6 +423,7 @@ main() {
   fi
   export_resolved_string CERT_MANAGER_CHART_VERSION cert_manager_chart_version "$(tf_default_from_variables cert_manager_chart_version)"
   export_resolved_string GRAFANA_CHART_VERSION grafana_chart_version "$(tf_default_from_variables grafana_chart_version)"
+  export_resolved_string ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE argo_rollouts_gatewayapi_plugin_image "$(tf_default_from_variables argo_rollouts_gatewayapi_plugin_image)"
   export_resolved_string HEADLAMP_CHART_VERSION headlamp_chart_version "$(tf_default_from_variables headlamp_chart_version)"
   export_resolved_string KYVERNO_CHART_VERSION kyverno_chart_version "$(tf_default_from_variables kyverno_chart_version)"
   export_resolved_string OAUTH2_PROXY_CHART_VERSION oauth2_proxy_chart_version "$(tf_default_from_variables oauth2_proxy_chart_version)"

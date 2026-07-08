@@ -81,6 +81,34 @@
       }
     },
     {
+      "id": "argo-rollouts-gatewayapi-plugin",
+      "hcl_key": "argo-rollouts-gatewayapi-plugin",
+      "image_name": "argo-rollouts-gatewayapi-plugin",
+      "default_tag": "v0.5.0",
+      "build": {
+        "context": "generated-argo-rollouts-gatewayapi-plugin",
+        "dockerfile": "Dockerfile",
+        "tag": "argo-rollouts-gatewayapi-plugin-version",
+        "plugin_binary": {
+          "terraform_version_variable": "argo_rollouts_gatewayapi_plugin_version",
+          "terraform_sha256_variable": "argo_rollouts_gatewayapi_plugin_sha256",
+          "url_template": "https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v{version}/gatewayapi-plugin-linux-amd64",
+          "cache_dir": ".run/kind/plugin-cache",
+          "context_binary_name": "gatewayapi-plugin-linux-amd64",
+          "verify": "sha256"
+        },
+        "version_tag_strategy": "plugin-version-with-v-prefix"
+      },
+      "fingerprint_sources": [
+        "kubernetes/kind/images/argo-rollouts-gatewayapi-plugin/Dockerfile",
+        "kubernetes/workflow/image-catalog.json"
+      ],
+      "version_check": {
+        "mode": "checked-elsewhere",
+        "reason": "local Argo Rollouts Gateway API plugin mirror image version is derived from Terraform plugin inputs; release freshness is reported by check-component-version.sh"
+      }
+    },
+    {
       "id": "idp-core",
       "hcl_key": "idp-core",
       "image_name": "idp-core",

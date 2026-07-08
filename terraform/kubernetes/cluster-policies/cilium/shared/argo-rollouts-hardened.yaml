@@ -5,11 +5,10 @@ metadata:
 spec:
   description: >-
     Hardened policy for the Argo Rollouts controller namespace. The controller
-    watches and updates Kubernetes resources through the API server, and
-    downloads the Gateway API traffic router plugin binary from GitHub
-    releases at startup, so it gets DNS-observed FQDN egress pinned to GitHub
-    plus the release-asset CDN. The Gateway API plugin itself does not require
-    additional in-cluster egress beyond the controller API-server path.
+    watches and updates Kubernetes resources through the API server. The
+    Gateway API plugin is mirrored into a local image and copied into the
+    controller pod at startup, so the controller does not need external release
+    asset egress.
   endpointSelector:
     matchLabels:
       "k8s:io.kubernetes.pod.namespace": argo-rollouts
@@ -24,16 +23,6 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
-              protocol: TCP
-          rules:
-            dns:
-              - matchPattern: "*"
-    - toFQDNs:
-        - matchName: github.com
-        - matchPattern: "*.githubusercontent.com"
-      toPorts:
-        - ports:
-            - port: "443"
               protocol: TCP
     - toEntities:
         - kube-apiserver

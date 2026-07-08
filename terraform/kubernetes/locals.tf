@@ -291,13 +291,18 @@ locals {
     "public.ecr.aws",
     "quay.io",
   ]) : toset([])
-  external_platform_grafana_image      = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
-  external_platform_hardened_registry  = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
-  external_platform_idp_core           = trimspace(lookup(var.external_platform_image_refs, "idp-core", ""))
-  external_platform_backstage          = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
-  external_platform_mcp                = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
-  external_platform_chatgpt_sim        = trimspace(lookup(var.external_platform_image_refs, "chatgpt-sim", ""))
-  external_platform_langfuse_demos     = trimspace(lookup(var.external_platform_image_refs, "langfuse-demos", ""))
+  external_platform_grafana_image     = trimspace(lookup(var.external_platform_image_refs, "grafana", ""))
+  external_platform_hardened_registry = trimspace(lookup(var.external_platform_image_refs, "hardened-registry", ""))
+  external_platform_idp_core          = trimspace(lookup(var.external_platform_image_refs, "idp-core", ""))
+  external_platform_backstage         = trimspace(lookup(var.external_platform_image_refs, "backstage", ""))
+  external_platform_mcp               = trimspace(lookup(var.external_platform_image_refs, "platform-mcp", ""))
+  external_platform_chatgpt_sim       = trimspace(lookup(var.external_platform_image_refs, "chatgpt-sim", ""))
+  external_platform_langfuse_demos    = trimspace(lookup(var.external_platform_image_refs, "langfuse-demos", ""))
+  external_platform_argo_rollouts_gatewayapi_plugin = trimspace(lookup(
+    var.external_platform_image_refs,
+    "argo-rollouts-gatewayapi-plugin",
+    "",
+  ))
   external_platform_grafana_ref_parts  = length(regexall("^(.+):([^:/]+)$", local.external_platform_grafana_image)) > 0 ? regex("^(.+):([^:/]+)$", local.external_platform_grafana_image) : []
   external_platform_grafana_repo       = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[0] : ""
   external_platform_grafana_tag        = length(local.external_platform_grafana_ref_parts) == 2 ? local.external_platform_grafana_ref_parts[1] : ""
@@ -315,6 +320,10 @@ locals {
   grafana_image_repository_effective         = local.use_external_platform_grafana ? local.external_platform_grafana_repository : var.grafana_image_repository
   grafana_image_tag_effective                = local.use_external_platform_grafana ? local.external_platform_grafana_tag : var.grafana_image_tag
   grafana_victoria_logs_plugin_url_effective = local.use_external_platform_grafana ? "" : trimspace(var.grafana_victoria_logs_plugin_url)
+  argo_rollouts_gatewayapi_plugin_image_effective = (
+    var.prefer_external_platform_images &&
+    local.external_platform_argo_rollouts_gatewayapi_plugin != ""
+  ) ? local.external_platform_argo_rollouts_gatewayapi_plugin : trimspace(var.argo_rollouts_gatewayapi_plugin_image)
   grafana_plugins_values_yaml = local.grafana_victoria_logs_plugin_url_effective != "" ? join("\n", [
     "        plugins:",
     "          - ${local.grafana_victoria_logs_plugin_url_effective}",
@@ -595,66 +604,71 @@ locals {
     [for f in sort(fileset(local.stack_dir, "templates/otel-gateway/**")) : filesha256("${local.stack_dir}/${f}")]
   )))
   policies_repo_render_contract = {
-    content_hash                           = local.policies_repo_content_hash
-    repo_owner                             = local.gitea_repo_owner
-    repo_is_org                            = local.gitea_repo_owner_is_org
-    policies_repo_url_cluster              = local.policies_repo_url_cluster
-    platform_base_domain                   = local.platform_base_domain_effective
-    platform_admin_base_domain             = local.platform_admin_base_domain_effective
-    argocd_public_host                     = local.argocd_public_host
-    sso_public_url                         = local.sso_public_url
-    gitea_public_host                      = local.gitea_public_host
-    grafana_public_host                    = local.grafana_public_host
-    headlamp_public_host                   = local.headlamp_public_host
-    hubble_public_host                     = local.hubble_public_host
-    kyverno_public_host                    = local.kyverno_public_host
-    sentiment_dev_public_host              = local.sentiment_dev_public_host
-    sentiment_uat_public_host              = local.sentiment_uat_public_host
-    subnetcalc_dev_public_host             = local.subnetcalc_dev_public_host
-    subnetcalc_uat_public_host             = local.subnetcalc_uat_public_host
-    sso_provider                           = local.sso_provider_effective
-    keycloak_realm                         = local.keycloak_realm
-    enable_hubble                          = var.enable_hubble
-    enable_policies                        = var.enable_policies
-    enable_image_signing                   = var.enable_image_signing
-    image_signing_public_key               = fileexists(local.image_signing_public_key_path) ? file(local.image_signing_public_key_path) : ""
-    enable_gateway_tls                     = var.enable_gateway_tls
-    gateway_https_host_port                = var.gateway_https_host_port
-    admin_route_allowlist_cidrs            = join(",", local.admin_route_allowlist_cidrs_effective)
-    gateway_trusted_proxy_cidrs            = join(",", local.gateway_trusted_proxy_cidrs_effective)
-    enable_cert_manager                    = var.enable_cert_manager
-    enable_actions_runner                  = var.enable_actions_runner
-    enable_app_repo_sentiment              = var.enable_app_repo_sentiment
-    enable_app_repo_subnetcalc             = var.enable_app_repo_subnetcalc
-    enable_apim_simulator                  = local.enable_apim_simulator_effective
-    enable_agentgateway_ai_gateway         = var.enable_agentgateway_ai_gateway
-    agentgateway_chart_version             = var.agentgateway_chart_version
-    agentgateway_namespace                 = var.agentgateway_namespace
-    agentgateway_ai_gateway_model          = var.agentgateway_ai_gateway_model
-    enable_prometheus                      = var.enable_prometheus
-    enable_alertmanager                    = var.enable_alertmanager
-    enable_grafana                         = var.enable_grafana
-    enable_victoria_logs                   = var.enable_victoria_logs
-    enable_otel_gateway                    = var.enable_otel_gateway
-    enable_metrics_server                  = var.enable_metrics_server
-    enable_external_secrets                = var.enable_external_secrets
-    enable_progressive_delivery            = var.enable_progressive_delivery
-    enable_headlamp                        = var.enable_headlamp
-    enable_sso                             = var.enable_sso
-    enable_backstage                       = var.enable_backstage
-    headlamp_cluster_role_binding_create   = var.headlamp_cluster_role_binding_create
-    headlamp_oidc_skip_tls_verify          = var.headlamp_oidc_skip_tls_verify
-    headlamp_oidc_client_secret            = var.enable_sso && var.enable_headlamp ? random_password.oidc_headlamp_client_secret[0].result : ""
-    enable_observability_agent             = var.enable_observability_agent
-    prefer_external_images                 = var.prefer_external_workload_images
-    external_sentiment_api                 = lookup(var.external_workload_image_refs, "sentiment-api", "")
-    external_sentiment_ui                  = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
-    external_subnetcalc_api                = lookup(var.external_workload_image_refs, "subnetcalc-api", "")
-    external_subnetcalc_apim               = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
-    external_platform_mcp                  = lookup(var.external_platform_image_refs, "platform-mcp", "")
-    external_platform_auth_chat            = lookup(var.external_platform_image_refs, "auth-chat", "")
-    external_platform_chatgpt_sim          = lookup(var.external_platform_image_refs, "chatgpt-sim", "")
-    external_platform_langfuse_demos       = lookup(var.external_platform_image_refs, "langfuse-demos", "")
+    content_hash                         = local.policies_repo_content_hash
+    repo_owner                           = local.gitea_repo_owner
+    repo_is_org                          = local.gitea_repo_owner_is_org
+    policies_repo_url_cluster            = local.policies_repo_url_cluster
+    platform_base_domain                 = local.platform_base_domain_effective
+    platform_admin_base_domain           = local.platform_admin_base_domain_effective
+    argocd_public_host                   = local.argocd_public_host
+    sso_public_url                       = local.sso_public_url
+    gitea_public_host                    = local.gitea_public_host
+    grafana_public_host                  = local.grafana_public_host
+    headlamp_public_host                 = local.headlamp_public_host
+    hubble_public_host                   = local.hubble_public_host
+    kyverno_public_host                  = local.kyverno_public_host
+    sentiment_dev_public_host            = local.sentiment_dev_public_host
+    sentiment_uat_public_host            = local.sentiment_uat_public_host
+    subnetcalc_dev_public_host           = local.subnetcalc_dev_public_host
+    subnetcalc_uat_public_host           = local.subnetcalc_uat_public_host
+    sso_provider                         = local.sso_provider_effective
+    keycloak_realm                       = local.keycloak_realm
+    enable_hubble                        = var.enable_hubble
+    enable_policies                      = var.enable_policies
+    enable_image_signing                 = var.enable_image_signing
+    image_signing_public_key             = fileexists(local.image_signing_public_key_path) ? file(local.image_signing_public_key_path) : ""
+    enable_gateway_tls                   = var.enable_gateway_tls
+    gateway_https_host_port              = var.gateway_https_host_port
+    admin_route_allowlist_cidrs          = join(",", local.admin_route_allowlist_cidrs_effective)
+    gateway_trusted_proxy_cidrs          = join(",", local.gateway_trusted_proxy_cidrs_effective)
+    enable_cert_manager                  = var.enable_cert_manager
+    enable_actions_runner                = var.enable_actions_runner
+    enable_app_repo_sentiment            = var.enable_app_repo_sentiment
+    enable_app_repo_subnetcalc           = var.enable_app_repo_subnetcalc
+    enable_apim_simulator                = local.enable_apim_simulator_effective
+    enable_agentgateway_ai_gateway       = var.enable_agentgateway_ai_gateway
+    agentgateway_chart_version           = var.agentgateway_chart_version
+    agentgateway_namespace               = var.agentgateway_namespace
+    agentgateway_ai_gateway_model        = var.agentgateway_ai_gateway_model
+    enable_prometheus                    = var.enable_prometheus
+    enable_alertmanager                  = var.enable_alertmanager
+    enable_grafana                       = var.enable_grafana
+    enable_victoria_logs                 = var.enable_victoria_logs
+    enable_otel_gateway                  = var.enable_otel_gateway
+    enable_metrics_server                = var.enable_metrics_server
+    enable_external_secrets              = var.enable_external_secrets
+    enable_progressive_delivery          = var.enable_progressive_delivery
+    enable_headlamp                      = var.enable_headlamp
+    enable_sso                           = var.enable_sso
+    enable_backstage                     = var.enable_backstage
+    headlamp_cluster_role_binding_create = var.headlamp_cluster_role_binding_create
+    headlamp_oidc_skip_tls_verify        = var.headlamp_oidc_skip_tls_verify
+    headlamp_oidc_client_secret          = var.enable_sso && var.enable_headlamp ? random_password.oidc_headlamp_client_secret[0].result : ""
+    enable_observability_agent           = var.enable_observability_agent
+    prefer_external_images               = var.prefer_external_workload_images
+    external_sentiment_api               = lookup(var.external_workload_image_refs, "sentiment-api", "")
+    external_sentiment_ui                = lookup(var.external_workload_image_refs, "sentiment-auth-ui", "")
+    external_subnetcalc_api              = lookup(var.external_workload_image_refs, "subnetcalc-api", "")
+    external_subnetcalc_apim             = lookup(var.external_workload_image_refs, "subnetcalc-apim-simulator", "")
+    external_platform_mcp                = lookup(var.external_platform_image_refs, "platform-mcp", "")
+    external_platform_auth_chat          = lookup(var.external_platform_image_refs, "auth-chat", "")
+    external_platform_chatgpt_sim        = lookup(var.external_platform_image_refs, "chatgpt-sim", "")
+    external_platform_langfuse_demos     = lookup(var.external_platform_image_refs, "langfuse-demos", "")
+    external_platform_argo_rollouts_gatewayapi_plugin = lookup(
+      var.external_platform_image_refs,
+      "argo-rollouts-gatewayapi-plugin",
+      "",
+    )
     external_subnetcalc_frontend           = lookup(var.external_workload_image_refs, "subnetcalc-frontend", "")
     mcp_public_host                        = local.mcp_public_host
     mcp_console_public_host                = local.mcp_console_public_host
@@ -683,6 +697,7 @@ locals {
     grafana_sidecar_image_tag              = var.grafana_sidecar_image_tag
     grafana_victoria_logs_plugin_url       = local.grafana_victoria_logs_plugin_url_effective
     grafana_liveness_initial_delay_seconds = var.grafana_liveness_initial_delay_seconds
+    argo_rollouts_gatewayapi_plugin_image  = local.argo_rollouts_gatewayapi_plugin_image_effective
     headlamp_chart_version                 = var.headlamp_chart_version
     metrics_server_chart_version           = var.metrics_server_chart_version
     external_secrets_chart_version         = var.external_secrets_chart_version

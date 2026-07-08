@@ -3590,7 +3590,11 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
         label: path.read_text(encoding="utf-8")
         for label, path in paths.items()
     }
-    platform_images = ("idp-core", "backstage", "platform-mcp")
+    platform_images = (
+        "idp-core",
+        "backstage",
+        "platform-mcp",
+    )
 
     for image_id in platform_images:
         if f'"id": "{image_id}"' not in contents["image catalog"]:
@@ -3599,12 +3603,19 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
             violations.append(f"locals terraform missing external platform ref for {image_id}")
         if image_id not in contents["variables terraform"]:
             violations.append(f"variables terraform missing {image_id}")
+    if '"id": "argo-rollouts-gatewayapi-plugin"' not in contents["image catalog"]:
+        violations.append("image catalog missing argo-rollouts-gatewayapi-plugin")
+    if "external_platform_argo_rollouts_gatewayapi_plugin" not in contents["locals terraform"]:
+        violations.append("locals terraform missing external platform ref for argo-rollouts-gatewayapi-plugin")
+    if "argo-rollouts-gatewayapi-plugin" not in contents["variables terraform"]:
+        violations.append("variables terraform missing argo-rollouts-gatewayapi-plugin")
 
     required_fragments = {
         "sync script": (
             "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE",
             "EXTERNAL_PLATFORM_IMAGE_IDP_CORE",
             "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP",
+            "EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN",
             "export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false",
             "resolve_external_workload_image()",
         ),
@@ -3612,6 +3623,8 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
             "EXTERNAL_PLATFORM_IMAGE_BACKSTAGE",
             "EXTERNAL_PLATFORM_IMAGE_IDP_CORE",
             "EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP",
+            "EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN",
+            "render_argo_rollouts_application_manifest",
             "ensure_grafana_dashboard_provider_paths",
             "/^    path:[[:space:]]*/",
             "/var/lib/grafana/dashboards/default",
@@ -3628,6 +3641,7 @@ def local_platform_image_sync_contract_violations(repo_root: Path) -> tuple[str,
             "external_platform_backstage",
             "external_platform_idp_core",
             "external_platform_mcp",
+            "external_platform_argo_rollouts_gatewayapi_plugin",
         ),
         "kind Makefile": (
             'GITEA_SYNC_TARGET_TFVARS_FILE="$${GITEA_SYNC_TARGET_TFVARS_FILE:-$(KIND_OPERATOR_OVERRIDES_FILE)}"',
@@ -3842,6 +3856,73 @@ def grafana_plugin_catalog_build_input_contract_violations(repo_root: Path) -> t
     return tuple(violations)
 
 
+def argo_rollouts_gatewayapi_plugin_catalog_build_input_contract_violations(repo_root: Path) -> tuple[str, ...]:
+    catalog_path = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
+    build_script_path = repo_root / "kubernetes" / "scripts" / "build-local-platform-images.sh"
+    violations: list[str] = []
+
+    for path in (catalog_path, build_script_path):
+        if not path.exists():
+            violations.append(f"{path.relative_to(repo_root).as_posix()} missing")
+    if violations:
+        return tuple(violations)
+
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    build_script = build_script_path.read_text(encoding="utf-8")
+    images = {image["id"]: image for image in catalog["platform_images"]}
+    plugin = images.get("argo-rollouts-gatewayapi-plugin")
+    if plugin is None:
+        return ("image catalog missing argo-rollouts-gatewayapi-plugin",)
+
+    build = plugin.get("build", {})
+    expected_build_fields: dict[str, Any] = {
+        "context": "generated-argo-rollouts-gatewayapi-plugin",
+        "dockerfile": "Dockerfile",
+        "tag": "argo-rollouts-gatewayapi-plugin-version",
+        "version_tag_strategy": "plugin-version-with-v-prefix",
+    }
+    for field_name, expected in expected_build_fields.items():
+        actual = build.get(field_name)
+        if actual != expected:
+            violations.append(f"argo-rollouts-gatewayapi-plugin build.{field_name} should be {expected!r}, got {actual!r}")
+
+    plugin_binary = build.get("plugin_binary", {})
+    plugin_binary_expectations = {
+        "terraform_version_variable": "argo_rollouts_gatewayapi_plugin_version",
+        "terraform_sha256_variable": "argo_rollouts_gatewayapi_plugin_sha256",
+        "cache_dir": ".run/kind/plugin-cache",
+        "context_binary_name": "gatewayapi-plugin-linux-amd64",
+        "verify": "sha256",
+    }
+    for field_name, expected in plugin_binary_expectations.items():
+        actual = plugin_binary.get(field_name)
+        if actual != expected:
+            violations.append(f"argo-rollouts-gatewayapi-plugin plugin_binary.{field_name} should be {expected!r}, got {actual!r}")
+    url_template = str(plugin_binary.get("url_template", ""))
+    if url_template.count("{version}") != 1 or "gatewayapi-plugin-linux-amd64" not in url_template:
+        violations.append("argo-rollouts-gatewayapi-plugin plugin_binary.url_template should include {version} once and the linux-amd64 asset name")
+
+    fingerprint_sources = set(plugin.get("fingerprint_sources", []))
+    for source in (
+        "kubernetes/kind/images/argo-rollouts-gatewayapi-plugin/Dockerfile",
+        "kubernetes/workflow/image-catalog.json",
+    ):
+        if source not in fingerprint_sources:
+            violations.append(f"argo-rollouts-gatewayapi-plugin fingerprint missing {source}")
+
+    for fragment in (
+        "image_catalog_build_json platform argo-rollouts-gatewayapi-plugin",
+        "catalog_argo_rollouts_gatewayapi_plugin_build_value",
+        "prepare_argo_rollouts_gatewayapi_plugin_binary",
+        "prepare_argo_rollouts_gatewayapi_plugin_build_context",
+        "ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256",
+    ):
+        if fragment not in build_script:
+            violations.append(f"platform image builder missing {fragment}")
+
+    return tuple(violations)
+
+
 def image_catalog_target_ref_contract_violations(repo_root: Path) -> tuple[str, ...]:
     validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.sh"
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
@@ -3883,8 +3964,8 @@ def image_catalog_target_tfvars_projection_contract_violations(repo_root: Path) 
     validator = repo_root / "kubernetes" / "workflow" / "validate-image-catalog-target-refs.sh"
     catalog = repo_root / "kubernetes" / "workflow" / "image-catalog.json"
     expected_hosts = {
+        "kind": "host.docker.internal:5002",
         "lima": "host.lima.internal:5002",
-        "lima": "192.168.64.1:5002",
     }
     required_image_tags = (
         ("platform-mcp", "platform"),
