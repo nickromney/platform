@@ -7,6 +7,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 source "${REPO_ROOT}/scripts/lib/shell-cli.sh"
 
 fail() { echo "sync-gitea-policies: $*" >&2; exit 1; }
+warn() { echo "WARN sync-gitea-policies: $*" >&2; }
 
 usage() {
   cat <<EOF
@@ -360,6 +361,10 @@ VICTORIA_LOGS_CHART_VERSION="${VICTORIA_LOGS_CHART_VERSION:-$(tf_default_from_va
 command -v curl >/dev/null 2>&1 || fail "curl not found"
 command -v git >/dev/null 2>&1 || fail "git not found"
 command -v helm >/dev/null 2>&1 || fail "helm not found"
+command -v tar >/dev/null 2>&1 || fail "tar not found"
+
+CHART_VENDOR_CACHE_DIR="${CHART_VENDOR_CACHE_DIR:-${STACK_DIR}/.run/chart-cache}"
+CHART_VENDOR_RETRY_DELAYS="${CHART_VENDOR_RETRY_DELAYS:-5 15}"
 
 GITEA_LOCAL_ACCESS_LOADED=0
 tmp=""
@@ -713,28 +718,121 @@ vendor_chart() {
   local chart="$2"
   local version="$3"
   local vendor_root="$4"
+
+  fetch_chart_archive "${repo_url}" "${chart}" "${version}"
+  mkdir -p "${vendor_root}"
+  rm -rf "${vendor_root:?}/${chart}"
+  tar -xzf "$(chart_cache_archive_path "${repo_url}" "${chart}" "${version}")" -C "${vendor_root}"
+}
+
+chart_cache_archive_path() {
+  local repo_url="$1"
+  local chart="$2"
+  local version="$3"
+  local repo_key
+
+  repo_key="$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
+  printf '%s/%s/%s-%s.tgz\n' "${CHART_VENDOR_CACHE_DIR}" "${repo_key}" "${chart}" "${version}"
+}
+
+retry_chart_fetch() {
+  local label="$1"
+  local attempt=1
+  local max_attempts=3
+  local status=0
+  local delay=""
+  shift
+
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    set +e
+    "$@"
+    status=$?
+    set -e
+
+    if [[ "${status}" -eq 0 ]]; then
+      return 0
+    fi
+
+    warn "${label} failed on attempt ${attempt}/${max_attempts} (exit ${status})"
+    if [[ "${attempt}" -eq "${max_attempts}" ]]; then
+      return "${status}"
+    fi
+
+    case "${attempt}" in
+      1)
+        delay="${CHART_VENDOR_RETRY_DELAYS%% *}"
+        ;;
+      *)
+        delay="${CHART_VENDOR_RETRY_DELAYS#* }"
+        if [[ "${delay}" == "${CHART_VENDOR_RETRY_DELAYS}" ]]; then
+          delay="15"
+        fi
+        delay="${delay%% *}"
+        ;;
+    esac
+    sleep "${delay}"
+    attempt=$((attempt + 1))
+  done
+
+  return "${status}"
+}
+
+fetch_chart_archive() {
+  local repo_url="$1"
+  local chart="$2"
+  local version="$3"
   local repo_name
   local status
+  local archive_path
+  local archive_dir
+  local fetched_archive
+  local tmp_fetch_dir
   local tmp_registry_dir
 
   assert_pinned_chart_version "${chart}" "${version}"
-  mkdir -p "${vendor_root}"
-  rm -rf "${vendor_root:?}/${chart}"
+  archive_path="$(chart_cache_archive_path "${repo_url}" "${chart}" "${version}")"
+  if [[ -f "${archive_path}" ]]; then
+    return 0
+  fi
+
+  archive_dir="$(dirname "${archive_path}")"
+  mkdir -p "${archive_dir}"
+  tmp_fetch_dir="$(mktemp -d "${archive_dir}/.fetch.${chart}.XXXXXX")"
   if [[ "${repo_url}" == "cr.agentgateway.dev/charts" || "${repo_url}" == "ghcr.io/kgateway-dev/charts" ]]; then
     local oci_repo="oci://${repo_url}/${chart}"
     tmp_registry_dir="$(mktemp -d)"
     set +e
-    DOCKER_CONFIG="${tmp_registry_dir}" \
-      helm pull "${oci_repo}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+    retry_chart_fetch "helm pull ${oci_repo} ${version}" \
+      env DOCKER_CONFIG="${tmp_registry_dir}" \
+      helm pull "${oci_repo}" --version "${version}" --destination "${tmp_fetch_dir}" >/dev/null
     status=$?
     set -e
     rmdir "${tmp_registry_dir}" >/dev/null 2>&1 || true
-    return "${status}"
+    if [[ "${status}" -ne 0 ]]; then
+      rm -rf "${tmp_fetch_dir}"
+      return "${status}"
+    fi
+  else
+    repo_name="vendor-$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
+    retry_chart_fetch "helm repo add ${repo_url}" \
+      helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1
+    retry_chart_fetch "helm repo update ${repo_name}" \
+      helm repo update "${repo_name}" >/dev/null 2>&1
+    retry_chart_fetch "helm pull ${repo_name}/${chart} ${version}" \
+      helm pull "${repo_name}/${chart}" --version "${version}" --destination "${tmp_fetch_dir}" >/dev/null
   fi
-  repo_name="vendor-$(printf '%s' "${repo_url}" | cksum | awk '{print $1}')"
-  helm repo add "${repo_name}" "${repo_url}" --force-update >/dev/null 2>&1 || true
-  helm repo update "${repo_name}" >/dev/null 2>&1 || true
-  helm pull "${repo_name}/${chart}" --version "${version}" --untar --untardir "${vendor_root}" >/dev/null
+
+  fetched_archive="${tmp_fetch_dir}/${chart}-${version}.tgz"
+  if [[ ! -f "${fetched_archive}" ]]; then
+    fetched_archive="$(find "${tmp_fetch_dir}" -maxdepth 1 -type f -name "${chart}-*.tgz" | head -n 1)"
+  fi
+  if [[ -z "${fetched_archive}" || ! -f "${fetched_archive}" ]]; then
+    rm -rf "${tmp_fetch_dir}"
+    fail "helm pull for ${chart} ${version} did not produce a chart archive"
+  fi
+
+  mv "${fetched_archive}" "${archive_path}"
+  rm -rf "${tmp_fetch_dir}"
 }
 
 patch_vendored_headlamp_chart() {

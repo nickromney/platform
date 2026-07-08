@@ -36,6 +36,7 @@ case "${cmd}" in
     shift
     chart="${ref##*/}"
     untardir=""
+    destination=""
     version=""
     while [[ $# -gt 0 ]]; do
       case "${1}" in
@@ -50,25 +51,30 @@ case "${cmd}" in
           untardir="${2}"
           shift 2
           ;;
+        --destination)
+          destination="${2}"
+          shift 2
+          ;;
         *)
           shift
           ;;
       esac
     done
-    mkdir -p "${untardir}/${chart}"
-    cat >"${untardir}/${chart}/Chart.yaml" <<OUT
+    workdir="$(mktemp -d)"
+    mkdir -p "${workdir}/${chart}"
+    cat >"${workdir}/${chart}/Chart.yaml" <<OUT
 apiVersion: v2
 name: ${chart}
 version: ${version}
 OUT
     if [[ "${chart}" == "headlamp" ]]; then
-      mkdir -p "${untardir}/${chart}/templates"
-      cat >"${untardir}/${chart}/templates/deployment.yaml" <<'OUT'
+      mkdir -p "${workdir}/${chart}/templates"
+      cat >"${workdir}/${chart}/templates/deployment.yaml" <<'OUT'
 {{- if hasKey .Values.config "sessionTTL" }}
             - "-session-ttl={{ .Values.config.sessionTTL }}"
             {{- end }}
 OUT
-      cat >"${untardir}/${chart}/values.schema.json" <<'OUT'
+      cat >"${workdir}/${chart}/values.schema.json" <<'OUT'
 {
   "properties": {
     "config": {
@@ -86,6 +92,15 @@ OUT
 }
 OUT
     fi
+    if [[ -n "${destination}" ]]; then
+      mkdir -p "${destination}"
+      tar -C "${workdir}" -czf "${destination}/${chart}-${version}.tgz" "${chart}"
+      rm -rf "${workdir}"
+      exit 0
+    fi
+    mkdir -p "${untardir}"
+    cp -R "${workdir}/${chart}" "${untardir}/${chart}"
+    rm -rf "${workdir}"
     exit 0
     ;;
 esac
@@ -423,12 +438,139 @@ EOF
   grep -Fq "repoURL: ${POLICIES_REPO_URL_CLUSTER}" "${apps_dir}/001-cert-manager.application.yaml"
   grep -Fq "targetRevision: main" "${apps_dir}/001-cert-manager.application.yaml"
   grep -Fq "path: apps/vendor/charts/cert-manager" "${apps_dir}/001-cert-manager.application.yaml"
-  ! grep -Fq "chart: cert-manager" "${apps_dir}/001-cert-manager.application.yaml"
+  [ "$(grep -Fc "chart: cert-manager" "${apps_dir}/001-cert-manager.application.yaml")" = "0" ]
+}
+
+@test "vendor_chart retries helm fetches twice before succeeding" {
+  vendor_root="${BATS_TEST_TMPDIR}/vendor"
+  retry_state="${BATS_TEST_TMPDIR}/helm-pull-count"
+
+  cat >"${TEST_BIN}/helm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "${cmd}" in
+  repo)
+    exit 0
+    ;;
+  pull)
+    count_file="${HELM_RETRY_COUNT_FILE:?}"
+    count=0
+    if [[ -f "${count_file}" ]]; then
+      count="$(cat "${count_file}")"
+    fi
+    count=$((count + 1))
+    printf '%s\n' "${count}" >"${count_file}"
+    if [[ "${count}" -lt 3 ]]; then
+      echo "connect: no route to host" >&2
+      exit 7
+    fi
+    ref="${1:?missing chart ref}"
+    shift
+    chart="${ref##*/}"
+    destination=""
+    version=""
+    while [[ $# -gt 0 ]]; do
+      case "${1}" in
+        --version)
+          version="${2}"
+          shift 2
+          ;;
+        --destination)
+          destination="${2}"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    workdir="$(mktemp -d)"
+    mkdir -p "${workdir}/${chart}" "${destination}"
+    printf 'apiVersion: v2\nname: %s\nversion: %s\n' "${chart}" "${version}" >"${workdir}/${chart}/Chart.yaml"
+    tar -C "${workdir}" -czf "${destination}/${chart}-${version}.tgz" "${chart}"
+    rm -rf "${workdir}"
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/helm"
+
+  run bash -lc "export HELM_RETRY_COUNT_FILE='${retry_state}' CHART_VENDOR_RETRY_DELAYS='0 0'; source '${SCRIPT}'; vendor_chart 'https://charts.jetstack.io' 'cert-manager' 'v1.20.2' '${vendor_root}'"
+
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${retry_state}")" = "3" ]
+  [ -f "${vendor_root}/cert-manager/Chart.yaml" ]
+  [ "$(printf '%s\n' "${output}" | grep -c 'WARN sync-gitea-policies: helm pull vendor-.*cert-manager v1.20.2 failed on attempt')" = "2" ]
+}
+
+@test "vendor_chart reuses cached chart archive without refetching" {
+  vendor_root="${BATS_TEST_TMPDIR}/vendor"
+  cache_dir="${BATS_TEST_TMPDIR}/chart-cache"
+  fetch_count="${BATS_TEST_TMPDIR}/helm-pull-count"
+
+  cat >"${TEST_BIN}/helm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "${cmd}" in
+  repo)
+    exit 0
+    ;;
+  pull)
+    count_file="${HELM_FETCH_COUNT_FILE:?}"
+    count=0
+    if [[ -f "${count_file}" ]]; then
+      count="$(cat "${count_file}")"
+    fi
+    count=$((count + 1))
+    printf '%s\n' "${count}" >"${count_file}"
+    ref="${1:?missing chart ref}"
+    shift
+    chart="${ref##*/}"
+    destination=""
+    version=""
+    while [[ $# -gt 0 ]]; do
+      case "${1}" in
+        --version)
+          version="${2}"
+          shift 2
+          ;;
+        --destination)
+          destination="${2}"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    workdir="$(mktemp -d)"
+    mkdir -p "${workdir}/${chart}" "${destination}"
+    printf 'apiVersion: v2\nname: %s\nversion: %s\n' "${chart}" "${version}" >"${workdir}/${chart}/Chart.yaml"
+    tar -C "${workdir}" -czf "${destination}/${chart}-${version}.tgz" "${chart}"
+    rm -rf "${workdir}"
+    exit 0
+    ;;
+esac
+exit 1
+EOF
+  chmod +x "${TEST_BIN}/helm"
+
+  run bash -lc "export HELM_FETCH_COUNT_FILE='${fetch_count}' CHART_VENDOR_CACHE_DIR='${cache_dir}'; source '${SCRIPT}'; vendor_chart 'https://charts.jetstack.io' 'cert-manager' 'v1.20.2' '${vendor_root}/first'; vendor_chart 'https://charts.jetstack.io' 'cert-manager' 'v1.20.2' '${vendor_root}/second'"
+
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${fetch_count}")" = "1" ]
+  [ -f "${vendor_root}/first/cert-manager/Chart.yaml" ]
+  [ -f "${vendor_root}/second/cert-manager/Chart.yaml" ]
+  [ -f "$(find "${cache_dir}" -type f -name 'cert-manager-v1.20.2.tgz' | head -n 1)" ]
 }
 
 @test "clone_remote_repo disables ssh agents and prompts" {
   capture_file="${BATS_TEST_TMPDIR}/clone-ssh-command"
-  export CAPTURE_FILE="${capture_file}"
 
   cat >"${TEST_BIN}/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -454,7 +596,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/git"
 
-  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\"; source '${SCRIPT}'; clone_remote_repo '${BATS_TEST_TMPDIR}/remote'; cat '${capture_file}'"
+  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\" CAPTURE_FILE='${capture_file}'; source '${SCRIPT}'; clone_remote_repo '${BATS_TEST_TMPDIR}/remote'; cat '${capture_file}'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"-o IdentityAgent=none"* ]]
@@ -467,7 +609,6 @@ EOF
   rendered_dir="${BATS_TEST_TMPDIR}/rendered"
   mkdir -p "${rendered_dir}"
   echo "policy: true" >"${rendered_dir}/policy.yaml"
-  export CAPTURE_FILE="${capture_file}"
 
   cat >"${TEST_BIN}/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -508,7 +649,7 @@ exit 0
 EOF
   chmod +x "${TEST_BIN}/git"
 
-  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\"; source '${SCRIPT}'; push_rendered_repo '${rendered_dir}'; cat '${capture_file}'"
+  run bash -lc "export PATH='${TEST_BIN}':\"\$PATH\" CAPTURE_FILE='${capture_file}'; source '${SCRIPT}'; push_rendered_repo '${rendered_dir}'; cat '${capture_file}'"
 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"-o IdentityAgent=none"* ]]
@@ -751,11 +892,11 @@ EOF
 
   [ "${status}" -eq 0 ]
   grep -Fq "name: idp-core" "${idp_manifest}"
-  ! grep -Fq "name: backstage" "${idp_manifest}"
+  [ "$(grep -Fc "name: backstage" "${idp_manifest}")" = "0" ]
   [ ! -f "${routes_dir}/httproute-portal.yaml" ]
   [ -f "${routes_dir}/httproute-portal-api.yaml" ]
-  ! grep -Fq "httproute-portal.yaml" "${routes_dir}/kustomization.yaml"
-  ! grep -Fq "oauth2-proxy-backstage" "${routes_dir}/referencegrant-sso.yaml"
+  [ "$(grep -Fc "httproute-portal.yaml" "${routes_dir}/kustomization.yaml")" = "0" ]
+  [ "$(grep -Fc "oauth2-proxy-backstage" "${routes_dir}/referencegrant-sso.yaml")" = "0" ]
   grep -Fq "oauth2-proxy-idp-core" "${routes_dir}/referencegrant-sso.yaml"
 }
 
