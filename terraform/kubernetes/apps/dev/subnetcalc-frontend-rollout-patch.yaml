@@ -17,9 +17,8 @@
       trafficRouting:
         plugins:
           argoproj-labs/gatewayAPI:
-            httpRoute:
-              name: subnetcalc-dev
-              namespace: gateway-routes
+            httpRoute: subnetcalc-frontend-dev
+            namespace: gateway-routes
       steps:
         - setWeight: 25
         - pause:

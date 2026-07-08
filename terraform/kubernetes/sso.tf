@@ -218,7 +218,7 @@ __YAML__
 
 
 data "external" "mkcert_ca_cert" {
-  count = var.enable_sso && var.enable_headlamp ? 1 : 0
+  count = (var.enable_sso && var.enable_headlamp) || (var.enable_gateway_tls && var.enable_progressive_delivery && local.enable_subnetcalc_workloads_effective && var.enable_argocd) ? 1 : 0
 
   program = ["/bin/bash", "./scripts/fetch-mkcert-ca-cert.sh"]
 
@@ -243,6 +243,26 @@ resource "kubernetes_secret_v1" "headlamp_mkcert_ca" {
 
   depends_on = [
     kubernetes_namespace_v1.headlamp,
+    data.external.mkcert_ca_cert,
+  ]
+}
+
+resource "kubernetes_secret_v1" "dev_mkcert_ca" {
+  count = var.enable_gateway_tls && var.enable_progressive_delivery && local.enable_subnetcalc_workloads_effective && var.enable_argocd ? 1 : 0
+
+  metadata {
+    name      = "mkcert-ca"
+    namespace = kubernetes_namespace_v1.dev[0].metadata[0].name
+  }
+
+  data = {
+    "ca.crt" = data.external.mkcert_ca_cert[0].result.value
+  }
+
+  type = "Opaque"
+
+  depends_on = [
+    kubernetes_namespace_v1.dev,
     data.external.mkcert_ca_cert,
   ]
 }

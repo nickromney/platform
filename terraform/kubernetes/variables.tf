@@ -1025,8 +1025,8 @@ check "enable_external_secrets_requires_enable_argocd" {
 
 check "enable_progressive_delivery_requires_argocd_gitea_gateway" {
   assert {
-    condition     = !var.enable_progressive_delivery || (var.enable_argocd && var.enable_gitea && var.enable_gateway_tls)
-    error_message = "enable_progressive_delivery requires enable_argocd=true, enable_gitea=true, and enable_gateway_tls=true."
+    condition     = !var.enable_progressive_delivery || (var.enable_argocd && var.enable_gitea && var.enable_gateway_tls && var.enable_sso)
+    error_message = "enable_progressive_delivery requires enable_argocd=true, enable_gitea=true, enable_gateway_tls=true, and enable_sso=true."
   }
 }
 

@@ -199,16 +199,28 @@ enable_progressive_delivery = true
 It installs Argo Rollouts via the app-of-apps tree and converts only
 `dev/subnetcalc-frontend` from a Deployment into a Rollout. `uat` remains a
 plain Deployment. The demo canary uses Gateway API traffic routing against the
-`gateway-routes/subnetcalc-dev` HTTPRoute with these steps:
+`gateway-routes/subnetcalc-frontend-dev` HTTPRoute with these steps:
 
 ```text
 25% -> pause 30s -> 50% -> pause 30s -> 100% -> pause 15s
 ```
 
-Watch the rollout:
+The browser entrypoint stays the SSO-protected app route:
+`platform-gateway` -> `gateway-routes/subnetcalc-dev` ->
+`sso/oauth2-proxy-subnetcalc-dev` -> `dev/subnetcalc-router`. The dev router
+keeps `/api` on APIM and sends frontend paths back through the internal
+`platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443`
+service with Host/SNI
+`subnetcalc-frontend.dev.127.0.0.1.sslip.io`. That re-entrant gateway hop is
+what lets Argo Rollouts change the weighted backendRefs between
+`dev/subnetcalc-frontend` and `dev/subnetcalc-frontend-canary`.
+
+Watch the rollout and the route weights:
 
 ```bash
 kubectl -n dev argo rollouts get rollout subnetcalc-frontend --watch
+kubectl -n gateway-routes get httproute subnetcalc-frontend-dev -o yaml --watch
+kubectl -n gateway-routes get httproute subnetcalc-frontend-dev -o jsonpath='{range .spec.rules[0].backendRefs[*]}{.name}{"="}{.weight}{"\n"}{end}'
 kubectl -n argo-rollouts port-forward svc/argo-rollouts-dashboard 3100:3100
 ```
 

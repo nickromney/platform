@@ -9,9 +9,11 @@ resources:
   - httproute-hubble.yaml
   - httproute-agentgateway-ai-gateway.yaml
   - httproute-kyverno.yaml
+  - httproute-subnetcalc-frontend-dev.yaml
   - referencegrant-argocd.yaml
   - referencegrant-gitea.yaml
   - referencegrant-headlamp.yaml
   - referencegrant-hubble.yaml
+  - referencegrant-dev-subnetcalc-frontend.yaml
   - referencegrant-agentgateway-ai-gateway.yaml
   - referencegrant-policy-reporter.yaml

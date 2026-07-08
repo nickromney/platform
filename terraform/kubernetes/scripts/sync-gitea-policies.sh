@@ -1800,6 +1800,13 @@ prune_gateway_routes_manifests() {
     remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-uat.yaml"
   fi
 
+  if ! is_true "${ENABLE_APP_REPO_SUBNETCALC}" || ! is_true "${ENABLE_PROGRESSIVE_DELIVERY}"; then
+    remove_if_present "${routes_dir}/httproute-subnetcalc-frontend-dev.yaml"
+    remove_if_present "${routes_dir}/referencegrant-dev-subnetcalc-frontend.yaml"
+    remove_kustomization_entry "${kustomization_file}" "httproute-subnetcalc-frontend-dev.yaml"
+    remove_kustomization_entry "${kustomization_file}" "referencegrant-dev-subnetcalc-frontend.yaml"
+  fi
+
   if ! apim_effective; then
     remove_if_present "${routes_dir}/httproute-apim.yaml"
     remove_kustomization_entry "${kustomization_file}" "httproute-apim.yaml"
@@ -1963,12 +1970,38 @@ configure_progressive_delivery() {
   is_true "${ENABLE_APP_REPO_SUBNETCALC}" || return 0
   [[ -f "${kustomization_file}" ]] || return 0
 
+  if ! grep -Fq "subnetcalc-router-gateway-canary-patch.yaml" "${kustomization_file}"; then
+    if grep -Eq '^patches:' "${kustomization_file}"; then
+      cat >>"${kustomization_file}" <<'EOF'
+  - path: subnetcalc-router-gateway-canary-patch.yaml
+EOF
+    else
+      cat >>"${kustomization_file}" <<'EOF'
+patches:
+  - path: subnetcalc-router-gateway-canary-patch.yaml
+EOF
+    fi
+  fi
+
   if grep -Fq "subnetcalc-frontend-rollout-patch.yaml" "${kustomization_file}"; then
     return 0
   fi
 
-  cat >>"${kustomization_file}" <<'EOF'
-  - subnetcalc-frontend-canary-service.yaml
+  if ! grep -Fq "subnetcalc-frontend-canary-service.yaml" "${kustomization_file}"; then
+    perl -0pi -e 's|(resources:\n(?:  - .+\n)+)|${1}  - subnetcalc-frontend-canary-service.yaml\n|' "${kustomization_file}"
+  fi
+
+  if grep -Eq '^patches:' "${kustomization_file}"; then
+    cat >>"${kustomization_file}" <<'EOF'
+  - path: subnetcalc-frontend-rollout-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: subnetcalc-frontend
+EOF
+  else
+    cat >>"${kustomization_file}" <<'EOF'
 patches:
   - path: subnetcalc-frontend-rollout-patch.yaml
     target:
@@ -1977,6 +2010,7 @@ patches:
       kind: Deployment
       name: subnetcalc-frontend
 EOF
+  fi
 }
 
 repo_exists_for_owner() {
