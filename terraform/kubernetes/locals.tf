@@ -995,12 +995,6 @@ locals {
             return hs
           EOT
           )
-          "resource.customizations.knownTypeFields.argoproj.io_Rollout" = trimspace(<<-EOT
-            - field: spec.template
-              type: core/v1/PodTemplateSpec
-          EOT
-          )
-
           "resource.customizations.health.gateway.networking.k8s.io_ReferenceGrant" = trimspace(<<-EOT
             hs = {}
             hs.status = "Healthy"
