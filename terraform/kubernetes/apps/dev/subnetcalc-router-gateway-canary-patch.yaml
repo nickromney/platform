@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: subnetcalc-router-nginx
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      server_name _;
+      absolute_redirect off;
+
+      set $frontend_gateway_host subnetcalc-frontend.dev.127.0.0.1.sslip.io;
+
+      location = /.auth/me {
+        default_type application/json;
+        add_header Cache-Control "no-store";
+
+        set $user_email $http_x_auth_request_email;
+        if ($user_email = "") { set $user_email $http_x_forwarded_email; }
+
+        set $user_name $http_x_auth_request_user;
+        if ($user_name = "") { set $user_name $user_email; }
+
+        set $access_token_json null;
+        if ($http_x_auth_request_access_token != "") { set $access_token_json "\"$http_x_auth_request_access_token\""; }
+
+        set $forwarded_access_token_json null;
+        if ($http_x_forwarded_access_token != "") { set $forwarded_access_token_json "\"$http_x_forwarded_access_token\""; }
+
+        if ($access_token_json = null) { set $access_token_json $forwarded_access_token_json; }
+
+        return 200 "[{\"provider_name\":\"oauth2-proxy\",\"user_id\":\"$user_email\",\"access_token\":$access_token_json,\"claims\":[{\"typ\":\"name\",\"val\":\"$user_name\"},{\"typ\":\"email\",\"val\":\"$user_email\"},{\"typ\":\"preferred_username\",\"val\":\"$user_email\"}]}]";
+      }
+
+      location ~ ^/\.auth/login/ {
+        return 302 https://$host/oauth2/start?rd=/;
+      }
+
+      location = /.auth/logout {
+        return 302 https://$host/oauth2/sign_out?rd=/signed-out.html;
+      }
+
+      location ^~ /api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        set $apim_token $http_x_auth_request_access_token;
+        if ($apim_token = "") { set $apim_token $http_x_forwarded_access_token; }
+
+        set $apim_auth $http_authorization;
+        if ($apim_auth = "") { set $apim_auth "Bearer $apim_token"; }
+        if ($apim_auth = "Bearer ") { set $apim_auth ""; }
+        proxy_set_header Authorization $apim_auth;
+        proxy_set_header X-Apim-Bypass-Subscription true;
+        proxy_set_header X-Subnetcalc-Bypass-Subscription true;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://subnetcalc-apim-simulator.apim.svc.cluster.local:8000;
+      }
+
+      location = /api {
+        return 301 /api/;
+      }
+
+      location = /signed-out.html {
+        proxy_ssl_server_name on;
+        proxy_ssl_name $frontend_gateway_host;
+        proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
+        proxy_ssl_verify on;
+        proxy_set_header Host $frontend_gateway_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+      }
+
+      location = /style.css {
+        proxy_ssl_server_name on;
+        proxy_ssl_name $frontend_gateway_host;
+        proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
+        proxy_ssl_verify on;
+        proxy_set_header Host $frontend_gateway_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+      }
+
+      location = /app-shell.css {
+        proxy_ssl_server_name on;
+        proxy_ssl_name $frontend_gateway_host;
+        proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
+        proxy_ssl_verify on;
+        proxy_set_header Host $frontend_gateway_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+      }
+
+      location = /favicon.svg {
+        proxy_ssl_server_name on;
+        proxy_ssl_name $frontend_gateway_host;
+        proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
+        proxy_ssl_verify on;
+        proxy_set_header Host $frontend_gateway_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+      }
+
+      location = /favicon.ico {
+        proxy_ssl_server_name on;
+        proxy_ssl_name $frontend_gateway_host;
+        proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
+        proxy_ssl_verify on;
+        proxy_set_header Host $frontend_gateway_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+      }
+
+      location / {
+        if ($http_user_agent ~* "kube-probe") { return 200; }
+
+        set $auth_email $http_x_auth_request_email;
+        if ($auth_email = "") { set $auth_email $http_x_forwarded_email; }
+        if ($auth_email = "") { return 302 https://$host/oauth2/start?rd=$uri; }
+
+        proxy_ssl_server_name on;
+        proxy_ssl_name $frontend_gateway_host;
+        proxy_ssl_trusted_certificate /gateway-ca/ca.crt;
+        proxy_ssl_verify on;
+        proxy_set_header Host $frontend_gateway_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass https://platform-gateway-nginx-internal.platform-gateway.svc.cluster.local:443;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subnetcalc-router
+spec:
+  template:
+    spec:
+      containers:
+        - name: nginx
+          volumeMounts:
+            - name: gateway-ca
+              mountPath: /gateway-ca
+              readOnly: true
+      volumes:
+        - name: gateway-ca
+          secret:
+            secretName: mkcert-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

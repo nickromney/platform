@@ -69,6 +69,74 @@ PY
   [[ "${output}" == *"validated gateway certificate SAN coverage for every HTTPRoute hostname"* ]]
 }
 
+@test "subnetcalc frontend canary route exposes stable and canary backends with dev ReferenceGrant" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from pathlib import Path
+import os
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+route_dirs = [
+    repo_root / "terraform/kubernetes/apps/platform-gateway-routes",
+    repo_root / "terraform/kubernetes/apps/platform-gateway-routes-sso",
+]
+
+for route_dir in route_dirs:
+    route_path = route_dir / "httproute-subnetcalc-frontend-dev.yaml"
+    grant_path = route_dir / "referencegrant-dev-subnetcalc-frontend.yaml"
+    kustomization_path = route_dir / "kustomization.yaml"
+
+    route = yaml.safe_load(route_path.read_text(encoding="utf-8"))
+    assert route["metadata"]["name"] == "subnetcalc-frontend-dev"
+    assert route["metadata"]["namespace"] == "gateway-routes"
+    assert route["spec"]["hostnames"] == ["subnetcalc-frontend.dev.127.0.0.1.sslip.io"]
+    parent = route["spec"]["parentRefs"][0]
+    assert parent["name"] == "platform-gateway"
+    assert parent["namespace"] == "platform-gateway"
+    assert parent["sectionName"] == "https"
+
+    backend_refs = route["spec"]["rules"][0]["backendRefs"]
+    by_name = {ref["name"]: ref for ref in backend_refs}
+    assert by_name["subnetcalc-frontend"]["namespace"] == "dev"
+    assert by_name["subnetcalc-frontend"]["port"] == 8080
+    assert by_name["subnetcalc-frontend"]["weight"] == 100
+    assert by_name["subnetcalc-frontend-canary"]["namespace"] == "dev"
+    assert by_name["subnetcalc-frontend-canary"]["port"] == 8080
+    assert by_name["subnetcalc-frontend-canary"]["weight"] == 0
+
+    grant = yaml.safe_load(grant_path.read_text(encoding="utf-8"))
+    assert grant["metadata"]["namespace"] == "dev"
+    assert grant["spec"]["from"] == [{
+        "group": "gateway.networking.k8s.io",
+        "kind": "HTTPRoute",
+        "namespace": "gateway-routes",
+    }]
+    targets = {item["name"] for item in grant["spec"]["to"]}
+    assert {"subnetcalc-frontend", "subnetcalc-frontend-canary"} <= targets
+
+    kustomization = yaml.safe_load(kustomization_path.read_text(encoding="utf-8"))
+    resources = set(kustomization["resources"])
+    assert route_path.name in resources
+    assert grant_path.name in resources
+
+print("validated subnetcalc frontend canary route and ReferenceGrant")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated subnetcalc frontend canary route and ReferenceGrant"* ]]
+}
+
+@test "subnetcalc rollout uses flat Gateway API plugin route schema" {
+  patch="${REPO_ROOT}/terraform/kubernetes/apps/dev/subnetcalc-frontend-rollout-patch.yaml"
+
+  grep -Fq "httpRoute: subnetcalc-frontend-dev" "${patch}"
+  grep -Fq "namespace: gateway-routes" "${patch}"
+  if grep -Fq "name: subnetcalc-dev" "${patch}"; then
+    return 1
+  fi
+}
+
 @test "check-security verifies rendered platform gateway nginx directives" {
   script="${REPO_ROOT}/terraform/kubernetes/scripts/check-security.sh"
 

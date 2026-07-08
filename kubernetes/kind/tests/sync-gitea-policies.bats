@@ -1049,14 +1049,24 @@ EOF
     'namespace: dev' \
     'resources:' \
     '  - ../workloads/base' \
+    'patches:' \
+    '  - path: subnetcalc-router-gateway-canary-patch.yaml' \
     >"${repo_dir}/apps/dev/kustomization.yaml"
 
   run bash -lc "export ENABLE_PROGRESSIVE_DELIVERY=true ENABLE_APP_REPO_SUBNETCALC=true; source '${SCRIPT}'; configure_progressive_delivery '${repo_dir}'"
 
   [ "${status}" -eq 0 ]
   grep -Fq '  - subnetcalc-frontend-canary-service.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
+  grep -Fq 'path: subnetcalc-router-gateway-canary-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
   grep -Fq 'path: subnetcalc-frontend-rollout-patch.yaml' "${repo_dir}/apps/dev/kustomization.yaml"
   grep -Fq 'name: subnetcalc-frontend' "${repo_dir}/apps/dev/kustomization.yaml"
+  [ "$(grep -c '^patches:' "${repo_dir}/apps/dev/kustomization.yaml")" -eq 1 ]
+}
+
+@test "policy repo render vendors subnetcalc frontend canary route and dev ReferenceGrant" {
+  run bash -lc "export STACK_DIR='${REPO_ROOT}/terraform/kubernetes' ENABLE_BACKSTAGE=false ENABLE_HUBBLE=false ENABLE_POLICIES=false ENABLE_GATEWAY_TLS=true ENABLE_HEADLAMP=false ENABLE_GRAFANA=false ENABLE_APP_REPO_SENTIMENT=false ENABLE_APP_REPO_SUBNETCALC=true ENABLE_APIM_SIMULATOR=true ENABLE_AGENTGATEWAY_AI_GATEWAY=false ENABLE_PROMETHEUS=false ENABLE_VICTORIA_LOGS=false ENABLE_OTEL_GATEWAY=false ENABLE_OBSERVABILITY_AGENT=false ENABLE_SSO=true ENABLE_PROGRESSIVE_DELIVERY=true; source '${SCRIPT}'; render_policy_repo_tree '${BATS_TEST_TMPDIR}/render-canary-route' >/dev/null; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; test -f '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/referencegrant-dev-subnetcalc-frontend.yaml'; grep -Fq 'subnetcalc-frontend-canary' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/httproute-subnetcalc-frontend-dev.yaml'; grep -Fq 'referencegrant-dev-subnetcalc-frontend.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/platform-gateway-routes-sso/kustomization.yaml'; grep -Fq 'subnetcalc-router-gateway-canary-patch.yaml' '${BATS_TEST_TMPDIR}/render-canary-route/repo/apps/dev/kustomization.yaml'"
+
+  [ "${status}" -eq 0 ]
 }
 
 @test "Terraform policies sync leaves chart and observability render values in GitOps contract" {

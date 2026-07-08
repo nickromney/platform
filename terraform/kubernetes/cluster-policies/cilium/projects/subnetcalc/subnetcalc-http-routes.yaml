@@ -5,7 +5,8 @@ metadata:
 spec:
   description: >-
     The router sends browser API traffic through the shared APIM simulator.
-    All other paths go to the frontend.
+    Dev frontend paths re-enter the platform gateway so Argo Rollouts can shift
+    Gateway API backend weights; UAT keeps the direct frontend path.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal
@@ -50,6 +51,15 @@ spec:
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+            "k8s:gateway.networking.k8s.io/gateway-name": platform-gateway
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP
 ---
 apiVersion: cilium.io/v2

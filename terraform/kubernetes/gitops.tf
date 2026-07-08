@@ -70,6 +70,7 @@ resource "null_resource" "sync_gitea_policies_repo" {
     kubernetes_secret_v1.gitea_registry_creds,
     kubernetes_secret_v1.backstage_gitea_credentials,
     kubernetes_secret_v1.headlamp_mkcert_ca,
+    kubernetes_secret_v1.dev_mkcert_ca,
     local_sensitive_file.policies_repo_private_key,
     local_file.gitops_render_contract,
   ]
