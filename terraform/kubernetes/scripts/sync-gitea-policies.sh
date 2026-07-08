@@ -1741,7 +1741,6 @@ prune_argocd_app_manifests() {
   if ! is_true "${ENABLE_PROGRESSIVE_DELIVERY}"; then
     remove_if_present "${apps_dir}/86-argo-rollouts.namespace.yaml"
     remove_if_present "${apps_dir}/87-argo-rollouts.application.yaml"
-    remove_if_present "${apps_dir}/87-argo-rollouts-plugin.configmap.yaml"
   fi
 
   if ! is_true "${ENABLE_OTEL_GATEWAY}" && ! is_true "${ENABLE_PROMETHEUS}" && ! is_true "${ENABLE_GRAFANA}" && ! is_true "${ENABLE_VICTORIA_LOGS}" && ! is_true "${ENABLE_OBSERVABILITY_AGENT}"; then
