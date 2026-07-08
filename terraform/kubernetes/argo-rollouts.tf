@@ -47,6 +47,9 @@ spec:
             registry: quay.io
             repository: argoproj/argo-rollouts
             tag: v1.9.0
+          trafficRouterPlugins:
+            - name: argoproj-labs/gatewayAPI
+              location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.5.0/gatewayapi-plugin-linux-amd64
         dashboard:
           enabled: true
   syncPolicy:
@@ -70,33 +73,5 @@ __YAML__
     null_resource.sync_gitea_policies_repo,
     null_resource.argocd_repo_server_restart,
     kubernetes_namespace_v1.argo_rollouts,
-  ]
-}
-
-resource "kubectl_manifest" "argo_rollouts_gateway_api_plugin_config" {
-  count = var.enable_progressive_delivery && var.enable_argocd && !var.enable_app_of_apps ? 1 : 0
-
-  yaml_body = <<__YAML__
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: argo-rollouts-config
-  namespace: ${kubernetes_namespace_v1.argo_rollouts[0].metadata[0].name}
-  labels:
-    app.kubernetes.io/name: argo-rollouts
-data:
-  trafficRouterPlugins: |
-    - name: argoproj-labs/gatewayAPI
-      location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.5.0/gatewayapi-plugin-linux-amd64
-__YAML__
-
-  wait              = true
-  validate_schema   = false
-  force_conflicts   = false
-  server_side_apply = true
-
-  depends_on = [
-    kubernetes_namespace_v1.argo_rollouts,
-    kubectl_manifest.argocd_app_argo_rollouts,
   ]
 }
