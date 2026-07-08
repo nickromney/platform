@@ -18,7 +18,7 @@ func main() {
 	issuer := os.Args[3]
 	clientID := os.Args[4]
 	caPath := os.Args[5]
-	dexHost := os.Args[6]
+	oidcHost := os.Args[6]
 	gatewayIP := os.Args[7]
 
 	data, err := os.ReadFile(sourcePath)
@@ -64,7 +64,7 @@ func main() {
 			if len(hostnames) > 0 {
 				allManaged := true
 				for _, hostname := range hostnames {
-					if hostname != dexHost && !managedSSOHostname.MatchString(hostname) {
+					if hostname != oidcHost && !managedSSOHostname.MatchString(hostname) {
 						allManaged = false
 						break
 					}
@@ -73,7 +73,7 @@ func main() {
 					continue
 				}
 			}
-			fmt.Fprintf(os.Stderr, "unexpected existing kube-apiserver hostAliases block unrelated to %s; refusing to rewrite manifest automatically\n", dexHost)
+			fmt.Fprintf(os.Stderr, "unexpected existing kube-apiserver hostAliases block unrelated to %s; refusing to rewrite manifest automatically\n", oidcHost)
 			os.Exit(1)
 		}
 
@@ -96,7 +96,7 @@ func main() {
 					"  hostAliases:",
 					fmt.Sprintf("  - ip: %q", gatewayIP),
 					"    hostnames:",
-					fmt.Sprintf("    - %s", dexHost),
+					fmt.Sprintf("    - %s", oidcHost),
 				)
 				insertedHostAliases = true
 			}

@@ -65,6 +65,8 @@ fi
 
 ok "gateway internal clusterIP: ${GATEWAY_IP}"
 
+ok "ensuring ${OIDC_HOST} resolves inside kind node"
+docker exec "${CONTROL_PLANE_NODE}" sh -lc "grep -qE '^[0-9.]+[[:space:]]+${OIDC_HOST}(\\s|$)' /etc/hosts || echo '${GATEWAY_IP} ${OIDC_HOST}' >> /etc/hosts"
 
 ok "copying mkcert root CA into kind node: ${MKCERT_CA_DEST}"
 docker cp "${CA_CERT}" "${CONTROL_PLANE_NODE}:${MKCERT_CA_DEST}"
@@ -162,6 +164,7 @@ require_cmd go
   "${OIDC_ISSUER_URL}" \
   "${OIDC_CLIENT_ID}" \
   "${MKCERT_CA_DEST}" \
+  "${OIDC_HOST}" \
   "${GATEWAY_IP}"
 
 if ! kubectl create --dry-run=client --validate=false -f "${RENDERED_MANIFEST_LOCAL}" >/dev/null 2>&1; then

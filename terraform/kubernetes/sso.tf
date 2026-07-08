@@ -1147,6 +1147,7 @@ resource "null_resource" "configure_kind_apiserver_oidc" {
       CLUSTER_NAME                = var.cluster_name
       SSO_PROVIDER                = "keycloak"
       KEYCLOAK_REALM              = local.keycloak_realm
+      OIDC_HOST                   = local.sso_public_host
       SSO_NAMESPACE               = "sso"
       SSO_DEPLOYMENT_NAME         = local.sso_provider_is_keycloak ? "keycloak" : "oidc"
       SSO_SERVICE_NAME            = local.sso_provider_is_keycloak ? "keycloak" : "oidc"
