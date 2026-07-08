@@ -70,15 +70,15 @@ contract_default() {
   local fallback="${3:-}"
   local value=""
 
-  if contract_has_key "${contract_key}"; then
-    value="$(contract_value "${contract_key}")"
-    printf -v "${env_name}" '%s' "${value}"
-    return 0
-  fi
-
   local current=""
   eval "current=\"\${${env_name}:-}\""
   if [[ -n "${current}" ]]; then
+    return 0
+  fi
+
+  if contract_has_key "${contract_key}"; then
+    value="$(contract_value "${contract_key}")"
+    printf -v "${env_name}" '%s' "${value}"
     return 0
   fi
 
@@ -1025,6 +1025,24 @@ render_argo_rollouts_application_manifest() {
   replace_literal "${app_file}" "host.docker.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0" "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE}"
 }
 
+render_platform_launchpad_dashboard() {
+  local app_file="$1"
+  local renderer="${STACK_DIR}/scripts/render-platform-launchpad.sh"
+
+  [[ -f "${app_file}" ]] || return 0
+  [[ -x "${renderer}" ]] || return 0
+
+  STACK_DIR="${STACK_DIR}" \
+    INVENTORY_FILE="${STACK_DIR}/config/platform-launchpad.apps.json" \
+    ENABLE_SSO="${ENABLE_SSO:-true}" \
+    ENABLE_HEADLAMP="${ENABLE_HEADLAMP:-true}" \
+    ENABLE_APP_REPO_SENTIMENT="${ENABLE_APP_REPO_SENTIMENT:-true}" \
+    ENABLE_APP_REPO_SUBNETCALC="${ENABLE_APP_REPO_SUBNETCALC:-true}" \
+    ENABLE_LANGFUSE="${ENABLE_LANGFUSE:-false}" \
+    ENABLE_LANGFUSE_DEMOS="${ENABLE_LANGFUSE_DEMOS:-false}" \
+    "${renderer}" --execute --target "${app_file}"
+}
+
 render_grafana_application_manifest() {
   local app_file="$1"
   local plugins_block="        plugins: []"
@@ -1043,6 +1061,7 @@ render_grafana_application_manifest() {
   replace_literal "${app_file}" "__GRAFANA_SIDECAR_IMAGE_TAG__" "${GRAFANA_SIDECAR_IMAGE_TAG}"
   replace_literal_block "${app_file}" "__GRAFANA_PLUGINS_VALUES__" "${plugins_block}"
   replace_literal "${app_file}" "__GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS__" "${GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS}"
+  render_platform_launchpad_dashboard "${app_file}"
   ensure_grafana_dashboard_provider_paths "${app_file}"
 }
 

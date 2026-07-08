@@ -34,6 +34,44 @@ setup() {
   [ "${status}" -eq 0 ]
 }
 
+@test "sync-gitea.sh reads map string values from target tfvars" {
+  target_tfvars="${BATS_TEST_TMPDIR}/target.tfvars"
+  cat >"${target_tfvars}" <<'EOF'
+external_platform_image_refs = {
+  "idp-core" = "host.docker.internal:5002/platform/idp-core:target"
+}
+EOF
+
+  run bash -lc "source '${SCRIPT}'; tfvar_map_string_or_default '${target_tfvars}' external_platform_image_refs idp-core missing"
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "host.docker.internal:5002/platform/idp-core:target" ]
+}
+
+@test "sync-gitea.sh lets target tfvars override stage booleans for local kind toggles" {
+  stage_tfvars="${BATS_TEST_TMPDIR}/stage.tfvars"
+  target_tfvars="${BATS_TEST_TMPDIR}/target.tfvars"
+  cat >"${stage_tfvars}" <<'EOF'
+enable_actions_runner = true
+enable_backstage = true
+EOF
+  cat >"${target_tfvars}" <<'EOF'
+enable_actions_runner = false
+enable_backstage = false
+EOF
+
+  run bash -lc "export GITEA_SYNC_TFVARS_FILE='${stage_tfvars}' GITEA_SYNC_TARGET_TFVARS_FILE='${target_tfvars}'; source '${SCRIPT}'; printf '%s\n' \"\$(resolve_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true)\" \"\$(resolve_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage true)\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'false\nfalse')" ]
+}
+
+@test "sync-gitea.sh exports local kind toggles from target-or-stage inputs" {
+  run bash -lc "grep -F 'export_resolved_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true' '${SCRIPT}' && grep -F 'export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage true' '${SCRIPT}'"
+
+  [ "${status}" -eq 0 ]
+}
+
 @test "sync-gitea.sh exports agentgateway GitOps inputs consumed by the policies renderer" {
   run bash -lc "grep -F 'export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false' '${SCRIPT}' && grep -F 'export_resolved_string AGENTGATEWAY_CHART_VERSION agentgateway_chart_version' '${SCRIPT}' && grep -F 'export_resolved_string AGENTGATEWAY_AI_GATEWAY_MODEL agentgateway_ai_gateway_model' '${SCRIPT}'"
 

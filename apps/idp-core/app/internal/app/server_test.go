@@ -159,6 +159,15 @@ func TestHealthRuntimeAndCatalog(t *testing.T) {
 		t.Fatalf("unexpected health: %d %#v", rec.Code, health)
 	}
 
+	rec, root := request(t, server, http.MethodGet, "/", nil)
+	if rec.Code != http.StatusOK || root["service"] != "idp-core" {
+		t.Fatalf("unexpected root: %d %#v", rec.Code, root)
+	}
+	links := root["links"].(map[string]any)
+	if links["status"] != apiPathStatus || links["openapi"] != apiPathOpenAPI {
+		t.Fatalf("root links = %#v", links)
+	}
+
 	rec, runtime := request(t, server, http.MethodGet, "/api/v1/runtime", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("runtime status: %d", rec.Code)

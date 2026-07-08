@@ -102,6 +102,7 @@ tfvar_map_string_or_default() {
         in_map = 0
         next
       }
+      equals = index(line, "=")
       if (equals == 0) {
         next
       }
@@ -382,7 +383,7 @@ main() {
   export_resolved_bool ENABLE_POLICIES enable_policies true
   export_resolved_bool ENABLE_GATEWAY_TLS enable_gateway_tls true
   export_resolved_bool ENABLE_CERT_MANAGER enable_cert_manager true
-  export_resolved_bool ENABLE_ACTIONS_RUNNER enable_actions_runner true
+  export_resolved_bool_target_or_stage ENABLE_ACTIONS_RUNNER enable_actions_runner true
   export_resolved_bool ENABLE_APP_REPO_SENTIMENT enable_app_repo_sentiment true
   export_resolved_bool ENABLE_APP_REPO_SUBNETCALC enable_app_repo_subnetcalc true
   export_resolved_bool ENABLE_SUBNETCALC_APIM_GATEWAY enable_subnetcalc_apim_gateway true
@@ -398,6 +399,7 @@ main() {
   export_resolved_bool ENABLE_AGENTGATEWAY_AI_GATEWAY enable_agentgateway_ai_gateway false
   export_resolved_bool ENABLE_LANGFUSE enable_langfuse false
   export_resolved_bool ENABLE_LANGFUSE_DEMOS enable_langfuse_demos false
+  export_resolved_bool_target_or_stage ENABLE_BACKSTAGE enable_backstage true
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_PLATFORM_IMAGES prefer_external_platform_images false
   export_resolved_bool_target_or_stage PREFER_EXTERNAL_WORKLOAD_IMAGES prefer_external_workload_images false
   export_external_platform_image EXTERNAL_PLATFORM_IMAGE_GRAFANA grafana

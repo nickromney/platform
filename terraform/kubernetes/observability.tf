@@ -394,6 +394,7 @@ ${local.grafana_plugins_values_yaml}
                   maxLines: 1000
         dashboards:
           default:
+            # codex:platform-launchpad:start
             platform-launchpad:
               json: |
                 {
@@ -1929,7 +1930,7 @@ ${local.grafana_plugins_values_yaml}
                       },
                       "targets": [
                         {
-                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))",
+                          "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * ((max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0) or (max(kube_pod_status_ready{namespace=\"dev\",pod=~\"subnetcalc-frontend-.*\",condition=\"true\"}) > bool 0) or vector(0))) or vector(0))",
                           "refId": "A"
                         }
                       ],
@@ -2096,6 +2097,7 @@ ${local.grafana_plugins_values_yaml}
                   "title": "Platform Launchpad",
                   "uid": "platform-launchpad"
                 }
+            # codex:platform-launchpad:end
             platform-overview:
               json: |
                 {

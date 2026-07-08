@@ -928,6 +928,22 @@ EOF
   [ "${output}" = "$(printf 'false\ntrue\ntrue\ntrue\ntrue\nhost.docker.internal:5002/platform/sentiment-api:contract\ntrue\nhost.docker.internal:5002/platform/backstage:contract\nplatform/grafana-victorialogs\n111')" ]
 }
 
+@test "sync-gitea-policies keeps explicit render inputs ahead of a GitOps render contract" {
+  contract_file="${BATS_TEST_TMPDIR}/gitops-render-contract.json"
+  cat >"${contract_file}" <<'EOF'
+{
+  "enable_backstage": false,
+  "prefer_external_platform": true,
+  "external_platform_idp_core": "host.docker.internal:5002/platform/idp-core:contract"
+}
+EOF
+
+  run bash -lc "export GITOPS_RENDER_CONTRACT_FILE='${contract_file}' ENABLE_BACKSTAGE=true PREFER_EXTERNAL_PLATFORM_IMAGES=true EXTERNAL_PLATFORM_IMAGE_IDP_CORE='host.docker.internal:5002/platform/idp-core:env'; source '${SCRIPT}'; printf '%s\n' \"\$ENABLE_BACKSTAGE\" \"\$PREFER_EXTERNAL_PLATFORM_IMAGES\" \"\$EXTERNAL_PLATFORM_IMAGE_IDP_CORE\""
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "$(printf 'true\ntrue\nhost.docker.internal:5002/platform/idp-core:env')" ]
+}
+
 @test "render_prometheus_application_manifest injects alertmanager startup-safe resources" {
   apps_dir="${BATS_TEST_TMPDIR}/argocd-apps"
   mkdir -p "${apps_dir}"

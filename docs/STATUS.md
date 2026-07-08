@@ -35,6 +35,15 @@ notes live under [`docs/plans/archive`](plans/archive/).
 
 ## Done
 
+- Launchpad live-state follow-up (2026-07-08): the post-proof Grafana
+  discrepancy was real. Stage `900` now renders only enabled Launchpad tiles,
+  checks each selected tile's PromQL and URL in `check-health`, treats the
+  dev SubnetCalc frontend Rollout through pod readiness, and serves a JSON
+  root response from `idp-core` so the Portal API tile no longer lands on a
+  bare 404. The local `kind` cluster was reconciled after the fix, disabled
+  runner leftovers were pruned, APIM's missing local workload image was rebuilt,
+  and `make -C kubernetes/kind 900 check-health` completed successfully with
+  21 Launchpad tiles evaluated.
 - Grand final clean proof (2026-07-08): a full `kind` cycle — `reset`,
   `100 apply`, `900 apply` with docker-mode Playwright E2E (21 passed),
   and formal `900 check-health` — completed end to end from clean `main`
