@@ -110,6 +110,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{
+			"service": "idp-core",
+			"status":  "ok",
+			"links": map[string]string{
+				"status":  apiPathStatus,
+				"health":  "/health",
+				"openapi": apiPathOpenAPI,
+			},
+		})
+	})
 	s.mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "healthy", "service": "idp-core"})
 	})

@@ -151,7 +151,7 @@
       "requires": [
         "ENABLE_APP_REPO_SUBNETCALC"
       ],
-      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0)) or vector(0))"
+      "expr": "(((max(kube_deployment_status_replicas_available{namespace=\"sso\",deployment=\"oauth2-proxy-subnetcalc-dev\"}) > bool 0) * (max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-router\"}) > bool 0) * ((max(kube_deployment_status_replicas_available{namespace=\"dev\",deployment=\"subnetcalc-frontend\"}) > bool 0) or (max(kube_pod_status_ready{namespace=\"dev\",pod=~\"subnetcalc-frontend-.*\",condition=\"true\"}) > bool 0) or vector(0))) or vector(0))"
     },
     {
       "title": "APIM Simulator",

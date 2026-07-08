@@ -170,6 +170,9 @@ def platform_launchpad_rendered_dashboard_contract_violations(repo_root: Path) -
             encoding="utf-8"
         )
     )
+    health_script = (repo_root / "terraform" / "kubernetes" / "scripts" / "check-cluster-health.sh").read_text(
+        encoding="utf-8"
+    )
     selected_tiles = _launchpad_selected_tiles(launchpad)
     expected_titles = [tile.get("title") for tile in selected_tiles]
     targets = (
@@ -215,6 +218,22 @@ def platform_launchpad_rendered_dashboard_contract_violations(repo_root: Path) -
                 violations.append(f"{relative} {title} panel link should match inventory URL")
             if not targets_config or targets_config[0].get("expr") != tile.get("expr"):
                 violations.append(f"{relative} {title} panel query should match inventory expression")
+
+    subnetcalc_dev = next((tile for tile in selected_tiles if tile.get("title") == "SubnetCalc DEV"), None)
+    if subnetcalc_dev is None:
+        violations.append("Launchpad missing SubnetCalc DEV tile")
+    else:
+        expr = subnetcalc_dev.get("expr", "")
+        if 'kube_pod_status_ready{namespace="dev",pod=~"subnetcalc-frontend-.*",condition="true"}' not in expr:
+            violations.append("SubnetCalc DEV tile should tolerate Rollout-managed frontend pods")
+
+    for fragment in (
+        "check_launchpad_tiles()",
+        "prometheus_query_max_value",
+        "Launchpad tile gate evaluated",
+    ):
+        if fragment not in health_script:
+            violations.append(f"check-cluster-health.sh missing Launchpad gate fragment {fragment}")
 
     return tuple(violations)
 
@@ -528,7 +547,11 @@ def langfuse_demo_rollout_surface_contract_violations(repo_root: Path) -> tuple[
             "langfuse_demos_source_tag=",
             'image_build_catalog_build_and_push platform langfuse-demos langfuse-demos "${langfuse_demos_source_tag}"',
         ),
-        "sync_script": ("EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS",),
+        "sync_script": (
+            "EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS",
+            "render_platform_launchpad_dashboard",
+            "render-platform-launchpad.sh",
+        ),
         "routes_kustomization": ("referencegrant-sso-langfuse-demos.yaml",),
     }
 

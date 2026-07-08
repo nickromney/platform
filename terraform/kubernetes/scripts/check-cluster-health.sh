@@ -1269,6 +1269,112 @@ check_gitea_api_surface() {
   warn "Gitea API NodePort not reachable on localhost:${port}; repo/bootstrap automation will fail until it is"
 }
 
+expect_bool_json() {
+  case "${1:-}" in
+    true) printf 'true\n' ;;
+    *) printf 'false\n' ;;
+  esac
+}
+
+launchpad_toggles_json() {
+  jq -cn \
+    --argjson sso "$(expect_bool_json "${EXPECT_SSO}")" \
+    --argjson headlamp "$(expect_bool_json "${EXPECT_HEADLAMP}")" \
+    --argjson sentiment "$(expect_bool_json "${EXPECT_APP_REPO_SENTIMENT}")" \
+    --argjson subnetcalc "$(expect_bool_json "${EXPECT_APP_REPO_SUBNET_CALC}")" \
+    --argjson langfuse "$(expect_bool_json "${EXPECT_LANGFUSE}")" \
+    --argjson langfuse_demos "$(expect_bool_json "${EXPECT_LANGFUSE_DEMOS}")" \
+    '{
+      ENABLE_SSO: $sso,
+      ENABLE_HEADLAMP: $headlamp,
+      ENABLE_APP_REPO_SENTIMENT: $sentiment,
+      ENABLE_APP_REPO_SUBNETCALC: $subnetcalc,
+      ENABLE_LANGFUSE: $langfuse,
+      ENABLE_LANGFUSE_DEMOS: $langfuse_demos
+    }'
+}
+
+prometheus_query_json() {
+  local expr="$1"
+  local encoded
+
+  encoded="$(jq -rn --arg q "${expr}" '$q | @uri')"
+  kubectl -n observability exec deploy/prometheus-server -c prometheus-server -- \
+    wget -qO- "http://localhost:9090/api/v1/query?query=${encoded}" 2>/dev/null || true
+}
+
+prometheus_query_max_value() {
+  local expr="$1"
+  local result
+
+  result="$(prometheus_query_json "${expr}")"
+  if [[ -z "${result}" ]]; then
+    printf '0\n'
+    return 0
+  fi
+
+  jq -r '
+    if .status == "success" and ((.data.result // []) | length) > 0 then
+      ([.data.result[].value[1] | tonumber] | max)
+    else
+      0
+    end
+  ' <<<"${result}" 2>/dev/null || printf '0\n'
+}
+
+check_launchpad_tiles() {
+  local inventory="${STACK_DIR}/config/platform-launchpad.apps.json"
+  local toggles_json title url expr value tile_count=0
+  local accepted_url_codes="200 204 301 302 303 401 403 405"
+
+  if [[ "${EXPECT_PROMETHEUS}" != "true" || "${EXPECT_GRAFANA}" != "true" ]]; then
+    ok "Launchpad tile checks skipped (enable_prometheus=${EXPECT_PROMETHEUS}, enable_grafana=${EXPECT_GRAFANA}${tfvars_hint})"
+    return 0
+  fi
+  if ! have_cmd jq; then
+    fail_soft "jq not found; cannot evaluate Launchpad tile inventory"
+    return 0
+  fi
+  if [[ ! -f "${inventory}" ]]; then
+    fail_soft "Launchpad inventory not found: ${inventory}"
+    return 0
+  fi
+  if ! kubectl -n observability get deploy prometheus-server >/dev/null 2>&1; then
+    fail_soft "Prometheus deployment missing; cannot evaluate Launchpad tile expressions"
+    return 0
+  fi
+
+  toggles_json="$(launchpad_toggles_json)"
+
+  while IFS=$'\t' read -r title url expr; do
+    [[ -n "${title}" ]] || continue
+    tile_count=$((tile_count + 1))
+
+    value="$(prometheus_query_max_value "${expr}")"
+    if awk -v v="${value}" 'BEGIN { exit !(v > 0) }'; then
+      ok "Launchpad tile ${title} expression healthy (${value})"
+    else
+      fail_soft "Launchpad tile ${title} expression is Down (${value})"
+    fi
+
+    check_http_surface "Launchpad tile ${title} URL" "${url}" "${accepted_url_codes}" true 0 5
+  done < <(
+    jq -r \
+      --argjson toggles "${toggles_json}" \
+      '.tiles[]
+        | select(((.requires // []) | all($toggles[.] == true)))
+        | [.title, .url, .expr]
+        | @tsv' \
+      "${inventory}"
+  )
+
+  if [[ "${tile_count}" -gt 0 ]]; then
+    ok "Launchpad tile gate evaluated ${tile_count} selected tile(s)"
+  else
+    fail_soft "Launchpad tile gate found no selected tiles"
+  fi
+}
+
 print_success_dashboard_hint() {
   local grafana_url=""
 
@@ -1884,6 +1990,8 @@ elif kubectl get ns observability >/dev/null 2>&1; then
     else
       fail_soft "node-exporter missing; Grafana node dashboards will be empty"
     fi
+
+    check_launchpad_tiles
   fi
 else
   if [[ "${EXPECT_PROMETHEUS}" == "true" || "${EXPECT_GRAFANA}" == "true" || "${EXPECT_VICTORIA_LOGS}" == "true" ]]; then
