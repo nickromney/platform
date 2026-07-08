@@ -122,6 +122,41 @@ PY
   [[ "${output}" == *"validated nginx gateway cilium api egress"* ]]
 }
 
+@test "Argo Rollouts policy does not allow GitHub plugin download egress" {
+  run uv run --isolated --with pyyaml python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import yaml
+
+repo_root = Path(os.environ["REPO_ROOT"])
+policy_path = repo_root / "terraform/kubernetes/cluster-policies/cilium/shared/argo-rollouts-hardened.yaml"
+policy = yaml.safe_load(policy_path.read_text())
+egress = policy["spec"]["egress"]
+
+assert all("toFQDNs" not in rule for rule in egress), "argo-rollouts must not egress to GitHub FQDNs"
+assert "github.com" not in policy_path.read_text()
+
+dns_egress = next(
+    rule
+    for rule in egress
+    if any(
+        endpoint.get("matchLabels", {}).get("k8s:io.kubernetes.pod.namespace") == "kube-system"
+        and endpoint.get("matchLabels", {}).get("k8s:k8s-app") == "kube-dns"
+        for endpoint in rule.get("toEndpoints", [])
+    )
+)
+assert all("rules" not in to_ports for to_ports in dns_egress.get("toPorts", []))
+
+print("validated argo rollouts cilium policy without github egress")
+PY
+
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"validated argo rollouts cilium policy without github egress"* ]]
+}
+
 @test "Sentiment backend policy allows MCP classify-only endpoint" {
   run uv run --isolated --with pyyaml python - <<'PY'
 from __future__ import annotations

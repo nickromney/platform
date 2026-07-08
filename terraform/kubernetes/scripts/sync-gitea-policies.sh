@@ -99,6 +99,7 @@ platform|EXTERNAL_PLATFORM_IMAGE_LANGFUSE_DEMOS|external_platform_langfuse_demos
 platform|EXTERNAL_PLATFORM_IMAGE_GRAFANA|external_platform_grafana|grafana-victorialogs|grafana
 platform|EXTERNAL_PLATFORM_IMAGE_IDP_CORE|external_platform_idp_core|idp-core|idp
 platform|EXTERNAL_PLATFORM_IMAGE_BACKSTAGE|external_platform_backstage|backstage|idp
+platform|EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN|external_platform_argo_rollouts_gatewayapi_plugin|argo-rollouts-gatewayapi-plugin|argo-rollouts
 EOF
 }
 
@@ -193,6 +194,7 @@ tfvar|GRAFANA_SIDECAR_IMAGE_REPOSITORY|grafana_sidecar_image_repository|grafana_
 tfvar|GRAFANA_SIDECAR_IMAGE_TAG|grafana_sidecar_image_tag|grafana_sidecar_image_tag
 tfvar|GRAFANA_VICTORIA_LOGS_PLUGIN_URL|grafana_victoria_logs_plugin_url|grafana_victoria_logs_plugin_url
 tfvar|GRAFANA_LIVENESS_INITIAL_DELAY_SECONDS|grafana_liveness_initial_delay_seconds|grafana_liveness_initial_delay_seconds
+tfvar|ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE|argo_rollouts_gatewayapi_plugin_image|argo_rollouts_gatewayapi_plugin_image
 EOF
 }
 
@@ -329,6 +331,8 @@ EXTERNAL_PLATFORM_IMAGE_GRAFANA="${EXTERNAL_PLATFORM_IMAGE_GRAFANA:-}"
 EXTERNAL_PLATFORM_IMAGE_IDP_CORE="${EXTERNAL_PLATFORM_IMAGE_IDP_CORE:-}"
 EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE:-}"
 EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP="${EXTERNAL_PLATFORM_IMAGE_PLATFORM_MCP:-}"
+EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN="${EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN:-}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE:-$(tf_default_from_variables argo_rollouts_gatewayapi_plugin_image)}"
 HARDENED_IMAGE_REGISTRY="${HARDENED_IMAGE_REGISTRY:-dhi.io}"
 AGENTGATEWAY_CHART_VERSION="${AGENTGATEWAY_CHART_VERSION:-$(tf_default_from_variables agentgateway_chart_version)}"
 CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-$(tf_default_from_variables cert_manager_chart_version)}"
@@ -851,6 +855,7 @@ apply_external_platform_images() {
   local auth_chat_manifest="${root_dir}/apps/auth-chat/all.yaml"
   local chatgpt_manifest="${root_dir}/apps/chatgpt-sim/all.yaml"
   local langfuse_demos_manifest="${root_dir}/apps/langfuse-demos/all.yaml"
+  local argo_rollouts_app="${root_dir}/apps/argocd-apps/87-argo-rollouts.application.yaml"
   local scope env_name contract_key image_name manifest_group image_ref manifest_file
 
   if ! is_true "${PREFER_EXTERNAL_PLATFORM_IMAGES}"; then
@@ -867,6 +872,12 @@ apply_external_platform_images() {
   fi
   if [[ -z "${EXTERNAL_PLATFORM_IMAGE_BACKSTAGE}" ]]; then
     EXTERNAL_PLATFORM_IMAGE_BACKSTAGE="$(infer_external_platform_cache_ref backstage)"
+  fi
+  if [[ -z "${EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN}" ]]; then
+    EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN="$(infer_external_platform_cache_ref argo-rollouts-gatewayapi-plugin)"
+  fi
+  if [[ -n "${EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN}" ]]; then
+    ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE="${EXTERNAL_PLATFORM_IMAGE_ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN}"
   fi
 
   while IFS='|' read -r scope env_name contract_key image_name manifest_group; do
@@ -892,12 +903,28 @@ apply_external_platform_images() {
         manifest_file="${langfuse_demos_manifest}"
         eval "image_ref=\"\${${env_name}:-}\""
         ;;
+      argo-rollouts)
+        manifest_file="${argo_rollouts_app}"
+        eval "image_ref=\"\${${env_name}:-}\""
+        if [[ -f "${manifest_file}" && -n "${image_ref}" ]]; then
+          replace_literal "${manifest_file}" "__ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE__" "${image_ref}"
+        fi
+        continue
+        ;;
       *)
         continue
         ;;
     esac
     replace_image_ref "${manifest_file}" "${image_name}" "${image_ref}"
   done < <(render_external_image_inputs)
+}
+
+render_argo_rollouts_application_manifest() {
+  local app_file="$1"
+
+  [[ -f "${app_file}" ]] || return 0
+  replace_literal "${app_file}" "__ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE__" "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE}"
+  replace_literal "${app_file}" "host.docker.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0" "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_IMAGE}"
 }
 
 render_grafana_application_manifest() {
@@ -2258,6 +2285,7 @@ render_policy_repo_tree() {
   fi
   configure_subnetcalc_direct_api "${repo_dir}"
   configure_progressive_delivery "${repo_dir}"
+  render_argo_rollouts_application_manifest "${repo_dir}/apps/argocd-apps/87-argo-rollouts.application.yaml"
   render_grafana_application_manifest "${repo_dir}/apps/argocd-apps/95-grafana.application.yaml"
   render_prometheus_application_manifest "${repo_dir}/apps/argocd-apps/90-prometheus.application.yaml"
   rewrite_image_owner "${repo_dir}/apps/apim/all.yaml"

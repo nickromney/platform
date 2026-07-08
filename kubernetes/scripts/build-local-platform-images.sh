@@ -20,6 +20,7 @@ source "${REPO_ROOT}/kubernetes/workflow/image-build-lib.sh"
 source "${REPO_ROOT}/kubernetes/scripts/image-signing-lib.sh"
 
 GRAFANA_CATALOG_BUILD_JSON="$(image_catalog_build_json platform grafana-victorialogs)"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_BUILD_JSON="$(image_catalog_build_json platform argo-rollouts-gatewayapi-plugin)"
 
 catalog_grafana_build_value() {
   local filter="$1"
@@ -37,6 +38,12 @@ catalog_grafana_image_ref() {
   [ -n "${source}" ] || { echo "${0##*/}: missing ${object_filter}.source in image catalog" >&2; exit 1; }
   [ -n "${tag}" ] || { echo "${0##*/}: missing ${object_filter}.tag in image catalog" >&2; exit 1; }
   printf '%s:%s\n' "${source}" "${tag}"
+}
+
+catalog_argo_rollouts_gatewayapi_plugin_build_value() {
+  local filter="$1"
+
+  jq -r "${filter} // empty" <<<"${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_BUILD_JSON}"
 }
 
 CACHE_PUSH_HOST="${CACHE_PUSH_HOST:-127.0.0.1:5002}"
@@ -62,6 +69,16 @@ PLUGIN_ARCHIVE_CACHE_DIR="${PLUGIN_ARCHIVE_CACHE_DIR:-${REPO_ROOT}/$(catalog_gra
 PLUGIN_CONTEXT_ARCHIVE_NAME="${PLUGIN_CONTEXT_ARCHIVE_NAME:-$(catalog_grafana_build_value '.plugin_archive.context_archive_name')}"
 GRAFANA_VERSION_TAG_STRATEGY="$(catalog_grafana_build_value '.version_tag_strategy')"
 PLUGIN_BUILD_CONTEXT_ROOT="${PLUGIN_BUILD_CONTEXT_ROOT:-${REPO_ROOT}/.run/kind/build-contexts}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION_VAR="$(catalog_argo_rollouts_gatewayapi_plugin_build_value '.plugin_binary.terraform_version_variable')"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256_VAR="$(catalog_argo_rollouts_gatewayapi_plugin_build_value '.plugin_binary.terraform_sha256_variable')"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL_TEMPLATE="$(catalog_argo_rollouts_gatewayapi_plugin_build_value '.plugin_binary.url_template')"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION:-$(tf_default_from_variables "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION_VAR}")}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256:-$(tf_default_from_variables "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256_VAR}")}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL_DEFAULT="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL_TEMPLATE//\{version\}/${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION}}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL:-${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL_DEFAULT}}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CACHE_DIR="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CACHE_DIR:-${REPO_ROOT}/$(catalog_argo_rollouts_gatewayapi_plugin_build_value '.plugin_binary.cache_dir')}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CONTEXT_BINARY_NAME="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CONTEXT_BINARY_NAME:-$(catalog_argo_rollouts_gatewayapi_plugin_build_value '.plugin_binary.context_binary_name')}"
+ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION_TAG_STRATEGY="$(catalog_argo_rollouts_gatewayapi_plugin_build_value '.version_tag_strategy')"
 
 trap image_catalog_cleanup_temp_paths EXIT
 
@@ -84,6 +101,11 @@ image_signing_ensure_keypair
 command -v shasum >/dev/null 2>&1 || { echo "${0##*/}: shasum not found" >&2; exit 1; }
 [ -n "${VICTORIA_LOGS_PLUGIN_VERSION}" ] || { echo "${0##*/}: grafana_victoria_logs_plugin_version is empty" >&2; exit 1; }
 [ -n "${VICTORIA_LOGS_PLUGIN_SHA256}" ] || { echo "${0##*/}: grafana_victoria_logs_plugin_sha256 is empty" >&2; exit 1; }
+[ -n "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION}" ] || { echo "${0##*/}: argo_rollouts_gatewayapi_plugin_version is empty" >&2; exit 1; }
+[[ "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "${0##*/}: argo_rollouts_gatewayapi_plugin_sha256 must be a lowercase 64-character SHA-256 hex digest" >&2
+  exit 1
+}
 
 commit_tag="$(git -C "${REPO_ROOT}" rev-parse --short=12 HEAD 2>/dev/null || true)"
 export IMAGE_BUILD_COMMIT_TAG="${commit_tag}"
@@ -125,6 +147,45 @@ prepare_grafana_build_context() {
   printf -v "${__resultvar}" '%s' "${context_dir}"
 }
 
+prepare_argo_rollouts_gatewayapi_plugin_binary() {
+  local __resultvar="$1"
+  local binary_name="gatewayapi-plugin-linux-amd64-v${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION}"
+  local binary_path="${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CACHE_DIR}/${binary_name}"
+  local tmp_path=""
+
+  mkdir -p "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CACHE_DIR}"
+
+  if [ -f "${binary_path}" ] && printf '%s  %s\n' "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" "${binary_path}" | shasum -a 256 -c - >/dev/null 2>&1; then
+    echo "OK   cached plugin ${binary_path}"
+    printf -v "${__resultvar}" '%s' "${binary_path}"
+    return 0
+  fi
+
+  tmp_path="$(mktemp "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CACHE_DIR}/.${binary_name}.XXXXXX")"
+  image_catalog_register_temp_path "${tmp_path}"
+  echo "FETCH ${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL} -> ${binary_path}"
+  curl -fsSL "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_URL}" -o "${tmp_path}"
+  printf '%s  %s\n' "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_SHA256}" "${tmp_path}" | shasum -a 256 -c - >/dev/null
+  chmod 0755 "${tmp_path}"
+  mv "${tmp_path}" "${binary_path}"
+  echo "CACHE ${binary_path}"
+  printf -v "${__resultvar}" '%s' "${binary_path}"
+}
+
+prepare_argo_rollouts_gatewayapi_plugin_build_context() {
+  local __resultvar="$1"
+  local binary_path="$2"
+  local context_dir=""
+
+  mkdir -p "${PLUGIN_BUILD_CONTEXT_ROOT}"
+  context_dir="$(mktemp -d "${PLUGIN_BUILD_CONTEXT_ROOT}/argo-rollouts-gatewayapi-plugin.XXXXXX")"
+  image_catalog_register_temp_path "${context_dir}"
+  cp "${REPO_ROOT}/kubernetes/kind/images/argo-rollouts-gatewayapi-plugin/Dockerfile" "${context_dir}/Dockerfile"
+  cp "${binary_path}" "${context_dir}/${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CONTEXT_BINARY_NAME:-gatewayapi-plugin-linux-amd64}"
+  chmod 0755 "${context_dir}/${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_CONTEXT_BINARY_NAME:-gatewayapi-plugin-linux-amd64}"
+  printf -v "${__resultvar}" '%s' "${context_dir}"
+}
+
 case "${GRAFANA_VERSION_TAG_STRATEGY}" in
   grafana-tag-plus-plugin-version)
     grafana_version_tag="${GRAFANA_IMAGE_TAG}-v${VICTORIA_LOGS_PLUGIN_VERSION}"
@@ -135,12 +196,24 @@ case "${GRAFANA_VERSION_TAG_STRATEGY}" in
     ;;
 esac
 
+case "${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION_TAG_STRATEGY}" in
+  plugin-version-with-v-prefix)
+    argo_rollouts_gatewayapi_plugin_version_tag="v${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION}"
+    ;;
+  *)
+    echo "${0##*/}: unsupported Argo Rollouts Gateway API plugin version_tag_strategy=${ARGO_ROLLOUTS_GATEWAYAPI_PLUGIN_VERSION_TAG_STRATEGY}" >&2
+    exit 1
+    ;;
+esac
+
 grafana_base_repo="${GRAFANA_BASE_CACHE_REPO}"
 plugin_fetch_repo="${PLUGIN_FETCH_CACHE_REPO}"
 grafana_base_ref="${CACHE_BUILD_HOST}/${grafana_base_repo}:${GRAFANA_IMAGE_TAG}"
 plugin_fetch_ref="${CACHE_BUILD_HOST}/${plugin_fetch_repo}:${PLUGIN_FETCH_IMAGE_TAG}"
 grafana_plugin_archive=""
 grafana_build_context=""
+argo_rollouts_gatewayapi_plugin_binary=""
+argo_rollouts_gatewayapi_plugin_build_context=""
 
 mirror_image_into_cache \
   "${GRAFANA_BASE_IMAGE_SOURCE}" \
@@ -168,6 +241,16 @@ image_build_build_and_push_cached \
   --build-arg GRAFANA_BASE_IMAGE="${grafana_base_ref}" \
   --build-arg PLUGIN_FETCH_IMAGE="${plugin_fetch_ref}" \
   --build-arg GRAFANA_IMAGE_TAG="${GRAFANA_IMAGE_TAG}"
+
+prepare_argo_rollouts_gatewayapi_plugin_binary argo_rollouts_gatewayapi_plugin_binary
+prepare_argo_rollouts_gatewayapi_plugin_build_context argo_rollouts_gatewayapi_plugin_build_context "${argo_rollouts_gatewayapi_plugin_binary}"
+
+image_build_build_and_push_cached \
+  "argo-rollouts-gatewayapi-plugin" \
+  "${argo_rollouts_gatewayapi_plugin_build_context}" \
+  "${argo_rollouts_gatewayapi_plugin_build_context}/Dockerfile" \
+  "${argo_rollouts_gatewayapi_plugin_version_tag}" \
+  ""
 
 idp_core_source_tag="$(
   image_catalog_source_tag platform idp-core

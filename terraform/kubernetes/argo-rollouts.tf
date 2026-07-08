@@ -47,9 +47,27 @@ spec:
             registry: quay.io
             repository: argoproj/argo-rollouts
             tag: v1.9.0
+          initContainers:
+            - name: install-gatewayapi-plugin
+              image: ${local.argo_rollouts_gatewayapi_plugin_image_effective}
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+              args:
+                - cp /plugins/gatewayapi-plugin /plugins-target/gatewayapi-plugin && chmod 0755 /plugins-target/gatewayapi-plugin
+              volumeMounts:
+                - name: trafficrouter-plugins
+                  mountPath: /plugins-target
+          volumeMounts:
+            - name: trafficrouter-plugins
+              mountPath: /var/run/argo-rollouts/plugins
+          volumes:
+            - name: trafficrouter-plugins
+              emptyDir: {}
           trafficRouterPlugins:
             - name: argoproj-labs/gatewayAPI
-              location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.5.0/gatewayapi-plugin-linux-amd64
+              location: file:///var/run/argo-rollouts/plugins/gatewayapi-plugin
         dashboard:
           enabled: true
   ignoreDifferences:

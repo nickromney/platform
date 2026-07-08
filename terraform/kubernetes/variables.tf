@@ -530,6 +530,24 @@ variable "grafana_victoria_logs_plugin_url" {
   default     = "https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v0.29.0/victoriametrics-logs-datasource-v0.29.0.zip;victoriametrics-logs-datasource"
 }
 
+variable "argo_rollouts_gatewayapi_plugin_version" {
+  description = "Argo Rollouts Gateway API traffic-router plugin release version used for the local mirror image."
+  type        = string
+  default     = "0.5.0"
+}
+
+variable "argo_rollouts_gatewayapi_plugin_sha256" {
+  description = "SHA-256 checksum for the Argo Rollouts Gateway API traffic-router plugin binary used for the local mirror image."
+  type        = string
+  default     = "f081c0afbaede0c1e0865e0ed3a9e2984c5b3f728f837d305bedaac500432c3d"
+}
+
+variable "argo_rollouts_gatewayapi_plugin_image" {
+  description = "Local mirror image containing the Argo Rollouts Gateway API traffic-router plugin binary."
+  type        = string
+  default     = "host.docker.internal:5002/platform/argo-rollouts-gatewayapi-plugin:v0.5.0"
+}
+
 variable "grafana_liveness_initial_delay_seconds" {
   description = "Grafana liveness probe initial delay in seconds."
   type        = number
@@ -1287,15 +1305,15 @@ variable "enable_backstage" {
 }
 
 variable "external_platform_image_refs" {
-  description = "Optional external platform image references keyed by platform image name. Supported keys today: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
+  description = "Optional external platform image references keyed by platform image name. Supported keys today: argo-rollouts-gatewayapi-plugin, auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
       for key in keys(var.external_platform_image_refs) :
-      contains(["auth-chat", "backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp"], key)
+      contains(["argo-rollouts-gatewayapi-plugin", "auth-chat", "backstage", "chatgpt-sim", "grafana", "hardened-registry", "idp-core", "langfuse-demos", "platform-mcp"], key)
     ])
-    error_message = "external_platform_image_refs supports only: auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
+    error_message = "external_platform_image_refs supports only: argo-rollouts-gatewayapi-plugin, auth-chat, backstage, chatgpt-sim, grafana, hardened-registry, idp-core, langfuse-demos, platform-mcp."
   }
 }

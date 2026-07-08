@@ -236,11 +236,13 @@ make -C kubernetes/kind gitea-sync AUTO_APPROVE=1
 Then hard-refresh or wait for the `dev` Argo CD app. Argo CD applies the Rollout
 spec; Argo Rollouts owns the stepwise promotion and Gateway API weights.
 
-Reviewer notes: chart `argo-rollouts` is pinned at `2.40.5`, controller image
-`quay.io/argoproj/argo-rollouts:v1.8.3` is preloaded when the toggle is true,
-and the Gateway API traffic-router plugin URL is pinned to
-`v0.5.0`. The controller downloads that plugin binary at runtime, so fully
-offline demos may need that binary preloaded or mirrored separately.
+Reviewer notes: chart `argo-rollouts` is pinned at `2.41.0`, controller image
+`quay.io/argoproj/argo-rollouts:v1.9.0` is preloaded when the toggle is true,
+and the Gateway API traffic-router plugin is pinned to `v0.5.0`. The local
+platform image builder mirrors the plugin binary into
+`platform/argo-rollouts-gatewayapi-plugin:v0.5.0`, and the chart initContainer
+copies it into the controller pod so cluster startup does not fetch the plugin
+from GitHub.
 
 Backstage is gated in the kind happy path by local Docker memory:
 
