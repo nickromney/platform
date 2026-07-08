@@ -28,7 +28,10 @@ metadata:
   name: subnetcalc-frontend-ingress
 spec:
   description: >-
-    Allow only the subnetcalc router to reach the subnetcalc frontend.
+    Allow the subnetcalc router and the platform gateway dataplane to reach
+    the subnetcalc frontend. The gateway path serves the dev progressive
+    delivery rung: router frontend traffic re-enters the gateway, which
+    forwards to the weighted stable/canary frontend Services.
   endpointSelector:
     matchLabels:
       "k8s:project": kindlocal
@@ -44,6 +47,10 @@ spec:
             "k8s:app": subnetcalc
             "k8s:tier": gateway
             "k8s:app.kubernetes.io/name": subnetcalc-router
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": platform-gateway
+            "k8s:app.kubernetes.io/name": platform-gateway-nginx
+            "k8s:gateway.networking.k8s.io/gateway-name": platform-gateway
       toPorts:
         - ports:
             - port: "8080"
